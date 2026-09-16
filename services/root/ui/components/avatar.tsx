@@ -101,29 +101,46 @@ export const KindBadge = ({ kind }: { kind: AuthorKind }) => {
 };
 
 /** A colleague NAME's session id — the UI's mirror of the server's
- *  Colleagues resolution, for digging into a live tree node. */
-export const sessionOf = (name: string): string | undefined => {
+ *  Colleagues resolution. EVERY agent answers each message in its
+ *  own session (`Manager:root::manager::<post-id>`,
+ *  `Engineer:root::engineer::<ask-post-id>`) — pass the INVOCATION
+ *  (the message's post id) to open the session that produced a
+ *  specific response; without one, the standing session. */
+export const sessionOf = (
+  name: string,
+  invocation?: string,
+): string | undefined => {
   const slug = name.trim().toLowerCase();
-  if (slug === "head") return "Head:root";
-  if (slug === "manager") return "Manager:root::manager";
-  if (slug === "reviewer") return "Reviewer:root::reviewer";
-  if (/^e-[a-z0-9]+$/.test(slug)) return `Engineer:root::${slug}`;
-  if (/^r-[a-z0-9]+$/.test(slug)) return `Reviewer:root::${slug}`;
-  return undefined;
+  if (slug === "head") {
+    return invocation === undefined
+      ? "Head:root"
+      : `Head:root::head::${invocation}`;
+  }
+  const terms: Record<string, string> = {
+    manager: "Manager",
+    engineer: "Engineer",
+    reviewer: "Reviewer",
+  };
+  const term = terms[slug];
+  if (term === undefined) return undefined;
+  return invocation === undefined
+    ? `${term}:root::${slug}`
+    : `${term}:root::${slug}::${invocation}`;
 };
 
 /** The author a SESSION's assistant rows speak as, from the chat id
  *  (`Head:root`, `Manager:root::manager`,
- *  `Engineer:root::e-4f2a`): the key's tail names the instance; the
- *  term names the singleton. */
+ *  `Engineer:root::engineer::p-x1`): the IDENTITY is the key segment
+ *  right under the root — an agent may hold many sessions (one per
+ *  thread) but speaks as one name. */
 export const sessionAuthor = (id: string): Author => {
   const colon = id.indexOf(":");
   const term = colon === -1 ? id : id.slice(0, colon);
   const key = colon === -1 ? "" : id.slice(colon + 1);
-  const tail = key.split("::").filter(Boolean).pop();
+  const identity = key.split("::").filter(Boolean)[1];
   if (term === "Head") return { name: "head", kind: "agent" };
-  if (tail !== undefined && tail !== "root") {
-    return { name: tail, kind: "agent" };
+  if (identity !== undefined) {
+    return { name: identity, kind: "agent" };
   }
   // PascalCase term → kebab-case name
   return {

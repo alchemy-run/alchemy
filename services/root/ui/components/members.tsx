@@ -1,12 +1,12 @@
 /**
  * WHO is in the channel — discord's member list, for an org where
- * members are humans AND agents. The roster is the org chart (code),
- * not runtime state: the channel's resident agent is static, the
- * humans are the owners, and the engineers appear while the ledger
- * shows them on work. Clicking an agent opens its session.
+ * members are humans AND agents. The roster is STATIC — the org
+ * chart is code, so every agent in a channel is declared, identity
+ * fixed. An agent may hold many sessions (the engineer works each
+ * thread in its own), but it is one member. Clicking an agent opens
+ * its standing session.
  */
 import { Avatar, HUMAN, type Author } from "@/components/avatar";
-import { useTasks } from "@/components/tasks";
 import { showOverlay } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -72,8 +72,6 @@ const Section = ({
 };
 
 export const MembersPanel = ({ channel }: { channel: string }) => {
-  const tasks = useTasks();
-
   const humans: Array<Member> = [
     { ...HUMAN, online: true, detail: "owner — you" },
   ];
@@ -92,7 +90,8 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
             name: "engineer",
             kind: "agent",
             online: true,
-            detail: "the worker — spawned per task (e-…)",
+            session: "Engineer:root::engineer",
+            detail: "the worker — a session per thread",
           },
           {
             name: "reviewer",
@@ -112,28 +111,6 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
           },
         ];
 
-  // engineers surface while the ledger has them on work — done work
-  // ages them out of the list, exactly like leaving the room
-  const engineers: Array<Member> =
-    channel === "engineering"
-      ? [
-          ...new Map(
-            tasks
-              .filter((task) => task.assignee !== undefined)
-              .map((task) => [
-                task.assignee!,
-                {
-                  name: task.assignee!,
-                  kind: "agent" as const,
-                  online: task.status === "working" || task.status === "review",
-                  session: `Engineer:root::${task.assignee!}`,
-                  detail: task.title,
-                },
-              ]),
-          ).values(),
-        ]
-      : [];
-
   return (
     <aside
       aria-label="channel members"
@@ -141,7 +118,6 @@ export const MembersPanel = ({ channel }: { channel: string }) => {
     >
       <Section label="humans" members={humans} />
       <Section label="agents" members={agents} />
-      <Section label="engineers" members={engineers} />
     </aside>
   );
 };

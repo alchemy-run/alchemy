@@ -15,39 +15,31 @@
  * each channel's transcript.
  */
 import { ChatView } from "@/components/chat";
+import { ChannelFeed, ThreadView } from "@/components/channel-feed";
 import { CallThread } from "@/components/call";
 import { SessionModelSelect } from "@/components/model-select";
 import { MembersPanel } from "@/components/members";
 import { ChannelThreads, TaskThread } from "@/components/tasks";
+import { Avatar, KindBadge, sessionAuthor } from "@/components/avatar";
 import { GhosttyTerminal } from "@/components/terminal";
 import {
   channelFromLocation,
   normalizeLegacyLocation,
   OVERLAY_EVENT,
+  closePane,
   overlayFromLocation,
+  panesFromLocation,
   showChannel,
   showOverlay,
   taskFromLocation,
+  threadFromLocation,
   type Overlay,
+  type Pane,
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import {
-  Hash,
-  Moon,
-  Pause,
-  Play,
-  Search,
-  Sun,
-  Users,
-  X,
-} from "lucide-react";
-import {
-  useEffect,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-  type ReactNode,
-} from "react";
+import { Hash, Moon, Pause, Play, Search, Sun, Users, Wrench, X } from "lucide-react";
+import { useRef, Fragment, useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 interface Channel {
   readonly name: string;
@@ -96,24 +88,95 @@ const OverlayShell = ({
   </div>
 );
 
+/**
+ * An agent's WORKING — the rightmost finder column: the session's
+ * sequence (thinking traces, messages, tool calls), split open by
+ * clicking the agent in a thread (or anywhere it is named).
+ */
+const AgentColumn = ({ id }: { id: string }) => {
+  // a per-invocation session's key ends with the ask's post id — the
+  // thread panel beside this column already shows that message, so
+  // the column suppresses the duplicate delivered copy
+  const invocation = id.split("::").pop();
+  // WHO is working here — the header names the agent, not the
+  // session's internal id
+  const author = sessionAuthor(id);
+  return (
+  <section
+    aria-label="agent session"
+    className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+  >
+    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <Avatar name={author.name} kind={author.kind} size={20} />
+        <span className="truncate font-mono text-xs font-semibold">
+          {author.name}
+        </span>
+        <KindBadge kind={author.kind} />
+        <Wrench
+          className="size-3 shrink-0 text-muted-foreground"
+          aria-label="an agent's working"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={() => closePane({ kind: "agent", id })}
+        aria-label="close the agent column"
+        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent"
+      >
+        <X className="size-3.5" />
+      </button>
+    </header>
+    <ChatView
+      id={id}
+      active={false}
+      readOnly
+      flat
+      {...(invocation !== undefined && invocation.startsWith("p-")
+        ? { hideInput: invocation }
+        : {})}
+    />
+  </section>
+  );
+};
+
+/**
+ * A workspace's TERMINAL — a finder column like the agent's working
+ * (never a modal): a real shell on the workspace's machine, split to
+ * the right, closing back to whatever was beside it.
+ */
+const WorkspaceColumn = ({ name }: { name: string }) => (
+  <section
+    aria-label="workspace terminal"
+    className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+  >
+    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+      <span className="truncate font-mono text-xs text-muted-foreground">
+        workspace {name} — its machine
+      </span>
+      <button
+        type="button"
+        onClick={() => closePane({ kind: "workspace", name })}
+        aria-label="close the workspace column"
+        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent"
+      >
+        <X className="size-3.5" />
+      </button>
+    </header>
+    <GhosttyTerminal
+      sessionId={`Workspace:root::ws-${name}`}
+      ptyId="main"
+      active
+    />
+  </section>
+);
+
 const OverlayView = ({ overlay }: { overlay: Overlay }) => {
   switch (overlay.kind) {
     case "agent":
-      return (
-        <OverlayShell title={overlay.id}>
-          <ChatView id={overlay.id} active={false} readOnly />
-        </OverlayShell>
-      );
+      return null; // a finder COLUMN, not a modal — see AgentColumn
     case "workspace":
-      return (
-        <OverlayShell title={`workspace ${overlay.name} — its machine`}>
-          <GhosttyTerminal
-            sessionId={`Workspace:root::ws-${overlay.name}`}
-            ptyId="main"
-            active
-          />
-        </OverlayShell>
-      );
+      return null; // a finder COLUMN, not a modal — see WorkspaceColumn
     case "call":
       return (
         <OverlayShell title={`call ${overlay.id}`}>
@@ -172,9 +235,25 @@ export const App = () => {
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
   );
+  /** The PANE STACK — the column right-adjacent to the thread,
+   *  tmux-shaped: every "Worked for"/workspace click appends a
+   *  VERTICAL split here; each pane closes on its own. */
+  const [panes, setPanes] = useState<ReadonlyArray<Pane>>(() =>
+    panesFromLocation(),
+  );
   const [task, setTask] = useState<string | undefined>(() =>
     taskFromLocation(),
   );
+  /** The OPEN thread — discord's side panel, riding the path. */
+  const [thread, setThread] = useState<string | undefined>(() =>
+    threadFromLocation(),
+  );
+  /** Every thread OPENED this session stays MOUNTED (hidden when not
+   *  the open one) — switching between threads shows each exactly as
+   *  last left (scroll, draft), never a re-render's scroll dance. */
+  const [openedThreads, setOpenedThreads] = useState<
+    ReadonlyArray<{ id: string; channel: string; chat: string }>
+  >([]);
   /** The transcript search, per channel — cleared on channel switch. */
   const [search, setSearch] = useState("");
   /** The members panel — who's in the channel; remembered. */
@@ -210,7 +289,9 @@ export const App = () => {
   useEffect(() => {
     const sync = () => {
       setOverlay(overlayFromLocation());
+      setPanes(panesFromLocation());
       setTask(taskFromLocation());
+      setThread(threadFromLocation());
       const name = channelFromLocation();
       if (name !== undefined) setSelected(name);
     };
@@ -230,9 +311,138 @@ export const App = () => {
   const channel =
     channels.find((entry) => entry.name === selected) ?? channels[0]!;
 
+  // remember every thread opened here — the panel cache's keys
+  useEffect(() => {
+    if (thread === undefined || task !== undefined) return;
+    setOpenedThreads((current) =>
+      current.some((entry) => entry.id === thread)
+        ? current
+        : [
+            ...current,
+            { id: thread, channel: channel.name, chat: channel.chat },
+          ],
+    );
+  }, [thread, task, channel.name, channel.chat]);
+
   useEffect(() => {
     window.localStorage.setItem("root:rail-width", String(railWidth));
   }, [railWidth]);
+
+  /** COLUMN sizes as PROPORTIONAL weights (feed : thread : panes),
+   *  not pixels — a column that appears or closes renormalizes the
+   *  shares, so a 50/50 split becomes thirds when a third column
+   *  opens instead of crushing the others. Remembered. */
+  const [colWeights, setColWeights] = useState<{
+    feed: number;
+    thread: number;
+    panes: number;
+  }>(() => {
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem("root:col-weights") ?? "",
+      ) as { feed?: number; thread?: number; panes?: number };
+      const ok = (value: unknown): value is number =>
+        typeof value === "number" && Number.isFinite(value) && value > 0;
+      if (ok(stored.feed) && ok(stored.thread) && ok(stored.panes)) {
+        return { feed: stored.feed, thread: stored.thread, panes: stored.panes };
+      }
+    } catch {
+      // first run (or the old px keys) — equal shares
+    }
+    return { feed: 1, thread: 1, panes: 1 };
+  });
+  useEffect(() => {
+    window.localStorage.setItem("root:col-weights", JSON.stringify(colWeights));
+  }, [colWeights]);
+
+  /** VERTICAL weights of the pane stack — one per pane, dragged at
+   *  the row dividers; a new pane arrives at weight 1. */
+  const [paneWeights, setPaneWeights] = useState<ReadonlyArray<number>>([]);
+  useEffect(() => {
+    setPaneWeights((current) =>
+      current.length === panes.length
+        ? current
+        : panes.map((_, index) => current[index] ?? 1),
+    );
+  }, [panes]);
+  const stackRef = useRef<HTMLElement | null>(null);
+
+  /** One drag: deltas from the pointer-down, until release. */
+  const dragFrom = (
+    down: ReactPointerEvent,
+    axis: "x" | "y",
+    apply: (delta: number) => void,
+  ) => {
+    down.preventDefault();
+    const start = axis === "x" ? down.clientX : down.clientY;
+    const move = (event: PointerEvent) =>
+      apply((axis === "x" ? event.clientX : event.clientY) - start);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const clampShare = (value: number) => Math.min(6, Math.max(0.2, value));
+
+  /** A column divider: the two NEIGHBORS trade share, converted from
+   *  the pointer's px delta through their live geometry. */
+  const startColDrag = (
+    down: ReactPointerEvent,
+    left: "feed" | "thread",
+    right: "thread" | "panes",
+  ) => {
+    const leftEl =
+      left === "feed"
+        ? document.querySelector("section[data-column=feed]")
+        : document.querySelector("aside[aria-label=thread]:not(.hidden)");
+    const rightEl =
+      right === "panes"
+        ? document.querySelector("aside[aria-label=panes]")
+        : document.querySelector("aside[aria-label=thread]:not(.hidden)");
+    if (!(leftEl instanceof HTMLElement) || !(rightEl instanceof HTMLElement)) {
+      return;
+    }
+    const from = { ...colWeights };
+    const pxPerWeight =
+      (leftEl.getBoundingClientRect().width +
+        rightEl.getBoundingClientRect().width) /
+      (from[left] + from[right]);
+    if (!Number.isFinite(pxPerWeight) || pxPerWeight <= 0) return;
+    dragFrom(down, "x", (dx) => {
+      const dw = dx / pxPerWeight;
+      setColWeights({
+        ...from,
+        [left]: clampShare(from[left] + dw),
+        [right]: clampShare(from[right] - dw),
+      });
+    });
+  };
+
+  /** Row divider inside the pane stack: the two adjacent panes trade
+   *  height. */
+  const startRowDrag = (down: ReactPointerEvent, above: number) => {
+    const stack = stackRef.current;
+    if (stack === null) return;
+    const total = paneWeights.reduce((sum, weight) => sum + weight, 0) || 1;
+    const pxPerWeight = stack.clientHeight / total;
+    const from = [...paneWeights];
+    const clampWeight = (value: number) => Math.min(8, Math.max(0.15, value));
+    dragFrom(down, "y", (dy) => {
+      const dw = dy / pxPerWeight;
+      setPaneWeights(
+        from.map((weight, index) =>
+          index === above
+            ? clampWeight(weight + dw)
+            : index === above + 1
+              ? clampWeight(weight - dw)
+              : weight,
+        ),
+      );
+    });
+  };
 
   /** Drag the rail's right edge to resize it. */
   const startRailDrag = (down: ReactPointerEvent) => {
@@ -320,7 +530,11 @@ export const App = () => {
             onUp={() => showChannel(channel.name)}
           />
         ) : (
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <section
+            data-column="feed"
+            style={{ flexGrow: colWeights.feed, flexBasis: 0 }}
+            className="flex min-h-0 min-w-[220px] flex-col"
+          >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
             <div className="flex min-w-0 shrink-0 items-center gap-1.5">
               <Hash className="size-4 shrink-0 text-muted-foreground" />
@@ -380,18 +594,103 @@ export const App = () => {
               </button>
             </div>
           </header>
-          <ChatView
-            key={channel.chat}
-            id={channel.chat}
-            active={overlay === undefined}
+          <ChannelFeed
+            key={channel.name}
+            channel={channel.name}
+            chat={channel.chat}
             placeholder={`Message #${channel.name}…`}
             filter={search}
           />
         </section>
         )}
 
+        {/* the OPEN thread — a finder column split to the right; its
+            composer speaks into the thread. Every thread ever opened
+            stays mounted, hidden — switching back shows it exactly
+            as last left. */}
+        {thread !== undefined && task === undefined && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="resize the thread"
+            onPointerDown={(down) => startColDrag(down, "feed", "thread")}
+            className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
+          />
+        )}
+        {openedThreads.map((entry) => (
+          <ThreadView
+            key={entry.id}
+            channel={entry.channel}
+            chat={entry.chat}
+            id={entry.id}
+            active={entry.id === thread && task === undefined}
+            weight={colWeights.thread}
+          />
+        ))}
+
+        {/* an agent's WORKING — the next column: clicking an agent
+            in the thread splits again */}
+        {/* the PANE STACK — one column right of the thread; every
+            pane opened from it splits VERTICALLY here (tmux):
+            workings and terminals in click order */}
+        {panes.length > 0 && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="resize the panes"
+            onPointerDown={(down) =>
+              startColDrag(
+                down,
+                thread !== undefined && task === undefined ? "thread" : "feed",
+                "panes",
+              )
+            }
+            className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
+          />
+        )}
+        {panes.length > 0 && (
+          <aside
+            ref={stackRef}
+            aria-label="panes"
+            style={{ flexGrow: colWeights.panes, flexBasis: 0 }}
+            className="flex min-h-0 min-w-0 flex-col border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
+          >
+            {panes.map((pane, index) => (
+              <Fragment
+                key={pane.kind === "agent" ? `a:${pane.id}` : `w:${pane.name}`}
+              >
+                {index > 0 && (
+                  <div
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="resize the pane"
+                    onPointerDown={(down) => startRowDrag(down, index - 1)}
+                    className="z-10 -my-[3px] h-1.5 w-full shrink-0 cursor-row-resize border-t border-border hover:bg-border active:bg-primary/40"
+                  />
+                )}
+                <div
+                  style={{
+                    flexGrow: paneWeights[index] ?? 1,
+                    flexShrink: 1,
+                    flexBasis: 0,
+                  }}
+                  className="flex min-h-0 min-w-0 flex-col"
+                >
+                  {pane.kind === "agent" ? (
+                    <AgentColumn id={pane.id} />
+                  ) : (
+                    <WorkspaceColumn name={pane.name} />
+                  )}
+                </div>
+              </Fragment>
+            ))}
+          </aside>
+        )}
+
         {/* WHO is here — humans and agents, discord's member list */}
-        {members && <MembersPanel channel={channel.name} />}
+        {members && thread === undefined && panes.length === 0 && (
+          <MembersPanel channel={channel.name} />
+        )}
       </div>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>

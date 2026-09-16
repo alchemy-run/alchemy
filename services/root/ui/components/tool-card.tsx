@@ -43,7 +43,7 @@ import {
 import type { GeneralEngineer } from "../../src/engineering/Engineer.ts";
 import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
-import { CodeCard } from "@/components/code";
+import { CodeCard, DiffCard } from "@/components/code";
 import { PostThread } from "@/components/post-thread";
 import { showOverlay, showTask, taskPath } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -150,6 +150,91 @@ const Mono = ({
     {typeof children === "string" ? <Ansi text={children} /> : children}
   </pre>
 );
+
+/** Shiki language for a path — the Read card shows real code. */
+const READ_LANGS: Record<string, string> = {
+  ts: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  tsx: "tsx",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "jsx",
+  json: "json",
+  jsonc: "jsonc",
+  py: "python",
+  rs: "rust",
+  go: "go",
+  sh: "shellscript",
+  bash: "shellscript",
+  zsh: "shellscript",
+  yml: "yaml",
+  yaml: "yaml",
+  toml: "toml",
+  md: "markdown",
+  mdx: "mdx",
+  css: "css",
+  html: "html",
+  sql: "sql",
+};
+
+/** The tool's `N: ` line-number prefix — stripped before
+ *  highlighting (the numbers aren't code). */
+const NUMBERED = /^\s*\d+: /;
+
+/**
+ * A git-format patch synthesized from before/after pairs — the diff
+ * renderer's input: its file header names the file (so the
+ * highlighter picks the language), each pair becomes one hunk with
+ * word-level inline highlights. Positions are nominal (an edit's
+ * true line numbers aren't known client-side).
+ */
+const syntheticPatch = (
+  path: string,
+  hunks: ReadonlyArray<{ before: string; after: string }>,
+): string => {
+  const body = hunks
+    .map(({ before, after }) => {
+      const removed = before.length === 0 ? [] : before.split("\n");
+      const added = after.length === 0 ? [] : after.split("\n");
+      return [
+        `@@ -1,${removed.length} +1,${added.length} @@`,
+        ...removed.map((line) => `-${line}`),
+        ...added.map((line) => `+${line}`),
+      ].join("\n");
+    })
+    .join("\n");
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${body}`;
+};
+
+/** A read file's body: SYNTAX-HIGHLIGHTED (Shiki via CodeCard) when
+ *  the extension names a language and the file is small enough to
+ *  highlight; the plain head+tail window otherwise. */
+const readBody = (path: unknown, content: string) => {
+  const language =
+    READ_LANGS[String(path ?? "").split(".").pop()?.toLowerCase() ?? ""];
+  if (language === undefined || content.length > 60_000) {
+    return <WindowedText text={content} head={20} tail={5} />;
+  }
+  const lines = content.split("\n");
+  const numbered = lines.every(
+    (line) => line.length === 0 || NUMBERED.test(line),
+  );
+  const code = numbered
+    ? lines.map((line) => line.replace(NUMBERED, "")).join("\n")
+    : content;
+  return (
+    <div className="px-2 py-2 [&_.code-surface]:my-0">
+      <CodeCard
+        code={code}
+        language={language}
+        overflow="scroll"
+        maxHeight="max-h-96"
+      />
+    </div>
+  );
+};
 
 /** Head+tail window (the Codex convention) for long plain output. */
 const WindowedText = ({
@@ -605,6 +690,10 @@ const THREAD: {
     input: { name: string },
     output: string | undefined,
   ) => ToolCallView;
+  list_workspaces: (
+    input: unknown,
+    output: string | undefined,
+  ) => ToolCallView;
   call: (
     input: { members?: ReadonlyArray<string>; topic?: string },
     output: string | undefined,
@@ -747,6 +836,23 @@ const THREAD: {
     ),
     summary: output === undefined ? undefined : summarize(output),
   }),
+
+  list_workspaces: (_input, output) => {
+    const record = parseRecord(output);
+    const names = Array.isArray(record?.workspaces)
+      ? (record.workspaces as Array<string>)
+      : undefined;
+    return {
+      icon: FolderTree,
+      title: <>Workspaces of this thread</>,
+      summary:
+        names === undefined
+          ? undefined
+          : names.length === 0
+            ? "none yet"
+            : names.join(", "),
+    };
+  },
 
   // the manager's LEDGER bookkeeping — one quiet line each, never a
   // wall: the channel's content is events and responses, not filing.
@@ -1148,6 +1254,46 @@ const CODER: Renderers<typeof GeneralEngineer> = {
         ),
     };
   },
+  // the explorer — how a fresh session restores context from the
+  // message graph
+  explore: (input, output) => {
+    const record = parseRecord(output);
+    const found = Array.isArray(record?.messages)
+      ? (record.messages as Array<{ author?: string; text?: string }>)
+      : undefined;
+    return {
+      icon: MessageSquare,
+      title: (
+        <>
+          Explore{" "}
+          <span className="font-mono text-muted-foreground">
+            {String(input.relation ?? "")}
+          </span>
+          {input.message !== undefined && (
+            <>
+              {" "}
+              of <span className="font-mono">{String(input.message)}</span>
+            </>
+          )}
+        </>
+      ),
+      body:
+        found === undefined ? undefined : (
+          <div className="space-y-1">
+            {found.map((message, index) => (
+              <div key={index} className="min-w-0 text-[12px]">
+                <span className="font-mono font-semibold">
+                  {message.author ?? "?"}
+                </span>{" "}
+                <span className="text-muted-foreground">
+                  {clamp(firstLine(message.text ?? ""), 110)}
+                </span>
+              </div>
+            ))}
+          </div>
+        ),
+    };
+  },
   tell: (input) => ({
     icon: MessageSquare,
     title: (
@@ -1226,10 +1372,7 @@ const CODER: Renderers<typeof GeneralEngineer> = {
           )}
         </>
       ),
-      body:
-        content === undefined ? undefined : (
-          <WindowedText text={content} head={20} tail={5} />
-        ),
+      body: content === undefined ? undefined : readBody(input.path, content),
     };
   },
 
@@ -1337,12 +1480,13 @@ const CODER: Renderers<typeof GeneralEngineer> = {
       input.content === undefined ? (
         outputText(output) && <Mono>{outputText(output)}</Mono>
       ) : (
-        <DiffText
-          text={String(input.content)
-            .split("\n")
-            .map((line) => `+${line}`)
-            .join("\n")}
-        />
+        <div className="px-2 py-1">
+          <DiffCard
+            patch={syntheticPatch(String(input.path ?? "file"), [
+              { before: "", after: String(input.content) },
+            ])}
+          />
+        </div>
       ),
   }),
 
@@ -1368,23 +1512,20 @@ const CODER: Renderers<typeof GeneralEngineer> = {
         </>
       ),
       badge: <DiffStatBadge added={added} removed={removed} />,
-      body: (
-        <div className="divide-y divide-border/50">
-          {edits.map((edit, index) => (
-            <DiffText
-              key={index}
-              text={[
-                ...String(edit.oldString ?? "")
-                  .split("\n")
-                  .map((line) => `-${line}`),
-                ...String(edit.newString ?? "")
-                  .split("\n")
-                  .map((line) => `+${line}`),
-              ].join("\n")}
+      body:
+        edits.length === 0 ? undefined : (
+          <div className="px-2 py-1">
+            <DiffCard
+              patch={syntheticPatch(
+                String(input.path ?? "file"),
+                edits.map((edit) => ({
+                  before: String(edit.oldString ?? ""),
+                  after: String(edit.newString ?? ""),
+                })),
+              )}
             />
-          ))}
-        </div>
-      ),
+          </div>
+        ),
     };
   },
 

@@ -106,6 +106,7 @@ import {
 import {
   Mention,
   PendingPost,
+  PostRef,
   PostThread,
   mentionsOf,
 } from "@/components/post-thread";
@@ -371,6 +372,24 @@ export const linkifyMarkdownTaskIds = (text: string): string =>
     })
     .join("");
 
+/**
+ * Rewrite `#<message-id>` references (`#p-mu2ygrdy-yxpq`) into post
+ * links (`/p/<id>`) — the anchor renderer turns them into message
+ * chips that reveal the referenced message, like `@name` mentions.
+ * Code spans and existing links stay untouched.
+ */
+export const linkifyMarkdownPostIds = (text: string): string =>
+  text
+    .split(CODE_SPLIT)
+    .map((chunk, index) => {
+      if (index % 2 === 1) return chunk; // code or a link — leave alone
+      return chunk.replace(
+        /(?<![\w/.-])#(p-[a-z0-9][a-z0-9-]*[a-z0-9])\b/g,
+        (_whole, id: string) => `[#${id}](/p/${id})`,
+      );
+    })
+    .join("");
+
 /** The task id a thread permalink names (`/t/t-x`). */
 const taskHrefId = (href: unknown): string | undefined => {
   if (typeof href !== "string") return undefined;
@@ -411,6 +430,10 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
     return (
       <Mention name={decodeURIComponent(href.slice("/agents/".length))} />
     );
+  }
+  // a message reference (`/p/p-x`) — the chip that reveals the post
+  if (typeof href === "string" && href.startsWith("/p/")) {
+    return <PostRef id={decodeURIComponent(href.slice("/p/".length))} />;
   }
   // a thread permalink (`/t/t-x`) — a pill that focuses the thread
   // (cmd-click still opens it in a new tab)
@@ -498,7 +521,9 @@ export const MarkdownText = ({
 }) => (
   <MessageResponse components={MARKDOWN_COMPONENTS}>
     {linkifyMarkdownMentions(
-      linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo)),
+      linkifyMarkdownPostIds(
+        linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo)),
+      ),
     )}
   </MessageResponse>
 );
@@ -1234,6 +1259,14 @@ export interface ChatProps {
   placeholder?: string;
   /** Hide the composer (read-only transcript, e.g. a channel run). */
   readOnly?: boolean;
+  /** Render the transcript FLAT — no reply-threading indentation,
+   *  no fold controls. The agent WORKING column wants the plain
+   *  sequence of what the session did. */
+  flat?: boolean;
+  /** Hide ONE input message by id — the working column of a
+   *  per-invocation session suppresses the delivered ask (the thread
+   *  panel beside it already shows that message). */
+  hideInput?: string;
   /** Hide the trailing assistant reply — for a channel RUN, the final
    *  text is the channel's message (Routes lands it there); the rail
    *  shows only the exploration that produced it. */
@@ -1257,6 +1290,8 @@ const ChatTranscript = ({
   repo,
   placeholder,
   readOnly,
+  flat,
+  hideInput,
   hideFinalReply,
   composerExtra,
   transformSubmit,
@@ -1498,6 +1533,9 @@ const ChatTranscript = ({
                 )}
                 {messages.map((message, messageIndex) => {
                   if (deleted.has(message.id)) return null;
+                  if (message.role === "user" && message.id === hideInput) {
+                    return null;
+                  }
                   if (searching && !matchesSearch(message)) return null;
                   // the reply: every text part after the message's last tool
                   // call (all of them when it called none)
@@ -1534,8 +1572,10 @@ const ChatTranscript = ({
                   // a reply THREADS under the post it answers — the
                   // data model's edge, not a role heuristic. The next
                   // reply to the SAME post continues the trunk; the
-                  // last one's elbow ends it (reddit's grammar).
-                  const threaded = meta?.replyTo !== undefined;
+                  // last one's elbow ends it (reddit's grammar). A
+                  // FLAT view (the working column) skips the geometry
+                  // — the plain sequence is the point.
+                  const threaded = flat !== true && meta?.replyTo !== undefined;
                   // a folded thread hides its replies behind "⊕ N"
                   if (
                     threaded &&
@@ -1572,7 +1612,9 @@ const ChatTranscript = ({
                       part.type === "dynamic-tool" &&
                       (part as { toolName?: string }).toolName === "ask",
                   );
-                  const hasReplies = replies.length > 0 || carriesAsk;
+                  // a FLAT view has no threads to fold — no trunk, no ⊖
+                  const hasReplies =
+                    flat !== true && (replies.length > 0 || carriesAsk);
                   const foldedHere = foldedThreads.has(message.id);
                   // DAY DIVIDER: a rule wherever the calendar day advances
                   // — against the nearest earlier message that HAS a clock
@@ -1618,8 +1660,11 @@ const ChatTranscript = ({
                   // an ASK is not a tool card — it IS the
                   // conversation: the text (its @mentions as chips)
                   // with each mentioned agent's reply threading under
-                  // it, reddit-shaped. Until the answers land, the
-                  // mentions stand in as "is answering…" rows.
+                  // it. In a FLAT working view the replies are NOT
+                  // embedded — the exchange lives in the thread
+                  // panel; the working shows what this agent SAID
+                  // (the ask text), nothing duplicated, nothing
+                  // indented.
                   const renderAsk = (
                     tool: {
                       toolCallId: string;
@@ -1648,6 +1693,21 @@ const ChatTranscript = ({
                     const text = String(
                       (tool.input as { text?: string } | undefined)?.text ?? "",
                     );
+                    if (flat === true) {
+                      return (
+                        <div key={key} className="py-0.5 text-[13px]">
+                          <MarkdownText text={text} />
+                          {postId === undefined &&
+                            !cutOpen(tool.state) &&
+                            tool.state !== "output-available" && (
+                              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <LoaderCircle className="size-3 animate-spin" />
+                                waiting for the answers…
+                              </div>
+                            )}
+                        </div>
+                      );
+                    }
                     return (
                       <div key={key} className="py-0.5">
                         {postId !== undefined ? (
@@ -1662,27 +1722,10 @@ const ChatTranscript = ({
                       </div>
                     );
                   };
-                  // discord GROUPING: consecutive rows by the same
-                  // author within a few minutes share one avatar +
-                  // header; the run reads as one turn of speech
-                  const previous = messages[messageIndex - 1];
-                  const previousAuthor =
-                    previous === undefined || deleted.has(previous.id)
-                      ? undefined
-                      : previous.role === "assistant"
-                        ? agentAuthor
-                        : (previous.metadata as { kind?: string } | undefined)
-                              ?.kind !== undefined ||
-                            firstTextOf(previous)?.startsWith("[inbound") ===
-                              true
-                          ? WORLD
-                          : authorOf(previous);
-                  const grouped =
-                    !newDay &&
-                    previousAuthor?.name === author.name &&
-                    meta?.at !== undefined &&
-                    previousAt !== undefined &&
-                    meta.at - previousAt < 7 * 60_000;
+                  // no author-grouping heuristic: every message is
+                  // its own row with its own avatar and header — a
+                  // message's identity is data, never inferred from
+                  // who happened to speak before it
                   return (
                     <div key={message.id} className="contents">
                       {newDay && meta?.at !== undefined && (
@@ -1708,7 +1751,7 @@ const ChatTranscript = ({
                                 landing ON the reply's avatar */}
                             <div
                               aria-hidden
-                              className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
+                              className="pointer-events-none absolute -left-5 top-0 h-4 w-5 border-b border-l border-muted-foreground/30"
                             />
                             {threadContinues && (
                               <div
@@ -1739,11 +1782,7 @@ const ChatTranscript = ({
                           "group/row -mx-2 flex min-w-0 flex-1 items-stretch gap-2 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
                           // spacing lives on the TREE: posts breathe,
                           // replies sit tight against their trunk
-                          threaded
-                            ? "-mx-0"
-                            : grouped
-                              ? "mt-0.5"
-                              : "mt-6",
+                          threaded ? "-mx-0" : "mt-6",
                           // the row under the pointer lifts; a selected one stays lit
                           selection.has(message.id) ||
                             menuIds.includes(message.id)
@@ -1754,78 +1793,67 @@ const ChatTranscript = ({
                         {/* the AVATAR column — reddit's uniform 24px
                             at every depth; a post with replies grows
                             the TRUNK under its avatar (⊖ at its
-                            head); a grouped row swaps the avatar for
-                            the wall clock, visible on hover */}
-                        {grouped ? (
-                          <div className="w-6 shrink-0 select-none pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 opacity-0 group-hover/row:opacity-100">
-                            {meta?.at !== undefined
-                              ? formatAt(meta.at)
-                              : null}
-                          </div>
-                        ) : (
-                          <div className="flex w-6 shrink-0 flex-col items-center">
-                            <Avatar
-                              {...author}
-                              size={24}
-                              className="mt-0.5"
-                            />
-                            {hasReplies &&
-                              (replies.length > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    toggleThread(message.id);
-                                  }}
-                                  aria-label={
-                                    foldedHere
-                                      ? "expand this thread"
-                                      : "collapse this thread"
-                                  }
-                                  title={foldedHere ? "expand" : "collapse"}
-                                  className="group/trunk relative w-4 flex-1 cursor-pointer"
-                                >
-                                  {/* the line runs UNBROKEN from the
-                                      avatar's bottom; the ⊖ rides the
-                                      JUNCTION at its foot, where the
-                                      reply's arc leaves the trunk */}
-                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
-                                  {!foldedHere && (
-                                    <CircleMinus className="absolute -bottom-2 left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
-                                  )}
-                                </button>
-                              ) : (
-                                // the ask inside this message hangs
-                                // from the author's trunk; its own
-                                // comments carry the fold handles
-                                <span className="relative w-4 flex-1">
-                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
-                                </span>
-                              ))}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          {!grouped && (
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-[13px] font-semibold leading-5">
-                                {author.name}
+                            head) */}
+                        <div className="flex w-6 shrink-0 flex-col items-center">
+                          <Avatar
+                            {...author}
+                            size={24}
+                            className="mt-0.5"
+                          />
+                          {hasReplies &&
+                            (replies.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleThread(message.id);
+                                }}
+                                aria-label={
+                                  foldedHere
+                                    ? "expand this thread"
+                                    : "collapse this thread"
+                                }
+                                title={foldedHere ? "expand" : "collapse"}
+                                className="group/trunk relative w-4 flex-1 cursor-pointer"
+                              >
+                                {/* the line runs UNBROKEN from the
+                                    avatar's bottom; the ⊖ rides the
+                                    JUNCTION at its foot, where the
+                                    reply's arc leaves the trunk */}
+                                <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
+                                {!foldedHere && (
+                                  <CircleMinus className="absolute -bottom-2 left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+                                )}
+                              </button>
+                            ) : (
+                              // the ask inside this message hangs
+                              // from the author's trunk; its own
+                              // comments carry the fold handles
+                              <span className="relative w-4 flex-1">
+                                <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
                               </span>
-                              <KindBadge kind={author.kind} />
-                              {meta?.at !== undefined && (
-                                <AtTooltip at={meta.at}>
-                                  <span className="cursor-default font-mono text-[10px] text-muted-foreground/70 hover:text-foreground">
-                                    {formatAt(meta.at)}
-                                  </span>
-                                </AtTooltip>
-                              )}
-                              {/* the message still being written wears
-                                  the spinner — the response happens IN
-                                  the thread, not as a row below it */}
-                              {burstLive && (
-                                <LoaderCircle className="size-3 shrink-0 animate-spin self-center text-muted-foreground" />
-                              )}
-                            </div>
-                          )}
+                            ))}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[13px] font-semibold leading-5">
+                              {author.name}
+                            </span>
+                            <KindBadge kind={author.kind} />
+                            {meta?.at !== undefined && (
+                              <AtTooltip at={meta.at}>
+                                <span className="cursor-default font-mono text-[10px] text-muted-foreground/70 hover:text-foreground">
+                                  {formatAt(meta.at)}
+                                </span>
+                              </AtTooltip>
+                            )}
+                            {/* the message still being written wears
+                                the spinner — the response happens IN
+                                the thread, not as a row below it */}
+                            {burstLive && (
+                              <LoaderCircle className="size-3 shrink-0 animate-spin self-center text-muted-foreground" />
+                            )}
+                          </div>
                         <Message
                           from={message.role}
                           className="ml-0 w-full max-w-full min-w-0"
@@ -1989,7 +2017,7 @@ const ChatTranscript = ({
                         <div className="relative ml-8">
                           <div
                             aria-hidden
-                            className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
+                            className="pointer-events-none absolute -left-5 top-0 h-4 w-5 border-b border-l border-muted-foreground/30"
                           />
                           <button
                             type="button"
@@ -2045,7 +2073,7 @@ const ChatTranscript = ({
             >
               <div
                 aria-hidden
-                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 rounded-bl-[12px] border-b border-l border-muted-foreground/30"
+                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 border-b border-l border-muted-foreground/30"
               />
               <div className="flex min-w-0 items-center gap-2 py-0.5">
                 <Avatar

@@ -281,3 +281,22 @@
 .ghostty-host * {
   caret-color: transparent;
 }
+
+/* Jumping to a message (a reply-reference click, a #id chip) FLASHES
+   it — a primary-tinted wash that fades, so the eye lands on the
+   right message. */
+@keyframes post-flash-frames {
+  0%,
+  35% {
+    background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+.post-flash {
+  border-radius: 4px;
+  animation: post-flash-frames 1.6s ease-out;
+}
