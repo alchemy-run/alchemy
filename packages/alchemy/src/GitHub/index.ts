@@ -1,4 +1,5 @@
 export * as Auth from "./AuthProvider.ts";
+export * from "./BranchProtection.ts";
 export * from "./Comment.ts";
 export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
 export * from "./Env.ts";
