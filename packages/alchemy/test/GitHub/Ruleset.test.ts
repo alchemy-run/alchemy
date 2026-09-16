@@ -7,7 +7,6 @@ import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -26,74 +25,6 @@ const fixtureNames = [
   "alchemy-pr-1570-ruleset-replace-a",
   "alchemy-pr-1570-ruleset-replace-b",
 ];
-
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
-
-const safeGitHub = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.provideServiceEffect(
-      GitHubCredentials,
-      Effect.gen(function* () {
-        const credentials = yield* yield* GitHubCredentials;
-        return Effect.succeed({
-          ...credentials,
-          baseUrl: undefined,
-          octokit: () => {
-            const octokit = credentials.octokit({ baseUrl: undefined });
-            octokit.hook.before("request", (options) => {
-              const url = new URL(
-                octokit.request.endpoint(options).url,
-                "https://api.github.com",
-              );
-              if (url.pathname === "/user/repos") {
-                url.pathname = `/orgs/${owner}/repos`;
-                options.url = url.toString();
-              }
-              const parts = url.pathname.split("/");
-              const fixture =
-                parts[1] === "repos" &&
-                parts[2] === owner &&
-                fixtureNames.includes(parts[3]!);
-              const organization =
-                url.pathname === `/orgs/${owner}/repos` &&
-                (options.method === "GET" ||
-                  (options.method === "POST" &&
-                    fixtureNames.includes(String(options.name))));
-              if (
-                url.origin !== "https://api.github.com" ||
-                !(
-                  fixture ||
-                  organization ||
-                  (url.pathname === "/user" && options.method === "GET")
-                )
-              ) {
-                throw new Error(
-                  `Refusing GitHub request: ${options.method} ${url}`,
-                );
-              }
-            });
-            // List only this suite's repositories, never production repositories.
-            octokit.hook.after("request", (response, options) => {
-              if (
-                new URL(octokit.request.endpoint(options).url).pathname ===
-                  `/orgs/${owner}/repos` &&
-                Array.isArray(response.data)
-              ) {
-                response.data = response.data.filter((repo) =>
-                  fixtureNames.includes(repo.name),
-                );
-              }
-            });
-            return octokit;
-          },
-        });
-      }),
-    ),
-    logLevel,
-  );
 
 // Retain public fixtures: the gh token lacks delete_repo, and private rulesets are plan-gated.
 const repository = (name: string, id = "Repo") =>
@@ -228,7 +159,7 @@ test.provider("create, update, clear, and delete a ruleset", (stack) =>
     expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
     expect(yield* getRulesets(repo)).toEqual([]);
     yield* stack.destroy();
-  }).pipe(safeGitHub),
+  }),
 );
 
 test.provider("list rulesets across test repositories", (stack) =>
@@ -247,8 +178,43 @@ test.provider("list rulesets across test repositories", (stack) =>
         }).pipe(destroy());
       }),
     );
+    const credentials = yield* yield* GitHubCredentials;
     const provider = yield* Provider.findProvider(GitHub.Ruleset);
-    const listed = yield* provider.list();
+    // list() enumerates /user/repos; confine it to this suite's fixture.
+    const listed = yield* provider.list().pipe(
+      Effect.provideService(
+        GitHubCredentials,
+        Effect.succeed({
+          ...credentials,
+          octokit: (override) => {
+            const octokit = credentials.octokit(override);
+            octokit.hook.before("request", (options) => {
+              const url = new URL(options.url, "https://api.github.com");
+              if (url.pathname === "/user/repos") {
+                url.pathname = `/orgs/${owner}/repos`;
+                options.url = url.toString();
+              }
+              if (
+                url.origin !== "https://api.github.com" ||
+                (url.pathname !== `/orgs/${owner}/repos` &&
+                  url.pathname !== `/repos/${owner}/${repo}/rulesets`)
+              ) {
+                throw new Error(`Unsafe Ruleset list request: ${url}`);
+              }
+            });
+            octokit.hook.after("request", (response, options) => {
+              const url = new URL(options.url, "https://api.github.com");
+              if (url.pathname === `/orgs/${owner}/repos`) {
+                response.data = (
+                  response.data as Array<{ name: string }>
+                ).filter((repository) => repository.name === repo);
+              }
+            });
+            return octokit;
+          },
+        }),
+      ),
+    );
     const found = listed.find(
       (ruleset) => ruleset.rulesetId === created.rulesetId,
     );
@@ -260,7 +226,7 @@ test.provider("list rulesets across test repositories", (stack) =>
     expect(yield* getRuleset(repo, created.rulesetId)).toBeUndefined();
     expect(yield* getRulesets(repo)).toEqual([]);
     yield* stack.destroy();
-  }).pipe(safeGitHub),
+  }),
 );
 
 test.provider("changing the repository replaces the ruleset", (stack) =>
@@ -301,5 +267,5 @@ test.provider("changing the repository replaces the ruleset", (stack) =>
     expect(yield* getRulesets(repoA)).toEqual([]);
     expect(yield* getRulesets(repoB)).toEqual([]);
     yield* stack.destroy();
-  }).pipe(safeGitHub),
+  }),
 );
