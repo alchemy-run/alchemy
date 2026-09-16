@@ -1,6 +1,7 @@
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
-import { DBCluster, DBInstance } from "@/AWS/RDS";
+import { SecurityGroup } from "@/AWS/EC2/SecurityGroup.ts";
+import { DBCluster, DBInstance, DBParameterGroup } from "@/AWS/RDS";
 import type { DBInstanceProps } from "@/AWS/RDS/DBInstance.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
@@ -227,81 +228,218 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
   { timeout: 1_800_000 },
 );
 
-// Full standalone-instance lifecycle, gated behind RDS_TEST_LIFECYCLE=1.
-// Provisioning + modifying + deleting a real `db.t3.micro` takes ~10-15 min,
-// far beyond the default budget. It creates a gp3 Postgres instance with
-// explicit storage/backup knobs, asserts they round-trip, then does an
-// in-place modify (allocatedStorage up, backup retention, perf insights) and
-// re-reads to assert no replacement occurred (same ARN, same identifier).
+// RDS provisioning exceeds the default live-test budget.
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: security configuration updates and drift (PR 1599)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // The testing account has no default VPC/subnets, so provision a
-      // production-shaped network (VPC + subnets across 2 AZs) and a DB subnet
-      // group for the instance to live in.
-      const network = Effect.gen(function* () {
-        const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
-        // No fixed name — let the engine generate a unique physical name so a
-        // leftover group from an interrupted run can't force a cross-VPC
-        // ModifyDBSubnetGroup ("new Subnets are not in the same Vpc").
-        const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
-          description: "alchemy standalone instance lifecycle",
-          subnetIds: net.privateSubnetIds,
+      const engine = (yield* rds.describeDBEngineVersions({
+        Engine: "postgres",
+        DefaultOnly: true,
+      })).DBEngineVersions?.[0];
+      const engineVersion = engine?.EngineVersion;
+      const family = engine?.DBParameterGroupFamily;
+      if (!engineVersion || !family) {
+        return yield* Effect.fail(
+          new Error("RDS did not return a default PostgreSQL engine family"),
+        );
+      }
+
+      const program = (updated: boolean) =>
+        Effect.gen(function* () {
+          const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
+          const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
+            description: "alchemy standalone instance lifecycle",
+            subnetIds: net.privateSubnetIds,
+          });
+          // Keep both old and new dependencies throughout updates and drift repair.
+          const firstGroup = yield* SecurityGroup("FirstGroup", {
+            vpcId: net.vpcId,
+          });
+          const secondGroup = yield* SecurityGroup("SecondGroup", {
+            vpcId: net.vpcId,
+          });
+          const firstParameters = yield* DBParameterGroup("FirstParameters", {
+            family,
+            description: "alchemy initial instance configuration",
+          });
+          const secondParameters = yield* DBParameterGroup("SecondParameters", {
+            family,
+            description: "alchemy updated instance configuration",
+          });
+          const group = updated ? secondGroup : firstGroup;
+          const parameters = updated ? secondParameters : firstParameters;
+          const instance = yield* DBInstance("StandaloneInstance", {
+            engine: "postgres",
+            engineVersion,
+            dbInstanceClass: "db.t3.micro",
+            allocatedStorage: updated ? 25 : 20,
+            storageType: "gp3",
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            backupRetentionPeriod: updated ? "3 days" : "1 day",
+            enablePerformanceInsights: updated ? true : undefined,
+            enableIAMDatabaseAuthentication: updated,
+            vpcSecurityGroupIds: [group.groupId],
+            dbParameterGroupName: parameters.dbParameterGroupName,
+            deletionProtection: false,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            publiclyAccessible: false,
+            networkType: "IPV4",
+          });
+          return {
+            instance,
+            groupId: group.groupId,
+            dbParameterGroupName: parameters.dbParameterGroupName,
+          };
         });
-        return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
+
+      const created = yield* stack.deploy(program(false));
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.instance.dbInstanceIdentifier,
       });
-
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 20,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "1 day",
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
+      const initial = (yield* describe).DBInstances?.[0];
+      expect(initial?.DBInstanceArn).toBe(created.instance.dbInstanceArn);
+      expect(initial?.DBInstanceStatus).toBe("available");
+      expect(initial?.AllocatedStorage).toBe(20);
+      expect(initial?.StorageType).toBe("gp3");
+      expect(initial?.BackupRetentionPeriod).toBe(1);
+      expect(initial?.IAMDatabaseAuthenticationEnabled).toBe(false);
+      expect(initial?.PubliclyAccessible).toBe(false);
+      expect(initial?.DeletionProtection).toBe(false);
+      expect(initial?.NetworkType).toBe("IPV4");
+      expect(initial?.VpcSecurityGroups).toEqual([
+        { VpcSecurityGroupId: created.groupId, Status: "active" },
+      ]);
+      expect(
+        initial?.DBParameterGroups?.map((group) => group.DBParameterGroupName),
+      ).toEqual([created.dbParameterGroupName]);
+      expect(created.instance.vpcSecurityGroups).toEqual([
+        { id: created.groupId, status: "active" },
+      ]);
+      expect(created.instance.dbParameterGroups).toEqual(
+        initial?.DBParameterGroups?.map((group) => ({
+          name: group.DBParameterGroupName,
+          status: group.ParameterApplyStatus,
+        })),
       );
 
-      expect(created.allocatedStorage).toBe(20);
-      expect(created.storageType).toBe("gp3");
-      expect(created.backupRetentionPeriod).toBe(1);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 25,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "3 days",
-            enablePerformanceInsights: true,
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
+      const updatedProgram = program(true);
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "update" });
+      const updated = yield* stack.deploy(updatedProgram);
+      expect(updated.instance.dbInstanceArn).toBe(
+        created.instance.dbInstanceArn,
       );
+      expect(updated.instance.dbInstanceIdentifier).toBe(
+        created.instance.dbInstanceIdentifier,
+      );
+      expect(updated.groupId).not.toBe(created.groupId);
+      expect(updated.dbParameterGroupName).not.toBe(
+        created.dbParameterGroupName,
+      );
+      expect(updated.instance.iamDatabaseAuthenticationEnabled).toBe(true);
+      expect(
+        updated.instance.pendingIamDatabaseAuthenticationEnabled,
+      ).toBeUndefined();
+      expect(updated.instance.vpcSecurityGroups).toEqual([
+        { id: updated.groupId, status: "active" },
+      ]);
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.DBInstanceStatus).toBe("available");
+      expect(observed?.AllocatedStorage).toBe(25);
+      expect(observed?.BackupRetentionPeriod).toBe(3);
+      expect(observed?.PerformanceInsightsEnabled).toBe(true);
+      expect(observed?.IAMDatabaseAuthenticationEnabled).toBe(true);
+      expect(
+        observed?.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled,
+      ).toBeUndefined();
+      expect(observed?.VpcSecurityGroups).toEqual([
+        { VpcSecurityGroupId: updated.groupId, Status: "active" },
+      ]);
+      expect(observed?.DBParameterGroups).toHaveLength(1);
+      expect(observed?.DBParameterGroups?.[0]?.DBParameterGroupName).toBe(
+        updated.dbParameterGroupName,
+      );
+      // RDS may require a reboot for a new parameter-group association.
+      expect(["in-sync", "pending-reboot"]).toContain(
+        observed?.DBParameterGroups?.[0]?.ParameterApplyStatus,
+      );
+      expect(updated.instance.dbParameterGroups).toEqual(
+        observed?.DBParameterGroups?.map((group) => ({
+          name: group.DBParameterGroupName,
+          status: group.ParameterApplyStatus,
+        })),
+      );
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
 
-      // In-place modify — identity is preserved (no replacement).
-      expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
-      expect(updated.backupRetentionPeriod).toBe(3);
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: created.instance.dbInstanceIdentifier,
+        VpcSecurityGroupIds: [created.groupId],
+        ApplyImmediately: true,
+      });
+      const drifted = (yield* describe.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 10,
+          until: (response) => {
+            const instance = response.DBInstances?.[0];
+            return (
+              instance?.DBInstanceStatus === "available" &&
+              instance.VpcSecurityGroups?.length === 1 &&
+              instance.VpcSecurityGroups[0]?.VpcSecurityGroupId ===
+                created.groupId &&
+              instance.VpcSecurityGroups[0]?.Status === "active"
+            );
+          },
+        }),
+      )).DBInstances?.[0];
+      expect(drifted?.DBInstanceStatus).toBe("available");
+      expect(drifted?.VpcSecurityGroups).toEqual([
+        { VpcSecurityGroupId: created.groupId, Status: "active" },
+      ]);
+      // Identical desired props must still plan and reconcile the live drift.
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "update" });
+      const repaired = yield* stack.deploy(updatedProgram);
+      expect(repaired.instance.dbInstanceArn).toBe(
+        created.instance.dbInstanceArn,
+      );
+      expect(repaired.instance.dbInstanceIdentifier).toBe(
+        created.instance.dbInstanceIdentifier,
+      );
+      expect(repaired.instance.vpcSecurityGroups).toEqual([
+        { id: updated.groupId, status: "active" },
+      ]);
+      const settled = (yield* describe).DBInstances?.[0];
+      expect(settled?.DBInstanceStatus).toBe("available");
+      expect(settled?.VpcSecurityGroups).toEqual([
+        { VpcSecurityGroupId: updated.groupId, Status: "active" },
+      ]);
+      expect(settled?.IAMDatabaseAuthenticationEnabled).toBe(true);
+      expect(settled?.PubliclyAccessible).toBe(false);
+      expect(settled?.DeletionProtection).toBe(false);
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
