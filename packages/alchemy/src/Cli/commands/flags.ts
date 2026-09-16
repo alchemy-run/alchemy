@@ -15,6 +15,13 @@ export const USER = Config.String("USER").pipe(
   Config.withDefault("unknown"),
 );
 
+/** `live_$USER`, `dev_$USER`, or `test_$USER` (falls back to `*_unknown`). */
+export const userStage = (kind: "live" | "dev" | "test") =>
+  USER.pipe(
+    Effect.map((user) => `${kind}_${user}`),
+    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
+  );
+
 export const ALCHEMY_STAGE = Config.String("ALCHEMY_STAGE").pipe(
   Config.option,
   Effect.map(Option.getOrUndefined),
@@ -69,10 +76,7 @@ export const resolveStage = Effect.fn(function* (
     }
     return configured;
   }
-  return yield* USER.pipe(
-    Effect.map((user) => `${kind}_${user}`),
-    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
-  );
+  return yield* userStage(kind);
 });
 
 export const envFile = Flag.File("env-file").pipe(

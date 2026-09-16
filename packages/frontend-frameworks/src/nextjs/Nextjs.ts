@@ -486,12 +486,6 @@ export const make = (
         const url = yield* Runtime.Runtime.use((runtime) =>
           runtime.start({
             name: worker?.name ?? "distilled-nextjs-dev",
-            // This workerd sits directly behind the host's WorkerProxy, which
-            // signs every forwarded request with its shared secret. The entry
-            // worker rejects a signed request whose secret it doesn't hold
-            // (400 "Invalid proxy shared secret"), so the host's secret must
-            // reach this start call.
-            proxySharedSecret: worker?.proxySharedSecret,
             compatibilityDate:
               options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
             compatibilityFlags: [
