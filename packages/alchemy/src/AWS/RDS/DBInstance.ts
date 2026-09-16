@@ -106,7 +106,12 @@ export interface DBInstanceProps {
    */
   masterUserSecretKmsKeyId?: string;
   /**
-   * Listener port. In-place modify (sent as `DBPortNumber` on modify).
+   * Standalone listener port. Omission/removal restores the engine default:
+   * PostgreSQL 5432, MySQL/MariaDB 3306, Oracle 1521, SQL Server 1433, Db2 50000.
+   * Unknown engines require an explicit port. RDS Custom supports creation
+   * with a port, but changing an existing Custom listener is not supported here.
+   * Ignored for Aurora and cluster members: configure the DBCluster port.
+   * Changes restart the database and are sent as `DBPortNumber` on modify.
    */
   port?: number;
   /**
@@ -569,6 +574,43 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
+ * ### Listener Port Defaults
+ * Omitted listener ports select the database engine's default: PostgreSQL
+ * 5432, MySQL/MariaDB 3306, Oracle 1521, SQL Server 1433, and Db2 50000.
+ * Alchemy compares the actual endpoint port, including pending changes,
+ * rather than the separate `DbInstancePort` field returned by AWS.
+ *
+ * **Example:** PostgreSQL listening on its default port
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ * });
+ * ```
+ *
+ * ### Resetting the Listener Port
+ * Removing a custom port restores the engine default. Unchanged programs
+ * also detect and repair external listener changes. Port changes restart
+ * the database, including when restoring defaults after adoption.
+ *
+ * **Example:** Restore PostgreSQL's port 5432
+ * ```diff lang="typescript"
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ * - port: 5433,
+ * });
+ * ```
+ *
+ * Aurora and other cluster members inherit their listener from `DBCluster`;
+ * instance `port` declarations are ignored. RDS Custom creation accepts a
+ * port, but an existing Custom instance that needs a listener change fails
+ * explicitly instead of silently retaining the wrong port or replacing data.
+ *
  * ### Monitoring & Logs
  * **Example:** Enhanced monitoring + log export
  * ```typescript
@@ -697,6 +739,56 @@ const logExportDelta = (
     ...(DisableLogTypes.length > 0 ? { DisableLogTypes } : {}),
   };
 };
+
+class InvalidDBInstancePort extends Data.TaggedError("InvalidDBInstancePort")<{
+  message: string;
+}> {}
+
+const desiredInstancePort = Effect.fn(function* (
+  props: DBInstanceProps,
+  observed?: rds.DBInstance,
+) {
+  if (
+    props.dbClusterIdentifier !== undefined ||
+    observed?.DBClusterIdentifier !== undefined ||
+    props.engine.startsWith("aurora")
+  ) {
+    return undefined;
+  }
+  if (props.port !== undefined) {
+    if (
+      !Number.isInteger(props.port) ||
+      props.port < 1150 ||
+      props.port > 65535
+    ) {
+      return yield* new InvalidDBInstancePort({
+        message: "port must be an integer between 1150 and 65535",
+      });
+    }
+    return props.port;
+  }
+  if (props.engine === "postgres") return 5432;
+  if (props.engine === "mysql" || props.engine === "mariadb") return 3306;
+  if (
+    props.engine.startsWith("oracle-") ||
+    props.engine.startsWith("custom-oracle-")
+  )
+    return 1521;
+  if (
+    props.engine.startsWith("sqlserver-") ||
+    props.engine.startsWith("custom-sqlserver-")
+  )
+    return 1433;
+  if (props.engine.startsWith("db2-")) return 50000;
+  return yield* new InvalidDBInstancePort({
+    message: `Declare port explicitly for engine '${props.engine}'`,
+  });
+});
+
+const portConverged = (instance: rds.DBInstance, port: number | undefined) =>
+  port === undefined ||
+  (instance.Endpoint?.Port === port &&
+    instance.PendingModifiedValues?.Port === undefined);
 
 class InvalidDBInstanceStorage extends Data.TaggedError(
   "InvalidDBInstanceStorage",
@@ -987,6 +1079,38 @@ export const DBInstanceProvider = () =>
         );
       });
 
+      const waitForPort = Effect.fn(function* (
+        instanceId: string,
+        port: number,
+      ) {
+        const instance = yield* readInstance(instanceId).pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (instance) =>
+              instance !== undefined &&
+              (instance.DBInstanceStatus === "available" ||
+                instance.DBInstanceStatus === "storage-optimization") &&
+              portConverged(instance, port),
+          }),
+        );
+        if (
+          !instance?.DBInstanceArn ||
+          !["available", "storage-optimization"].includes(
+            instance.DBInstanceStatus ?? "",
+          ) ||
+          !portConverged(instance, port)
+        ) {
+          return yield* new InvalidDBInstancePort({
+            message: `DB instance '${instanceId}' listener did not converge (status: ${instance?.DBInstanceStatus}, desired: ${port}, observed: ${instance?.Endpoint?.Port}, pending: ${instance?.PendingModifiedValues?.Port})`,
+          });
+        }
+        return instance;
+      });
+
       const waitForStorage = Effect.fn(function* (
         instanceId: string,
         converged: (instance: rds.DBInstance) => boolean,
@@ -1070,13 +1194,15 @@ export const DBInstanceProvider = () =>
             if (!instance?.DBInstanceArn) {
               return { action: "update", stables: [] } as const;
             }
+            const port = yield* desiredInstancePort(news, instance);
             const desiredStorage = yield* resolveStorage(
               news,
               instance.AllocatedStorage,
             );
             if (
               !storageConverged(instance, desiredStorage) ||
-              !autoscalingConverged(storage, instance)
+              !autoscalingConverged(storage, instance) ||
+              !portConverged(instance, port)
             ) {
               return { action: "update" } as const;
             }
@@ -1137,6 +1263,7 @@ export const DBInstanceProvider = () =>
           const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
+          let port = yield* desiredInstancePort(news, observed);
           let desiredStorage = yield* resolveStorage(
             news,
             observed?.AllocatedStorage,
@@ -1160,7 +1287,7 @@ export const DBInstanceProvider = () =>
                 MasterUserPassword: news.masterUserPassword,
                 ManageMasterUserPassword: news.manageMasterUserPassword,
                 MasterUserSecretKmsKeyId: news.masterUserSecretKmsKeyId,
-                Port: news.port,
+                Port: port,
                 MultiAZ: news.multiAZ,
                 AvailabilityZone: news.availabilityZone,
                 BackupRetentionPeriod: backupRetentionDays,
@@ -1225,7 +1352,7 @@ export const DBInstanceProvider = () =>
             // syncCoreSettings — single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
             // from the observed cloud state, to avoid spurious
-            // `PendingModifiedValues`. `Port` maps to `DBPortNumber` on modify.
+            // `PendingModifiedValues`. The listener port is synchronized below.
             const core: rds.ModifyDBInstanceMessage = {
               DBInstanceIdentifier: identifier,
               ApplyImmediately: true,
@@ -1255,7 +1382,6 @@ export const DBInstanceProvider = () =>
             setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
             setIf("PreferredMaintenanceWindow", news.preferredMaintenanceWindow, observed.PreferredMaintenanceWindow); // prettier-ignore
-            setIf("DBPortNumber", news.port, observed.DbInstancePort);
             setIf("OptionGroupName", news.optionGroupName, undefined);
             setIf("LicenseModel", news.licenseModel, observed.LicenseModel);
             setIf("CACertificateIdentifier", news.caCertificateIdentifier, observed.CACertificateIdentifier); // prettier-ignore
@@ -1379,6 +1505,25 @@ export const DBInstanceProvider = () =>
                 allocationConverged(storage, instance) &&
                 autoscalingConverged(storage, instance),
             );
+          }
+
+          port = yield* desiredInstancePort(news, observed);
+          if (port !== undefined && !portConverged(observed, port)) {
+            if (observed.PendingModifiedValues?.Port !== port) {
+              if (news.engine.startsWith("custom-")) {
+                return yield* new InvalidDBInstancePort({
+                  message:
+                    "Changing an existing RDS Custom listener through ModifyDBInstance is not supported",
+                });
+              }
+              // Port changes restart immediately without applying unrelated pending settings.
+              yield* rds.modifyDBInstance({
+                DBInstanceIdentifier: identifier,
+                DBPortNumber: port,
+                ApplyImmediately: false,
+              });
+            }
+            observed = yield* waitForPort(identifier, port);
           }
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
