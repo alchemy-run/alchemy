@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import { Unowned } from "@/AdoptPolicy";
 import { InstanceId } from "@/InstanceId";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
@@ -1633,14 +1634,16 @@ describe("Prisma resource providers", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const projectProvider = yield* PrismaProject.Provider;
-      const databaseProvider = yield* PrismaDatabase.Provider;
-      const connectionProvider = yield* PrismaConnection.Provider;
-      const branchProvider = yield* PrismaBranch.Provider;
-      const serviceProvider = yield* PrismaApp.Provider;
-      const versionProvider = yield* PrismaDeployment.Provider;
-      const envProvider = yield* PrismaEnvironmentVariable.Provider;
-      const repoProvider = yield* PrismaSourceRepository.Provider;
+      const projectProvider = yield* Provider.findProvider(PrismaProject);
+      const databaseProvider = yield* Provider.findProvider(PrismaDatabase);
+      const connectionProvider = yield* Provider.findProvider(PrismaConnection);
+      const branchProvider = yield* Provider.findProvider(PrismaBranch);
+      const serviceProvider = yield* Provider.findProvider(PrismaApp);
+      const versionProvider = yield* Provider.findProvider(PrismaDeployment);
+      const envProvider = yield* Provider.findProvider(
+        PrismaEnvironmentVariable,
+      );
+      const repoProvider = yield* Provider.findProvider(PrismaSourceRepository);
 
       const project = yield* projectProvider.read!(
         readInput("Project", { name: "app" }),
@@ -2229,7 +2232,7 @@ describe("Prisma resource providers", () => {
       });
 
       return Effect.gen(function* () {
-        const domainProvider = yield* PrismaCustomDomain.Provider;
+        const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
         const error = yield* domainProvider
           .reconcile(
             reconcileInput("CustomDomain", {
@@ -2294,7 +2297,7 @@ describe("Prisma resource providers", () => {
     });
 
     return Effect.gen(function* () {
-      const domainProvider = yield* PrismaCustomDomain.Provider;
+      const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
       const domain = yield* domainProvider.read!(
         readInput("CustomDomain", {
           app: "service-1",
@@ -2514,7 +2517,9 @@ describe("Prisma resource providers", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        const envProvider = yield* Provider.findProvider(
+          PrismaEnvironmentVariable,
+        );
         const observed = yield* envProvider.read!(
           readInput("EnvironmentVariable", {
             project: "project-1",
@@ -2594,7 +2599,9 @@ describe("Prisma resource providers", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const envProvider = yield* Provider.findProvider(
+        PrismaEnvironmentVariable,
+      );
       const observed = yield* envProvider.read!(
         readInput("EnvironmentVariable", {
           project: "project-1",
@@ -3999,7 +4006,7 @@ describe("Prisma resource providers", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const projectProvider = yield* PrismaProject.Provider;
+      const projectProvider = yield* Provider.findProvider(PrismaProject);
       const observed = yield* projectProvider.read!(
         readInput("Project", { name: "app", region: "us-east-1" }),
       );

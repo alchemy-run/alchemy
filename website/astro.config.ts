@@ -34,6 +34,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
@@ -141,6 +142,7 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
@@ -240,10 +242,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
@@ -1101,6 +1099,31 @@ export default defineConfig({
           ],
         },
         {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
+                },
+                {
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
+                  link: "/stripe/guides/webhooks",
+                },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
+          ],
+        },
+        {
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
@@ -1143,6 +1166,83 @@ export default defineConfig({
             },
             { label: "Webhooks & events", link: "/github/events" },
             providerResourcesEntry("GitHub"),
+          ],
+        },
+        {
+          label: "Git",
+          items: [
+            { label: "Overview", link: "/git" },
+            { label: "Getting Started", link: "/git/getting-started" },
+            {
+              label: "Tutorial",
+              items: [
+                {
+                  label: "Part 1: Push your first repository",
+                  link: "/git/tutorial/part-1",
+                },
+                {
+                  label: "Part 2: Control access",
+                  link: "/git/tutorial/part-2",
+                },
+                {
+                  label: "Part 3: Publish a repository",
+                  link: "/git/tutorial/part-3",
+                },
+                {
+                  label: "Part 4: Give users their own credentials",
+                  link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
+                },
+              ],
+            },
+            {
+              label: "Using your host",
+              items: [
+                { label: "Cloning & pushing", link: "/git/clone-and-push" },
+                { label: "Repositories", link: "/git/repositories" },
+                { label: "Pull requests", link: "/git/pull-requests" },
+                {
+                  label: "GitHub API compatibility",
+                  link: "/git/github-api",
+                },
+              ],
+            },
+            {
+              label: "Building blocks",
+              items: [
+                { label: "Overview", link: "/git/blocks" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
+                { label: "Repository", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob Store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Recipes",
+              items: [
+                { label: "Overview", link: "/git/recipes" },
+                { label: "Scaling", link: "/git/recipes/scaling" },
+                { label: "All on Cloudflare", link: "/git/recipes/cloudflare" },
+                {
+                  label: "Bytes in S3, hashing on Lambda",
+                  link: "/git/recipes/cloudflare-aws",
+                },
+                {
+                  label: "Bring your own store",
+                  link: "/git/recipes/your-own-store",
+                },
+              ],
+            },
           ],
         },
         {

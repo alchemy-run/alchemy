@@ -94,14 +94,18 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
     return {
       shared: {
         api: {
-          polyfill,
+          // Virtual entries have no package directory for bare-import resolution.
+          polyfill: polyfill.map((id) => toPosixPath(require.resolve(id))),
           inject: Object.fromEntries(
             Object.entries(inject).map(([injectedName, moduleSpecifier]) => {
               assert(
                 typeof moduleSpecifier === "string",
                 `expected moduleSpecifier to be a string`,
               );
-              return [injectedName, moduleSpecifier];
+              return [
+                injectedName,
+                toPosixPath(require.resolve(moduleSpecifier)),
+              ];
             }),
           ),
         },
