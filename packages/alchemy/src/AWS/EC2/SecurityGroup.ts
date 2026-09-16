@@ -310,8 +310,8 @@ export interface SecurityGroup extends Resource<
  *     fromPort: 443,
  *     toPort: 443,
  *     cidrIpv4: "10.0.0.0/16",
- * -   description: "HTTPS",
- * +   description: "Internal HTTPS",
+ * -    description: "HTTPS",
+ * +    description: "Internal HTTPS",
  *   }],
  * });
  * ```
@@ -328,12 +328,12 @@ export interface SecurityGroup extends Resource<
  * ```diff lang="typescript"
  * const sg = yield* AWS.EC2.SecurityGroup("AppSg", {
  *   vpcId: vpc.vpcId,
- * - egress: [{
- * -   ipProtocol: "tcp",
- * -   fromPort: 443,
- * -   toPort: 443,
- * -   cidrIpv4: "0.0.0.0/0",
- * - }],
+ * -  egress: [{
+ * -    ipProtocol: "tcp",
+ * -    fromPort: 443,
+ * -    toPort: 443,
+ * -    cidrIpv4: "0.0.0.0/0",
+ * -  }],
  * });
  * ```
  *

@@ -507,8 +507,8 @@ export interface DBInstance extends Resource<
  *   masterUsername: "admin",
  *   manageMasterUserPassword: true,
  *   allocatedStorage: 400,
- * - iops: 16000,
- * - storageThroughput: 750,
+ * -  iops: 16000,
+ * -  storageThroughput: 750,
  * });
  * ```
  *
@@ -552,7 +552,7 @@ export interface DBInstance extends Resource<
  *   manageMasterUserPassword: true,
  *   storageType: "gp2",
  *   allocatedStorage: 20,
- * - maxAllocatedStorage: 100,
+ * -  maxAllocatedStorage: 100,
  * });
  * ```
  *
