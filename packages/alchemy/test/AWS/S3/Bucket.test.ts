@@ -13,12 +13,14 @@ import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
+import * as KMS from "@distilled.cloud/aws/kms";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -287,6 +289,132 @@ test.provider(
       ).toEqual([{ Key: "initialized", Value: "yes" }]);
       yield* stack.destroy();
       yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "PR1587 skips encryption writes for a decoded KMS ARN and still updates keys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const definition = (
+        revision: string,
+        key: "first" | "second",
+        bucketKeyEnabled = false,
+        policy?: AWS.IAM.PolicyStatement[],
+      ) =>
+        Effect.gen(function* () {
+          const first = yield* AWS.KMS.Key("FirstKey", {
+            deletionWindow: "7 days",
+          });
+          const second = yield* AWS.KMS.Key("SecondKey", {
+            deletionWindow: "7 days",
+          });
+          const bucket = yield* Bucket("KmsIdentityBucket", {
+            tags: { revision },
+            policy,
+            encryption: {
+              sseAlgorithm: "aws:kms",
+              kmsMasterKeyId: key === "first" ? first.keyArn : second.keyArn,
+              bucketKeyEnabled,
+            },
+          });
+          return { bucket, first, second };
+        });
+      const initial = yield* stack.deploy(definition("before", "first"));
+      const { bucket, first, second } = initial;
+      const observed = yield* S3.getBucketEncryption({
+        Bucket: bucket.bucketName,
+      });
+      const decoded =
+        observed.ServerSideEncryptionConfiguration!.Rules[0]!
+          .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
+      expect(Redacted.isRedacted(decoded)).toBe(true);
+      expect(
+        Redacted.isRedacted(decoded) ? Redacted.value(decoded) : decoded,
+      ).toBe(first.keyArn);
+      const probeWrite = S3.putBucketEncryption({
+        Bucket: bucket.bucketName,
+        ServerSideEncryptionConfiguration:
+          observed.ServerSideEncryptionConfiguration!,
+      }).pipe(
+        Effect.as(false),
+        Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+      );
+
+      const deny: AWS.IAM.PolicyStatement[] = [
+        {
+          Effect: "Deny",
+          Principal: { AWS: "*" },
+          Action: ["s3:PutEncryptionConfiguration"],
+          Resource: bucket.bucketArn,
+        },
+      ];
+      yield* Effect.gen(function* () {
+        yield* S3.putBucketPolicy({
+          Bucket: bucket.bucketName,
+          Policy: JSON.stringify({ Version: "2012-10-17", Statement: deny }),
+        });
+        expect(
+          yield* probeWrite.pipe(
+            Effect.repeat({
+              until: Boolean,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          ),
+        ).toBe(true);
+        const plan = yield* stack.plan(
+          definition("after", "first", false, deny),
+        );
+        expect(plan.resources.KmsIdentityBucket?.action).toBe("update");
+        // Tags force reconcile; an encryption PUT would fail under the proven deny.
+        yield* stack.deploy(definition("after", "first", false, deny));
+        expect(
+          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+        ).toContainEqual({ Key: "revision", Value: "after" });
+        expect(yield* probeWrite).toBe(true);
+      }).pipe(
+        Effect.ensuring(
+          S3.deleteBucketPolicy({ Bucket: bucket.bucketName }).pipe(
+            Effect.orDie,
+          ),
+        ),
+      );
+
+      // Wait for removal using the original configuration, never the desired next key.
+      yield* S3.putBucketEncryption({
+        Bucket: bucket.bucketName,
+        ServerSideEncryptionConfiguration:
+          observed.ServerSideEncryptionConfiguration!,
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AccessDeniedException",
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+        }),
+      );
+      yield* stack.deploy(definition("different-key", "second"));
+      const changed = (yield* S3.getBucketEncryption({
+        Bucket: bucket.bucketName,
+      })).ServerSideEncryptionConfiguration!.Rules[0]!
+        .ApplyServerSideEncryptionByDefault!.KMSMasterKeyID;
+      expect(
+        Redacted.isRedacted(changed) ? Redacted.value(changed) : changed,
+      ).toBe(second.keyArn);
+      yield* stack.deploy(definition("bucket-key", "second", true));
+      expect(
+        (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+          .ServerSideEncryptionConfiguration?.Rules[0]?.BucketKeyEnabled,
+      ).toBe(true);
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+      for (const key of [first, second]) {
+        expect(
+          (yield* KMS.describeKey({ KeyId: key.keyId })).KeyMetadata?.KeyState,
+        ).toBe("PendingDeletion");
+      }
     }),
   { timeout: 120_000 },
 );
