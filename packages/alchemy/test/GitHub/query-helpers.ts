@@ -1,5 +1,5 @@
+import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Effect from "effect/Effect";
-import { Octokit } from "./Octokit.ts";
 
 /**
  * Query filters for GitHub Pull Requests.
@@ -59,26 +59,8 @@ export interface QueriedPullRequest {
 }
 
 /**
- * Query pull requests from a repository with optional filters.
- *
- * This is the observation/read side of the GitHub provider, enabling queries
- * against existing PRs without declaring them as managed resources.
- *
- * **Example:** Query Open PRs to Main
- * ```typescript
- * const openPRs = yield* GitHub.queryPullRequests("my-org", "my-repo", {
- *   state: "open",
- *   base: "main",
- * })
- * ```
- *
- * **Example:** Query PRs from Feature Branches
- * ```typescript
- * const featurePRs = yield* GitHub.queryPullRequests("my-org", "my-repo", {
- *   head: "my-org:feature/*",
- *   state: "all",
- * })
- * ```
+ * Test helper: query pull requests from a repository with optional filters,
+ * used to observe PullRequest resource state out-of-band.
  */
 export const queryPullRequests = (
   owner: string,
@@ -154,12 +136,7 @@ export const queryPullRequests = (
   });
 
 /**
- * Get a single pull request by number.
- *
- * **Example:** Get Specific PR
- * ```typescript
- * const pr = yield* GitHub.getPullRequest("my-org", "my-repo", 456)
- * ```
+ * Test helper: get a single pull request by number.
  */
 export const getPullRequest = (
   owner: string,

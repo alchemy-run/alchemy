@@ -5,6 +5,7 @@ import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { getPullRequest, queryPullRequests } from "./query-helpers.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -110,18 +111,14 @@ test.provider(
         }),
       );
 
-      const pulls = yield* GitHub.queryPullRequests(owner, repo, {
+      const pulls = yield* queryPullRequests(owner, repo, {
         head: `${owner}:alchemy-pr-1569-a`,
         base,
         sort: "updated",
         direction: "asc",
       });
       expect(pulls).toHaveLength(1);
-      const single = yield* GitHub.getPullRequest(
-        owner,
-        repo,
-        created.prNumber,
-      );
+      const single = yield* getPullRequest(owner, repo, created.prNumber);
       expect(pulls[0]).toEqual(single);
       expect(single).toMatchObject({
         number: created.prNumber,
@@ -144,7 +141,7 @@ test.provider(
       expect(single.createdAt).toBeTruthy();
       expect(single.updatedAt).toBeTruthy();
       expect(
-        yield* GitHub.queryPullRequests(owner, repo, {
+        yield* queryPullRequests(owner, repo, {
           head: `${owner}:alchemy-pr-1569-b`,
         }),
       ).toEqual([]);
@@ -155,23 +152,19 @@ test.provider(
         client.rest.pulls.get({ owner, repo, pull_number: created.prNumber }),
       );
       expect(closed.data.state).toBe("closed");
-      expect(yield* GitHub.queryPullRequests(owner, repo)).toEqual([]);
-      const closedPulls = yield* GitHub.queryPullRequests(owner, repo, {
+      expect(yield* queryPullRequests(owner, repo)).toEqual([]);
+      const closedPulls = yield* queryPullRequests(owner, repo, {
         state: "closed",
       });
       const fromList = closedPulls.find(
         (pull) => pull.number === created.prNumber,
       );
-      const fromGet = yield* GitHub.getPullRequest(
-        owner,
-        repo,
-        created.prNumber,
-      );
+      const fromGet = yield* getPullRequest(owner, repo, created.prNumber);
       expect(fromList).toEqual(fromGet);
       expect(fromGet.state).toBe("closed");
       expect(fromGet.closedAt).toBeTruthy();
       expect(fromGet.merged).toBe(false);
-      const all = yield* GitHub.queryPullRequests(owner, repo, {
+      const all = yield* queryPullRequests(owner, repo, {
         state: "all",
       });
       expect(all.some((pull) => pull.number === created.prNumber)).toBe(true);
