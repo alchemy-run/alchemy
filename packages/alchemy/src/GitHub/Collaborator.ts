@@ -1,8 +1,10 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface CollaboratorProps {
@@ -143,20 +145,15 @@ export const CollaboratorProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
 
       // Ensure & Sync — PUT is idempotent; creates or updates permission
-      yield* Effect.tryPromise({
-        try: async () => {
-          await octokit.rest.repos.addCollaborator({
-            owner: news.owner,
-            repo: news.repository,
-            username: news.username,
-            permission: news.permission ?? "push",
-          });
-        },
-        catch: (e) => e as Error,
-      });
+      yield* Repos.addCollaborator({
+        owner: news.owner,
+        repo: news.repository,
+        username: news.username,
+        permission: news.permission ?? "push",
+      }).pipe(github);
 
       return {
         username: news.username,
@@ -165,31 +162,31 @@ export const CollaboratorProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
+      const github = yield* githubFor();
 
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
+
+      // Listing collaborators requires push access; the token can see repos
+      // (via org membership) where it has none, so filter on the observed
+      // permissions instead of tolerating a 403 per repo.
+      const writable = repos.filter((repo) => repo.permissions?.push === true);
 
       const perRepo = yield* Effect.forEach(
-        repos,
+        writable,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const collaborators = await octokit.paginate(
-                  octokit.rest.repos.listCollaborators,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
-                return collaborators.map((collab: any) => ({
+          Repos.listCollaborators
+            .items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              per_page: 100,
+            })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((collaborators) =>
+                collaborators.map((collab) => ({
                   username: collab.login,
                   permission: collab.permissions?.admin
                     ? "admin"
@@ -200,16 +197,12 @@ export const CollaboratorProvider = () =>
                         : collab.permissions?.triage
                           ? "triage"
                           : "pull",
-                }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+                })),
+              ),
+              // Repos where the token lacks access are skipped rather than
+              // failing the whole enumeration.
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+            ),
         { concurrency: 10 },
       );
 
@@ -217,23 +210,25 @@ export const CollaboratorProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.removeCollaborator({
-              owner: olds.owner,
-              repo: olds.repository,
-              username: olds.username,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      // Observe-before-delete: removeCollaborator has no typed NotFound, and
+      // the grant (or the whole repository) may already be gone out-of-band.
+      // A 404 from the membership probe means there is nothing to remove.
+      const existing = yield* Repos.checkCollaborator({
+        owner: olds.owner,
+        repo: olds.repository,
+        username: olds.username,
+      }).pipe(
+        github,
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
+      if (existing === undefined) return;
+
+      yield* Repos.removeCollaborator({
+        owner: olds.owner,
+        repo: olds.repository,
+        username: olds.username,
+      }).pipe(github);
     }),
   });

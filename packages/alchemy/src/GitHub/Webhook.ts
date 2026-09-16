@@ -1,12 +1,14 @@
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Stream from "effect/Stream";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
-import type { WebhookEventName } from "./RepositoryEventSource.ts";
+import type { GitHubEventName } from "./RepositoryEventSource.ts";
 
 export interface WebhookProps {
   /**
@@ -31,7 +33,7 @@ export interface WebhookProps {
    * Use `["*"]` to receive every event GitHub emits.
    * @default ["push"]
    */
-  events?: WebhookEventName[];
+  events?: (GitHubEventName | "*")[];
 
   /**
    * Secret used to sign each delivery with `HMAC-SHA256`. The signature is
@@ -171,7 +173,7 @@ export const WebhookProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
 
       const config = {
         url: news.url as string,
@@ -187,118 +189,69 @@ export const WebhookProvider = () =>
       // created) collapses to "no observed webhook" so we converge by
       // creating a fresh one.
       const observed = output?.webhookId
-        ? yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                const { data } = await octokit.rest.repos.getWebhook({
-                  owner: news.owner,
-                  repo: news.repository,
-                  hook_id: output.webhookId,
-                });
-                return data;
-              } catch (error: any) {
-                if (error.status === 404) return undefined;
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          })
-        : undefined;
-
-      // Ensure — POST creates the webhook.
-      if (observed === undefined) {
-        const { data } = yield* Effect.tryPromise(() =>
-          octokit.rest.repos.createWebhook({
+        ? yield* Repos.getWebhook({
             owner: news.owner,
             repo: news.repository,
-            name: "web",
-            active,
-            events,
-            config,
-          }),
-        );
-        return toAttrs(data);
-      }
-
-      // Sync — PATCH the existing webhook with the desired config. The
-      // secret can never be read back, so we always send the full config
-      // to converge rather than diffing.
-      const { data } = yield* Effect.tryPromise(() =>
-        octokit.rest.repos.updateWebhook({
-          owner: news.owner,
-          repo: news.repository,
-          hook_id: observed.id,
-          active,
-          events,
-          config,
-        }),
-      );
+            hook_id: output.webhookId,
+          }).pipe(
+            github,
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          )
+        : undefined;
+      const data = yield* (
+        observed === undefined
+          ? Repos.createWebhook({
+              owner: news.owner,
+              repo: news.repository,
+              name: "web",
+              active,
+              events,
+              config,
+            })
+          : Repos.updateWebhook({
+              owner: news.owner,
+              repo: news.repository,
+              hook_id: observed.id,
+              active,
+              events,
+              config,
+            })
+      ).pipe(github);
       return toAttrs(data);
     }),
-
-    // GitHub has no global webhook list — hooks are repo-scoped. Enumerate every
-    // repository the authenticated token can see, then list each repo's webhooks.
+    // Hooks are repo-scoped; enumerate all visible repositories first.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      // `octokit.paginate` walks every page and flattens to a single array.
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const github = yield* githubFor();
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const hooks = await octokit.paginate(
-                  octokit.rest.repos.listWebhooks,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
-                return hooks.map(toAttrs);
-              } catch (error: any) {
-                // Repos where the token lacks admin access reject the webhooks
-                // endpoint with 403/404 — skip them per the per-item not-found
-                // rule rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Repos.listWebhooks
+            .items({ owner: repo.owner.login, repo: repo.name, per_page: 100 })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((hooks) => hooks.map(toAttrs)),
+              Effect.catchTag(["Forbidden", "NotFound"], () =>
+                Effect.succeed([]),
+              ),
+            ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
-
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise(async () => {
-        try {
-          await octokit.rest.repos.deleteWebhook({
-            owner: olds.owner,
-            repo: olds.repository,
-            hook_id: output.webhookId,
-          });
-        } catch (error: any) {
-          if (error.status !== 404) {
-            throw error;
-          }
-        }
-      });
+      const github = yield* githubFor(olds.baseUrl);
+      yield* Repos.deleteWebhook({
+        owner: olds.owner,
+        repo: olds.repository,
+        hook_id: output.webhookId,
+      }).pipe(
+        github,
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });
 

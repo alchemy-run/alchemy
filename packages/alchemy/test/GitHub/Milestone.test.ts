@@ -1,12 +1,13 @@
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
+import * as Issues from "@distilled.cloud/github/issues";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as GitHub from "@/GitHub/index.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider.ts";
 import { destroy } from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
@@ -49,17 +50,15 @@ const fixture = (
 
 const listMilestones = (fixture: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.paginate(octokit.rest.issues.listMilestones, {
-          owner,
-          repo: repositoryName(fixture),
-          state: "all",
-          per_page: 100,
-        }),
-      catch: (error) => error as Error,
-    });
+    const github = yield* githubFor();
+    return yield* Issues.listMilestones
+      .items({
+        owner,
+        repo: repositoryName(fixture),
+        state: "all",
+        per_page: 100,
+      })
+      .pipe(Stream.runCollect, github);
   });
 
 const verifyDeleted = (fixture: string) =>
@@ -175,20 +174,8 @@ test.provider(
           description: "For list test",
         }),
       );
-      const credentials = yield* yield* GitHubCredentials;
-      const client = credentials.octokit({ baseUrl: undefined });
-      client.hook.before("request", (options) => {
-        if (options.url === "/user/repos") options.url = `/orgs/${owner}/repos`;
-      });
       const provider = yield* Provider.findProvider(GitHub.Milestone);
-      const allMilestones = yield* provider
-        .list()
-        .pipe(
-          Effect.provideService(
-            GitHubCredentials,
-            Effect.succeed({ ...credentials, octokit: () => client }),
-          ),
-        );
+      const allMilestones = yield* provider.list();
       const found = allMilestones.find(
         (milestone) => milestone.nodeId === created.nodeId,
       );

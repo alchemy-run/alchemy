@@ -1,8 +1,20 @@
+import * as DistilledGitHubCredentials from "@distilled.cloud/github/Credentials";
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import {
+  effectiveGitHubBaseUrl,
+  gitHubBaseUrlChanged,
+  githubFor,
+} from "./Client.ts";
+import { GitHubCredentials } from "./Credentials.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface MilestoneProps {
@@ -248,7 +260,7 @@ export const MilestoneProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const state = news.state ?? "open";
       const description = news.description ?? "";
       const requestedDueOn = news.dueOn;
@@ -262,35 +274,27 @@ export const MilestoneProvider = () =>
       // Observe — probe for an existing milestone by title. GitHub's list
       // endpoint supports filtering by state, but we need to check both open
       // and closed to find any existing milestone with this title.
-      const existingMilestones = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.issues.listMilestones, {
-            owner: news.owner,
-            repo: news.repository,
-            state: "all",
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const existingMilestones = yield* Issues.listMilestones
+        .items({
+          owner: news.owner,
+          repo: news.repository,
+          state: "all",
+          per_page: 100,
+        })
+        .pipe(Stream.runCollect, github);
 
       let observed = existingMilestones.find((m) => m.title === news.title);
 
       // Ensure — when no milestone exists, create one
       if (observed === undefined) {
-        const { data } = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.issues.createMilestone({
-              owner: news.owner,
-              repo: news.repository,
-              title: news.title,
-              state,
-              description,
-              due_on: dueOn ?? undefined,
-            }),
-          catch: (e) => e as Error,
-        });
-
-        observed = data;
+        observed = yield* Issues.createMilestone({
+          owner: news.owner,
+          repo: news.repository,
+          title: news.title,
+          state,
+          description,
+          due_on: dueOn ?? undefined,
+        }).pipe(github);
       }
 
       // Creation can shift the due date; converge the returned state too.
@@ -302,26 +306,34 @@ export const MilestoneProvider = () =>
         return attrsOf(observed);
       }
 
-      // Octokit's endpoint type omits the API's nullable due_on field.
-      const { data } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.request<
-            Awaited<
-              ReturnType<typeof octokit.rest.issues.updateMilestone>
-            >["data"]
-          >({
-            method: "PATCH",
-            url: "/repos/{owner}/{repo}/milestones/{milestone_number}",
-            owner: news.owner,
-            repo: news.repository,
-            milestone_number: observed.number,
-            title: news.title,
-            state,
-            description,
-            due_on: dueOn,
-          }),
-        catch: (e) => e as Error,
-      });
+      // distilled's UpdateMilestoneRequest types due_on as an optional
+      // string (the API schema omits its nullability), so clearing a due
+      // date — which requires an explicit `due_on: null` PATCH, omitting
+      // the field leaves it unchanged — goes over the raw HTTP client and
+      // re-reads the milestone through the typed operation.
+      if (dueOn === null && observed.due_on !== null) {
+        yield* patchMilestoneNullDueOn(news, observed.number, {
+          title: news.title,
+          state,
+          description,
+        });
+        const data = yield* Issues.getMilestone({
+          owner: news.owner,
+          repo: news.repository,
+          milestone_number: observed.number,
+        }).pipe(github);
+        return attrsOf(data);
+      }
+
+      const data = yield* Issues.updateMilestone({
+        owner: news.owner,
+        repo: news.repository,
+        milestone_number: observed.number,
+        title: news.title,
+        state,
+        description,
+        due_on: dueOn ?? undefined,
+      }).pipe(github);
 
       return attrsOf(data);
     }),
@@ -330,43 +342,31 @@ export const MilestoneProvider = () =>
     // milestones are keyed by {owner, repository, title} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
+      const github = yield* githubFor();
 
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
 
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const milestones = await octokit.paginate(
-                  octokit.rest.issues.listMilestones,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    state: "all",
-                    per_page: 100,
-                  },
-                );
-                return milestones.map(attrsOf);
-              } catch (error: any) {
-                // Repos where the token lacks milestone access reject with
-                // 403/404 — skip them rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Issues.listMilestones
+            .items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              state: "all",
+              per_page: 100,
+            })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((milestones) => milestones.map(attrsOf)),
+              // Repos where the token lacks milestone access (or that
+              // vanished mid-enumeration) are skipped rather than failing
+              // the whole enumeration.
+              Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed([])),
+            ),
         { concurrency: 10 },
       );
 
@@ -374,26 +374,55 @@ export const MilestoneProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.issues.deleteMilestone({
-              owner: olds.owner,
-              repo: olds.repository,
-              milestone_number: output.milestoneNumber,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      yield* Issues.deleteMilestone({
+        owner: olds.owner,
+        repo: olds.repository,
+        milestone_number: output.milestoneNumber,
+      }).pipe(
+        github,
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });
+
+// distilled's UpdateMilestoneRequest cannot express `due_on: null` (the
+// GitHub OpenAPI schema types the member as a plain string), but null is the
+// only way to clear a milestone's due date. Until the spec is patched, this
+// issues the PATCH directly over the Effect HTTP client with the same
+// headers the distilled protocol sends; the caller re-reads the milestone
+// through the typed getMilestone operation afterwards.
+const patchMilestoneNullDueOn = Effect.fn(function* (
+  props: MilestoneProps,
+  milestoneNumber: number,
+  body: { title: string; state: "open" | "closed"; description: string },
+) {
+  const creds = yield* yield* GitHubCredentials;
+  const apiBaseUrl =
+    (yield* effectiveGitHubBaseUrl(props.baseUrl)) ??
+    DistilledGitHubCredentials.DEFAULT_API_BASE_URL;
+  const client = yield* HttpClient.HttpClient;
+  const request = HttpClientRequest.patch(
+    `${apiBaseUrl}/repos/${props.owner}/${props.repository}/milestones/${milestoneNumber}`,
+  ).pipe(
+    HttpClientRequest.setHeaders({
+      Authorization: `Bearer ${Redacted.value(creds.token)}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "Alchemy (alchemy.run)",
+    }),
+    HttpClientRequest.bodyJsonUnsafe({ ...body, due_on: null }),
+  );
+  const response = yield* client.execute(request);
+  if (response.status < 200 || response.status >= 300) {
+    return yield* Effect.fail(
+      new Error(
+        `Failed to clear due date on milestone ${props.owner}/${props.repository}#${milestoneNumber}: HTTP ${response.status}`,
+      ),
+    );
+  }
+});
 
 const attrsOf = (data: {
   number: number;

@@ -1,12 +1,14 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import * as GitHub from "@/GitHub";
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -40,37 +42,28 @@ const repoName = (repo: GitHub.Repository) =>
 
 const getRuleset = (repo: string, rulesetId: number) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.getRepoRuleset({
-          owner,
-          repo,
-          ruleset_id: rulesetId,
-        }),
-      catch: (error) => error as Error & { status?: number },
+    const github = yield* githubFor();
+    return yield* Repos.getRepoRuleset({
+      owner,
+      repo,
+      ruleset_id: rulesetId,
     }).pipe(
-      Effect.map(({ data }) => data),
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
+      github,
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
   });
 
 const getRulesets = (repo: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.paginate(octokit.rest.repos.getRepoRulesets, {
-          owner,
-          repo,
-          includes_parents: false,
-          per_page: 100,
-        }),
-      catch: (error) => error as Error,
-    });
+    const github = yield* githubFor();
+    return yield* Repos.getRepoRulesets
+      .items({
+        owner,
+        repo,
+        includes_parents: false,
+        per_page: 100,
+      })
+      .pipe(Stream.runCollect, github);
   });
 
 test.provider("create, update, clear, and delete a ruleset", (stack) =>
@@ -178,42 +171,15 @@ test.provider("list rulesets across test repositories", (stack) =>
         }).pipe(destroy());
       }),
     );
-    const credentials = yield* yield* GitHubCredentials;
     const provider = yield* Provider.findProvider(GitHub.Ruleset);
-    // list() enumerates /user/repos; confine it to this suite's fixture.
     const listed = yield* provider.list().pipe(
-      Effect.provideService(
-        GitHubCredentials,
-        Effect.succeed({
-          ...credentials,
-          octokit: (override) => {
-            const octokit = credentials.octokit(override);
-            octokit.hook.before("request", (options) => {
-              const url = new URL(options.url, "https://api.github.com");
-              if (url.pathname === "/user/repos") {
-                url.pathname = `/orgs/${owner}/repos`;
-                options.url = url.toString();
-              }
-              if (
-                url.origin !== "https://api.github.com" ||
-                (url.pathname !== `/orgs/${owner}/repos` &&
-                  url.pathname !== `/repos/${owner}/${repo}/rulesets`)
-              ) {
-                throw new Error(`Unsafe Ruleset list request: ${url}`);
-              }
-            });
-            octokit.hook.after("request", (response, options) => {
-              const url = new URL(options.url, "https://api.github.com");
-              if (url.pathname === `/orgs/${owner}/repos`) {
-                response.data = (
-                  response.data as Array<{ name: string }>
-                ).filter((repository) => repository.name === repo);
-              }
-            });
-            return octokit;
-          },
-        }),
-      ),
+      // Repository listings are eventually consistent for fresh fixtures.
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        times: 10,
+        until: (rulesets) =>
+          rulesets.some((ruleset) => ruleset.rulesetId === created.rulesetId),
+      }),
     );
     const found = listed.find(
       (ruleset) => ruleset.rulesetId === created.rulesetId,

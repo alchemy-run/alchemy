@@ -1,5 +1,6 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import * as GitHub from "@/GitHub";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
@@ -36,23 +37,15 @@ const repoName = (repository: GitHub.Repository) =>
 
 const getProtection = (branch: string, repository: string = repo) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: async () => {
-        try {
-          const { data } = await octokit.rest.repos.getBranchProtection({
-            owner,
-            repo: repository,
-            branch,
-          });
-          return data;
-        } catch (error: any) {
-          if (error.status === 404) return undefined;
-          throw error;
-        }
-      },
-      catch: (e) => e as Error,
-    });
+    const github = yield* githubFor();
+    return yield* Repos.getBranchProtection({
+      owner,
+      repo: repository,
+      branch,
+    }).pipe(
+      github,
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    );
   });
 
 const hostRepository = GitHub.Repository("Repo", {

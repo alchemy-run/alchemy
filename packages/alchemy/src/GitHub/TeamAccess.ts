@@ -1,8 +1,11 @@
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Teams from "@distilled.cloud/github/teams";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface TeamAccessProps {
@@ -161,21 +164,16 @@ export const TeamAccessProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
 
       // Ensure & Sync — PUT is idempotent; adds team or updates permission
-      yield* Effect.tryPromise({
-        try: async () => {
-          await octokit.rest.teams.addOrUpdateRepoPermissionsInOrg({
-            org: news.owner,
-            team_slug: news.teamSlug,
-            owner: news.owner,
-            repo: news.repository,
-            permission: news.permission ?? "push",
-          });
-        },
-        catch: (e) => e as Error,
-      });
+      yield* Teams.addOrUpdateRepoPermissionsInOrg({
+        org: news.owner,
+        team_slug: news.teamSlug,
+        owner: news.owner,
+        repo: news.repository,
+        permission: news.permission ?? "push",
+      }).pipe(github);
 
       return {
         teamSlug: news.teamSlug,
@@ -183,44 +181,32 @@ export const TeamAccessProvider = () =>
       };
     }),
 
+    // Enumerate team access across the repositories the token can see —
+    // grants are keyed by {owner, repository, teamSlug} with no account-wide
+    // list endpoint, so walk the repos like the Environment provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
+      const github = yield* githubFor();
 
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
 
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const teams = await octokit.paginate(
-                  octokit.rest.repos.listTeams,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
-                return teams.map((team: any) => ({
+          Repos.listTeams
+            .items({ owner: repo.owner.login, repo: repo.name, per_page: 100 })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((teams) =>
+                teams.map((team) => ({
                   teamSlug: team.slug,
                   permission: team.permission ?? "push",
-                }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+                })),
+              ),
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+            ),
         { concurrency: 10 },
       );
 
@@ -228,24 +214,27 @@ export const TeamAccessProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.teams.removeRepoInOrg({
-              org: olds.owner,
-              team_slug: olds.teamSlug,
-              owner: olds.owner,
-              repo: olds.repository,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
+      // Observe-before-delete: removeRepoInOrg has no typed NotFound, and the
+      // grant (or the whole team) may already be gone out-of-band. A 404 from
+      // the permission probe means there is nothing left to revoke.
+      const existing = yield* Teams.checkPermissionsForRepoInOrg({
+        org: olds.owner,
+        team_slug: olds.teamSlug,
+        owner: olds.owner,
+        repo: olds.repository,
+      }).pipe(
+        github,
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      );
+      if (existing === undefined) return;
+
+      yield* Teams.removeRepoInOrg({
+        org: olds.owner,
+        team_slug: olds.teamSlug,
+        owner: olds.owner,
+        repo: olds.repository,
+      }).pipe(github);
     }),
   });

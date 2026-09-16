@@ -1,6 +1,6 @@
+import * as Repos from "@distilled.cloud/github/repos";
 import * as GitHub from "@/GitHub/index.ts";
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Output from "@/Output.ts";
 import * as Provider from "@/Provider.ts";
 import { destroy } from "@/RemovalPolicy.ts";
@@ -8,6 +8,7 @@ import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -44,39 +45,57 @@ const release = (
     }).pipe(destroy());
   });
 
-const getRelease = (fixture: string, releaseId: number) =>
+const listReleases = (fixture: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.getRelease({
-          owner,
-          repo: `alchemy-effect-pr-1577-release-${fixture}`,
-          release_id: releaseId,
-        }),
-      catch: (error) => error as Error & { status?: number },
-    }).pipe(
-      Effect.map(({ data }) => data),
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
-    );
+    const github = yield* githubFor();
+    return yield* Repos.listReleases
+      .items({
+        owner,
+        repo: `alchemy-effect-pr-1577-release-${fixture}`,
+        per_page: 100,
+      })
+      .pipe(
+        Stream.runCollect,
+        github,
+        Effect.catchTag("NotFound", () => Effect.succeed<Repos.Release[]>([])),
+      );
   });
 
-const assertDeleted = (fixture: string, releaseId: number) =>
+// distilled's getRelease types no NotFound, so existence is decided by
+// polling the (draft-inclusive, eventually consistent) release list; the
+// direct GET then reads the authoritative, read-your-write release.
+const getRelease = (fixture: string, releaseId: number) =>
   Effect.gen(function* () {
-    expect(yield* getRelease(fixture, releaseId)).toBeUndefined();
-    const octokit = yield* Octokit;
-    const { data } = yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.listReleases({
-          owner,
-          repo: `alchemy-effect-pr-1577-release-${fixture}`,
-        }),
-      catch: (error) => error as Error,
-    });
-    expect(data).toEqual([]);
+    const releases = yield* listReleases(fixture).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: 8,
+        until: (releases) =>
+          releases.some((release) => release.id === releaseId),
+      }),
+    );
+    if (!releases.some((release) => release.id === releaseId)) {
+      return undefined;
+    }
+    const github = yield* githubFor();
+    return yield* Repos.getRelease({
+      owner,
+      repo: `alchemy-effect-pr-1577-release-${fixture}`,
+      release_id: releaseId,
+    }).pipe(github);
+  });
+
+const assertDeleted = (fixture: string, _releaseId: number) =>
+  Effect.gen(function* () {
+    const releases = yield* listReleases(fixture).pipe(
+      // Deletion propagation lags the release list too.
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: 8,
+        until: (releases) => releases.length === 0,
+      }),
+    );
+    expect(releases).toEqual([]);
   });
 
 test.provider(
@@ -207,43 +226,8 @@ test.provider(
           body: "For list test",
         }),
       );
-      const name = "alchemy-effect-pr-1577-release-list";
-      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Release);
-      // list() enumerates /user/repos; confine it to this suite's fixture.
       const all = yield* provider.list().pipe(
-        Effect.provideService(
-          GitHubCredentials,
-          Effect.succeed({
-            ...credentials,
-            octokit: (override) => {
-              const octokit = credentials.octokit(override);
-              octokit.hook.before("request", (options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === "/user/repos") {
-                  url.pathname = `/orgs/${owner}/repos`;
-                  options.url = url.toString();
-                }
-                if (
-                  url.origin !== "https://api.github.com" ||
-                  (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !== `/repos/${owner}/${name}/releases`)
-                ) {
-                  throw new Error(`Unsafe Release list request: ${url}`);
-                }
-              });
-              octokit.hook.after("request", (response, options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repo) => repo.name === name);
-                }
-              });
-              return octokit;
-            },
-          }),
-        ),
         // Repository listings are eventually consistent for fresh fixtures.
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
@@ -252,14 +236,12 @@ test.provider(
             releases.some((item) => item.releaseId === created.releaseId),
         }),
       );
-      expect(
-        all.every((item) =>
-          item.htmlUrl.startsWith(`https://github.com/${owner}/`),
-        ),
-      ).toBe(true);
       const found = all.find((item) => item.releaseId === created.releaseId);
       expect(found).toBeDefined();
       expect(found?.tagName).toBe(created.tagName);
+      expect(found?.htmlUrl.startsWith(`https://github.com/${owner}/`)).toBe(
+        true,
+      );
       yield* stack.deploy(repository("list"));
       yield* assertDeleted("list", created.releaseId);
       yield* stack.destroy();

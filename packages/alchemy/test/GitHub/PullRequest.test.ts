@@ -1,5 +1,10 @@
+import * as Git from "@distilled.cloud/github/git";
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Pulls from "@distilled.cloud/github/pulls";
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Users from "@distilled.cloud/github/users";
 import * as GitHub from "@/GitHub";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Output from "@/Output";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
@@ -29,61 +34,46 @@ const repository = () =>
 const repoName = (repository: GitHub.Repository) =>
   Output.map(repository.fullName, (fullName) => fullName.split("/")[1]!);
 
-const request = <A>(run: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (error) => error as Error & { status?: number },
-  });
-
 const branches = ["alchemy-pr-1569-a", "alchemy-pr-1569-b"];
 
 const prepareBranches = Effect.gen(function* () {
-  const client = yield* Octokit;
+  const github = yield* githubFor();
   const scope = { owner, repo };
-  const { data: repository } = yield* request(() =>
-    client.rest.repos.get(scope),
-  );
+  const repository = yield* Repos.get(scope).pipe(github);
   const base = repository.default_branch;
-  const { data: ref } = yield* request(() =>
-    client.rest.git.getRef({ ...scope, ref: `heads/${base}` }),
+  const ref = yield* Git.getRef({ ...scope, ref: `heads/${base}` }).pipe(
+    github,
   );
   for (const branch of branches) {
-    const existing = yield* request(() =>
-      client.rest.git.getRef({ ...scope, ref: `heads/${branch}` }),
-    ).pipe(
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
+    const existing = yield* Git.getRef({
+      ...scope,
+      ref: `heads/${branch}`,
+    }).pipe(
+      github,
+      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
     );
     if (existing === undefined) {
-      yield* request(() =>
-        client.rest.git.createRef({
-          ...scope,
-          ref: `refs/heads/${branch}`,
-          sha: ref.object.sha,
-        }),
-      );
-      yield* request(() =>
-        client.rest.repos.createOrUpdateFileContents({
-          ...scope,
-          branch,
-          path: "alchemy-pr-1569.txt",
-          message: "Add deterministic PR test fixture",
-          content: "YWxjaGVteSBQUiBmaXh0dXJlCg==",
-        }),
-      );
+      yield* Git.createRef({
+        ...scope,
+        ref: `refs/heads/${branch}`,
+        sha: ref.object.sha,
+      }).pipe(github);
+      yield* Repos.createOrUpdateFileContents({
+        ...scope,
+        branch,
+        path: "alchemy-pr-1569.txt",
+        message: "Add deterministic PR test fixture",
+        content: "YWxjaGVteSBQUiBmaXh0dXJlCg==",
+      }).pipe(github);
     }
   }
   return base;
 });
 
 const deleteBranches = Effect.gen(function* () {
-  const client = yield* Octokit;
+  const github = yield* githubFor();
   for (const branch of branches) {
-    yield* request(() =>
-      client.rest.git.deleteRef({ owner, repo, ref: `heads/${branch}` }),
-    );
+    yield* Git.deleteRef({ owner, repo, ref: `heads/${branch}` }).pipe(github);
   }
 });
 
@@ -94,17 +84,13 @@ test.provider(
       yield* stack.destroy();
       yield* stack.deploy(repository());
       const base = yield* prepareBranches;
-      const client = yield* Octokit;
-      const { data: user } = yield* request(() =>
-        client.rest.users.getAuthenticated(),
-      );
-      const { data: milestone } = yield* request(() =>
-        client.rest.issues.createMilestone({
-          owner,
-          repo,
-          title: "alchemy-pr-1569-lifecycle",
-        }),
-      );
+      const github = yield* githubFor();
+      const user = yield* Users.getAuthenticated({}).pipe(github);
+      const milestone = yield* Issues.createMilestone({
+        owner,
+        repo,
+        title: "alchemy-pr-1569-lifecycle",
+      }).pipe(github);
       const deploy = (props: Partial<GitHub.PullRequestProps> = {}) =>
         stack.deploy(
           Effect.gen(function* () {
@@ -120,9 +106,7 @@ test.provider(
           }),
         );
       const get = (number: number) =>
-        request(() =>
-          client.rest.pulls.get({ owner, repo, pull_number: number }),
-        );
+        Pulls.get({ owner, repo, pull_number: number }).pipe(github);
       const created = yield* deploy({
         body: "\n        Initial body\n      ",
         draft: true,
@@ -136,7 +120,7 @@ test.provider(
       );
       expect(created.draft).toBe(true);
       expect(created.merged).toBe(false);
-      const initial = (yield* get(created.prNumber)).data;
+      const initial = yield* get(created.prNumber);
       expect(initial.body).toBe("Initial body");
       expect(initial.assignees?.map((assignee) => assignee.login)).toEqual([
         user.login,
@@ -157,7 +141,7 @@ test.provider(
       expect(updated.prNumber).toBe(created.prNumber);
       expect(updated.nodeId).toBe(created.nodeId);
       expect(updated.draft).toBe(false);
-      const afterUpdate = (yield* get(created.prNumber)).data;
+      const afterUpdate = yield* get(created.prNumber);
       expect(afterUpdate.title).toBe("Updated PR");
       expect(afterUpdate.body ?? "").toBe("");
       expect(afterUpdate.draft).toBe(false);
@@ -171,11 +155,11 @@ test.provider(
 
       const draft = yield* deploy({ draft: true, labels: [] });
       expect(draft.draft).toBe(true);
-      expect((yield* get(draft.prNumber)).data.draft).toBe(true);
-      expect((yield* get(draft.prNumber)).data.labels).toEqual([]);
+      expect((yield* get(draft.prNumber)).draft).toBe(true);
+      expect((yield* get(draft.prNumber)).labels).toEqual([]);
       const closed = yield* deploy({ state: "closed", draft: true });
       expect(closed.state).toBe("closed");
-      expect((yield* get(closed.prNumber)).data.state).toBe("closed");
+      expect((yield* get(closed.prNumber)).state).toBe("closed");
       const reopened = yield* deploy();
       expect(reopened.prNumber).toBe(created.prNumber);
       expect(reopened.state).toBe("open");
@@ -188,27 +172,25 @@ test.provider(
       expect(replaced.prNumber).not.toBe(created.prNumber);
       expect(replaced.nodeId).not.toBe(created.nodeId);
       expect(replaced.state).toBe("closed");
-      expect((yield* get(created.prNumber)).data.state).toBe("closed");
-      expect((yield* get(replaced.prNumber)).data.state).toBe("closed");
+      expect((yield* get(created.prNumber)).state).toBe("closed");
+      expect((yield* get(replaced.prNumber)).state).toBe("closed");
       const final = yield* deploy({ head: "alchemy-pr-1569-b" });
       expect(final.prNumber).toBe(replaced.prNumber);
       expect(final.state).toBe("open");
 
       // Verify closure before releasing the retained repository fixture.
       yield* stack.deploy(repository());
-      expect((yield* get(final.prNumber)).data.state).toBe("closed");
-      const open = yield* request(() =>
-        client.rest.pulls.list({ owner, repo, state: "open" }),
+      expect((yield* get(final.prNumber)).state).toBe("closed");
+      const open = yield* Pulls.list({ owner, repo, state: "open" }).pipe(
+        github,
       );
-      expect(open.data).toEqual([]);
+      expect(open).toEqual([]);
       yield* deleteBranches;
-      yield* request(() =>
-        client.rest.issues.deleteMilestone({
-          owner,
-          repo,
-          milestone_number: milestone.number,
-        }),
-      );
+      yield* Issues.deleteMilestone({
+        owner,
+        repo,
+        milestone_number: milestone.number,
+      }).pipe(github);
       yield* stack.destroy();
     }),
   { timeout: 120_000 },

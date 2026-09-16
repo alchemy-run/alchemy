@@ -29,7 +29,7 @@ and filters for release commits on `main` in ordinary handler code:
 ```typescript
 // src/ReleaseService.ts
 yield* Github.consumeRepositoryEvents(
-  { owner: "alchemy-run", repository: "alchemy", events: ["push"] },
+  { owner: "alchemy-run", repository: "alchemy", events: [Github.WebhookEvents.Push] },
   (event) => {
     const title = event.payload.head_commit?.message.split("\n")[0] ?? "";
     const isRelease =

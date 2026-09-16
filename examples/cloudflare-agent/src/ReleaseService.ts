@@ -14,7 +14,7 @@ export default Cloudflare.Worker(
       {
         owner: "alchemy-run",
         repository: "alchemy",
-        events: ["push"],
+        events: [Github.WebhookEvents.Push],
       },
       (event) => {
         const title = event.payload.head_commit?.message.split("\n")[0] ?? "";

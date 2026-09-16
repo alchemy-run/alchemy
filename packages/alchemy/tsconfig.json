@@ -54,6 +54,9 @@
       "path": "../../submodules/distilled/packages/neon/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/github/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
