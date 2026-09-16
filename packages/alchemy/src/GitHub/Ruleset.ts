@@ -1,8 +1,11 @@
+import { Forbidden } from "@distilled.cloud/github/Errors";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RulesetProps {
@@ -332,18 +335,14 @@ export const RulesetProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
 
       let observed =
         output === undefined
           ? undefined
           : yield* getRuleset(news, output.rulesetId);
 
-      const rules: NonNullable<
-        NonNullable<
-          Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]
-        >["rules"]
-      > = [];
+      const rules: Repos.RepositoryRule[] = [];
 
       if (news.rules?.creation) {
         rules.push({ type: "creation" });
@@ -421,21 +420,14 @@ export const RulesetProvider = () =>
         bypass_actors: bypassActors ?? [],
         conditions,
         rules,
-      } satisfies Omit<
-        NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>,
-        "owner" | "repo"
-      >;
+      } satisfies Omit<Repos.CreateRepoRulesetRequest, "owner" | "repo">;
 
       if (observed === undefined) {
-        observed = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.createRepoRuleset({
-              owner: news.owner,
-              repo: news.repository,
-              ...desired,
-            }),
-          catch: (e) => e as Error,
-        }).pipe(Effect.map(({ data }) => data));
+        observed = yield* Repos.createRepoRuleset({
+          owner: news.owner,
+          repo: news.repository,
+          ...desired,
+        }).pipe(github);
       }
 
       if (
@@ -452,16 +444,12 @@ export const RulesetProvider = () =>
         )
       ) {
         const rulesetId = observed.id;
-        observed = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.updateRepoRuleset({
-              owner: news.owner,
-              repo: news.repository,
-              ruleset_id: rulesetId,
-              ...desired,
-            }),
-          catch: (e) => e as Error,
-        }).pipe(Effect.map(({ data }) => data));
+        observed = yield* Repos.updateRepoRuleset({
+          owner: news.owner,
+          repo: news.repository,
+          ruleset_id: rulesetId,
+          ...desired,
+        }).pipe(github);
       }
 
       return attrsOf(observed);
@@ -474,35 +462,36 @@ export const RulesetProvider = () =>
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
+      const github = yield* githubFor();
 
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
 
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: () =>
-              octokit.paginate(octokit.rest.repos.getRepoRulesets, {
-                owner: repo.owner.login,
-                repo: repo.name,
-                includes_parents: false,
-                per_page: 100,
-              }),
-            catch: (e) => e as Error & { status?: number },
-          }).pipe(
-            Effect.map((rulesets) => rulesets.map(attrsOf)),
-            Effect.catchIf(
-              (error) => error.status === 403 || error.status === 404,
-              () => Effect.succeed([]),
+          Repos.getRepoRulesets
+            .items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              includes_parents: false,
+              per_page: 100,
+            })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((rulesets) => rulesets.map(attrsOf)),
+              // Repos where the token lacks ruleset access (plan-gated
+              // private repos 403) — skip them rather than failing the whole
+              // enumeration. Forbidden is matched by instance because
+              // distilled's getRepoRulesets does not yet type it.
+              Effect.catchTag("NotFound", () => Effect.succeed([])),
+              Effect.catchIf(
+                (error) => error instanceof Forbidden,
+                () => Effect.succeed([]),
+              ),
             ),
-          ),
         { concurrency: 10 },
       );
 
@@ -512,21 +501,15 @@ export const RulesetProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       if (output?.rulesetId === undefined) return;
 
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
-      yield* Effect.tryPromise({
-        try: () =>
-          octokit.rest.repos.deleteRepoRuleset({
-            owner: olds.owner,
-            repo: olds.repository,
-            ruleset_id: output.rulesetId,
-          }),
-        catch: (e) => e as Error & { status?: number },
+      yield* Repos.deleteRepoRuleset({
+        owner: olds.owner,
+        repo: olds.repository,
+        ruleset_id: output.rulesetId,
       }).pipe(
-        Effect.catchIf(
-          (error) => error.status === 404,
-          () => Effect.void,
-        ),
+        github,
+        Effect.catchTag("NotFound", () => Effect.void),
       );
     }),
   });
@@ -535,21 +518,14 @@ const getRuleset = Effect.fn(function* (
   props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">,
   rulesetId: number,
 ) {
-  const octokit = yield* octokitFor(props.baseUrl);
-  return yield* Effect.tryPromise({
-    try: () =>
-      octokit.rest.repos.getRepoRuleset({
-        owner: props.owner,
-        repo: props.repository,
-        ruleset_id: rulesetId,
-      }),
-    catch: (e) => e as Error & { status?: number },
+  const github = yield* githubFor(props.baseUrl);
+  return yield* Repos.getRepoRuleset({
+    owner: props.owner,
+    repo: props.repository,
+    ruleset_id: rulesetId,
   }).pipe(
-    Effect.map(({ data }) => data),
-    Effect.catchIf(
-      (error) => error.status === 404,
-      () => Effect.succeed(undefined),
-    ),
+    github,
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
   );
 });
 

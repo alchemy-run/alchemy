@@ -11,7 +11,7 @@ import { exec } from "../Util/exec.ts";
 import { GitHubCredentials } from "./Credentials.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Octokit.ts";
+import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface WikiPageProps {

@@ -1,6 +1,6 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import * as GitHub from "@/GitHub";
-import { GitHubCredentials } from "@/GitHub/Credentials.ts";
-import { Octokit } from "@/GitHub/Octokit.ts";
+import { githubFor } from "@/GitHub/Client.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
@@ -33,11 +33,12 @@ const repoName = (repo: GitHub.Repository) =>
 
 const getIssue = (repo: string, issueNumber: number) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    const { data } = yield* Effect.tryPromise(() =>
-      octokit.rest.issues.get({ owner, repo, issue_number: issueNumber }),
-    );
-    return data;
+    const github = yield* githubFor();
+    return yield* Issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber,
+    }).pipe(github);
   });
 
 test.provider(
@@ -93,41 +94,8 @@ test.provider(
       expect(fetched.assignees).toEqual([]);
       expect(fetched.milestone).toBeNull();
 
-      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Issue);
       const listed = yield* provider.list().pipe(
-        Effect.provideService(
-          GitHubCredentials,
-          Effect.succeed({
-            ...credentials,
-            octokit: (override) => {
-              const octokit = credentials.octokit(override);
-              octokit.hook.before("request", (options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === "/user/repos") {
-                  url.pathname = `/orgs/${owner}/repos`;
-                  options.url = url.toString();
-                }
-                if (
-                  url.origin !== "https://api.github.com" ||
-                  (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !== `/repos/${owner}/${name}/issues`)
-                ) {
-                  throw new Error(`Unsafe Issue list request: ${url}`);
-                }
-              });
-              octokit.hook.after("request", (response, options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repo) => repo.name === name);
-                }
-              });
-              return octokit;
-            },
-          }),
-        ),
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           times: 10,

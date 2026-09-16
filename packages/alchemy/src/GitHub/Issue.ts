@@ -1,9 +1,12 @@
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged, githubFor } from "./Client.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface IssueProps {
@@ -213,49 +216,40 @@ export const IssueProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+      const github = yield* githubFor(news.baseUrl);
       const body = news.body ? dedent(news.body) : "";
       const state = news.state ?? "open";
       const labels = news.labels ?? [];
       const assignees = news.assignees ?? [];
       const milestone = news.milestone ?? null;
 
-      let data =
+      const observed =
         output?.issueNumber !== undefined
-          ? yield* Effect.tryPromise({
-              try: () =>
-                octokit.rest.issues.get({
-                  owner: news.owner,
-                  repo: news.repository,
-                  issue_number: output.issueNumber,
-                }),
-              catch: (error) => error as Error & { status?: number },
+          ? yield* Issues.get({
+              owner: news.owner,
+              repo: news.repository,
+              issue_number: output.issueNumber,
             }).pipe(
-              Effect.map((response) => response.data),
-              Effect.catchIf(
-                (error) => error.status === 404,
-                () => Effect.succeed(undefined),
-              ),
+              github,
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             )
           : undefined;
 
-      if (data === undefined) {
-        const created = yield* Effect.tryPromise(() =>
-          octokit.rest.issues.create({
-            owner: news.owner,
-            repo: news.repository,
-            title: news.title,
-            body,
-            labels,
-            assignees,
-            milestone: milestone ?? undefined,
-          }),
-        );
-        data = created.data;
-      }
+      let data: Issues.Issue | Issues.UpdateResponse =
+        observed !== undefined
+          ? observed
+          : yield* Issues.create({
+              owner: news.owner,
+              repo: news.repository,
+              title: news.title,
+              body,
+              labels,
+              assignees,
+              milestone: milestone ?? undefined,
+            }).pipe(github);
 
-      const sameNames = (observed: string[], desired: string[]) =>
-        JSON.stringify(observed.map((name) => name.toLowerCase()).sort()) ===
+      const sameNames = (current: string[], desired: string[]) =>
+        JSON.stringify(current.map((name) => name.toLowerCase()).sort()) ===
         JSON.stringify(desired.map((name) => name.toLowerCase()).sort());
 
       // Creation always opens an issue; sync also applies the desired initial state.
@@ -275,21 +269,17 @@ export const IssueProvider = () =>
         ) ||
         (data.milestone?.number ?? null) !== milestone
       ) {
-        const issueNumber = data.number;
-        const updated = yield* Effect.tryPromise(() =>
-          octokit.rest.issues.update({
-            owner: news.owner,
-            repo: news.repository,
-            issue_number: issueNumber,
-            title: news.title,
-            body,
-            state,
-            labels,
-            assignees,
-            milestone,
-          }),
-        );
-        data = updated.data;
+        data = yield* Issues.update({
+          owner: news.owner,
+          repo: news.repository,
+          issue_number: data.number,
+          title: news.title,
+          body,
+          state,
+          labels,
+          assignees,
+          milestone,
+        }).pipe(github);
       }
       return {
         issueNumber: data.number,
@@ -303,33 +293,28 @@ export const IssueProvider = () =>
 
     // Enumerate every issue across the repositories the token can see.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
+      const github = yield* githubFor();
 
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
+      const repos = yield* Repos.listForAuthenticatedUser
+        .items({ per_page: 100 })
+        .pipe(Stream.runCollect, github);
 
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const issues = await octokit.paginate(
-                  octokit.rest.issues.listForRepo,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    state: "all",
-                    per_page: 100,
-                  },
-                );
+          Issues.listForRepo
+            .items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              state: "all",
+              per_page: 100,
+            })
+            .pipe(
+              Stream.runCollect,
+              github,
+              Effect.map((issues) =>
                 // Filter out pull requests (they appear in issues API)
-                return issues
+                issues
                   .filter((issue) => !issue.pull_request)
                   .map((issue) => ({
                     issueNumber: issue.number,
@@ -338,16 +323,18 @@ export const IssueProvider = () =>
                     state: issue.state as "open" | "closed",
                     createdAt: issue.created_at,
                     updatedAt: issue.updated_at,
-                  }));
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+                  })),
+              ),
+              // Repos where the token lacks issue access (or with issues
+              // disabled, which GitHub reports as 410 Gone) are skipped
+              // rather than failing the whole enumeration. UnprocessableEntity
+              // covers repos with issue datasets too large for page-based
+              // pagination ("please use cursor based pagination"), which this
+              // endpoint's generated pagination cannot express yet.
+              Effect.catchTag(["NotFound", "Gone", "UnprocessableEntity"], () =>
+                Effect.succeed([]),
+              ),
+            ),
         { concurrency: 10 },
       );
 
@@ -355,24 +342,18 @@ export const IssueProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
+      const github = yield* githubFor(olds.baseUrl);
 
       // Opted-in destruction closes the issue without deleting its discussion.
       if (output?.issueNumber !== undefined) {
-        yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.issues.update({
-              owner: olds.owner,
-              repo: olds.repository,
-              issue_number: output.issueNumber,
-              state: "closed",
-            }),
-          catch: (error) => error as Error & { status?: number },
+        yield* Issues.update({
+          owner: olds.owner,
+          repo: olds.repository,
+          issue_number: output.issueNumber,
+          state: "closed",
         }).pipe(
-          Effect.catchIf(
-            (error) => error.status === 404,
-            () => Effect.void,
-          ),
+          github,
+          Effect.catchTag("NotFound", () => Effect.void),
         );
       }
     }),
