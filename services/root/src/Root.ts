@@ -15,7 +15,7 @@ import { Head } from "./Head.ts";
  *
  * Everything derives from this group and carries its key in its own:
  * members (`root::manager`, `root::e-4f2a`), workspaces
- * (`root::ws-pr-1521`), calls, tasks, proposals. The lineage is the
+ * (`root::ws-pr-1521`), calls, threads, proposals. The lineage is the
  * project — what the company is, is the history of this channel and
  * the trees that grew from it, all of it CODE in the repository the
  * company maintains (services/root), all of it versioned. A FORK of

@@ -8,9 +8,6 @@
  * /p/p-x1  /c/engineering/p/p-x1
  *                       a THREAD — clicked into from the feed; the
  *                       composer there speaks INTO the thread
- * /t/t-mu1l0zyu-5m9a    a task thread — standalone: a task BELONGS to
- *                       no channel; it is REFERENCED from places (a
- *                       post's pill, the rail, later a quote-post)
  * ?agent=…  ?workspace=…  ?call=…
  *                       overlays, riding on ANY path — a peek over
  *                       the current place, not a place of their own
@@ -43,15 +40,6 @@ export const channelFromLocation = (): string | undefined => {
   const parts = segments();
   if (parts.length === 0) return "root";
   return parts[0] === "c" && parts[1] !== undefined
-    ? decodeURIComponent(parts[1])
-    : undefined;
-};
-
-export const taskPath = (id: string): string => `/t/${encodeURIComponent(id)}`;
-
-export const taskFromLocation = (): string | undefined => {
-  const parts = segments();
-  return parts[0] === "t" && parts[1] !== undefined
     ? decodeURIComponent(parts[1])
     : undefined;
 };
@@ -125,10 +113,6 @@ export const threadFromLocation = (): string | undefined => {
 /** Click INTO a thread — the feed shows the card, this is the place. */
 export const showThread = (channel: string, id: string): void =>
   navigate(threadPath(channel, id));
-
-/** Focus a task's thread — its own place, wherever it was referenced
- *  from. */
-export const showTask = (id: string): void => navigate(taskPath(id));
 
 /* ── panes and overlays (query over the current path) ─────────────
  *
@@ -225,8 +209,8 @@ export const showOverlay = (overlay: Overlay | undefined): void => {
   }
 };
 
-/** Pre-path urls (`/?channel=…`, `/?task=…`) translate ONCE at boot —
- *  old links keep resolving; overlay params survive untouched. */
+/** Pre-path urls (`/?channel=…`) translate ONCE at boot — old links
+ *  keep resolving; overlay params survive untouched. */
 export const normalizeLegacyLocation = (): void => {
   const params = new URLSearchParams(window.location.search);
   // pre-pane params (`?agent=`, `?workspace=`) fold into the stack
@@ -245,12 +229,7 @@ export const normalizeLegacyLocation = (): void => {
       `${window.location.pathname}?${params.toString()}`,
     );
   }
-  const task = params.get("task");
   const channel = params.get("channel");
-  if (task === null && channel === null) return;
-  window.history.replaceState(
-    {},
-    "",
-    task !== null ? taskPath(task) : channelPath(channel!),
-  );
+  if (channel === null) return;
+  window.history.replaceState({}, "", channelPath(channel));
 };

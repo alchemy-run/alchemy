@@ -31,7 +31,6 @@ const TABLES = [
     payload TEXT NOT NULL,
     proposer_term TEXT NOT NULL,
     proposer_key TEXT NOT NULL,
-    task TEXT,
     outcome TEXT,
     created_at INTEGER NOT NULL,
     decided_at INTEGER
@@ -51,7 +50,6 @@ interface ProposalRow extends Record<string, Cloudflare.SqlStorageValue> {
   payload: string;
   proposer_term: string;
   proposer_key: string;
-  task: string | null;
   outcome: string | null;
   created_at: number;
   decided_at: number | null;
@@ -65,7 +63,6 @@ const toProposal = (row: ProposalRow): Proposal => ({
   detail: row.detail,
   payload: JSON.parse(row.payload) as ProposalPayload,
   proposer: { term: row.proposer_term, key: row.proposer_key },
-  ...(row.task === null ? {} : { task: row.task }),
   ...(row.outcome === null ? {} : { outcome: row.outcome }),
   createdAt: row.created_at,
   ...(row.decided_at === null ? {} : { decidedAt: row.decided_at }),
@@ -130,8 +127,8 @@ const ProposalsDOLive = Cloudflare.DurableObject<ProposalsRpc>()(
         yield* sql.exec(
           `INSERT INTO proposals
             (id, kind, status, summary, detail, payload, proposer_term,
-             proposer_key, task, created_at)
-           VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+             proposer_key, created_at)
+           VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
           id,
           input.kind,
           input.summary,
@@ -139,7 +136,6 @@ const ProposalsDOLive = Cloudflare.DurableObject<ProposalsRpc>()(
           JSON.stringify(input.payload),
           input.proposer.term,
           input.proposer.key,
-          input.task ?? null,
           at,
         );
         return (yield* byId(id))!;

@@ -58,8 +58,6 @@ export interface Proposal {
   readonly detail: string;
   readonly payload: ProposalPayload;
   readonly proposer: Proposer;
-  /** The engineering task this act advances, when one does (lineage). */
-  readonly task?: string;
   /** deny reason / execution result / failure text. */
   readonly outcome?: string;
   readonly createdAt: number;
@@ -72,7 +70,6 @@ export interface StageProposalInput {
   readonly detail: string;
   readonly payload: ProposalPayload;
   readonly proposer: Proposer;
-  readonly task?: string;
 }
 
 export class Proposals extends Context.Service<

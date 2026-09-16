@@ -19,7 +19,7 @@ import { ChannelFeed, ThreadView } from "@/components/channel-feed";
 import { CallThread } from "@/components/call";
 import { MembersPanel } from "@/components/members";
 import { AgentProfile } from "@/components/agent-profile";
-import { ChannelThreads, TaskThread } from "@/components/tasks";
+
 import { Avatar, KindBadge, sessionAuthor } from "@/components/avatar";
 import { GhosttyTerminal } from "@/components/terminal";
 import { fetchOrg } from "@/lib/org";
@@ -34,7 +34,6 @@ import {
   showAgent,
   showChannel,
   showOverlay,
-  taskFromLocation,
   threadFromLocation,
   type AgentPlace,
   type Overlay,
@@ -245,9 +244,6 @@ export const App = () => {
   const [panes, setPanes] = useState<ReadonlyArray<Pane>>(() =>
     panesFromLocation(),
   );
-  const [task, setTask] = useState<string | undefined>(() =>
-    taskFromLocation(),
-  );
   /** The open agent PROFILE (`/a/:name/:tab?/:item?`) — the org's
    *  mirror page, tab and selected card in the path. */
   const [agent, setAgent] = useState<AgentPlace | undefined>(() =>
@@ -280,11 +276,7 @@ export const App = () => {
   });
   const [channels, setChannels] = useState<ReadonlyArray<Channel>>(FALLBACK);
   const [selected, setSelected] = useState<string>(
-    // a task permalink loads with the ledger's home channel behind it
-    // — that's where its threads live in the rail
-    () =>
-      channelFromLocation() ??
-      (taskFromLocation() !== undefined ? "engineering" : "root"),
+    () => channelFromLocation() ?? "root",
   );
   const { resolved, toggle } = useTheme();
   const ThemeIcon = resolved === "dark" ? Moon : Sun;
@@ -314,7 +306,6 @@ export const App = () => {
     const sync = () => {
       setOverlay(overlayFromLocation());
       setPanes(panesFromLocation());
-      setTask(taskFromLocation());
       setAgent(agentFromLocation());
       setThread(threadFromLocation());
       const name = channelFromLocation();
@@ -338,7 +329,7 @@ export const App = () => {
 
   // remember every thread opened here — the panel cache's keys
   useEffect(() => {
-    if (thread === undefined || task !== undefined) return;
+    if (thread === undefined) return;
     setOpenedThreads((current) =>
       current.some((entry) => entry.id === thread)
         ? current
@@ -347,7 +338,7 @@ export const App = () => {
             { id: thread, channel: channel.name, chat: channel.chat },
           ],
     );
-  }, [thread, task, channel.name, channel.chat]);
+  }, [thread, channel.name, channel.chat]);
 
   useEffect(() => {
     window.localStorage.setItem("root:rail-width", String(railWidth));
@@ -528,11 +519,6 @@ export const App = () => {
                   <Hash className="size-3.5 shrink-0" />
                   {entry.name}
                 </button>
-                {/* the channel's THREADS, nested under it — the
-                    ledger has no separate board */}
-                {entry.name === "engineering" && (
-                  <ChannelThreads selected={task} />
-                )}
               </div>
             ))}
             {/* the AGENTS — the org's roster, each a profile page:
@@ -591,13 +577,6 @@ export const App = () => {
             name={agent.name}
             tab={agent.tab}
             item={agent.item}
-            onUp={() => showChannel(channel.name)}
-          />
-        ) : task !== undefined ? (
-          <TaskThread
-            key={task}
-            id={task}
-            channel={channel.name}
             onUp={() => showChannel(channel.name)}
           />
         ) : (
@@ -672,7 +651,7 @@ export const App = () => {
             composer speaks into the thread. Every thread ever opened
             stays mounted, hidden — switching back shows it exactly
             as last left. */}
-        {thread !== undefined && task === undefined && (
+        {thread !== undefined && (
           <div
             role="separator"
             aria-orientation="vertical"
@@ -687,7 +666,7 @@ export const App = () => {
             channel={entry.channel}
             chat={entry.chat}
             id={entry.id}
-            active={entry.id === thread && task === undefined}
+            active={entry.id === thread}
             weight={colWeights.thread}
           />
         ))}
@@ -705,7 +684,7 @@ export const App = () => {
             onPointerDown={(down) =>
               startColDrag(
                 down,
-                thread !== undefined && task === undefined ? "thread" : "feed",
+                thread !== undefined ? "thread" : "feed",
                 "panes",
               )
             }

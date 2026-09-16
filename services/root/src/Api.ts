@@ -6,7 +6,6 @@ import { Interrupt } from "./chat/Interrupt.ts";
 import { PostMessage } from "./chat/PostMessage.ts";
 import { Transcript } from "./chat/Transcript.ts";
 import { ChannelsApi } from "./chat/ChannelsApi.ts";
-import { TasksApi } from "./engineering/TasksApi.ts";
 import { StatusApi } from "./github/StatusApi.ts";
 import { OrgApi } from "./OrgApi.ts";
 import { DecideApi } from "./proposals/DecideApi.ts";
@@ -31,7 +30,6 @@ export const Api = Effect.gen(function* () {
     yield* Interrupt,
     yield* CallsApi,
     yield* PostsApi,
-    yield* TasksApi,
     yield* ChannelsApi,
     yield* DecideApi,
     yield* ExecApi,

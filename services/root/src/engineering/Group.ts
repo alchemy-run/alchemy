@@ -27,10 +27,11 @@ export const EngineeringChart = Engineering.make`
   The engineering group of the company. ${Manager} heads it
   (its session is this group's channel):
   it fronts the triage queue (the inbound github issues, pull requests,
-  and direct requests for alchemy, distilled, and floci), maintains the
-  task ledger, and stages clean merge proposals for the humans.
+  and direct requests for alchemy, distilled, and floci), files work
+  as threads in the channel, and stages clean merge proposals for the
+  humans.
   ${Engineer} is its worker — the coding skill-set given hands —
-  staffed onto tasks by the manager, one workspace each.
+  staffed onto threads by the manager, one workspace each.
   ${Reviewer} is its quality gate: engineers ask it to review their
   pull requests; it iterates with them until the work meets the
   standard, then files the merge proposal the humans decide.

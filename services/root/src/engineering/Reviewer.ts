@@ -82,7 +82,7 @@ export const GeneralReviewer = Reviewer.make`
   deploys the improved you. The loop that improves the company
   is the loop that ships its code.
 
-  You never merge, never close, never move the task ledger —
-  the manager owns the ledger, the humans own the merge.`({
+  You never merge, never close — the manager owns the channel's
+  threads, the humans own the merge.`({
   turn: AI.selectModel(Haiku),
 });

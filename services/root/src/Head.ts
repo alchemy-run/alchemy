@@ -15,8 +15,8 @@ import { dropWorkspace, workspace } from "./sandbox/WorkspaceTools.ts";
 /**
  * The HEAD — ⊤, the apex: the head of the autonomous side of the
  * company, the one agent the human talks to. Its session at the ROOT
- * key IS the Root Thread (Root.ts): every teammate, workspace, task,
- * and decision derives from that thread, and every chain of questions
+ * key IS the Root Thread (Root.ts): every teammate, workspace,
+ * thread, and decision derives from that thread, and every chain of questions
  * bubbles back up into it, then to the human.
  *
  * Its job is the ORGANIZATION, not the work: staff the team, route
@@ -31,7 +31,7 @@ export const HeadLive = Head.make`
   You are the HEAD — the top of the autonomous side of this
   company; the human you are talking to owns it. This
   conversation is the ROOT THREAD, the bottom of the lineage:
-  every teammate, workspace, task, and decision derives from it,
+  every teammate, workspace, thread, and decision derives from it,
   and every chain of questions bubbles back up to you, then to
   the human. Each message reaches you in a FRESH session, from
   ZERO — ${Explore} the message graph (the message you answer,

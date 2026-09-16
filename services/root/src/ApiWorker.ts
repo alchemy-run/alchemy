@@ -14,8 +14,8 @@ import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
 import { AskLive, TellLive } from "./chat/Ask.ts";
 import { Calls, CallToolLive } from "./chat/Call.ts";
-import { ExploreLive } from "./chat/Explore.ts";
 import { CallsLive, PostsLive } from "./chat/ChatDO.ts";
+import { ExploreLive } from "./chat/Explore.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
 import { PushBranchLive } from "./coding/PushBranch.ts";
@@ -24,7 +24,7 @@ import { GeneralEngineer } from "./engineering/Engineer.ts";
 import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
 import { ManagerLive } from "./engineering/Manager.ts";
 import { GeneralReviewer } from "./engineering/Reviewer.ts";
-import { TasksLive, TriageLive } from "./engineering/TriageDO.ts";
+import { TriageLive } from "./engineering/TriageDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
@@ -53,9 +53,7 @@ const OrgRegistry = Layer.sync(Binding.AcquisitionRegistry, () =>
  *  builds registers its static declaration (template + refs + pinned
  *  model), and `GET /api/org` serves the org graph from it: the
  *  organization, derived, never re-declared. */
-const OrgStructure = Layer.sync(AI.OrgRegistry, () =>
-  AI.makeOrgRegistry(),
-);
+const OrgStructure = Layer.sync(AI.OrgRegistry, () => AI.makeOrgRegistry());
 
 /** The artifact store on the session's workspaces. */
 const Store = ArtifactsSandbox;
@@ -136,10 +134,10 @@ const ReviewerWorker = GeneralReviewer.pipe(
 );
 
 /** The MANAGER — the head of the engineering team: the triage queue,
- *  the task ledger, spawn/workspaces, proposals, conversation. */
+ *  the channel's threads, spawn/workspaces, proposals, conversation. */
 const ManagerWorker = ManagerLive.pipe(
   Layer.provide(EngineerWorker),
-  Layer.provide([TriageLive, TasksLive]),
+  Layer.provide(TriageLive),
   Layer.provide(Conversation),
   Layer.provide(ProposalsLive),
   Layer.provide(WorkspaceAgentLive),
@@ -232,7 +230,7 @@ const Company = Layer.mergeAll(
   SandboxSession,
   PublishTokenLive,
 ).pipe(
-  Layer.provideMerge([TriageLive, TasksLive]),
+  Layer.provideMerge(TriageLive),
   Layer.provideMerge(ProposalsLive),
   Layer.provideMerge(CallsLive),
   Layer.provideMerge(PostsLive),

@@ -63,7 +63,8 @@ export const OrgGuidanceGeneral = OrgGuidance.make`
     TREE, and the Root channel's wire (one file per route).
   - \`engineering/\` — the engineering group: its \`AI.Group\` chart,
     the manager (fronting the TRIAGE QUEUE — the inbound issues/PRs,
-    strict FIFO — and the TASK LEDGER), and the Engineer.
+    strict FIFO — filing work as THREADS in its channel), and the
+    Engineer.
   - \`coding/\` — the SKILL of coding: the toolbox (Read + Run), the
     editor (the ONLY Layer that grants a write), the publish pair
     behind the human gate.

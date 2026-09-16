@@ -22,7 +22,7 @@ import { lineage } from "../Lineage.ts";
  * driver parks the session; the backlog waits durably; resume picks
  * the work back up). Triage itself adds only DEDUPE: webhooks
  * redeliver and the dev poller re-synthesizes; one row per event key
- * (TriageDO, beside the task ledger).
+ * (TriageDO).
  */
 
 export type InboundKind = "issue" | "pull" | "request";

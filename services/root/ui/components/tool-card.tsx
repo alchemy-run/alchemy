@@ -1,5 +1,6 @@
 import {
   ListChecks,
+  MessageSquarePlus,
   AlarmClock,
   BookmarkPlus,
   ChevronDown,
@@ -45,7 +46,7 @@ import { useAnchoredToggle } from "@/lib/anchor";
 import { Ansi, stripAnsi } from "@/lib/ansi";
 import { CodeCard, DiffCard } from "@/components/code";
 import { PostThread } from "@/components/post-thread";
-import { showOverlay, showTask, taskPath } from "@/lib/routes";
+import { showOverlay } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /* ── helpers ─────────────────────────────────────────────────── */
@@ -483,24 +484,6 @@ const ThreadId = ({ id }: { id: string | undefined }) => (
   <span className="font-mono text-mist">{id ?? "?"}</span>
 );
 
-/** A task id in a ledger chip — the chip is the task's THREAD ANCHOR
- *  in the channel; clicking the id opens the task's panel. A REAL
- *  link (deep-linkable, cmd-clickable); plain clicks route in-app. */
-const TaskAnchor = ({ id }: { id: string }) => (
-  <a
-    href={taskPath(id)}
-    onClick={(event) => {
-      event.stopPropagation();
-      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-      event.preventDefault();
-      showTask(id);
-    }}
-    className="cursor-pointer font-mono text-mist underline decoration-border underline-offset-2 hover:text-foreground"
-  >
-    {id}
-  </a>
-);
-
 /** The "why" of a judgement or a decision, as its own paragraph. */
 const Why = ({ why }: { why: string | undefined }) =>
   why ? (
@@ -715,17 +698,13 @@ const THREAD: {
     input: { why?: string; thread?: string },
     output: string | undefined,
   ) => ToolCallView;
-  /** The manager's ledger bookkeeping — rendered as quiet one-liners. */
-  task_covering: (
-    input: { ref?: string },
+  /** The manager's thread bookkeeping — quiet one-liners. */
+  post: (
+    input: { channel?: string; text?: string; replyTo?: string },
     output: string | undefined,
   ) => ToolCallView;
-  task_upsert: (
-    input: { task?: string; title?: string; status?: string },
-    output: string | undefined,
-  ) => ToolCallView;
-  tasks: (
-    input: { status?: string },
+  threads: (
+    input: { channel?: string },
     output: string | undefined,
   ) => ToolCallView;
 } = {
@@ -854,59 +833,51 @@ const THREAD: {
     };
   },
 
-  // the manager's LEDGER bookkeeping — one quiet line each, never a
+  // the manager's THREAD bookkeeping — one quiet line each, never a
   // wall: the channel's content is events and responses, not filing.
-  // Each chip is its task's THREAD ANCHOR — the id opens the panel.
-  task_covering: (
-    input: { ref?: string },
+  post: (
+    input: { channel?: string; text?: string; replyTo?: string },
     output: string | undefined,
   ) => {
     const record = parseRecord(output);
-    const found = record?.covering as
-      | { id?: string; title?: string }
-      | null
-      | undefined;
+    const id = typeof record?.id === "string" ? record.id : undefined;
     return {
-      icon: ListChecks,
+      icon: MessageSquarePlus,
       title: (
         <span className="text-muted-foreground">
-          coverage of <Ref value={String(input.ref ?? "")} />
-          {" → "}
-          {found?.id == null ? "untracked" : <TaskAnchor id={found.id} />}
+          {input.replyTo === undefined ? (
+            <>
+              filed a thread in #{input.channel ?? "?"}
+              {id !== undefined && (
+                <>
+                  {" — "}
+                  <ThreadId id={id} />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              posted into <ThreadId id={input.replyTo} />
+            </>
+          )}
         </span>
       ),
+      summary:
+        typeof input.text === "string" && input.text.length > 0
+          ? input.text.length > 120
+            ? `${input.text.slice(0, 120)}…`
+            : input.text
+          : undefined,
     };
   },
-  task_upsert: (
-    input: { task?: string; title?: string; status?: string },
-    output: string | undefined,
-  ) => {
+  threads: (input: { channel?: string }, output: string | undefined) => {
     const record = parseRecord(output);
-    const id =
-      typeof record?.id === "string"
-        ? record.id
-        : typeof input.task === "string"
-          ? input.task
-          : undefined;
+    const list = Array.isArray(record?.threads) ? record.threads : [];
     return {
       icon: ListChecks,
       title: (
         <span className="text-muted-foreground">
-          filed {id === undefined ? "a task" : <TaskAnchor id={id} />}
-          {typeof input.status === "string" ? ` — ${input.status}` : ""}
-          {typeof input.title === "string" ? ` · ${input.title}` : ""}
-        </span>
-      ),
-    };
-  },
-  tasks: (_input: { status?: string }, output: string | undefined) => {
-    const record = parseRecord(output);
-    const list = Array.isArray(record?.tasks) ? record.tasks : [];
-    return {
-      icon: ListChecks,
-      title: (
-        <span className="text-muted-foreground">
-          read the ledger — {list.length} task{list.length === 1 ? "" : "s"}
+          read #{input.channel ?? "?"}'s threads — {list.length}
         </span>
       ),
     };
@@ -1862,9 +1833,7 @@ export const MIN_TOOL_RUN = 3;
 const RUN_LABELS: Record<string, (n: number, running: boolean) => string> = {
   workspace: (n, running) =>
     `${running ? "Creating" : "Created"} ${n} workspaces`,
-  task_covering: (n, running) =>
-    `${running ? "Checking" : "Checked"} coverage of ${n} refs`,
-  task_upsert: (n, running) => `${running ? "Filing" : "Filed"} ${n} tasks`,
+  post: (n, running) => `${running ? "Posting" : "Posted"} ${n} posts`,
   assign: (n, running) => `${running ? "Assigning" : "Assigned"} ${n} refs`,
   unassign: (n, running) =>
     `${running ? "Unassigning" : "Unassigned"} ${n} refs`,
@@ -2075,8 +2044,8 @@ export const ToolCard = ({
       )}
     >
       {/* a DIV when not expandable — a disabled <button> swallows its
-          children's clicks, and chip titles carry live links (task
-          anchors, refs) that must stay clickable */}
+          children's clicks, and chip titles carry live links (thread
+          ids, refs) that must stay clickable */}
       <HeaderShell
         expandable={expandable}
         onToggle={(target) => anchored(target, () => setOpen(!open))}

@@ -89,7 +89,6 @@ import {
   GitPullRequestClosed,
   Hash,
   Link2,
-  ListChecks,
   LoaderCircle,
   MessageSquare,
   Square,
@@ -105,8 +104,6 @@ import {
   agentFromLocation,
   showAgent,
   showChannel,
-  showTask,
-  taskPath,
 } from "@/lib/routes";
 import {
   fetchOrg,
@@ -377,26 +374,6 @@ export const linkifyMarkdownRefs = (text: string, repo?: string): string =>
     .join("");
 
 /**
- * Rewrite bare task ids (`t-mu1l0zyu-5m9a`) into thread permalinks
- * (`/t/<id>` — a RELATIVE href, which markdown sanitization allows
- * where a custom protocol would be stripped) so the channel can
- * ANSWER with threads: ask it "what covers container dedup?" and the
- * ids in its reply render as pills that focus the thread. Code spans
- * and existing links stay untouched.
- */
-export const linkifyMarkdownTaskIds = (text: string): string =>
-  text
-    .split(CODE_SPLIT)
-    .map((chunk, index) => {
-      if (index % 2 === 1) return chunk; // code or a link — leave alone
-      return chunk.replace(
-        /(?<![\w/.-])t-[a-z0-9]{4,}-[a-z0-9]{2,}\b/g,
-        (id) => `[${id}](/t/${id})`,
-      );
-    })
-    .join("");
-
-/**
  * Rewrite `#<message-id>` references (`#p-mu2ygrdy-yxpq`) into post
  * links (`/p/<id>`) — the anchor renderer turns them into message
  * chips that reveal the referenced message, like `@name` mentions.
@@ -413,13 +390,6 @@ export const linkifyMarkdownPostIds = (text: string): string =>
       );
     })
     .join("");
-
-/** The task id a thread permalink names (`/t/t-x`). */
-const taskHrefId = (href: unknown): string | undefined => {
-  if (typeof href !== "string") return undefined;
-  const match = href.match(/^\/t\/([a-z0-9-]+)$/);
-  return match?.[1];
-};
 
 /**
  * Rewrite `@name` mentions into agent links so every message reads
@@ -687,27 +657,6 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   if (typeof href === "string" && href.startsWith("/p/")) {
     return <PostRef id={decodeURIComponent(href.slice("/p/".length))} />;
   }
-  // a thread permalink (`/t/t-x`) — a pill that focuses the thread
-  // (cmd-click still opens it in a new tab)
-  const taskId = taskHrefId(href);
-  if (taskId !== undefined) {
-    return (
-      <a
-        href={taskPath(taskId)}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-          event.preventDefault();
-          showTask(taskId);
-        }}
-        title="open this thread"
-        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0 align-text-bottom font-mono text-[11px] text-foreground no-underline hover:bg-accent"
-      >
-        <ListChecks className="size-3 text-mist" />
-        {children}
-      </a>
-    );
-  }
   const anchor = typeof href === "string" ? parseAnchor(href) : undefined;
   if (anchor !== undefined) {
     return (
@@ -773,9 +722,7 @@ export const MarkdownText = ({
 }) => (
   <MessageResponse components={MARKDOWN_COMPONENTS}>
     {linkifyMarkdownMentions(
-      linkifyMarkdownPostIds(
-        linkifyMarkdownTaskIds(linkifyMarkdownRefs(text, repo)),
-      ),
+      linkifyMarkdownPostIds(linkifyMarkdownRefs(text, repo)),
     )}
   </MessageResponse>
 );
