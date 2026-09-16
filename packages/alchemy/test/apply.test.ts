@@ -673,6 +673,35 @@ describe("linear update propagation", () => {
         expect(sawByB.every((v) => v === "v2")).toBe(true);
       }),
   );
+
+  // Regression: a dependent that repins from upstream A to upstream B updates
+  // *itself*, while A and B are both noops. The noop pass must still persist
+  // their new `downstream` — delete ordering reads it from the persisted row,
+  // so a stale list would delete B concurrently with the dependent that still
+  // references it (and needlessly wait on A).
+  test.provider(
+    "noop upstreams persist a repinned dependent's downstream edge",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (pin: "A" | "B") =>
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            const B = yield* TestResource("B", { string: "b" });
+            const C = yield* TestResource("C", {
+              string: (pin === "A" ? A : B).string,
+            });
+            return { A, B, C };
+          });
+
+        yield* stack.deploy(program("A"));
+        expect((yield* getState("A"))?.downstream).toEqual(["C"]);
+        expect((yield* getState("B"))?.downstream).toEqual([]);
+
+        yield* stack.deploy(program("B"));
+        expect((yield* getState("A"))?.downstream).toEqual([]);
+        expect((yield* getState("B"))?.downstream).toEqual(["C"]);
+      }),
+  );
 });
 
 // Regression: `deleteFirst` on a `replace` diff was plumbed from the provider
@@ -5455,7 +5484,7 @@ describe("stack output persistence", () => {
         }).pipe(stack.deploy);
         expect(result).toEqual({ url: "hello" });
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "hello" });
@@ -5476,7 +5505,7 @@ describe("stack output persistence", () => {
           return { url: A.string };
         }).pipe(stack.deploy);
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "v2" });

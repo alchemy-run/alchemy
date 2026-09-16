@@ -7,7 +7,6 @@ export {
 export * as AdoptPolicy from "./AdoptPolicy.ts";
 export * from "./AI/index.ts";
 export * from "./AlchemyContext.ts";
-export * as Alchemist from "./Alchemist/index.ts";
 export * from "./Apply.ts";
 export {
   Service as BindingService,

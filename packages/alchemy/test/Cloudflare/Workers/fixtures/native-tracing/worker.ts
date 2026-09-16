@@ -200,13 +200,13 @@ export const tracedWorkerImpl = Effect.gen(function* () {
   Effect.provide(
     Layer.unwrap(
       Effect.gen(function* () {
-        const collectorUrl = yield* Config.string("COLLECTOR_URL").pipe(
+        const collectorUrl = yield* Config.String("COLLECTOR_URL").pipe(
           Effect.orElseSucceed(() => undefined),
         );
-        const composeOrder = yield* Config.string("COMPOSE_ORDER").pipe(
+        const composeOrder = yield* Config.String("COMPOSE_ORDER").pipe(
           Effect.orElseSucceed(() => "cf-last"),
         );
-        const headSamplingRate = yield* Config.number(
+        const headSamplingRate = yield* Config.Number(
           "HEAD_SAMPLING_RATE",
         ).pipe(Effect.orElseSucceed(() => 1));
         const native = Layer.mergeAll(

@@ -326,7 +326,12 @@ export const handler = (options: HandlerOptions = {}) =>
           }
 
           const store = packages.getByName(id);
-          yield* store.recordDownload(tag).pipe(Effect.orDie);
+          if (!(yield* store.recordDownload(tag).pipe(Effect.orDie))) {
+            return yield* HttpServerResponse.json(
+              { error: "tag not found" },
+              { status: 404 },
+            );
+          }
 
           return HttpServerResponse.fromWeb(
             new Response(null, {

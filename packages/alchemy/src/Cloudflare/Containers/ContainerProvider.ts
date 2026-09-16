@@ -211,6 +211,7 @@ export const LiveContainerProvider = () =>
             props.instanceType ??
             (props.vcpu === undefined &&
             props.memory === undefined &&
+            props.memoryMib === undefined &&
             props.disk === undefined
               ? "lite"
               : undefined),
@@ -219,6 +220,7 @@ export const LiveContainerProvider = () =>
           secrets: props.secrets,
           vcpu: props.vcpu,
           memory: props.memory,
+          memoryMib: props.memoryMib,
           disk: props.disk,
           environmentVariables: Object.entries(env).map(([name, value]) => ({
             name,

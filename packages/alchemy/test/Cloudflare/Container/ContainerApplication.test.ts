@@ -84,6 +84,40 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
+  test.provider(
+    "forwards the fixture's memoryMib to Cloudflare",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const app = yield* stack.deploy(RemoteContainer.Application);
+        expect(app.configuration.memoryMib).toBe(4096);
+        const live = yield* Containers.getContainerApplication({
+          accountId: app.accountId,
+          applicationId: app.applicationId,
+        });
+        expect(live.configuration.memoryMib).toBe(4096);
+        expect(live.configuration.instanceType).not.toBe("lite");
+
+        yield* stack.destroy();
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: app.accountId,
+          applicationId: app.applicationId,
+        }).pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
   // Canonical `list()` test (Cloudflare account collection, pattern (b)).
   // `listContainerApplications` returns the full application objects in one
   // (non-paginated) response, so `list()` maps each into the exact `read`
