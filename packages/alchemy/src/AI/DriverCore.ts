@@ -296,6 +296,11 @@ export const renderRef = (ref: unknown): string => {
   if (isSource(ref)) {
     return renderSource(ref);
   }
+  // a spliced error class renders as its tag — the name the model
+  // (and a document's reader) knows it by
+  if (isErrorTerm(ref)) {
+    return `\`${errorTag(ref)}\``;
+  }
   if (isFragment(ref)) {
     return render(ref.template, ref.refs);
   }

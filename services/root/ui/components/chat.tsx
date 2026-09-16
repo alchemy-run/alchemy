@@ -74,11 +74,14 @@ import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
 import {
   AlarmClock,
+  Blocks,
+  Braces,
   ChevronDown,
   CircleDot,
   CircleMinus,
   CirclePlus,
   Copy,
+  CornerDownRight,
   FileCode2,
   GitMerge,
   GitPullRequestArrow,
@@ -90,7 +93,10 @@ import {
   MessageSquare,
   Square,
   Trash2,
+  TriangleAlert,
   Unlink2,
+  Users,
+  Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -419,11 +425,95 @@ export const AnchorActionContext = createContext<
   ((href: string) => void) | undefined
 >(undefined);
 
+/* ── splice references: every kind a FIRST-CLASS pill ──────────────
+ *
+ * The org's rendered prose (`/api/org`) marks every template splice
+ * as a `ref://<kind>/<name>` link — a tool, a skill, a group, a
+ * parameter, an answer field, a declared failure, a source file.
+ * Each kind wears its own icon and tint, the way an agent mention
+ * wears the @-chip. */
+
+const SPLICE_KINDS: Record<
+  string,
+  { icon: LucideIcon; className: string; title: string }
+> = {
+  tool: {
+    icon: Wrench,
+    className: "bg-primary/15 text-primary",
+    title: "a tool",
+  },
+  skill: {
+    icon: Blocks,
+    className: "bg-mist/15 text-mist",
+    title: "a skill",
+  },
+  group: {
+    icon: Users,
+    className: "bg-mist/15 text-mist",
+    title: "a group",
+  },
+  param: {
+    icon: Braces,
+    className: "bg-muted/60 text-muted-foreground",
+    title: "a parameter",
+  },
+  output: {
+    icon: CornerDownRight,
+    className: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    title: "an answer field",
+  },
+  error: {
+    icon: TriangleAlert,
+    className: "bg-red-500/10 text-red-600 dark:text-red-400",
+    title: "a declared failure",
+  },
+  source: {
+    icon: FileCode2,
+    className: "bg-muted/60 text-muted-foreground",
+    title: "a source file",
+  },
+};
+
+/** One spliced reference, rendered first-class. */
+export const SplicePill = ({
+  kind,
+  name,
+}: {
+  kind: string;
+  name: string;
+}) => {
+  const spec = SPLICE_KINDS[kind] ?? SPLICE_KINDS.param!;
+  const Icon = spec.icon;
+  return (
+    <span
+      title={`${name} — ${spec.title}`}
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 truncate rounded px-1 py-0 align-baseline font-mono text-[11px] font-medium",
+        spec.className,
+      )}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden />
+      {name}
+    </span>
+  );
+};
+
 /** A link in rendered markdown. GitHub issue/pull links get hover
  *  cards; `anchor://` links draw as file-line PILLS that focus the
  *  review view when one is listening. */
 const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   const onAnchor = useContext(AnchorActionContext);
+  // a SPLICED REFERENCE (`/ref/<kind>/<name>`, the org's rendered
+  // prose) — every splice kind is a first-class pill; an agent
+  // splice IS the mention chip
+  if (typeof href === "string" && href.startsWith("/ref/")) {
+    const rest = href.slice("/ref/".length);
+    const at = rest.indexOf("/");
+    const kind = at < 0 ? rest : rest.slice(0, at);
+    const name = at < 0 ? "" : decodeURIComponent(rest.slice(at + 1));
+    if (kind === "agent") return <Mention name={name} />;
+    return <SplicePill kind={kind} name={name} />;
+  }
   // an agent mention (`/agents/name`) — the discord chip
   if (typeof href === "string" && href.startsWith("/agents/")) {
     return (

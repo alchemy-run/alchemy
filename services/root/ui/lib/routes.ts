@@ -56,6 +56,19 @@ export const taskFromLocation = (): string | undefined => {
     : undefined;
 };
 
+/** An agent's PROFILE — the mirror of its charter (`/a/Head`). */
+export const agentPath = (name: string): string =>
+  `/a/${encodeURIComponent(name)}`;
+
+export const agentFromLocation = (): string | undefined => {
+  const parts = segments();
+  return parts[0] === "a" && parts[1] !== undefined
+    ? decodeURIComponent(parts[1])
+    : undefined;
+};
+
+export const showAgent = (name: string): void => navigate(agentPath(name));
+
 export const showChannel = (name: string): void => navigate(channelPath(name));
 
 /** A thread's place — the channel's path with the root post under

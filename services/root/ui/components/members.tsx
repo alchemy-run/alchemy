@@ -7,11 +7,12 @@
  * its standing session.
  */
 import { Avatar, HUMAN, type Author } from "@/components/avatar";
-import { showOverlay } from "@/lib/routes";
+import { showAgent } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 interface Member extends Author {
-  /** The session the member's row opens (agents only). */
+  /** The session the member holds (agents only) — the row itself
+   *  opens the agent's PROFILE (`/a/:name`), the org's mirror page. */
   readonly session?: string;
   /** One line under the pointer — what they're on. */
   readonly detail?: string;
@@ -39,7 +40,7 @@ const Section = ({
           onClick={
             member.session === undefined
               ? undefined
-              : () => showOverlay({ kind: "agent", id: member.session! })
+              : () => showAgent(member.name)
           }
           title={member.detail ?? member.name}
           className={cn(

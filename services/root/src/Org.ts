@@ -154,6 +154,56 @@ const nameOf = (term: unknown): string =>
 const sourceOf = (cls: { source?: { path?: string } }): string | undefined =>
   cls.source?.path;
 
+/* ── marked prose: every splice a FIRST-CLASS reference ──────────────
+ *
+ * The model reads `\`name\`` mentions (AI.render — byte-stable, plain);
+ * the MIRROR reads the same templates with every splice rendered as a
+ * TYPED reference — a markdown link on the `/ref/<kind>/<name>` path
+ * the UI draws as a pill with the kind's icon (a tool wears a wrench
+ * the way "@manager" wears the mention chip). A path, not a custom
+ * scheme: the markdown renderer's link security blocks unknown
+ * protocols. */
+
+const mark = (kind: string, name: string): string =>
+  `[${name}](/ref/${kind}/${encodeURIComponent(name)})`;
+
+const markRef = (ref: unknown): string => {
+  if (AI.isToolDef(ref)) return mark("tool", ref.tool["~alchemy/Name"]);
+  if (AI.isToolImpl(ref)) return mark("tool", ref.tool["~alchemy/Name"]);
+  if (AI.isTool(ref)) return mark("tool", nameOf(ref));
+  if (AI.isSkill(ref)) return mark("skill", nameOf(ref));
+  if (AI.isAgent(ref)) return mark("agent", AI.memberSlug(nameOf(ref)));
+  if (AI.isGroup(ref)) return mark("group", nameOf(ref));
+  if (AI.isThing(ref)) return mark("param", nameOf(ref));
+  if (AI.isIn(ref)) {
+    return ref.things.map((thing) => mark("param", nameOf(thing))).join(", ");
+  }
+  if (AI.isOut(ref)) {
+    return ref.things.map((thing) => mark("output", nameOf(thing))).join(", ");
+  }
+  if (AI.isErrorTerm(ref)) return mark("error", AI.errorTag(ref));
+  if (AI.isSource(ref)) {
+    const source = ref as { path?: string; "~alchemy/Name": string };
+    return mark("source", source.path ?? source["~alchemy/Name"]);
+  }
+  if (AI.isFragment(ref)) return renderMarked(ref.template, ref.refs);
+  if (Effect.isEffect(ref)) return "…";
+  return String(ref);
+};
+
+/** Render a template with every splice as a `ref://` reference. */
+const renderMarked = (
+  template: TemplateStringsArray,
+  refs: ReadonlyArray<unknown>,
+): string => {
+  const parts = AI.dedentTemplate(template);
+  let out = parts[0] ?? "";
+  for (let index = 0; index < refs.length; index++) {
+    out += markRef(refs[index]) + (parts[index + 1] ?? "");
+  }
+  return out.trim();
+};
+
 /** One tool term's projection: prose, schema summary, declared errors. */
 const toolEntry = (
   term: AI.Tool<string, any[]>,
@@ -171,7 +221,7 @@ const toolEntry = (
   }
   return {
     name: nameOf(term),
-    description: AI.render(term.template, term.refs),
+    description: renderMarked(term.template, term.refs),
     kind,
     params,
     outputs,
@@ -208,14 +258,14 @@ export const buildOrgGraph = (
     name: nameOf(entry.cls),
     slug: AI.memberSlug(nameOf(entry.cls)),
     source: sourceOf(entry.cls),
-    chart: AI.render(entry.chart.template, [...entry.chart.refs]),
+    chart: renderMarked(entry.chart.template, entry.chart.refs),
     members: entry.chart.refs.filter(AI.isAgent).map(nameOf),
   }));
 
   const skills: OrgSkill[] = SKILLS.map((entry) => ({
     name: nameOf(entry.cls),
     source: sourceOf(entry.cls),
-    teaching: AI.render(entry.general.template, [...entry.general.refs]),
+    teaching: renderMarked(entry.general.template, entry.general.refs),
     // a teaching may mention a tool several times — one grant
     tools: [...new Set(entry.general.refs.filter(AI.isTool).map(nameOf))],
   }));
@@ -242,7 +292,7 @@ export const buildOrgGraph = (
       slug: AI.memberSlug(name),
       source: sourceOf(entry.cls),
       model: entry.model,
-      charter: AI.render(entry.live.template, [...entry.live.refs]),
+      charter: renderMarked(entry.live.template, entry.live.refs),
       tools,
       skills: [...grantedSkills].map((skill) => ({
         name: skill,

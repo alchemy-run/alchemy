@@ -18,16 +18,20 @@ import { ChatView } from "@/components/chat";
 import { ChannelFeed, ThreadView } from "@/components/channel-feed";
 import { CallThread } from "@/components/call";
 import { MembersPanel } from "@/components/members";
+import { AgentProfile } from "@/components/agent-profile";
 import { ChannelThreads, TaskThread } from "@/components/tasks";
 import { Avatar, KindBadge, sessionAuthor } from "@/components/avatar";
 import { GhosttyTerminal } from "@/components/terminal";
+import { fetchOrg } from "@/lib/org";
 import {
+  agentFromLocation,
   channelFromLocation,
   normalizeLegacyLocation,
   OVERLAY_EVENT,
   closePane,
   overlayFromLocation,
   panesFromLocation,
+  showAgent,
   showChannel,
   showOverlay,
   taskFromLocation,
@@ -243,6 +247,14 @@ export const App = () => {
   const [task, setTask] = useState<string | undefined>(() =>
     taskFromLocation(),
   );
+  /** The open agent PROFILE (`/a/:name`) — the org's mirror page. */
+  const [agent, setAgent] = useState<string | undefined>(() =>
+    agentFromLocation(),
+  );
+  /** The AGENTS rail section — the roster from `/api/org`. */
+  const [roster, setRoster] = useState<
+    ReadonlyArray<{ name: string; slug: string; model: string }>
+  >([]);
   /** The OPEN thread — discord's side panel, riding the path. */
   const [thread, setThread] = useState<string | undefined>(() =>
     threadFromLocation(),
@@ -283,6 +295,17 @@ export const App = () => {
         if (body.channels.length > 0) setChannels(body.channels);
       })
       .catch(() => {});
+    fetchOrg()
+      .then((graph) =>
+        setRoster(
+          graph.agents.map((entry) => ({
+            name: entry.name,
+            slug: entry.slug,
+            model: entry.model.label,
+          })),
+        ),
+      )
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -290,6 +313,7 @@ export const App = () => {
       setOverlay(overlayFromLocation());
       setPanes(panesFromLocation());
       setTask(taskFromLocation());
+      setAgent(agentFromLocation());
       setThread(threadFromLocation());
       const name = channelFromLocation();
       if (name !== undefined) setSelected(name);
@@ -507,6 +531,41 @@ export const App = () => {
                 )}
               </div>
             ))}
+            {/* the AGENTS — the org's roster, each a profile page:
+                the mirror of its charter (`/a/:name`) */}
+            {roster.length > 0 && (
+              <div className="flex flex-col gap-0.5 pt-3">
+                <div className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  agents
+                </div>
+                {roster.map((entry) => (
+                  <button
+                    key={entry.name}
+                    type="button"
+                    onClick={() => showAgent(entry.name)}
+                    aria-label={`open ${entry.slug}'s profile`}
+                    title={entry.model}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
+                      agent !== undefined &&
+                        agent.toLowerCase() === entry.name.toLowerCase()
+                        ? "bg-accent font-medium"
+                        : "text-muted-foreground hover:bg-accent/60",
+                    )}
+                  >
+                    <Avatar name={entry.slug} kind="agent" size={18} />
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {entry.slug}
+                    </span>
+                    <span
+                      aria-hidden
+                      title={entry.model}
+                      className="size-1.5 shrink-0 rounded-full bg-moss/70"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           {/* the resize handle — drag the rail's edge */}
           <div
@@ -518,10 +577,17 @@ export const App = () => {
           />
         </nav>
 
-        {/* the center: the focused THREAD (the tweet-permalink move —
-            a thread opens as the main view, not a side panel), or the
-            channel feed */}
-        {task !== undefined ? (
+        {/* the center: an agent's PROFILE (the org's mirror page),
+            the focused THREAD (the tweet-permalink move — a thread
+            opens as the main view, not a side panel), or the channel
+            feed */}
+        {agent !== undefined ? (
+          <AgentProfile
+            key={agent}
+            name={agent}
+            onUp={() => showChannel(channel.name)}
+          />
+        ) : task !== undefined ? (
           <TaskThread
             key={task}
             id={task}
