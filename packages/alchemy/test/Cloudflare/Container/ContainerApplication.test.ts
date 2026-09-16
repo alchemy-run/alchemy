@@ -1105,7 +1105,15 @@ describe("ContainerApplication", () => {
         expect(second.app.configuration.image).toBe(digestRef);
         expect(second.app.hash?.digest).toBe(first.app.hash?.digest);
         expect(second.app.hash?.image).not.toBe("0000000000000000");
-        expect(yield* live(accountId, second.app.applicationId)).toMatchObject({
+        expect(
+          yield* live(accountId, second.app.applicationId).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "ContainerApplicationNotFound",
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          ),
+        ).toMatchObject({
           image: digestRef,
           durableObjects: { namespaceId },
         });

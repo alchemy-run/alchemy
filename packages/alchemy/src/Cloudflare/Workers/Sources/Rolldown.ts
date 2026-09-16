@@ -243,7 +243,7 @@ export const makeEffectVirtualEntry = (
 import * as Effect from "effect/Effect";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
+import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare/Bridge";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
