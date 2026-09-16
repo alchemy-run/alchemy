@@ -1066,6 +1066,23 @@ export const LiveContainerProvider = () =>
             return { action: "update", stables: ["accountId"] } as const;
           }
 
+          const application = yield* Containers.getContainerApplication({
+            accountId: output.accountId,
+            applicationId: output.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (
+            application &&
+            (application.id !== output.applicationId ||
+              application.name !== output.applicationName ||
+              application.accountId !== output.accountId)
+          ) {
+            return { action: "replace" } as const;
+          }
+
           const { imageHash, dev } = yield* computeImage(
             id,
             news,
