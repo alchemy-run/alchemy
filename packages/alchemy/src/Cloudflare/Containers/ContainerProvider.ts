@@ -192,6 +192,7 @@ export const LiveContainerProvider = () =>
             props.instanceType ??
             (props.vcpu === undefined &&
             props.memory === undefined &&
+            props.memoryMib === undefined &&
             props.disk === undefined
               ? "lite"
               : undefined),
@@ -200,6 +201,7 @@ export const LiveContainerProvider = () =>
           secrets: props.secrets,
           vcpu: props.vcpu,
           memory: props.memory,
+          memoryMib: props.memoryMib,
           disk: props.disk,
           environmentVariables: Object.entries(env).map(([name, value]) => ({
             name,
@@ -1063,6 +1065,23 @@ export const LiveContainerProvider = () =>
           if (!isLiveId(output.applicationId)) {
             // Override stables to only include the accountId because the applicationId is going to change.
             return { action: "update", stables: ["accountId"] } as const;
+          }
+
+          const application = yield* Containers.getContainerApplication({
+            accountId: output.accountId,
+            applicationId: output.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (
+            application &&
+            (application.id !== output.applicationId ||
+              application.name !== output.applicationName ||
+              application.accountId !== output.accountId)
+          ) {
+            return { action: "replace" } as const;
           }
 
           const { imageHash, dev } = yield* computeImage(

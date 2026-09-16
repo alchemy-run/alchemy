@@ -19,7 +19,12 @@
 // via `--import` when spawning node in a checkout. Published installs run
 // bundled `.js` and never load it; this file is excluded from the tarball.
 // In a checkout, the source loader resolves from the workspace package.
-import { registerHooks } from "node:module";
+import { enableCompileCache, registerHooks } from "node:module";
+
+// See register-oxc.js: enabled before anything else loads so the whole graph —
+// the loader's rolldown dependency and every transformed workspace file —
+// is code-cached across the CLI, the dev exec child and the sidecars.
+enableCompileCache();
 
 /** @param {string} specifier */
 const isMonorepoPackage = (specifier) =>

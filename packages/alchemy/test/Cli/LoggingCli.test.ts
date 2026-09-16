@@ -72,6 +72,26 @@ it.effect("emits plain progress through the Effect logger", () => {
   );
 });
 
+it.effect("prints dev stack outputs with the plain apply renderer", () => {
+  const messages: unknown[] = [];
+  return Effect.gen(function* () {
+    const cli = yield* Cli;
+    const session = yield* cli.startApplySession(planWith([]), { dev: true });
+    expect(session.setOutput).toBeDefined();
+    yield* session.setOutput!({ api: "http://localhost:1337/" });
+    expect(messages).toContainEqual(["{ api: 'http://localhost:1337/' }"]);
+  }).pipe(
+    Effect.provide(Layer.provide(LoggingCli, PlatformServices)),
+    Effect.provide(
+      Logger.layer([
+        Logger.make<unknown, void>((options) => {
+          messages.push(options.message);
+        }),
+      ]),
+    ),
+  );
+});
+
 it.effect("streams apply notes as they arrive", () => {
   const messages: string[] = [];
   const logger = Logger.make<unknown, void>((options) => {

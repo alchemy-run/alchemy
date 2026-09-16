@@ -192,7 +192,7 @@ export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("API_KEY");
+    const apiKey = yield* Config.Redacted("API_KEY");
 
     return {
       fetch: Effect.gen(function* () {
@@ -204,7 +204,7 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-`Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+`Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
 `Redacted.value` only where you need the raw string.
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
@@ -277,5 +277,5 @@ hibernate — no parent App, no Docker image.
 [Postgres](/fly/data/postgres) binds with `ConnectPostgres`.
 [Redis](/fly/data/redis) binds with `ReadWriteRedis`.
 [Tigris](/fly/data/tigris) binds with `PutObject` / `GetObject`.
-[Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
+[Secrets](/fly/data/secrets) covers `Config.Redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.
