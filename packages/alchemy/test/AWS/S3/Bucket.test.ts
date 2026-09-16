@@ -25,6 +25,59 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+for (const blocked of ["SSE-C", "NONE"] as const) {
+  test.provider(
+    `PR1588 preserves external ${blocked} encryption blocks when defaults change`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const bucket = yield* stack.deploy(
+          Bucket("EncryptionBlocksBucket", {
+            encryption: { sseAlgorithm: "aws:kms" },
+          }),
+        );
+        yield* S3.putBucketEncryption({
+          Bucket: bucket.bucketName,
+          ServerSideEncryptionConfiguration: {
+            Rules: [
+              {
+                ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "aws:kms" },
+                BlockedEncryptionTypes: { EncryptionType: [blocked] },
+              },
+            ],
+          },
+        });
+        const before = (yield* S3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([
+          blocked,
+        ]);
+        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
+          "aws:kms",
+        );
+        const desired = Bucket("EncryptionBlocksBucket", {
+          encryption: { sseAlgorithm: "AES256" },
+        });
+        const plan = yield* stack.plan(desired);
+        expect(plan.resources.EncryptionBlocksBucket?.action).toBe("update");
+        yield* stack.deploy(desired);
+        const after = (yield* S3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
+          "AES256",
+        );
+        expect(after.BlockedEncryptionTypes).toEqual(
+          before.BlockedEncryptionTypes,
+        );
+        yield* stack.destroy();
+        yield* assertBucketDeleted(bucket.bucketName);
+      }),
+    { timeout: 120_000 },
+  );
+}
+
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
