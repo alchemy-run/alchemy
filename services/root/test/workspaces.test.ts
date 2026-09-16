@@ -40,7 +40,6 @@ import * as Schedule from "effect/Schedule";
 import { resolve } from "node:path";
 import { CheckoutsWorkspace } from "../src/sandbox/CheckoutsWorkspace.ts";
 import { SandboxDev } from "../src/sandbox/SandboxDev.ts";
-import { defaultWorkspace } from "../src/sandbox/SessionTree.ts";
 import {
   makeWorkspaceHost,
   WORKSPACES_DIR,
@@ -268,29 +267,29 @@ test(
           );
           expect(tree.path).toBe(dir);
 
-          // an engineer session whose DEFAULT workspace this is
+          // an engineer session — NO defaults: it addresses the
+          // workspace explicitly
           const store = PersistentRef.makeMemoryStore();
           const engineer = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
             effect.pipe(
               Effect.provideService(AI.Thread, {
-                key: "test-ws::e-1",
+                key: "test-ws::engineer::p-1",
               } as never),
               Effect.provideService(PersistentRef.Store, store),
             );
-          yield* engineer(PersistentRef.set(defaultWorkspace, "routed"));
 
-          // its calls land INSIDE the workspace…
+          // its addressed calls land INSIDE the workspace…
           const branch = yield* engineer(
-            sandbox.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"]),
+            sandbox.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+              cwd: "@routed",
+            }),
           );
           expect(branch.success).toBe(true);
           expect(branch.stdout.trim()).toBe(`ws/${dir}`);
-          const pkg = yield* engineer(sandbox.readFile("package.json"));
+          const pkg = yield* engineer(
+            sandbox.readFile("@routed/package.json"),
+          );
           expect(pkg).toContain('"name"');
-          // …reach a sibling workspace explicitly (its own, by name)…
-          expect(
-            yield* engineer(sandbox.exists("@routed/package.json")),
-          ).toBe(true);
           // …and CANNOT escape: the served root IS the workspaces dir
           const escaped = yield* engineer(
             sandbox.readFile("@routed/../../package.json"),
@@ -301,21 +300,11 @@ test(
             sandbox.readFile("@nope/README.md"),
           ).pipe(Effect.flip);
           expect(String(unknown)).toContain("no workspace named 'nope'");
-          // a session with NO default fails closed
-          const bare = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-            effect.pipe(
-              Effect.provideService(AI.Thread, {
-                key: "test-ws::e-2",
-              } as never),
-              Effect.provideService(
-                PersistentRef.Store,
-                PersistentRef.makeMemoryStore(),
-              ),
-            );
-          const lost = yield* bare(sandbox.exec("git", ["status"])).pipe(
-            Effect.flip,
-          );
-          expect(String(lost)).toContain("no workspace");
+          // a plain relative path fails closed — no defaults exist
+          const lost = yield* engineer(
+            sandbox.exec("git", ["status"]),
+          ).pipe(Effect.flip);
+          expect(String(lost)).toContain("no default workspace");
 
           yield* checkouts.release(key);
           expect(Option.isNone(yield* checkouts.get(key))).toBe(true);

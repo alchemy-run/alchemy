@@ -7,6 +7,7 @@ import Engineering from "./engineering/Group.ts";
 import { makeEntityTools } from "./github/Entity.ts";
 import { models } from "./platform/Model.ts";
 import { makeProposalTools } from "./proposals/Propose.ts";
+import { Explore } from "./chat/Explore.ts";
 import { makeWorkspaceTools } from "./sandbox/WorkspaceTools.ts";
 
 /**
@@ -49,7 +50,10 @@ export const HeadLive = Head.make(
           conversation is the ROOT THREAD, the bottom of the lineage:
           every teammate, workspace, task, and decision derives from it,
           and every chain of questions bubbles back up to you, then to
-          the human. Human + Root + Head is the whole bootstrap — the
+          the human. Each message reaches you in a FRESH session, from
+          ZERO — ${Explore} the message graph (the message you answer,
+          the chain above it, the whole thread) to restore what was
+          already said before you answer. Human + Root + Head is the whole bootstrap — the
           company is CODE in the repository it maintains
           (services/root), and it evolves by changing itself: a new role
           or process is a charter file, proposed as a pull request,

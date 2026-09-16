@@ -2,7 +2,10 @@ import * as AI from "alchemy/AI";
 import * as GitHub from "alchemy/GitHub";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as S from "effect/Schema";
+import { currentAsk } from "../chat/Ask.ts";
+import { Posts } from "../chat/Posts.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { primary } from "../github/Repos.ts";
 import { ROOT } from "../Root.ts";
@@ -10,12 +13,15 @@ import { WORKSPACE_TERM, pullWorkspaceName, workspaceKey } from "./Keys.ts";
 import { WorkspaceAgent } from "./WorkspaceAgent.ts";
 
 /**
- * The WORKSPACE tools — how the company's agents provision and retire
- * the machines they work in. A workspace is an isolated machine with
- * the repository checked out (its own MicroVM deployed, a linked
- * worktree in dev — sandbox/WorkspaceAgent.ts); the tool RESULT names
- * it, and the Root Thread renders the name as the workspace's terminal
- * chip. Shared by the Head and the Manager.
+ * The WORKSPACE tools — how the company's agents provision, discover,
+ * and retire the machines they work in. A workspace is an isolated
+ * machine with the repository checked out (its own MicroVM deployed,
+ * a linked worktree in dev — sandbox/WorkspaceAgent.ts).
+ *
+ * There is NO per-session default workspace: agents CREATE workspaces
+ * as they need them, a workspace made inside a thread is LINKED to
+ * that thread, and any agent can QUERY a thread's active workspaces —
+ * then address one explicitly as `@<name>/<path>` in any tool path.
  */
 
 export class BadRef extends Data.TaggedError("BadRef")<{
@@ -28,8 +34,8 @@ export class CheckoutFailed extends Data.TaggedError("CheckoutFailed")<{
 
 const wsName = AI.Thing("name", S.String)`
   The workspace's name ("pr-832", "scratch") — how every agent
-  addresses it in paths ("@<name>/<path>") and how spawn hands it to
-  an engineer. Letters, digits, dots, dashes, underscores.`;
+  addresses it in paths ("@<name>/<path>"). Letters, digits, dots,
+  dashes, underscores.`;
 
 const wsRef = AI.Thing("ref", S.optionalKey(S.String))`
   A pull request — "owner/repo#N" — to base the workspace on: its head
@@ -39,10 +45,36 @@ const wsRef = AI.Thing("ref", S.optionalKey(S.String))`
 const branch = AI.Thing("branch", S.String)`
   The branch the workspace's tree has checked out.`;
 
+const active = AI.Thing("workspaces", S.Array(S.String))`
+  The workspaces active in this thread, oldest first — address one as
+  "@<name>/<path>".`;
+
+/** The THREAD the calling session is working in — the root of the
+ *  message its round answers (undefined outside a conversation). */
+const currentThreadRoot = Effect.gen(function* () {
+  const frame = yield* Effect.serviceOption(AI.Thread);
+  if (Option.isNone(frame)) return undefined;
+  const parent = yield* currentAsk;
+  if (parent === undefined) return undefined;
+  const posts = yield* Effect.serviceOption(Posts);
+  if (Option.isNone(posts)) return undefined;
+  const above = yield* posts.value.ancestors(parent);
+  return above[0]?.id ?? parent;
+});
+
 export const makeWorkspaceTools = Effect.gen(function* () {
   const workspaces = yield* WorkspaceAgent;
   const sessions = yield* AI.Sessions;
   const sessionRepo = yield* SessionRepo;
+  const posts = yield* Effect.serviceOption(Posts);
+
+  /** Creating a workspace inside a thread LINKS it there — that is
+   *  how teammates' fresh sessions discover it. */
+  const link = Effect.fn(function* (name: string) {
+    const thread = yield* currentThreadRoot;
+    if (thread === undefined || Option.isNone(posts)) return;
+    yield* posts.value.linkWorkspace(thread, name).pipe(Effect.ignore);
+  });
 
   /** Provision one workspace (its own machine + tree). Idempotent. */
   const provision = Effect.fn(function* (options: {
@@ -70,6 +102,7 @@ export const makeWorkspaceTools = Effect.gen(function* () {
           (message) => new CheckoutFailed({ message: String(message) }),
         ),
       );
+    yield* link(made.name);
     return made;
   });
 
@@ -98,11 +131,12 @@ export const makeWorkspaceTools = Effect.gen(function* () {
     checked out, ready to be worked on. With ${wsRef}: the pull
     request's head branch, fetched fresh, named "pr-N". Without: a
     scratch workspace named ${wsName} on the repository's default
-    state. Answers ${AI.out(wsName, branch)}. Every agent reaches
-    every workspace ("@<name>/<path>" in any path); an engineer is
-    handed its DEFAULT one at spawn. Fails with ${BadRef} for a ref
-    that is not a pull request of a connected repository,
-    ${CheckoutFailed} when git refuses.`(
+    state. Answers ${AI.out(wsName, branch)}. Created inside a
+    thread, the workspace is LINKED to it — teammates find it with
+    list_workspaces. There are no defaults: every agent addresses
+    every workspace explicitly ("@<name>/<path>" in any path). Fails
+    with ${BadRef} for a ref that is not a pull request of a
+    connected repository, ${CheckoutFailed} when git refuses.`(
     Effect.fn(function* (p: { ref?: string; name?: string }) {
       if (p.ref !== undefined) {
         const made = yield* provisionPull(p.ref);
@@ -121,12 +155,26 @@ export const makeWorkspaceTools = Effect.gen(function* () {
     }),
   );
 
+  const listWorkspaces = yield* AI.Tool("list_workspaces")`
+    The workspaces ACTIVE in this thread — ${AI.out(active)}. You
+    start from zero: this is how you find the machine the thread's
+    work lives on before addressing paths ("@<name>/<path>"). Empty
+    means nobody made one yet — create it with workspace if your
+    work needs a tree.`(
+    Effect.fn(function* () {
+      const thread = yield* currentThreadRoot;
+      if (thread === undefined || Option.isNone(posts)) {
+        return { workspaces: [] };
+      }
+      return { workspaces: yield* posts.value.workspacesOf(thread) };
+    }),
+  );
+
   const dropWorkspace = yield* AI.Tool("drop_workspace")`
     Drop the workspace named ${wsName} — its tree and its machine.
-    Work committed and pushed survives on GitHub; anything else in the
-    tree is gone. Engineers whose default it was lose their footing —
-    stop or re-point them first. Fails with ${CheckoutFailed} when the
-    release refuses.`(
+    Work committed and pushed survives on GitHub; anything else in
+    the tree is gone, and the name leaves every thread it was linked
+    in. Fails with ${CheckoutFailed} when the release refuses.`(
     Effect.fn(function* (p: { name: string }) {
       const key = workspaceKey(ROOT, p.name);
       yield* workspaces
@@ -138,8 +186,17 @@ export const makeWorkspaceTools = Effect.gen(function* () {
           ),
         );
       yield* sessions.remove(WORKSPACE_TERM, key, { machine: true });
+      if (Option.isSome(posts)) {
+        yield* posts.value.unlinkWorkspace(p.name).pipe(Effect.ignore);
+      }
     }),
   );
 
-  return { workspace, dropWorkspace, provision, provisionPull };
+  return {
+    workspace,
+    listWorkspaces,
+    dropWorkspace,
+    provision,
+    provisionPull,
+  };
 });

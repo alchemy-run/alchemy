@@ -29,13 +29,22 @@ const TAG = "calls";
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
-    parent_id TEXT,
+    reply_to TEXT,
+    channel TEXT,
     author TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'message',
     text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
     at INTEGER NOT NULL
   )`,
-  `CREATE INDEX IF NOT EXISTS posts_parent ON posts (parent_id)`,
+  `CREATE INDEX IF NOT EXISTS posts_reply ON posts (reply_to)`,
+  `CREATE INDEX IF NOT EXISTS posts_channel ON posts (channel)`,
+  `CREATE TABLE IF NOT EXISTS thread_workspaces (
+    thread TEXT NOT NULL,
+    workspace TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (thread, workspace)
+  )`,
   `CREATE TABLE IF NOT EXISTS calls (
     id TEXT PRIMARY KEY,
     topic TEXT NOT NULL,
@@ -62,8 +71,10 @@ const TABLES = [
 
 interface PostRow extends Record<string, Cloudflare.SqlStorageValue> {
   id: string;
-  parent_id: string | null;
+  reply_to: string | null;
+  channel: string | null;
   author: string;
+  kind: string;
   text: string;
   status: string;
   at: number;
@@ -88,20 +99,23 @@ interface UtteranceRow extends Record<string, Cloudflare.SqlStorageValue> {
 
 const toPost = (row: PostRow): Post => ({
   id: row.id,
-  ...(row.parent_id === null ? {} : { parent: row.parent_id }),
+  ...(row.reply_to === null ? {} : { replyTo: row.reply_to }),
+  ...(row.channel === null ? {} : { channel: row.channel }),
   author: row.author,
+  kind: row.kind === "ask" ? "ask" : "message",
   text: row.text,
   status: row.status as Post["status"],
   at: row.at,
-  children: [],
 });
 
 interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
-  // ── the post tree ──
+  // ── the post stream ──
   readonly postWrite: (input: {
     readonly id: string;
-    readonly parent?: string;
+    readonly replyTo?: string;
+    readonly channel?: string;
     readonly author: string;
+    readonly kind?: Post["kind"];
     readonly text: string;
     readonly status?: Post["status"];
   }) => Effect.Effect<void, never, RuntimeContext>;
@@ -109,22 +123,44 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     id: string,
     status: Post["status"],
   ) => Effect.Effect<void, never, RuntimeContext>;
-  /** The SUBTREE under one post (children nested, chronological). */
-  readonly postTree: (
+  readonly postGet: (
     id: string,
   ) => Effect.Effect<Post | undefined, never, RuntimeContext>;
-  /** The chain ABOVE one post — root first, ending with the post. */
+  /** The messages replying to one post, oldest first. */
+  readonly postReplies: (
+    id: string,
+  ) => Effect.Effect<ReadonlyArray<Post>, never, RuntimeContext>;
+  /** The `replyTo` chain ABOVE one post — full messages, oldest
+   *  first, ending with the post. */
   readonly postAncestors: (
     id: string,
-  ) => Effect.Effect<
-    ReadonlyArray<{ readonly id: string; readonly author: string }>,
-    never,
-    RuntimeContext
-  >;
-  /** Root posts (no parent), newest first — the company's activity. */
-  readonly postRoots: (
-    limit?: number,
   ) => Effect.Effect<ReadonlyArray<Post>, never, RuntimeContext>;
+  /** The whole THREAD a post lives in: its root's reply graph,
+   *  chronological (the root is the first row). */
+  readonly postThread: (
+    id: string,
+  ) => Effect.Effect<ReadonlyArray<Post>, never, RuntimeContext>;
+  /** Workspace ↔ thread links — which workspaces are ACTIVE in a
+   *  thread. Agents create workspaces as they need them; creating one
+   *  inside a thread links it, and any agent can query the thread's
+   *  active set. */
+  readonly workspaceLink: (
+    thread: string,
+    workspace: string,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly workspacesOf: (
+    thread: string,
+  ) => Effect.Effect<ReadonlyArray<string>, never, RuntimeContext>;
+  /** Unlink a dropped workspace everywhere. */
+  readonly workspaceUnlink: (
+    workspace: string,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  /** The stream, oldest first — one channel's feed when `channel` is
+   *  given; `limit` keeps the newest messages. */
+  readonly postList: (options?: {
+    readonly channel?: string;
+    readonly limit?: number;
+  }) => Effect.Effect<ReadonlyArray<Post>, never, RuntimeContext>;
 
   // ── calls ──
   readonly open: (input: {
@@ -220,6 +256,22 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
         { discard: true },
       );
+      // posts written under earlier schemas — PRAGMA-guarded so a
+      // re-run never throws duplicate-column and poisons the DO
+      const columns = yield* (yield* sql.exec<
+        { name: string } & Record<string, Cloudflare.SqlStorageValue>
+      >("SELECT name FROM pragma_table_info('posts')")).toArray();
+      if (!columns.some((column) => column.name === "channel")) {
+        yield* sql.exec("ALTER TABLE posts ADD COLUMN channel TEXT");
+      }
+      if (!columns.some((column) => column.name === "kind")) {
+        yield* sql.exec(
+          "ALTER TABLE posts ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'",
+        );
+      }
+      if (!columns.some((column) => column.name === "reply_to")) {
+        yield* sql.exec("ALTER TABLE posts ADD COLUMN reply_to TEXT");
+      }
 
       return {
         fetch: Effect.gen(function* () {
@@ -246,13 +298,15 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
             `INSERT OR IGNORE INTO posts
-              (id, parent_id, author, text, status, at)
-             VALUES (?, ?, ?, ?, ?, ?)`
+              (id, reply_to, channel, author, kind, text, status, at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
               .trim()
               .replaceAll(/\s+/g, " "),
             input.id,
-            input.parent ?? null,
+            input.replyTo ?? null,
+            input.channel ?? null,
             input.author,
+            input.kind ?? "message",
             input.text,
             input.status ?? "running",
             at,
@@ -267,39 +321,29 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           );
         }),
 
-        postTree: Effect.fn(function* (id) {
-          // the subtree, assembled in memory — chains are hop-budgeted
-          // (MAX_HOPS), so a tree is small by construction
+        postGet: Effect.fn(function* (id) {
           const rows = yield* (yield* sql.exec<PostRow>(
-            `WITH RECURSIVE tree (id) AS (
-               SELECT ? UNION ALL
-               SELECT posts.id FROM posts JOIN tree ON posts.parent_id = tree.id
-             )
-             SELECT posts.* FROM posts JOIN tree ON posts.id = tree.id
-             ORDER BY posts.at ASC`
-              .trim()
-              .replaceAll(/\s+/g, " "),
+            "SELECT * FROM posts WHERE id = ?",
             id,
           )).toArray();
-          const nodes = new Map<string, Post & { children: Post[] }>();
-          for (const row of rows) {
-            nodes.set(row.id, { ...toPost(row), children: [] });
-          }
-          for (const node of nodes.values()) {
-            if (node.parent !== undefined) {
-              nodes.get(node.parent)?.children.push(node);
-            }
-          }
-          return nodes.get(id);
+          return rows[0] === undefined ? undefined : toPost(rows[0]);
+        }),
+
+        postReplies: Effect.fn(function* (id) {
+          const rows = yield* (yield* sql.exec<PostRow>(
+            "SELECT * FROM posts WHERE reply_to = ? ORDER BY at ASC",
+            id,
+          )).toArray();
+          return rows.map(toPost);
         }),
 
         postAncestors: Effect.fn(function* (id) {
           const rows = yield* (yield* sql.exec<PostRow>(
             `WITH RECURSIVE chain (id, depth) AS (
                SELECT ?, 0 UNION ALL
-               SELECT posts.parent_id, chain.depth + 1
+               SELECT posts.reply_to, chain.depth + 1
                FROM posts JOIN chain ON posts.id = chain.id
-               WHERE posts.parent_id IS NOT NULL AND chain.depth < 32
+               WHERE posts.reply_to IS NOT NULL AND chain.depth < 32
              )
              SELECT posts.* FROM posts JOIN chain ON posts.id = chain.id
              ORDER BY chain.depth DESC`
@@ -307,15 +351,81 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
               .replaceAll(/\s+/g, " "),
             id,
           )).toArray();
-          return rows.map((row) => ({ id: row.id, author: row.author }));
+          return rows.map(toPost);
         }),
 
-        postRoots: Effect.fn(function* (limit) {
+        postThread: Effect.fn(function* (id) {
+          // the thread's ROOT: walk the reply chain up…
+          const up = yield* (yield* sql.exec<PostRow>(
+            `WITH RECURSIVE chain (id, depth) AS (
+               SELECT ?, 0 UNION ALL
+               SELECT posts.reply_to, chain.depth + 1
+               FROM posts JOIN chain ON posts.id = chain.id
+               WHERE posts.reply_to IS NOT NULL AND chain.depth < 32
+             )
+             SELECT posts.* FROM posts JOIN chain ON posts.id = chain.id
+             ORDER BY chain.depth DESC LIMIT 1`
+              .trim()
+              .replaceAll(/\s+/g, " "),
+            id,
+          )).toArray();
+          const root = up[0];
+          if (root === undefined) return [];
+          // …then the whole reply graph beneath it, chronological
           const rows = yield* (yield* sql.exec<PostRow>(
-            "SELECT * FROM posts WHERE parent_id IS NULL ORDER BY at DESC LIMIT ?",
-            limit ?? 50,
+            `WITH RECURSIVE tree (id) AS (
+               SELECT ? UNION ALL
+               SELECT posts.id FROM posts JOIN tree ON posts.reply_to = tree.id
+             )
+             SELECT posts.* FROM posts JOIN tree ON posts.id = tree.id
+             ORDER BY posts.at ASC, posts.id ASC LIMIT 200`
+              .trim()
+              .replaceAll(/\s+/g, " "),
+            root.id,
           )).toArray();
           return rows.map(toPost);
+        }),
+
+        workspaceLink: Effect.fn(function* (thread, workspace) {
+          const at = yield* Clock.currentTimeMillis;
+          yield* sql.exec(
+            "INSERT INTO thread_workspaces (thread, workspace, at) VALUES (?, ?, ?) ON CONFLICT (thread, workspace) DO NOTHING",
+            thread,
+            workspace,
+            at,
+          );
+        }),
+
+        workspacesOf: Effect.fn(function* (thread) {
+          const rows = yield* (yield* sql.exec<
+            { workspace: string } & Record<string, Cloudflare.SqlStorageValue>
+          >(
+            "SELECT workspace FROM thread_workspaces WHERE thread = ? ORDER BY at ASC",
+            thread,
+          )).toArray();
+          return rows.map((row) => row.workspace);
+        }),
+
+        workspaceUnlink: Effect.fn(function* (workspace) {
+          yield* sql.exec(
+            "DELETE FROM thread_workspaces WHERE workspace = ?",
+            workspace,
+          );
+        }),
+
+        postList: Effect.fn(function* (options) {
+          // newest LIMIT rows, then oldest-first for reading order
+          const rows = yield* (yield* (options?.channel === undefined
+            ? sql.exec<PostRow>(
+                "SELECT * FROM posts ORDER BY at DESC, id DESC LIMIT ?",
+                options?.limit ?? 200,
+              )
+            : sql.exec<PostRow>(
+                "SELECT * FROM posts WHERE channel = ? ORDER BY at DESC, id DESC LIMIT ?",
+                options.channel,
+                options.limit ?? 200,
+              ))).toArray();
+          return rows.reverse().map(toPost);
         }),
 
         open: Effect.fn(function* (input) {
@@ -413,9 +523,16 @@ export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
       return Posts.of({
         post: (input) => inWorker(stub().postWrite(input)),
         settle: (id, status) => inWorker(stub().postSettle(id, status)),
-        tree: (id) => inWorker(stub().postTree(id)),
+        get: (id) => inWorker(stub().postGet(id)),
+        replies: (id) => inWorker(stub().postReplies(id)),
         ancestors: (id) => inWorker(stub().postAncestors(id)),
-        roots: (limit) => inWorker(stub().postRoots(limit)),
+        thread: (id) => inWorker(stub().postThread(id)),
+        list: (options) => inWorker(stub().postList(options)),
+        linkWorkspace: (thread, workspace) =>
+          inWorker(stub().workspaceLink(thread, workspace)),
+        workspacesOf: (thread) => inWorker(stub().workspacesOf(thread)),
+        unlinkWorkspace: (workspace) =>
+          inWorker(stub().workspaceUnlink(workspace)),
       });
     }),
   );

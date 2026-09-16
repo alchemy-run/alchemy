@@ -50,11 +50,12 @@ export const lineage = (name: string): string => `${ROOT}::${name}`;
 /** The root a lineage key belongs to (`root::ws-pr-1` → `root`). */
 export const rootOf = (key: string): string => key.split("::")[0]!;
 
-/** A session key's group-local NAME — how colleagues address it
- *  (`root` → "head"; `root::manager` →
- *  "manager"; `root::e-4f2a` → "e-4f2a"). */
+/** A session key's IDENTITY — the agent colleagues address
+ *  (`root` → "head"; `root::manager` → "manager";
+ *  `root::engineer::p-x1` → "engineer": an agent may hold many
+ *  sessions — one per thread it works — but the identity is the
+ *  segment right under the root, the same whichever session speaks). */
 export const nameOfKey = (key: string): string => {
   if (key === ROOT) return "head";
-  const segments = key.split("::");
-  return segments[segments.length - 1]!;
+  return key.split("::")[1]!;
 };

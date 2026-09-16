@@ -4,12 +4,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as S from "effect/Schema";
 import { Ask, Tell } from "../chat/Ask.ts";
+import { Explore } from "../chat/Explore.ts";
 import { Call } from "../chat/Call.ts";
 import { models } from "../platform/Model.ts";
 import { makeProposalTools } from "../proposals/Propose.ts";
-import { lineage } from "../Root.ts";
+
 import { makeWorkspaceTools } from "../sandbox/WorkspaceTools.ts";
-import { Engineer } from "./Engineer.ts";
+
 import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
 
 /**
@@ -20,7 +21,7 @@ import { Tasks, type TaskItem, type TaskStatus } from "./Tasks.ts";
  * The inbound world arrives in ITS OWN SESSION INBOX (the session is
  * the queue — Triage.ts dedupes and pumps, the driver wakes); it files
  * each item into the TASK LEDGER (Tasks.ts), moves the
- * ledger todo → working → review → done, staffs engineers (one
+ * ledger todo → working → review → done, workspaces the work (one
  * workspace per task), verifies their output, and stages merge
  * proposals so the humans' approval is one click. It answers the Head
  * with short, factual reports — its answer IS the report.
@@ -34,25 +35,11 @@ export class Manager extends AI.Agent<
   }
 >(import.meta)("Manager") {}
 
-const shortId = (): string => Math.random().toString(36).slice(2, 8);
-
-const brief = AI.Thing("brief", S.String)`
-  The engineer's whole task, self-contained: the goal, the constraints,
-  the repository facts it needs, and what DONE means (typically: a
-  branch pushed and a pull request opened). It does not see your
-  conversation.`;
-
 const workspaceOf = AI.Thing("workspace", S.String)`
   The workspace (by name) the engineer works in — its DEFAULT: shell
   and relative paths land there; "@<name>/…" reaches siblings.`;
 
-const agentKey = AI.Thing("agent", S.String)`
-  The engineer's name ("e-4f2a") — ask/tell address it; read its
-  session for the full transcript.`;
 
-const report = AI.Thing("report", S.String)`
-  The engineer's final reply — its own words, ending with what it
-  produced (branches, pull requests, findings).`;
 
 const taskId = AI.Thing("task", S.optionalKey(S.String))`
   An existing task's id — omit to create one.`;
@@ -84,7 +71,7 @@ const status = AI.Thing(
   Where the work stands.`;
 
 const assignee = AI.Thing("assignee", S.optionalKey(S.String))`
-  The engineer working it ("e-4f2a").`;
+  The agent working it ("engineer").`;
 
 const taskWorkspace = AI.Thing("workspace", S.optionalKey(S.String))`
   The workspace (by name) the work lives in.`;
@@ -151,7 +138,6 @@ export const ManagerLive = Manager.make(
   Effect.gen(function* () {
     const model = yield* models;
     const tasks = yield* Tasks;
-    const engineer = yield* Engineer;
     const { workspace, dropWorkspace } = yield* makeWorkspaceTools;
     const { proposeComment, proposeMerge, proposeClose } =
       yield* makeProposalTools;
@@ -165,7 +151,7 @@ export const ManagerLive = Manager.make(
       issue, a PR, both — a late PR JOINS the issue's task, never
       forks a duplicate: check task_covering first). Move status
       todo → working → review → done as the work moves; record the
-      assignee ("e-…") and the workspace when work starts; append a
+      assignee ("engineer") and the workspace when work starts; append a
       note for anything the ledger should remember: ${AI.in(
         taskId,
         title,
@@ -246,31 +232,6 @@ export const ManagerLive = Manager.make(
       }),
     );
 
-    const spawn = yield* AI.Tool("spawn")`
-      Kick off an ENGINEER with ${brief} in ${workspaceOf} — its own
-      session, full editor and shell, push and open-pull-request tools
-      behind the human gate. The call returns when the engineer
-      settles — answers ${AI.out(agentKey, report)}; while it works it
-      can ask you (and you it, by its name). Spawn engineers in
-      parallel only for INDEPENDENT tasks; one workspace, one
-      engineer.`(
-      Effect.fn(function* (p: { brief: string; workspace: string }) {
-        const name = `e-${shortId()}`;
-        const key = lineage(name);
-        const me = yield* AI.Thread;
-        yield* engineer.at(key).setWorkspace(p.workspace);
-        const outcome = yield* engineer.dispatch(p.brief, {
-          key,
-          parent: { term: "Manager", key: me.key },
-        });
-        return {
-          agent: name,
-          report:
-            typeof outcome === "string" ? outcome : JSON.stringify(outcome),
-        };
-      }),
-    );
-
     return {
       turn: Effect.gen(function* () {
         const pick = yield* chosen;
@@ -282,6 +243,11 @@ export const ManagerLive = Manager.make(
         root channel; you answer the Head (${Ask} reaches it as
         "@head"),
         and your answer IS your report — short and factual.
+
+        Each message reaches you in a FRESH session, from ZERO —
+        ${Explore} the message graph (the message you answer, the
+        chain above it, the whole thread) to restore what was already
+        said and done before you decide anything.
 
         Your first responsibility is the INBOUND STREAM: the company is
         drowning in issues and pull requests. Every event arrives in
@@ -298,19 +264,23 @@ export const ManagerLive = Manager.make(
         Reply with one line per item filed.
 
         Your second responsibility is MOVING the ledger (${taskList}):
-        todo → working — ${workspace} one workspace per task (a pull
-        request's workspace carries its head branch) and ${spawn} an
-        engineer in it with a self-contained brief. A task with no
+        todo → working — ${workspace} one workspace per task, made
+        INSIDE the task's thread so it links there (a pull request's
+        workspace carries its head branch; teammates discover it with
+        list_workspaces), then ${Ask} "@engineer" with the brief —
+        name the workspace and the goal; the engineer starts from
+        zero and explores the thread for the rest. A task with no
         pull request yet (a feature request, a product directive)
-        moves NOW — do not park it: spawn the engineer immediately,
-        and the brief names the whole loop: build in the workspace,
-        push a topic branch, open the pull request, then ask
-        "@reviewer" and iterate until the reviewer files the merge
-        proposal;
+        moves NOW — do not park it: make the workspace, ask
+        immediately, and the brief names the whole loop: build in the
+        workspace, push a topic branch, open the pull request, then
+        ask "@reviewer" and iterate until the reviewer files the
+        merge proposal;
         working → review — read the report, ${Ask} the engineer hard
-        questions (mention it: "@e-…"), verify claims against the
-        tree before you accept
-        (${Call} a huddle of engineers when one question is not enough —
+        questions (mention it: "@engineer"; it answers fresh and
+        explores the thread for the context), verify claims against
+        the tree before you accept
+        (${Call} a huddle when one question is not enough —
         drive it with ask);
         review → done — the REVIEWER is the gate: it iterates with the
         engineer and, when the pull request meets the standard, files

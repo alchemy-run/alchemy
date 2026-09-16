@@ -39,10 +39,17 @@ export const EngineeringChart = Engineering.make`
 /**
  * The COLLEAGUES seam (chat/Ask.ts), implemented for this company —
  * pure ADDRESSES (term + key; Sessions.dispatch finds the charter), so
- * this Layer holds no agent Layer and the org chart stays acyclic:
- * `head` is the Head at the root; team roles resolve through the
- * {@link Engineering} chart at their lineage key; spawned engineers
- * (`e-…`) are Engineer sessions at theirs.
+ * this Layer holds no agent Layer and the org chart stays acyclic.
+ *
+ * The roster is STATIC — every agent in the channel is declared in
+ * the chart (`head`, `manager`, `engineer`, `reviewer`); there are no
+ * runtime identities. An agent holds MANY SESSIONS: every role
+ * answers each MESSAGE in its own session
+ * (`root::manager::<post-id>`, `root::engineer::<ask-post-id>`) — a
+ * separate space to work in per response, starting from zero
+ * (context is explored from the message graph, not carried in
+ * memory) — so one identity works any number of exchanges in
+ * parallel and no session accumulates the channel's history.
  */
 // Layer.suspend: this module sits in the Root ↔ Group ↔ Ask import
 // cycle — the tag must not be dereferenced until build time, or the
@@ -58,33 +65,23 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
         const name = ref["~alchemy/Name"];
         return { name, slug: AI.memberSlug(name) };
       });
-    const roster = [
-      "head",
-      ...members.map((member) => member.slug),
-      "e-<id> (a spawned engineer)",
-      "r-<id> (a parallel reviewer session)",
-    ];
+    const roster = ["head", ...members.map((member) => member.slug)];
     return Colleagues.of({
-      resolve: (name) =>
+      resolve: (name, options) =>
         Effect.gen(function* () {
           const slug = name.trim().toLowerCase();
+          // EVERY agent answers each message in its OWN session — the
+          // invocation (the ask's post id) is the key. The standing
+          // session (no invocation) holds only what is addressed to
+          // the agent outside any message: notes, control.
           if (slug === "head") {
-            return { name: "head", term: "Head", key: ROOT };
-          }
-          if (/^e-[a-z0-9]+$/.test(slug)) {
             return {
-              name: slug,
-              term: Engineer["~alchemy/Name"],
-              key: lineage(slug),
-            };
-          }
-          // parallel review sessions — one reviewer TERM, a session
-          // per name, so four engineers never queue on one context
-          if (/^r-[a-z0-9]+$/.test(slug)) {
-            return {
-              name: slug,
-              term: Reviewer["~alchemy/Name"],
-              key: lineage(slug),
+              name: "head",
+              term: "Head",
+              key:
+                options?.invocation !== undefined
+                  ? lineage(`head::${options.invocation}`)
+                  : ROOT,
             };
           }
           const member = members.find(
@@ -93,7 +90,11 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
           if (member === undefined) {
             return yield* new TeammateUnknown({ member: name, roster });
           }
-          return { name: slug, term: member.name, key: lineage(slug) };
+          const key =
+            options?.invocation !== undefined
+              ? lineage(`${slug}::${options.invocation}`)
+              : lineage(slug);
+          return { name: slug, term: member.name, key };
         }),
     });
   }),

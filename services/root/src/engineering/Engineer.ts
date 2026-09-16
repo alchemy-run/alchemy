@@ -5,6 +5,8 @@ import { OrgGuidance } from "../OrgGuidance.ts";
 import { ROOT } from "../Root.ts";
 import { ReadOutput } from "../artifacts/ReadOutput.ts";
 import { Ask, Tell } from "../chat/Ask.ts";
+import { Explore } from "../chat/Explore.ts";
+import { makeWorkspaceTools } from "../sandbox/WorkspaceTools.ts";
 import { Bash } from "../coding/Bash.ts";
 import { EditFile } from "../coding/EditFile.ts";
 import { Glob } from "../coding/Glob.ts";
@@ -22,7 +24,6 @@ import { Distillation } from "../process/Distillation.ts";
 import { ProviderEngineering } from "../process/ProviderEngineering.ts";
 import { PullRequests } from "../process/PullRequests.ts";
 import { Verification } from "../process/Verification.ts";
-import { defaultWorkspace } from "../sandbox/SessionTree.ts";
 
 /**
  * The CODER — a generic coding agent, the whole product in one file:
@@ -57,13 +58,6 @@ export interface EngineerApi {
    *  sampling on; `undefined` returns to the org's default. Nothing
    *  in flight is interrupted. */
   readonly setModel: (model: string | undefined) => Effect.Effect<void>;
-  /** Hand the session its DEFAULT WORKSPACE — the thread-local name of
-   *  an existing workspace (a thread's checkout for the pull request
-   *  the brief is about). From the first tool call on, the session's
-   *  shell and relative paths land there (`WorkspaceRouter`), while
-   *  every sibling workspace stays reachable as `@<name>/…`;
-   *  `undefined` clears it. Set BEFORE the brief. */
-  readonly setWorkspace: (name: string | undefined) => Effect.Effect<void>;
 }
 
 export const GeneralEngineer = Engineer.make(
@@ -74,6 +68,8 @@ export const GeneralEngineer = Engineer.make(
     // is no session here; turns and methods read theirs from the frame.
     const model = yield* models;
     const repo = yield* SessionRepo;
+    const { workspace: workspaceTool, listWorkspaces } =
+      yield* makeWorkspaceTools;
 
     // the session's own pick — a DECLARED durable cell, born at the
     // default, rewritten by `setModel` (the operator's selector, or a
@@ -109,13 +105,6 @@ export const GeneralEngineer = Engineer.make(
         );
       const workspace = tree?.repo ?? "the alchemy repository";
       const pull = tree?.pull;
-
-      // the DEFAULT workspace HANDED to the session (a thread's
-      // checkout for one unit of work) — its shell and relative paths
-      // land there; the stance names it, and names the bag, so the
-      // model knows both its footing and its reach. Name only — never
-      // a machine touch: the tree itself lands on the first tool call.
-      const handedName = yield* defaultWorkspace;
       const manager = thread.key.startsWith(`${ROOT}::`)
         ? "manager"
         : undefined;
@@ -124,24 +113,16 @@ export const GeneralEngineer = Engineer.make(
       // mention counts (mention-is-presence rides splices, not strings)
       const subject =
         manager !== undefined
-          ? handedName !== null
-            ? AI.fragment`
-            Your DEFAULT workspace is "${handedName}" — one of this
-            thread's workspaces, the checkout for the work your brief
-            is about. Every relative path, your shell, and your
-            commits land in it; its branch is already the right one —
-            never run git checkout / git switch / gh pr checkout.
-            The company's OTHER workspaces are equally yours: address
-            one as "@<name>/<path>" in any tool path or exec cwd
-            (your brief names them; ${Ask} the manager when unsure).
+          ? AI.fragment`
+            You have NO default workspace — no session does. Every
+            path you touch addresses a workspace explicitly as
+            "@<name>/<path>" (any tool path, any exec cwd); there is
+            no machine root to fall back to. Find your footing with
+            ${listWorkspaces} — the workspaces active in this thread
+            — or create what you need with ${workspaceTool} (created
+            here, it links to this thread so teammates find it).
             Commit and push with ${PushBranch} as the current branch
             so the work lands where it belongs.`
-            : AI.fragment`
-            You have NO default workspace yet: relative paths resolve
-            nowhere until you address a workspace of this company as
-            "@<name>/<path>" (your brief names them — ${Ask} the
-            manager if none was named). There is no machine root to
-            fall back to.`
           : pull === undefined
             ? AI.fragment``
             : pull.ref === pull.head
@@ -216,11 +197,15 @@ export const GeneralEngineer = Engineer.make(
         stop; when you are blocked on a decision only the operator can
         make, ask the question and park.`
             : AI.fragment`
-        You are one ENGINEER of this company, working a brief the
-        engineering manager gave you. ${Ask} by MENTIONING:
-        "@${manager}" when you are blocked on something only the
-        manager can decide, a sibling engineer ("@e-…") when its work
-        bears on yours; ${Tell} for a heads-up that needs no answer.
+        You are one ENGINEER of this company, answering ONE message —
+        this session exists for exactly the ask that invoked it, and
+        it started from ZERO. Restore the context you need with
+        ${Explore}: read the message you are answering, the chain
+        above it (how the work got here), sibling replies, or the
+        whole thread — before assuming anything was told to you.
+        ${Ask} by MENTIONING: "@${manager}" when you are blocked on
+        something only the manager can decide; ${Tell} for a
+        heads-up that needs no answer.
 
         A pull request you open is NOT done until reviewed — you cannot
         propose a merge yourself. After ${OpenPullRequest}, ${Ask} with
@@ -250,8 +235,6 @@ export const GeneralEngineer = Engineer.make(
         Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
       setModel: (next: string | undefined) =>
         PersistentRef.set(chosen, next ?? null),
-      setWorkspace: (name: string | undefined) =>
-        PersistentRef.set(defaultWorkspace, name ?? null),
     };
   }),
 );

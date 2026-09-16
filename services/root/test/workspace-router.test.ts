@@ -1,13 +1,12 @@
 /**
  * `WorkspaceRouter`'s contract (sandbox/WorkspaceRouter.ts): every
- * sandbox call of a thread-family session resolves to a WORKSPACE —
- * the session's default (`SessionTree.defaultWorkspace`) or an
- * explicit `@<name>/…` — and runs against that workspace's machine
- * (the `AI.Thread` override) below its tree; a session with no
- * resolvable workspace gets a typed error, NEVER a machine root —
- * which is how an engineer once ran `gh pr checkout` in the
- * developer's own checkout. Standalone (repo-keyed) sessions converge
- * their implicit tree on first touch, as before.
+ * sandbox call of a thread-family session addresses a WORKSPACE
+ * EXPLICITLY as `@<name>/…` — sessions have NO default workspace —
+ * and runs against that workspace's machine (the `AI.Thread`
+ * override) below its tree; a plain relative path gets a typed error,
+ * NEVER a machine root — which is how an engineer once ran `gh pr
+ * checkout` in the developer's own checkout. Standalone (repo-keyed)
+ * sessions converge their implicit tree on first touch, as before.
  */
 import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
@@ -17,7 +16,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SessionRepo } from "../src/github/SessionRepo.ts";
-import { defaultWorkspace } from "../src/sandbox/SessionTree.ts";
 import { WorkspaceRouter } from "../src/sandbox/WorkspaceRouter.ts";
 import { workspaceKey } from "../src/sandbox/Keys.ts";
 
@@ -105,23 +103,20 @@ const layer = (existing: ReadonlyArray<string>, raw: AI.Sandbox["Service"]) =>
 const PR5 = workspaceKey("t-1", "pr-5");
 const PR6 = workspaceKey("t-1", "pr-6");
 
-test("calls land on the workspace's machine, below its tree — default and @name alike", async () => {
+test("calls land on the addressed workspace's machine, below its tree", async () => {
   const { raw, calls } = machines();
   await Effect.runPromise(
     Effect.gen(function* () {
       const sandbox = yield* AI.Sandbox;
-      // engineer A: default = the thread's pr-5 workspace
-      const a = frame("t-1::e-a");
-      yield* a(PersistentRef.set(defaultWorkspace, "pr-5"));
-      yield* a(sandbox.exec("git status"));
-      yield* a(sandbox.exec("pnpm test", undefined, { cwd: "packages/x" }));
-      // …and it reaches a SIBLING workspace explicitly
+      // an engineer addresses the thread's workspaces EXPLICITLY
+      const a = frame("t-1::engineer::p-1");
+      yield* a(sandbox.exec("git status", undefined, { cwd: "@pr-5" }));
+      yield* a(
+        sandbox.exec("pnpm test", undefined, { cwd: "@pr-5/packages/x" }),
+      );
+      // …including a sibling workspace
       yield* a(sandbox.readFile("@pr-6/README.md"));
-      // engineer B: its own default, not A's
-      const b = frame("t-1::e-b");
-      yield* b(PersistentRef.set(defaultWorkspace, "pr-6"));
-      yield* b(sandbox.exec("git status"));
-      // the manager (no default): explicit @name only
+      // the manager addresses the same way
       yield* frame("t-1")(
         sandbox.exec("git log", undefined, { cwd: "@pr-5" }),
       );
@@ -131,12 +126,11 @@ test("calls land on the workspace's machine, below its tree — default and @nam
     { machine: PR5, cwd: "t-1-ws-pr-5" },
     { machine: PR5, cwd: "t-1-ws-pr-5/packages/x" },
     { machine: PR6, cwd: "t-1-ws-pr-6/README.md" },
-    { machine: PR6, cwd: "t-1-ws-pr-6" },
     { machine: PR5, cwd: "t-1-ws-pr-5" },
   ]);
 });
 
-test("no default and no @name fails with guidance — NEVER a machine root", async () => {
+test("no @name fails with guidance — NEVER a machine root", async () => {
   const { raw, calls } = machines();
   const outcome = await Effect.runPromise(
     Effect.gen(function* () {
@@ -146,7 +140,7 @@ test("no default and no @name fails with guidance — NEVER a machine root", asy
       );
     }).pipe(Effect.provide(layer([PR5], raw))),
   );
-  expect(String(outcome)).toContain("no workspace");
+  expect(String(outcome)).toContain("no default workspace");
   expect(String(outcome)).toContain("@<name>");
   expect(calls).toEqual([]);
 });
@@ -156,9 +150,10 @@ test("an unknown workspace name fails with the reason — never falls through", 
   const outcome = await Effect.runPromise(
     Effect.gen(function* () {
       const sandbox = yield* AI.Sandbox;
-      const a = frame("t-1::e-a");
-      yield* a(PersistentRef.set(defaultWorkspace, "pr-9"));
-      return yield* a(sandbox.exec("git status")).pipe(Effect.flip);
+      const a = frame("t-1::engineer::p-1");
+      return yield* a(
+        sandbox.exec("git status", undefined, { cwd: "@pr-9" }),
+      ).pipe(Effect.flip);
     }).pipe(Effect.provide(layer([PR5], raw))),
   );
   expect(String(outcome)).toContain("pr-9");

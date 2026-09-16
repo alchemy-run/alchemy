@@ -20,6 +20,7 @@ type Names = AI.ToolNames<typeof GeneralEngineer>;
 const _names: Names[] = [
   "bash",
   "editFile",
+  "explore",
   "glob",
   "grep",
   "listDirectory",
@@ -84,6 +85,11 @@ const _complete: Registry<typeof GeneralEngineer> = {
   readFile: (input) => (input.path satisfies string, 1),
   readOutput: (input) => (input.outputId satisfies string, 1),
   writeFile: (input) => (input.content satisfies string, 1),
+  explore: (input) => (
+    input.relation satisfies "message" | "above" | "replies" | "thread",
+    input.message satisfies string | undefined,
+    1
+  ),
 };
 
 // a SKILL's teaching carries its own wire — its tools never surface on

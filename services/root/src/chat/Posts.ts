@@ -2,39 +2,34 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
 /**
- * A POST — the company's one message shape, and the only structure
- * the conversation has.
+ * A POST — the company's one message shape.
  *
- * Everything is a post in a tree: a human's channel message, an
- * agent's message addressed with `@mentions`, and each mentioned
- * agent's answer. A post REPLIES to exactly one post (`parent`), and
- * a post's replies are its children — arbitrarily deep, uniformly
- * recursive, like a reddit comment or a tweet:
+ * The conversation is a FLAT, chronological list per channel — like a
+ * discord channel, not a tree. A human's message, an agent's message
+ * addressed with `@mentions`, and each mentioned agent's answer are
+ * all posts in the same stream, in the order they happened. Structure
+ * is DERIVED, never stored as shape: a post may carry `replyTo` — a
+ * reference to the message it answers — and its text carries
+ * `@mentions`; readers (the UI, the ask chain guard) parse those
+ * references into whatever graph they need.
  *
- * ```
- * manager: @reviewer what do you check first? @e-demo1 introduce yourself
- * ├─ reviewer: the diff, then the tests…
- * ├─ e-demo1: @reviewer what do you check first?     ← asked while answering
- * │  └─ reviewer: the diff, then the tests…
- * └─ e-demo1: I'm an engineer on this codebase…
- * ```
- *
- * There is deliberately NO "ask" record. An ask is not an edge with a
- * question and an answer welded together — it is a post that mentions
- * people, and their answers are posts replying to it. That collapse
- * is what lets one recursive renderer draw the whole conversation,
- * and why a target is never named twice (the text addresses it).
- *
- * The store is write-through from the Ask tool's physics (the post
- * lands when it is sent, each reply as it bubbles back), so the tree
- * is live while chains run.
+ * There is deliberately NO tree. Threading, indentation, and lanes
+ * were all attempts to make storage carry presentation; they made
+ * parallel replies look sequential and deep chains unreadable. The
+ * stream is the truth (what happened, in order); `replyTo` is the
+ * annotation (what each message answers).
  */
 export interface Post {
   readonly id: string;
-  /** The post this replies to — absent for a root. */
-  readonly parent?: string;
+  /** The message this one answers — a reference, not a tree edge. */
+  readonly replyTo?: string;
+  /** The channel the message belongs to (`root`, `engineering`). */
+  readonly channel?: string;
   /** Who wrote it — an agent's name, or the human's. */
   readonly author: string;
+  /** `ask` — the message delegates (its `@mentions` name who it
+   *  asks); `message` — an answer or a plain statement. */
+  readonly kind: "message" | "ask";
   /** The message itself; `@mentions` address whoever it asks. */
   readonly text: string;
   /**
@@ -44,18 +39,19 @@ export interface Post {
    */
   readonly status: "running" | "settled" | "failed";
   readonly at: number;
-  /** Its replies — nested, oldest first. */
-  readonly children: ReadonlyArray<Post>;
 }
 
 export class Posts extends Context.Service<
   Posts,
   {
-    /** Write a post. Roots omit `parent`. */
+    /** Write a post into the stream. */
     readonly post: (input: {
       readonly id: string;
-      readonly parent?: string;
+      readonly replyTo?: string;
+      readonly channel?: string;
       readonly author: string;
+      /** @default "message" */
+      readonly kind?: Post["kind"];
       readonly text: string;
       readonly status?: Post["status"];
     }) => Effect.Effect<void>;
@@ -64,19 +60,40 @@ export class Posts extends Context.Service<
       id: string,
       status: Post["status"],
     ) => Effect.Effect<void>;
-    /** A post and everything beneath it. */
-    readonly tree: (id: string) => Effect.Effect<Post | undefined>;
+    /** One post. */
+    readonly get: (id: string) => Effect.Effect<Post | undefined>;
+    /** The messages that reply to one post, oldest first. */
+    readonly replies: (id: string) => Effect.Effect<ReadonlyArray<Post>>;
     /**
-     * The chain ABOVE a post — root first, ending with the post
-     * itself. The ask chain's structural source: cycle and hop
-     * guards walk these authors instead of any in-band header.
+     * The reference chain ABOVE a post — full messages, following
+     * `replyTo`, oldest first, ending with the post itself. The ask
+     * chain's structural source (cycle and hop guards walk the
+     * authors) and the explorer's way UP the graph.
      */
-    readonly ancestors: (
-      id: string,
-    ) => Effect.Effect<
-      ReadonlyArray<{ readonly id: string; readonly author: string }>
-    >;
-    /** The newest roots — the company's recent exchanges. */
-    readonly roots: (limit?: number) => Effect.Effect<ReadonlyArray<Post>>;
+    readonly ancestors: (id: string) => Effect.Effect<ReadonlyArray<Post>>;
+    /** The whole THREAD a post lives in — its root's reply graph,
+     *  chronological, root first. The explorer's widest view. */
+    readonly thread: (id: string) => Effect.Effect<ReadonlyArray<Post>>;
+    /** The stream, oldest first — one channel's feed when `channel`
+     *  is given. `limit` keeps the newest messages. */
+    readonly list: (options?: {
+      readonly channel?: string;
+      readonly limit?: number;
+    }) => Effect.Effect<ReadonlyArray<Post>>;
+    /**
+     * WORKSPACE ↔ THREAD links. There is no per-session default:
+     * agents create workspaces as they need them; creating one inside
+     * a thread links it there, and any agent can query the thread's
+     * active set to find its footing.
+     */
+    readonly linkWorkspace: (
+      thread: string,
+      workspace: string,
+    ) => Effect.Effect<void>;
+    readonly workspacesOf: (
+      thread: string,
+    ) => Effect.Effect<ReadonlyArray<string>>;
+    /** A dropped workspace leaves every thread it was linked in. */
+    readonly unlinkWorkspace: (workspace: string) => Effect.Effect<void>;
   }
 >()("Posts") {}

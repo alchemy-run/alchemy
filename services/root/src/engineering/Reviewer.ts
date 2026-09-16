@@ -3,6 +3,7 @@ import * as PersistentRef from "alchemy/PersistentRef";
 import * as Effect from "effect/Effect";
 import { ReadOutput } from "../artifacts/ReadOutput.ts";
 import { Ask, Tell } from "../chat/Ask.ts";
+import { Explore } from "../chat/Explore.ts";
 import { Bash } from "../coding/Bash.ts";
 import { EditFile } from "../coding/EditFile.ts";
 import { Glob } from "../coding/Glob.ts";
@@ -16,7 +17,6 @@ import { models } from "../platform/Model.ts";
 import { PullRequests } from "../process/PullRequests.ts";
 import { Verification } from "../process/Verification.ts";
 import { makeProposalTools } from "../proposals/Propose.ts";
-import { defaultWorkspace } from "../sandbox/SessionTree.ts";
 import { makeWorkspaceTools } from "../sandbox/WorkspaceTools.ts";
 
 /**
@@ -39,15 +39,12 @@ export class Reviewer extends AI.Agent<Reviewer, ReviewerApi>(import.meta)(
 export interface ReviewerApi {
   readonly model: () => Effect.Effect<string | undefined>;
   readonly setModel: (model: string | undefined) => Effect.Effect<void>;
-  /** Hand the session a DEFAULT WORKSPACE (a task's checkout) before
-   *  a brief; `undefined` clears it. */
-  readonly setWorkspace: (name: string | undefined) => Effect.Effect<void>;
 }
 
 export const GeneralReviewer = Reviewer.make(
   Effect.gen(function* () {
     const model = yield* models;
-    const { workspace, dropWorkspace } = yield* makeWorkspaceTools;
+    const { workspace, listWorkspaces, dropWorkspace } = yield* makeWorkspaceTools;
     const { proposeComment, proposeMerge } = yield* makeProposalTools;
 
     const chosen = PersistentRef.of<string | null>("model", () => null);
@@ -59,12 +56,18 @@ export const GeneralReviewer = Reviewer.make(
           You are the REVIEWER of this company's engineering group — the
           quality gate in front of every pull request the engineers
           produce for the Alchemy products. Engineers ${Ask} you to
-          review; your answer to each ask IS the review.
+          review; your answer to each ask IS the review. Each ask
+          reaches you in a fresh session, from ZERO — ${Explore} the
+          message graph (the ask you answer, the chain above it, the
+          whole thread) to restore what was already said before you
+          assume.
 
           REVIEW BY RUNNING, never by reading alone. The work lives in
           one of the company's workspaces — your asker names the
-          workspace and the branch; address it as "@<name>/<path>" in
-          any tool path or shell cwd. Read the diff (${Bash}: git diff
+          workspace and the branch (${listWorkspaces} shows this
+          thread's active ones when it doesn't); address it as
+          "@<name>/<path>" in any tool path or shell cwd — no session
+          has a default workspace. Read the diff (${Bash}: git diff
           against the base), explore what it touches (${Grep}, ${Glob},
           ${ListDirectory}, ${ReadFile}; ${ReadOutput} pages truncated
           output), and RUN the proof: the typecheck, the tests for what
@@ -84,7 +87,7 @@ export const GeneralReviewer = Reviewer.make(
 
           HUMAN FEEDBACK on a proposed pull request comes back to you:
           forward the concrete items to the engineer (${Ask} by
-          mentioning it, "@e-…"; ${Tell} for notes needing no answer)
+          mentioning it, "@engineer"; ${Tell} for notes needing no answer)
           and see them through. Feedback about YOUR REVIEWING — a standard you
           missed, a rule you enforced wrongly — becomes code: your
           charter is services/root/src/engineering/Reviewer.ts.
@@ -103,8 +106,6 @@ export const GeneralReviewer = Reviewer.make(
         Effect.map(chosen, (pick) => (pick === null ? undefined : pick)),
       setModel: (next: string | undefined) =>
         PersistentRef.set(chosen, next ?? null),
-      setWorkspace: (name: string | undefined) =>
-        PersistentRef.set(defaultWorkspace, name ?? null),
     };
   }),
 );

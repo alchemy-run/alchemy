@@ -1,6 +1,5 @@
 import * as AI from "alchemy/AI";
 import * as Git from "alchemy/Git";
-import * as PersistentRef from "alchemy/PersistentRef";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -9,26 +8,26 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SessionRepo, sessionOf } from "../github/SessionRepo.ts";
 import { workspaceKey, workspaceName } from "./Keys.ts";
-import { defaultWorkspace } from "./SessionTree.ts";
 
 /**
  * The session's view of its WORKSPACES — `AI.Sandbox` as a ROUTER over
  * the session's whole bag of them, not one machine with one cwd.
  *
- * A thread's agents (the manager and every engineer) share one view:
- * every workspace of the thread, all of them readable, writable, and
- * executable by all of them. A path addresses a sibling workspace
- * explicitly as `@<name>/…` (`@pr-1522/packages/alchemy`); a plain
- * relative path resolves in the session's DEFAULT workspace (the name
- * the manager handed it — `SessionTree.defaultWorkspace`). Which
- * machine that touches is the router's business: in dev every
+ * A thread's agents share one view: every workspace of the company,
+ * all of them readable, writable, and executable by all of them. A
+ * path addresses a workspace explicitly as `@<name>/…`
+ * (`@pr-1522/packages/alchemy`) — and ONLY explicitly: sessions have
+ * NO default workspace. Agents create workspaces as they need them
+ * (the workspace tool links a new one to the thread it was made in)
+ * and discover a thread's active set with list_workspaces. Which
+ * machine a path touches is the router's business: in dev every
  * workspace is a linked worktree on the ONE host server; deployed each
  * workspace is its OWN MicroVM, and the call is routed by re-keying
  * the machine derivation (`AI.Thread` override) before it reaches the
  * raw sandbox layer.
  *
- * FAIL-CLOSED, by construction: a session with no default workspace
- * and no `@name` in the path gets a typed error naming the fix; an
+ * FAIL-CLOSED, by construction: a plain relative path in a
+ * thread-family session gets a typed error naming the fix; an
  * unknown workspace name fails the same way. There is NO fallback to
  * a machine root — the class of incident where a session's failed
  * checkout dropped its git commands into the developer's own tree
@@ -110,7 +109,7 @@ export const WorkspaceRouter: Layer.Layer<
         .pipe(Effect.provideService(AI.Thread, phantom(key)));
       if (Option.isNone(found)) {
         return yield* Effect.fail(
-          `no workspace named '${name}' in this thread — the manager creates workspaces with its workspace tool; an existing sibling workspace is addressed as "@<name>/<path>"`,
+          `no workspace named '${name}' in this thread — list_workspaces shows the active ones, the workspace tool creates one; an existing workspace is addressed as "@<name>/<path>"`,
         );
       }
       wsTrees.set(key, found.value);
@@ -206,19 +205,6 @@ export const WorkspaceRouter: Layer.Layer<
 
     /* ── resolution ───────────────────────────────────────────────── */
 
-    /** The session's DEFAULT workspace name (`SessionTree`), when its
-     *  frame carries a store and the cell is set. */
-    const handedName: Effect.Effect<string | undefined> = Effect.gen(
-      function* () {
-        const store = yield* Effect.serviceOption(PersistentRef.Store);
-        if (Option.isNone(store)) return undefined;
-        const name = yield* defaultWorkspace.pipe(
-          Effect.provideService(PersistentRef.Store, store.value),
-        );
-        return name ?? undefined;
-      },
-    );
-
     /** The tree's path on the machine, when it is not the root. */
     const baseOf = (tree: Git.Checkout | undefined): string | undefined =>
       tree === undefined || tree.path === "." || tree.path === ""
@@ -240,7 +226,7 @@ export const WorkspaceRouter: Layer.Layer<
     };
 
     const NO_WORKSPACE =
-      "this session has no workspace: no default was handed to it and the path names none — address one explicitly as \"@<name>/<path>\" (the thread's manager creates workspaces with its workspace tool)";
+      'sessions have no default workspace and this path names none — address one explicitly as "@<name>/<path>": list_workspaces shows the workspaces active in this thread, and the workspace tool creates one';
 
     /** Resolve the machine+base a call with `explicit` (an `@name`, if
      *  any) runs against. */
@@ -265,9 +251,8 @@ export const WorkspaceRouter: Layer.Layer<
       if (tree !== undefined) {
         return { key: thread.key, override: false, base: baseOf(tree) };
       }
-      // thread-family: the handed default, or nothing — NEVER a root
-      const name = yield* handedName;
-      if (name !== undefined) return yield* workspaceTarget(threadId, name);
+      // thread-family: NO defaults, NEVER a root — the agent
+      // addresses a workspace or has none
       return yield* Effect.fail(NO_WORKSPACE);
     });
 
@@ -345,7 +330,6 @@ export const WorkspaceRouter: Layer.Layer<
       );
       if (thread === undefined) return;
       if (workspaceName(thread.key) !== undefined) return;
-      if ((yield* handedName) !== undefined) return;
       const session = sessionOf(thread.key);
       if (!converged.has(session)) return;
       const tree = yield* checkouts.get(session);

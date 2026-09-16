@@ -13,6 +13,7 @@ import { ReadOutputLive } from "./artifacts/ReadOutput.ts";
 import { SpillingTools } from "./artifacts/SpillingTools.ts";
 import { AskLive, TellLive } from "./chat/Ask.ts";
 import { Calls, CallToolLive } from "./chat/Call.ts";
+import { ExploreLive } from "./chat/Explore.ts";
 import { CallsLive, PostsLive } from "./chat/ChatDO.ts";
 import { WriteTools } from "./coding/Editor.ts";
 import { OpenPullRequestLive } from "./coding/OpenPullRequest.ts";
@@ -69,8 +70,15 @@ const Spill = SpillingTools.pipe(
 );
 
 /** What every CONVERSING member holds: the ask/tell/call physics over
- *  the colleague addresses and the call store. */
-const Conversation = Layer.mergeAll(AskLive, TellLive, CallToolLive).pipe(
+ *  the colleague addresses and the call store, plus the EXPLORER —
+ *  every response starts from zero and restores context by walking
+ *  the message graph. */
+const Conversation = Layer.mergeAll(
+  AskLive,
+  TellLive,
+  CallToolLive,
+  ExploreLive,
+).pipe(
   Layer.provide(ColleaguesLive),
   Layer.provide(PostsLive),
   Layer.provide(CallsLive),
@@ -83,6 +91,7 @@ const EngineerWorker = GeneralEngineer.pipe(
   Layer.provide(PublishTokenLive),
   Layer.provide(Conversation),
   Layer.provide(ProposalsLive),
+  Layer.provide(WorkspaceAgentLive),
   Layer.provide(Editor),
   Layer.provide(Guidance),
   Layer.provide(Toolbox),

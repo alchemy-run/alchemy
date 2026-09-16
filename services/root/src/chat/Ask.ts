@@ -2,13 +2,14 @@ import * as AI from "alchemy/AI";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Clock from "effect/Clock";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
 import { nameOfKey } from "../Root.ts";
 import { Posts } from "./Posts.ts";
-import { Calls, renderUtterance } from "./Call.ts";
+import { Calls } from "./Call.ts";
 
 /**
  * ASK — conversation as function calling, the ONLY way agents talk.
@@ -26,7 +27,7 @@ import { Calls, renderUtterance } from "./Call.ts";
  * IS the ask's post id (`Sessions.dispatch` carries an identified
  * `AI.Message`), the target reads what it is answering from
  * `AI.Thread.invocations` (the round's admitted messages), and the
- * cycle/hop guard walks the post tree's ancestors — a chain deeper
+ * cycle/hop guard walks the reply-reference chain — a chain deeper
  * than {@link MAX_HOPS} or one that would cycle is refused
  * model-visibly, so the asker answers with what it has instead of
  * recursing forever.
@@ -66,7 +67,7 @@ export class NoMention extends Data.TaggedError("NoMention") {
   }
 }
 
-/** How agents are addressed IN TEXT — `@reviewer`, `@e-4f2a`. The
+/** How agents are addressed IN TEXT — `@reviewer`, `@engineer`. The
  *  same convention the UI renders as mention chips. */
 export const MENTION = /(?<![\w@.])@([a-z][a-z0-9-]{0,40})\b/g;
 
@@ -77,16 +78,25 @@ export const mentionsOf = (text: string): ReadonlyArray<string> => [
 
 /**
  * The COLLEAGUES a session can address: the whole company, resolved by
- * group-local name (`head`, `manager`, `e-4f2a`) to a
+ * agent name (`head`, `manager`, `engineer`, `reviewer`) to a
  * session ADDRESS — a term and a key, pure data (`Sessions.dispatch`
- * does the talking). Implemented once for the company (the Group
- * declaration plus the Head) in engineering/Group.ts — the seam that
- * keeps `Ask` ignorant of the org chart.
+ * does the talking). The roster is STATIC (the org chart is code);
+ * identity is one, sessions are many: pass `invocation` (the ask's
+ * post id) and a worker role answers in a session OF ITS OWN for
+ * that message — each response gets its own separate space to work
+ * in, starting from zero (context is restored by exploring the
+ * message graph, not carried in session memory). Channel residents
+ * (head, manager) keep one session — their session IS the channel.
+ * Implemented once for the company in engineering/Group.ts — the
+ * seam that keeps `Ask` ignorant of the org chart.
  */
 export class Colleagues extends Context.Service<
   Colleagues,
   {
-    readonly resolve: (name: string) => Effect.Effect<
+    readonly resolve: (
+      name: string,
+      options?: { readonly invocation?: string },
+    ) => Effect.Effect<
       {
         readonly name: string;
         /** The target's session term (its agent). */
@@ -116,7 +126,7 @@ const currentThread = Effect.gen(function* () {
  *  the post id as the message id). Structural and round-scoped:
  *  `AI.Thread.invocations` is the round's admitted messages, so a
  *  stale ask earlier in the transcript can never claim the edge. */
-const currentAsk = Effect.gen(function* () {
+export const currentAsk = Effect.gen(function* () {
   const thread = yield* currentThread;
   const invocations = yield* thread.invocations;
   for (let index = invocations.length - 1; index >= 0; index--) {
@@ -127,15 +137,15 @@ const currentAsk = Effect.gen(function* () {
 });
 
 const agent = AI.Thing("agent", S.String)`
-  The teammate, by name — "head", a role like "manager", or a spawned
-  engineer like "e-4f2a".`;
+  The teammate, by name — "head", "manager", "engineer", "reviewer".`;
 
 const text = AI.Thing("text", S.String)`
   Your message, written the way you'd talk to colleagues — and
   ADDRESSED with @mentions: EVERY agent you mention ("@reviewer",
-  "@e-4f2a", "@manager") receives this text and answers it. Make it
-  self-contained (they do not see your conversation); lead with the
-  point.`;
+  "@engineer", "@manager") receives this text and answers it. The
+  responder starts from ZERO — it sees this message only, and
+  explores the thread for anything else it needs — so lead with the
+  point and name the essentials (paths, ids, what DONE means).`;
 
 const answers = AI.Thing(
   "answers",
@@ -201,21 +211,32 @@ export const AskLive = Layer.effect(
       const me = yield* currentThread;
       const myName = nameOfKey(me.key);
       const parent = yield* currentAsk;
-      // the chain BEHIND this ask — the post tree's ancestor authors
-      // (structural; no header to parse, nothing to go stale)
-      const behind =
-        parent === undefined
-          ? []
-          : (yield* posts.ancestors(parent)).map(
-              (ancestor) => ancestor.author,
-            );
+      // the message being answered carries the channel the whole
+      // exchange streams into
+      const parentPost =
+        parent === undefined ? undefined : yield* posts.get(parent);
+      // the reference chain BEHIND this ask — structural (no header
+      // to parse, nothing to go stale); its first link is the THREAD
+      // this exchange lives in
+      const above =
+        parent === undefined ? [] : yield* posts.ancestors(parent);
+      const behind = above.map((ancestor) => ancestor.author);
       const chain = behind.includes(myName) ? behind : [...behind, myName];
 
-      // WHO the text addresses — the @mentions ARE the routing
+      // ONE post id for the message, minted up front — it IS the
+      // invocation: each target answers in a fresh session of its
+      // own for exactly this message
+      const minted = yield* Clock.currentTimeMillis;
+      const postId = `p-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+      // WHO the text addresses — the @mentions ARE the routing; a
+      // worker role gets its own separate space to work in per
+      // message (it starts from zero and explores the graph for
+      // context)
       const names = mentionsOf(p.text);
       if (names.length === 0) return yield* new NoMention();
       const targets = yield* Effect.forEach(names, (name) =>
-        colleagues.resolve(name),
+        colleagues.resolve(name, { invocation: postId }),
       );
       for (const target of targets) {
         if (chain.includes(target.name) || chain.length >= MAX_HOPS) {
@@ -242,16 +263,17 @@ export const AskLive = Layer.effect(
         }
       }
 
-      // ONE post for the message — the targets' answers reply to it,
+      // ONE post for the message — the targets' answers reference it,
       // so the text (and the @mentions addressing it) is written and
       // rendered exactly once, however many agents it asks
-      const minted = yield* Clock.currentTimeMillis;
-      const postId = `p-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const channel = parentPost?.channel;
       yield* posts
         .post({
           id: postId,
-          ...(parent !== undefined ? { parent } : {}),
+          ...(parent !== undefined ? { replyTo: parent } : {}),
+          ...(channel !== undefined ? { channel } : {}),
           author: myName,
+          kind: "ask",
           text: p.text,
         })
         .pipe(Effect.ignore);
@@ -263,14 +285,25 @@ export const AskLive = Layer.effect(
         readonly key: string;
       }) {
         // on a call: the target receives the meeting-so-far it has
-        // not yet seen — one message per utterance (its own words
-        // never echoed back)
-        let history: ReadonlyArray<string> | undefined;
+        // not yet seen — one AUTHORED message per utterance (its own
+        // words never echoed back). Attribution is structural
+        // (`Message.author`), and the stable per-utterance id makes
+        // redelivery idempotent. The ask itself was mirrored into
+        // the call transcript just above — the target receives it as
+        // THE message below, never again as history.
+        let history: ReadonlyArray<AI.Message> | undefined;
         if (p.call !== undefined && Option.isSome(calls)) {
           const delta = yield* calls.value.since(p.call, target.name);
-          history = delta.map((utterance) =>
-            renderUtterance(p.call!, utterance),
-          );
+          history = delta
+            .filter(
+              (utterance) =>
+                !(utterance.author === myName && utterance.text === p.text),
+            )
+            .map((utterance) => ({
+              id: `${p.call}#${utterance.seq}`,
+              author: utterance.author,
+              content: utterance.text,
+            }));
         }
 
         // the target's REPLY is its own post under the message —
@@ -296,7 +329,8 @@ export const AskLive = Layer.effect(
               posts
                 .post({
                   id: replyId,
-                  parent: postId,
+                  replyTo: postId,
+                  ...(channel !== undefined ? { channel } : {}),
                   author: target.name,
                   text: String(defect).slice(0, 2_000),
                   status: "failed",
@@ -314,7 +348,8 @@ export const AskLive = Layer.effect(
         yield* posts
           .post({
             id: replyId,
-            parent: postId,
+            replyTo: postId,
+            ...(channel !== undefined ? { channel } : {}),
             author: target.name,
             text: clipped,
             status: "settled",
@@ -325,11 +360,20 @@ export const AskLive = Layer.effect(
       });
 
       // every mentioned agent answers — concurrently, the way a
-      // message to several colleagues lands on all of them at once
+      // message to several colleagues lands on all of them at once.
+      // The post settles on EVERY exit: a cut round (the operator's
+      // stop interrupting this handler) or a failure leaves the post
+      // `failed`, never spinning forever — the status is data, and
+      // this is where the data is known.
       const settled = yield* Effect.all(targets.map(askOne), {
         concurrency: 4,
-      });
-      yield* posts.settle(postId, "settled").pipe(Effect.ignore);
+      }).pipe(
+        Effect.onExit((exit) =>
+          posts
+            .settle(postId, Exit.isSuccess(exit) ? "settled" : "failed")
+            .pipe(Effect.ignore),
+        ),
+      );
       return { answers: settled, post: postId };
     });
   }),
@@ -342,6 +386,9 @@ export const TellLive = Layer.effect(
     const sessions = yield* AI.Sessions;
     return Effect.fn(function* (p: { agent: string; note: string }) {
       const me = yield* currentThread;
+      // a note goes to the agent's STANDING session — worker
+      // invocation sessions are born of asks and die with them; a
+      // note that needs the working context should be an ask
       const target = yield* colleagues.resolve(p.agent);
       yield* sessions.send(
         target.term,

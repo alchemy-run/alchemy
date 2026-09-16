@@ -80,14 +80,6 @@ const callId = AI.Thing("call", S.String)`
   The call's id: pass it to ask so every exchange lands in the call;
   the humans watch the thread live and can join it.`;
 
-/** One utterance, as it enters a member's session (one message each —
- *  the group-chat projection; attribution is this text convention,
- *  never a platform field). */
-export const renderUtterance = (
-  callId: string,
-  utterance: CallUtterance,
-): string => `[${callId} #${utterance.seq}] ${utterance.author}\n${utterance.text}`;
-
 /**
  * The call tool — a CLASS tool so it rides the typed wire (renderer
  * coverage, `AI.ToolNames`). A call is not "ended" by a tool: it has
@@ -96,10 +88,13 @@ export const renderUtterance = (
  * word.
  */
 export class Call extends (AI.Tool<Call>(import.meta)("call")`
-  Call ${members} into a conversation about ${topic}. You speak first:
-  drive it with ask, passing the ${AI.out(callId)} it answers, so
-  every exchange lands in the call's thread — the humans watch it live
-  and can join. One agent acts at a time; the call is the record.`) {}
+  Call ${members} into a conversation about ${topic} — a HUDDLE, for
+  when one exchange with one teammate is not enough (several
+  teammates, or sustained back-and-forth). To ask ONE teammate one
+  thing, just ask — never open a call for it. You speak first: drive
+  it with ask, passing the ${AI.out(callId)} it answers, so every
+  exchange lands in the call's thread — the humans watch it live and
+  can join. One agent acts at a time; the call is the record.`) {}
 
 export const CallToolLive = Layer.effect(
   Call,
