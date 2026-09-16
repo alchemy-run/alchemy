@@ -416,8 +416,8 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const testAccountId = yield* Config.string("TEST_CLOUDFLARE_ACCOUNT_ID");
-    const prodAccountId = yield* Config.string("PROD_CLOUDFLARE_ACCOUNT_ID");
+    const testAccountId = yield* Config.String("TEST_CLOUDFLARE_ACCOUNT_ID");
+    const prodAccountId = yield* Config.String("PROD_CLOUDFLARE_ACCOUNT_ID");
 
     const testToken = yield* Cloudflare.ApiToken.AccountApiToken("TestApiToken", {
       accountId: testAccountId,

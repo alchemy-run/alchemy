@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import { App as PrismaApp, AppProvider } from "@/Prisma/App";
 import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
@@ -133,7 +134,7 @@ describe("Prisma App", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaApp.Provider;
+      const provider = yield* Provider.findProvider(PrismaApp);
       const error = yield* provider.read!({
         id: "App",
         fqn: "App",

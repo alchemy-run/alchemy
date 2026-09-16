@@ -319,6 +319,8 @@ export interface BranchProtection extends Resource<
  * ### Protecting a Repository's Default Branch
  * **Example:** Protect the Default Branch of a New Repository
  * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
  * const repo = yield* GitHub.Repository("repo", {
  *   owner: "my-org",
  *   name: "my-repo",
@@ -327,7 +329,7 @@ export interface BranchProtection extends Resource<
  *
  * yield* GitHub.BranchProtection("main", {
  *   owner: "my-org",
- *   repository: repo.name,
+ *   repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
  *   branch: repo.defaultBranch,
  *   requiredPullRequestReviews: { requiredApprovingReviewCount: 1 },
  *   allowForcePushes: false,
@@ -393,8 +395,9 @@ export const BranchProtectionProvider = () =>
     // {owner, repository, branch, host} is the rule's path identity — GitHub
     // has no rename, so changing any of them replaces the resource.
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return;
       if (olds === undefined) return;
+      // Unresolved props may change the path identity and orphan the old rule.
+      if (!isResolved(news)) return { action: "replace" };
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
@@ -538,11 +541,7 @@ export const BranchProtectionProvider = () =>
 
     // Refresh from the live rule. A 404 means either the branch is no longer
     // protected or the branch/repository is gone — both are "missing".
-    read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) {
-        return undefined;
-      }
-
+    read: Effect.fn(function* ({ olds }) {
       const octokit = yield* octokitFor(olds.baseUrl);
 
       return yield* Effect.tryPromise({

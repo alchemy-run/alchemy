@@ -1,28 +1,32 @@
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
-const { test } = Test.make({ providers: GitHub.providers() });
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
+if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
+  throw new Error(
+    `Refusing GitHub mutations outside the test organizations: ${owner}`,
+  );
+}
+
+const { test } = Test.make({
+  providers: GitHub.providers({ baseUrl: "github.com" }),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// These tests create, mutate, and delete a real branch protection rule, so
-// they run against the dedicated test org (never a real one). Set
-// GITHUB_TEST_OWNER="" to skip, or to your own login to run against a
-// personal account. The host repository is public because branch protection
-// on private repositories is plan-gated.
-const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
-const repo =
-  process.env.GITHUB_TEST_BRANCH_PROTECTION_REPOSITORY ??
-  "alchemy-effect-branch-protection-test";
+// Public fixtures avoid plan gates and are retained because gh lacks delete_repo.
+const repo = "alchemy-effect-pr-1514-branch-protection";
+const replacementRepo = "alchemy-effect-pr-1514-branch-protection-replacement";
 
 // Derive the repository name from the `fullName` output — referencing an
 // output (rather than the `repo` constant) makes the engine order dependent
@@ -30,7 +34,7 @@ const repo =
 const repoName = (repository: GitHub.Repository) =>
   Output.map(repository.fullName, (fullName) => fullName.split("/")[1]!);
 
-const getProtection = (branch: string) =>
+const getProtection = (branch: string, repository: string = repo) =>
   Effect.gen(function* () {
     const octokit = yield* Octokit;
     return yield* Effect.tryPromise({
@@ -38,7 +42,7 @@ const getProtection = (branch: string) =>
         try {
           const { data } = await octokit.rest.repos.getBranchProtection({
             owner,
-            repo,
+            repo: repository,
             branch,
           });
           return data;
@@ -59,8 +63,8 @@ const hostRepository = GitHub.Repository("Repo", {
   autoInit: true,
 });
 
-test.provider.skipIf(!owner)(
-  "create, update, and delete a branch protection rule",
+test.provider(
+  "create, update, replace, and delete a branch protection rule",
   (stack) =>
     Effect.gen(function* () {
       // Clean up any leftovers from a previous run before deploying.
@@ -114,6 +118,17 @@ test.provider.skipIf(!owner)(
       expect(fetched?.required_linear_history?.enabled).toBe(true);
       expect(fetched?.required_conversation_resolution?.enabled).toBe(true);
 
+      const provider = yield* Provider.findProvider(GitHub.BranchProtection);
+      const recovered = yield* provider.read!({
+        id: "Protection",
+        fqn: "Protection",
+        instanceId: "pr-1514",
+        olds: { owner, repository: repo, branch: created.branch },
+        output: undefined,
+      });
+      expect(recovered?.url).toEqual(created.url);
+      expect(recovered?.enforceAdmins).toBe(true);
+
       // Update — drop reviews and status checks, relax admin enforcement,
       // allow force pushes, and require signed commits (the aspect that lives
       // behind its own endpoint). Same logical ID → same rule URL (update in
@@ -165,10 +180,59 @@ test.provider.skipIf(!owner)(
       expect(unchanged.url).toEqual(created.url);
       expect(unchanged.requiredSignatures).toBe(true);
 
-      // Delete — the rule goes away; the retained repo stays.
+      const reset = yield* stack.deploy(
+        Effect.gen(function* () {
+          const repository = yield* hostRepository;
+          return yield* GitHub.BranchProtection("Protection", {
+            owner,
+            repository: repoName(repository),
+            branch: repository.defaultBranch,
+          }).pipe(destroy());
+        }),
+      );
+      expect(reset.requiredSignatures).toBe(false);
+      expect(reset.allowForcePushes).toBe(false);
+      expect(reset.requiredLinearHistory).toBe(false);
+      const afterReset = yield* getProtection(created.branch);
+      expect(afterReset?.required_signatures?.enabled ?? false).toBe(false);
+      expect(afterReset?.allow_force_pushes?.enabled).toBe(false);
+      expect(afterReset?.required_linear_history?.enabled).toBe(false);
+
+      // Keep the old dependency deployed until its protection is replaced.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* hostRepository;
+          const repository = yield* GitHub.Repository("ReplacementRepo", {
+            owner,
+            name: replacementRepo,
+            description: "alchemy-effect PR 1514 replacement fixture",
+            visibility: "public",
+            autoInit: true,
+          });
+          return yield* GitHub.BranchProtection("Protection", {
+            owner,
+            repository: repoName(repository),
+            branch: repository.defaultBranch,
+            enforceAdmins: true,
+          }).pipe(destroy());
+        }),
+      );
+      expect(replaced.url).not.toEqual(created.url);
+      expect(replaced.url).toContain(
+        `/repos/${owner}/${replacementRepo}/branches/`,
+      );
+      expect(yield* getProtection(created.branch)).toBeUndefined();
+      expect(
+        (yield* getProtection(replaced.branch, replacementRepo))?.enforce_admins
+          ?.enabled,
+      ).toBe(true);
+
+      // Both rules must be gone independently of the retained repositories.
       yield* stack.destroy();
-      const afterDestroy = yield* getProtection(created.branch);
-      expect(afterDestroy).toBeUndefined();
+      expect(yield* getProtection(created.branch)).toBeUndefined();
+      expect(
+        yield* getProtection(replaced.branch, replacementRepo),
+      ).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -465,7 +465,7 @@ export interface CommandOutput {
   stderr: string;
 }
 
-const DockerBin = Config.string("DOCKER_BIN").pipe(
+const DockerBin = Config.String("DOCKER_BIN").pipe(
   Effect.orElseSucceed(() => "docker"),
 );
 

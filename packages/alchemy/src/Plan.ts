@@ -38,7 +38,7 @@ import { parseFqn } from "./FQN.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
-  findProviderByType,
+  tryFindProviderRegistrationByType,
   missingProviderError,
   Provider,
   providerForMode,
@@ -425,7 +425,14 @@ export const make = <A>(
       Type: string;
       Mode?: ProviderMode | undefined;
     }) {
-      const base = yield* findProviderByType(resource.Type);
+      const base = yield* tryFindProviderRegistrationByType(resource.Type).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.die(`Provider not found for ${resource.Type}`),
+            onSome: Effect.succeed,
+          }),
+        ),
+      );
       const mode =
         base.modes !== undefined
           ? (resource.Mode ?? runDefaultMode)
@@ -543,7 +550,7 @@ export const make = <A>(
 
     const resolveRenamer = Effect.fn(function* (resource: ResourceLike) {
       const provider = Option.getOrUndefined(
-        yield* tryFindProviderByType(resource.Type),
+        yield* tryFindProviderRegistrationByType(resource.Type),
       );
       const allowedTypes = new Set([
         resource.Type,
@@ -840,7 +847,7 @@ export const make = <A>(
           // here so the concrete value flows into diffing/hashing (an opaque
           // Config hashes the same regardless of the underlying value) and so
           // providers receive a resolved value instead of a Config object.
-          // `Config.redacted` resolves to a `Redacted`, which stays opaque via
+          // `Config.Redacted` resolves to a `Redacted`, which stays opaque via
           // the branch below.
           return yield* resolveInput(yield* input, ancestors);
         } else if (isResource(input)) {
