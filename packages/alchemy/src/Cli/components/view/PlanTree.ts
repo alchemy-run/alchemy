@@ -29,6 +29,8 @@ export type PlanRow =
       type: "resource";
       id: string;
       resourceType: string;
+      /** Secondary identity for inventories without logical resource names. */
+      detail?: string;
       depth: number;
       action: CRUD["action"];
       persistedApplyStatus?: "created" | "updated";
@@ -110,6 +112,13 @@ export interface PlanTreeOptions {
    * @default true
    */
   readonly expanded?: boolean;
+}
+
+/** Display-only plans, such as cloud inventories, need no engine state or providers. */
+export interface PlanTreeData {
+  readonly rows: readonly PlanRow[];
+  readonly summary: PlanSummaryCounts;
+  readonly defaultMode?: ProviderMode;
 }
 
 const getRowKey = (item: FlattenedItem) => item.path.join("/");
@@ -219,19 +228,18 @@ export class PlanTree {
   readonly mode: "review" | "apply";
   readonly detailed: boolean;
   readonly titleDetail?: string;
+  readonly defaultMode?: ProviderMode;
   private state: PlanTreeState;
   private readonly listeners = new Set<() => void>();
 
-  constructor(
-    readonly plan: Plan,
-    options: PlanTreeOptions = {},
-  ) {
+  constructor(plan: Plan | PlanTreeData, options: PlanTreeOptions = {}) {
     this.detailed = options.detailed ?? false;
     this.mode = options.mode ?? "review";
     this.titleDetail = options.titleDetail;
-    this.rows = buildRows(plan, this.detailed);
+    this.defaultMode = plan.defaultMode;
+    this.rows = "rows" in plan ? plan.rows : buildRows(plan, this.detailed);
     this.progressRows = this.rows.filter(isProgressRow);
-    this.summary = buildPlanSummary(plan);
+    this.summary = "rows" in plan ? plan.summary : buildPlanSummary(plan);
     this.state = {
       tasks: buildInitialTasks(this.rows),
       label: options.label ?? "Plan",
@@ -270,6 +278,10 @@ export class PlanTree {
 
   setExpanded(expanded: boolean) {
     this.update({ expanded });
+  }
+
+  setLabel(label: string) {
+    this.update({ label });
   }
 
   setViewport(viewport: PlanViewport) {

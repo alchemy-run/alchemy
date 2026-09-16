@@ -128,17 +128,17 @@ other stage alone.
 
 ## Stages in tests
 
-The test harness from Part 3 defaults to a stage named `test`. You
-can override it per file — or per call — which is how multiple CI
-runs can test in parallel against the same AWS account without
-colliding:
+The test harness from Part 3 defaults to `test_$USER` (e.g.
+`test_sam`). Override it per file — or per call — which is how
+multiple CI runs can test in parallel against the same AWS account
+without colliding:
 
 ```diff lang="typescript"
 // test/integ.test.ts
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-+  stage: process.env.STAGE ?? "test",
++  stage: `pr-${process.env.PR_NUMBER}`,
 });
 ```
 

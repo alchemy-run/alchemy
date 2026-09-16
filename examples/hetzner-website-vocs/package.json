@@ -11,24 +11,24 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:effect",
-    "react": "catalog:frontend-rsc",
-    "react-dom": "catalog:frontend-rsc",
-    "react-server-dom-webpack": "catalog:frontend",
-    "vocs": "catalog:frontend",
-    "waku": "catalog:frontend"
+    "effect": "catalog:",
+    "react": "catalog:react-rsc",
+    "react-dom": "catalog:react-rsc",
+    "react-server-dom-webpack": "catalog:",
+    "vocs": "catalog:",
+    "waku": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
-    "@effect/platform-node": "catalog:effect",
+    "@effect/platform-node": "catalog:",
     "@types/node": "catalog:node24",
-    "@types/react": "catalog:frontend",
-    "@types/react-dom": "catalog:frontend",
-    "@vitejs/plugin-react": "catalog:frontend",
-    "@vitejs/plugin-rsc": "catalog:frontend",
-    "typescript": "catalog:build",
-    "vite": "catalog:build"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitejs/plugin-rsc": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   },
   "repository": {
     "type": "git",

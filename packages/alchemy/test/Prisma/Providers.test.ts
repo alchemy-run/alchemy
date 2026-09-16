@@ -126,16 +126,12 @@ describe("Prisma providers", () => {
       for (const provider of providers) {
         expect(typeof provider.reconcile).toBe("function");
         expect(typeof provider.delete).toBe("function");
-        // ProviderLayer.dual registration: dev resolves the local variant
-        // and exposes both variants for per-resource mode resolution.
+        // Lookup resolves the concrete local variant in dev.
         expect(provider.mode).toBe("local");
-        expect(typeof provider.modes?.live).toBe("object");
-        expect(typeof provider.modes?.local).toBe("object");
       }
       for (let i = 0; i < resourceTypes.length; i += 1) {
-        expect(providers[i]?.stables).toEqual(
-          expectedStables.get(resourceTypes[i]),
-        );
+        const provider = providers[i]!;
+        expect(provider.stables).toEqual(expectedStables.get(resourceTypes[i]));
       }
     }).pipe(providePrismaDev),
   );

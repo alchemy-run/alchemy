@@ -56,6 +56,13 @@ afterAll(async () => {
 test(
   "alchemy dev serves every local binding end-to-end",
   async () => {
+    // Start from an empty stage. The local D1 provider trusts its state row
+    // for "migrations applied", so a stage left deployed by an interrupted
+    // run (remote state store) combined with a wiped `.alchemy/local` (e.g.
+    // `git clean -fdx`) would skip the migrations and fail `/d1` with
+    // `no such table: greetings` — a stale-environment failure, not the
+    // #1007 regression this route exists to pin.
+    cli.destroy();
     cli.start();
 
     // The first dev deploy applies D1 migrations through the sidecar,
