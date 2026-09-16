@@ -23,7 +23,7 @@ import {
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
   securityGroupRuleKey,
-} from "./SecurityGroupRules.ts";
+} from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type SecurityGroupId<ID extends string = string> = `sg-${ID}`;
