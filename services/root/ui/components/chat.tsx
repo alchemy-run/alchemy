@@ -27,7 +27,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { InputGroupAddon } from "@/components/ui/input-group";
 import { confirm } from "@/components/confirm";
-import { SessionModelSelect } from "@/components/model-select";
 import {
   Tool,
   ToolContent,
@@ -2109,26 +2108,12 @@ const ChatTranscript = ({
               />
             </PromptInputBody>
             {/* the controls INLINE, right of the text (no footer row —
-                it doubled the composer's height): the model THIS
-                session samples with (the agent you are talking to — a
-                thread's pick still reaches its engineers on the
-                server), and send/stop, pinned to the bottom as the
-                text grows */}
+                it doubled the composer's height): send/stop, pinned to
+                the bottom as the text grows */}
             <InputGroupAddon
               align="inline-end"
               className="gap-0.5 self-end py-1.5"
             >
-              {/* ghost, not a chip — the pick should not shout next
-                  to what you're typing (the header keeps the chip);
-                  the label truncates so a narrow pane keeps room to
-                  type */}
-              <SessionModelSelect
-                sessionId={id}
-                label="The agent's model"
-                size="sm"
-                variant="ghost"
-                className="max-w-36 min-w-0 [&_span]:truncate"
-              />
               {/* while the agent works the button is STOP: abort the
                   round on the server (the session lives on); the turn's
                   end arrives over the socket and the button turns back.

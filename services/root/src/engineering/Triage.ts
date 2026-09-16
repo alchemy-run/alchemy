@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
 import { inWorker } from "../platform/Database.ts";
-import { lineage } from "../Root.ts";
+import { lineage } from "../Lineage.ts";
 
 /**
  * TRIAGE — the pump that turns the outside world into messages in the

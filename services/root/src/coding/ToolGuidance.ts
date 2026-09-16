@@ -16,13 +16,18 @@ export class ToolGuidance extends AI.Skill<ToolGuidance>(import.meta)(
 export const ToolGuidanceGeneral = ToolGuidance.make`
   ## Writing a tool
 
-  One file, one tool. A tool's contract (the \`AI.Tool\` tag, its tagged
-  template, the \`AI.Thing\`s it splices) and its \`*Live\` Layer
+  One file, one tool. A CLASS tool's contract (the \`AI.Tool\` tag, its
+  tagged template, the \`AI.Thing\`s it splices) and its \`*Live\` Layer
   live in ONE file named after the tool — ${Bash.source} is the model.
-  A parameter lives with its canonical tool and is imported from there
-  (\`path\` from ${ReadFile.source}, \`content\` from ${WriteFile.source}),
-  never redeclared: two tools spelling the same parameter differently
-  is two vocabularies.
+  A tool with one implementation is a static definition instead,
+  declared synchronously at module scope:
+  \`export const x = AI.Tool("x")\`…\`(init)\` — the INIT Effect resolves
+  its services once where the agent's Layer builds and returns the
+  per-call handler (the handler's one implicit input is the calling
+  session, \`AI.Thread\`). A parameter lives with its canonical tool
+  and is imported from there (\`path\` from ${ReadFile.source},
+  \`content\` from ${WriteFile.source}), never redeclared: two tools
+  spelling the same parameter differently is two vocabularies.
 
   Every tool runs over the session's \`AI.Sandbox\` — the machine that
   holds the checkout — never the Worker's own filesystem or network.

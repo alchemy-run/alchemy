@@ -8,7 +8,7 @@ import { currentAsk } from "../chat/Ask.ts";
 import { Posts } from "../chat/Posts.ts";
 import { SessionRepo } from "../github/SessionRepo.ts";
 import { primary } from "../github/Repos.ts";
-import { ROOT } from "../Root.ts";
+import { ROOT } from "../Lineage.ts";
 import { WORKSPACE_TERM, pullWorkspaceName, workspaceKey } from "./Keys.ts";
 import { WorkspaceAgent } from "./WorkspaceAgent.ts";
 
@@ -22,6 +22,10 @@ import { WorkspaceAgent } from "./WorkspaceAgent.ts";
  * as they need them, a workspace made inside a thread is LINKED to
  * that thread, and any agent can QUERY a thread's active workspaces —
  * then address one explicitly as `@<name>/<path>` in any tool path.
+ *
+ * Each tool is a static `ToolDef`: declared at module scope, its INIT
+ * resolves the services once where the agent's Layer builds, and the
+ * handler's one implicit input is the calling session (`AI.Thread`).
  */
 
 export class BadRef extends Data.TaggedError("BadRef")<{
@@ -62,9 +66,10 @@ const currentThreadRoot = Effect.gen(function* () {
   return above[0]?.id ?? parent;
 });
 
-export const makeWorkspaceTools = Effect.gen(function* () {
+/** The provisioning physics the defs' inits share — resolved once per
+ *  host Layer build. */
+const provisioner = Effect.gen(function* () {
   const workspaces = yield* WorkspaceAgent;
-  const sessions = yield* AI.Sessions;
   const sessionRepo = yield* SessionRepo;
   const posts = yield* Effect.serviceOption(Posts);
 
@@ -126,18 +131,23 @@ export const makeWorkspaceTools = Effect.gen(function* () {
     });
   });
 
-  const workspace = yield* AI.Tool("workspace")`
-    Ensure a WORKSPACE — an isolated machine with the repository
-    checked out, ready to be worked on. With ${wsRef}: the pull
-    request's head branch, fetched fresh, named "pr-N". Without: a
-    scratch workspace named ${wsName} on the repository's default
-    state. Answers ${AI.out(wsName, branch)}. Created inside a
-    thread, the workspace is LINKED to it — teammates find it with
-    list_workspaces. There are no defaults: every agent addresses
-    every workspace explicitly ("@<name>/<path>" in any path). Fails
-    with ${BadRef} for a ref that is not a pull request of a
-    connected repository, ${CheckoutFailed} when git refuses.`(
-    Effect.fn(function* (p: { ref?: string; name?: string }) {
+  return { provision, provisionPull };
+});
+
+export const workspace = AI.Tool("workspace")`
+  Ensure a WORKSPACE — an isolated machine with the repository
+  checked out, ready to be worked on. With ${wsRef}: the pull
+  request's head branch, fetched fresh, named "pr-N". Without: a
+  scratch workspace named ${wsName} on the repository's default
+  state. Answers ${AI.out(wsName, branch)}. Created inside a
+  thread, the workspace is LINKED to it — teammates find it with
+  list_workspaces. There are no defaults: every agent addresses
+  every workspace explicitly ("@<name>/<path>" in any path). Fails
+  with ${BadRef} for a ref that is not a pull request of a
+  connected repository, ${CheckoutFailed} when git refuses.`(
+  Effect.gen(function* () {
+    const { provision, provisionPull } = yield* provisioner;
+    return Effect.fn(function* (p: { ref?: string; name?: string }) {
       if (p.ref !== undefined) {
         const made = yield* provisionPull(p.ref);
         return { name: made.name, branch: made.branch };
@@ -152,30 +162,38 @@ export const makeWorkspaceTools = Effect.gen(function* () {
         remote: GitHub.remote(primary).url,
       });
       return { name: made.name, branch: made.branch };
-    }),
-  );
+    });
+  }),
+);
 
-  const listWorkspaces = yield* AI.Tool("list_workspaces")`
-    The workspaces ACTIVE in this thread — ${AI.out(active)}. You
-    start from zero: this is how you find the machine the thread's
-    work lives on before addressing paths ("@<name>/<path>"). Empty
-    means nobody made one yet — create it with workspace if your
-    work needs a tree.`(
-    Effect.fn(function* () {
+export const listWorkspaces = AI.Tool("list_workspaces")`
+  The workspaces ACTIVE in this thread — ${AI.out(active)}. You
+  start from zero: this is how you find the machine the thread's
+  work lives on before addressing paths ("@<name>/<path>"). Empty
+  means nobody made one yet — create it with workspace if your
+  work needs a tree.`(
+  Effect.gen(function* () {
+    const posts = yield* Effect.serviceOption(Posts);
+    return Effect.fn(function* () {
       const thread = yield* currentThreadRoot;
       if (thread === undefined || Option.isNone(posts)) {
         return { workspaces: [] };
       }
       return { workspaces: yield* posts.value.workspacesOf(thread) };
-    }),
-  );
+    });
+  }),
+);
 
-  const dropWorkspace = yield* AI.Tool("drop_workspace")`
-    Drop the workspace named ${wsName} — its tree and its machine.
-    Work committed and pushed survives on GitHub; anything else in
-    the tree is gone, and the name leaves every thread it was linked
-    in. Fails with ${CheckoutFailed} when the release refuses.`(
-    Effect.fn(function* (p: { name: string }) {
+export const dropWorkspace = AI.Tool("drop_workspace")`
+  Drop the workspace named ${wsName} — its tree and its machine.
+  Work committed and pushed survives on GitHub; anything else in
+  the tree is gone, and the name leaves every thread it was linked
+  in. Fails with ${CheckoutFailed} when the release refuses.`(
+  Effect.gen(function* () {
+    const workspaces = yield* WorkspaceAgent;
+    const sessions = yield* AI.Sessions;
+    const posts = yield* Effect.serviceOption(Posts);
+    return Effect.fn(function* (p: { name: string }) {
       const key = workspaceKey(ROOT, p.name);
       yield* workspaces
         .at(key)
@@ -189,14 +207,6 @@ export const makeWorkspaceTools = Effect.gen(function* () {
       if (Option.isSome(posts)) {
         yield* posts.value.unlinkWorkspace(p.name).pipe(Effect.ignore);
       }
-    }),
-  );
-
-  return {
-    workspace,
-    listWorkspaces,
-    dropWorkspace,
-    provision,
-    provisionPull,
-  };
-});
+    });
+  }),
+);

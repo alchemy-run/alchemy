@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
-import { nameOfKey } from "../Root.ts";
+import { nameOfKey } from "../Lineage.ts";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 

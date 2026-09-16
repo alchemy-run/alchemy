@@ -25,14 +25,21 @@ export class CharterGuidance extends AI.Skill<CharterGuidance>(import.meta)(
 export const CharterGuidanceGeneral = CharterGuidance.make`
   ## Prose is code
 
-  An agent is a bare \`AI.Agent\` tag; its behavior is a charter Layer,
-  the \`*Live\` beside the tag: INIT runs once per session (mint tools,
-  resolve the tree) and returns the STANCE, a fragment re-rendered
-  before every sampling. A skill is a bare \`AI.Skill\` tag whose
-  teaching rides its \`*General\` Layer (\`Skill.make\`…\`\`), dormant
-  until the agent activates it. A fragment (\`AI.fragment\`) is shared
-  doctrine spliced into several stances. A tool's tagged template is
-  its description and the parameters it splices are its schema.
+  An agent is a bare \`AI.Agent\` tag; its behavior is its CHARTER —
+  \`Agent.make\` as a tagged template at module scope (\`Head.make\`…\`\`),
+  STATIC by construction: the template is the system prompt, known
+  before anything runs, and applying the result once attaches behavior
+  (\`({ turn, ...methods })\` — \`turn\` is a per-tick hook for side
+  effects and \`AI.selectModel\` only, never prose). A skill is a bare
+  \`AI.Skill\` tag whose teaching rides its \`*General\` Layer
+  (\`Skill.make\`…\`\`), dormant until the agent activates it. A tool is
+  a static definition, declared synchronously at module scope:
+  \`AI.Tool("name")\`…\`(init)\` — the tagged template is its description,
+  the parameters it splices are its schema, and the INIT Effect (run
+  once where the agent's Layer builds) acquires its services and
+  bindings and returns the per-call handler. The handler's one
+  implicit input is the calling session (\`AI.Thread\`); everything
+  else is an explicit argument.
 
   Mention is presence: a stance's toolkit is exactly what its prose
   splices, and every splice charges the Layer's requirement channel,

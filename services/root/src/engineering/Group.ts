@@ -2,7 +2,7 @@ import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Colleagues, TeammateUnknown } from "../chat/Ask.ts";
-import { lineage, ROOT } from "../Root.ts";
+import { lineage, ROOT } from "../Lineage.ts";
 import { Engineer } from "./Engineer.ts";
 import { Manager } from "./Manager.ts";
 import { Reviewer } from "./Reviewer.ts";

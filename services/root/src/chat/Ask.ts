@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Clock from "effect/Clock";
 import * as Option from "effect/Option";
 import * as S from "effect/Schema";
-import { nameOfKey } from "../Root.ts";
+import { nameOfKey } from "../Lineage.ts";
 import { Posts } from "./Posts.ts";
 import { Calls } from "./Call.ts";
 

@@ -17,7 +17,6 @@
 import { ChatView } from "@/components/chat";
 import { ChannelFeed, ThreadView } from "@/components/channel-feed";
 import { CallThread } from "@/components/call";
-import { SessionModelSelect } from "@/components/model-select";
 import { MembersPanel } from "@/components/members";
 import { ChannelThreads, TaskThread } from "@/components/tasks";
 import { Avatar, KindBadge, sessionAuthor } from "@/components/avatar";
@@ -566,13 +565,6 @@ export const App = () => {
                 )}
               </div>
               <StopResume chat={channel.chat} />
-              {/* the composer keeps the pick reachable on narrow */}
-              <SessionModelSelect
-                sessionId={channel.chat}
-                label="model"
-                size="sm"
-                className="max-md:hidden"
-              />
               <button
                 type="button"
                 onClick={() => {

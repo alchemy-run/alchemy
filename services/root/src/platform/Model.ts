@@ -9,8 +9,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 /**
  * The org's MODELS — each a named service holding a ready
- * `LanguageModel` Layer (`AI.Model`). A charter picks one by providing
- * it to its stance: `AI.fragment`…``.pipe(Effect.provide(opus))`.
+ * `LanguageModel` Layer (`AI.Model`). Models are SELECTED, never
+ * configured: a charter's `turn` hook calls `AI.selectModel(Opus)`,
+ * and the requirement (`Opus`) charges the agent's Layer — which
+ * models an agent samples with is a static, type-level fact of the
+ * org. No selection → the driver's default ({@link Model}).
  */
 export class Opus extends AI.Model<Opus>()("root/Opus") {}
 export class Fable extends AI.Model<Fable>()("root/Fable") {}
@@ -24,88 +27,6 @@ export class DeepSeekFlash extends AI.Model<DeepSeekFlash>()(
 export class DeepSeekPro extends AI.Model<DeepSeekPro>()(
   "root/DeepSeekPro",
 ) {}
-
-/**
- * The CATALOG the selector shows, in display order: the id the UI
- * writes into a thread's state, its label, and the service it names.
- * `DEFAULT_MODEL` is what a stance samples with when its thread chose
- * nothing.
- */
-export const MODELS = [
-  {
-    id: "claude-opus-5",
-    label: "Claude Opus 5",
-    provider: "anthropic",
-    model: Opus,
-  },
-  {
-    id: "claude-fable-5-1",
-    label: "Claude Fable 5.1",
-    provider: "anthropic",
-    model: Fable,
-  },
-  {
-    id: "claude-haiku-4-5",
-    label: "Claude Haiku 4.5",
-    provider: "anthropic",
-    model: Haiku,
-  },
-  {
-    id: "gpt-6-astra",
-    label: "GPT-6 Astra",
-    provider: "openai",
-    model: Gpt6Astra,
-  },
-  {
-    id: "deepseek-flash",
-    label: "DeepSeek V4.1 Flash",
-    provider: "deepseek",
-    model: DeepSeekFlash,
-  },
-  {
-    id: "deepseek-v4-pro",
-    label: "DeepSeek V4 Pro",
-    provider: "deepseek",
-    model: DeepSeekPro,
-  },
-] as const;
-
-export type ModelId = (typeof MODELS)[number]["id"];
-
-/** The catalog's services — what holding every model requires. */
-export type Catalog =
-  | Opus
-  | Fable
-  | Haiku
-  | Gpt6Astra
-  | DeepSeekFlash
-  | DeepSeekPro;
-
-export const DEFAULT_MODEL: ModelId = "claude-haiku-4-5";
-
-/** What `GET /api/models` serves — the catalog minus the services. */
-export const catalog = MODELS.map(({ id, label, provider }) => ({
-  id,
-  label,
-  provider,
-}));
-
-/**
- * Every catalog model, keyed by id — a charter yields this once at
- * init and indexes it with the thread's pick per tick. Unknown ids
- * fall back to the default, so a model retired from the catalog never
- * strands the threads that chose it.
- */
-export const models: Effect.Effect<
-  (id: string | undefined) => AI.ModelLayer,
-  never,
-  Catalog
-> = Effect.gen(function* () {
-  const byId = new Map<string, AI.ModelLayer>();
-  for (const entry of MODELS) byId.set(entry.id, yield* entry.model);
-  const fallback = byId.get(DEFAULT_MODEL)!;
-  return (id) => (id === undefined ? fallback : (byId.get(id) ?? fallback));
-});
 
 /* ── implementations ────────────────────────────────────────────── */
 
@@ -279,10 +200,9 @@ export const ModelsLive = Layer.mergeAll(
 );
 
 /**
- * The driver's DEFAULT model — what a stance samples with when it was
- * provided none. The default IS one of the catalog's, so the selector
- * always offers what an unconfigured thread runs on. Built over the
- * catalog services ({@link ModelsLive}), which the agents share.
+ * The driver's DEFAULT model — what a stance samples with when its
+ * charter selected none. Built over the model services
+ * ({@link ModelsLive}), which the agents share.
  */
-export const Model: Layer.Layer<LanguageModel.LanguageModel, never, Catalog> =
-  Layer.unwrap(Effect.map(models, (pick) => pick(undefined)));
+export const Model: Layer.Layer<LanguageModel.LanguageModel, never, Haiku> =
+  Layer.unwrap(Effect.map(Haiku, (layer) => layer));

@@ -4,7 +4,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Head } from "../Head.ts";
-import { ROOT } from "../Root.ts";
+import { ROOT } from "../Lineage.ts";
 
 /**
  * POST /api/root — the human's message to the Head, on the Root

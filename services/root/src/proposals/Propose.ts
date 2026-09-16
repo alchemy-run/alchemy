@@ -10,6 +10,10 @@ import { Proposals } from "./Proposals.ts";
  * Approve/Deny and the proposal's live status. Given to the Head and
  * to managers; engineers meet the same seam through their gated
  * push/open-PR tools (coding/Gate.ts).
+ *
+ * Each tool is a static `ToolDef`: its INIT resolves the proposal
+ * store once where the agent's Layer builds; the handler stages under
+ * the calling session (`AI.Thread` — the one implicit input).
  */
 
 const ref = AI.Thing("ref", S.String)`
@@ -25,10 +29,10 @@ const why = AI.Thing("why", S.String)`
 const proposalId = AI.Thing("proposal", S.String)`
   The staged proposal's id — its card tracks the decision.`;
 
-export const makeProposalTools = Effect.gen(function* () {
+/** The staging physics the defs' inits share. */
+const stager = Effect.gen(function* () {
   const proposals = yield* Proposals;
-
-  const stage = Effect.fn(function* (input: {
+  return Effect.fn(function* (input: {
     readonly kind: "comment" | "merge" | "close";
     readonly summary: string;
     readonly detail: string;
@@ -47,47 +51,54 @@ export const makeProposalTools = Effect.gen(function* () {
     });
     return { proposal: staged.id };
   });
+});
 
-  const proposeComment = yield* AI.Tool("propose_comment")`
-    Propose posting ${body} as a comment on ${ref}, with ${why} for the
-    human deciding. Nothing is posted until they approve — answers
-    ${AI.out(proposalId)}; the decision arrives as a message.`(
-    Effect.fn(function* (p: { ref: string; body: string; why: string }) {
+export const proposeComment = AI.Tool("propose_comment")`
+  Propose posting ${body} as a comment on ${ref}, with ${why} for the
+  human deciding. Nothing is posted until they approve — answers
+  ${AI.out(proposalId)}; the decision arrives as a message.`(
+  Effect.gen(function* () {
+    const stage = yield* stager;
+    return Effect.fn(function* (p: { ref: string; body: string; why: string }) {
       return yield* stage({
         kind: "comment",
         summary: `comment on ${p.ref}`,
         detail: `${p.why}\n\n---\n\n${p.body}`,
         payload: { kind: "comment", ref: p.ref, body: p.body },
       });
-    }),
-  );
+    });
+  }),
+);
 
-  const proposeMerge = yield* AI.Tool("propose_merge")`
-    Propose MERGING pull request ${ref}, with ${why} — state plainly
-    what was verified (green, reviewed, described); the human's approval
-    should be one click. Answers ${AI.out(proposalId)}.`(
-    Effect.fn(function* (p: { ref: string; why: string }) {
+export const proposeMerge = AI.Tool("propose_merge")`
+  Propose MERGING pull request ${ref}, with ${why} — state plainly
+  what was verified (green, reviewed, described); the human's approval
+  should be one click. Answers ${AI.out(proposalId)}.`(
+  Effect.gen(function* () {
+    const stage = yield* stager;
+    return Effect.fn(function* (p: { ref: string; why: string }) {
       return yield* stage({
         kind: "merge",
         summary: `merge ${p.ref}`,
         detail: p.why,
         payload: { kind: "merge", ref: p.ref },
       });
-    }),
-  );
+    });
+  }),
+);
 
-  const proposeClose = yield* AI.Tool("propose_close")`
-    Propose CLOSING ${ref} (an issue resolved, answered, or stale — or
-    a pull request superseded), with ${why}. Answers ${AI.out(proposalId)}.`(
-    Effect.fn(function* (p: { ref: string; why: string }) {
+export const proposeClose = AI.Tool("propose_close")`
+  Propose CLOSING ${ref} (an issue resolved, answered, or stale — or
+  a pull request superseded), with ${why}. Answers ${AI.out(proposalId)}.`(
+  Effect.gen(function* () {
+    const stage = yield* stager;
+    return Effect.fn(function* (p: { ref: string; why: string }) {
       return yield* stage({
         kind: "close",
         summary: `close ${p.ref}`,
         detail: p.why,
         payload: { kind: "close", ref: p.ref, reason: p.why },
       });
-    }),
-  );
-
-  return { proposeComment, proposeMerge, proposeClose };
-});
+    });
+  }),
+);

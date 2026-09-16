@@ -107,13 +107,18 @@ will do next.
 
 ## Writing a tool
 
-One file, one tool. A tool's contract (the `AI.Tool` tag, its tagged
-template, the `AI.Thing`s it splices) and its `*Live` Layer
+One file, one tool. A CLASS tool's contract (the `AI.Tool` tag, its
+tagged template, the `AI.Thing`s it splices) and its `*Live` Layer
 live in ONE file named after the tool — `src/coding/Bash.ts` is the model.
-A parameter lives with its canonical tool and is imported from there
-(`path` from `src/coding/ReadFile.ts`, `content` from `src/coding/WriteFile.ts`),
-never redeclared: two tools spelling the same parameter differently
-is two vocabularies.
+A tool with one implementation is a static definition instead,
+declared synchronously at module scope:
+`export const x = AI.Tool("x")`…`(init)` — the INIT Effect resolves
+its services once where the agent's Layer builds and returns the
+per-call handler (the handler's one implicit input is the calling
+session, `AI.Thread`). A parameter lives with its canonical tool
+and is imported from there (`path` from `src/coding/ReadFile.ts`,
+`content` from `src/coding/WriteFile.ts`), never redeclared: two tools
+spelling the same parameter differently is two vocabularies.
 
 Every tool runs over the session's `AI.Sandbox` — the machine that
 holds the checkout — never the Worker's own filesystem or network.
@@ -139,14 +144,21 @@ directory — real processes, real files, the model the only fake.
 
 ## Prose is code
 
-An agent is a bare `AI.Agent` tag; its behavior is a charter Layer,
-the `*Live` beside the tag: INIT runs once per session (mint tools,
-resolve the tree) and returns the STANCE, a fragment re-rendered
-before every sampling. A skill is a bare `AI.Skill` tag whose
-teaching rides its `*General` Layer (`Skill.make`…``), dormant
-until the agent activates it. A fragment (`AI.fragment`) is shared
-doctrine spliced into several stances. A tool's tagged template is
-its description and the parameters it splices are its schema.
+An agent is a bare `AI.Agent` tag; its behavior is its CHARTER —
+`Agent.make` as a tagged template at module scope (`Head.make`…``),
+STATIC by construction: the template is the system prompt, known
+before anything runs, and applying the result once attaches behavior
+(`({ turn, ...methods })` — `turn` is a per-tick hook for side
+effects and `AI.selectModel` only, never prose). A skill is a bare
+`AI.Skill` tag whose teaching rides its `*General` Layer
+(`Skill.make`…``), dormant until the agent activates it. A tool is
+a static definition, declared synchronously at module scope:
+`AI.Tool("name")`…`(init)` — the tagged template is its description,
+the parameters it splices are its schema, and the INIT Effect (run
+once where the agent's Layer builds) acquires its services and
+bindings and returns the per-call handler. The handler's one
+implicit input is the calling session (`AI.Thread`); everything
+else is an explicit argument.
 
 Mention is presence: a stance's toolkit is exactly what its prose
 splices, and every splice charges the Layer's requirement channel,

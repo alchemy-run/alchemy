@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { attributed } from "../BindingAttribution.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { Thread } from "./Thread.ts";
 import type { In, Out, Thing } from "./Thing.ts";
 import type { Services } from "./Fragment.ts";
 import { makeSource, type Source } from "./Source.ts";
@@ -173,10 +174,16 @@ export interface Tool<
    * the legacy inline {@link ToolImpl}, so pre-static charters that
    * `yield*` the application keep working until they migrate.)
    */
-  <Err extends ToolErrors<Refs[number]> = never, Req = never>(
+  <
+    Err extends ToolErrors<Refs[number]> = never,
+    Req = never,
+    HandlerR extends Thread | RuntimeContext = never,
+  >(
     impl: Effect.Effect<
-      (props: this["params"]) => Effect.Effect<ToolReturns<Refs[number]>>,
-      Err,
+      (
+        props: this["params"],
+      ) => Effect.Effect<ToolReturns<Refs[number]>, Err, HandlerR>,
+      never,
       Req
     >,
   ): ToolDef<this, Err, Req | Services<Refs>>;

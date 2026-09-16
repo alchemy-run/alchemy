@@ -129,12 +129,9 @@ const headOut = AI.Thing("head", S.String)`
 const baseOut = AI.Thing("base", S.String)`
   The branch it merges into.`;
 
-/**
- * `read_issue` / `read_pull` — one entity, read fresh from GitHub:
- * title, state, body, and the latest comments. The company's agents
- * read the world on demand; nothing is mirrored.
- */
-export const makeEntityTools = Effect.gen(function* () {
+/** The connected repositories' GitHub doors, resolved once per host
+ *  Layer build — the read defs' shared init physics. */
+const entityRepos = Effect.gen(function* () {
   const repos = yield* Effect.forEach(connected, (entry) =>
     Effect.gen(function* () {
       const identity = yield* GitHub.resolveRepository(entry.repository);
@@ -178,17 +175,31 @@ export const makeEntityTools = Effect.gen(function* () {
     }));
   });
 
-  const readIssue = yield* AI.Tool("read_issue")`
-    Read issue ${refThing} fresh from GitHub. Answers
-    ${AI.out(titleOut, stateOut, bodyOut, commentsOut)}. Fails with
-    ${BadRef} when the ref is malformed, unconnected, or absent.`(
-    Effect.fn(function* (p: { ref: string }) {
+  return { repoOf, comments };
+});
+
+/**
+ * `read_issue` / `read_pull` — one entity, read fresh from GitHub:
+ * title, state, body, and the latest comments. The company's agents
+ * read the world on demand; nothing is mirrored. Static `ToolDef`s:
+ * the GitHub doors resolve once where the agent's Layer builds.
+ */
+export const readIssue = AI.Tool("read_issue")`
+  Read issue ${refThing} fresh from GitHub. Answers
+  ${AI.out(titleOut, stateOut, bodyOut, commentsOut)}. Fails with
+  ${BadRef} when the ref is malformed, unconnected, or absent.`(
+  Effect.gen(function* () {
+    const { repoOf, comments } = yield* entityRepos;
+    return Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
       const issue = yield* repo
         .getIssue({ issue_number: number })
         .pipe(
           Effect.mapError(
-            (error) => new BadRef({ message: `could not read ${p.ref}: ${error.message}` }),
+            (error) =>
+              new BadRef({
+                message: `could not read ${p.ref}: ${error.message}`,
+              }),
           ),
         );
       return {
@@ -197,21 +208,27 @@ export const makeEntityTools = Effect.gen(function* () {
         body: (issue.body ?? "").slice(0, 6_000),
         comments: yield* comments(repo, number),
       };
-    }),
-  );
+    });
+  }),
+);
 
-  const readPull = yield* AI.Tool("read_pull")`
-    Read pull request ${refThing} fresh from GitHub. Answers
-    ${AI.out(titleOut, stateOut, headOut, baseOut, bodyOut, commentsOut)}.
-    Fails with ${BadRef} when the ref is malformed, unconnected, or
-    absent.`(
-    Effect.fn(function* (p: { ref: string }) {
+export const readPull = AI.Tool("read_pull")`
+  Read pull request ${refThing} fresh from GitHub. Answers
+  ${AI.out(titleOut, stateOut, headOut, baseOut, bodyOut, commentsOut)}.
+  Fails with ${BadRef} when the ref is malformed, unconnected, or
+  absent.`(
+  Effect.gen(function* () {
+    const { repoOf, comments } = yield* entityRepos;
+    return Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
       const pull = yield* repo
         .getPull({ pull_number: number })
         .pipe(
           Effect.mapError(
-            (error) => new BadRef({ message: `could not read ${p.ref}: ${error.message}` }),
+            (error) =>
+              new BadRef({
+                message: `could not read ${p.ref}: ${error.message}`,
+              }),
           ),
         );
       return {
@@ -222,8 +239,6 @@ export const makeEntityTools = Effect.gen(function* () {
         body: (pull.body ?? "").slice(0, 6_000),
         comments: yield* comments(repo, number),
       };
-    }),
-  );
-
-  return { readIssue, readPull };
-});
+    });
+  }),
+);

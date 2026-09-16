@@ -6,11 +6,9 @@ import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Manager } from "../engineering/Manager.ts";
 import { MANAGER_ADDRESS } from "../engineering/Triage.ts";
-import { Head } from "../Head.ts";
 import { inWorker } from "../platform/Database.ts";
-import { nameOfKey, ROOT } from "../Root.ts";
+import { nameOfKey, ROOT } from "../Lineage.ts";
 import { mentionsOf } from "./Ask.ts";
 import { Posts } from "./Posts.ts";
 
@@ -37,8 +35,6 @@ export const ChannelsApi = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
   const posts = yield* Posts;
   const exec = yield* Cloudflare.WorkerExecutionContext;
-  const head = yield* Head;
-  const manager = yield* Manager;
 
   const channels = [
     { name: "root", chat: `Head:${ROOT}` },
@@ -53,25 +49,6 @@ export const ChannelsApi = Effect.gen(function* () {
    *  accumulates the channel's history. */
   const invocationKey = (standing: string, post: string) =>
     standing === ROOT ? `${ROOT}::head::${post}` : `${standing}::${post}`;
-
-  /** The channel's model pick lives on the STANDING session (the
-   *  header's selector) — each fresh invocation session inherits it
-   *  before the dispatch. */
-  const inheritModel = Effect.fn(function* (
-    term: string,
-    standing: string,
-    key: string,
-  ) {
-    const agent =
-      term === Head["~alchemy/Name"]
-        ? head
-        : term === Manager["~alchemy/Name"]
-          ? manager
-          : undefined;
-    if (agent === undefined) return;
-    const pick = yield* agent.at(standing).model();
-    if (pick !== undefined) yield* agent.at(key).setModel(pick);
-  });
 
   const parse = (id: string) => {
     const at = id.indexOf(":");
@@ -142,15 +119,12 @@ export const ChannelsApi = Effect.gen(function* () {
       value.length > 8_000 ? `${value.slice(0, 8_000)}\n[… clipped]` : value;
     const session = invocationKey(target.key, postId);
     yield* exec.waitUntil(
-      inheritModel(target.term, target.key, session).pipe(
-        Effect.andThen(
-          sessions.dispatch(target.term, session, {
-            id: postId,
-            author: HUMAN,
-            content: text,
-          }),
-        ),
-      )
+      sessions
+        .dispatch(target.term, session, {
+          id: postId,
+          author: HUMAN,
+          content: text,
+        })
         .pipe(
           Effect.flatMap((outcome) => {
             const answer = typeof outcome === "string" ? outcome.trim() : "";

@@ -18,7 +18,6 @@ import {
   PromptInputTextarea,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { SessionModelSelect } from "@/components/model-select";
 import { InputGroupAddon } from "@/components/ui/input-group";
 import {
   AuthorAvatar,
@@ -120,13 +119,6 @@ const Composer = ({
           />
         </PromptInputBody>
         <InputGroupAddon align="inline-end" className="gap-0.5 self-end py-1.5">
-          <SessionModelSelect
-            sessionId={chat}
-            label="The agent's model"
-            size="sm"
-            variant="ghost"
-            className="max-w-36 min-w-0 [&_span]:truncate"
-          />
           <PromptInputSubmit
             status={live ? "streaming" : undefined}
             onStop={() => {
