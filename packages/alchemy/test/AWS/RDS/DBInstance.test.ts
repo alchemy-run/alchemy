@@ -1,11 +1,17 @@
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+} from "@/AWS/IAM/Policy.ts";
 import { DBCluster, DBInstance } from "@/AWS/RDS";
 import type { DBInstanceProps } from "@/AWS/RDS/DBInstance.ts";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as rds from "@distilled.cloud/aws/rds";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -227,81 +233,176 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
   { timeout: 1_800_000 },
 );
 
-// Full standalone-instance lifecycle, gated behind RDS_TEST_LIFECYCLE=1.
-// Provisioning + modifying + deleting a real `db.t3.micro` takes ~10-15 min,
-// far beyond the default budget. It creates a gp3 Postgres instance with
-// explicit storage/backup knobs, asserts they round-trip, then does an
-// in-place modify (allocatedStorage up, backup retention, perf insights) and
-// re-reads to assert no replacement occurred (same ARN, same identifier).
+// RDS provisioning exceeds the default live-test budget.
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: managed secret policy updates and drift (PR 1598)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // The testing account has no default VPC/subnets, so provision a
-      // production-shaped network (VPC + subnets across 2 AZs) and a DB subnet
-      // group for the instance to live in.
-      const network = Effect.gen(function* () {
-        const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
-        // No fixed name — let the engine generate a unique physical name so a
-        // leftover group from an interrupted run can't force a cross-VPC
-        // ModifyDBSubnetGroup ("new Subnets are not in the same Vpc").
-        const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
-          description: "alchemy standalone instance lifecycle",
-          subnetIds: net.privateSubnetIds,
-        });
-        return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
+      const { accountId } = yield* AWSEnvironment.current;
+      const policy = (actions: string[]): PolicyDocument => ({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: actions,
+            Resource: "*",
+          },
+        ],
       });
+      const initialPolicy = policy(["secretsmanager:DescribeSecret"]);
+      const updatedPolicy = policy([
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy",
+      ]);
+      const program = (
+        masterUserSecretResourcePolicy: PolicyDocument | undefined,
+        updated: boolean,
+        round: string,
+      ) =>
+        Effect.gen(function* () {
+          const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
+          const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
+            description: "alchemy standalone instance lifecycle",
+            subnetIds: net.privateSubnetIds,
+          });
+          return yield* DBInstance("StandaloneInstance", {
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            allocatedStorage: updated ? 25 : 20,
+            storageType: "gp3",
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            masterUserSecretResourcePolicy,
+            backupRetentionPeriod: updated ? "3 days" : "1 day",
+            enablePerformanceInsights: updated ? true : undefined,
+            deletionProtection: false,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            publiclyAccessible: false,
+            tags: { round },
+          });
+        });
 
       const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 20,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "1 day",
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
+        program(initialPolicy, false, "created"),
       );
-
-      expect(created.allocatedStorage).toBe(20);
-      expect(created.storageType).toBe("gp3");
-      expect(created.backupRetentionPeriod).toBe(1);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 25,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "3 days",
-            enablePerformanceInsights: true,
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      const initial = (yield* describe).DBInstances?.[0];
+      const secretArn = initial?.MasterUserSecret?.SecretArn;
+      if (!secretArn) {
+        return yield* Effect.fail(
+          new Error("RDS did not return its managed master secret ARN"),
+        );
+      }
+      expect(created.masterUserSecretArn).toBe(secretArn);
+      expect(initial?.DBInstanceArn).toBe(created.dbInstanceArn);
+      expect(initial?.AllocatedStorage).toBe(20);
+      expect(initial?.StorageType).toBe("gp3");
+      expect(initial?.BackupRetentionPeriod).toBe(1);
+      expect(created.masterUserSecretResourcePolicy).toBe(
+        normalizePolicyDocument(initialPolicy),
       );
+      // Only policy metadata is read; master credential values are never fetched.
+      const readPolicy = secretsmanager
+        .getResourcePolicy({ SecretId: secretArn })
+        .pipe(
+          Effect.map((response) =>
+            response.ResourcePolicy === undefined
+              ? undefined
+              : normalizePolicyDocument(response.ResourcePolicy),
+          ),
+        );
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
 
-      // In-place modify — identity is preserved (no replacement).
+      const updatedProgram = program(updatedPolicy, true, "updated");
+      const updated = yield* stack.deploy(updatedProgram);
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
-      expect(updated.backupRetentionPeriod).toBe(3);
+      expect(updated.dbInstanceIdentifier).toBe(created.dbInstanceIdentifier);
+      expect(updated.masterUserSecretArn).toBe(secretArn);
+      expect(updated.masterUserSecretResourcePolicy).toBe(
+        normalizePolicyDocument(updatedPolicy),
+      );
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.AllocatedStorage).toBe(25);
+      expect(observed?.BackupRetentionPeriod).toBe(3);
+      expect(observed?.PerformanceInsightsEnabled).toBe(true);
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
+
+      // Remove the live policy without changing desired props.
+      yield* secretsmanager.deleteResourcePolicy({ SecretId: secretArn });
+      const removed = yield* readPolicy.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (value) => value === undefined,
+        }),
+      );
+      expect(removed).toBeUndefined();
+      expect(
+        (yield* stack.plan(updatedProgram)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "update" });
+      const repaired = yield* stack.deploy(updatedProgram);
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(repaired.masterUserSecretArn).toBe(secretArn);
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+
+      // Omission relinquishes management; it must not delete the live policy.
+      const omitted = yield* stack.deploy(program(undefined, true, "omitted"));
+      expect(omitted.masterUserSecretArn).toBe(secretArn);
+      expect(omitted.masterUserSecretResourcePolicy).toBeUndefined();
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+      yield* secretsmanager.putResourcePolicy({
+        SecretId: secretArn,
+        ResourcePolicy: normalizePolicyDocument(initialPolicy),
+        BlockPublicPolicy: true,
+      });
+      const unmanagedPolicy = yield* readPolicy.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (value) => value === normalizePolicyDocument(initialPolicy),
+        }),
+      );
+      expect(unmanagedPolicy).toBe(normalizePolicyDocument(initialPolicy));
+      const unmanaged = yield* stack.deploy(
+        program(undefined, true, "unmanaged"),
+      );
+      expect(unmanaged.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(unmanaged.masterUserSecretResourcePolicy).toBeUndefined();
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
+      const secretGone = yield* secretsmanager
+        .describeSecret({ SecretId: secretArn })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (absent) => absent,
+          }),
+        );
+      expect(secretGone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
