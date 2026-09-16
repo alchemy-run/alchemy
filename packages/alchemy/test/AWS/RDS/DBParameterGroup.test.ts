@@ -185,11 +185,50 @@ test.provider("parameters are written, updated and reset", (stack) =>
 );
 
 test.provider(
+  "PR1590 adoption resets undeclared overrides to the same defaults as creation",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = "alchemy-test-pr1590-adopt-parameters";
+      yield* rds.createDBParameterGroup({
+        DBParameterGroupName: name,
+        DBParameterGroupFamily: "postgres16",
+        Description: "Desired-state adoption regression",
+      });
+      yield* modifyParameters(name, [
+        {
+          ParameterName: "work_mem",
+          ParameterValue: "8192",
+          ApplyMethod: "immediate",
+        },
+      ]);
+      yield* waitForParameters(
+        name,
+        (parameters) => parameters.get("work_mem")?.ParameterValue === "8192",
+      );
+      const program = DBParameterGroup("AdoptedParameters1590", {
+        dbParameterGroupName: name,
+        family: "postgres16",
+        description: "Desired-state adoption regression",
+      });
+      const adopted = yield* stack.deploy(program);
+      expect(adopted.parameters).toEqual({});
+      expect(yield* userParameters(name)).toEqual({});
+      expect(
+        (yield* stack.plan(program)).resources.AdoptedParameters1590?.action,
+      ).toBe("noop");
+      yield* stack.destroy();
+      yield* assertGroupGone(name);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
   "PR1590 plans and repairs live modify/reset drift with unchanged props",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const program = (parameters: Record<string, string>) =>
+      const program = (parameters?: Record<string, string>) =>
         Effect.gen(function* () {
           const group = yield* DBParameterGroup("DriftParameters1590", {
             family: "postgres16",
@@ -262,14 +301,7 @@ test.provider(
       expect(repaired.group.dbParameterGroupArn).toBe(
         created.group.dbParameterGroupArn,
       );
-      // #1590 does not include #1589's post-write readback wait.
-      yield* waitForParameters(
-        name,
-        (parameters) =>
-          parameters.get("log_autovacuum_min_duration")?.ParameterValue ===
-            desired.log_autovacuum_min_duration &&
-          parameters.get("max_connections")?.Source !== "user",
-      );
+      expect(repaired.group.parameters).toEqual(desired);
       expect(yield* userParameters(name)).toEqual(desired);
       expect(
         (yield* stack.plan(program(desired))).resources.DriftParameters1590
@@ -302,6 +334,31 @@ test.provider(
           desired.log_autovacuum_min_duration,
       );
       expect(yield* userParameters(name)).toEqual(desired);
+
+      const omitted = yield* stack.deploy(program());
+      expect(omitted.group.parameters).toEqual({});
+      expect(yield* userParameters(name)).toEqual({});
+      yield* modifyParameters(name, [
+        {
+          ParameterName: "max_connections",
+          ParameterValue: "200",
+          ApplyMethod: "pending-reboot",
+        },
+      ]);
+      yield* waitForParameters(
+        name,
+        (parameters) =>
+          parameters.get("max_connections")?.ParameterValue === "200",
+      );
+      const omittedDrift = yield* stack.plan(program());
+      expect(omittedDrift.resources.DriftParameters1590?.action).toBe("update");
+      expect(omittedDrift.resources.StableReference1590?.action).toBe("noop");
+      const cleared = yield* stack.deploy(program());
+      expect(cleared.group.parameters).toEqual({});
+      expect(yield* userParameters(name)).toEqual({});
+      expect(
+        (yield* stack.plan(program())).resources.DriftParameters1590?.action,
+      ).toBe("noop");
       yield* stack.destroy();
       yield* assertGroupGone(name);
       yield* assertGroupGone(created.dependent.dbParameterGroupName);
@@ -346,7 +403,7 @@ test.provider(
       ).toBe("noop");
       const initial = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(initial.resources.DefaultParameters1590).toMatchObject({
         action: "unchanged",
@@ -399,7 +456,7 @@ test.provider(
       ).toBe("noop");
       const reset = yield* Drift.detect({
         name: stack.name,
-        stage: "test",
+        stage: stack.stage,
       }).pipe(Effect.provide(stack.state));
       expect(reset.resources.DefaultParameters1590).toMatchObject({
         action: "unchanged",

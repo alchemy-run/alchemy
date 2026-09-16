@@ -10,7 +10,7 @@
  * What the helper owns (identically for every consumer):
  *
  * - **RPC-sidecar hosting** via {@link RpcProvider.effect} with the shared
- *   AWS dev sidecar entry ([Local.ts](./Local.ts)), so the provider and its
+ *   AWS provider group ([Local.ts](./Local.ts)), so the provider and its
  *   watch fibers survive exec-process hot reloads during `alchemy dev`.
  * - **Live-provider delegation** — builds the caller's LIVE provider layer
  *   inside the floci override context ({@link flociServices} + optional
@@ -47,15 +47,16 @@ import type { ProviderService } from "../../Provider.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
+import { moduleExtension } from "../../Util/Node.ts";
 
 /**
- * The AWS dev sidecar entry URL ([Local.ts](./Local.ts)) — every
+ * The AWS provider group module ([Local.ts](./Local.ts)) — every
  * {@link makeDevWatchProvider} consumer passes this so all floci dev
- * providers share ONE sidecar process.
+ * providers are served from the same group by the dev sidecar.
  */
-export const flociSidecarEntry = () =>
+export const flociProvidersUrl = () =>
   import.meta.resolve(
-    import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+    `./Local${moduleExtension(import.meta.url)}`,
     import.meta.url,
   );
 
@@ -203,12 +204,12 @@ export const makeDevWatchProvider = <
   Attrs = R["Attributes"],
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
-  serverEntryUrl: string,
+  providersUrl: string,
   spec: DevWatchSpec<Props, Attrs>,
 ) =>
   RpcProvider.effect(
     cls,
-    serverEntryUrl,
+    providersUrl,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const ambient = yield* Effect.context<never>();
