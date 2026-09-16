@@ -16,6 +16,7 @@
  */
 import { ChatView } from "@/components/chat";
 import { ChannelFeed, ThreadView } from "@/components/channel-feed";
+import { PaneContext } from "@/components/pane-context";
 import { CallThread } from "@/components/call";
 import { MembersPanel } from "@/components/members";
 import { AgentProfile } from "@/components/agent-profile";
@@ -377,8 +378,8 @@ export const App = () => {
     window.localStorage.setItem("root:col-weights", JSON.stringify(colWeights));
   }, [colWeights]);
 
-  /** VERTICAL weights of the pane stack — one per pane, dragged at
-   *  the row dividers; a new pane arrives at weight 1. */
+  /** Weights of the pane COLUMNS — one per pane, dragged at the
+   *  dividers between them; a new pane arrives at weight 1. */
   const [paneWeights, setPaneWeights] = useState<ReadonlyArray<number>>([]);
   useEffect(() => {
     setPaneWeights((current) =>
@@ -443,17 +444,17 @@ export const App = () => {
     });
   };
 
-  /** Row divider inside the pane stack: the two adjacent panes trade
-   *  height. */
+  /** Divider inside the pane stack: the two adjacent pane COLUMNS
+   *  trade width. */
   const startRowDrag = (down: ReactPointerEvent, above: number) => {
     const stack = stackRef.current;
     if (stack === null) return;
     const total = paneWeights.reduce((sum, weight) => sum + weight, 0) || 1;
-    const pxPerWeight = stack.clientHeight / total;
+    const pxPerWeight = stack.clientWidth / total;
     const from = [...paneWeights];
     const clampWeight = (value: number) => Math.min(8, Math.max(0.15, value));
-    dragFrom(down, "y", (dy) => {
-      const dw = dy / pxPerWeight;
+    dragFrom(down, "x", (dx) => {
+      const dw = dx / pxPerWeight;
       setPaneWeights(
         from.map((weight, index) =>
           index === above
@@ -678,11 +679,11 @@ export const App = () => {
           />
         ))}
 
-        {/* an agent's WORKING — the next column: clicking an agent
-            in the thread splits again */}
-        {/* the PANE STACK — one column right of the thread; every
-            pane opened from it splits VERTICALLY here (tmux):
-            workings and terminals in click order */}
+        {/* the PANE STACK — MILLER COLUMNS marching right of the
+            thread: agent workings, terminals, and referenced threads
+            in click order. A reference clicked inside a pane splits
+            right-adjacent to it; the chain grows arbitrarily far
+            right (the stack scrolls) and is never blown away. */}
         {panes.length > 0 && (
           <div
             role="separator"
@@ -703,19 +704,25 @@ export const App = () => {
             ref={stackRef}
             aria-label="panes"
             style={{ flexGrow: colWeights.panes, flexBasis: 0 }}
-            className="flex min-h-0 min-w-0 flex-col border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
+            className="flex min-h-0 min-w-0 flex-row overflow-x-auto border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
           >
             {panes.map((pane, index) => (
               <Fragment
-                key={pane.kind === "agent" ? `a:${pane.id}` : `w:${pane.name}`}
+                key={
+                  pane.kind === "agent"
+                    ? `a:${pane.id}`
+                    : pane.kind === "workspace"
+                      ? `w:${pane.name}`
+                      : `p:${pane.channel}:${pane.id}`
+                }
               >
                 {index > 0 && (
                   <div
                     role="separator"
-                    aria-orientation="horizontal"
+                    aria-orientation="vertical"
                     aria-label="resize the pane"
                     onPointerDown={(down) => startRowDrag(down, index - 1)}
-                    className="z-10 -my-[3px] h-1.5 w-full shrink-0 cursor-row-resize border-t border-border hover:bg-border active:bg-primary/40"
+                    className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize border-l border-border hover:bg-border active:bg-primary/40"
                   />
                 )}
                 <div
@@ -724,13 +731,28 @@ export const App = () => {
                     flexShrink: 1,
                     flexBasis: 0,
                   }}
-                  className="flex min-h-0 min-w-0 flex-col"
+                  className="flex min-h-0 min-w-[20rem] flex-col"
                 >
-                  {pane.kind === "agent" ? (
-                    <AgentColumn id={pane.id} />
-                  ) : (
-                    <WorkspaceColumn name={pane.name} />
-                  )}
+                  {/* the pane knows ITSELF — a reference clicked
+                      inside opens right-adjacent to it */}
+                  <PaneContext.Provider value={pane}>
+                    {pane.kind === "agent" ? (
+                      <AgentColumn id={pane.id} />
+                    ) : pane.kind === "workspace" ? (
+                      <WorkspaceColumn name={pane.name} />
+                    ) : (
+                      <ThreadView
+                        channel={pane.channel}
+                        chat={
+                          channels.find(
+                            (entry) => entry.name === pane.channel,
+                          )?.chat ?? ""
+                        }
+                        id={pane.id}
+                        onClose={() => closePane(pane)}
+                      />
+                    )}
+                  </PaneContext.Provider>
                 </div>
               </Fragment>
             ))}

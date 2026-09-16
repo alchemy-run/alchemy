@@ -25,7 +25,8 @@
  */
 import { Avatar, HUMAN, sessionOf } from "@/components/avatar";
 import { formatAt, MarkdownText } from "@/components/chat";
-import { showOverlay, showThread } from "@/lib/routes";
+import { PaneContext } from "@/components/pane-context";
+import { openPane, showOverlay, showThread } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   ChevronRight,
@@ -186,9 +187,13 @@ const ReplyRef = ({ target }: { target: Post }) => (
 );
 
 /** A `#<message-id>` reference in text — a chip like the `@mention`
- *  (message icon, author, first words); clicking opens the thread it
- *  lives in and scrolls it into view. */
+ *  (message icon, author, first words). Clicking NEVER replaces the
+ *  view: the referenced thread opens as a pane RIGHT-ADJACENT to
+ *  wherever the click happened (the stack's end from the feed or the
+ *  center thread; right of the source pane from inside the stack),
+ *  and the message scrolls into view there. The chain only grows. */
 export const PostRef = ({ id }: { id: string }) => {
+  const source = useContext(PaneContext);
   const [target, setTarget] = useState<
     { post: Post; thread: string } | undefined
   >(undefined);
@@ -213,10 +218,17 @@ export const PostRef = ({ id }: { id: string }) => {
       type="button"
       onClick={(event) => {
         event.stopPropagation();
-        // the message lives in a thread — open that place, then ask
-        // the thread view to scroll it into view
+        // the message lives in a thread — split it open beside the
+        // click, then ask the pane to scroll it into view
         if (target !== undefined) {
-          showThread(target.post.channel ?? "root", target.thread);
+          openPane(
+            {
+              kind: "post",
+              channel: target.post.channel ?? "root",
+              id: target.thread,
+            },
+            { after: source },
+          );
         }
         revealPost(id);
       }}

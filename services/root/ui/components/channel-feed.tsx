@@ -304,6 +304,7 @@ export const ThreadView = ({
   id,
   active = true,
   weight,
+  onClose,
 }: {
   channel: string;
   chat: string;
@@ -315,6 +316,9 @@ export const ThreadView = ({
   active?: boolean;
   /** The column's proportional share — dragged at the divider. */
   weight?: number;
+  /** The X — the center thread returns to its channel; a PANE in the
+   *  reference chain closes just itself. */
+  onClose?: () => void;
 }) => {
   const { posts, refresh } = useChannelPosts(channel);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -403,10 +407,15 @@ export const ThreadView = ({
       )}
     >
       <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm font-medium">Thread</span>
+        <span className="flex min-w-0 items-baseline gap-1.5 text-sm font-medium">
+          Thread
+          <span className="truncate font-mono text-[10px] font-normal text-muted-foreground">
+            #{channel}
+          </span>
+        </span>
         <button
           type="button"
-          onClick={() => showChannel(channel)}
+          onClick={() => (onClose !== undefined ? onClose() : showChannel(channel))}
           aria-label="close the thread"
           className="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent"
         >
