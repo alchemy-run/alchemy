@@ -14,7 +14,7 @@ import {
 const app = (id: string, branchId: string | null = "branch-main") => ({
   id,
   type: "app" as const,
-  url: `https://api.prisma.test/v1/apps/${id}`,
+  url: `https://api.prisma.test/v1/services/${id}`,
   name: "api",
   region: { id: "us-east-1" as const, name: "US East" },
   projectId: "project-1",
@@ -64,7 +64,7 @@ const clientBackedApi = (client: any) =>
     const query = Object.fromEntries(new URLSearchParams(request.search));
     const { call, callVoid, list } = dispatchTo(request);
 
-    if (head === "apps") {
+    if (head === "services") {
       if (id === undefined) {
         return request.method === "GET"
           ? call(client.listApps, [query], list)

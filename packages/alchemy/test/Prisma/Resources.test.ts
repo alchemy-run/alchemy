@@ -270,7 +270,7 @@ const makeClient = () => {
       return Effect.succeed({
         id: "service-1",
         type: "app",
-        url: "https://api.prisma.test/v1/apps/service-1",
+        url: "https://api.prisma.test/v1/services/service-1",
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -285,7 +285,7 @@ const makeClient = () => {
       return Effect.succeed({
         id,
         type: "app",
-        url: `https://api.prisma.test/v1/apps/${id}`,
+        url: `https://api.prisma.test/v1/services/${id}`,
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -342,6 +342,7 @@ const makeClient = () => {
       return Effect.succeed({
         id,
         type: "deployment",
+        serviceId: "service-1",
         url: `https://api.prisma.test/v1/deployments/${id}`,
         foundryVersionId: "foundry-1",
         status: "new",
@@ -554,7 +555,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       }
     }
 
-    if (head === "apps") {
+    if (head === "services") {
       if (id === undefined) {
         return request.method === "GET"
           ? call(
@@ -591,14 +592,14 @@ const dispatchManagement = (client: any, request: Captured): Response => {
       }
     }
 
-    if (head === "apps" && id !== undefined && tail === "promote") {
+    if (head === "services" && id !== undefined && tail === "promote") {
       return call(client.promoteApp, [id, body]);
     }
-    if (head === "apps" && id !== undefined && tail === "rollback") {
+    if (head === "services" && id !== undefined && tail === "rollback") {
       return call(client.rollbackApp, [id, body]);
     }
     if (
-      head === "apps" &&
+      head === "services" &&
       id !== undefined &&
       tail === undefined &&
       request.method === "DELETE"
@@ -1778,7 +1779,7 @@ describe("Prisma resource providers", () => {
             {
               id: "service-1",
               type: "app" as const,
-              url: "https://api.prisma.test/v1/apps/service-1",
+              url: "https://api.prisma.test/v1/services/service-1",
               name: "api",
               region: { id: "us-east-1", name: "US East" },
               projectId: query.projectId,
@@ -1796,6 +1797,7 @@ describe("Prisma resource providers", () => {
             {
               id: "version-1",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-1",
               foundryVersionId: "foundry-1",
               createdAt,
@@ -1808,6 +1810,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "running",
@@ -1943,10 +1946,10 @@ describe("Prisma resource providers", () => {
         "GET /v1/databases/database-1/connections",
         "GET /v1/databases/database-1/connections",
         "GET /v1/projects/project-1/branches",
-        "GET /v1/apps",
+        "GET /v1/services",
         "GET /v1/projects/project-1/branches",
         "GET /v1/deployments/version-1",
-        "GET /v1/apps/service-1/deployments",
+        "GET /v1/services/service-1/deployments",
         "GET /v1/environment-variables",
         "GET /v1/source-repositories",
       ]);
@@ -2051,12 +2054,12 @@ describe("Prisma resource providers", () => {
           "listAppDeployments",
           appId,
           "GET",
-          `/v1/apps/${appId}/deployments`,
+          `/v1/services/${appId}/deployments`,
         ),
       deleteApp: (id: string) =>
-        failNotFound("deleteApp", id, "DELETE", `/v1/apps/${id}`),
+        failNotFound("deleteApp", id, "DELETE", `/v1/services/${id}`),
       getApp: (id: string) =>
-        failNotFound("getApp", id, "GET", `/v1/apps/${id}`),
+        failNotFound("getApp", id, "GET", `/v1/services/${id}`),
       getDeployment: (id: string) =>
         failNotFound("getDeployment", id, "GET", `/v1/deployments/${id}`),
     } as unknown as PrismaManagementClient;
@@ -2271,12 +2274,12 @@ describe("Prisma resource providers", () => {
           "GET /v1/projects/project-1/branches",
           "POST /v1/projects/project-1/branches",
           "GET /v1/projects/project-1/branches",
-          "POST /v1/apps",
+          "POST /v1/services",
           "GET /v1/projects/project-1/branches",
-          "POST /v1/apps/service-1/deployments",
+          "POST /v1/services/service-1/deployments",
           "GET /v1/deployments/version-1",
           "POST /v1/environment-variables",
-          "GET /v1/apps",
+          "GET /v1/services",
           "GET /v1/projects/project-1/databases",
           "POST /v1/source-repositories",
           "GET /v1/source-repositories/repo-1",
@@ -2660,6 +2663,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status,
@@ -2680,7 +2684,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "api-000000000000",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -3339,7 +3343,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -3355,7 +3359,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "web",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -3637,7 +3641,7 @@ describe("Prisma resource providers", () => {
             return {
               id,
               type: "app" as const,
-              url: `https://api.prisma.test/v1/apps/${id}`,
+              url: `https://api.prisma.test/v1/services/${id}`,
               name: "api",
               region: { id: "us-east-1", name: "US East" },
               projectId: "project-1",
@@ -4595,6 +4599,7 @@ describe("Prisma resource providers", () => {
             {
               id: "version-1",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-1",
               foundryVersionId: "foundry-1",
               createdAt,
@@ -4607,6 +4612,7 @@ describe("Prisma resource providers", () => {
           return {
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: status.get(id) ?? "stopped",
@@ -5228,7 +5234,7 @@ describe("Prisma resource providers", () => {
     const service = {
       id: "service-1",
       type: "app" as const,
-      url: "https://api.prisma.test/v1/apps/service-1",
+      url: "https://api.prisma.test/v1/services/service-1",
       name: "api",
       region: { id: "us-east-1", name: "US East" },
       projectId: "project-1",
@@ -5341,7 +5347,7 @@ describe("Prisma resource providers", () => {
         Effect.gen(function* () {
           calls.push(["createApp", input]);
           visible.add("service");
-          return yield* Effect.fail(apiConflict(`/v1/apps`));
+          return yield* Effect.fail(apiConflict(`/v1/services`));
         }),
       listEnvironmentVariables: (query: unknown) =>
         Effect.sync(() => {

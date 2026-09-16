@@ -14,9 +14,9 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {
-  type GetV1AppsByAppIdDeploymentsResponse,
-  getV1AppsByAppIdDeployments,
-  postV1AppsByAppIdDeployments,
+  type GetServiceDeploymentsResponse,
+  getServiceDeployments,
+  createServiceDeployment,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import {
@@ -222,14 +222,13 @@ export const Deployment = Resource<Deployment>("Prisma.Deployment");
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listAppDeployments = (appId: string) =>
   Effect.gen(function* () {
-    const deployments: GetV1AppsByAppIdDeploymentsResponse["data"][number][] =
-      [];
+    const deployments: GetServiceDeploymentsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1AppsByAppIdDeployments(
+      const page = yield* getServiceDeployments(
         cursor === undefined
-          ? { appId, limit: 100 }
-          : { appId, limit: 100, cursor },
+          ? { serviceId: appId, limit: 100 }
+          : { serviceId: appId, limit: 100, cursor },
       );
       deployments.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
@@ -238,7 +237,7 @@ const listAppDeployments = (appId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1AppsByAppIdDeployments: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -674,8 +673,8 @@ const ProviderLive = () =>
               : Effect.fail(error);
 
           if (!deployment) {
-            const created = yield* postV1AppsByAppIdDeployments({
-              appId,
+            const created = yield* createServiceDeployment({
+              serviceId: appId,
               ...(news.portMapping === undefined
                 ? {}
                 : { portMapping: news.portMapping }),

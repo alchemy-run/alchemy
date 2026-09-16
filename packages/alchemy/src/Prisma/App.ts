@@ -12,13 +12,13 @@ import {
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1AppsResponse,
-  type GetV1ProjectsByProjectIdBranchesResponse,
-  getV1Apps,
-  getV1AppsByAppId,
-  getV1ProjectsByProjectIdBranches,
-  patchV1AppsByAppId,
-  postV1Apps,
+  type GetServicesResponse,
+  type GetProjectBranchesResponse,
+  getServices,
+  getService,
+  getProjectBranches,
+  updateService,
+  createService,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import { destroyApp } from "./ComputeLifecycle.ts";
@@ -135,11 +135,10 @@ export const App = Resource<App>("Prisma.App");
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listBranches = (projectId: string, gitName?: string) =>
   Effect.gen(function* () {
-    const branches: GetV1ProjectsByProjectIdBranchesResponse["data"][number][] =
-      [];
+    const branches: GetProjectBranchesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1ProjectsByProjectIdBranches({
+      const page = yield* getProjectBranches({
         projectId,
         limit: 100,
         ...(gitName === undefined ? {} : { gitName }),
@@ -152,7 +151,7 @@ const listBranches = (projectId: string, gitName?: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdBranches: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -163,10 +162,10 @@ const listBranches = (projectId: string, gitName?: string) =>
 
 const listApps = (projectId?: string) =>
   Effect.gen(function* () {
-    const apps: GetV1AppsResponse["data"][number][] = [];
+    const apps: GetServicesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Apps({
+      const page = yield* getServices({
         limit: 100,
         ...(projectId === undefined ? {} : { projectId }),
         ...(cursor === undefined ? {} : { cursor }),
@@ -178,7 +177,7 @@ const listApps = (projectId?: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Apps: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -366,7 +365,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.appId;
           const app = appId
-            ? yield* getV1AppsByAppId({ appId }).pipe(
+            ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -402,13 +401,13 @@ const ProviderLive = () =>
             ? undefined
             : output?.appId;
           let app: ObservedApp | undefined = appId
-            ? yield* getV1AppsByAppId({ appId }).pipe(
+            ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
             : undefined;
           if (!app) {
-            const result = yield* postV1Apps({
+            const result = yield* createService({
               projectId,
               displayName,
               branchId: branch.id,
@@ -449,8 +448,8 @@ const ProviderLive = () =>
           );
           const needsBranchSync = yield* branchNeedsSync(projectId, app, news);
           if (app.name !== displayName || needsBranchSync) {
-            app = yield* patchV1AppsByAppId({
-              appId: app.id,
+            app = yield* updateService({
+              serviceId: app.id,
               displayName,
               branchId: branch.id,
             }).pipe(Effect.map((response) => response.data));
@@ -466,7 +465,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.appId)) return;
-          const app = yield* getV1AppsByAppId({ appId: output.appId }).pipe(
+          const app = yield* getService({ serviceId: output.appId }).pipe(
             Effect.map((response) => response.data),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );

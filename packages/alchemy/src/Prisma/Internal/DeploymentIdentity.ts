@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import {
-  type GetV1AppsByAppIdDeploymentsResponse,
-  getV1AppsByAppIdDeployments,
+  type GetServiceDeploymentsResponse,
+  getServiceDeployments,
 } from "@distilled.cloud/prisma-postgres/management";
 import { PrismaPaginationError } from "./Pagination.ts";
 
@@ -14,11 +14,13 @@ export const ensureDeploymentMembership = Effect.fn(function* (
   if (knownLatestDeploymentId === deployment.id) return;
   // Distilled emits the cursor-paginated list operations as plain ops, so
   // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-  const deployments: GetV1AppsByAppIdDeploymentsResponse["data"][number][] = [];
+  const deployments: GetServiceDeploymentsResponse["data"][number][] = [];
   let cursor: string | undefined;
   while (true) {
-    const page = yield* getV1AppsByAppIdDeployments(
-      cursor === undefined ? { appId } : { appId, cursor },
+    const page = yield* getServiceDeployments(
+      cursor === undefined
+        ? { serviceId: appId }
+        : { serviceId: appId, cursor },
     );
     deployments.push(...page.data);
     const nextCursor = page.pagination.nextCursor;
@@ -27,7 +29,7 @@ export const ensureDeploymentMembership = Effect.fn(function* (
       return yield* Effect.fail(
         new PrismaPaginationError({
           message:
-            "Invalid Prisma Management API pagination response from getV1AppsByAppIdDeployments: hasMore was true without a non-empty nextCursor",
+            "Invalid Prisma Management API pagination response from getServiceDeployments: hasMore was true without a non-empty nextCursor",
         }),
       );
     }

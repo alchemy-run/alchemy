@@ -135,7 +135,7 @@ const clientBackedApi = (client: any) =>
         return call(client.listProjectDatabases, [id, query], list);
       }
     }
-    if (head === "apps" && id === undefined && request.method === "GET") {
+    if (head === "services" && id === undefined && request.method === "GET") {
       return call(client.listApps, [query], list);
     }
     if (head === "environment-variables") {
@@ -403,7 +403,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
   const fake = makeFakeManagementApi((request) => {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
 
-    if (request.pathname === "/v1/apps" && request.method === "GET") {
+    if (request.pathname === "/v1/services" && request.method === "GET") {
       calls.push([
         "listApps",
         Object.fromEntries(new URLSearchParams(request.search)),
@@ -1507,7 +1507,7 @@ const customDomainClient = {
       return {
         id: appId,
         type: "app" as const,
-        url: `https://api.prisma.test/v1/apps/${appId}`,
+        url: `https://api.prisma.test/v1/services/${appId}`,
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",

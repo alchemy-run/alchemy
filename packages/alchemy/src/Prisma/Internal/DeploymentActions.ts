@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import type { Conflict } from "@distilled.cloud/prisma-postgres";
 import {
-  postV1DeploymentsByDeploymentIdStart,
-  postV1DeploymentsByDeploymentIdStop,
+  createDeploymentStart,
+  createDeploymentStop,
 } from "@distilled.cloud/prisma-postgres/management";
 import { observeDeployment } from "./DeploymentObserve.ts";
 
@@ -27,7 +27,7 @@ const stopConflictIsIdempotent = (deploymentId: string, error: Conflict) =>
   );
 
 export const startDeploymentIdempotent = (deploymentId: string) =>
-  postV1DeploymentsByDeploymentIdStart({ deploymentId }).pipe(
+  createDeploymentStart({ deploymentId }).pipe(
     Effect.map((response) => response.data),
     Effect.catchTag("Conflict", (error) =>
       startConflictIsIdempotent(deploymentId, error),
@@ -35,7 +35,7 @@ export const startDeploymentIdempotent = (deploymentId: string) =>
   );
 
 export const stopDeploymentIdempotent = (deploymentId: string) =>
-  postV1DeploymentsByDeploymentIdStop({ deploymentId }).pipe(
+  createDeploymentStop({ deploymentId }).pipe(
     Effect.asVoid,
     Effect.catchTag("Conflict", (error) =>
       stopConflictIsIdempotent(deploymentId, error),

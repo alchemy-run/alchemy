@@ -15,13 +15,13 @@ import {
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1ConnectionsResponse,
-  deleteV1ConnectionsById,
-  getV1Connections,
-  getV1ConnectionsById,
-  getV1DatabasesByDatabaseIdConnections,
-  postV1Connections,
-  postV1ConnectionsByIdRotate,
+  type GetConnectionsResponse,
+  deleteConnection,
+  getConnections,
+  getConnection,
+  getDatabaseConnections,
+  createConnection,
+  createConnectionRotate,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import { extractConnectionSecrets } from "./Client.ts";
@@ -267,10 +267,10 @@ export const Connection = Resource<Connection>("Prisma.Connection");
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listDatabaseConnections = (databaseId: string) =>
   Effect.gen(function* () {
-    const connections: GetV1ConnectionsResponse["data"][number][] = [];
+    const connections: GetConnectionsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1DatabasesByDatabaseIdConnections(
+      const page = yield* getDatabaseConnections(
         cursor === undefined
           ? { databaseId, limit: 100 }
           : { databaseId, limit: 100, cursor },
@@ -282,7 +282,7 @@ const listDatabaseConnections = (databaseId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1DatabasesByDatabaseIdConnections: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getDatabaseConnections: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -293,10 +293,10 @@ const listDatabaseConnections = (databaseId: string) =>
 
 const listAllConnections = () =>
   Effect.gen(function* () {
-    const connections: GetV1ConnectionsResponse["data"][number][] = [];
+    const connections: GetConnectionsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Connections(
+      const page = yield* getConnections(
         cursor === undefined ? {} : { cursor },
       );
       connections.push(...page.data);
@@ -306,7 +306,7 @@ const listAllConnections = () =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Connections: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getConnections: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -481,7 +481,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.connectionId;
           if (connectionId && output) {
-            const connection = yield* getV1ConnectionsById({
+            const connection = yield* getConnection({
               id: connectionId,
             }).pipe(
               Effect.map((response) => response.data),
@@ -551,7 +551,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.connectionId;
           let connection: ObservedConnectionRecord | undefined = connectionId
-            ? yield* getV1ConnectionsById({ id: connectionId }).pipe(
+            ? yield* getConnection({ id: connectionId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -594,7 +594,7 @@ const ProviderLive = () =>
             ? extractConnectionSecrets(connection)
             : {};
           if (!connection) {
-            const create = postV1Connections({
+            const create = createConnection({
               databaseId,
               name: physicalName,
             }).pipe(
@@ -628,7 +628,7 @@ const ProviderLive = () =>
             recoveringOwnedGeneratedSecrets ||
             (news.rotate === true && olds?.rotate !== true)
           ) {
-            const rotated = yield* postV1ConnectionsByIdRotate({
+            const rotated = yield* createConnectionRotate({
               id: connection.id,
             }).pipe(
               // Rotation mints new credentials; a replay would revoke the
@@ -673,7 +673,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.connectionId)) return;
-          const connection = yield* getV1ConnectionsById({
+          const connection = yield* getConnection({
             id: output.connectionId,
           }).pipe(
             Effect.map((response) => response.data),
@@ -690,7 +690,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          yield* deleteV1ConnectionsById({ id: connection.id }).pipe(
+          yield* deleteConnection({ id: connection.id }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }),

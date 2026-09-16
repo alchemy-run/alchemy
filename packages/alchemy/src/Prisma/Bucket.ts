@@ -11,11 +11,11 @@ import {
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1BucketsResponse,
-  deleteV1BucketsByBucketId,
-  getV1Buckets,
-  getV1BucketsByBucketId,
-  postV1Buckets,
+  type GetBucketsResponse,
+  deleteBucket,
+  getBuckets,
+  getBucket,
+  createBucket,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import type { Project } from "./Project.ts";
@@ -128,10 +128,10 @@ const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listBuckets = () =>
   Effect.gen(function* () {
-    const buckets: GetV1BucketsResponse["data"][number][] = [];
+    const buckets: GetBucketsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Buckets(cursor === undefined ? {} : { cursor });
+      const page = yield* getBuckets(cursor === undefined ? {} : { cursor });
       buckets.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -139,7 +139,7 @@ const listBuckets = () =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Buckets: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getBuckets: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -191,7 +191,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.bucketId;
           if (!bucketId) return undefined;
-          const bucket = yield* getV1BucketsByBucketId({ bucketId }).pipe(
+          const bucket = yield* getBucket({ bucketId }).pipe(
             Effect.map((response) => response.data),
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
@@ -203,7 +203,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.bucketId;
           const observed = bucketId
-            ? yield* getV1BucketsByBucketId({ bucketId }).pipe(
+            ? yield* getBucket({ bucketId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -219,7 +219,7 @@ const ProviderLive = () =>
             }
             return attrsFrom(observed);
           }
-          const created = yield* postV1Buckets({
+          const created = yield* createBucket({
             projectId,
             ...(news.name === undefined ? {} : { name: news.name }),
             ...(news.branchId === undefined || news.branchId === null
@@ -235,7 +235,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.bucketId)) return;
-          const bucket = yield* getV1BucketsByBucketId({
+          const bucket = yield* getBucket({
             bucketId: output.bucketId,
           }).pipe(
             Effect.map((response) => response.data),
@@ -252,7 +252,7 @@ const ProviderLive = () =>
           }
           // Deletion cascades server-side: the Management API removes the
           // bucket together with its objects and any remaining keys.
-          yield* deleteV1BucketsByBucketId({
+          yield* deleteBucket({
             bucketId: output.bucketId,
           }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),

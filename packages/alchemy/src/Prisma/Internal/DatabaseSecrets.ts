@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import {
-  type GetV1DatabasesByDatabaseIdResponse,
-  getV1DatabasesByDatabaseId,
-  postV1ConnectionsByIdRotate,
+  type GetDatabaseResponse,
+  getDatabase,
+  createConnectionRotate,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import { extractConnectionSecrets } from "../Client.ts";
@@ -69,7 +69,7 @@ const databaseCredentialsSchedule = Schedule.max([
 ]);
 
 const waitForRotatableDatabase = (database: ObservedDatabase) =>
-  getV1DatabasesByDatabaseId({ databaseId: database.id }).pipe(
+  getDatabase({ databaseId: database.id }).pipe(
     Effect.map((response) => response.data),
     Effect.catchTag("NotFound", () =>
       Effect.fail(
@@ -114,8 +114,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
       ),
     );
   }
-  let database: D | GetV1DatabasesByDatabaseIdResponse["data"] =
-    initialDatabase;
+  let database: D | GetDatabaseResponse["data"] = initialDatabase;
   const observedConnection =
     database.connections.find(
       (connection) => connection.id === database.defaultConnectionId,
@@ -152,7 +151,7 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <
       ),
     );
   }
-  const rotated = yield* postV1ConnectionsByIdRotate({ id: connectionId }).pipe(
+  const rotated = yield* createConnectionRotate({ id: connectionId }).pipe(
     // Rotation mints new credentials; a replay would revoke the ones we
     // just persisted, so opt out of the retry policy.
     Retry.none,

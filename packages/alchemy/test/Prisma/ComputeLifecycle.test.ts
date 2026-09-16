@@ -30,6 +30,7 @@ const apiError = (
 const deployment = (id: string, status: string) => ({
   id,
   type: "deployment" as const,
+  serviceId: "app-1",
   url: `https://api.prisma.test/v1/deployments/${id}`,
   foundryVersionId: `foundry-${id}`,
   status,
@@ -40,7 +41,7 @@ const deployment = (id: string, status: string) => ({
 const appItem = (id: string) => ({
   id,
   type: "app" as const,
-  url: `https://api.prisma.test/v1/apps/${id}`,
+  url: `https://api.prisma.test/v1/services/${id}`,
   name: id,
   region: { id: "us-east-1", name: "US East" },
   projectId: "project-1",
@@ -73,7 +74,7 @@ const clientBackedApi = (client: any) =>
         return callVoid(client.deleteDeployment, [id]);
       }
     }
-    if (head === "apps") {
+    if (head === "services") {
       if (id === undefined && request.method === "GET") {
         return call(client.listApps, [query], list);
       }
@@ -340,7 +341,7 @@ describe("Prisma canonical Compute lifecycle", () => {
         Effect.suspend(() => {
           attempts += 1;
           return attempts < 3
-            ? Effect.fail(apiError("DELETE", `/v1/apps/${id}`, 409))
+            ? Effect.fail(apiError("DELETE", `/v1/services/${id}`, 409))
             : Effect.void;
         }),
     } as unknown as PrismaManagementClient;
@@ -355,7 +356,7 @@ describe("Prisma canonical Compute lifecycle", () => {
   it.effect("treats an already deleted App as deleted", () => {
     const client = {
       deleteApp: (id: string) =>
-        Effect.fail(apiError("DELETE", `/v1/apps/${id}`, 404)),
+        Effect.fail(apiError("DELETE", `/v1/services/${id}`, 404)),
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
@@ -368,7 +369,7 @@ describe("Prisma canonical Compute lifecycle", () => {
 
   it.live("surfaces the final App deletion conflict", () => {
     let attempts = 0;
-    const conflict = apiError("DELETE", "/v1/apps/app-1", 409);
+    const conflict = apiError("DELETE", "/v1/services/app-1", 409);
     const client = {
       deleteApp: () =>
         Effect.sync(() => {
@@ -423,7 +424,7 @@ describe("Prisma canonical Compute lifecycle", () => {
   it.effect("treats an already deleted project as deleted", () => {
     const client = {
       listApps: () =>
-        Effect.fail(apiError("GET", "/v1/apps?projectId=project-1", 404)),
+        Effect.fail(apiError("GET", "/v1/services?projectId=project-1", 404)),
       deleteProject: (id: string) =>
         Effect.fail(apiError("DELETE", `/v1/projects/${id}`, 404)),
     } as unknown as PrismaManagementClient;
@@ -547,7 +548,7 @@ describe("Prisma canonical Compute lifecycle", () => {
       // end of the list would let the cleanup miss live Apps, so the walk fails
       // loudly instead.
       const fake = makeFakeManagementApi((request: Captured) =>
-        request.pathname === "/v1/apps" && request.method === "GET"
+        request.pathname === "/v1/services" && request.method === "GET"
           ? page([appItem("app-1")], true, null)
           : unhandled(request),
       );

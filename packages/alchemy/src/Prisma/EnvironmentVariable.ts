@@ -12,12 +12,12 @@ import {
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1EnvironmentVariablesResponse,
-  deleteV1EnvironmentVariablesByEnvVarId,
-  getV1EnvironmentVariables,
-  getV1EnvironmentVariablesByEnvVarId,
-  patchV1EnvironmentVariablesByEnvVarId,
-  postV1EnvironmentVariables,
+  type GetEnvironmentVariablesResponse,
+  deleteEnvironmentVariable,
+  getEnvironmentVariables,
+  getEnvironmentVariable,
+  updateEnvironmentVariable,
+  createEnvironmentVariable,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import type { Project } from "./Project.ts";
@@ -193,10 +193,10 @@ const listVariables = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const variables: GetV1EnvironmentVariablesResponse["data"][number][] = [];
+    const variables: GetEnvironmentVariablesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1EnvironmentVariables(
+      const page = yield* getEnvironmentVariables(
         cursor === undefined ? query : { ...query, cursor },
       );
       variables.push(...page.data);
@@ -206,7 +206,7 @@ const listVariables = (
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1EnvironmentVariables: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -343,7 +343,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.environmentVariableId;
           const variable = variableId
-            ? yield* getV1EnvironmentVariablesByEnvVarId({
+            ? yield* getEnvironmentVariable({
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
@@ -384,7 +384,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.environmentVariableId;
           let variable = variableId
-            ? yield* getV1EnvironmentVariablesByEnvVarId({
+            ? yield* getEnvironmentVariable({
                 envVarId: variableId,
               }).pipe(
                 Effect.map((response) => response.data),
@@ -394,7 +394,7 @@ const ProviderLive = () =>
           const value = news.value;
           let created = false;
           if (!variable) {
-            const result = yield* postV1EnvironmentVariables({
+            const result = yield* createEnvironmentVariable({
               projectId,
               ...(news.branchId ? { branchId: news.branchId } : {}),
               class: news.class,
@@ -427,7 +427,7 @@ const ProviderLive = () =>
           });
           yield* ensureUserManagedVariable(variable);
           if (!created) {
-            variable = (yield* patchV1EnvironmentVariablesByEnvVarId({
+            variable = (yield* updateEnvironmentVariable({
               envVarId: variable.id,
               value: Redacted.value(value),
             })).data;
@@ -436,7 +436,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.environmentVariableId)) return;
-          const variable = yield* getV1EnvironmentVariablesByEnvVarId({
+          const variable = yield* getEnvironmentVariable({
             envVarId: output.environmentVariableId,
           }).pipe(
             Effect.map((response) => response.data),
@@ -459,7 +459,7 @@ const ProviderLive = () =>
             }
             return;
           }
-          yield* deleteV1EnvironmentVariablesByEnvVarId({
+          yield* deleteEnvironmentVariable({
             envVarId: variable.id,
           }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),

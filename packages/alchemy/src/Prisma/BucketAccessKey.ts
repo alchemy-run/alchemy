@@ -13,10 +13,10 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import type { Bucket } from "./Bucket.ts";
 import {
-  type GetV1BucketsByBucketIdKeysResponse,
-  deleteV1BucketsByBucketIdKeysByKeyId,
-  getV1BucketsByBucketIdKeys,
-  postV1BucketsByBucketIdKeys,
+  type GetBucketKeysResponse,
+  deleteBucketKey,
+  getBucketKeys,
+  createBucketKey,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
@@ -156,10 +156,10 @@ export class AmbiguousBucketAccessKeyError extends Data.TaggedError(
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listKeys = (bucketId: string) =>
   Effect.gen(function* () {
-    const keys: GetV1BucketsByBucketIdKeysResponse["data"][number][] = [];
+    const keys: GetBucketKeysResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1BucketsByBucketIdKeys(
+      const page = yield* getBucketKeys(
         cursor === undefined
           ? { bucketId, limit: 100 }
           : { bucketId, limit: 100, cursor },
@@ -171,7 +171,7 @@ const listKeys = (bucketId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1BucketsByBucketIdKeys: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getBucketKeys: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -278,12 +278,12 @@ const ProviderLive = () =>
           // leaking an unusable credential.
           const orphan = yield* uniqueKeyNamed(bucketId, expectedName);
           if (orphan) {
-            yield* deleteV1BucketsByBucketIdKeysByKeyId({
+            yield* deleteBucketKey({
               bucketId,
               keyId: orphan.id,
             }).pipe(Effect.catchTag("NotFound", () => Effect.void));
           }
-          const created = yield* postV1BucketsByBucketIdKeys({
+          const created = yield* createBucketKey({
             bucketId,
             name: expectedName,
             role: news.role,
@@ -308,7 +308,7 @@ const ProviderLive = () =>
           if (isPrismaDevId(output.bucketAccessKeyId)) return;
           // Bucket deletion revokes remaining keys server-side, so the key
           // may already be gone when the bucket was destroyed first.
-          yield* deleteV1BucketsByBucketIdKeysByKeyId({
+          yield* deleteBucketKey({
             bucketId: output.bucketId,
             keyId: output.bucketAccessKeyId,
           }).pipe(Effect.catchTag("NotFound", () => Effect.void));

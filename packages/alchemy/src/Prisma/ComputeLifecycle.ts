@@ -4,11 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Category from "@distilled.cloud/core/category";
 import {
-  type GetV1AppsResponse,
-  deleteV1AppsByAppId,
-  deleteV1DeploymentsByDeploymentId,
-  deleteV1ProjectsById,
-  getV1Apps,
+  type GetServicesResponse,
+  deleteService,
+  deleteDeployment,
+  deleteProject,
+  getServices,
 } from "@distilled.cloud/prisma-postgres/management";
 import { stopDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
@@ -258,7 +258,7 @@ export const destroyDeployment = Effect.fn(function* (
     stopped = true;
   }
 
-  yield* deleteV1DeploymentsByDeploymentId({ deploymentId }).pipe(
+  yield* deleteDeployment({ deploymentId }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
     Effect.catch((error) =>
       Effect.fail(deploymentDeleteFailed(deploymentId, statusAtDelete, error)),
@@ -285,7 +285,7 @@ export const destroyApp = Effect.fn(function* (
   let appDeleted = false;
   if (!options.keepApp) {
     for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
-      const deleted = yield* deleteV1AppsByAppId({ appId }).pipe(
+      const deleted = yield* deleteService({ serviceId: appId }).pipe(
         Effect.as(true),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
         Effect.catchTag("Conflict", (error) =>
@@ -326,10 +326,10 @@ export const destroyProjectApps = Effect.fn(function* (
     // callers walk `pagination` themselves (see `src/Neon/Project.ts`). A 404
     // from the project-filtered listing means the project is already gone.
     const apps = yield* Effect.gen(function* () {
-      const items: GetV1AppsResponse["data"][number][] = [];
+      const items: GetServicesResponse["data"][number][] = [];
       let cursor: string | undefined;
       while (true) {
-        const page = yield* getV1Apps(
+        const page = yield* getServices(
           cursor === undefined
             ? { projectId, limit: 100 }
             : { projectId, limit: 100, cursor },
@@ -341,7 +341,7 @@ export const destroyProjectApps = Effect.fn(function* (
           return yield* Effect.fail(
             new PrismaPaginationError({
               message:
-                "Invalid Prisma Management API pagination response from getV1Apps: hasMore was true without a non-empty nextCursor",
+                "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
             }),
           );
         }
@@ -364,7 +364,7 @@ export const destroyProjectApps = Effect.fn(function* (
     for (let attempt = 0; attempt < DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
       // A 409, or the API's 400 on a still-populated project, means the
       // delete is blocked on remaining member resources: re-clean and retry.
-      const deleted = yield* deleteV1ProjectsById({ id: projectId }).pipe(
+      const deleted = yield* deleteProject({ id: projectId }).pipe(
         Effect.as(true),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
         Effect.catchTag("Conflict", (error) =>

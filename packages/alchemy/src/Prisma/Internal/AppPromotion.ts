@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import {
-  getV1AppsByAppId,
-  postV1AppsByAppIdPromote,
-  postV1AppsByAppIdRollback,
+  getService,
+  createServicePromote,
+  createServiceRollback,
 } from "@distilled.cloud/prisma-postgres/management";
 import type { ObservedApp } from "./Observed.ts";
 import type { PromoteAppResult } from "../Types.ts";
@@ -47,7 +47,7 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
     );
     if (remainingBeforeObservation <= 0) break;
 
-    const observationOption = yield* getV1AppsByAppId({ appId }).pipe(
+    const observationOption = yield* getService({ serviceId: appId }).pipe(
       Effect.map((response) => response.data),
       Effect.result,
       Effect.timeoutOption(Duration.millis(remainingBeforeObservation)),
@@ -95,8 +95,8 @@ export const promoteAppObserved = Effect.fn(function* (
   deploymentId: string,
   options: AppDeploymentTargetObservationOptions = {},
 ) {
-  const promoted = yield* postV1AppsByAppIdPromote({
-    appId,
+  const promoted = yield* createServicePromote({
+    serviceId: appId,
     deploymentId,
   }).pipe(
     Effect.map((response) => response.data),
@@ -122,7 +122,7 @@ export const promoteAppObserved = Effect.fn(function* (
     };
   }
 
-  const observation = yield* getV1AppsByAppId({ appId }).pipe(
+  const observation = yield* getService({ serviceId: appId }).pipe(
     Effect.map((response) => response.data),
     Effect.result,
   );
@@ -135,8 +135,8 @@ export const promoteAppObserved = Effect.fn(function* (
       reassignedDomains: 0,
     };
   }
-  const repaired = yield* postV1AppsByAppIdRollback({
-    appId,
+  const repaired = yield* createServiceRollback({
+    serviceId: appId,
     deploymentId,
   }).pipe(
     Effect.map((response) => response.data),
@@ -146,7 +146,7 @@ export const promoteAppObserved = Effect.fn(function* (
     ? yield* waitForAppDeploymentTarget(appId, deploymentId, options).pipe(
         Effect.result,
       )
-    : yield* getV1AppsByAppId({ appId }).pipe(
+    : yield* getService({ serviceId: appId }).pipe(
         Effect.map((response) => response.data),
         Effect.result,
       );

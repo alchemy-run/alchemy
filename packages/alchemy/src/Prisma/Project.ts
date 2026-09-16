@@ -1,12 +1,12 @@
 import {
-  type GetV1ProjectsByProjectIdDatabasesResponse,
-  type GetV1ProjectsResponse,
-  getV1Projects,
-  getV1ProjectsById,
-  getV1ProjectsByProjectIdDatabases,
-  patchV1ProjectsById,
-  postV1Projects,
-  postV1ProjectsByProjectIdDatabases,
+  type GetProjectDatabasesResponse,
+  type GetProjectsResponse,
+  getProjects,
+  getProject,
+  getProjectDatabases,
+  updateProject,
+  createProject,
+  createProjectDatabase,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import * as Effect from "effect/Effect";
@@ -164,10 +164,10 @@ const createName = (id: string, name: string | undefined) =>
 // provider uses (see `src/Neon/Project.ts` findProjectByName).
 const listProjects = () =>
   Effect.gen(function* () {
-    const projects: GetV1ProjectsResponse["data"][number][] = [];
+    const projects: GetProjectsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Projects(cursor === undefined ? {} : { cursor });
+      const page = yield* getProjects(cursor === undefined ? {} : { cursor });
       projects.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -175,7 +175,7 @@ const listProjects = () =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Projects: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -224,11 +224,10 @@ const recoverGeneratedProjectAfterConflict = (name: string) =>
 
 const listProjectDatabases = (projectId: string) =>
   Effect.gen(function* () {
-    const databases: GetV1ProjectsByProjectIdDatabasesResponse["data"][number][] =
-      [];
+    const databases: GetProjectDatabasesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1ProjectsByProjectIdDatabases(
+      const page = yield* getProjectDatabases(
         cursor === undefined
           ? { projectId, limit: 100 }
           : { projectId, limit: 100, cursor },
@@ -240,7 +239,7 @@ const listProjectDatabases = (projectId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdDatabases: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -294,7 +293,7 @@ const observeDesiredDefaultDatabase = (
   desiredRegion: string,
 ) =>
   Effect.gen(function* () {
-    const project = (yield* getV1ProjectsById({ id: projectId }).pipe(
+    const project = (yield* getProject({ id: projectId }).pipe(
       Effect.catchTag("NotFound", () =>
         Effect.fail(
           new DefaultDatabaseConsistencyError(
@@ -469,7 +468,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.projectId;
           const project = projectId
-            ? yield* getV1ProjectsById({ id: projectId }).pipe(
+            ? yield* getProject({ id: projectId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -502,7 +501,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.projectId;
           let project: ObservedProject | undefined = outputProjectId
-            ? yield* getV1ProjectsById({ id: outputProjectId }).pipe(
+            ? yield* getProject({ id: outputProjectId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -515,7 +514,7 @@ const ProviderLive = () =>
           let createdProject = false;
           let recoverCreateSecrets = false;
           if (!project) {
-            const result = yield* postV1Projects({
+            const result = yield* createProject({
               name,
               createDatabase: news.createDatabase ?? true,
               region: news.region,
@@ -602,7 +601,7 @@ const ProviderLive = () =>
           const settingsChanged =
             news.settings !== undefined || olds?.settings !== undefined;
           if (project.name !== name || settingsChanged) {
-            project = (yield* patchV1ProjectsById({
+            project = (yield* updateProject({
               id: project.id,
               name,
               ...(settingsChanged ? { settings: news.settings ?? {} } : {}),
@@ -629,26 +628,25 @@ const ProviderLive = () =>
             }
             if (!database) {
               defaultDatabaseChanged = true;
-              const created: ObservedDatabase =
-                yield* postV1ProjectsByProjectIdDatabases({
-                  projectId,
-                  region: desiredRegion,
-                  isDefault: true,
-                }).pipe(
-                  Retry.none,
-                  Effect.map((response) => response.data),
-                  Effect.catchTag("Conflict", () =>
-                    defaultDatabase(projectId).pipe(
-                      Effect.flatMap((database) =>
-                        requireDefaultDatabaseInRegion(
-                          database,
-                          name,
-                          desiredRegion,
-                        ),
+              const created: ObservedDatabase = yield* createProjectDatabase({
+                projectId,
+                region: desiredRegion,
+                isDefault: true,
+              }).pipe(
+                Retry.none,
+                Effect.map((response) => response.data),
+                Effect.catchTag("Conflict", () =>
+                  defaultDatabase(projectId).pipe(
+                    Effect.flatMap((database) =>
+                      requireDefaultDatabaseInRegion(
+                        database,
+                        name,
+                        desiredRegion,
                       ),
                     ),
                   ),
-                );
+                ),
+              );
               database = yield* requireDefaultDatabaseInRegion(
                 created,
                 name,

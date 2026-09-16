@@ -23,6 +23,7 @@ const conflict = (action: "start" | "stop") =>
 const version = (status: string) => ({
   id: "deployment-1",
   type: "deployment" as const,
+  serviceId: "service-1",
   url: "https://api.prisma.test/v1/deployments/deployment-1",
   foundryVersionId: "foundry-1",
   status,

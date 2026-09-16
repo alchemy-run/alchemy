@@ -12,14 +12,14 @@ import {
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1ProjectsByProjectIdBranchesResponse,
-  type GetV1ProjectsResponse,
-  deleteV1BranchesByBranchId,
-  getV1BranchesByBranchId,
-  getV1Projects,
-  getV1ProjectsByProjectIdBranches,
-  patchV1BranchesByBranchId,
-  postV1ProjectsByProjectIdBranches,
+  type GetProjectBranchesResponse,
+  type GetProjectsResponse,
+  deleteBranch,
+  getBranch,
+  getProjects,
+  getProjectBranches,
+  updateBranch,
+  createProjectBranch,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import type { Project } from "./Project.ts";
@@ -143,11 +143,10 @@ const listBranches = (
   query?: { readonly gitName?: string },
 ) =>
   Effect.gen(function* () {
-    const branches: GetV1ProjectsByProjectIdBranchesResponse["data"][number][] =
-      [];
+    const branches: GetProjectBranchesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1ProjectsByProjectIdBranches({
+      const page = yield* getProjectBranches({
         projectId,
         ...(query?.gitName === undefined ? {} : { gitName: query.gitName }),
         ...(cursor === undefined ? {} : { cursor }),
@@ -159,7 +158,7 @@ const listBranches = (
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdBranches: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -170,10 +169,10 @@ const listBranches = (
 
 const listProjects = () =>
   Effect.gen(function* () {
-    const projects: GetV1ProjectsResponse["data"][number][] = [];
+    const projects: GetProjectsResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Projects(cursor === undefined ? {} : { cursor });
+      const page = yield* getProjects(cursor === undefined ? {} : { cursor });
       projects.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -181,7 +180,7 @@ const listProjects = () =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Projects: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjects: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -294,7 +293,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.branchId;
           const branch = branchId
-            ? yield* getV1BranchesByBranchId({ branchId }).pipe(
+            ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -319,7 +318,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.branchId;
           let branch = branchId
-            ? yield* getV1BranchesByBranchId({ branchId }).pipe(
+            ? yield* getBranch({ branchId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -339,7 +338,7 @@ const ProviderLive = () =>
               );
             }
             previousDefaultBranchId = defaults[0]!.id;
-            branch = yield* postV1ProjectsByProjectIdBranches({
+            branch = yield* createProjectBranch({
               projectId,
               gitName,
               ...(news.isDefault === undefined
@@ -376,7 +375,7 @@ const ProviderLive = () =>
               );
             }
             previousDefaultBranchId = defaults[0]!.id;
-            branch = (yield* patchV1BranchesByBranchId({
+            branch = (yield* updateBranch({
               branchId: branch.id,
               isDefault: true,
             })).data;
@@ -396,7 +395,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.branchId)) return;
-          const branch = yield* getV1BranchesByBranchId({
+          const branch = yield* getBranch({
             branchId: output.branchId,
           }).pipe(
             Effect.map((response) => response.data),
@@ -426,7 +425,7 @@ const ProviderLive = () =>
                 ),
               );
             }
-            const previous = yield* getV1BranchesByBranchId({
+            const previous = yield* getBranch({
               branchId: previousDefaultBranchId,
             }).pipe(
               Effect.map((response) => response.data),
@@ -450,7 +449,7 @@ const ProviderLive = () =>
             }
             const restored = previous.isDefault
               ? previous
-              : (yield* patchV1BranchesByBranchId({
+              : (yield* updateBranch({
                   branchId: previous.id,
                   isDefault: true,
                 })).data;
@@ -465,7 +464,7 @@ const ProviderLive = () =>
                 ),
               );
             }
-            const demoted = yield* getV1BranchesByBranchId({
+            const demoted = yield* getBranch({
               branchId: branch.id,
             }).pipe(
               Effect.map((response) => response.data),
@@ -484,7 +483,7 @@ const ProviderLive = () =>
               );
             }
           }
-          yield* deleteV1BranchesByBranchId({
+          yield* deleteBranch({
             branchId: output.branchId,
           }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),

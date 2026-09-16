@@ -179,7 +179,7 @@ const makeHealthLifecycleFixture = (options?: {
   const app = () => ({
     id: "service-1",
     type: "app" as const,
-    url: "https://api.prisma.test/v1/apps/service-1",
+    url: "https://api.prisma.test/v1/services/service-1",
     name: "api",
     region: { id: "us-east-1", name: "US East" },
     projectId: "project-1",
@@ -196,7 +196,7 @@ const makeHealthLifecycleFixture = (options?: {
         return Effect.fail(
           new PrismaApiError({
             method: "GET",
-            path: `/v1/apps/${id}`,
+            path: `/v1/services/${id}`,
             // Non-transient on purpose: a 5xx would be replayed by the
             // retry policy.
             status: 400,
@@ -229,6 +229,7 @@ const makeHealthLifecycleFixture = (options?: {
         ? Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: `foundry-${id}`,
             status,
@@ -266,7 +267,7 @@ const makeHealthLifecycleFixture = (options?: {
           return yield* Effect.fail(
             new PrismaApiError({
               method: "POST",
-              path: `/v1/apps/${appId}/rollback`,
+              path: `/v1/services/${appId}/rollback`,
               status: 400,
               message: "rollback unavailable",
             }),
@@ -356,7 +357,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
   const query = Object.fromEntries(new URLSearchParams(request.search));
   const { call, callVoid, list } = dispatchTo(request);
 
-  if (head === "apps") {
+  if (head === "services") {
     if (id === undefined) {
       return request.method === "GET"
         ? call(client.listApps, [query], list)
@@ -943,7 +944,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: `https://api.prisma.test/v1/apps/${id}`,
+          url: `https://api.prisma.test/v1/services/${id}`,
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -1317,7 +1318,7 @@ describe("Prisma Compute", () => {
             {
               id: "service-1",
               type: "app" as const,
-              url: "https://api.prisma.test/v1/apps/service-1",
+              url: "https://api.prisma.test/v1/services/service-1",
               name: "api",
               region: { id: "us-east-1", name: "US East" },
               projectId,
@@ -1329,7 +1330,7 @@ describe("Prisma Compute", () => {
             {
               id: "service-feature",
               type: "app" as const,
-              url: "https://api.prisma.test/v1/apps/service-feature",
+              url: "https://api.prisma.test/v1/services/service-feature",
               name: "api",
               region: { id: "us-east-1", name: "US East" },
               projectId,
@@ -1345,6 +1346,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-live",
             status: "running",
@@ -1357,6 +1359,7 @@ describe("Prisma Compute", () => {
             {
               id: "version-old",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-old",
               foundryVersionId: "foundry-version-old",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1412,7 +1415,7 @@ describe("Prisma Compute", () => {
           {
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId,
@@ -1428,6 +1431,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-live",
           status: "running",
@@ -1478,7 +1482,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -1493,6 +1497,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: `foundry-${id}`,
             status: "running",
@@ -1505,6 +1510,7 @@ describe("Prisma Compute", () => {
             {
               id: "version-old",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-old",
               foundryVersionId: "foundry-version-old",
               createdAt: "2026-01-01T00:00:00Z",
@@ -1569,7 +1575,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -1595,6 +1601,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: `foundry-${id}`,
           status,
@@ -1687,7 +1694,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId,
@@ -1702,7 +1709,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -1727,6 +1734,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-1",
             foundryVersionId: "foundry-1",
             status: "new",
@@ -1809,7 +1817,7 @@ describe("Prisma Compute", () => {
       const service = () => ({
         id: "service-1",
         type: "app" as const,
-        url: "https://api.prisma.test/v1/apps/service-1",
+        url: "https://api.prisma.test/v1/services/service-1",
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -1846,6 +1854,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: id.replace("version", "foundry"),
             status: "new",
@@ -2043,7 +2052,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -2069,6 +2078,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status: "new",
@@ -2140,7 +2150,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-other",
@@ -2219,7 +2229,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId,
@@ -2245,6 +2255,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "new",
@@ -2308,7 +2319,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -2333,6 +2344,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status: "new",
@@ -2411,7 +2423,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: `https://api.prisma.test/v1/apps/${id}`,
+          url: `https://api.prisma.test/v1/services/${id}`,
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -2436,6 +2448,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status: "new",
@@ -3490,7 +3503,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -3512,6 +3525,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -3606,7 +3620,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId,
@@ -3632,6 +3646,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-1",
             foundryVersionId: "foundry-1",
             status: "new",
@@ -3762,7 +3777,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId,
@@ -3784,6 +3799,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -4153,7 +4169,7 @@ describe("Prisma Compute", () => {
           Effect.succeed({
             id: "service-1",
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -4167,6 +4183,7 @@ describe("Prisma Compute", () => {
           Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: `foundry-${id}`,
             status: "running",
@@ -4324,7 +4341,7 @@ describe("Prisma Compute", () => {
           return {
             id,
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -4377,7 +4394,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -4422,6 +4439,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -4521,7 +4539,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -4570,6 +4588,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-1",
             foundryVersionId: "foundry-1",
             status: "new",
@@ -4714,7 +4733,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -4765,6 +4784,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -4941,7 +4961,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -4986,6 +5006,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-new",
           status: "new",
@@ -5070,7 +5091,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId,
@@ -5085,7 +5106,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -5099,7 +5120,7 @@ describe("Prisma Compute", () => {
         Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -5124,6 +5145,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "running",
@@ -5238,7 +5260,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId,
@@ -5264,6 +5286,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -5358,7 +5381,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id: "service-1",
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "web",
           region: { id: "us-east-1", name: "US East" },
           projectId,
@@ -5384,6 +5407,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -5467,7 +5491,7 @@ describe("Prisma Compute", () => {
       const service = {
         id: "service-1",
         type: "app" as const,
-        url: "https://api.prisma.test/v1/apps/service-1",
+        url: "https://api.prisma.test/v1/services/service-1",
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -5490,7 +5514,7 @@ describe("Prisma Compute", () => {
             return yield* Effect.fail(
               new PrismaApiError({
                 method: "POST",
-                path: `/v1/apps`,
+                path: `/v1/services`,
                 status: 409,
                 message: "already exists",
               }),
@@ -5538,6 +5562,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-1",
             foundryVersionId: "foundry-1",
             status: "new",
@@ -5594,7 +5619,7 @@ describe("Prisma Compute", () => {
     const service = () => ({
       id: "service-1",
       type: "app" as const,
-      url: "https://api.prisma.test/v1/apps/service-1",
+      url: "https://api.prisma.test/v1/services/service-1",
       name: "api",
       region: { id: "us-east-1", name: "US East" },
       projectId: "project-1",
@@ -5607,6 +5632,7 @@ describe("Prisma Compute", () => {
     const version = (id: string) => ({
       id,
       type: "deployment" as const,
+      serviceId: "service-1",
       url: `https://api.prisma.test/v1/deployments/${id}`,
       foundryVersionId: `foundry-${id}`,
       status: versions.get(id) ?? "new",
@@ -5722,6 +5748,7 @@ describe("Prisma Compute", () => {
           [...versions.keys()].map((id) => ({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: `foundry-${id}`,
             createdAt: "2026-01-01T00:00:00Z",
@@ -5923,7 +5950,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: "https://api.prisma.test/v1/apps/service-1",
+            url: "https://api.prisma.test/v1/services/service-1",
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -5956,6 +5983,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-new",
             status: "new",
@@ -6061,7 +6089,7 @@ describe("Prisma Compute", () => {
       const service = () => ({
         id: "service-1",
         type: "app" as const,
-        url: "https://api.prisma.test/v1/apps/service-1",
+        url: "https://api.prisma.test/v1/services/service-1",
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
@@ -6099,6 +6127,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "running",
@@ -6186,7 +6215,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "api",
             region: { id: "us-east-1", name: "us-east-1" },
             projectId: "project-1",
@@ -6230,6 +6259,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: `foundry-${id}`,
             status: id === "version-1" ? "stopped" : "running",
@@ -6343,7 +6373,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -6368,6 +6398,7 @@ describe("Prisma Compute", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-new",
             status: versions.get(id) ?? "new",
@@ -6390,7 +6421,7 @@ describe("Prisma Compute", () => {
             return yield* Effect.fail(
               new PrismaApiError({
                 method: "POST",
-                path: `/v1/apps/${appId}/promote`,
+                path: `/v1/services/${appId}/promote`,
                 status: 400,
                 message: "promote failed",
               }),
@@ -6400,7 +6431,7 @@ describe("Prisma Compute", () => {
           Effect.fail(
             new PrismaApiError({
               method: "POST",
-              path: "/v1/apps/service-1/rollback",
+              path: "/v1/services/service-1/rollback",
               status: 400,
               message: "promotion recovery failed",
             }),
@@ -6530,7 +6561,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "app" as const,
-          url: "https://api.prisma.test/v1/apps/service-1",
+          url: "https://api.prisma.test/v1/services/service-1",
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
@@ -6584,6 +6615,7 @@ describe("Prisma Compute", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-new",
           status: "new",

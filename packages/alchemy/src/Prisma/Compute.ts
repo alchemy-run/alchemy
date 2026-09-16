@@ -34,21 +34,21 @@ import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import {
-  type GetV1AppsResponse,
-  type GetV1EnvironmentVariablesResponse,
-  type GetV1ProjectsByProjectIdBranchesResponse,
-  deleteV1EnvironmentVariablesByEnvVarId,
-  getV1Apps,
-  getV1AppsByAppId,
-  getV1BranchesByBranchId,
-  getV1EnvironmentVariables,
-  getV1ProjectsByProjectIdBranches,
-  patchV1AppsByAppId,
-  patchV1EnvironmentVariablesByEnvVarId,
-  postV1Apps,
-  postV1AppsByAppIdDeployments,
-  postV1AppsByAppIdRollback,
-  postV1EnvironmentVariables,
+  type GetServicesResponse,
+  type GetEnvironmentVariablesResponse,
+  type GetProjectBranchesResponse,
+  deleteEnvironmentVariable,
+  getServices,
+  getService,
+  getBranch,
+  getEnvironmentVariables,
+  getProjectBranches,
+  updateService,
+  updateEnvironmentVariable,
+  createService,
+  createServiceDeployment,
+  createServiceRollback,
+  createEnvironmentVariable,
 } from "@distilled.cloud/prisma-postgres/management";
 import {
   runBuildCommand,
@@ -853,11 +853,10 @@ const isAppProvisioningNotFound = (error: Error | { readonly _tag: string }) =>
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listBranches = (projectId: string, gitName?: string) =>
   Effect.gen(function* () {
-    const branches: GetV1ProjectsByProjectIdBranchesResponse["data"][number][] =
-      [];
+    const branches: GetProjectBranchesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1ProjectsByProjectIdBranches({
+      const page = yield* getProjectBranches({
         projectId,
         limit: 100,
         ...(gitName === undefined ? {} : { gitName }),
@@ -870,7 +869,7 @@ const listBranches = (projectId: string, gitName?: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdBranches: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -881,10 +880,10 @@ const listBranches = (projectId: string, gitName?: string) =>
 
 const listApps = (projectId: string) =>
   Effect.gen(function* () {
-    const apps: GetV1AppsResponse["data"][number][] = [];
+    const apps: GetServicesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Apps(
+      const page = yield* getServices(
         cursor === undefined
           ? { projectId, limit: 100 }
           : { projectId, limit: 100, cursor },
@@ -896,7 +895,7 @@ const listApps = (projectId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Apps: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -962,7 +961,7 @@ const createApp = (
   props: ComputeProps & { appName: string },
   branchId: string,
 ) =>
-  postV1Apps({
+  createService({
     projectId,
     displayName: props.appName,
     branchId,
@@ -1698,7 +1697,7 @@ const findExistingApp = Effect.fn(function* (
   const appId =
     output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
   return appId
-    ? yield* getV1AppsByAppId({ appId }).pipe(
+    ? yield* getService({ serviceId: appId }).pipe(
         Effect.map((response) => response.data),
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       )
@@ -1753,8 +1752,8 @@ const ensureApp = Effect.fn(function* (
     props.regionId ?? output?.regionId ?? app.region.id,
   );
   if (app.name !== props.appName || app.branchId !== branch.id) {
-    app = yield* patchV1AppsByAppId({
-      appId: app.id,
+    app = yield* updateService({
+      serviceId: app.id,
       displayName: props.appName,
       branchId: branch.id,
     }).pipe(Effect.map((response) => response.data));
@@ -1786,10 +1785,10 @@ const findEnvironmentVariable = (
   Effect.gen(function* () {
     // Distilled emits the cursor-paginated list operations as plain ops, so
     // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-    const variables: GetV1EnvironmentVariablesResponse["data"][number][] = [];
+    const variables: GetEnvironmentVariablesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1EnvironmentVariables({
+      const page = yield* getEnvironmentVariables({
         projectId,
         class: cls,
         key,
@@ -1804,7 +1803,7 @@ const findEnvironmentVariable = (
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1EnvironmentVariables: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -1866,7 +1865,7 @@ const resolveComputeEnvironmentScope = Effect.fn(function* (
     );
   }
 
-  const branch = yield* getV1BranchesByBranchId({
+  const branch = yield* getBranch({
     branchId: app.branchId,
   }).pipe(Effect.map((response) => response.data));
   const inferredClass = branch.role;
@@ -1900,7 +1899,7 @@ const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
   const cleanupErrors: unknown[] = [];
   for (const created of [...createdIds].reverse()) {
     const result = yield* Effect.result(
-      deleteV1EnvironmentVariablesByEnvVarId({ envVarId: created.id }).pipe(
+      deleteEnvironmentVariable({ envVarId: created.id }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
       ),
     );
@@ -1965,13 +1964,13 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     for (const { key, value, variable } of plans) {
       if (value === null) continue;
       if (variable) {
-        yield* patchV1EnvironmentVariablesByEnvVarId({
+        yield* updateEnvironmentVariable({
           envVarId: variable.id,
           value,
         });
         nextOwnedIds[key] = variable.id;
       } else {
-        const created = yield* postV1EnvironmentVariables({
+        const created = yield* createEnvironmentVariable({
           projectId,
           ...(branchId ? { branchId } : {}),
           class: cls,
@@ -1991,7 +1990,7 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     // Apply explicit deletions only after all ownership checks and upserts.
     for (const { key, value, variable } of plans) {
       if (value !== null || !variable) continue;
-      yield* deleteV1EnvironmentVariablesByEnvVarId({
+      yield* deleteEnvironmentVariable({
         envVarId: variable.id,
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       deleted.push(key);
@@ -2045,7 +2044,7 @@ const destroyComputeEnvironment = Effect.fn(function* (
     ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (!variable) continue;
     if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* deleteV1EnvironmentVariablesByEnvVarId({
+    yield* deleteEnvironmentVariable({
       envVarId: variable.id,
     }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     deleted.push(key);
@@ -2074,7 +2073,7 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
     );
     if (!variable) continue;
     if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* deleteV1EnvironmentVariablesByEnvVarId({
+    yield* deleteEnvironmentVariable({
       envVarId: variable.id,
     }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     deleted.push(key);
@@ -2186,7 +2185,7 @@ const ProviderLive = () =>
               ? output.appId
               : undefined;
           const app = appId
-            ? yield* getV1AppsByAppId({ appId }).pipe(
+            ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -2307,7 +2306,7 @@ const ProviderLive = () =>
                       aggregateCleanupFailure(
                         "App",
                         app.id,
-                        `/v1/apps/${app.id}`,
+                        `/v1/services/${app.id}`,
                         error,
                         cleanupError,
                       ),
@@ -2416,8 +2415,8 @@ const ProviderLive = () =>
             ) {
               const persistedDeploymentId = output.deploymentId;
               const displacedDeploymentId = app.latestDeploymentId;
-              const rollback = yield* postV1AppsByAppIdRollback({
-                appId: app.id,
+              const rollback = yield* createServiceRollback({
+                serviceId: app.id,
                 deploymentId: persistedDeploymentId,
               }).pipe(
                 Effect.map((response) => response.data),
@@ -2438,7 +2437,7 @@ const ProviderLive = () =>
                         ? [observedAfterRollback.failure]
                         : []),
                     ],
-                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/apps/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
+                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
                   ),
                 );
               }
@@ -2570,8 +2569,8 @@ const ProviderLive = () =>
                 : Effect.fail(error);
 
             if (!deployment) {
-              const created = yield* postV1AppsByAppIdDeployments({
-                appId: app.id,
+              const created = yield* createServiceDeployment({
+                serviceId: app.id,
                 portMapping: { http: artifact.port },
                 ...(effectiveNews.skipCodeUpload === undefined
                   ? {}
@@ -2697,8 +2696,8 @@ const ProviderLive = () =>
               if (Result.isSuccess(readiness)) {
                 readinessStatus = "ready";
               } else if (rollbackDeploymentId) {
-                const rollback = yield* postV1AppsByAppIdRollback({
-                  appId: app.id,
+                const rollback = yield* createServiceRollback({
+                  serviceId: app.id,
                   deploymentId: rollbackDeploymentId,
                 }).pipe(
                   Effect.map((response) => response.data),
@@ -2728,7 +2727,7 @@ const ProviderLive = () =>
                       ...(Result.isFailure(rollback) ? [rollback.failure] : []),
                       observedAfterRollback.failure,
                     ],
-                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/apps/${app.id}/rollback before making any new cloud changes.`,
+                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
                   ),
                 );
               } else {

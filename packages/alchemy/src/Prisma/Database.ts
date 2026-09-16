@@ -16,16 +16,16 @@ import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
-  type GetV1DatabasesResponse,
-  type GetV1ProjectsByProjectIdBranchesResponse,
-  type GetV1ProjectsByProjectIdDatabasesResponse,
-  deleteV1DatabasesByDatabaseId,
-  getV1Databases,
-  getV1DatabasesByDatabaseId,
-  getV1ProjectsByProjectIdBranches,
-  getV1ProjectsByProjectIdDatabases,
-  patchV1DatabasesByDatabaseId,
-  postV1Databases,
+  type GetDatabasesResponse,
+  type GetProjectBranchesResponse,
+  type GetProjectDatabasesResponse,
+  deleteDatabase,
+  getDatabases,
+  getDatabase,
+  getProjectBranches,
+  getProjectDatabases,
+  updateDatabase,
+  createDatabase,
 } from "@distilled.cloud/prisma-postgres/management";
 import { Retry } from "@distilled.cloud/prisma-postgres";
 import { extractConnectionSecrets } from "./Client.ts";
@@ -292,11 +292,10 @@ const createName = (id: string, name: string | undefined) =>
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
 const listProjectDatabases = (projectId: string) =>
   Effect.gen(function* () {
-    const databases: GetV1ProjectsByProjectIdDatabasesResponse["data"][number][] =
-      [];
+    const databases: GetProjectDatabasesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1ProjectsByProjectIdDatabases(
+      const page = yield* getProjectDatabases(
         cursor === undefined
           ? { projectId, limit: 100 }
           : { projectId, limit: 100, cursor },
@@ -308,7 +307,7 @@ const listProjectDatabases = (projectId: string) =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1ProjectsByProjectIdDatabases: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getProjectDatabases: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -319,12 +318,10 @@ const listProjectDatabases = (projectId: string) =>
 
 const listAllDatabases = () =>
   Effect.gen(function* () {
-    const databases: GetV1DatabasesResponse["data"][number][] = [];
+    const databases: GetDatabasesResponse["data"][number][] = [];
     let cursor: string | undefined;
     while (true) {
-      const page = yield* getV1Databases(
-        cursor === undefined ? {} : { cursor },
-      );
+      const page = yield* getDatabases(cursor === undefined ? {} : { cursor });
       databases.push(...page.data);
       const nextCursor = page.pagination.nextCursor;
       if (!page.pagination.hasMore) break;
@@ -332,7 +329,7 @@ const listAllDatabases = () =>
         return yield* Effect.fail(
           new PrismaPaginationError({
             message:
-              "Invalid Prisma Management API pagination response from getV1Databases: hasMore was true without a non-empty nextCursor",
+              "Invalid Prisma Management API pagination response from getDatabases: hasMore was true without a non-empty nextCursor",
           }),
         );
       }
@@ -452,10 +449,8 @@ const desiredSourcesMatch = (
 ) => deepEqual(normalizeDatabaseSource(left), normalizeDatabaseSource(right));
 
 const branchIdForGitName = (projectId: string, gitName: string) =>
-  getV1ProjectsByProjectIdBranches({ projectId, gitName, limit: 2 }).pipe(
-    Effect.map(
-      (response: GetV1ProjectsByProjectIdBranchesResponse) => response.data,
-    ),
+  getProjectBranches({ projectId, gitName, limit: 2 }).pipe(
+    Effect.map((response: GetProjectBranchesResponse) => response.data),
     Effect.flatMap((branches) =>
       branches.length > 1
         ? Effect.fail(
@@ -677,7 +672,7 @@ const ProviderLive = () =>
             : output?.databaseId;
           let generatedIdentityMatch = false;
           let database = databaseId
-            ? yield* getV1DatabasesByDatabaseId({ databaseId }).pipe(
+            ? yield* getDatabase({ databaseId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -733,7 +728,7 @@ const ProviderLive = () =>
             ? undefined
             : output?.databaseId;
           let database: ObservedProjectDatabase | undefined = databaseId
-            ? yield* getV1DatabasesByDatabaseId({ databaseId }).pipe(
+            ? yield* getDatabase({ databaseId }).pipe(
                 Effect.map((response) => response.data),
                 Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               )
@@ -756,7 +751,7 @@ const ProviderLive = () =>
                 ),
               );
             }
-            const result = yield* postV1Databases({
+            const result = yield* createDatabase({
               projectId,
               name,
               region,
@@ -841,7 +836,7 @@ const ProviderLive = () =>
             (yield* branchNeedsSync(projectId, database, desired));
           if (needsPatch) {
             // Omitted branch props preserve the attachment; null is rejected.
-            database = (yield* patchV1DatabasesByDatabaseId({
+            database = (yield* updateDatabase({
               databaseId: database.id,
               name,
               branchId: attach.branchId,
@@ -878,7 +873,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.databaseId)) return;
-          const database = yield* getV1DatabasesByDatabaseId({
+          const database = yield* getDatabase({
             databaseId: output.databaseId,
           }).pipe(
             Effect.map((response) => response.data),
@@ -892,7 +887,7 @@ const ProviderLive = () =>
               ),
             );
           }
-          yield* deleteV1DatabasesByDatabaseId({
+          yield* deleteDatabase({
             databaseId: output.databaseId,
           }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
