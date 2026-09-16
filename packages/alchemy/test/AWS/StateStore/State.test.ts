@@ -123,6 +123,22 @@ test.provider(
         (yield* s3.getBucketEncryption({ Bucket: bucket.bucketName }))
           .ServerSideEncryptionConfiguration?.Rules[0]?.BucketKeyEnabled,
       ).toBe(true);
+      const defaultState = yield* makeS3State({
+        bucketName: bucket.bucketName,
+        prefix: "pr1587",
+      });
+      expect(yield* defaultState.listStacks()).toEqual([]);
+      const defaults = (yield* s3.getBucketEncryption({
+        Bucket: bucket.bucketName,
+      })).ServerSideEncryptionConfiguration!.Rules[0]!;
+      expect(defaults.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
+        "AES256",
+      );
+      expect(
+        defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
+      ).toBeUndefined();
+      expect(defaults.BucketKeyEnabled ?? false).toBe(false);
+      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       yield* stack.destroy();
       const absent = yield* s3
         .getBucketLocation({ Bucket: bucket.bucketName })
@@ -147,7 +163,7 @@ test.provider(
 
 for (const blocked of ["SSE-C", "NONE"] as const) {
   test.provider(
-    `PR1588 state initialization preserves external ${blocked} encryption blocks`,
+    `state initialization restores encryption defaults after external ${blocked} settings`,
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -190,9 +206,11 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
         expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
           "AES256",
         );
-        expect(after.BlockedEncryptionTypes).toEqual(
-          before.BlockedEncryptionTypes,
-        );
+        expect(
+          after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
+        ).toBeUndefined();
+        expect(after.BucketKeyEnabled ?? false).toBe(false);
+        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
         yield* stack.destroy();
         const absent = yield* s3
           .getBucketLocation({ Bucket: bucket.bucketName })
@@ -212,7 +230,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
 }
 
 test.provider(
-  "PR1588 state services manage encryption blocks, preserve omissions, and clear restrictions",
+  "state services manage encryption blocks and restore defaults on removal",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -249,18 +267,31 @@ test.provider(
         },
       });
       yield* block;
-      const probeWrite = readRule.pipe(
-        Effect.flatMap((rule) =>
-          s3.putBucketEncryption({
-            Bucket: bucket.bucketName,
-            ServerSideEncryptionConfiguration: { Rules: [rule] },
-          }),
-        ),
-        Effect.as(false),
-        Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
-      );
       const settings: "SSE-C"[][] = [[], ["SSE-C"]];
       for (const types of settings) {
+        const probeWrite = s3
+          .putBucketEncryption({
+            Bucket: bucket.bucketName,
+            ServerSideEncryptionConfiguration: {
+              Rules: [
+                {
+                  ApplyServerSideEncryptionByDefault: {
+                    SSEAlgorithm: "AES256",
+                  },
+                  BucketKeyEnabled: false,
+                  BlockedEncryptionTypes: {
+                    EncryptionType: types.length ? types : ["NONE"],
+                  },
+                },
+              ],
+            },
+          })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("AccessDeniedException", () =>
+              Effect.succeed(true),
+            ),
+          );
         expect(yield* initialize(types)).toEqual([]);
         const expected = types.length ? ["SSE-C"] : ["NONE"];
         expect(
@@ -291,7 +322,7 @@ test.provider(
             ),
           ).toBe(true);
           expect(yield* initialize([...types, ...types])).toEqual([]);
-          expect(yield* initialize(undefined)).toEqual([]);
+          if (!types.length) expect(yield* initialize(undefined)).toEqual([]);
           expect(yield* probeWrite).toBe(true);
         }).pipe(
           Effect.ensuring(
@@ -300,15 +331,20 @@ test.provider(
               .pipe(Effect.orDie),
           ),
         );
+        let allowed = 0;
         expect(
           yield* probeWrite.pipe(
             Effect.repeat({
-              until: (denied) => !denied,
+              until: (denied) => {
+                allowed = denied ? 0 : allowed + 1;
+                return allowed >= 3;
+              },
               schedule: Schedule.spaced("1 second"),
               times: 8,
             }),
           ),
         ).toBe(false);
+        expect(allowed).toBe(3);
         expect(
           (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
         ).toEqual(expected);
@@ -319,6 +355,14 @@ test.provider(
       ]);
       yield* block;
       expect(yield* initialize([])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+      expect(yield* initialize(["SSE-C"])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "SSE-C",
+      ]);
+      expect(yield* initialize(undefined)).toEqual([]);
       expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
         "NONE",
       ]);
