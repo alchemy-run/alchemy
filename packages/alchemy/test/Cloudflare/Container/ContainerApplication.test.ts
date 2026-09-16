@@ -1,5 +1,19 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Drift from "@/Drift.ts";
+import { Docker, DockerLive } from "@/Docker/Docker.ts";
+import * as Layer from "effect/Layer";
+import * as Config from "effect/Config";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { ExternalContainer } from "./fixtures/external/object.ts";
+import ExternalContainerWorker from "./fixtures/external/worker.ts";
+import MyContainerLive, {
+  MyContainer,
+} from "./fixtures/effectful/container.ts";
+import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
@@ -13,7 +27,9 @@ import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -86,6 +102,213 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
+  for (const fixture of [
+    {
+      name: "Dockerfile",
+      program: Effect.gen(function* () {
+        const worker = yield* ExternalContainerWorker;
+        const app: Cloudflare.ContainerApplication =
+          yield* ExternalContainer.Application;
+        return { app, url: worker.url.as<string>() };
+      }),
+      route: "/hello",
+      response: "hello from external container",
+    },
+    {
+      name: "generated",
+      program: Effect.gen(function* () {
+        const worker = yield* EffectfulContainerWorker;
+        const app: Cloudflare.ContainerApplication =
+          yield* MyContainer.Application;
+        return { app, url: worker.url.as<string>() };
+      }).pipe(Effect.provide(MyContainerLive)),
+      route: "/ping",
+      response: "pong",
+    },
+  ]) {
+    test.provider(
+      `exports ${fixture.name} builds from a non-loading builder to the registry`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const docker = yield* Docker;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const configDir = yield* Config.String("DOCKER_CONFIG").pipe(
+            Config.orElse(() =>
+              Config.String("HOME").pipe(
+                Config.map((home) => path.join(home, ".docker")),
+              ),
+            ),
+          );
+          const configFile = path.join(configDir, "config.json");
+          const readConfig = fs
+            .readFileString(configFile)
+            .pipe(
+              Effect.catchReason("PlatformError", "NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const configBefore = yield* readConfig;
+          const builder = `alchemy-registry-export-${fixture.name.toLowerCase()}`;
+          yield* Effect.acquireRelease(
+            docker.run([
+              "buildx",
+              "create",
+              "--name",
+              builder,
+              "--driver",
+              "docker-container",
+            ]),
+            () =>
+              docker
+                .run(["buildx", "rm", "--force", builder])
+                .pipe(Effect.orDie),
+          );
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              const previous = {
+                builder: process.env.BUILDX_BUILDER,
+                attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
+              };
+              process.env.BUILDX_BUILDER = builder;
+              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = "false";
+              return previous;
+            }),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous.builder === undefined)
+                  delete process.env.BUILDX_BUILDER;
+                else process.env.BUILDX_BUILDER = previous.builder;
+                if (previous.attestations === undefined)
+                  delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
+                else
+                  process.env.BUILDX_NO_DEFAULT_ATTESTATIONS =
+                    previous.attestations;
+              }),
+          );
+          const selected = yield* docker.run(["buildx", "inspect"]);
+          expect(selected.stdout).toMatch(/Driver:\s+docker-container/);
+          expect(selected.stdout).toContain(builder);
+
+          const deployed = yield* stack.deploy(fixture.program);
+          const tag = taggedRefOf(deployed.app);
+          const local = yield* docker.image
+            .inspect(tag)
+            .pipe(
+              Effect.catchReason("PlatformError", "NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          expect(local).toBeUndefined();
+          expect(deployed.app.hash?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+          const { accountId, applicationId } = deployed.app;
+          const credentials =
+            yield* Containers.createContainerRegistryCredentials({
+              accountId,
+              registryId: "registry.cloudflare.com",
+              permissions: ["pull"],
+              expirationMinutes: 15,
+            });
+          const username = credentials.username ?? credentials.user;
+          assert(username);
+          const client = yield* HttpClient.HttpClient;
+          const repository = tag.slice(
+            "registry.cloudflare.com/".length,
+            tag.lastIndexOf(":"),
+          );
+          const manifest = yield* client.execute(
+            HttpClientRequest.get(
+              `https://registry.cloudflare.com/v2/${repository}/manifests/${deployed.app.hash!.digest}`,
+            ).pipe(
+              HttpClientRequest.basicAuth(username, credentials.password),
+              HttpClientRequest.setHeader(
+                "Accept",
+                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
+              ),
+            ),
+          );
+          expect(manifest.status).toBe(200);
+          expect(manifest.headers["docker-content-digest"]).toBe(
+            deployed.app.hash!.digest,
+          );
+          const index = yield* manifest.json.pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.Struct({
+                  mediaType: Schema.String,
+                  manifests: Schema.Array(
+                    Schema.Struct({
+                      platform: Schema.Struct({
+                        os: Schema.String,
+                        architecture: Schema.String,
+                      }),
+                    }),
+                  ),
+                }),
+              ),
+            ),
+          );
+          expect(index.mediaType).toBe(
+            "application/vnd.oci.image.index.v1+json",
+          );
+          expect(
+            index.manifests.some(
+              ({ platform }) =>
+                platform.os === "linux" && platform.architecture === "amd64",
+            ),
+          ).toBe(true);
+          const observed = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId,
+          });
+          expect(observed.configuration.image).toBe(
+            deployed.app.configuration.image,
+          );
+
+          const response = yield* Effect.gen(function* () {
+            const response = yield* client.get(
+              `${deployed.url}${fixture.route}`,
+            );
+            return { status: response.status, body: yield* response.text };
+          }).pipe(
+            Effect.timeout("45 seconds"),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (response) =>
+                response.status === 200 &&
+                response.body.includes(fixture.response),
+              times: 8,
+            }),
+          );
+          expect(response.status).toBe(200);
+          expect(response.body).toContain(fixture.response);
+          expect(yield* readConfig).toBe(configBefore);
+          const unchanged = yield* stack.deploy(fixture.program);
+          expect(unchanged.app.applicationId).toBe(applicationId);
+          expect(unchanged.app.hash).toEqual(deployed.app.hash);
+
+          yield* stack.destroy();
+          const deleted = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }).pipe(logLevel, Effect.scoped),
+      { timeout: 120_000, exclusive: true },
+    );
+  }
+
   for (const maxInstances of [2, 4]) {
     for (const field of [
       "applicationId",
