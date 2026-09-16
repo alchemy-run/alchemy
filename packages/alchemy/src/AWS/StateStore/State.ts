@@ -58,7 +58,9 @@ export interface S3StateOptions {
    */
   prefix?: string;
   /**
-   * Default encryption enforced on the state bucket.
+   * Default encryption enforced on the state bucket. Set
+   * `blockedEncryptionTypes: ["SSE-C"]` to block customer-provided encryption
+   * keys, omit it to preserve existing restrictions, or use `[]` to clear them.
    *
    * @default `{ sseAlgorithm: "AES256" }`
    */
@@ -125,6 +127,21 @@ type S3Deps = Credentials | HttpClient | Region;
  *   }),
  * );
  * ```
+ *
+ * ### Managing SSE-C Restrictions
+ * **Example:** Block customer-provided encryption keys on the state bucket
+ * ```typescript
+ * const stateStore = AWS.state({
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ *     blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * Omit `blockedEncryptionTypes` to preserve existing restrictions. Set it to
+ * `[]` to allow SSE-C writes; this sends AWS's `NONE` value. The default
+ * encryption algorithm remains managed independently of these restrictions.
  *
  * @resource
  */
@@ -462,6 +479,14 @@ const ensureStateBucket = (
         KMSMasterKeyID: desiredEncryption.kmsMasterKeyId,
       },
       BucketKeyEnabled: desiredEncryption.bucketKeyEnabled ?? false,
+      BlockedEncryptionTypes:
+        desiredEncryption.blockedEncryptionTypes === undefined
+          ? observedEncryption?.BlockedEncryptionTypes
+          : {
+              EncryptionType: desiredEncryption.blockedEncryptionTypes.length
+                ? [...new Set(desiredEncryption.blockedEncryptionTypes)]
+                : ["NONE"],
+            },
     };
     // SensitiveString decodes to Redacted; its JSON form hides the key identity.
     const keyValue = (
@@ -477,6 +502,13 @@ const ensureStateBucket = (
           keyValue(rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
           null,
         bucketKey: rule?.BucketKeyEnabled ?? false,
+        blockedEncryptionTypes: [
+          ...new Set(
+            rule?.BlockedEncryptionTypes?.EncryptionType?.filter(
+              (type) => type !== "NONE",
+            ) ?? [],
+          ),
+        ].sort(),
       });
     if (
       encryptionFingerprint(observedEncryption) !==
@@ -484,9 +516,7 @@ const ensureStateBucket = (
     ) {
       yield* s3.putBucketEncryption({
         Bucket: bucket,
-        ServerSideEncryptionConfiguration: {
-          Rules: [desiredEncryptionRule],
-        },
+        ServerSideEncryptionConfiguration: { Rules: [desiredEncryptionRule] },
       });
     }
 

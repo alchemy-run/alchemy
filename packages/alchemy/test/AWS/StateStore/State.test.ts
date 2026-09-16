@@ -145,6 +145,200 @@ test.provider(
   { timeout: 120_000 },
 );
 
+for (const blocked of ["SSE-C", "NONE"] as const) {
+  test.provider(
+    `PR1588 state initialization preserves external ${blocked} encryption blocks`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const bucket = yield* stack.deploy(
+          AWS.S3.Bucket("EncryptionBlocksStateBucket", {}),
+        );
+        const initialize = Effect.gen(function* () {
+          const state = yield* makeS3State({
+            bucketName: bucket.bucketName,
+            prefix: "pr1588",
+          });
+          return yield* state.listStacks();
+        });
+        expect(yield* initialize).toEqual([]);
+        yield* s3.putBucketEncryption({
+          Bucket: bucket.bucketName,
+          ServerSideEncryptionConfiguration: {
+            Rules: [
+              {
+                ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "aws:kms" },
+                BlockedEncryptionTypes: { EncryptionType: [blocked] },
+              },
+            ],
+          },
+        });
+        const before = (yield* s3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(before.BlockedEncryptionTypes?.EncryptionType).toEqual([
+          blocked,
+        ]);
+        expect(before.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
+          "aws:kms",
+        );
+        // Re-running the generator constructs a fresh state service and rechecks cloud configuration.
+        expect(yield* initialize).toEqual([]);
+        const after = (yield* s3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(after.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe(
+          "AES256",
+        );
+        expect(after.BlockedEncryptionTypes).toEqual(
+          before.BlockedEncryptionTypes,
+        );
+        yield* stack.destroy();
+        const absent = yield* s3
+          .getBucketLocation({ Bucket: bucket.bucketName })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+            Effect.repeat({
+              until: Boolean,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+        expect(absent).toBe(true);
+      }),
+    { timeout: 120_000 },
+  );
+}
+
+test.provider(
+  "PR1588 state services manage encryption blocks, preserve omissions, and clear restrictions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(
+        AWS.S3.Bucket("ManagedStateEncryptionBlocks", {}),
+      );
+      const initialize = (
+        blockedEncryptionTypes: AWS.S3.BucketEncryption["blockedEncryptionTypes"],
+      ) =>
+        Effect.gen(function* () {
+          const state = yield* makeS3State({
+            bucketName: bucket.bucketName,
+            prefix: "pr1588-managed",
+            encryption: { sseAlgorithm: "AES256", blockedEncryptionTypes },
+          });
+          return yield* state.listStacks();
+        });
+      const readRule = s3
+        .getBucketEncryption({ Bucket: bucket.bucketName })
+        .pipe(
+          Effect.map(
+            (result) => result.ServerSideEncryptionConfiguration!.Rules[0]!,
+          ),
+        );
+      const block = s3.putBucketEncryption({
+        Bucket: bucket.bucketName,
+        ServerSideEncryptionConfiguration: {
+          Rules: [
+            {
+              ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" },
+              BlockedEncryptionTypes: { EncryptionType: ["SSE-C"] },
+            },
+          ],
+        },
+      });
+      yield* block;
+      const probeWrite = readRule.pipe(
+        Effect.flatMap((rule) =>
+          s3.putBucketEncryption({
+            Bucket: bucket.bucketName,
+            ServerSideEncryptionConfiguration: { Rules: [rule] },
+          }),
+        ),
+        Effect.as(false),
+        Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+      );
+      const settings: "SSE-C"[][] = [[], ["SSE-C"]];
+      for (const types of settings) {
+        expect(yield* initialize(types)).toEqual([]);
+        const expected = types.length ? ["SSE-C"] : ["NONE"];
+        expect(
+          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
+        ).toEqual(expected);
+        yield* Effect.gen(function* () {
+          yield* s3.putBucketPolicy({
+            Bucket: bucket.bucketName,
+            Policy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Deny",
+                  Principal: "*",
+                  Action: "s3:PutEncryptionConfiguration",
+                  Resource: bucket.bucketArn,
+                },
+              ],
+            }),
+          });
+          expect(
+            yield* probeWrite.pipe(
+              Effect.repeat({
+                until: Boolean,
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toBe(true);
+          expect(yield* initialize([...types, ...types])).toEqual([]);
+          expect(yield* initialize(undefined)).toEqual([]);
+          expect(yield* probeWrite).toBe(true);
+        }).pipe(
+          Effect.ensuring(
+            s3
+              .deleteBucketPolicy({ Bucket: bucket.bucketName })
+              .pipe(Effect.orDie),
+          ),
+        );
+        expect(
+          yield* probeWrite.pipe(
+            Effect.repeat({
+              until: (denied) => !denied,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          ),
+        ).toBe(false);
+        expect(
+          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
+        ).toEqual(expected);
+      }
+      expect(yield* initialize([])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+      yield* block;
+      expect(yield* initialize([])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+      yield* stack.destroy();
+      const absent = yield* s3
+        .getBucketLocation({ Bucket: bucket.bucketName })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+          Effect.repeat({
+            until: Boolean,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+      expect(absent).toBe(true);
+    }),
+  { timeout: 120_000 },
+);
+
 const STACK = "S3StateStoreTestStack";
 
 /**
