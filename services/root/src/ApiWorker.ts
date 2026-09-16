@@ -25,6 +25,7 @@ import { ManagerLive } from "./engineering/Manager.ts";
 import { GeneralReviewer } from "./engineering/Reviewer.ts";
 import { TriageLive } from "./engineering/TriageDO.ts";
 import { GitRoutes } from "./forge/GitServer.ts";
+import { IssuesLive } from "./forge/IssuesDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
@@ -224,6 +225,9 @@ const Company = Layer.mergeAll(
   PublishTokenLive,
 ).pipe(
   Layer.provideMerge(TriageLive),
+  // the forge's issues store — the mirror the Sync routes fill and
+  // the /api/v3 issues facade serves
+  Layer.provideMerge(IssuesLive),
   Layer.provideMerge(ProposalsLive),
   Layer.provideMerge(CallsLive),
   Layer.provideMerge(PostsLive),

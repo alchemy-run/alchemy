@@ -43,8 +43,9 @@ export class ForgeCaller extends Context.Service<
 export const ORG_USER: ForgeUser = { id: "org", name: "root" };
 
 /** The credential a request carries: `git` sends HTTP Basic with the
- *  token in the password field; REST clients send `Bearer`/`token`. */
-const credential = (
+ *  token in the password field; REST clients send `Bearer`/`token`.
+ *  Shared with the forge's plain routes (Sync, the issues facade). */
+export const credential = (
   headers: Readonly<Record<string, string | undefined>>,
 ): string | undefined => {
   const header = headers.authorization;
