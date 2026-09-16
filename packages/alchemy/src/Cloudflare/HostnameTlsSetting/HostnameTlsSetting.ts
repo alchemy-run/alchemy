@@ -167,10 +167,8 @@ export const HostnameTlsSettingProvider = () =>
     stables: ["zoneId", "settingId", "hostname", "createdAt"],
 
     list: Effect.fn(function* () {
-      // No account-wide enumeration: overrides are keyed by
-      // (zone, settingId, hostname). Enumerate every zone and probe each of
-      // the three TLS settings for the zone apex with the per-hostname GET,
-      // emitting one row per override that exists.
+      // Enumerate every override, including subdomains, through the zone's
+      // collection endpoint. The per-hostname GET returns 405 on live zones.
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
       const settingIds: Id[] = ["ciphers", "min_tls_version", "http2"];
@@ -181,26 +179,21 @@ export const HostnameTlsSettingProvider = () =>
             settingIds,
             (settingId) =>
               hostnames
-                .getSettingTls({
-                  zoneId: zone.id,
-                  settingId,
-                  hostname: zone.name,
-                })
+                .listSettingsTls({ zoneId: zone.id, settingId })
                 .pipe(
-                  Effect.map((setting) =>
-                    toAttributes(zone.id, settingId, zone.name, setting),
-                  ),
-                  // Zones without Advanced Certificate Manager / Cloudflare
-                  // for SaaS reject the route, and a scoped token may lack
-                  // access to a zone — skip those rather than fail the whole
-                  // enumeration. A 404 means no override for that hostname.
-                  Effect.catchTag(
-                    ["AdvancedCertificateManagerRequired", "Forbidden"],
-                    () => Effect.succeed([] as Attributes[]),
-                  ),
-                  Effect.catchIf(
-                    (e) => e._tag === "CloudflareError" && e.status === 404,
-                    () => Effect.succeed([] as Attributes[]),
+                  Effect.map((settings) =>
+                    settings.flatMap((setting) =>
+                      setting.hostname == null
+                        ? []
+                        : [
+                            toAttributes(
+                              zone.id,
+                              settingId,
+                              setting.hostname,
+                              setting,
+                            ),
+                          ],
+                    ),
                   ),
                 ),
             { concurrency: "unbounded" },
@@ -245,11 +238,7 @@ export const HostnameTlsSettingProvider = () =>
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || !settingId || !hostname) return undefined;
 
-      const observed = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId,
-        hostname,
-      });
+      const observed = yield* findSetting(zoneId, settingId, hostname);
       if (observed === undefined) return undefined;
 
       const attrs = toAttributes(zoneId, settingId, hostname, observed);
@@ -265,11 +254,7 @@ export const HostnameTlsSettingProvider = () =>
       const { settingId, hostname } = news;
 
       // 1. Observe — list the setting's overrides and match on hostname.
-      const observed = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId,
-        hostname,
-      });
+      const observed = yield* findSetting(zoneId, settingId, hostname);
 
       // 2. Sync — PUT is a true upsert, so a single call covers both the
       //    missing and the drifted case; skip it entirely on a no-op.
@@ -291,11 +276,7 @@ export const HostnameTlsSettingProvider = () =>
       const { zoneId, settingId, hostname } = output;
       // Observe first — deleting an already-removed override is not an
       // error (idempotent re-delete after a crashed run).
-      const observed = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId,
-        hostname,
-      });
+      const observed = yield* findSetting(zoneId, settingId, hostname);
       if (observed === undefined) return;
       yield* hostnames.deleteSettingTls({ zoneId, settingId, hostname }).pipe(
         // Lost a race with an out-of-band delete — already converged.
@@ -308,7 +289,16 @@ export const HostnameTlsSettingProvider = () =>
 // API helpers
 // ---------------------------------------------------------------------------
 
-type ObservedSetting = hostnames.GetSettingTlsResponse;
+type ObservedSetting = hostnames.ListSettingsTlsResponse[number];
+
+const findSetting = (zoneId: string, settingId: string, hostname: string) =>
+  hostnames
+    .listSettingsTls({ zoneId, settingId })
+    .pipe(
+      Effect.map((settings) =>
+        settings.find((setting) => setting.hostname === hostname),
+      ),
+    );
 
 /**
  * Structural equality for setting values — scalar versions/toggles compare
@@ -327,10 +317,7 @@ const toAttributes = (
   zoneId: string,
   settingId: string,
   hostname: string,
-  setting:
-    | ObservedSetting
-    | hostnames.GetSettingTlsResponse
-    | hostnames.PutSettingTlsResponse,
+  setting: ObservedSetting | hostnames.PutSettingTlsResponse,
 ): Attributes => ({
   zoneId,
   settingId,
