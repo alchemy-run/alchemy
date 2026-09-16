@@ -4,10 +4,8 @@
  * (`HttpApiClient.make(GitApi, ...)`), and OpenAPI share one schema-checked
  * surface.
  *
- * Every endpoint is an `alchemy/Http` route class: an `HttpApiEndpoint`
- * that also names the tag of its implementation, so any route can be
- * swapped by providing a different Layer for its tag. The groups are
- * classes too, and exported, so an API can be built from a subset.
+ * Endpoints use `HttpApiEndpoint`; groups are implemented with
+ * `HttpApiBuilder.group`. The exported groups can also form a smaller API.
  *
  * | Group | Path | Routes |
  * | --- | --- | --- |
@@ -18,14 +16,13 @@
  * | {@link Protocol} | `/:owner/:repo/…` | infoRefs, uploadPack, receivePack |
  * | {@link GitHub} | `/api/v3` | the GitHub REST v3 facade |
  *
- * No route carries middleware: who may call it is decided by the API that
- * mounts it (`Git.Api.middleware(Yours)`). The engine's own hash route is
+ * No route carries middleware: apply application HttpRouter middleware to
+ * Git.ApiLive when composing the public routes. The engine's own hash route is
  * {@link InternalApi}, mounted separately. Shared schemas and tagged
  * errors live in `Api/Schema.ts` and are re-exported flatly from here.
  */
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import { GitHub } from "./Api/GitHub.ts";
 import { Objects } from "./Api/Objects.ts";
 import { Protocol } from "./Api/Protocol.ts";
@@ -44,8 +41,8 @@ export * from "./Api/Repos.ts";
 
 /**
  * The complete git-service API: the REST plane at `/api/v1`, the git wire
- * protocol at the root, and the GitHub facade at `/api/v3`. Derive yours
- * from it (`Git.Api.add(...)`) or build one from the groups.
+ * protocol at the root, and the GitHub facade at `/api/v3`. Compose client
+ * schemas with `AppApi.addHttpApi(Git.Api)`, or build one from the groups.
  */
 export class GitApi extends HttpApi.make("git-service")
   .add(Repos)
@@ -63,23 +60,23 @@ export class GitApi extends HttpApi.make("git-service")
  * lets anonymous callers read public repositories asks this.
  *
  * ```typescript
- * (httpEffect, { endpoint }) =>
+ * (httpEffect) =>
  *   Effect.gen(function* () {
  *     const request = yield* HttpServerRequest.HttpServerRequest;
- *     if (Git.isRead(endpoint, request) && (yield* isPublic)) return yield* httpEffect;
+ *     if (Git.isRead(request) && (yield* isPublic)) return yield* httpEffect;
  *     // …
  *   })
  * ```
  */
 export const isRead = (
-  endpoint: HttpApiEndpoint.Top,
   request: HttpServerRequest.HttpServerRequest,
 ): boolean => {
-  if (endpoint.identifier === "uploadPack") return true;
-  if (endpoint.method !== "GET") return false;
-  if (endpoint.identifier !== "infoRefs") return true;
-  const service = new URL(request.url, "http://localhost").searchParams.get(
-    "service",
+  const url = new URL(request.url, "http://localhost");
+  if (request.method === "POST")
+    return url.pathname.endsWith("/git-upload-pack");
+  if (request.method !== "GET" && request.method !== "HEAD") return false;
+  return (
+    !url.pathname.endsWith("/info/refs") ||
+    url.searchParams.get("service") !== "git-receive-pack"
   );
-  return service !== "git-receive-pack";
 };

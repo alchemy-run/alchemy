@@ -1,7 +1,6 @@
 import * as hostnames from "@distilled.cloud/cloudflare/hostnames";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -168,11 +167,10 @@ export const HostnameTlsSettingProvider = () =>
     stables: ["zoneId", "settingId", "hostname", "createdAt"],
 
     list: Effect.fn(function* () {
-      // No account-wide enumeration: overrides live under
-      // `/zones/{zone_id}/hostnames/settings/{settingId}` and are keyed by
-      // (zone, settingId, hostname). Enumerate every zone, then list each
-      // of the three TLS settings, paginating exhaustively, and flatten one
-      // row per (settingId, hostname) override.
+      // No account-wide enumeration: overrides are keyed by
+      // (zone, settingId, hostname). Enumerate every zone and probe each of
+      // the three TLS settings for the zone apex with the per-hostname GET,
+      // emitting one row per override that exists.
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
       const settingIds: Id[] = ["ciphers", "min_tls_version", "http2"];
@@ -182,32 +180,26 @@ export const HostnameTlsSettingProvider = () =>
           Effect.forEach(
             settingIds,
             (settingId) =>
-              hostnames.getSettingTls
-                .pages({ zoneId: zone.id, settingId })
+              hostnames
+                .getSettingTls({
+                  zoneId: zone.id,
+                  settingId,
+                  hostname: zone.name,
+                })
                 .pipe(
-                  Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) =>
-                      page.result.flatMap((entry) =>
-                        entry.hostname == null
-                          ? []
-                          : [
-                              toAttributes(
-                                zone.id,
-                                settingId,
-                                entry.hostname,
-                                entry,
-                              ),
-                            ],
-                      ),
-                    ),
+                  Effect.map((setting) =>
+                    toAttributes(zone.id, settingId, zone.name, setting),
                   ),
                   // Zones without Advanced Certificate Manager / Cloudflare
                   // for SaaS reject the route, and a scoped token may lack
                   // access to a zone — skip those rather than fail the whole
-                  // enumeration.
+                  // enumeration. A 404 means no override for that hostname.
                   Effect.catchTag(
                     ["AdvancedCertificateManagerRequired", "Forbidden"],
+                    () => Effect.succeed([] as Attributes[]),
+                  ),
+                  Effect.catchIf(
+                    (e) => e._tag === "CloudflareError" && e.status === 404,
                     () => Effect.succeed([] as Attributes[]),
                   ),
                 ),
@@ -253,7 +245,11 @@ export const HostnameTlsSettingProvider = () =>
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || !settingId || !hostname) return undefined;
 
-      const observed = yield* findSetting(zoneId, settingId, hostname);
+      const observed = yield* hostnames.getSettingTls({
+        zoneId,
+        settingId,
+        hostname,
+      });
       if (observed === undefined) return undefined;
 
       const attrs = toAttributes(zoneId, settingId, hostname, observed);
@@ -268,9 +264,12 @@ export const HostnameTlsSettingProvider = () =>
       const zoneId = news.zoneId as string;
       const { settingId, hostname } = news;
 
-      // 1. Observe — there is no per-hostname GET; list the setting's
-      //    overrides and match on hostname.
-      const observed = yield* findSetting(zoneId, settingId, hostname);
+      // 1. Observe — list the setting's overrides and match on hostname.
+      const observed = yield* hostnames.getSettingTls({
+        zoneId,
+        settingId,
+        hostname,
+      });
 
       // 2. Sync — PUT is a true upsert, so a single call covers both the
       //    missing and the drifted case; skip it entirely on a no-op.
@@ -292,7 +291,11 @@ export const HostnameTlsSettingProvider = () =>
       const { zoneId, settingId, hostname } = output;
       // Observe first — deleting an already-removed override is not an
       // error (idempotent re-delete after a crashed run).
-      const observed = yield* findSetting(zoneId, settingId, hostname);
+      const observed = yield* hostnames.getSettingTls({
+        zoneId,
+        settingId,
+        hostname,
+      });
       if (observed === undefined) return;
       yield* hostnames.deleteSettingTls({ zoneId, settingId, hostname }).pipe(
         // Lost a race with an out-of-band delete — already converged.
@@ -305,20 +308,7 @@ export const HostnameTlsSettingProvider = () =>
 // API helpers
 // ---------------------------------------------------------------------------
 
-type ObservedSetting = hostnames.GetSettingTlsResponse["result"][number];
-
-/**
- * Find the override for `hostname` in the setting's hostname list — the API
- * has no per-hostname GET. Missing → `undefined`.
- */
-const findSetting = (zoneId: string, settingId: string, hostname: string) =>
-  hostnames
-    .getSettingTls({ zoneId, settingId })
-    .pipe(
-      Effect.map((response) =>
-        response.result.find((entry) => entry.hostname === hostname),
-      ),
-    );
+type ObservedSetting = hostnames.GetSettingTlsResponse;
 
 /**
  * Structural equality for setting values — scalar versions/toggles compare
@@ -337,7 +327,10 @@ const toAttributes = (
   zoneId: string,
   settingId: string,
   hostname: string,
-  setting: ObservedSetting | hostnames.PutSettingTlsResponse,
+  setting:
+    | ObservedSetting
+    | hostnames.GetSettingTlsResponse
+    | hostnames.PutSettingTlsResponse,
 ): Attributes => ({
   zoneId,
   settingId,

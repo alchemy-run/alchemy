@@ -263,6 +263,8 @@ export interface Release extends Resource<
  * ### Wiring with Other Resources
  * **Example:** Create Repository with Release
  * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
  * const repo = yield* GitHub.Repository("sdk", {
  *   owner: "my-org",
  *   name: "sdk",
@@ -270,8 +272,8 @@ export interface Release extends Resource<
  * });
  *
  * yield* GitHub.Release("v1", {
- *   owner: repo.owner!,
- *   repository: repo.name!,
+ *   owner: "my-org",
+ *   repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
  *   tagName: "v1.0.0",
  *   name: "Initial Release",
  *   body: "First public version of the SDK",
@@ -301,31 +303,18 @@ export const ReleaseProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
+    read: Effect.fn(function* ({ olds, output }) {
+      const observed = yield* findRelease(olds, output?.releaseId);
+      return observed === undefined ? undefined : attrsOf(observed);
+    }),
+
+    reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = yield* octokitFor(news.baseUrl);
       const body = news.body !== undefined ? dedent(news.body) : undefined;
+      let observed = yield* findRelease(news, output?.releaseId);
 
-      // Observe — probe for an existing release by tag name
-      const observed = yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.rest.repos.getReleaseByTag({
-              owner: news.owner,
-              repo: news.repository,
-              tag: news.tagName,
-            });
-            return data;
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
-
-      // Ensure — when no release exists, create one
       if (observed === undefined) {
-        const { data } = yield* Effect.tryPromise({
+        observed = yield* Effect.tryPromise({
           try: () =>
             octokit.rest.repos.createRelease({
               owner: news.owner,
@@ -338,13 +327,38 @@ export const ReleaseProvider = () =>
               target_commitish: news.targetCommitish,
               generate_release_notes: news.generateReleaseNotes,
             }),
-          catch: (e) => e as Error,
-        });
-
-        return attrsOf(data);
+          catch: (error) => error as Error & { status?: number },
+        }).pipe(
+          Effect.map(({ data }) => data),
+          Effect.catchIf(
+            (error) => error.status === 422,
+            (error) =>
+              findRelease(news).pipe(
+                Effect.flatMap((release) =>
+                  release === undefined
+                    ? Effect.fail(error)
+                    : Effect.succeed(release),
+                ),
+              ),
+          ),
+        );
       }
 
-      // Sync — update the existing release
+      const desired = {
+        name: news.name ?? news.tagName,
+        body: body ?? (news.generateReleaseNotes ? (observed.body ?? "") : ""),
+        draft: news.draft ?? false,
+        prerelease: news.prerelease ?? false,
+      };
+      if (
+        (observed.name ?? observed.tag_name) === desired.name &&
+        (observed.body ?? "") === desired.body &&
+        observed.draft === desired.draft &&
+        observed.prerelease === desired.prerelease
+      ) {
+        return attrsOf(observed);
+      }
+
       const { data } = yield* Effect.tryPromise({
         try: () =>
           octokit.rest.repos.updateRelease({
@@ -352,11 +366,7 @@ export const ReleaseProvider = () =>
             repo: news.repository,
             release_id: observed.id,
             tag_name: news.tagName,
-            name: news.name,
-            body,
-            draft: news.draft,
-            prerelease: news.prerelease,
-            // target_commitish cannot be changed after creation
+            ...desired,
           }),
         catch: (e) => e as Error,
       });
@@ -432,12 +442,63 @@ export const ReleaseProvider = () =>
     }),
   });
 
+const findRelease = Effect.fn(function* (
+  props: ReleaseProps,
+  releaseId?: number,
+) {
+  const octokit = yield* octokitFor(props.baseUrl);
+  const request = { owner: props.owner, repo: props.repository };
+  if (releaseId !== undefined) {
+    const existing = yield* Effect.tryPromise({
+      try: () =>
+        octokit.rest.repos.getRelease({ ...request, release_id: releaseId }),
+      catch: (error) => error as Error & { status?: number },
+    }).pipe(
+      Effect.map(({ data }) => data),
+      Effect.catchIf(
+        (error) => error.status === 404,
+        () => Effect.succeed(undefined),
+      ),
+    );
+    if (existing !== undefined && existing.tag_name === props.tagName)
+      return existing;
+  }
+  const published = yield* Effect.tryPromise({
+    try: () =>
+      octokit.rest.repos.getReleaseByTag({ ...request, tag: props.tagName }),
+    catch: (error) => error as Error & { status?: number },
+  }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.catchIf(
+      (error) => error.status === 404,
+      () => Effect.succeed(undefined),
+    ),
+  );
+  if (published !== undefined) return published;
+
+  // The tag endpoint excludes drafts, including drafts recovered without state.
+  const releases = yield* Effect.tryPromise({
+    try: () =>
+      octokit.paginate(octokit.rest.repos.listReleases, {
+        ...request,
+        per_page: 100,
+      }),
+    catch: (error) => error as Error & { status?: number },
+  }).pipe(
+    Effect.catchIf(
+      (error) => error.status === 404,
+      () => Effect.succeed([]),
+    ),
+  );
+  return releases.find((release) => release.tag_name === props.tagName);
+});
+
 const attrsOf = (data: {
   id: number;
   node_id: string;
   tag_name: string;
   name: string | null;
-  body: string | null;
+  body?: string | null;
   draft: boolean;
   prerelease: boolean;
   html_url: string;

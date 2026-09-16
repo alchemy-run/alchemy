@@ -663,3 +663,35 @@ describe("promoted wire packs (DESIGN §22.5)", () => {
     );
   });
 });
+
+describe("prepared object view", () => {
+  test("reads only its own staged objects and live objects, with a size cap", () =>
+    run(
+      Effect.gen(function* () {
+        const sql = makeTestSqlClient();
+        const store = makeObjectStore({
+          sql,
+          blobs: makeMemoryBlobStore(),
+          repoId: REPO,
+        });
+        const own = yield* makeFixture(3, new TextEncoder().encode("own"));
+        const other = yield* makeFixture(3, new TextEncoder().encode("other"));
+        yield* store.insertStaged("mine", { ...own, size: own.content.length });
+        yield* store.insertStaged("theirs", {
+          ...other,
+          size: other.content.length,
+        });
+        expect(yield* store.getMeta(own.oid)).toBeUndefined();
+        expect(
+          (yield* store.readPrepared("mine", own.oid, 3))?.content,
+        ).toEqual(own.content);
+        expect(
+          yield* store.readPrepared("mine", other.oid, 100),
+        ).toBeUndefined();
+        const tooBig = yield* Effect.result(
+          store.readPrepared("mine", own.oid, 2),
+        );
+        expect(tooBig._tag).toBe("Failure");
+      }),
+    ));
+});

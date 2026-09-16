@@ -4,14 +4,14 @@
  *
  * Public surface:
  * - The HTTP contract ({@link GitApi}, aliased {@link Api}): every plane as
- *   one `HttpApi`, each endpoint an `alchemy/Http` route class, each group a
+ *   one `HttpApi`, each endpoint an `HttpApiEndpoint`, each group a
  *   class, with the schemas and tagged errors.
- * - {@link Handlers}, the default implementation of every route, and the
- *   per-route `*Live` Layers it is made of.
- * - {@link Hooks}, git's pre-receive hook as a service. There is no auth
- *   in the engine: the middleware of the API that mounts the routes decides
- *   who gets in.
- * - The deployable pieces: {@link Server} + {@link ServerLive}, the
+ * - {@link Handlers} and {@link ApiHandlersLive}: shared handler implementations.
+ *   {@link ApiLive} registers public routes; merge it beside application routes.
+ *   {@link GroupsLive} exposes native group implementations for overrides.
+ * - {@link Engine}: transport-independent operations, with scoped prepare/commit
+ *   for application authorization and validation. HTTP codecs live in `alchemy/Git/Http`.
+ * - The deployable pieces: {@link ApiLive} + {@link InternalApiLive}, the
  *   {@link GitRepo} / {@link Registry} Durable Objects, and the storage and
  *   hasher blocks.
  *
@@ -22,14 +22,19 @@
  */
 export * from "./Api.ts";
 export { GitApi as Api } from "./Api.ts";
-export {
-  Hooks,
-  HooksNone,
-  type HooksShape,
-  type RefRejection,
-  type RefUpdate,
-} from "./Hooks.ts";
+export { Engine, EngineLive } from "./Engine.ts";
+export type { PushInput, PreparedPush, RefUpdate } from "./Push.ts";
+export * as Http from "./Http.ts";
+export * as Push from "./PushInput.ts";
 export * from "./Server.ts";
+export {
+  parseCommit,
+  parseTree,
+  ZERO_OID,
+  ObjectType,
+} from "./Protocol/ObjectCodec.ts";
+export { StoreError } from "./Protocol/Store.ts";
+export { WireProtocolError, PackIngestError } from "./RepoObject.ts";
 export {
   BlobStore,
   BlobStoreR2,
@@ -39,7 +44,7 @@ export {
   type BlobMultipart,
   type BlobStoreShape,
 } from "./BlobStore.ts";
-export { BlobStoreS3, type BlobStoreS3Options } from "./BlobStoreS3.ts";
+export { BlobStoreS3 } from "./BlobStoreS3.ts";
 export { RegistryD1 } from "./RegistryD1.ts";
 export {
   GitRepo,

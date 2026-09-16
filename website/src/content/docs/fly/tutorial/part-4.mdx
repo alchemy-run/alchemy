@@ -146,7 +146,7 @@ curl https://myapp-site-dev-a1b2c3d4.fly.dev/secret
 ```
 
 :::tip[Your own domain?]
-Declare a [`Fly.Certificate`](/fly/networking#certificates) for a
+Declare a [`Fly.Certificate`](/fly/networking#use-your-own-hostname) for a
 hostname you control (`kind: "acme"`) and point DNS at the App —
 the ACME challenge records live on `cert.dnsRequirements`. Dedicated
 IPv4 (`IpAssignment` `type: "v4"`) is billed and quota-gated —
