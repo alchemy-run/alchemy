@@ -6,9 +6,11 @@ description: Alchemy programs run in two phases — Construction drives the depl
 import DAG from "../../../components/DAG.astro";
 
 Every alchemy program runs in two phases — plantime builds the plan,
-runtime serves requests. Function resources — Workers, Lambdas,
-Containers — express both in a single program by **returning an
-Effect from inside an Effect**.
+runtime serves requests. [Runtime](/infrastructure-as-effects/runtime)
+resources — Workers, Lambdas, Containers — express both in a single
+program by **returning an Effect from inside an Effect**. Earlier
+pages named the two halves the Construction phase and the Runtime
+phase; this page pins down exactly when each one runs.
 
 ## Construction vs Runtime
 
@@ -46,9 +48,10 @@ covers where cleanup can (and cannot) happen.
 The Runtime phase is the *only* place where `Alchemy.RuntimeContext`
 is available. Any Effect whose requirements include `RuntimeContext`
 can only execute inside the runtime closure — the type system
-rejects it everywhere else. The next page builds the
-[colored-function model](/infrastructure-as-effects/layers#runtime-as-a-colored-function)
-on top of this split.
+rejects it everywhere else.
+[Layers](/infrastructure-as-effects/layers#the-types-hold-the-boundary)
+builds on this split to keep whole services honest about where they
+can run.
 
 ## What runs when
 
@@ -153,11 +156,8 @@ The Construction/Runtime split lets you write code that:
    variable in the runtime body already knows which resource to
    talk to.
 
-Next: [Layers](/infrastructure-as-effects/layers) turns this phase
-split into a type-level model — `RuntimeContext` as a colored
-function.
-
 ## Where next
 
-- [Layers](/infrastructure-as-effects/layers) — `RuntimeContext` as a colored function; infrastructure behind service interfaces.
+- [Circular Bindings](/infrastructure-as-effects/circular-bindings) — the two-pass plan this phase split makes possible. Next page.
+- [Layers](/infrastructure-as-effects/layers) — `RuntimeContext` as a type-level boundary; infrastructure behind service interfaces.
 - [State Store](/state-store) — where deploy results persist between runs.
