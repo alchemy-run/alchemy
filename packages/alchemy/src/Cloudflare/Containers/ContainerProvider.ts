@@ -1538,11 +1538,9 @@ export const LiveContainerProvider = () =>
           const name = yield* createApplicationName(id, olds?.name);
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
-          // Cloudflare container applications carry no ownership signal that
-          // we can read back from the API, so a name match is not proof of
-          // ownership. Brand it `Unowned` so the engine surfaces
-          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
-          return Unowned(attrs);
+          // Generated names identify this instance by its random suffix.
+          // Explicit names alone do not establish ownership.
+          return olds?.name === undefined ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {
