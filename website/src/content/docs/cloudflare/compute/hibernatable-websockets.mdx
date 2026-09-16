@@ -200,7 +200,7 @@ first message after hibernation would broadcast to nobody.
 :::note
 The `state` *reference* is resolved in the outer (Construction) Effect, but
 `state.getWebSockets()` is
-[colored with `RuntimeContext`](/infrastructure-as-effects/layers#runtime-as-a-colored-function),
+[colored with `RuntimeContext`](/infrastructure-as-effects/layers#the-types-hold-the-boundary),
 so it can only run in the inner (runtime) Effect — which is exactly
 where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.

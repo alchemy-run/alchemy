@@ -1,5 +1,5 @@
 /**
- * The suites' auth, in user land, the way a host builds it: one `HttpApi`
+ * The suites' auth, in user land, the way a host builds it: one `HttpRouter`
  * middleware in front of every git route. Two shared secrets name two
  * users; anything else is anonymous, and anonymous may read public
  * repositories and nothing more. The engine never sees a credential.
@@ -10,14 +10,13 @@
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as Schema from "effect/Schema";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import { GitApi, isRead, RegistryStore } from "@/Git/index.ts";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 /**
  * The secret every suite authenticates with. Honors a caller-provided
@@ -53,14 +52,13 @@ export class TestCaller extends Context.Service<
   { readonly user: TestUser | null }
 >()("test/Git/Caller") {}
 
-/** The middleware every git route runs behind. */
-export class TestAuth extends HttpApiMiddleware.Service<
-  TestAuth,
-  { provides: TestCaller; requires: RuntimeContext }
->()("test/Git/Auth", { error: Unauthorized }) {}
-
-/** The git API behind the suites' middleware; the clients are built from it. */
-export class TestApi extends GitApi.middleware(TestAuth) {}
+/** API schema for typed clients. Authentication is applied to router layers. */
+// Client-only error declaration: router middleware returns this error on 401.
+class AuthenticationErrors extends HttpApiMiddleware.Service<AuthenticationErrors>()(
+  "test/Git/AuthenticationErrors",
+  { error: Unauthorized },
+) {}
+export class TestApi extends GitApi.middleware(AuthenticationErrors) {}
 
 /**
  * The credential a request carries: `git` sends HTTP Basic with the
@@ -96,44 +94,40 @@ const unauthorized = HttpServerResponse.jsonUnsafe(
  * facade's `GET`s, and a clone or fetch over the wire. Everything else
  * is a 401 with `WWW-Authenticate`, so `git` prompts.
  */
-export const TestAuthLive: Layer.Layer<TestAuth, never, RegistryStore> =
-  Layer.effect(
-    TestAuth,
-    Effect.gen(function* () {
-      const registry = yield* RegistryStore;
-      return (httpEffect, { endpoint }) =>
-        Effect.gen(function* () {
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          const presented = credential(request.headers);
-          if (presented === TEST_SECRET) {
-            return yield* Effect.provideService(httpEffect, TestCaller, {
-              user: TEST_USER,
-            });
-          }
-          if (presented === TEST_SECRET_DEV) {
-            return yield* Effect.provideService(httpEffect, TestCaller, {
-              user: TEST_USER_DEV,
-            });
-          }
-          if (presented !== undefined) return unauthorized;
-
-          // Anonymous: a read of one public repository, or nothing. A
-          // repository that does not exist is the route's 404, so a 401
-          // never confirms a private one.
-          if (!isRead(endpoint, request)) return unauthorized;
-          const params = yield* HttpRouter.params;
-          const owner = params.owner?.toLowerCase();
-          const name = params.repo?.toLowerCase().replace(/\.git$/, "");
-          if (owner === undefined || name === undefined) return unauthorized;
-          const entry = yield* registry
-            .resolve(owner, name)
-            .pipe(
-              Effect.catchTag("StoreError", () => Effect.succeed(undefined)),
-            );
-          if (entry !== undefined && !entry.public) return unauthorized;
+export const TestAuthLive = HttpRouter.middleware<{ provides: TestCaller }>()(
+  Effect.gen(function* () {
+    const registry = yield* RegistryStore;
+    return (httpEffect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const presented = credential(request.headers);
+        if (presented === TEST_SECRET) {
           return yield* Effect.provideService(httpEffect, TestCaller, {
-            user: null,
+            user: TEST_USER,
           });
+        }
+        if (presented === TEST_SECRET_DEV) {
+          return yield* Effect.provideService(httpEffect, TestCaller, {
+            user: TEST_USER_DEV,
+          });
+        }
+        if (presented !== undefined) return unauthorized;
+
+        // Anonymous: a read of one public repository, or nothing. A
+        // repository that does not exist is the route's 404, so a 401
+        // never confirms a private one.
+        if (!isRead(request)) return unauthorized;
+        const params = yield* HttpRouter.params;
+        const owner = params.owner?.toLowerCase();
+        const name = params.repo?.toLowerCase().replace(/\.git$/, "");
+        if (owner === undefined || name === undefined) return unauthorized;
+        const entry = yield* registry
+          .resolve(owner, name)
+          .pipe(Effect.catchTag("StoreError", () => Effect.succeed(undefined)));
+        if (entry !== undefined && !entry.public) return unauthorized;
+        return yield* Effect.provideService(httpEffect, TestCaller, {
+          user: null,
         });
-    }),
-  );
+      }).pipe(Effect.provide(RuntimeContext.phantom));
+  }),
+).layer;

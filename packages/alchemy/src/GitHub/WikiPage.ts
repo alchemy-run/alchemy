@@ -2,9 +2,20 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { dedent } from "../Util/dedent.ts";
-import { gitHubBaseUrlChanged, octokitFor } from "./Octokit.ts";
+import { gitHubBaseUrlChanged } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
+import {
+  deleteWikiPage,
+  readWikiPage,
+  syncWikiPage,
+  wikiRepository,
+} from "./WikiPageGit.ts";
+
+export {
+  InvalidWikiPage,
+  WikiGitError,
+  WikiRepositoryUnavailable,
+} from "./WikiPageGit.ts";
 
 export interface WikiPageProps {
   /**
@@ -18,9 +29,9 @@ export interface WikiPageProps {
   repository: string;
 
   /**
-   * Page title (e.g. `Home`, `Getting Started`). The title is the page's
-   * identity — changing it replaces the page (creates a new page and deletes
-   * the old one if opted in via `allowDelete`).
+   * Page title (e.g. `Home`, `Getting Started`). Whitespace becomes hyphens
+   * in the page name. Changing that name replaces the page (creates a new
+   * page and deletes the old one if opted in via `allowDelete`).
    */
   title: string;
 
@@ -46,7 +57,15 @@ export interface WikiPageProps {
    * an extension (e.g. `markdown` → `Page.md`, `asciidoc` → `Page.asciidoc`).
    * @default "markdown"
    */
-  format?: "markdown" | "asciidoc" | "mediawiki" | "org" | "pod" | "rdoc" | "rest" | "textile";
+  format?:
+    | "markdown"
+    | "asciidoc"
+    | "mediawiki"
+    | "org"
+    | "pod"
+    | "rdoc"
+    | "rest"
+    | "textile";
 
   /**
    * Whether to allow deletion of the page when the resource is destroyed.
@@ -60,7 +79,8 @@ export interface WikiPageProps {
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
    * provider. Changing it replaces the resource — the same name on a
-   * different GitHub instance is a different physical resource.
+   * different GitHub instance is a different physical resource. Authenticated
+   * wiki Git operations require HTTPS.
    */
   baseUrl?: string;
 }
@@ -102,7 +122,17 @@ export interface WikiPage extends Resource<
  * preserve documentation history — set `allowDelete: true` to opt in.
  *
  * The repository's wiki must be enabled (`hasWiki: true` on the Repository
- * resource). Wiki pages are version-controlled: each update is a Git commit.
+ * resource) and initialized by creating its first page in the GitHub web UI.
+ * Enabling the wiki or setting `autoInit` on the repository does not initialize
+ * the separate wiki Git repository. An inaccessible or uninitialized wiki
+ * produces `WikiRepositoryUnavailable` with setup instructions.
+ *
+ * Git must be installed on the deployment machine. Pages are managed through
+ * the wiki's Git repository, not the GitHub REST API. Each content or format
+ * change creates a commit; unchanged pages do not. Concurrent pushes are
+ * retried against a fresh checkout without force-pushing. Deletion removes the
+ * current page file, not its Git history. Authentication uses a transient
+ * process-environment header; tokens are not stored in clone URLs or Git config.
  *
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
@@ -184,7 +214,11 @@ export interface WikiPage extends Resource<
  *
  * ### Wiring with Other Resources
  * **Example:** Create Wiki Pages for a Repository
+ * Deploy the repository first and create its first wiki page in the GitHub
+ * web UI before adding `WikiPage` to the stack.
  * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
  * const repo = yield* GitHub.Repository("docs", {
  *   owner: "my-org",
  *   name: "docs",
@@ -194,7 +228,7 @@ export interface WikiPage extends Resource<
  *
  * yield* GitHub.WikiPage("home", {
  *   owner: repo.owner!,
- *   repository: repo.name!,
+ *   repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
  *   title: "Home",
  *   content: "Welcome to the documentation wiki!",
  * });
@@ -206,105 +240,35 @@ export const WikiPage = Resource<WikiPage>("GitHub.WikiPage");
 
 export const WikiPageProvider = () =>
   Provider.succeed(WikiPage, {
-    stables: ["title", "pageName"],
+    stables: ["pageName"],
 
-    // Non-listable: GitHub's wiki pages API doesn't provide a list endpoint
-    // for enumerating all pages across repositories. There's only a list
-    // endpoint per repository, and with no ambient scope to enumerate from,
-    // this collapses to the empty list.
+    // Wiki pages have no account-wide enumeration API.
     list: () => Effect.succeed([]),
 
-    // A wiki page belongs to (host, owner, repository, title) — changing any
-    // of these replaces the resource.
+    // Replacement must not delete the successor when titles normalize identically.
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
       if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
-        news.title !== olds.title ||
+        news.title.replace(/\s+/g, "-") !== olds.title.replace(/\s+/g, "-") ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
         return { action: "replace" };
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* octokitFor(news.baseUrl);
-      const content = dedent(news.content);
-      const message = news.message ?? `Update ${news.title}`;
-      const format = news.format ?? "markdown";
-
-      // Convert title to page name (GitHub's URL-safe form)
-      const pageName = news.title.replace(/\s+/g, "-");
-
-      // Observe — probe for the existing page
-      const observed = yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.request(
-              "GET /repos/{owner}/{repo}/pages/{page_name}",
-              {
-                owner: news.owner,
-                repo: news.repository,
-                page_name: pageName,
-              },
-            );
-            return data;
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
-
-      // Ensure or Sync — GitHub's wiki API uses PUT for both create and update
-      const { data } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.request("PUT /repos/{owner}/{repo}/pages/{page_name}", {
-            owner: news.owner,
-            repo: news.repository,
-            page_name: pageName,
-            title: news.title,
-            content,
-            format,
-            message,
-            // The sha is only required for updates (to prevent conflicts)
-            ...(observed !== undefined ? { sha: observed.sha } : {}),
-          }),
-        catch: (e) => e as Error,
-      });
-
-      return {
-        title: data.title,
-        pageName: data.name,
-        htmlUrl: data.html_url,
-        sha: data.sha,
-      };
+    read: Effect.fn(function* ({ olds }) {
+      return yield* readWikiPage(yield* wikiRepository(olds), olds);
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      if (!olds.allowDelete) {
-        return;
-      }
+    reconcile: Effect.fn(function* ({ news }) {
+      return yield* syncWikiPage(yield* wikiRepository(news), news);
+    }),
 
-      const octokit = yield* octokitFor(olds.baseUrl);
-      const pageName = olds.title.replace(/\s+/g, "-");
-
-      yield* Effect.tryPromise(async () => {
-        try {
-          await octokit.request("DELETE /repos/{owner}/{repo}/pages/{page_name}", {
-            owner: olds.owner,
-            repo: olds.repository,
-            page_name: pageName,
-            message: `Delete ${olds.title}`,
-          });
-        } catch (error: any) {
-          if (error.status !== 404) {
-            throw error;
-          }
-        }
-      });
+    delete: Effect.fn(function* ({ olds }) {
+      if (!olds.allowDelete) return;
+      yield* deleteWikiPage(yield* wikiRepository(olds), olds);
     }),
   });
