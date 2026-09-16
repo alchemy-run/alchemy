@@ -1,25 +1,25 @@
-import * as Effect from "effect/Effect"
-import { isResolved } from "../Diff.ts"
-import * as Provider from "../Provider.ts"
-import { Resource } from "../Resource.ts"
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts"
-import type * as GitHub from "./Providers.ts"
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface CollaboratorProps {
   /**
    * Repository owner — a user or organization login.
    */
-  owner: string
+  owner: string;
 
   /**
    * Repository name.
    */
-  repository: string
+  repository: string;
 
   /**
    * GitHub username to grant access.
    */
-  username: string
+  username: string;
 
   /**
    * Permission level to grant.
@@ -31,7 +31,7 @@ export interface CollaboratorProps {
    *
    * @default "push"
    */
-  permission?: "pull" | "push" | "maintain" | "triage" | "admin"
+  permission?: "pull" | "push" | "maintain" | "triage" | "admin";
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -40,7 +40,7 @@ export interface CollaboratorProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string
+  baseUrl?: string;
 }
 
 export interface Collaborator extends Resource<
@@ -50,12 +50,12 @@ export interface Collaborator extends Resource<
     /**
      * GitHub username.
      */
-    username: string
+    username: string;
 
     /**
      * Permission level granted.
      */
-    permission: string
+    permission: string;
   },
   never,
   GitHub.Providers
@@ -125,25 +125,25 @@ export interface Collaborator extends Resource<
  */
 export const Collaborator = Resource<Collaborator>("GitHub.Collaborator", {
   defaultRemovalPolicy: "retain",
-})
+});
 
 export const CollaboratorProvider = () =>
   Provider.succeed(Collaborator, {
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return
-      if (olds === undefined) return
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.username !== olds.username ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
-        return { action: "replace" }
+        return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl)
+      const octokit = yield* octokitFor(news.baseUrl);
 
       // Ensure & Sync — PUT is idempotent; creates or updates permission
       yield* Effect.tryPromise({
@@ -153,19 +153,19 @@ export const CollaboratorProvider = () =>
             repo: news.repository,
             username: news.username,
             permission: news.permission ?? "push",
-          })
+          });
         },
         catch: (e) => e as Error,
-      })
+      });
 
       return {
         username: news.username,
         permission: news.permission ?? "push",
-      }
+      };
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit
+      const octokit = yield* Octokit;
 
       const repos = yield* Effect.tryPromise({
         try: () =>
@@ -173,7 +173,7 @@ export const CollaboratorProvider = () =>
             per_page: 100,
           }),
         catch: (e) => e as Error,
-      })
+      });
 
       const perRepo = yield* Effect.forEach(
         repos,
@@ -188,7 +188,7 @@ export const CollaboratorProvider = () =>
                     repo: repo.name,
                     per_page: 100,
                   },
-                )
+                );
                 return collaborators.map((collab: any) => ({
                   username: collab.login,
                   permission: collab.permissions?.admin
@@ -200,24 +200,24 @@ export const CollaboratorProvider = () =>
                         : collab.permissions?.triage
                           ? "triage"
                           : "pull",
-                }))
+                }));
               } catch (error: any) {
                 if (error.status === 403 || error.status === 404) {
-                  return []
+                  return [];
                 }
-                throw error
+                throw error;
               }
             },
             catch: (e) => e as Error,
           }),
         { concurrency: 10 },
-      )
+      );
 
-      return perRepo.flat()
+      return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl)
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise({
         try: async () => {
@@ -226,14 +226,14 @@ export const CollaboratorProvider = () =>
               owner: olds.owner,
               repo: olds.repository,
               username: olds.username,
-            })
+            });
           } catch (error: any) {
             if (error.status !== 404) {
-              throw error
+              throw error;
             }
           }
         },
         catch: (e) => e as Error,
-      })
+      });
     }),
-  })
+  });

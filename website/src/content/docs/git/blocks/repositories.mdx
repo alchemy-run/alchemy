@@ -1,19 +1,22 @@
 ---
 title: Repository
-description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
+description: One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, compose operations through Git.Engine, or implement its shape over another store.
 ---
+
+The examples use `Authentication` from
+[Getting Started](/git/getting-started): the application's request middleware.
 
 `Git.ReposDurableObject` hosts one Durable Object per repository and
 provides `Git.RepoStore`, the service every route reaches it through:
 
 ```typescript
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
-  Layer.provide(AuthenticatedLive),
+const GitLive = Git.ApiLive.pipe(
+  Layer.provide(Git.ApiHandlersLive),
+  Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   // ReposDurableObject requires:
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
   Layer.provide(Git.HasherInline),            // push verification
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, spilled pushes
   Layer.provide(Git.RegistryDurableObject),   // owner/name → repoId
 );
 ```
@@ -69,17 +72,25 @@ Resolve the id through the registry, then talk to the object. A route
 that answers the default branch's tip:
 
 ```typescript
-export class Tip extends Http.get<Tip>()("tip", "/api/v1/repos/:owner/:repo/tip", {
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+
+export const Tip = HttpApiEndpoint.get("tip", "/api/v1/repos/:owner/:repo/tip", {
   params: Git.RepoPath,
   success: Git.Ref,
   error: [Git.RepoNotFound, Git.RefNotFound],
-}) {}
+});
 
-export const TipLive = Tip.make(
+export class AppRoutes extends HttpApiGroup.make("app").add(Tip) {}
+export class AppApi extends HttpApi.make("app").add(AppRoutes) {}
+
+export const AppRoutesLive = HttpApiBuilder.group(AppApi, "app", (h) =>
   Effect.gen(function* () {
     const registry = yield* Git.RegistryStore;
     const repos = yield* Git.RepoStore;
-    return Effect.fn(function* ({ params }) {
+    return h.handle("tip", Effect.fn(function* ({ params }) {
       const entry = yield* registry
         .resolve(params.owner, params.repo)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
@@ -92,60 +103,37 @@ export const TipLive = Tip.make(
         .getRef(`refs/heads/${meta.defaultBranch}`)
         .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
       return new Git.Ref({ name: ref.name, oid: ref.oid as Git.Oid });
-    });
+    }));
   }),
 );
 ```
 
-Mounted in an API derived from `Git.Api`, it runs behind that API's
-middleware like every other route.
+Provide `AppRoutesLive` to `HttpApiBuilder.layer(AppApi)`, then merge that route layer beside `Git.ApiLive`.
+`Git.ApiLive` registers the Git groups.
+[HTTP routes](/git/blocks/server#add-git-to-your-application) shows the full assembly. The registry
+and repository clients are resolved when the group builds; the handler
+runs once per request behind the route middleware.
 
-## Wrap it
+## Compose application operations
 
-`Git.RepoStore` is a service, so a Layer can provide a decorated one.
-Every push commits through `commitPush` and every REST ref write
-through `updateRef`, so wrapping those two is a hook on every ref
-move:
+Use `Git.Engine` to work with repository data from your own handler:
 
 ```typescript
-// src/hooks.ts
-const afterPush = (repoId: string, result: Git.CommitPushResult) =>
-  Effect.log(`push to ${repoId}`, result.results.map((r) => r.ref));
-
-export const ReposWithHooks = Layer.effect(
-  Git.RepoStore,
-  Effect.map(Git.RepoStore, (repos) => ({
-    getByName: (repoId) => {
-      const stub = repos.getByName(repoId);
-      return new Proxy(stub, {
-        get: (target, key, receiver) =>
-          key === "commitPush"
-            ? (input: Git.CommitPushInput) =>
-                target.commitPush(input).pipe(
-                  Effect.tap((result) => afterPush(repoId, result)),
-                )
-            : Reflect.get(target, key, receiver),
-      });
-    },
-  })),
-).pipe(Layer.provide(Git.ReposDurableObject));
+const git = yield* Git.Engine;
+const repo = yield* git.repositories.get({ owner: "alice", repo: "demo" });
+const prepared = yield* git.prepareRefRemoval(repo, { ref: "refs/heads/feature" });
+yield* checkRefChanges(repo, prepared.updates);
+yield* prepared.commit;
+yield* Effect.log("branch removed");
 ```
 
-```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
-  Layer.provide(AuthenticatedLive),
--  Layer.provide(Git.ReposDurableObject),
-+  Layer.provide(ReposWithHooks),
-```
+Run this inside `Effect.scoped`. `checkRefChanges` is your application function;
+it can use your request user and database. The prepared operation pins the ref
+value and can commit only once before the scope closes. Use the same policy from
+push and merge handlers. [Engine operations](/git/blocks/engine) describes the APIs.
 
-The wrapper runs in the Worker, where the routes call the object.
-`commitPush` carries the ref commands and what they resolved to;
-`updateRef` and `mergePull` are the other two ways a ref moves. A
-Queue producer or a Workflow trigger goes in `afterPush` the same way.
-To refuse a ref update before it happens, with a reason git reports,
-[Git.Hooks](/git/blocks/auth#hooks) is the pre-receive hook and needs
-no wrapping.
+`RepoStore` remains the lower storage contract for implementing another backend.
+Its raw RPC methods are infrastructure primitives, not an authorization boundary.
 
 ## Implement your own
 
