@@ -7,6 +7,7 @@ import { destroy } from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -243,6 +244,13 @@ test.provider(
             },
           }),
         ),
+        // Repository listings are eventually consistent for fresh fixtures.
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+          until: (releases) =>
+            releases.some((item) => item.releaseId === created.releaseId),
+        }),
       );
       expect(
         all.every((item) =>
