@@ -459,7 +459,7 @@ export const gitHubCompatRoutes = (options: GitHubCompatOptions) => {
           .pipe(Effect.map((page) => page.items[0]?.oid ?? revision));
 
   return {
-    /** `GET /api/v3/user` — the credential probe; replace `Git.GitHubUser` to answer from your users. */
+    /** `GET /api/v3/user` — the credential probe; override the `user` handler in your `github` group to answer from your users. */
     user: () => ghJson(ghUser("git")),
     /** `GET /api/v3/repos/:owner/:repo` */
     repo: () =>

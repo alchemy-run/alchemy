@@ -1,25 +1,25 @@
-import * as Effect from "effect/Effect"
-import { isResolved } from "../Diff.ts"
-import * as Provider from "../Provider.ts"
-import { Resource } from "../Resource.ts"
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts"
-import type * as GitHub from "./Providers.ts"
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface TeamAccessProps {
   /**
    * Repository owner — must be an organization login.
    */
-  owner: string
+  owner: string;
 
   /**
    * Repository name.
    */
-  repository: string
+  repository: string;
 
   /**
    * Team slug within the organization (e.g. `platform`, `frontend`).
    */
-  teamSlug: string
+  teamSlug: string;
 
   /**
    * Permission level to grant.
@@ -31,7 +31,7 @@ export interface TeamAccessProps {
    *
    * @default "push"
    */
-  permission?: "pull" | "push" | "maintain" | "triage" | "admin"
+  permission?: "pull" | "push" | "maintain" | "triage" | "admin";
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -40,7 +40,7 @@ export interface TeamAccessProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string
+  baseUrl?: string;
 }
 
 export interface TeamAccess extends Resource<
@@ -50,12 +50,12 @@ export interface TeamAccess extends Resource<
     /**
      * Team slug.
      */
-    teamSlug: string
+    teamSlug: string;
 
     /**
      * Permission level granted.
      */
-    permission: string
+    permission: string;
   },
   never,
   GitHub.Providers
@@ -143,25 +143,25 @@ export interface TeamAccess extends Resource<
  */
 export const TeamAccess = Resource<TeamAccess>("GitHub.TeamAccess", {
   defaultRemovalPolicy: "retain",
-})
+});
 
 export const TeamAccessProvider = () =>
   Provider.succeed(TeamAccess, {
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return
-      if (olds === undefined) return
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         news.teamSlug !== olds.teamSlug ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
-        return { action: "replace" }
+        return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl)
+      const octokit = yield* octokitFor(news.baseUrl);
 
       // Ensure & Sync — PUT is idempotent; adds team or updates permission
       yield* Effect.tryPromise({
@@ -172,19 +172,19 @@ export const TeamAccessProvider = () =>
             owner: news.owner,
             repo: news.repository,
             permission: news.permission ?? "push",
-          })
+          });
         },
         catch: (e) => e as Error,
-      })
+      });
 
       return {
         teamSlug: news.teamSlug,
         permission: news.permission ?? "push",
-      }
+      };
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit
+      const octokit = yield* Octokit;
 
       const repos = yield* Effect.tryPromise({
         try: () =>
@@ -192,7 +192,7 @@ export const TeamAccessProvider = () =>
             per_page: 100,
           }),
         catch: (e) => e as Error,
-      })
+      });
 
       const perRepo = yield* Effect.forEach(
         repos,
@@ -207,28 +207,28 @@ export const TeamAccessProvider = () =>
                     repo: repo.name,
                     per_page: 100,
                   },
-                )
+                );
                 return teams.map((team: any) => ({
                   teamSlug: team.slug,
                   permission: team.permission ?? "push",
-                }))
+                }));
               } catch (error: any) {
                 if (error.status === 403 || error.status === 404) {
-                  return []
+                  return [];
                 }
-                throw error
+                throw error;
               }
             },
             catch: (e) => e as Error,
           }),
         { concurrency: 10 },
-      )
+      );
 
-      return perRepo.flat()
+      return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* octokitFor(olds.baseUrl)
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise({
         try: async () => {
@@ -238,14 +238,14 @@ export const TeamAccessProvider = () =>
               team_slug: olds.teamSlug,
               owner: olds.owner,
               repo: olds.repository,
-            })
+            });
           } catch (error: any) {
             if (error.status !== 404) {
-              throw error
+              throw error;
             }
           }
         },
         catch: (e) => e as Error,
-      })
+      });
     }),
-  })
+  });
