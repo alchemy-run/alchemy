@@ -13,6 +13,7 @@ import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
+import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 
@@ -54,6 +55,7 @@ export const providers = (options?: ProvidersOptions) =>
       Release,
       Repository,
       Secret,
+      TeamAccess,
       Variable,
       Webhook,
     ]),
@@ -69,6 +71,7 @@ export const providers = (options?: ProvidersOptions) =>
         ReleaseProvider(),
         RepositoryProvider(),
         SecretProvider(),
+        TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
       ),
