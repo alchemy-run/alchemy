@@ -102,7 +102,6 @@ const SECTIONS: Section[] = [
       "How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.",
     pages: {
       slugs: [
-        "infrastructure-as-effects/index",
         "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
         "infrastructure-as-effects/layers",
