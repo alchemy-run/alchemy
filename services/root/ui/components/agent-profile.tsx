@@ -40,7 +40,7 @@ const PROSE =
   "text-[15.5px] leading-[1.75] text-foreground/90 " +
   "[&_p]:my-3.5 [&_p:first-child]:mt-0 [&_ul]:my-3 [&_ol]:my-3 [&_li]:my-1 " +
   "[&_pre]:my-4 [&_blockquote]:my-4 [&_h1]:mt-8 [&_h2]:mt-7 [&_h3]:mt-6";
-const DOC = `mx-auto w-full max-w-2xl ${PROSE}`;
+const DOC = `w-full max-w-2xl ${PROSE}`;
 
 const Pill = ({
   children,
@@ -352,7 +352,7 @@ export const AgentProfile = ({
               ) : (
                 /* skills — a document LIST: collapsed rows, the
                    teaching on expand; the switch rides the header */
-                <article className="mx-auto w-full max-w-2xl divide-y divide-border/40">
+                <article className="w-full max-w-2xl divide-y divide-border/40">
                   {agent.skills.map((grant) => (
                     <DocRow
                       key={grant.name}
@@ -413,7 +413,7 @@ export const AgentProfile = ({
             {tab === "tools" && (
               /* tools — a document LIST: collapsed rows, the prose
                  and schema pills on expand */
-              <article className="mx-auto w-full max-w-2xl divide-y divide-border/40">
+              <article className="w-full max-w-2xl divide-y divide-border/40">
                 {agent.tools.map((tool) => (
                   <DocRow
                     key={tool.name}
