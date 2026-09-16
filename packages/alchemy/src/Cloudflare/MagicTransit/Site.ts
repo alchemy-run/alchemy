@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -155,7 +156,28 @@ export const MagicSiteProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        ["description", "connectorId", "secondaryConnectorId", "location"].some(
+          (key) =>
+            removedConfiguration(
+              olds[key as keyof typeof olds],
+              news[key as keyof typeof news],
+            ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if (
+        (output || olds) &&
+        (output?.haMode ?? olds?.haMode ?? false) !== (news.haMode ?? false)
+      )
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // haMode is create-only — the update API has no such field.
@@ -184,7 +206,7 @@ export const MagicSiteProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createSiteName(id, news.name);
+      const name = yield* createSiteName(id, news.name ?? output?.name);
       // Inputs have been resolved to concrete strings by Plan.
       const connectorId = news.connectorId as string | undefined;
       const secondaryConnectorId = news.secondaryConnectorId as
@@ -278,9 +300,10 @@ const getSite = (accountId: string, siteId: string) =>
  * Cloudflare's side, so pick the first match deterministically by id.
  */
 const findByName = (accountId: string, name: string) =>
-  magicTransit.listSites({ accountId }).pipe(
+  magicTransit.listSites.items({ accountId }).pipe(
+    Stream.runCollect,
     Effect.map((r): ObservedSite | undefined =>
-      r.result
+      Array.from(r)
         .filter((s) => s.name === name)
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),

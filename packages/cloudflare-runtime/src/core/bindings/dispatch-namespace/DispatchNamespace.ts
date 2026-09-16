@@ -9,6 +9,7 @@ const DispatchNamespaceBindingWorker = {
 };
 import { formatExtensionModule } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
+import { RegistryProxy } from "../../registry/RegistryProxy.ts";
 import type { BindingHook } from "../../PluginContext.ts";
 import type { RemoteBindings } from "../../remote-bindings/RemoteBindings.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
@@ -74,6 +75,32 @@ export const remote = (
           moduleName: EXTENSION_MODULE_NAME,
           innerBindings: [{ name: "proxyClient", service }],
         },
+      }),
+    ),
+  );
+
+/** Routes fetch requests to locally running user workers in the namespace. */
+export const local = (
+  props: DispatchNamespaceProps,
+): BindingHook<DispatchNamespace | RegistryProxy> =>
+  Plugin.use(DispatchNamespace, () =>
+    Plugin.use(RegistryProxy, ({ api }) =>
+      Effect.gen(function* () {
+        if (props.outbound)
+          throw new Error("Local dispatch outbound workers are not supported");
+        const service = yield* api.subscribe({
+          kind: "worker",
+          namespace: props.namespace,
+          scriptName: "*",
+          dispatch: true,
+        });
+        return {
+          name: props.binding,
+          wrapped: {
+            moduleName: EXTENSION_MODULE_NAME,
+            innerBindings: [{ name: "proxyClient", service }],
+          },
+        };
       }),
     ),
   );

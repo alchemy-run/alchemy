@@ -39,7 +39,7 @@ type StreamEffect<A> = Effect.Effect<A, StreamError, RuntimeContext>;
  * video store and each video's `preview` URL is served unmodified at
  * `{devUrl}/cdn-cgi/mf/stream/<id>/watch`. The local store performs no
  * transcoding (the `hlsPlaybackUrl`/`dashPlaybackUrl` point at a placeholder
- * host), no signed URLs, and `createDirectUpload` is unsupported. Pipe the
+ * host), no signed URLs. Direct uploads use expiring single-use local URLs. Pipe the
  * binding through `Alchemy.remote()` to proxy to the real Stream service
  * instead.
  *

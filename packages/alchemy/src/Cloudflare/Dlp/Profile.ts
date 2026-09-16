@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { deepEqual } from "../../Diff.ts";
+import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -33,6 +35,18 @@ export interface ProfileEntry {
 }
 
 export interface ProfileProps {
+  /** Enable AI context analysis. */
+  aiContextEnabled?: zeroTrust.CreateDlpProfileCustomRequest["aiContextEnabled"];
+  /** Context keyword scanning settings for predefined detections. */
+  contextAwareness?: zeroTrust.CreateDlpProfileCustomRequest["contextAwareness"];
+  /** Data class IDs associated with this profile. Use an empty array to clear. */
+  dataClasses?: zeroTrust.CreateDlpProfileCustomRequest["dataClasses"];
+  /** Data tag IDs associated with this profile. Use an empty array to clear. */
+  dataTags?: zeroTrust.CreateDlpProfileCustomRequest["dataTags"];
+  /** Sensitivity levels associated with this profile. Use an empty array to clear. */
+  sensitivityLevels?: zeroTrust.CreateDlpProfileCustomRequest["sensitivityLevels"];
+  /** References to predefined or integration entries owned by other profiles. */
+  sharedEntries?: zeroTrust.CreateDlpProfileCustomRequest["sharedEntries"];
   /**
    * Name of the profile. If omitted, a unique name is generated from the
    * app, stage, and logical ID.
@@ -143,6 +157,12 @@ export const isProfile = (value: unknown): value is Profile =>
 
 export const ProfileProvider = () =>
   Provider.succeed(Profile, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["profileId", "accountId"],
 
     read: Effect.fn(function* ({ output }) {
@@ -159,7 +179,7 @@ export const ProfileProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createProfileName(id, news.name);
+      const name = yield* createProfileName(id, news.name ?? output?.name);
 
       // 1. Observe.
       const observed = output?.profileId
@@ -171,6 +191,13 @@ export const ProfileProvider = () =>
         const created = yield* zeroTrust.createDlpProfileCustom({
           accountId,
           name,
+          aiContextEnabled: news.aiContextEnabled,
+          contextAwareness: news.contextAwareness,
+          dataClasses: news.dataClasses,
+          dataTags: news.dataTags,
+          sensitivityLevels: news.sensitivityLevels,
+          sharedEntries: news.sharedEntries,
+
           ...(news.description !== undefined
             ? { description: news.description }
             : {}),
@@ -196,12 +223,43 @@ export const ProfileProvider = () =>
       //    name so existing entry ids are preserved.
       const dirty =
         observed.name !== name ||
+        (news.aiContextEnabled !== undefined &&
+          observed.aiContextEnabled !== news.aiContextEnabled) ||
+        (news.contextAwareness !== undefined &&
+          !deepEqual(observed.contextAwareness, news.contextAwareness, {
+            stripNullish: true,
+          })) ||
+        (news.dataClasses !== undefined &&
+          !arrayEqualsUnordered(
+            observed.dataClasses ?? [],
+            news.dataClasses,
+          )) ||
+        (news.dataTags !== undefined &&
+          !arrayEqualsUnordered(observed.dataTags ?? [], news.dataTags)) ||
+        (news.sensitivityLevels !== undefined &&
+          !arrayEqualsUnordered(
+            (observed.sensitivityLevels ?? []).map(({ groupId, levelId }) =>
+              JSON.stringify([groupId, levelId]),
+            ),
+            news.sensitivityLevels.map(({ groupId, levelId }) =>
+              JSON.stringify([groupId, levelId]),
+            ),
+          )) ||
         (observed.description ?? undefined) !== news.description ||
         observed.allowedMatchCount !== (news.allowedMatchCount ?? 0) ||
         observed.ocrEnabled !== (news.ocrEnabled ?? false) ||
         (news.confidenceThreshold !== undefined &&
           (observed.confidenceThreshold ?? undefined) !==
             news.confidenceThreshold) ||
+        (news.sharedEntries !== undefined &&
+          !deepEqual(
+            [...news.sharedEntries].sort((a, b) =>
+              a.entryId.localeCompare(b.entryId),
+            ),
+            (observed.sharedEntries ?? [])
+              .map((entry) => ({ entryId: entry.id, enabled: entry.enabled }))
+              .sort((a, b) => a.entryId.localeCompare(b.entryId)),
+          )) ||
         !sameEntries(observed, news.entries);
       if (!dirty) {
         return toAttributes(observed, accountId);
@@ -211,6 +269,12 @@ export const ProfileProvider = () =>
         accountId,
         profileId: observed.id,
         name,
+        aiContextEnabled: news.aiContextEnabled,
+        contextAwareness: news.contextAwareness,
+        dataClasses: news.dataClasses,
+        dataTags: news.dataTags,
+        sensitivityLevels: news.sensitivityLevels,
+        sharedEntries: news.sharedEntries,
         description: news.description ?? null,
         allowedMatchCount: news.allowedMatchCount ?? 0,
         ocrEnabled: news.ocrEnabled ?? false,
@@ -327,9 +391,7 @@ const encodeNewEntry = (
       ? { validation: entry.pattern.validation }
       : {}),
   },
-  ...(entry.description !== undefined
-    ? { description: entry.description }
-    : {}),
+  description: entry.description ?? null,
 });
 
 /**
@@ -359,6 +421,7 @@ const sameEntries = (
     return (
       live !== undefined &&
       live.enabled === entry.enabled &&
+      (live.description ?? "") === (entry.description ?? "") &&
       live.pattern.regex === entry.pattern.regex &&
       (live.pattern.validation ?? undefined) === entry.pattern.validation
     );

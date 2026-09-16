@@ -129,6 +129,7 @@ test.provider.skipIf(!entitledZoneId)(
           return yield* Cloudflare.ApiShield.Configuration("SessionIds", {
             zoneId,
             authIdCharacteristics: [{ name: "authorization", type: "header" }],
+            normalize: true,
           });
         }),
       );

@@ -175,7 +175,7 @@ export const ZoneTransferPeerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createPeerName(id, news.name);
+      const name = yield* createPeerName(id, news.name ?? output?.name);
       // Inputs are resolved to concrete values by Plan.
       const desired = {
         name,

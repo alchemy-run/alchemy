@@ -241,7 +241,10 @@ export const SubscriptionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createSubscriptionName(id, news.name);
+      const name =
+        news.name ??
+        output?.name ??
+        (yield* createSubscriptionName(id, undefined));
 
       // Observe — the subscriptionId cached on `output` is a hint, not a
       // guarantee: a missing subscription falls through to create.

@@ -156,6 +156,12 @@ export const ImpersonationRegistryEntryProvider = () =>
         );
     }),
 
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -196,7 +202,7 @@ export const ImpersonationRegistryEntryProvider = () =>
             name: news.name,
             email: news.email,
             isEmailRegex: news.isEmailRegex ?? false,
-            comments: news.comments,
+            comments: news.comments ?? "",
           },
         );
         return toAttributes(created, accountId);
@@ -207,8 +213,7 @@ export const ImpersonationRegistryEntryProvider = () =>
         (observed.name ?? "") !== news.name ||
         (observed.email ?? "") !== news.email ||
         (observed.isEmailRegex ?? false) !== (news.isEmailRegex ?? false) ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (observed.comments ?? "") !== (news.comments ?? "");
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -219,7 +224,7 @@ export const ImpersonationRegistryEntryProvider = () =>
         name: news.name,
         email: news.email,
         isEmailRegex: news.isEmailRegex ?? false,
-        comments: news.comments,
+        comments: news.comments ?? "",
       });
       return toAttributes(patched, accountId);
     }),

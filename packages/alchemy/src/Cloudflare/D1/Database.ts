@@ -401,7 +401,10 @@ export const ProviderLive = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createDatabaseName(id, news.name);
+      const name =
+        news.name ??
+        output?.databaseName ??
+        (yield* createDatabaseName(id, undefined));
       const jurisdiction = news.jurisdiction ?? "default";
       const acct = output?.accountId ?? accountId;
 
@@ -444,7 +447,7 @@ export const ProviderLive = () =>
       // exists; we tolerate the race by re-listing to find it.
       let databaseId: string;
       let databaseName: string;
-      const isFirstCreation = !observed;
+      let isFirstCreation = false;
       if (!observed) {
         const db = yield* d1
           .createDatabase({
@@ -454,7 +457,12 @@ export const ProviderLive = () =>
             primaryLocationHint: news.primaryLocationHint,
           })
           .pipe(
-            Effect.catchTag("InvalidProperty", () =>
+            Effect.tap(() =>
+              Effect.sync(() => {
+                isFirstCreation = true;
+              }),
+            ),
+            Effect.catchTag("InvalidProperty", (cause) =>
               Effect.gen(function* () {
                 const match = yield* d1.listDatabases
                   .items({ accountId: acct, name })
@@ -466,9 +474,7 @@ export const ProviderLive = () =>
                 if (match) {
                   return match;
                 }
-                return yield* Effect.die(
-                  `Database with name "${name}" already exists but could not be found`,
-                );
+                return yield* Effect.fail(cause);
               }),
             ),
           );
@@ -483,8 +489,12 @@ export const ProviderLive = () =>
       // database resource itself. Always patch with the desired mode
       // so adoption converges drifted state.
       const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
+      const currentDatabase = yield* d1.getDatabase({
+        accountId: acct,
+        databaseId,
+      });
       const observedReplicationMode =
-        observed?.readReplication?.mode ?? "disabled";
+        currentDatabase.readReplication?.mode ?? "disabled";
       if (
         isFirstCreation
           ? desiredReplicationMode !== "disabled"
@@ -519,7 +529,7 @@ export const ProviderLive = () =>
       const migrations = migrationsInput
         ? yield* runMigrations({
             input: migrationsInput,
-            stamped: stampedOf(output),
+            stamped: stampedOf(isFirstCreation ? undefined : output),
             withExecutor: (apply) =>
               Effect.gen(function* () {
                 const queryDb = yield* d1.queryDatabase;
@@ -541,7 +551,7 @@ export const ProviderLive = () =>
             databaseId,
             news.importFiles,
             yield* rootDir,
-            output?.importHashes ?? {},
+            isFirstCreation ? {} : (output?.importHashes ?? {}),
           )
         : {};
 
@@ -680,7 +690,10 @@ export const ProviderLocal = () =>
 
           return {
             databaseId,
-            databaseName: yield* createDatabaseName(id, news.name),
+            databaseName: yield* createDatabaseName(
+              id,
+              news.name ?? output?.databaseName,
+            ),
             jurisdiction: (news.jurisdiction ?? "default") as Jurisdiction,
             readReplication: news.readReplication,
             accountId: output?.accountId ?? accountId,

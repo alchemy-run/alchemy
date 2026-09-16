@@ -38,12 +38,17 @@ import type {
   R2Conditional,
   R2Etag,
   R2ServiceProps,
+  R2BucketLockRule,
+  R2LifecycleCondition,
 } from "./R2BucketOptions.shared.ts";
 import {
   BINDING_R2_BLOBS,
   BINDING_R2_ENABLE_CONTROL_ENDPOINTS,
   BINDING_R2_OBJECT,
   HEADER_R2_BUCKET,
+  HEADER_R2_LOCK_RULES,
+  HEADER_R2_POLICY,
+  isR2ObjectLocked,
   HEADER_R2_CONTROL_OP,
   testR2Conditional,
 } from "./R2BucketOptions.shared.ts";
@@ -56,10 +61,13 @@ interface Env {
 
 export default {
   async fetch(request, env, ctx) {
-    const { bucketName } = (ctx as { props: R2ServiceProps }).props;
+    const policy = (ctx as { props: R2ServiceProps }).props;
+    const { bucketName, lockRules } = policy;
     const stub = env[BINDING_R2_OBJECT].getByName(bucketName);
     const headers = new Headers(request.headers);
     headers.set(HEADER_R2_BUCKET, encodeURIComponent(bucketName));
+    headers.set(HEADER_R2_LOCK_RULES, JSON.stringify(lockRules ?? []));
+    headers.set(HEADER_R2_POLICY, JSON.stringify(policy));
     return stub.fetch(new Request(request, { headers }));
   },
 } satisfies ExportedHandler<Env>;
@@ -447,6 +455,7 @@ type ObjectRow = {
   size: number; // total size of object (all parts) in bytes
   etag: string; // hex MD5 hash if not multipart
   uploaded: number; // milliseconds since unix epoch
+  storage_class: string;
   checksums: string; // JSON-serialised `R2StringChecksums` (workers-types)
   http_metadata: string; // JSON-serialised `R2HTTPMetadata` (workers-types)
   custom_metadata: string; // JSON-serialised user-defined metadata
@@ -461,6 +470,8 @@ type MultipartUploadRow = {
   key: string;
   http_metadata: string; // JSON-serialised `R2HTTPMetadata` (workers-types)
   custom_metadata: string; // JSON-serialised user-defined metadata
+  created: number;
+  storage_class: string;
   state: (typeof MultipartUploadState)[keyof typeof MultipartUploadState];
   // NOTE: we need to keep completed/aborted uploads around for referential
   // integrity, and because error messages are different when attempting to
@@ -483,6 +494,7 @@ CREATE TABLE IF NOT EXISTS _mf_objects (
     size INTEGER NOT NULL,
     etag TEXT NOT NULL,
     uploaded INTEGER NOT NULL,
+    storage_class TEXT NOT NULL DEFAULT 'Standard',
     checksums TEXT NOT NULL,
     http_metadata TEXT NOT NULL,
     custom_metadata TEXT NOT NULL
@@ -492,7 +504,9 @@ CREATE TABLE IF NOT EXISTS _mf_multipart_uploads (
     key TEXT NOT NULL,
     http_metadata TEXT NOT NULL,
     custom_metadata TEXT NOT NULL,
-    state TINYINT DEFAULT 0 NOT NULL
+    state TINYINT DEFAULT 0 NOT NULL,
+    created INTEGER NOT NULL DEFAULT 0,
+    storage_class TEXT NOT NULL DEFAULT 'Standard'
 );
 CREATE TABLE IF NOT EXISTS _mf_multipart_parts (
     upload_id TEXT NOT NULL REFERENCES _mf_multipart_uploads(upload_id),
@@ -548,6 +562,7 @@ interface R2GetRequest {
   onlyIf?: R2Conditional;
 }
 interface R2PutRequest {
+  storageClass?: string;
   method: "put";
   object: string;
   customMetadata?: Record<string, string>;
@@ -560,6 +575,7 @@ interface R2PutRequest {
   sha512?: Uint8Array;
 }
 interface R2CreateMultipartUploadRequest {
+  storageClass?: string;
   method: "createMultipartUpload";
   object: string;
   customMetadata?: Record<string, string>;
@@ -687,6 +703,7 @@ function decodeBindingRequest(raw: any): R2BindingRequest {
       return {
         method: "put",
         object: raw.object,
+        storageClass: raw.storageClass,
         customMetadata: decodeRecord(raw.customFields),
         httpMetadata: decodeHttpFields(raw.httpFields),
         onlyIf: decodeConditional(raw.onlyIf),
@@ -700,6 +717,7 @@ function decodeBindingRequest(raw: any): R2BindingRequest {
       return {
         method: "createMultipartUpload",
         object: raw.object,
+        storageClass: raw.storageClass,
         customMetadata: decodeRecord(raw.customFields),
         httpMetadata: decodeHttpFields(raw.httpFields),
       };
@@ -750,6 +768,7 @@ function decodeBindingRequest(raw: any): R2BindingRequest {
 
 /* Response formats, returned to the Workers runtime */
 interface R2HeadResponse {
+  storageClass: string;
   name: string;
   version: string;
   size: number;
@@ -793,6 +812,7 @@ class InternalR2Object {
   readonly size: number;
   readonly etag: string;
   readonly uploaded: number;
+  readonly storageClass: string;
   readonly httpMetadata: R2HttpFields;
   readonly customMetadata: Record<string, string>;
   readonly range?: R2Range;
@@ -804,6 +824,7 @@ class InternalR2Object {
     this.size = row.size;
     this.etag = row.etag;
     this.uploaded = row.uploaded;
+    this.storageClass = row.storage_class ?? "Standard";
     this.httpMetadata = JSON.parse(row.http_metadata);
     this.customMetadata = JSON.parse(row.custom_metadata);
     this.range = range;
@@ -825,6 +846,7 @@ class InternalR2Object {
       size: this.size,
       etag: this.etag,
       uploaded: this.uploaded,
+      storageClass: this.storageClass,
       httpFields: this.httpMetadata,
       customFields: Object.entries(this.customMetadata).map(([k, v]) => ({
         k,
@@ -1099,6 +1121,16 @@ class DigestingStream<
 const validate = new Validator();
 const decoder = new TextDecoder();
 
+function validateStorageClass(value: string | undefined) {
+  if (
+    value !== undefined &&
+    value !== "Standard" &&
+    value !== "InfrequentAccess"
+  )
+    throw new R2Error(400, "Invalid storage class", 0);
+  return value ?? "Standard";
+}
+
 function generateVersion() {
   return hexEncode(crypto.getRandomValues(new Uint8Array(16)));
 }
@@ -1191,7 +1223,7 @@ function sqlStmts(storage: DurableObjectStorage) {
   const getByKey = (key: string) =>
     sql
       .exec<ObjectRow>(
-        `SELECT key, blob_id, version, size, etag, uploaded, checksums, http_metadata, custom_metadata
+        `SELECT key, blob_id, version, size, etag, uploaded, storage_class, checksums, http_metadata, custom_metadata
         FROM _mf_objects WHERE key = ?1`,
         key,
       )
@@ -1199,14 +1231,15 @@ function sqlStmts(storage: DurableObjectStorage) {
       .at(0);
   const putRow = (row: ObjectRow) =>
     sql.exec(
-      `INSERT OR REPLACE INTO _mf_objects (key, blob_id, version, size, etag, uploaded, checksums, http_metadata, custom_metadata)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      `INSERT OR REPLACE INTO _mf_objects (key, blob_id, version, size, etag, uploaded, storage_class, checksums, http_metadata, custom_metadata)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
       row.key,
       row.blob_id,
       row.version,
       row.size,
       row.etag,
       row.uploaded,
+      row.storage_class,
       row.checksums,
       row.http_metadata,
       row.custom_metadata,
@@ -1268,6 +1301,7 @@ function sqlStmts(storage: DurableObjectStorage) {
       "size",
       "etag",
       "uploaded",
+      "storage_class",
       "checksums",
       ...extraColumns,
     ];
@@ -1366,7 +1400,7 @@ function sqlStmts(storage: DurableObjectStorage) {
                 'key:' || key
             ) AS delimited_prefix_or_key,
             -- NOTE: we'll ignore metadata for delimited prefix rows, so it doesn't matter which keys' we return
-            version, size, etag, uploaded, checksums, http_metadata, custom_metadata
+            version, size, etag, uploaded, storage_class, checksums, http_metadata, custom_metadata
           FROM _mf_objects
           WHERE substr(key, 1, length(?1)) = ?1
           AND (?2 IS NULL OR key > ?2)
@@ -1382,12 +1416,14 @@ function sqlStmts(storage: DurableObjectStorage) {
 
     createMultipartUpload: (row: Omit<MultipartUploadRow, "state">) =>
       sql.exec(
-        `INSERT INTO _mf_multipart_uploads (upload_id, key, http_metadata, custom_metadata)
-        VALUES (?1, ?2, ?3, ?4)`,
+        `INSERT INTO _mf_multipart_uploads (upload_id, key, http_metadata, custom_metadata, created, storage_class)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
         row.upload_id,
         row.key,
         row.http_metadata,
         row.custom_metadata,
+        row.created,
+        row.storage_class,
       ),
     putPart: (key: string, newRow: Omit<MultipartPartRow, "object_key">) =>
       storage.transactionSync(() => {
@@ -1431,10 +1467,10 @@ function sqlStmts(storage: DurableObjectStorage) {
           .exec<
             Pick<
               MultipartUploadRow,
-              "http_metadata" | "custom_metadata" | "state"
+              "http_metadata" | "custom_metadata" | "state" | "storage_class"
             >
           >(
-            "SELECT http_metadata, custom_metadata, state FROM _mf_multipart_uploads WHERE upload_id = ?1 AND key = ?2",
+            "SELECT http_metadata, custom_metadata, state, storage_class FROM _mf_multipart_uploads WHERE upload_id = ?1 AND key = ?2",
             uploadId,
             key,
           )
@@ -1534,6 +1570,7 @@ function sqlStmts(storage: DurableObjectStorage) {
           size: totalSize,
           etag,
           uploaded: Date.now(),
+          storage_class: uploadRow.storage_class,
           checksums: "{}",
           http_metadata: uploadRow.http_metadata,
           custom_metadata: uploadRow.custom_metadata,
@@ -1638,6 +1675,26 @@ export class R2BucketObject implements DurableObject {
   ) {
     state.storage.sql.exec("PRAGMA case_sensitive_like = TRUE");
     state.storage.sql.exec(SQL_SCHEMA);
+    // Upgrade existing local storage without losing objects or multipart state.
+    for (const [table, columns] of Object.entries({
+      _mf_objects: { storage_class: "TEXT NOT NULL DEFAULT 'Standard'" },
+      _mf_multipart_uploads: {
+        storage_class: "TEXT NOT NULL DEFAULT 'Standard'",
+        created: "INTEGER NOT NULL DEFAULT 0",
+      },
+    })) {
+      const present = new Set(
+        state.storage.sql
+          .exec(`PRAGMA table_info(${table})`)
+          .toArray()
+          .map((row) => row.name),
+      );
+      for (const [column, definition] of Object.entries(columns))
+        if (!present.has(column))
+          state.storage.sql.exec(
+            `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+          );
+    }
     this.#stmts = sqlStmts(state.storage);
   }
 
@@ -1675,7 +1732,16 @@ export class R2BucketObject implements DurableObject {
       }
     }
 
+    const policy: R2ServiceProps = JSON.parse(
+      req.headers.get(HEADER_R2_POLICY) ??
+        JSON.stringify({ bucketName: this.name }),
+    );
+    await this.state.storage.put("lifecyclePolicy", policy);
     try {
+      validateStorageClass(policy.storageClass);
+      await this.#applyLifecycle(policy);
+      if (new URL(req.url).pathname === "/__lifecycle_init")
+        return new Response(null, { status: 204 });
       if (req.method === "GET") return await this.#handleGet(req);
       if (req.method === "PUT") return await this.#handlePut(req);
       return new Response(null, { status: 405 });
@@ -1686,6 +1752,7 @@ export class R2BucketObject implements DurableObject {
       console.error(fallback);
       return new Response(fallback, { status: 500 });
     } finally {
+      await this.#scheduleLifecycle(policy);
       // Make sure the request body is consumed. Otherwise, calls which make
       // requests to this object may hang and never resolve.
       // See https://github.com/cloudflare/workerd/issues/960.
@@ -1693,6 +1760,155 @@ export class R2BucketObject implements DurableObject {
         await req.body.pipeTo(new WritableStream());
       }
     }
+  }
+
+  #lifecycleDeadline(
+    condition: R2LifecycleCondition | undefined,
+    created: number,
+  ) {
+    return condition === undefined
+      ? Infinity
+      : condition.type === "Age"
+        ? created + condition.maxAge * 1000
+        : Date.parse(condition.date);
+  }
+
+  async #applyLifecycle(policy: R2ServiceProps) {
+    const now = Date.now();
+    const rules = (policy.lifecycleRules ?? []).filter(
+      (rule) => rule.enabled !== false,
+    );
+    if (rules.length === 0) return;
+    for (const object of this.state.storage.sql
+      .exec<ObjectRow>("SELECT * FROM _mf_objects")
+      .toArray()) {
+      const matching = rules.filter((rule) =>
+        object.key.startsWith(rule.prefix ?? ""),
+      );
+      if (
+        matching.some(
+          (rule) =>
+            this.#lifecycleDeadline(
+              rule.deleteObjectsTransition?.condition,
+              object.uploaded,
+            ) <= now,
+        ) &&
+        !isR2ObjectLocked(
+          policy.lockRules ?? [],
+          object.key,
+          object.uploaded,
+          now,
+        )
+      ) {
+        for (const blob of this.#stmts.deleteByKeys([object.key]))
+          this.#backgroundDelete(blob);
+      } else if (
+        matching.some((rule) =>
+          rule.storageClassTransitions?.some(
+            (transition) =>
+              this.#lifecycleDeadline(transition.condition, object.uploaded) <=
+              now,
+          ),
+        )
+      ) {
+        this.state.storage.sql.exec(
+          "UPDATE _mf_objects SET storage_class = 'InfrequentAccess' WHERE key = ?",
+          object.key,
+        );
+      }
+    }
+    for (const upload of this.state.storage.sql
+      .exec<MultipartUploadRow>(
+        "SELECT * FROM _mf_multipart_uploads WHERE state = 0",
+      )
+      .toArray()) {
+      if (
+        rules.some(
+          (rule) =>
+            upload.key.startsWith(rule.prefix ?? "") &&
+            this.#lifecycleDeadline(
+              rule.abortMultipartUploadsTransition?.condition,
+              upload.created,
+            ) <= now,
+        )
+      ) {
+        for (const blob of this.#stmts.abortMultipartUpload(
+          upload.key,
+          upload.upload_id,
+        ))
+          this.#backgroundDelete(blob);
+      }
+    }
+  }
+
+  async #scheduleLifecycle(policy: R2ServiceProps) {
+    if (this.beingTested) return;
+    const now = Date.now();
+    let next = Infinity;
+    const schedule = (deadline: number) => {
+      if (Number.isFinite(deadline))
+        next = Math.min(next, Math.max(now + 1000, deadline));
+    };
+    const rules = (policy.lifecycleRules ?? []).filter(
+      (rule) => rule.enabled !== false,
+    );
+    if (rules.length === 0) {
+      await this.state.storage.deleteAlarm();
+      return;
+    }
+    for (const object of this.state.storage.sql
+      .exec<ObjectRow>("SELECT key, uploaded, storage_class FROM _mf_objects")
+      .toArray()) {
+      for (const rule of rules)
+        if (object.key.startsWith(rule.prefix ?? "")) {
+          const deletion = this.#lifecycleDeadline(
+            rule.deleteObjectsTransition?.condition,
+            object.uploaded,
+          );
+          // Locked objects are reconsidered periodically; retention wins over expiration.
+          schedule(
+            deletion <= now &&
+              isR2ObjectLocked(
+                policy.lockRules ?? [],
+                object.key,
+                object.uploaded,
+                now,
+              )
+              ? now + 60_000
+              : deletion,
+          );
+          if (object.storage_class !== "InfrequentAccess")
+            for (const transition of rule.storageClassTransitions ?? [])
+              schedule(
+                this.#lifecycleDeadline(transition.condition, object.uploaded),
+              );
+        }
+    }
+    for (const upload of this.state.storage.sql
+      .exec<MultipartUploadRow>(
+        "SELECT key, created FROM _mf_multipart_uploads WHERE state = 0",
+      )
+      .toArray()) {
+      for (const rule of rules)
+        if (upload.key.startsWith(rule.prefix ?? ""))
+          schedule(
+            this.#lifecycleDeadline(
+              rule.abortMultipartUploadsTransition?.condition,
+              upload.created,
+            ),
+          );
+    }
+    if (Number.isFinite(next)) await this.state.storage.setAlarm(next);
+    else await this.state.storage.deleteAlarm();
+  }
+
+  async alarm() {
+    const policy =
+      await this.state.storage.get<R2ServiceProps>("lifecyclePolicy");
+    if (!policy) return;
+    this.#name = policy.bucketName;
+    await this.#applyLifecycle(policy);
+    await this.#scheduleLifecycle(policy);
   }
 
   async #handleControlOp({ name, args = [] }: ControlOp): Promise<Response> {
@@ -1869,12 +2085,27 @@ export class R2BucketObject implements DurableObject {
     return new InternalR2ObjectBody(row, value, r2Range);
   }
 
+  #assertUnlocked(key: string, rules: readonly R2BucketLockRule[]) {
+    const row = this.#stmts.getByKey(key);
+    if (row && isR2ObjectLocked(rules, key, row.uploaded, Date.now())) {
+      // Zero is workerd's unspecified-error code; a live lock code has not
+      // been verified. Preserve the useful local message through the binding.
+      throw new R2Error(
+        403,
+        "Object is locked by an R2 bucket retention rule",
+        0,
+      );
+    }
+  }
+
   async #put(
     key: string,
     value: ReadableStream<Uint8Array>,
     valueSize: number,
     opts: InternalR2PutOptions,
+    lockRules: readonly R2BucketLockRule[],
   ): Promise<InternalR2Object> {
+    this.#assertUnlocked(key, lockRules);
     // Store value in the blob store, computing required digests as we go
     // (this means we don't have to buffer the entire stream to compute them)
     const algorithms: Array<DigestAlgorithm> = [];
@@ -1901,12 +2132,14 @@ export class R2BucketObject implements DurableObject {
       size: valueSize,
       etag: md5DigestHex,
       uploaded: Date.now(),
+      storage_class: validateStorageClass(opts.storageClass),
       checksums: JSON.stringify(checksums),
       http_metadata: JSON.stringify(opts.httpMetadata ?? {}),
       custom_metadata: JSON.stringify(opts.customMetadata ?? {}),
     };
     let oldBlobIds: Array<string> | undefined;
     try {
+      this.#assertUnlocked(key, lockRules);
       oldBlobIds = this.#stmts.put(row, opts.onlyIf);
     } catch (e) {
       // Probably precondition failed. In any case, the put transaction failed,
@@ -1920,9 +2153,13 @@ export class R2BucketObject implements DurableObject {
     return new InternalR2Object(row);
   }
 
-  #delete(keys: string | Array<string>) {
+  #delete(
+    keys: string | Array<string>,
+    lockRules: readonly R2BucketLockRule[],
+  ) {
     if (!Array.isArray(keys)) keys = [keys];
     for (const key of keys) validate.key(key);
+    for (const key of keys) this.#assertUnlocked(key, lockRules);
     const oldBlobIds = this.#stmts.deleteByKeys(keys);
     for (const blobId of oldBlobIds) this.#backgroundDelete(blobId);
   }
@@ -2042,6 +2279,8 @@ export class R2BucketObject implements DurableObject {
     this.#stmts.createMultipartUpload({
       key,
       upload_id: uploadId,
+      created: Date.now(),
+      storage_class: validateStorageClass(opts.storageClass),
       http_metadata: JSON.stringify(opts.httpMetadata ?? {}),
       custom_metadata: JSON.stringify(opts.customMetadata ?? {}),
     });
@@ -2094,7 +2333,9 @@ export class R2BucketObject implements DurableObject {
     key: string,
     uploadId: string,
     parts: Array<R2PublishedPart>,
+    lockRules: readonly R2BucketLockRule[],
   ): Promise<InternalR2Object> {
+    this.#assertUnlocked(key, lockRules);
     validate.key(key);
     const minPartSize = this.beingTested
       ? R2Limits.MIN_MULTIPART_PART_SIZE_TEST
@@ -2134,9 +2375,25 @@ export class R2BucketObject implements DurableObject {
 
   async #handlePut(req: Request): Promise<Response> {
     const { metadata, metadataSize, value } = await decodeMetadata(req);
+    const lockRules: R2BucketLockRule[] = JSON.parse(
+      req.headers.get(HEADER_R2_LOCK_RULES) ?? "[]",
+    );
 
+    if (
+      metadata.method === "put" ||
+      metadata.method === "createMultipartUpload"
+    ) {
+      const policy: R2ServiceProps = JSON.parse(
+        req.headers.get(HEADER_R2_POLICY) ?? "{}",
+      );
+      metadata.storageClass ??= policy.storageClass;
+      validateStorageClass(metadata.storageClass);
+    }
     if (metadata.method === "delete") {
-      this.#delete("object" in metadata ? metadata.object : metadata.objects);
+      this.#delete(
+        "object" in metadata ? metadata.object : metadata.objects,
+        lockRules,
+      );
       return new Response();
     } else if (metadata.method === "put") {
       const contentLength = parseInt(
@@ -2152,6 +2409,7 @@ export class R2BucketObject implements DurableObject {
         value,
         valueSize,
         metadata,
+        lockRules,
       );
       return encodeResult(result);
     } else if (metadata.method === "createMultipartUpload") {
@@ -2180,6 +2438,7 @@ export class R2BucketObject implements DurableObject {
         metadata.object,
         metadata.uploadId,
         metadata.parts,
+        lockRules,
       );
       return encodeResult(result);
     } else if (metadata.method === "abortMultipartUpload") {

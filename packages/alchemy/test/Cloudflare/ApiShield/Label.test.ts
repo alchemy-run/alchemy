@@ -78,6 +78,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
           zoneId,
           name: NAME_DEFAULT,
           description: "v1",
+          metadata: { team: "api" },
         }).pipe(adopt(true));
       }),
     );
@@ -90,6 +91,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
     const live = yield* getLabel(zoneId, NAME_DEFAULT);
     expect(live?.name).toEqual(NAME_DEFAULT);
     expect(live?.description).toEqual("v1");
+    expect(live?.metadata).toEqual({ team: "api" });
 
     // Update the mutable description — same identity, patched in place.
     const updated = yield* stack.deploy(
@@ -98,6 +100,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
           zoneId,
           name: NAME_DEFAULT,
           description: "v2",
+          metadata: { team: "security" },
         }).pipe(adopt(true));
       }),
     );
@@ -107,6 +110,7 @@ test.provider("create, update description in place, destroy a label", (stack) =>
 
     const patched = yield* getLabel(zoneId, NAME_DEFAULT);
     expect(patched?.description).toEqual("v2");
+    expect(patched?.metadata).toEqual({ team: "security" });
 
     yield* stack.destroy();
 

@@ -24,7 +24,7 @@ const logLevel = Effect.provideService(
 // own out-of-band verification calls.
 const forbiddenBlips = {
   while: (e: { _tag: string }) => e._tag === "Forbidden",
-  schedule: Schedule.exponential("500 millis"),
+  schedule: Schedule.spaced("2 seconds"),
   times: 8,
 } as const;
 
@@ -82,7 +82,7 @@ const expectStreamGone = (accountId: string, streamId: string) =>
     Effect.retry({
       while: (e) => e._tag === "StreamNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -95,7 +95,7 @@ const expectSinkGone = (accountId: string, sinkId: string) =>
     Effect.retry({
       while: (e) => e._tag === "SinkNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -108,7 +108,7 @@ const expectPipelineGone = (accountId: string, pipelineId: string) =>
     Effect.retry({
       while: (e) => e._tag === "PipelineNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -182,7 +182,7 @@ test.provider(
       // Destroy again — delete must be idempotent.
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 90_000 },
 );
 
 interface EtlOpts {

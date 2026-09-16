@@ -112,18 +112,10 @@ export const SigningKeyProvider = () =>
       ) {
         return { action: "replace" } as const;
       }
-      if (
-        typeof olds?.accountId === "string" &&
-        typeof news.accountId === "string" &&
-        olds.accountId !== news.accountId
-      ) {
-        return { action: "replace" } as const;
-      }
-      if (
-        output?.accountId !== undefined &&
-        typeof news.accountId === "string" &&
-        news.accountId !== output.accountId
-      ) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const previousAccount = output?.accountId ?? olds?.accountId;
+      const desiredAccount = news.accountId ?? accountId;
+      if (previousAccount !== undefined && previousAccount !== desiredAccount) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -163,11 +155,11 @@ export const SigningKeyProvider = () =>
       );
     }),
 
-    reconcile: Effect.fn(function* ({ id, news }) {
+    reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;
-      const name = yield* createKeyName(id, news.name);
+      const name = yield* createKeyName(id, news.name ?? output?.keyName);
 
       // 1. Observe — list the account's keys and look for ours. `output`
       //    is only a cache of the name; the list is authoritative.

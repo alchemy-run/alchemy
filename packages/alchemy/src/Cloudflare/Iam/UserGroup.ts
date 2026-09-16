@@ -148,6 +148,11 @@ export const isUserGroup = (value: unknown): value is UserGroup =>
 export const UserGroupProvider = () =>
   Provider.succeed(UserGroup, {
     stables: ["userGroupId", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
 
     // Account-scoped collection: exhaustively paginate the account's
     // user-groups list. Each page item already carries the full shape
@@ -188,7 +193,7 @@ export const UserGroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createGroupName(id, news.name);
+      const name = yield* createGroupName(id, news.name ?? output?.name);
       const desired = resolvePolicies(news.policies ?? []);
 
       // 1. Observe — the id cached on `output` is a hint, not a

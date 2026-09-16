@@ -139,7 +139,7 @@ export const ViewProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createViewName(id, news.name);
+      const name = yield* createViewName(id, news.name ?? output?.name);
       // Inputs are resolved to concrete values by Plan.
       const zones = news.zones as string[];
 
@@ -199,9 +199,10 @@ const getView = (accountId: string, viewId: string) =>
  * determinism.
  */
 const findByName = (accountId: string, name: string) =>
-  dns.listSettingAccountViews({ accountId, name: { exact: name } }).pipe(
+  dns.listSettingAccountViews.items({ accountId, name: { exact: name } }).pipe(
+    Stream.runCollect,
     Effect.map((list) =>
-      list.result
+      [...list]
         .filter((v) => v.name === name)
         .sort((a, b) => a.createdTime.localeCompare(b.createdTime))
         .at(0),

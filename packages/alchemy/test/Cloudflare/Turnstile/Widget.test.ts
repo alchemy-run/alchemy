@@ -26,7 +26,10 @@ const getWidget = (accountId: string, sitekey: string) =>
   turnstile.getWidget({ accountId, sitekey }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("5 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -39,10 +42,11 @@ const expectGone = (accountId: string, sitekey: string) =>
     Effect.catchTag("WidgetNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WidgetNotDeleted",
-      schedule: Schedule.max([
+      schedule: Schedule.min([
         Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
+        Schedule.spaced("5 seconds"),
       ]),
+      times: 8,
     }),
   );
 
@@ -86,6 +90,7 @@ test.provider("update mutable props in place (same sitekey)", (stack) =>
     const initial = yield* stack.deploy(
       Cloudflare.Turnstile.Widget("UpdateWidget", {
         name: "alchemy-turnstile-update",
+        clearanceLevel: "jschallenge",
         domains: [zoneName],
         mode: "managed",
       }),
@@ -93,6 +98,7 @@ test.provider("update mutable props in place (same sitekey)", (stack) =>
 
     expect(initial.name).toEqual("alchemy-turnstile-update");
     expect(initial.mode).toEqual("managed");
+    expect(initial.clearanceLevel).toEqual("jschallenge");
 
     const updated = yield* stack.deploy(
       Cloudflare.Turnstile.Widget("UpdateWidget", {
@@ -112,6 +118,7 @@ test.provider("update mutable props in place (same sitekey)", (stack) =>
 
     const live = yield* getWidget(accountId, updated.sitekey);
     expect(live.name).toEqual("alchemy-turnstile-update-v2");
+    expect(live.clearanceLevel).toEqual("no_clearance");
     expect(live.mode).toEqual("invisible");
     expect([...live.domains].sort()).toEqual(
       [zoneName, `www.${zoneName}`].sort(),
@@ -153,7 +160,10 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* turnstile.deleteWidget({ accountId, sitekey: widget.sitekey }).pipe(
       Effect.retry({
         while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
+        schedule: Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("5 seconds"),
+        ]),
         times: 8,
       }),
     );

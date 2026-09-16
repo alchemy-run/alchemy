@@ -131,6 +131,36 @@ describe.sequential("MtlsCertificate", () => {
     }).pipe(logLevel),
   );
 
+  test.provider(
+    "replaces a renamed certificate with the same PEM without deleting its replacement",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        yield* stack.destroy();
+        const deploy = (name: string) =>
+          stack.deploy(
+            Cloudflare.MtlsCertificate.MtlsCertificate("RenamedCert", {
+              name,
+              ca: true,
+              certificates: CA_CERT_1,
+            }),
+          );
+        const first = yield* deploy("alchemy-audit-mtls-first");
+        const second = yield* deploy("alchemy-audit-mtls-second");
+        // Cloudflare may reuse the certificate id when reuploading identical PEM.
+        const actual = yield* mtls.getMtlsCertificate({
+          accountId,
+          mtlsCertificateId: second.mtlsCertificateId,
+        });
+        expect(actual.name).toEqual("alchemy-audit-mtls-second");
+        if (first.mtlsCertificateId !== second.mtlsCertificateId) {
+          yield* waitForDelete(accountId, first.mtlsCertificateId);
+        }
+        yield* stack.destroy();
+        yield* waitForDelete(accountId, second.mtlsCertificateId);
+      }).pipe(logLevel),
+  );
+
   test.provider("list enumerates the deployed mTLS certificate", (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

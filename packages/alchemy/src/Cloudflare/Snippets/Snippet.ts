@@ -38,13 +38,25 @@ export interface SnippetProps {
    *
    * Mutable — updated in place via upload.
    */
-  code: string;
+  code?: string;
+  /** Additional upload modules. Include the main module here when omitting code. */
+  files?: SnippetFile[];
   /**
    * Filename of the snippet's main module as referenced in the upload.
    *
    * @default "snippet.js"
    */
   mainModule?: string;
+}
+
+/** A named text or binary module in a Snippet multipart upload. */
+export interface SnippetFile {
+  /** Module filename used by import statements. */
+  name: string;
+  /** UTF-8 source text or binary module bytes. */
+  content: string | Uint8Array;
+  /** MIME type identifying the module; defaults to application/javascript+module. */
+  contentType?: string;
 }
 
 export interface SnippetAttributes {
@@ -95,6 +107,19 @@ export type Snippet = Resource<
  *       },
  *     };
  *   `,
+ * });
+ * ```
+ *
+ * ### Uploading Multiple Modules
+ * **Example:** Import a helper module
+ * ```typescript
+ * yield* Cloudflare.Snippets.Snippet("Modules", {
+ *   zoneId: zone.zoneId,
+ *   mainModule: "main.js",
+ *   files: [
+ *     { name: "main.js", content: 'import handler from "./helper.js"; export default handler;' },
+ *     { name: "helper.js", content: 'export default { fetch(request) { return fetch(request); } };' },
+ *   ],
  * });
  * ```
  *
@@ -226,19 +251,80 @@ export const SnippetProvider = () =>
       const name = output?.name ?? (yield* createSnippetName(id, news.name));
       const mainModule = news.mainModule ?? DEFAULT_MAIN_MODULE;
 
-      // `putSnippet` (PUT) is a true upsert — one call converges greenfield
-      // create, routine update, and adoption alike.
-      const file = yield* Effect.sync(
-        () =>
-          new File([news.code], mainModule, {
-            type: "application/javascript+module",
-          }),
+      const modules: SnippetFile[] = [...(news.files ?? [])];
+      if (news.code !== undefined)
+        modules.push({ name: mainModule, content: news.code });
+      if (new Set(modules.map((file) => file.name)).size !== modules.length)
+        return yield* Effect.fail(
+          new Error(
+            "Snippet module filenames must be unique; do not specify the main module in both code and files",
+          ),
+        );
+      if (!modules.some((file) => file.name === mainModule))
+        return yield* Effect.fail(
+          new Error(
+            `Snippet main module ${mainModule} must be supplied by code or files`,
+          ),
+        );
+      const observed = yield* getSnippetOrUndefined(zoneId, name);
+      // The download API does not expose metadata identifying the entrypoint.
+      // Binary multipart downloads are decoded as text by the upstream API
+      // schema, so only skip uploads when every desired module is textual.
+      if (
+        observed &&
+        output?.mainModule === mainModule &&
+        modules.every((file) => typeof file.content === "string")
+      ) {
+        const content = yield* snippets
+          .getContent({ zoneId, snippetName: name })
+          .pipe(
+            Effect.catchTag("SnippetNotFound", () => Effect.succeed(undefined)),
+          );
+        if (content?.contentType?.startsWith("multipart/form-data")) {
+          const files = yield* Effect.tryPromise(() =>
+            new Response(content.body, {
+              headers: { "Content-Type": content.contentType! },
+            }).formData(),
+          );
+          const entries = [...files.entries()];
+          let equal = entries.length === modules.length;
+          for (const module of modules) {
+            const file: unknown = files.get(module.name);
+            if (
+              !(file instanceof Blob) ||
+              !("name" in file) ||
+              file.name !== module.name ||
+              normalizeModuleType(file.type) !==
+                normalizeModuleType(
+                  module.contentType ?? "application/javascript+module",
+                ) ||
+              (yield* Effect.tryPromise(() => file.text())) !== module.content
+            ) {
+              equal = false;
+              break;
+            }
+          }
+          if (equal) return toAttributes(observed, zoneId, mainModule);
+        }
+      }
+      // PUT ensures missing content and restores drift in existing modules.
+      const files = modules.map(
+        (module) =>
+          new File(
+            [
+              typeof module.content === "string"
+                ? module.content
+                : new Uint8Array(module.content).buffer,
+            ],
+            module.name,
+            { type: module.contentType ?? "application/javascript+module" },
+          ),
       );
       const synced = yield* snippets.putSnippet({
         zoneId,
         snippetName: name,
         metadata: { mainModule },
-        files: file,
+        files,
       });
 
       return toAttributes(synced, zoneId, mainModule);
@@ -259,7 +345,10 @@ export const SnippetProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "SnippetInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("5 seconds"),
+              ]),
               Schedule.recurs(8),
             ]),
           }),
@@ -300,3 +389,15 @@ const toAttributes = (
   createdOn: observed.createdOn,
   modifiedOn: observed.modifiedOn ?? undefined,
 });
+
+// Cloudflare downloads JavaScript modules as text/javascript;charset=utf-8.
+const normalizeModuleType = (type: string) => {
+  const mime = type.split(";")[0]!.toLowerCase();
+  return [
+    "text/javascript",
+    "application/javascript",
+    "application/javascript+module",
+  ].includes(mime)
+    ? "javascript"
+    : mime;
+};

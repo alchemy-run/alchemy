@@ -358,7 +358,7 @@ export const ConfigurationProvider = () =>
             config: {
               ingress: [{ service: DEFAULT_CATCH_ALL_SERVICE }],
             },
-          }).pipe(Effect.catch(() => Effect.void));
+          }).pipe(Effect.catchTag("TunnelNotFound", () => Effect.void));
         }),
 
         read: Effect.fn(function* ({ output }) {

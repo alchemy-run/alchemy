@@ -1,0 +1,40 @@
+{
+  "service": [
+    "spectrum",
+    "accounts",
+    "user",
+    "argo",
+    "pages",
+    "email_security",
+    "email_sending",
+    "acm"
+  ],
+  "resources": [
+    "Spectrum.Application",
+    "Account.Account",
+    "Account.Member",
+    "ApiToken.UserApiToken",
+    "ApiToken.AccountApiToken",
+    "Argo.SmartRouting",
+    "Argo.TieredCaching",
+    "Pages.Project",
+    "Pages.Domain",
+    "Email.TrustedDomain",
+    "Email.BlockSender",
+    "Email.SendingSubdomain",
+    "Email.Domain",
+    "Acm.CustomTrustStore",
+    "Acm.TotalTls"
+  ],
+  "testsPassed": 36,
+  "testCommand": "timeout 240 pnpm test <15 assigned resource suites> --profile testing --timeout 120000",
+  "files": "last16-files.txt (15 paths), modified matching tests, ApiToken/Common.ts; Pages SDK nullable map patch",
+  "patches": {
+    "pages": "deploymentBindingNulls.manual.json: typed map removal sentinels"
+  },
+  "skippedTests": {
+    "userAuth": 2,
+    "gated": 18
+  },
+  "notes": "Full per-resource semantic-last15.md; last15 followup8pass verified EU R2 jurisdiction and typed queue binding removal. No claim all paid/external features live verified."
+}

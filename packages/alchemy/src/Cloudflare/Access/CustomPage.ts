@@ -157,7 +157,7 @@ export const CustomPageProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createPageName(id, news.name);
+      const name = yield* createPageName(id, news.name ?? output?.name);
 
       // Observe — prefer the cached id, fall back to a name lookup so we
       // recover from out-of-band deletes and state-persistence failures.
@@ -258,7 +258,6 @@ const findPageByName = (acct: string, name: string) =>
     Stream.filter((p) => p.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
   );
 
 const toAttrs = (observed: ObservedPage, accountId: string) => ({

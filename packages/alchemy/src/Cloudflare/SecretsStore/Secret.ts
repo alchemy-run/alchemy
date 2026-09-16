@@ -49,7 +49,7 @@ export type StoreSecretProps = {
    */
   scopes?: string[];
   /**
-   * Optional free-form description.
+   * Optional free-form description. Removing this property clears the description.
    */
   comment?: string;
 };
@@ -120,7 +120,11 @@ export const SecretProviderLive = () =>
       const newStoreId = news.store.storeId;
       const oldName = output?.secretName ?? resolveName(id, olds.name);
       const newName = resolveName(id, news.name);
-      if (oldStoreId !== newStoreId || oldName !== newName) {
+      if (
+        oldStoreId !== newStoreId ||
+        oldName !== newName ||
+        (output?.accountId ?? olds.store?.accountId) !== news.store.accountId
+      ) {
         return { action: "replace" } as const;
       }
       const oldValue = olds.value ? Redacted.value(olds.value) : undefined;
@@ -129,7 +133,7 @@ export const SecretProviderLive = () =>
         return { action: "update" } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const name = resolveName(id, news.name);
       const scopes = resolveScopes(news.scopes);
       const accountId = news.store.accountId;
@@ -145,6 +149,7 @@ export const SecretProviderLive = () =>
             storeId: string;
             status: string;
             comment?: string | null;
+            scopes?: string[] | null;
           }
         | undefined;
       if (output?.secretId) {
@@ -176,6 +181,7 @@ export const SecretProviderLive = () =>
       // value can't be read back from the API; we trust an
       // identically-named secret reflects the same intent.
       if (!observed) {
+        let conflict: secretsStore.SecretNameAlreadyExists | undefined;
         const created = yield* secretsStore
           .createStoreSecret({
             accountId,
@@ -190,8 +196,11 @@ export const SecretProviderLive = () =>
             ],
           })
           .pipe(
-            Effect.catchTag("SecretNameAlreadyExists", () =>
-              Effect.succeed(undefined),
+            Effect.catchTag("SecretNameAlreadyExists", (error) =>
+              Effect.sync(() => {
+                conflict = error;
+                return undefined;
+              }),
             ),
           );
         if (created) {
@@ -223,23 +232,28 @@ export const SecretProviderLive = () =>
             Effect.map(Option.getOrUndefined),
           );
         if (!existing) {
-          return yield* Effect.die(
-            new Error(
-              `Secret '${name}' reported as already existing in store ${storeId} but could not be found on lookup.`,
-            ),
-          );
+          return yield* Effect.fail(conflict!);
         }
         observed = existing;
       }
 
-      const patched = yield* secretsStore.patchStoreSecret({
-        accountId,
-        storeId,
-        secretId: observed.id,
-        scopes,
-        comment: news.comment,
-        value: Redacted.value(news.value),
-      });
+      const valueChanged =
+        !olds || Redacted.value(olds.value) !== Redacted.value(news.value);
+      const metadataChanged =
+        (observed.comment ?? "") !== (news.comment ?? "") ||
+        JSON.stringify([...(observed.scopes ?? [])].sort()) !==
+          JSON.stringify([...scopes].sort());
+      const patched =
+        valueChanged || metadataChanged
+          ? yield* secretsStore.patchStoreSecret({
+              accountId,
+              storeId,
+              secretId: observed.id,
+              scopes,
+              comment: news.comment ?? "",
+              value: valueChanged ? Redacted.value(news.value) : undefined,
+            })
+          : observed;
       const status = yield* waitForSecretActive(
         { accountId, storeId, secretId: observed.id },
         asSecretStatus(patched.status),
@@ -491,9 +505,9 @@ const waitForSecretActive = (
     : secretsStore.getStoreSecret(key).pipe(
         Effect.map((s) => asSecretStatus(s.status)),
         Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
+          schedule: Schedule.spaced("1 second"),
           until: (status) => status === "active",
-          times: 20,
+          times: 10,
         }),
         // The secret was observed moments ago; a NotFound here is a
         // read-replica lag blip, not a deletion. Report the last known

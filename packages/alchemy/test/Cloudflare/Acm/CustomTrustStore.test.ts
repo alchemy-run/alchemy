@@ -49,7 +49,10 @@ const resolveZoneId = Effect.gen(function* () {
 // Freshly-minted scoped API tokens propagate eventually-consistently across
 // Cloudflare's edge — ride out intermittent 403s via the typed `Forbidden`
 // tag in each acm operation's error union.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 /** Out-of-band read; "gone" (typed) maps to undefined. */
 const getTrustStore = (zoneId: string, id: string) =>

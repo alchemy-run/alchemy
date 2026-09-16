@@ -4,7 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import { deepEqual } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -207,7 +207,11 @@ export const BucketEventNotificationProvider = () =>
   Provider.succeed(BucketEventNotification, {
     stables: ["bucketName", "queueId", "accountId", "jurisdiction"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       const o = olds as Partial<BucketEventNotificationProps>;
       const n = news as BucketEventNotificationProps;
       // No prior props to compare against — let the engine decide.
@@ -480,6 +484,10 @@ const listAllBuckets = (accountId: string) =>
       all.push(...page);
       const last = page.at(-1)?.name;
       if (page.length < pageSize || last == null) break;
+      if (last === startAfter)
+        return yield* Effect.fail(
+          new Error("Cloudflare R2 bucket pagination did not advance"),
+        );
       startAfter = last;
     }
     return all;

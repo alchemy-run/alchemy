@@ -35,7 +35,10 @@ const DOMAIN_REPLACE_B = `alchemy-pages-replace-b.${zoneName}`;
 // verification calls.
 const forbiddenRetry = {
   while: (e: { _tag: string }) => e._tag === "Forbidden",
-  schedule: Schedule.exponential("500 millis"),
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("4 seconds"),
+  ]),
   times: 8,
 } as const;
 
@@ -63,7 +66,10 @@ const waitForDomain = (
     Effect.retry({
       while: (e) => e._tag === "Forbidden" || e._tag === "PagesDomainNotFound",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),
@@ -84,7 +90,10 @@ const expectDomainGone = (
     Effect.retry({
       while: (e) => e._tag === "DomainNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),

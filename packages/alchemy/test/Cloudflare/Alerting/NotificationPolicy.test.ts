@@ -44,6 +44,24 @@ test.provider("create, update, delete notification policy", (stack) =>
     expect(actual.alertType).toEqual("universal_ssl_event_type");
     expect(actual.mechanisms?.email?.[0]?.id).toEqual(EMAIL);
 
+    // This alert type does not support intervals; do not invent a universal
+    // reset/default value for the heterogeneous notification API.
+    const intervalError = yield* alerting
+      .updatePolicy({
+        accountId,
+        policyId: policy.policyId,
+        name: policy.name,
+        alertType: "universal_ssl_event_type",
+        enabled: true,
+        mechanisms: { email: [{ id: EMAIL }] },
+        alertInterval: "30m",
+      })
+      .pipe(Effect.flip);
+    expect(intervalError._tag).toEqual("BadRequest");
+    expect(intervalError.message).toContain(
+      "customization of alerting interval is not supported",
+    );
+
     // Update mutable props in place — same id.
     const updated = yield* stack.deploy(
       Cloudflare.Alerting.NotificationPolicy("SslPolicy", {
@@ -62,6 +80,18 @@ test.provider("create, update, delete notification policy", (stack) =>
     });
     expect(afterUpdate.enabled).toBe(false);
     expect(afterUpdate.description).toEqual("paused during migration");
+    yield* stack.deploy(
+      Cloudflare.Alerting.NotificationPolicy("SslPolicy", {
+        alertType: "universal_ssl_event_type",
+        mechanisms: { email: [{ id: EMAIL }] },
+      }),
+    );
+    const cleared = yield* alerting.getPolicy({
+      accountId,
+      policyId: policy.policyId,
+    });
+    expect(cleared.description ?? "").toEqual("");
+    expect(cleared.enabled).toBe(true);
 
     yield* stack.destroy();
 
@@ -138,8 +168,11 @@ const waitForPolicyDeleted = (accountId: string, policyId: string) =>
     Effect.retry({
       while: (e) => e._tag === "PolicyNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("5 seconds"),
+        ]),
+        Schedule.recurs(8),
       ]),
     }),
   );

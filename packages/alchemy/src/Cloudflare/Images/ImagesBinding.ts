@@ -37,6 +37,10 @@ export const ImagesBinding = makeBindingLayer<
   (raw) =>
     ({
       raw,
+      text: (text, options) =>
+        raw.pipe(
+          Effect.map((binding) => wrapTransformer(binding.text(text, options))),
+        ),
       info: (stream, options) =>
         Effect.gen(function* () {
           const binding = yield* raw;

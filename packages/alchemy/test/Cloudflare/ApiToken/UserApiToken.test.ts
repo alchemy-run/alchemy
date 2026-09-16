@@ -17,121 +17,130 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-describe.skip("UserApiToken", () => {
-  test.provider("create and delete user token with default props", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+describe.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
+  "UserApiToken",
+  () => {
+    test.provider("create and delete user token with default props", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const token = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiToken.UserApiToken("DefaultUserToken", {
-            policies: [
-              {
-                effect: "allow",
-                permissionGroups: ["Workers Scripts Read"],
-                resources: {
-                  [`com.cloudflare.api.account.${accountId}`]: "*",
+        const token = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ApiToken.UserApiToken("DefaultUserToken", {
+              policies: [
+                {
+                  effect: "allow",
+                  permissionGroups: ["Workers Scripts Read"],
+                  resources: {
+                    [`com.cloudflare.api.account.${accountId}`]: "*",
+                  },
                 },
-              },
-            ],
-          });
-        }),
-      );
+              ],
+            });
+          }),
+        );
 
-      expect(token.tokenId).toBeDefined();
-      expect(token.name).toBeDefined();
-      expect(token.status).toEqual("active");
-      expect(Redacted.value(token.value)).toMatch(/.+/);
+        expect(token.tokenId).toBeDefined();
+        expect(token.name).toBeDefined();
+        expect(token.status).toEqual("active");
+        expect(Redacted.value(token.value)).toMatch(/.+/);
 
-      const actualToken = yield* user.getToken({ tokenId: token.tokenId });
-      expect(actualToken.id).toEqual(token.tokenId);
-      expect(actualToken.name).toEqual(token.name);
+        const actualToken = yield* user.getToken({ tokenId: token.tokenId });
+        expect(actualToken.id).toEqual(token.tokenId);
+        expect(actualToken.name).toEqual(token.name);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      yield* waitForTokenToBeDeleted(token.tokenId);
-    }).pipe(logLevel),
-  );
-
-  test.provider("create, update, delete user token", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-
-      yield* stack.destroy();
-
-      const token = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
-            name: "alchemy-test-user-update-initial",
-            policies: [
-              {
-                effect: "allow",
-                permissionGroups: ["Workers Scripts Read"],
-                resources: {
-                  [`com.cloudflare.api.account.${accountId}`]: "*",
-                },
-              },
-            ],
-          });
-        }),
-      );
-
-      expect(token.name).toEqual("alchemy-test-user-update-initial");
-      const initialValue = Redacted.value(token.value);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
-            name: "alchemy-test-user-update-renamed",
-            policies: [
-              {
-                effect: "allow",
-                permissionGroups: [
-                  "Workers Scripts Read",
-                  "Workers KV Storage Read",
-                ],
-                resources: {
-                  [`com.cloudflare.api.account.${accountId}`]: "*",
-                },
-              },
-            ],
-          });
-        }),
-      );
-
-      expect(updated.tokenId).toEqual(token.tokenId);
-      expect(updated.name).toEqual("alchemy-test-user-update-renamed");
-      expect(Redacted.value(updated.value)).toEqual(initialValue);
-
-      const actual = yield* user.getToken({ tokenId: updated.tokenId });
-      expect(actual.name).toEqual("alchemy-test-user-update-renamed");
-      expect(actual.policies?.[0]?.permissionGroups.length).toEqual(2);
-
-      yield* stack.destroy();
-
-      yield* waitForTokenToBeDeleted(token.tokenId);
-    }).pipe(logLevel),
-  );
-
-  const waitForTokenToBeDeleted = Effect.fn(function* (tokenId: string) {
-    yield* user.getToken({ tokenId }).pipe(
-      Effect.flatMap(() => Effect.fail(new TokenStillExists())),
-      Effect.retry({
-        while: (e): e is TokenStillExists => e instanceof TokenStillExists,
-        schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
-      }),
-      Effect.catchTag("TokenStillExists", () =>
-        Effect.die(
-          `Cloudflare API token ${tokenId} was not deleted after retries`,
-        ),
-      ),
-      Effect.catchTag("TokenNotFound", () => Effect.void),
-      Effect.catchTag("InvalidRoute", () => Effect.void),
+        yield* waitForTokenToBeDeleted(token.tokenId);
+      }).pipe(logLevel),
     );
-  });
-});
+
+    test.provider("create, update, delete user token", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const token = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
+              name: "alchemy-test-user-update-initial",
+              policies: [
+                {
+                  effect: "allow",
+                  permissionGroups: ["Workers Scripts Read"],
+                  resources: {
+                    [`com.cloudflare.api.account.${accountId}`]: "*",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+
+        expect(token.name).toEqual("alchemy-test-user-update-initial");
+        const initialValue = Redacted.value(token.value);
+
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ApiToken.UserApiToken("UpdateUserToken", {
+              name: "alchemy-test-user-update-renamed",
+              policies: [
+                {
+                  effect: "allow",
+                  permissionGroups: [
+                    "Workers Scripts Read",
+                    "Workers KV Storage Read",
+                  ],
+                  resources: {
+                    [`com.cloudflare.api.account.${accountId}`]: "*",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+
+        expect(updated.tokenId).toEqual(token.tokenId);
+        expect(updated.name).toEqual("alchemy-test-user-update-renamed");
+        expect(Redacted.value(updated.value)).toEqual(initialValue);
+
+        const actual = yield* user.getToken({ tokenId: updated.tokenId });
+        expect(actual.name).toEqual("alchemy-test-user-update-renamed");
+        expect(actual.policies?.[0]?.permissionGroups.length).toEqual(2);
+
+        yield* stack.destroy();
+
+        yield* waitForTokenToBeDeleted(token.tokenId);
+      }).pipe(logLevel),
+    );
+
+    const waitForTokenToBeDeleted = Effect.fn(function* (tokenId: string) {
+      yield* user.getToken({ tokenId }).pipe(
+        Effect.flatMap(() => Effect.fail(new TokenStillExists())),
+        Effect.retry({
+          while: (e): e is TokenStillExists => e instanceof TokenStillExists,
+          schedule: Schedule.max([
+            Schedule.min([
+              Schedule.exponential(200),
+              Schedule.spaced("4 seconds"),
+            ]),
+            Schedule.recurs(8),
+          ]),
+        }),
+        Effect.catchTag("TokenStillExists", () =>
+          Effect.die(
+            `Cloudflare API token ${tokenId} was not deleted after retries`,
+          ),
+        ),
+        Effect.catchTag("TokenNotFound", () => Effect.void),
+        Effect.catchTag("InvalidRoute", () => Effect.void),
+      );
+    });
+  },
+);
 
 describe("UserApiToken list", () => {
   // Read-only: `GET /user/tokens` requires the authenticated *user's* identity.
@@ -174,10 +183,10 @@ describe("UserApiToken list probe", () => {
       const provider = yield* Provider.findProvider(
         Cloudflare.ApiToken.UserApiToken,
       );
-      const result = yield* Effect.result(provider.list());
+      const result = yield* Effect.result(user.listTokens({}));
       if (Result.isSuccess(result)) {
         // An entitled credential can list — that's fine, nothing to assert.
-        expect(Array.isArray(result.success)).toBe(true);
+        expect(Array.isArray(result.success.result)).toBe(true);
         return;
       }
       expect(result.failure._tag).toBe("Unauthorized");
@@ -186,3 +195,41 @@ describe("UserApiToken list probe", () => {
 });
 
 class TokenStillExists extends Data.TaggedError("TokenStillExists") {}
+
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_USER_TOKENS)(
+  "creates disabled token and restores active when status is removed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const props = {
+        name: "alchemy-audit-user-token-status",
+        policies: [
+          {
+            effect: "allow" as const,
+            permissionGroups: ["Workers Scripts Read" as const],
+            resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+          },
+        ],
+      };
+      const disabled = yield* stack.deploy(
+        Cloudflare.ApiToken.UserApiToken("StatusToken", {
+          ...props,
+          status: "disabled",
+        }),
+      );
+      const first = yield* user.getToken({ tokenId: disabled.tokenId });
+      expect(first.status).toEqual("disabled");
+      const active = yield* stack.deploy(
+        Cloudflare.ApiToken.UserApiToken("StatusToken", props),
+      );
+      expect(active.tokenId).toEqual(disabled.tokenId);
+      expect(Redacted.value(active.value)).toEqual(
+        Redacted.value(disabled.value),
+      );
+      const second = yield* user.getToken({ tokenId: active.tokenId });
+      expect(second.status).toEqual("active");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

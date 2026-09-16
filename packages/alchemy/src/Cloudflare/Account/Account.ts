@@ -18,6 +18,8 @@ type TypeId = typeof TypeId;
 export type AccountType = "standard" | "enterprise";
 
 export interface AccountProps {
+  /** Parent organization fields accepted by the account update API. Omission leaves placement unmanaged. */
+  managedBy?: accounts.UpdateAccountRequest["managedBy"];
   /**
    * Account name (display name). Mutable in place. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
@@ -232,11 +234,19 @@ export const AccountProvider = () =>
         news.enforceTwofactor !== undefined &&
         (settings?.enforceTwofactor ?? false) !== news.enforceTwofactor;
 
-      if (nameDirty || abuseDirty || twofactorDirty) {
+      const managedByDirty =
+        news.managedBy !== undefined &&
+        ((news.managedBy.parentOrgId !== undefined &&
+          news.managedBy.parentOrgId !== observed.managedBy?.parentOrgId) ||
+          (news.managedBy.parentOrgName !== undefined &&
+            news.managedBy.parentOrgName !==
+              observed.managedBy?.parentOrgName));
+      if (nameDirty || abuseDirty || twofactorDirty || managedByDirty) {
         observed = yield* accounts.updateAccount({
           accountId: observed.id,
           id: observed.id,
           name,
+          managedBy: news.managedBy,
           settings:
             abuseDirty || twofactorDirty
               ? {

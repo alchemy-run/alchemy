@@ -34,7 +34,10 @@ const resolveZoneId = Effect.gen(function* () {
 // with "Unable to authenticate request". Ride out the blips on the test's
 // own out-of-band calls by retrying the typed `Forbidden` error (part of
 // each security-txt operation's error union via distilled patches).
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("5 seconds"),
+]);
 
 const getSecurityTxt = (zoneId: string) =>
   securityTxt.getSecurityTxt({ zoneId }).pipe(
@@ -134,6 +137,10 @@ describe.sequential("SecurityTxt", () => {
             contact,
             expires,
             policy: ["https://alchemy.run/security-policy"],
+            acknowledgments: ["https://alchemy.run/thanks"],
+            canonical: ["https://alchemy.run/.well-known/security.txt"],
+            encryption: ["https://alchemy.run/key.asc"],
+            hiring: ["https://alchemy.run/jobs"],
             preferredLanguages: "en, es",
           });
         }),
@@ -163,6 +170,21 @@ describe.sequential("SecurityTxt", () => {
       );
       expect(reverted.policy).toBeUndefined();
       expect(reverted.preferredLanguages).toBeUndefined();
+
+      const minimal = yield* getSecurityTxt(zoneId);
+      expect(typeof minimal).not.toEqual("string");
+      if (typeof minimal !== "string") {
+        for (const field of [
+          "policy",
+          "acknowledgments",
+          "canonical",
+          "encryption",
+          "hiring",
+        ] as const) {
+          expect(minimal[field] ?? []).toEqual([]);
+        }
+        expect(minimal.preferredLanguages ?? "").toEqual("");
+      }
 
       yield* stack.destroy();
 

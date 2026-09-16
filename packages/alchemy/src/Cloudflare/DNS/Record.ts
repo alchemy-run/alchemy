@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -102,6 +103,10 @@ export interface RecordCommonProps {
    * Custom tags shown in the dashboard. No effect on DNS responses.
    */
   tags?: ReadonlyArray<string>;
+  /** Per-record address-family restrictions and CNAME flattening options. */
+  settings?: dns.RecordsCreateRequestSettings;
+  /** Route requests to this record through Cloudflare private networking. */
+  privateRouting?: boolean;
 }
 
 type StringRecordType = Exclude<RecordType, keyof RecordDataByType | "MX">;
@@ -161,6 +166,16 @@ export interface RecordAttributes {
   ttl: number;
   /** Whether the record is proxied. */
   proxied: boolean;
+  /** Mail server or URI priority returned by Cloudflare. */
+  priority?: number;
+  /** Dashboard comment. */
+  comment?: string;
+  /** Dashboard tags. */
+  tags?: ReadonlyArray<string>;
+  /** Per-record address-family and CNAME flattening configuration. */
+  settings?: dns.RecordsCreateRequestSettings;
+  /** Whether the record uses private origin routing. */
+  privateRouting?: boolean;
   /** ISO8601 creation timestamp. */
   createdOn: string | undefined;
   /** ISO8601 last-modified timestamp. */
@@ -294,10 +309,14 @@ export const RecordProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      if (!isResolved(news)) return undefined;
       const o = olds as RecordProps;
-      const n = news as RecordProps;
-      if (o.type !== undefined && o.type !== n.type) {
+      const n = news;
+      if (
+        (output?.type ?? o.type) !== undefined &&
+        (output?.type ?? o.type) !== n.type
+      ) {
         return { action: "replace" } as const;
       }
       if (o.name !== undefined && o.name !== n.name) {
@@ -306,9 +325,8 @@ export const RecordProvider = () =>
       // zoneId is Input<string>; by reconcile time both sides are
       // concrete strings.
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        typeof (output?.zoneId ?? o.zoneId) === "string" &&
+        (output?.zoneId ?? o.zoneId) !== n.zoneId
       ) {
         return { action: "replace" } as const;
       }
@@ -359,7 +377,7 @@ export const RecordProvider = () =>
           // (`DnsRecordAlreadyExists`). Self-heal: re-scan and adopt the
           // existing record instead of failing the deploy. Ownership was
           // already gated by `read`/the adopt policy upstream.
-          Effect.catchTag("DnsRecordAlreadyExists", () =>
+          Effect.catchTag("DnsRecordAlreadyExists", (originalError) =>
             findByNameType(zoneId, news.name, news.type, {
               content: body.content,
               data: body.data,
@@ -368,12 +386,7 @@ export const RecordProvider = () =>
               Effect.flatMap((existing) =>
                 existing
                   ? Effect.succeed({ record: existing, raced: true } as const)
-                  : Effect.fail(
-                      new Error(
-                        `Cloudflare reported an identical DNS record for ` +
-                          `(${news.name}, ${news.type}) but it could not be found`,
-                      ),
-                    ),
+                  : Effect.fail(originalError),
               ),
             ),
           ),
@@ -430,6 +443,11 @@ export const RecordProvider = () =>
         type: observed.type,
         content: observed.content,
         data: observed.data,
+        priority: observed.priority,
+        comment: observed.comment,
+        tags: observed.tags,
+        settings: observed.settings,
+        privateRouting: observed.privateRouting,
         ttl: observed.ttl,
         proxied: observed.proxied ?? false,
         createdOn: observed.createdOn,
@@ -443,7 +461,7 @@ export const RecordProvider = () =>
           zoneId: output.zoneId,
           dnsRecordId: output.recordId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(Effect.catchTag("DnsRecordNotFound", () => Effect.void));
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -485,10 +503,9 @@ export const RecordProvider = () =>
 const observeById = (zoneId: string, dnsRecordId: string) =>
   Effect.gen(function* () {
     const r = yield* dns.getRecord({ zoneId, dnsRecordId }).pipe(
-      // Distilled tags transport errors but a 404 for a missing
-      // record surfaces as an untagged error. Swallow so the
-      // reconciler falls through to the find-by-name path.
-      Effect.catch(() => Effect.succeed(undefined)),
+      // Only an absent record permits recovery by name. Authentication,
+      // transport, and schema failures must preserve the existing state.
+      Effect.catchTag("DnsRecordNotFound", () => Effect.succeed(undefined)),
     );
     if (r === undefined) return undefined;
     return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
@@ -630,6 +647,8 @@ interface ObservedRecord {
   readonly content?: string;
   readonly ttl?: number;
   readonly proxied?: boolean;
+  readonly privateRouting?: boolean;
+  readonly settings?: dns.RecordsCreateRequestSettings;
   readonly comment?: string;
   readonly tags?: ReadonlyArray<string>;
   readonly priority?: number;
@@ -648,6 +667,8 @@ const narrowRecord = (raw: {
   content?: string | null;
   ttl?: number | null;
   proxied?: boolean | null;
+  privateRouting?: boolean | null;
+  settings?: dns.RecordsCreateRequestSettings | null;
   comment?: string | null;
   tags?: ReadonlyArray<string> | null;
   priority?: number | null;
@@ -661,6 +682,8 @@ const narrowRecord = (raw: {
   content: undef(raw.content),
   ttl: undef(raw.ttl),
   proxied: undef(raw.proxied),
+  privateRouting: undef(raw.privateRouting),
+  settings: undef(raw.settings),
   comment: undef(raw.comment),
   tags: raw.tags == null ? undefined : (raw.tags as ReadonlyArray<string>),
   priority: undef(raw.priority),
@@ -689,6 +712,11 @@ const toAttributes = (
     type: observed.type,
     content: observed.content,
     data: observed.data,
+    priority: observed.priority,
+    comment: observed.comment,
+    tags: observed.tags,
+    settings: observed.settings,
+    privateRouting: observed.privateRouting,
     ttl: observed.ttl,
     proxied: observed.proxied ?? false,
     createdOn: observed.createdOn,
@@ -707,6 +735,8 @@ interface RecordMutableBodyCommon {
   proxied?: boolean;
   comment?: string;
   tags?: string[];
+  settings?: dns.RecordsCreateRequestSettings;
+  privateRouting?: boolean;
   priority?: number;
 }
 
@@ -726,8 +756,10 @@ const buildMutableBody = (news: RecordProps): RecordMutableBody => {
           ? 1
           : (news.ttl as number),
     proxied: news.proxied,
-    comment: news.comment,
-    tags: news.tags === undefined ? undefined : Array.from(news.tags),
+    comment: news.comment ?? "",
+    tags: Array.from(news.tags ?? []),
+    settings: news.settings,
+    privateRouting: news.privateRouting,
     priority: news.priority,
   };
   return typeof news.content === "string"
@@ -752,6 +784,21 @@ const bodyEqualsObserved = (
   ) {
     return false;
   }
+  if (
+    desired.settings !== undefined &&
+    Object.entries(desired.settings).some(
+      ([key, value]) =>
+        value != null &&
+        value !==
+          (observed.settings?.[key as keyof typeof observed.settings] ?? false),
+    )
+  )
+    return false;
+  if (
+    desired.privateRouting !== undefined &&
+    desired.privateRouting !== (observed.privateRouting ?? false)
+  )
+    return false;
   // CF echoes ttl=1 for "automatic".
   if (desired.ttl !== observed.ttl) return false;
   if (

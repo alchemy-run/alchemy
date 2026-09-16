@@ -42,7 +42,10 @@ const getUserGroup = (accountId: string, userGroupId: string) =>
   iam.getUserGroup({ accountId, userGroupId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -53,7 +56,10 @@ const expectGone = (accountId: string, userGroupId: string) =>
     Effect.asSome,
     Effect.catchTag("UserGroupNotFound", () => Effect.succeedNone),
     Effect.repeat({
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("4 seconds"),
+      ]),
       until: (g) => g._tag === "None",
       times: 8,
     }),
@@ -157,16 +163,27 @@ test.provider(
         permissionGroupId2,
       );
 
-      // No-op deploy — same desired state, same identity, reconcile
-      // observes the in-sync state and applies nothing.
+      yield* iam.updateUserGroup({
+        accountId,
+        userGroupId: v2.group.userGroupId,
+        name: "alchemy-iam-ug-drifted",
+        policies: [],
+      });
+      // Change the name to trigger reconciliation while retaining the desired
+      // scope/policies, which must converge from the out-of-band edit.
       const v3 = yield* stack.deploy(
         program({
-          name: UG_NAME_RENAMED,
+          name: UG_NAME_RENAMED + "-restored",
           permissionGroupId: permissionGroupId2,
           accountScopeKey,
         }),
       );
       expect(v3.group.userGroupId).toEqual(v1.group.userGroupId);
+      const restored = yield* getUserGroup(accountId, v3.group.userGroupId);
+      expect(restored.name).toEqual(UG_NAME_RENAMED + "-restored");
+      expect(restored.policies?.[0]?.permissionGroups?.[0]?.id).toEqual(
+        permissionGroupId2,
+      );
 
       yield* stack.destroy();
 

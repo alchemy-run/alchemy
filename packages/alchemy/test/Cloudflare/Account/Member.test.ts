@@ -31,7 +31,10 @@ const healEmail = "sam+alchemy-test-member-heal@alchemy.run";
 // declared in the distilled error union) on out-of-band verification calls.
 const forbiddenRetry = {
   while: (e: { _tag: string }) => e._tag === "Forbidden",
-  schedule: Schedule.exponential("500 millis"),
+  schedule: Schedule.min([
+    Schedule.exponential("500 millis"),
+    Schedule.spaced("4 seconds"),
+  ]),
   times: 8,
 } as const;
 
@@ -49,7 +52,10 @@ const expectGone = (accountId: string, memberId: string) =>
     Effect.retry({
       while: (e) => e._tag === "MemberNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.min([
+          Schedule.exponential("500 millis"),
+          Schedule.spaced("4 seconds"),
+        ]),
         Schedule.recurs(10),
       ]),
     }),

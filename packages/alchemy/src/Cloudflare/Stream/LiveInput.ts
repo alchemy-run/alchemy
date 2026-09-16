@@ -48,6 +48,8 @@ export type LiveInputRecording = {
 };
 
 export type LiveInputProps = {
+  /** Use Low-Latency HLS for delivery, reducing latency at the cost of player compatibility. */
+  preferLowLatency?: boolean;
   /**
    * Sets the creator ID associated with this live input. Mutable.
    */
@@ -80,6 +82,8 @@ export type LiveInputProps = {
 };
 
 export type LiveInputAttributes = {
+  /** Whether Low-Latency HLS delivery is preferred. */
+  preferLowLatency?: boolean;
   /**
    * The unique identifier for the live input (Cloudflare `uid`).
    */
@@ -198,8 +202,6 @@ export const LiveInputProvider = () =>
     // item into the same Attributes shape `read` produces.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
-      // or as a bare `result` array depending on the account — handle both.
       const response = yield* stream.listLiveInputs({ accountId });
       const inputs = Array.isArray(response)
         ? response
@@ -235,6 +237,7 @@ export const LiveInputProvider = () =>
           enabled: news.enabled,
           meta,
           recording: news.recording,
+          preferLowLatency: news.preferLowLatency,
         });
         return toAttributes(created, accountId);
       }
@@ -246,6 +249,8 @@ export const LiveInputProvider = () =>
       // them.
       const observedAccount = output?.accountId ?? accountId;
       const dirty =
+        (news.preferLowLatency !== undefined &&
+          news.preferLowLatency !== (observed.preferLowLatency ?? false)) ||
         (news.enabled ?? true) !== (observed.enabled ?? true) ||
         (news.deleteRecordingAfterDays ?? undefined) !==
           (observed.deleteRecordingAfterDays ?? undefined) ||
@@ -265,6 +270,7 @@ export const LiveInputProvider = () =>
         enabled: news.enabled,
         meta,
         recording: news.recording,
+        preferLowLatency: news.preferLowLatency,
       });
       return toAttributes(updated, observedAccount);
     }),
@@ -300,6 +306,7 @@ const toAttributes = (
   accountId: string,
 ): LiveInputAttributes => ({
   liveInputId: input.uid ?? "",
+  preferLowLatency: input.preferLowLatency ?? undefined,
   accountId,
   created: input.created ?? undefined,
   modified: input.modified ?? undefined,

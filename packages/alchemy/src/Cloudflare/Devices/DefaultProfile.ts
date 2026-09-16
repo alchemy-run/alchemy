@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 
+import { deepEqual } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -16,6 +17,12 @@ import type { Providers } from "../Providers.ts";
  * endpoints for the split-tunnel include/exclude and fallback domains.
  */
 export interface DeviceDefaultProfileProps {
+  /** DNS search suffixes appended to unqualified names. */
+  dnsSearchSuffixes?: zeroTrust.PatchDevicePolicyDefaultRequest["dnsSearchSuffixes"];
+  /** Enable global network acceleration. */
+  globalAcceleration?: zeroTrust.PatchDevicePolicyDefaultRequest["globalAcceleration"];
+  /** Virtual networks available to the device profile. */
+  virtualNetworks?: zeroTrust.PatchDevicePolicyDefaultRequest["virtualNetworks"];
   /**
    * Split-tunnel mode. `"include"` routes only listed CIDRs/hostnames
    * through WARP; `"exclude"` routes everything except listed entries.
@@ -269,6 +276,12 @@ export const DeviceDefaultProfile = Resource<DeviceDefaultProfile>(
  */
 export const DeviceDefaultProfileProvider = () =>
   Provider.succeed(DeviceDefaultProfile, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     nuke: { singleton: true },
     stables: ["accountId"],
     reconcile: Effect.fn(function* ({ news = {} }) {
@@ -292,7 +305,7 @@ export const DeviceDefaultProfileProvider = () =>
         observed: unknown,
       ) => {
         if (desired === undefined) return;
-        if (desired !== observed) {
+        if (!sameJSON(desired, observed)) {
           patchBody[key] = desired;
           needsPatch = true;
         }
@@ -303,6 +316,22 @@ export const DeviceDefaultProfileProvider = () =>
         denull(obs.profile.captivePortal),
       );
       setIf("autoConnect", news.autoConnect, denull(obs.profile.autoConnect));
+      setIf(
+        "dnsSearchSuffixes",
+        news.dnsSearchSuffixes,
+        denull(obs.profile.dnsSearchSuffixes),
+      );
+      setIf(
+        "globalAcceleration",
+        news.globalAcceleration,
+        denull(obs.profile.globalAcceleration),
+      );
+      setIf(
+        "virtualNetworks",
+        news.virtualNetworks,
+        denull(obs.profile.virtualNetworks),
+      );
+
       setIf(
         "allowedToLeave",
         news.allowedToLeave,
@@ -447,37 +476,14 @@ export const DeviceDefaultProfileProvider = () =>
     }),
   });
 
-// Cloudflare returns `{result: null, success: true}` (NOT `[]`) when
-// a default-policy list endpoint is empty, and distilled's schema
-// rejects that as a transport error. Swallow into `undefined` so the
-// reconciler treats an empty list as "no entries" rather than failing.
-const listOrEmpty = <A, Err, Req>(
-  op: Effect.Effect<{ result?: readonly A[] | null }, Err, Req>,
-) =>
-  op.pipe(
-    Effect.catch(() =>
-      Effect.succeed({
-        result: [] as readonly A[],
-      }),
-    ),
-  );
-
+// The profile GET includes split tunnels and fallback domains. Observe them
+// together instead of treating a failed subresource read as an empty list.
 const observe = Effect.fn(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
-  const [profile, include, exclude, fallback] = yield* Effect.all(
-    [
-      zeroTrust.getDevicePolicyDefault({ accountId }),
-      listOrEmpty(zeroTrust.getDevicePolicyDefaultInclude({ accountId })),
-      listOrEmpty(zeroTrust.getDevicePolicyDefaultExclude({ accountId })),
-      listOrEmpty(
-        zeroTrust.getDevicePolicyDefaultFallbackDomain({ accountId }),
-      ),
-    ],
-    { concurrency: "unbounded" },
-  );
-  const inc = (include.result ?? []).map(normalizeSplit);
-  const exc = (exclude.result ?? []).map(normalizeSplit);
-  const fb = (fallback.result ?? []).map(normalizeFallback);
+  const profile = yield* zeroTrust.getDevicePolicyDefault({ accountId });
+  const inc = (profile.include ?? []).map(normalizeSplit);
+  const exc = (profile.exclude ?? []).map(normalizeSplit);
+  const fb = (profile.fallbackDomains ?? []).map(normalizeFallback);
   return {
     profile,
     splitTunnelInclude: inc,
@@ -583,7 +589,7 @@ const encodeFallback = (
 
 /** Structural deep-equality via canonical JSON. */
 const sameJSON = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+  deepEqual(a, b, { stripNullish: true });
 
 const inferMode = (observed: {
   include?: readonly unknown[] | null | undefined;

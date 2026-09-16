@@ -71,8 +71,10 @@ test.provider(
 
       const deployAt = (value: string) =>
         Effect.gen(function* () {
-          const store =
-            yield* Cloudflare.SecretsStore.Store("LocalSecretsStore");
+          const store = yield* Cloudflare.SecretsStore.Store(
+            "LocalSecretsStore",
+            { name: "alchemy-local-secrets" },
+          );
           const secret = yield* Cloudflare.SecretsStore.Secret("LocalApiKey", {
             store,
             value: Redacted.make(value),
@@ -92,6 +94,7 @@ test.provider(
       // The local providers fabricate `dev:` ids — proof no cloud call ran
       // — and the worker serves from the local dev proxy.
       expect(v1.store.storeId).toMatch(/^dev:/);
+      expect(v1.store.storeName).toBe("alchemy-local-secrets");
       expect(v1.secret.secretId).toMatch(/^dev:/);
       expect(v1.secret.storeId).toBe(v1.store.storeId);
       expect(v1.secret.status).toBe("active");

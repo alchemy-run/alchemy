@@ -44,7 +44,10 @@ const resolveZoneId = Effect.gen(function* () {
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips on the
 // out-of-band verification calls by retrying the typed `Forbidden` tag.
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const getApp = (zoneId: string, appId: string) =>
   spectrum.getApp({ zoneId, appId }).pipe(

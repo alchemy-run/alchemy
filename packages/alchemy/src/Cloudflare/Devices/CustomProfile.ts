@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { deepEqual } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -23,6 +24,12 @@ type TypeId = typeof TypeId;
  * to the account's default profile.
  */
 export interface DeviceCustomProfileProps {
+  /** DNS search suffixes appended to unqualified names. */
+  dnsSearchSuffixes?: zeroTrust.PatchDevicePolicyCustomRequest["dnsSearchSuffixes"];
+  /** Enable global network acceleration. */
+  globalAcceleration?: zeroTrust.PatchDevicePolicyCustomRequest["globalAcceleration"];
+  /** Virtual networks available to the device profile. */
+  virtualNetworks?: zeroTrust.PatchDevicePolicyCustomRequest["virtualNetworks"];
   /**
    * Name of the device settings profile. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
@@ -260,6 +267,12 @@ export const isDeviceCustomProfile = (
 
 export const DeviceCustomProfileProvider = () =>
   Provider.succeed(DeviceCustomProfile, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["policyId", "accountId", "default"],
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -286,7 +299,7 @@ export const DeviceCustomProfileProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createProfileName(id, news.name);
+      const name = yield* createProfileName(id, news.name ?? output?.name);
 
       // 1. Observe — the policy id cached on `output` is a hint, not a
       //    guarantee: a missing profile falls through to create.
@@ -301,6 +314,9 @@ export const DeviceCustomProfileProvider = () =>
         const created = yield* zeroTrust.createDevicePolicyCustom({
           accountId,
           name,
+          dnsSearchSuffixes: news.dnsSearchSuffixes,
+          globalAcceleration: news.globalAcceleration,
+          virtualNetworks: news.virtualNetworks,
           match: news.match,
           precedence: news.precedence,
           enabled: news.enabled,
@@ -365,6 +381,22 @@ export const DeviceCustomProfileProvider = () =>
         }
       };
       setIf("name", name, observed.name ?? undefined);
+      setIf(
+        "dnsSearchSuffixes",
+        news.dnsSearchSuffixes,
+        denull(observed.dnsSearchSuffixes),
+      );
+      setIf(
+        "globalAcceleration",
+        news.globalAcceleration,
+        denull(observed.globalAcceleration),
+      );
+      setIf(
+        "virtualNetworks",
+        news.virtualNetworks,
+        denull(observed.virtualNetworks),
+      );
+
       setIf("match", news.match, denull(observed.match));
       setIf("precedence", news.precedence, denull(observed.precedence));
       setIf("enabled", news.enabled, denull(observed.enabled));
@@ -680,4 +712,4 @@ const encodeFallback = (
 
 /** Structural deep-equality via canonical JSON. */
 const sameJSON = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+  deepEqual(a, b, { stripNullish: true });

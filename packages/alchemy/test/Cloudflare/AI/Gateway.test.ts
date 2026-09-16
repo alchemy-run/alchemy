@@ -67,6 +67,10 @@ test.provider("create, update, delete ai gateway", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.AI.Gateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
+          retryBackoff: "exponential",
+          retryDelay: 200,
+          retryMaxAttempts: 2,
+          workersAiBillingMode: "postpaid",
           cacheTtl: 60,
           collectLogs: true,
           rateLimitingInterval: 60,
@@ -81,6 +85,10 @@ test.provider("create, update, delete ai gateway", (stack) =>
       id: gateway.gatewayId,
     });
     expect(actualGateway.id).toEqual(gateway.gatewayId);
+    expect(actualGateway.retryBackoff).toEqual("exponential");
+    expect(actualGateway.retryDelay).toEqual(200);
+    expect(actualGateway.retryMaxAttempts).toEqual(2);
+    expect(actualGateway.workersAiBillingMode).toEqual("postpaid");
     expect(actualGateway.cacheTtl).toEqual(60);
     expect(actualGateway.rateLimitingLimit).toEqual(100);
 
@@ -88,6 +96,10 @@ test.provider("create, update, delete ai gateway", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.AI.Gateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
+          retryBackoff: "linear",
+          retryDelay: 400,
+          retryMaxAttempts: 3,
+          workersAiBillingMode: "postpaid",
           cacheTtl: 120,
           collectLogs: true,
           rateLimitingInterval: 120,
@@ -101,6 +113,9 @@ test.provider("create, update, delete ai gateway", (stack) =>
       accountId,
       id: updatedGateway.gatewayId,
     });
+    expect(actualUpdatedGateway.retryBackoff).toEqual("linear");
+    expect(actualUpdatedGateway.retryDelay).toEqual(400);
+    expect(actualUpdatedGateway.retryMaxAttempts).toEqual(3);
     expect(actualUpdatedGateway.cacheTtl).toEqual(120);
     expect(actualUpdatedGateway.rateLimitingInterval).toEqual(120);
     expect(actualUpdatedGateway.rateLimitingLimit).toEqual(200);
@@ -328,11 +343,19 @@ test(
       Effect.flatMap((res) =>
         res.status === 200
           ? Effect.succeed(res)
-          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+          : res.text.pipe(
+              Effect.flatMap((body) =>
+                Effect.fail(
+                  new Error(
+                    `Worker not ready: HTTP ${res.status} ${workerUrl}/url: ${body.slice(0, 300)}`,
+                  ),
+                ),
+              ),
+            ),
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
+        schedule: Schedule.spaced("5 seconds"),
+        times: 10,
       }),
     );
     expect(res.status).toBe(200);

@@ -139,7 +139,7 @@ export const AppProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createAppName(id, news.name);
+      const name = yield* createAppName(id, news.name ?? output?.name);
 
       // Observe — the appId cached on `output` is a hint, not a guarantee:
       // a missing app (code 20007) falls through and we recreate.

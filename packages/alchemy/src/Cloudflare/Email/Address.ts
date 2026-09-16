@@ -1,6 +1,5 @@
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -124,19 +123,20 @@ export const AddressProvider = () =>
     }),
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const identifier =
-        output?.addressId ??
-        (olds?.email ? encodeURIComponent(olds.email) : undefined);
-      if (!identifier) return undefined;
       const acct = output?.accountId ?? accountId;
+      if (!output?.addressId) {
+        return olds?.email ? yield* findByEmail(acct, olds.email) : undefined;
+      }
       return yield* emailRouting
         .getAddress({
           accountId: acct,
-          destinationAddressIdentifier: identifier,
+          destinationAddressIdentifier: output.addressId,
         })
         .pipe(
           Effect.map((r) => toAttrs(acct, r)),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.catchTag("EmailAddressNotFound", () =>
+            Effect.succeed(undefined),
+          ),
         );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -153,20 +153,14 @@ export const AddressProvider = () =>
             })
             .pipe(
               Effect.map((r) => toAttrs(acct, r)),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.catchTag("EmailAddressNotFound", () =>
+                Effect.succeed(undefined),
+              ),
             )
         : undefined;
 
       if (!observed) {
-        observed = yield* emailRouting
-          .getAddress({
-            accountId: acct,
-            destinationAddressIdentifier: encodeURIComponent(email),
-          })
-          .pipe(
-            Effect.map((r) => toAttrs(acct, r)),
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
+        observed = yield* findByEmail(acct, email);
       }
 
       // Ensure — register the address if it doesn't already exist.
@@ -194,8 +188,8 @@ export const AddressProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!output?.addressId) return;
-      // Idempotent on the typed not-found; transient failures are retried
-      // bounded and a persistent failure surfaces — a swallowed failure
+      // Idempotent on the typed not-found; transport retry belongs to the SDK.
+      // Other failures propagate immediately — a swallowed failure
       // silently leaks the destination address. Cloudflare refuses to
       // delete an address for ~15 minutes after creation
       // (`EmailAddressCreatedTooRecently`, code 2032) — retrying is
@@ -206,15 +200,6 @@ export const AddressProvider = () =>
           accountId: output.accountId,
           destinationAddressIdentifier: output.addressId,
         })
-        .pipe(
-          Effect.catchTag("EmailAddressNotFound", () => Effect.void),
-          Effect.retry({
-            while: (e) => e._tag !== "EmailAddressCreatedTooRecently",
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(8),
-            ]),
-          }),
-        );
+        .pipe(Effect.catchTag("EmailAddressNotFound", () => Effect.void));
     }),
   });

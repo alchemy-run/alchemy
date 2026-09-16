@@ -875,6 +875,7 @@ const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
   dispatchNamespace: string | undefined;
+  bindingsInherit?: "strict";
   metadata: workers.PutScriptRequest["metadata"];
   files: workers.PutScriptRequest["files"];
 }) =>
@@ -885,6 +886,7 @@ const putWorkerScript = (params: {
           accountId: params.accountId,
           dispatchNamespace: params.dispatchNamespace,
           scriptName: params.scriptName,
+          bindingsInherit: params.bindingsInherit,
           metadata:
             params.metadata as unknown as wfp.PutDispatchNamespaceScriptRequest["metadata"],
           files: params.files,
@@ -900,6 +902,7 @@ const putWorkerScript = (params: {
       .putScript({
         accountId: params.accountId,
         scriptName: params.scriptName,
+        bindingsInherit: params.bindingsInherit,
         metadata: params.metadata,
         files: params.files,
       })
@@ -1178,6 +1181,8 @@ const resolveWorkerMetadataHash = ({
       data: binding.data,
     })),
     assets: workerAssetConfigForHash(props.assets),
+    bindingsInherit: props.bindingsInherit,
+    keepBindings: props.keepBindings,
     cache: props.cache,
     limits: props.limits,
     logpush: props.logpush,
@@ -1376,8 +1381,11 @@ export const LiveWorkerProvider = () =>
               Effect.retry({
                 while: (error) => error._tag === "WorkerNotFound",
                 schedule: Schedule.max([
-                  Schedule.exponential(200),
-                  Schedule.recurs(15),
+                  Schedule.min([
+                    Schedule.exponential(200),
+                    Schedule.spaced("5 seconds"),
+                  ]),
+                  Schedule.recurs(8),
                 ]),
               }),
             );
@@ -1445,7 +1453,6 @@ export const LiveWorkerProvider = () =>
                     : [],
                 ),
               ),
-              Effect.catch(() => Effect.succeed([])),
             );
 
           const desiredSet = new Set(desired);
@@ -1516,7 +1523,6 @@ export const LiveWorkerProvider = () =>
                     (d) => d.hostname === hostname && d.service !== scriptName,
                   ),
                 ),
-                Effect.catch(() => Effect.succeed(undefined)),
               );
             if (otherOwner?.id) {
               return yield* Effect.die(
@@ -1551,8 +1557,11 @@ export const LiveWorkerProvider = () =>
                 Effect.retry({
                   while: (error) => error._tag === "WorkerNotFound",
                   schedule: Schedule.max([
-                    Schedule.exponential(200),
-                    Schedule.recurs(15),
+                    Schedule.min([
+                      Schedule.exponential(200),
+                      Schedule.spaced("5 seconds"),
+                    ]),
+                    Schedule.recurs(8),
                   ]),
                 }),
                 Effect.retry({
@@ -1590,7 +1599,7 @@ export const LiveWorkerProvider = () =>
           .listScriptDeployments({ accountId, scriptName })
           .pipe(
             Effect.map((response) => response.deployments ?? []),
-            Effect.catch(() => Effect.succeed([])),
+            Effect.catchTag("WorkerNotFound", () => Effect.succeed([])),
           );
         const latest = [...deployments].sort((a, b) =>
           b.createdOn.localeCompare(a.createdOn),
@@ -1704,7 +1713,11 @@ export const LiveWorkerProvider = () =>
               zoneId,
               rulesetPhase: "http_request_dynamic_redirect",
             })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(
+              Effect.catchTag("RulesetNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter(
@@ -1806,7 +1819,11 @@ export const LiveWorkerProvider = () =>
               zoneId,
               rulesetPhase: "http_request_late_transform",
             })
-            .pipe(Effect.catch(() => Effect.succeed(undefined)));
+            .pipe(
+              Effect.catchTag("RulesetNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -1937,8 +1954,8 @@ export const LiveWorkerProvider = () =>
 
       // List the routes attached to `scriptName` across the given zones.
       // Routes without an id/pattern or owned by another script are
-      // ignored. Zones the token can't read are skipped rather than
-      // failing the whole listing.
+      // ignored. Lookup failures must propagate so missing permissions are
+      // never mistaken for absent routes.
       const listWorkerRoutesInZones = (
         scriptName: string,
         zoneIds: readonly string[],
@@ -1950,16 +1967,17 @@ export const LiveWorkerProvider = () =>
 
         const routesByZone = Effect.all(
           uniqueZoneIds.map((zoneId) =>
-            workers.listRoutes({ zoneId }).pipe(
-              Effect.map((response) =>
-                (response.result ?? []).flatMap((route) =>
-                  route.id && route.pattern && route.script === scriptName
-                    ? [{ id: route.id, pattern: route.pattern, zoneId }]
-                    : [],
+            workers
+              .listRoutes({ zoneId })
+              .pipe(
+                Effect.map((response) =>
+                  (response.result ?? []).flatMap((route) =>
+                    route.id && route.pattern && route.script === scriptName
+                      ? [{ id: route.id, pattern: route.pattern, zoneId }]
+                      : [],
+                  ),
                 ),
               ),
-              Effect.catch(() => Effect.succeed([])),
-            ),
           ),
           // Bounded: this issues one request per zone, so a Worker with routes
           // spread across many zones would otherwise burst the account's whole
@@ -2039,10 +2057,7 @@ export const LiveWorkerProvider = () =>
 
             const zoneRoutes = yield* workers
               .listRoutes({ zoneId: route.zoneId })
-              .pipe(
-                Effect.map((response) => response.result ?? []),
-                Effect.catch(() => Effect.succeed([])),
-              );
+              .pipe(Effect.map((response) => response.result ?? []));
             const otherOwner = zoneRoutes.find(
               (candidate) =>
                 candidate.pattern === route.pattern &&
@@ -2077,8 +2092,11 @@ export const LiveWorkerProvider = () =>
                 Effect.retry({
                   while: (error) => error._tag === "RouteScriptNotFound",
                   schedule: Schedule.max([
-                    Schedule.exponential(200),
-                    Schedule.recurs(15),
+                    Schedule.min([
+                      Schedule.exponential(200),
+                      Schedule.spaced("5 seconds"),
+                    ]),
+                    Schedule.recurs(8),
                   ]),
                 }),
                 Effect.catchTag("InvalidRoute", (originalError) =>
@@ -2093,7 +2111,6 @@ export const LiveWorkerProvider = () =>
                               candidate.script === scriptName,
                           ),
                         ),
-                        Effect.catch(() => Effect.succeed(undefined)),
                       );
                     if (!match?.id) {
                       return yield* Effect.fail(originalError);
@@ -2278,8 +2295,11 @@ export const LiveWorkerProvider = () =>
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
             schedule: Schedule.max([
-              Schedule.exponential(100),
-              Schedule.recurs(20),
+              Schedule.min([
+                Schedule.exponential(100),
+                Schedule.spaced("5 seconds"),
+              ]),
+              Schedule.recurs(8),
             ]),
           }),
         );
@@ -3008,10 +3028,12 @@ export const LiveWorkerProvider = () =>
           .createScriptVersion({
             accountId,
             scriptName: parentName,
+            bindingsInherit: news.bindingsInherit,
             metadata: {
               mainModule: bundle.main!,
               assets: metadataAssets,
               bindings: metadataBindings,
+              keepBindings: news.keepBindings,
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               cacheOptions: news.cache ?? getCacheBinding(bindings),
@@ -3605,7 +3627,12 @@ export const LiveWorkerProvider = () =>
               item.type === "queue" &&
               (item.queueId !== undefined || item.shim !== undefined)
             ) {
-              const { queueId: _, shim: __, ...rest } = item;
+              const {
+                queueId: _,
+                shim: __,
+                localQueueSettings: ___,
+                ...rest
+              } = item;
               return rest;
             }
             return item;
@@ -3707,7 +3734,9 @@ export const LiveWorkerProvider = () =>
             })
             .pipe(
               Effect.map((s) => s as typeof s | undefined),
-              Effect.catch(() => Effect.succeed(undefined)),
+              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
+                Effect.succeed(undefined),
+              ),
             ));
 
         const oldTags = Array.from(new Set(oldSettings?.tags ?? []));
@@ -4009,6 +4038,17 @@ export const LiveWorkerProvider = () =>
           news.streamingTailConsumers,
         );
         const metadata: workers.PutScriptRequest["metadata"] = {
+          annotations:
+            news.version &&
+            (news.version.message !== undefined ||
+              news.version.tag !== undefined ||
+              news.version.alias !== undefined)
+              ? {
+                  workersMessage: news.version.message,
+                  workersTag: news.version.tag,
+                  workersAlias: news.version.alias,
+                }
+              : undefined,
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
@@ -4018,7 +4058,7 @@ export const LiveWorkerProvider = () =>
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
-          keepBindings: undefined,
+          keepBindings: news.keepBindings,
           limits: news.limits,
           logpush: news.logpush,
           mainModule: bundle.main,
@@ -4076,10 +4116,12 @@ export const LiveWorkerProvider = () =>
             .createScriptVersion({
               accountId,
               scriptName: name,
+              bindingsInherit: news.bindingsInherit,
               metadata: {
                 mainModule: metadata.mainModule!,
                 assets: metadata.assets,
                 bindings: metadata.bindings,
+                keepBindings: metadata.keepBindings,
                 keepAssets: metadata.keepAssets,
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
@@ -4142,20 +4184,17 @@ export const LiveWorkerProvider = () =>
             accountId,
             scriptName: name,
             dispatchNamespace,
+            bindingsInherit: news.bindingsInherit,
             metadata,
             files: bundle.files,
           }).pipe(
-            Effect.catch((err) => {
+            Effect.catchTag("MigrationTagMismatch", (err) => {
               // When adopting a Worker managed by Wrangler (or after a previous
               // deploy with mismatched migrations), the old_tag precondition
               // fails. The only way to discover the actual tag is through the
               // error message — getScriptSettings is meant to return it but
               // doesn't at runtime.
-              const msg = String(
-                typeof err === "object" && err !== null && "message" in err
-                  ? err.message
-                  : err,
-              );
+              const msg = err.message ?? "";
               const expectedTag = msg.match(
                 /when expected tag is ['"]?([^'"]+)['"]?/,
               )?.[1];
@@ -4164,6 +4203,7 @@ export const LiveWorkerProvider = () =>
                   accountId,
                   scriptName: name,
                   dispatchNamespace,
+                  bindingsInherit: news.bindingsInherit,
                   metadata: {
                     ...metadata,
                     migrations: {
@@ -4175,8 +4215,7 @@ export const LiveWorkerProvider = () =>
                   files: bundle.files,
                 });
               }
-              // @effect-diagnostics-next-line anyUnknownInErrorContext:off
-              return Effect.fail(err as any);
+              return Effect.fail(err);
             }),
           );
         }
@@ -4252,7 +4291,7 @@ export const LiveWorkerProvider = () =>
           // first few hundred ms after `putScript` returns, POST /subdomain
           // can still get back `WorkerNotFound` (a generic "unknown error"
           // body), or a bare 500 surfaced as `InternalServerError` /
-          // `UnknownCloudflareError` (code 10013). Bigger uploads race harder.
+          // typed transient server failures. Bigger uploads race harder.
           // Retry the subdomain toggle on those transient tags with a short
           // exponential backoff; same pattern we use elsewhere in this
           // provider for DO-namespace propagation and for `putScript` itself.
@@ -4260,11 +4299,13 @@ export const LiveWorkerProvider = () =>
             Effect.retry({
               while: (error) =>
                 error._tag === "WorkerNotFound" ||
-                error._tag === "InternalServerError" ||
-                error._tag === "UnknownCloudflareError",
+                error._tag === "InternalServerError",
               schedule: Schedule.max([
-                Schedule.exponential(200),
-                Schedule.recurs(15),
+                Schedule.min([
+                  Schedule.exponential(200),
+                  Schedule.spaced("5 seconds"),
+                ]),
+                Schedule.recurs(8),
               ]),
             }),
           );
@@ -4292,14 +4333,15 @@ export const LiveWorkerProvider = () =>
           // resurface in `urls`. Plain workers.dev Workers (no persisted
           // domains) never pay this listDomains call (#926).
           const live = new Set(
-            yield* workers.listDomains({ accountId, service: name }).pipe(
-              Effect.map((r) =>
-                (r.result ?? []).flatMap((d) =>
-                  d.hostname ? [d.hostname] : [],
+            yield* workers
+              .listDomains({ accountId, service: name })
+              .pipe(
+                Effect.map((r) =>
+                  (r.result ?? []).flatMap((d) =>
+                    d.hostname ? [d.hostname] : [],
+                  ),
                 ),
               ),
-              Effect.catch(() => Effect.succeed([] as string[])),
-            ),
           );
           const serving = [
             ...(live.has(previousDomain.name) ? [previousDomain.name] : []),
@@ -4341,7 +4383,6 @@ export const LiveWorkerProvider = () =>
                     : [],
                 ),
               ),
-              Effect.catch(() => Effect.succeed([])),
             );
           const reconciled = yield* reconcileDomains(
             name,
@@ -5206,13 +5247,8 @@ export const LiveWorkerProvider = () =>
               // returns code 10002 / "An unknown error has occurred" on the
               // first put for a fresh worker name. Surfaced as the shared
               // `InternalServerError` upstream (alchemy-run/distilled#290).
-              // Also match `UnknownCloudflareError` for older
-              // @distilled.cloud/cloudflare versions that haven't picked
-              // up the patch yet.
               Effect.retry({
-                while: (e) =>
-                  e._tag === "InternalServerError" ||
-                  e._tag === "UnknownCloudflareError",
+                while: (e) => e._tag === "InternalServerError",
                 schedule: Schedule.max([
                   Schedule.exponential(1000),
                   Schedule.recurs(5),
@@ -5660,14 +5696,13 @@ export const LiveWorkerProvider = () =>
           if (output.versionOf !== undefined) {
             // Remove our affinity rules from the parent's zones — the
             // canary owned them, and with the canary gone there is no
-            // split left to pin. Best-effort: a zone we can no longer
-            // touch must not fail the destroy.
+            // split left to pin. Preserve failures so cleanup can be retried.
             if (output.affinityZoneIds?.length) {
               yield* reconcileAffinityRules({
                 scriptName: output.versionOf,
                 desired: undefined,
                 previousZoneIds: output.affinityZoneIds,
-              }).pipe(Effect.catch(() => Effect.void));
+              });
             }
             if (!output.versionId) return;
             yield* Effect.logInfo(
@@ -5765,10 +5800,7 @@ export const LiveWorkerProvider = () =>
               accountId: output.accountId,
               service: output.workerName,
             })
-            .pipe(
-              Effect.map((r) => r.result ?? []),
-              Effect.catch(() => Effect.succeed([])),
-            );
+            .pipe(Effect.map((r) => r.result ?? []));
           // Remove our redirect rules from each affected zone's dynamic
           // redirect entrypoint *before* detaching the domains — the live
           // domain list is what resolves each redirect hostname's zone.
@@ -5776,13 +5808,13 @@ export const LiveWorkerProvider = () =>
           // rules tagged `alchemy:worker:<script>:redirect:*`, leaving
           // everything else in the shared entrypoint untouched.
           // Remove our version-affinity rules from every zone state says
-          // holds them. Best-effort, like the redirect rules below.
+          // holds them. Failed cleanup must preserve state for a retry.
           if (output.affinityZoneIds?.length) {
             yield* reconcileAffinityRules({
               scriptName: output.workerName,
               desired: undefined,
               previousZoneIds: output.affinityZoneIds,
-            }).pipe(Effect.catch(() => Effect.void));
+            });
           }
           const redirects = stateWorkerDomain(output)?.redirects ?? [];
           if (redirects.length > 0) {
@@ -5797,7 +5829,7 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
               previousRedirects: redirects,
-            }).pipe(Effect.catch(() => Effect.void));
+            });
           }
           if (liveDomains.length) {
             yield* Effect.all(

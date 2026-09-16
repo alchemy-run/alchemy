@@ -34,13 +34,14 @@ export type DropDisposition =
   | "NONE";
 
 export interface DomainProps {
+  /** Processing regions for this domain. Omission leaves existing regions unmanaged. */
+  regions?: string[];
   /**
    * The fully-qualified domain name of a domain that is **already
    * onboarded** to Email Security (via MX/BCC/journal or an API
    * integration). Domains cannot be created via the API — onboarding
-   * happens in the Email Security dashboard. The domain name is the
-   * resource's identity — changing it triggers a replacement (re-adopting
-   * a different domain).
+   * happens in the Email Security dashboard. Once adopted, the domain
+   * name can be updated through the settings API.
    */
   domain: string;
   /**
@@ -187,6 +188,9 @@ export const DomainProvider = () =>
     stables: ["domainId", "accountId", "domain", "o365TenantId", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       if (!isResolved(news)) return undefined;
       // The domain name is the resource's identity — changing it means
       // re-adopting a different onboarded domain.
@@ -341,6 +345,13 @@ const settingsDelta = (
     "accountId" | "domainId"
   > = {};
   let dirty = false;
+  if (
+    news.regions !== undefined &&
+    !sameArray(observed.regions, news.regions)
+  ) {
+    delta.regions = news.regions;
+    dirty = true;
+  }
   if (
     news.allowedDeliveryModes !== undefined &&
     !sameArray(observed.allowedDeliveryModes, news.allowedDeliveryModes)

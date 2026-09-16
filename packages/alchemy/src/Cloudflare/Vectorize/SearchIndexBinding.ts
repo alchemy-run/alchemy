@@ -19,6 +19,8 @@ export const SearchIndexBinding = Layer.effect(
               type: "vectorize",
               name: index.LogicalId,
               indexName: index.indexName,
+              dimensions: index.dimensions,
+              metric: index.metric,
             },
           ],
         });

@@ -168,15 +168,20 @@ export const PolicyProvider = () =>
       // description is the best identity we have). A match is branded
       // `Unowned` so the engine gates takeover behind `--adopt`.
       const description = yield* createDescription(id, olds?.description);
-      const list = yield* pageShield.listPolicies({ zoneId });
-      const match = list.result.find((p) => p.description === description);
+      const list = yield* pageShield.listPolicies
+        .items({ zoneId })
+        .pipe(Stream.runCollect);
+      const match = list.find((p) => p.description === description);
       return match ? Unowned(toAttributes(zoneId, match)) : undefined;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const description = yield* createDescription(id, news.description);
+      const description = yield* createDescription(
+        id,
+        news.description ?? output?.description,
+      );
 
       // 1. Observe — the policyId cached on `output` is a hint, not a
       //    guarantee: a PolicyNotFound falls through to "missing".

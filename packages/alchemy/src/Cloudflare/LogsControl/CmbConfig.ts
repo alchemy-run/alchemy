@@ -134,7 +134,11 @@ export const CmbConfigProvider = () =>
     // unconfigured.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const observed = yield* getCmbConfig(accountId);
+      const observed = yield* getCmbConfig(accountId).pipe(
+        Effect.catchTag("LogsControlNotAuthorized", () =>
+          Effect.succeed(undefined),
+        ),
+      );
       return observed === undefined ? [] : [toAttributes(accountId, observed)];
     }),
 
@@ -198,11 +202,8 @@ const getCmbConfig = (accountId: string) =>
         ? undefined
         : config,
     ),
-    // Accounts without the Compliance/CMB entitlement get
-    // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
-    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () =>
-      Effect.succeed(undefined),
-    ),
+    // Lost authorization is not proof that an existing config was deleted.
+    Effect.catchTag("CmbConfigNotFound", () => Effect.succeed(undefined)),
   );
 
 const toAttributes = (

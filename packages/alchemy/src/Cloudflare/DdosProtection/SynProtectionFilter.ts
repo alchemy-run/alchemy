@@ -107,6 +107,11 @@ export const isSynProtectionFilter = (
 export const SynProtectionFilterProvider = () =>
   Provider.succeed(SynProtectionFilter, {
     stables: ["filterId", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
 
     // Account-scoped collection: paginate every filter in the ambient
     // account. Accounts without the Advanced TCP Protection entitlement (or
@@ -165,6 +170,8 @@ export const SynProtectionFilterProvider = () =>
       // 2. Ensure — create when missing. Expressions are not unique on
       //    Cloudflare's side, so there is no AlreadyExists race to
       //    tolerate.
+      if (!observed)
+        observed = yield* findByExpression(accountId, news.expression);
       if (!observed) {
         observed = yield* ddos.createAdvancedTcpProtectionSynProtectionFilter({
           accountId,

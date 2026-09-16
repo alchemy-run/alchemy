@@ -66,15 +66,20 @@ test(
         Effect.flatMap((res) =>
           res.status === 200
             ? Effect.succeed(res)
-            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+            : res.text.pipe(
+                Effect.flatMap((body) =>
+                  Effect.fail(
+                    new Error(
+                      `Worker not ready: HTTP ${res.status} ${effectUrl}: ${body.slice(0, 300)}`,
+                    ),
+                  ),
+                ),
+              ),
         ),
-        // Cap exponential backoff at 3s so retries stay bounded.
+        // Bound hostname/token propagation to ten retries and fifty seconds.
         Effect.retry({
-          schedule: Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("3 seconds"),
-          ]),
-          times: 20,
+          schedule: Schedule.spaced("5 seconds"),
+          times: 10,
         }),
       );
 
@@ -91,5 +96,5 @@ test(
     expect(body.updatedId).toBe(body.id);
     expect(body.deleted).toBe(true);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );

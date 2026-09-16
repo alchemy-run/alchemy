@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -345,4 +346,50 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
+);
+
+test.provider("rename conflict preserves the other deployed route", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    yield* stack.destroy();
+    const deploy = (rename: boolean) =>
+      stack.deploy(
+        Effect.gen(function* () {
+          const gateway = yield* Cloudflare.AI.Gateway("CollisionGateway", {
+            id: "alchemy-test-aigw-collision",
+          });
+          const first = yield* Cloudflare.AI.GatewayDynamicRouting("First", {
+            gatewayId: gateway.gatewayId,
+            name: rename ? "alchemy-route-second" : "alchemy-route-first",
+            elements: graph("@cf/meta/llama-3.1-8b-instruct", 1),
+          });
+          const second = yield* Cloudflare.AI.GatewayDynamicRouting("Second", {
+            gatewayId: gateway.gatewayId,
+            name: "alchemy-route-second",
+            elements: graph("@cf/meta/llama-3.1-8b-instruct", 2),
+          });
+          return { first, second };
+        }),
+      );
+    const created = yield* deploy(false);
+    const conflict = yield* deploy(true).pipe(Effect.result);
+    expect(Result.isFailure(conflict)).toBe(true);
+    const first = yield* aiGateway.getDynamicRouting({
+      accountId,
+      gatewayId: created.first.gatewayId,
+      id: created.first.routeId,
+    });
+    const second = yield* aiGateway.getDynamicRouting({
+      accountId,
+      gatewayId: created.second.gatewayId,
+      id: created.second.routeId,
+    });
+    expect(first.name).toEqual("alchemy-route-first");
+    expect(second.name).toEqual("alchemy-route-second");
+    expect(second.version.data).toEqual(
+      graph("@cf/meta/llama-3.1-8b-instruct", 2),
+    );
+    yield* deploy(false);
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

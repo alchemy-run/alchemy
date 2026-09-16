@@ -497,7 +497,7 @@ export const LiveContainerProvider = () =>
         // directory.
         const context = yield* fs.realPath(props.context ?? ".");
         const dockerfile = props.dockerfile
-          ? yield* fs.realPath(props.dockerfile)
+          ? yield* fs.realPath(path.resolve(context, props.dockerfile))
           : path.join(context, "Dockerfile");
         const contextHash = yield* hashDirectory({ cwd: context });
         const dockerfileContent = yield* fs.readFileString(dockerfile);
@@ -789,6 +789,7 @@ export const LiveContainerProvider = () =>
           name,
           ...scalingDefaults(news),
           affinities: news.affinities,
+          jobs: news.jobs,
           configuration,
           durableObjects,
         }).pipe(
@@ -828,10 +829,8 @@ export const LiveContainerProvider = () =>
                   ),
                 ),
           ),
-          Effect.catchIf(
-            (e) =>
-              "message" in (e as any) &&
-              String((e as any).message).includes("already exists"),
+          Effect.catchTag(
+            "ContainerApplicationAlreadyExists",
             () => adoptExistingByName,
           ),
           Effect.tapError((error) =>
@@ -960,6 +959,7 @@ export const LiveContainerProvider = () =>
                 name: existing.applicationName,
                 ...scaling,
                 affinities: news.affinities,
+                jobs: news.jobs,
                 configuration,
                 durableObjects,
               });
@@ -1042,6 +1042,12 @@ export const LiveContainerProvider = () =>
             name !== oldName
           ) {
             return { action: "replace" } as const;
+          }
+
+          if ((news.jobs ?? false) !== (olds.jobs ?? false)) {
+            // Jobs is creation-only and an existing name/DO namespace cannot
+            // host a second application during replacement.
+            return { action: "replace", deleteFirst: true } as const;
           }
 
           const hasDurableObjects =
@@ -1175,7 +1181,7 @@ export const LiveContainerProvider = () =>
             }).pipe(
               Effect.map((app) => ({
                 ...toAttributes(app),
-                hash: output.hash,
+                hash: observedApplicationHash(app, output),
               })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
                 Effect.succeed(undefined),
@@ -1187,7 +1193,9 @@ export const LiveContainerProvider = () =>
             if (found) {
               existing = {
                 ...toAttributes(found),
-                hash: output?.hash,
+                hash: output
+                  ? observedApplicationHash(found, output)
+                  : undefined,
               };
             }
           }
@@ -1381,7 +1389,9 @@ export const LiveContainerProvider = () =>
               }
               return {
                 ...toAttributes(existing),
-                hash: output?.hash,
+                hash: output
+                  ? observedApplicationHash(existing, output)
+                  : undefined,
                 // The dev image is a local build-context reference that the
                 // API can't return — preserve the persisted one so a refresh
                 // doesn't wipe it (which would break a later `alchemy dev`).
@@ -1406,7 +1416,7 @@ export const LiveContainerProvider = () =>
             }).pipe(
               Effect.map((app) => ({
                 ...toAttributes(app),
-                hash: output.hash,
+                hash: observedApplicationHash(app, output),
                 dev: output.dev,
               })),
               Effect.catchTag("ContainerApplicationNotFound", () =>
@@ -1564,3 +1574,19 @@ const toAttributes = (
   version: application.version,
   dev: undefined,
 });
+
+// A fingerprint describes the last applied state, not arbitrary fresh cloud
+// state. Invalidate it after an out-of-band version or scaling change so
+// reconcile cannot skip restoring the desired configuration.
+const observedApplicationHash = (
+  application: Containers.ContainerApplicationItem,
+  output: ContainerApplication["Attributes"],
+): ContainerApplication["Attributes"]["hash"] => {
+  if (!output.hash) return undefined;
+  const unchanged =
+    application.version === output.version &&
+    application.instances === output.instances &&
+    application.maxInstances === output.maxInstances &&
+    application.schedulingPolicy === output.schedulingPolicy;
+  return unchanged ? output.hash : { ...output.hash, configuration: undefined };
+};

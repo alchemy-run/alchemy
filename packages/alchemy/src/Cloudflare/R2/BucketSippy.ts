@@ -227,8 +227,11 @@ export const BucketSippyProvider = () =>
   Provider.succeed(BucketSippy, {
     stables: ["bucketName", "accountId", "jurisdiction"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       // The bucket is the configuration's identity — moving Sippy to a
       // different bucket (or jurisdiction) is a replacement. Compare
       // only once both sides are concrete strings.

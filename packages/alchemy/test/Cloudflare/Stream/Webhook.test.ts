@@ -22,7 +22,7 @@ const getWebhook = (accountId: string) =>
   stream.getWebhook({ accountId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );
@@ -36,7 +36,7 @@ const expectGone = (accountId: string) =>
     Effect.retry({
       while: (e) => e._tag === "WebhookNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),

@@ -8,8 +8,18 @@ export type QueueContentType = "text" | "json" | "bytes" | "v8";
 
 /** Options for a queue consumer (the worker's `queue()` handler). */
 export interface QueueConsumer {
+  /** Stable identity for one queue lifetime; defaults to queueName. */
+  readonly persistenceKey?: string;
+  /** Identity of the dead-letter queue lifetime, when known. */
+  readonly deadLetterQueuePersistenceKey?: string;
   /** Logical name of the queue this worker consumes. */
   readonly queueName: string;
+  /** Queue-wide default delay before delivery, in seconds. */
+  readonly deliveryDelay?: number;
+  /** Accept messages without delivering them to the consumer. */
+  readonly deliveryPaused?: boolean;
+  /** Drop unconsumed messages after this many seconds. @default 86400 */
+  readonly messageRetentionPeriod?: number;
   /**
    * When set, this consumer's queue is a REAL Cloudflare queue: the runtime
    * attaches a pull loop that drains it via the HTTP pull API (the queue
@@ -40,6 +50,8 @@ export interface QueueConsumer {
  * {@link QueueProducerOptions} without the binding name.
  */
 export interface QueueProducerEntry {
+  readonly persistenceKey?: string;
+  readonly messageRetentionPeriod?: number;
   readonly queueName: string;
   readonly deliveryDelay?: number;
 }
@@ -50,6 +62,8 @@ export const BINDING_QUEUE_PRODUCERS = "QUEUE_PRODUCERS";
 export const BINDING_QUEUE_USER_WORKER = "USER_WORKER";
 export const BINDING_QUEUE_BROKER = "BROKER";
 export const BINDING_QUEUE_NAME = "QUEUE_NAME";
+/** Durable producer spool target, resolved through the dev registry. */
+export const BINDING_QUEUE_FORWARD = "QUEUE_FORWARD";
 
 /** Name of the service binding the broker uses to forward to a dead-letter queue. */
 export const BINDING_QUEUE_DLQ = (queueName: string): string =>

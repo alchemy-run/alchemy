@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -226,13 +227,13 @@ export const WidgetProvider = () =>
       const match = yield* findByName(acct, name);
       if (match) {
         const observed = yield* getWidget(acct, match.sitekey);
-        return observed ? toAttributes(observed, acct) : undefined;
+        return observed ? Unowned(toAttributes(observed, acct)) : undefined;
       }
       return undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createWidgetName(id, news.name);
+      const name = yield* createWidgetName(id, news.name ?? output?.name);
 
       // Observe — the sitekey cached on `output` is a hint, not a
       // guarantee: a 404 falls through to "missing" and we recreate.
@@ -265,23 +266,20 @@ export const WidgetProvider = () =>
         name,
         domains: news.domains,
         mode: news.mode,
-        botFightMode: news.botFightMode ?? observedBool(observed.botFightMode),
-        clearanceLevel:
-          news.clearanceLevel ?? (observed.clearanceLevel as ClearanceLevel),
-        ephemeralId: news.ephemeralId ?? observedBool(observed.ephemeralId),
-        offlabel: news.offlabel ?? observedBool(observed.offlabel),
+        botFightMode: news.botFightMode ?? false,
+        clearanceLevel: news.clearanceLevel ?? "no_clearance",
+        ephemeralId: news.ephemeralId ?? false,
+        offlabel: news.offlabel ?? false,
       };
       const dirty =
         observed.name !== desired.name ||
         observed.mode !== desired.mode ||
         !sameDomains(observed.domains, desired.domains) ||
-        (news.botFightMode !== undefined &&
-          observed.botFightMode !== news.botFightMode) ||
-        (news.clearanceLevel !== undefined &&
-          observed.clearanceLevel !== news.clearanceLevel) ||
-        (news.ephemeralId !== undefined &&
-          observed.ephemeralId !== news.ephemeralId) ||
-        (news.offlabel !== undefined && observed.offlabel !== news.offlabel);
+        observedBool(observed.botFightMode) !== desired.botFightMode ||
+        (observed.clearanceLevel ?? "no_clearance") !==
+          desired.clearanceLevel ||
+        observedBool(observed.ephemeralId) !== desired.ephemeralId ||
+        observedBool(observed.offlabel) !== desired.offlabel;
 
       if (!dirty) {
         return toAttributes(observed, observed.accountId);

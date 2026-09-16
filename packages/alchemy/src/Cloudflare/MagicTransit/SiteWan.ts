@@ -1,3 +1,4 @@
+import { removedConfiguration, sameConfiguration } from "./configuration.ts";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -59,6 +60,8 @@ export interface MagicSiteWanProps {
 }
 
 export interface MagicSiteWanAttributes {
+  /** Observed staticAddressing configuration. */
+  staticAddressing?: magicTransit.GetSiteWanResponse["staticAddressing"];
   /** Cloudflare-assigned identifier of the WAN. */
   wanId: string;
   /** The site the WAN belongs to. */
@@ -135,7 +138,24 @@ export const MagicSiteWanProvider = () =>
   Provider.succeed(MagicSiteWan, {
     stables: ["wanId", "siteId", "accountId"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+      if (!isResolved(news)) return undefined;
+      if (
+        olds &&
+        isResolved(olds) &&
+        ["priority", "vlanTag", "staticAddressing"].some((key) =>
+          removedConfiguration(
+            olds[key as keyof typeof olds],
+            news[key as keyof typeof news],
+          ),
+        )
+      )
+        return { action: "replace", deleteFirst: true } as const;
+      if ((output || olds) && (output?.siteId ?? olds?.siteId) !== news.siteId)
+        return { action: "replace", deleteFirst: true } as const;
       if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // WANs cannot move between sites.
@@ -174,7 +194,7 @@ export const MagicSiteWanProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const siteId = news.siteId as string;
-      const name = yield* createWanName(id, news.name);
+      const name = yield* createWanName(id, news.name ?? output?.name);
 
       // Observe — the id on `output` is a hint; fall back to a name scan.
       let observed = output?.wanId
@@ -215,7 +235,7 @@ export const MagicSiteWanProvider = () =>
           (observed.priority ?? undefined) !== news.priority) ||
         (news.vlanTag !== undefined &&
           (observed.vlanTag ?? undefined) !== news.vlanTag) ||
-        staticAddressingDirty(observed.staticAddressing, news.staticAddressing);
+        !sameConfiguration(observed.staticAddressing, news.staticAddressing);
       if (dirty) {
         const updated = yield* magicTransit.updateSiteWan({
           accountId,
@@ -288,19 +308,7 @@ export const MagicSiteWanProvider = () =>
     }),
   });
 
-interface ObservedWan {
-  id?: string | null;
-  name?: string | null;
-  physport?: number | null;
-  priority?: number | null;
-  vlanTag?: number | null;
-  healthCheckRate?: string | null;
-  staticAddressing?: {
-    address: string;
-    gatewayAddress: string;
-    secondaryAddress?: string | null;
-  } | null;
-}
+type ObservedWan = magicTransit.GetSiteWanResponse;
 
 /**
  * Read a WAN by id, mapping "gone" (`SiteWanNotFound`, HTTP 404) to
@@ -317,9 +325,10 @@ const getWan = (accountId: string, siteId: string, wanId: string) =>
  * pick the first match deterministically by id.
  */
 const findByName = (accountId: string, siteId: string, name: string) =>
-  magicTransit.listSiteWans({ accountId, siteId }).pipe(
+  magicTransit.listSiteWans.items({ accountId, siteId }).pipe(
+    Stream.runCollect,
     Effect.map((r): ObservedWan | undefined =>
-      r.result
+      Array.from(r)
         .filter((wan) => wan.name === name)
         .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
         .at(0),
@@ -349,6 +358,7 @@ const toAttributes = (
   siteId: string,
   accountId: string,
 ): MagicSiteWanAttributes => ({
+  staticAddressing: wan.staticAddressing ?? undefined,
   wanId: wan.id ?? "",
   siteId,
   accountId,

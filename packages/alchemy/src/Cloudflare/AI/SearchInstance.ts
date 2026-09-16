@@ -93,6 +93,18 @@ export type CacheThreshold =
   | "anything_goes";
 
 export type SearchInstanceProps = {
+  /** Enable hybrid keyword/vector search at creation. Changing it replaces the instance. */
+  hybridSearchEnabled?: boolean;
+  /** Whether indexed content is summarized. */
+  summarization?: boolean;
+  /** Model used to summarize indexed content. */
+  summarizationModel?: aisearch.UpdateNamespaceInstanceRequest["summarizationModel"];
+  /** System prompt used for AI Search answers. */
+  systemPromptAiSearch?: string;
+  /** System prompt used when summarizing indexed content. */
+  systemPromptIndexSummarization?: string;
+  /** System prompt used to rewrite retrieval queries. */
+  systemPromptRewriteQuery?: string;
   /**
    * SearchInstance identifier (the AI Search "name" shown in the dashboard).
    * Lowercase alphanumeric, hyphens, and underscores. If omitted, a unique
@@ -570,14 +582,14 @@ export const SearchInstanceProvider = () =>
       // always safe here regardless of whether the id is pinned.
       const newNamespace = resolveNamespace(news.namespace);
       const oldNamespace = resolveNamespace(
-        output?.namespace ?? olds.namespace,
+        output?.namespace ?? olds?.namespace,
       );
       if (newNamespace !== oldNamespace) {
         return { action: "replace" } as const;
       }
       // The instance id is its identity — renaming is a replacement.
       const oldId =
-        output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, olds?.instanceId));
       // Auto-generated ids are engine-owned: the deployed id stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided instanceId can force a replace.
@@ -595,16 +607,18 @@ export const SearchInstanceProvider = () =>
       } as const;
       // The data-source kind and location are fixed at creation; changing
       // either requires re-indexing from scratch (a replacement).
-      if ((news.type ?? "r2") !== (output?.type ?? olds.type ?? "r2")) {
+      if ((news.type ?? "r2") !== (output?.type ?? olds?.type ?? "r2")) {
         return replace;
       }
-      const oldSource = output?.source ?? olds.source;
+      const oldSource = output?.source ?? olds?.source;
       if (oldSource !== undefined && news.source !== oldSource) {
         return replace;
       }
+      if (news.hybridSearchEnabled !== olds?.hybridSearchEnabled)
+        return replace;
       // The embedding model defines the vector space and is immutable.
       const oldEmbedding =
-        normalize(output?.embeddingModel) ?? olds.embeddingModel;
+        normalize(output?.embeddingModel) ?? olds?.embeddingModel;
       if (
         news.embeddingModel !== undefined &&
         oldEmbedding !== undefined &&
@@ -663,7 +677,7 @@ export const SearchInstanceProvider = () =>
       );
       return rows.flat();
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const namespace = resolveNamespace(news.namespace);
@@ -685,6 +699,7 @@ export const SearchInstanceProvider = () =>
             name: namespace,
             id: instanceId,
             type: news.type ?? "r2",
+            hybridSearchEnabled: news.hybridSearchEnabled,
             ...toMutableBody(news),
           })
           .pipe(
@@ -728,7 +743,10 @@ export const SearchInstanceProvider = () =>
           }
           // Indexing itself starts asynchronously; we deliberately do NOT
           // wait for the first sync to finish.
-          return toAttributes(ensured.instance, acct, namespace);
+          // Update-only prompt/summarization settings still need to be
+          // synchronized after the create operation.
+          if (!hasUpdateOnlySettings(news))
+            return toAttributes(ensured.instance, acct, namespace);
         }
         observed = ensured.instance;
       }
@@ -739,19 +757,23 @@ export const SearchInstanceProvider = () =>
       // value is preserved in the full PUT body.
       const desired = toMutableBody(news);
       const observedRecord = observed as unknown as Record<string, unknown>;
-      const dirty = Object.entries(desired).some(
-        ([key, value]) =>
-          // Cloudflare's read projection always returns `tokenId: null`
-          // (the association is write-only), so it can never be diffed
-          // against desired — excluding it avoids perpetual false drift.
-          // It still rides along in the create body and in any update PUT
-          // triggered by other fields.
-          key !== "tokenId" &&
-          value !== undefined &&
-          !deepEqual(normalize(observedRecord[key]), normalize(value), {
-            stripNullish: true,
-          }),
-      );
+      const tokenChanged =
+        news.tokenId !== undefined && (!olds || olds.tokenId !== news.tokenId);
+      const dirty =
+        tokenChanged ||
+        Object.entries(desired).some(
+          ([key, value]) =>
+            // Cloudflare's read projection always returns `tokenId: null`
+            // (the association is write-only), so it can never be diffed
+            // against desired — excluding it avoids perpetual false drift.
+            // Its write-only rotation is compared with prior desired props
+            // separately, and is always synchronized on adoption.
+            key !== "tokenId" &&
+            value !== undefined &&
+            !deepEqual(normalize(observedRecord[key]), normalize(value), {
+              stripNullish: true,
+            }),
+        );
       if (!dirty) {
         return toAttributes(observed, acct, namespace);
       }
@@ -777,6 +799,7 @@ export const SearchInstanceProvider = () =>
           id: output.instanceId,
         })
         .pipe(
+          retryInternalError,
           Effect.catchTag(
             ["AiSearchInstanceNotFound", "NamespaceNotFound"],
             () => Effect.void,
@@ -808,23 +831,27 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) =>
-        e._tag === "InvalidTokenCredentials" || e._tag === "MissingSitemap",
-      // A full-body update PUT re-sends `source`, which makes Cloudflare
-      // re-validate the (write-only, auto-provisioned) R2 service token and
-      // re-fetch a web-crawler seed — opening a fresh propagation window each
-      // time. The window stretches under full-suite parallel load (token
-      // propagation across the edge contends with every other test's calls),
-      // so the budget is generous (~2 min). Crucially the per-attempt delay is
-      // *capped* at 6s (`either` takes the min of the two schedules): an
-      // uncapped exponential balloons to ~38s gaps by attempt 10, so it polls
-      // sparsely and detects a settled token tens of seconds late. Capped
-      // polling detects within 6s of propagation completing while still
-      // covering a long total window.
+        e._tag === "AiSearchInternalError" ||
+        e._tag === "InvalidTokenCredentials" ||
+        e._tag === "MissingSitemap",
+      // Source validation is eventually consistent; cap both attempts and
+      // delay so an invalid source or token cannot stall deployment.
       schedule: Schedule.min([
         Schedule.exponential("1 second", 1.5),
-        Schedule.spaced("6 seconds"),
+        Schedule.spaced("5 seconds"),
       ]),
-      times: 22,
+      times: 8,
+    }),
+  );
+
+const retryInternalError = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "AiSearchInternalError",
+      schedule: Schedule.spaced("3 seconds"),
+      times: 8,
     }),
   );
 
@@ -843,13 +870,12 @@ const resolveNamespace = (namespace: string | undefined): string =>
  * code 7002) or its whole namespace is (`NamespaceNotFound`, code 7063).
  */
 const getInstance = (accountId: string, namespace: string, id: string) =>
-  aisearch
-    .readNamespaceInstance({ accountId, name: namespace, id })
-    .pipe(
-      Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
+    retryInternalError,
+    Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () =>
+      Effect.succeed(undefined),
+    ),
+  );
 
 const createInstanceId = (id: string, instanceId: string | undefined) =>
   Effect.gen(function* () {
@@ -870,7 +896,20 @@ type MutableBody = ReturnType<typeof toMutableBody>;
  * The mutable slice of the desired state, shaped for the create/update
  * request bodies. Immutable props (`id`, `type`) are handled separately.
  */
+const hasUpdateOnlySettings = (news: SearchInstanceProps) =>
+  news.summarization !== undefined ||
+  news.summarizationModel !== undefined ||
+  news.systemPromptAiSearch !== undefined ||
+  news.systemPromptIndexSummarization !== undefined ||
+  news.systemPromptRewriteQuery !== undefined;
+
 const toMutableBody = (news: SearchInstanceProps) => ({
+  summarization: news.summarization,
+  summarizationModel: news.summarizationModel,
+  systemPromptAiSearch: news.systemPromptAiSearch,
+  systemPromptIndexSummarization: news.systemPromptIndexSummarization,
+  systemPromptRewriteQuery: news.systemPromptRewriteQuery,
+
   source: news.source as string,
   sourceParams: news.sourceParams,
   tokenId: news.tokenId as string | undefined,

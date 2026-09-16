@@ -145,7 +145,7 @@ export const ZoneTransferAclProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createAclName(id, news.name);
+      const name = yield* createAclName(id, news.name ?? output?.name);
       // Inputs are resolved to concrete values by Plan.
       const ipRange = news.ipRange as string;
 

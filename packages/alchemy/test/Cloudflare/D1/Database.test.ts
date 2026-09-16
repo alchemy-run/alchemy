@@ -829,6 +829,26 @@ test.provider("imports SQL files via importFiles", (stack) =>
       { id: 2, label: "two" },
     ]);
 
+    // A persisted hash is not evidence that a newly recreated database
+    // contains the imported data. Redeploy with the stale persisted identity.
+    yield* d1.deleteDatabase({ accountId, databaseId: database.databaseId });
+    const recovered = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.D1.Database("ImportDatabase", {
+          importFiles: [importPath],
+          readReplication: { mode: "disabled" },
+        });
+      }),
+    );
+    expect(recovered.databaseId).not.toBe(database.databaseId);
+    expect(recovered.databaseName).toBe(database.databaseName);
+    expect(
+      yield* getResults<{ id: number; label: string }>(
+        accountId,
+        recovered.databaseId,
+        "SELECT id, label FROM widgets ORDER BY id;",
+      ),
+    ).toEqual(widgets);
     yield* stack.destroy();
     yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
   }).pipe(logLevel),

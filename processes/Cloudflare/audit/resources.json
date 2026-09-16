@@ -1,0 +1,1936 @@
+{
+  "auditDate": "2026-09-13",
+  "scope": "241 existing resource contracts; not every Cloudflare API endpoint",
+  "validation": "Per-resource notes distinguish actual lifecycle runs, probes, skips and static review. Reviewed does not mean every configuration was deployed.",
+  "resources": [
+    {
+      "resource": "AI.CustomTopics",
+      "source": "packages/alchemy/src/Cloudflare/AI/CustomTopics.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AiSecurity/CustomTopics.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed whole topic-list PUT, zone scope, singleton baseline capture/restore and order-insensitive comparison. Replaced ambiguous delimiter identity with JSON tuples. Typed entitlement probe/list pass; topic-policy mutation requires subscription."
+    },
+    {
+      "resource": "AI.Dataset",
+      "source": "packages/alchemy/src/Cloudflare/AI/Dataset.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/Dataset.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full create/update surface (name,enable,filters with all14 keys/four operators/scalar union), scope replacement, observed normalized state, name collision recovery and paginated discovery. Cold matches now Unowned. Typed child/parent absence and immutable stable ids covered; generated names preserved centrally. Existing deployed lifecycle tests run again after ownership change."
+    },
+    {
+      "resource": "AI.Evaluation",
+      "source": "packages/alchemy/src/Cloudflare/AI/Evaluation.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/Evaluation.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all immutable inputs (datasets,evaluation types,name,gateway/account), replacement, observed status and typed absence. Cold matches now Unowned; concurrent name recovery rejects a different dataset set. Evaluation type ids are only observable after results exist, so cached desired ids remain necessary; adoption cannot prove pending type configuration. No fake local job completion."
+    },
+    {
+      "resource": "AI.Gateway",
+      "source": "packages/alchemy/src/Cloudflare/AI/Gateway.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/Gateway.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed create/update shape and nested retry/billing/guardrail fields, account/id replacement, typed get-create collision recovery and post-create sync, typed deletion/list. Earlier added missing features and normalized nullable response guards. Reconcile currently sends PATCH even when forced with unchanged observed configuration; no versioned resource churn or false output. Optional advanced settings selectively forwarded; entitlement combinations remain gated."
+    },
+    {
+      "resource": "AI.GatewayDynamicRouting",
+      "source": "packages/alchemy/src/Cloudflare/AI/GatewayDynamicRouting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/GatewayDynamicRouting.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all six graph variants and nested edge/model/rate fields against SDK, account/gateway scope replacement, versions/deployment drift and paginated hydration. Removed destructive rename-collision handler that deleted an unrelated route. Actual two-resource conflict fixture verifies both survive unchanged; whole suite5/5. Cold discovery now Unowned. End node outputs follow documented empty terminal semantics despite SDK permissive map."
+    },
+    {
+      "resource": "AI.GatewayProvider",
+      "source": "packages/alchemy/src/Cloudflare/AI/GatewayProvider.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/GatewayProvider.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed complete provider/alias/secret/default/rate configuration and list-only API with replacement. Fixed helper pagination beyond50 and cold Unowned read. A mismatching occupant can only be deleted when its id equals persisted currentId; foreign occupants fail typed GatewayProviderOwnershipConflict. Secret readiness/create conflict retries bounded. Full helper no longer infers ownership merely from matching alias. Deployed existing lifecycle/secret replacement/list suite passed29.9s after guard; concurrent foreign-occupant branch is statically reviewed, not induced."
+    },
+    {
+      "resource": "AI.SearchInstance",
+      "source": "packages/alchemy/src/Cloudflare/AI/SearchInstance.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/SearchInstance.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed namespace/id/source/type/embedding replacement and SDK-derived nested source/index/retrieval/public-endpoint settings. Fixed adoption diff dereferences of absent olds and write-only tokenId-only rotation (prior props comparison; always sync on adoption). Earlier added hybridSearchEnabled plus update-only summarization/model/prompts. Selective omitted fields preserve observed config; initial-index error is explicitly best effort warning. Runtime remains remote search/inference, no fake index. Actual replacement/recovery hit code7001 Internal Error, previously mistyped ValidationError. Added precise AiSearchInternalError SDK matcher and bounded retries; updated R2 CRUD/replacement/recovery/namespace/list5 passed. Crawler recheck after unrelated Flagship import fix passed1/1; all six actual lifecycle cases passed across final rerun+focusedrecheck."
+    },
+    {
+      "resource": "AI.SearchNamespace",
+      "source": "packages/alchemy/src/Cloudflare/AI/SearchNamespace.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/SearchNamespace.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full name/description CRUD, reserved default namespace read-only/retained, output identity/account replacement, typed create-race recovery and paginated list. Description null clears; missing-on-update recreate. Independent actual namespace lifecycle refresh recorded in evidence."
+    },
+    {
+      "resource": "AI.SearchToken",
+      "source": "packages/alchemy/src/Cloudflare/AI/SearchToken.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AI/SearchToken.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all five create/update fields, account replacement, paginated natural-key discovery, write-only key comparison via olds, typed absence and dependency delete. Cold matches now Unowned; legacy omission converges false consistently with create. Delete retries reduced from60x5sec to8x5sec; credential propagation exponential capped5sec. Explicit legacytrue creates tokens that API per-id routes cannot manage; documented service limitation."
+    },
+    {
+      "resource": "AI.SecuritySettings",
+      "source": "packages/alchemy/src/Cloudflare/AI/SecuritySettings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/AiSecurity/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed sole enabled setting, zone identity, observed no-op and baseline capture/restore. Exact entitlement probe plus list pass; mutating policy gated."
+    },
+    {
+      "resource": "Access.Application",
+      "source": "packages/alchemy/src/Cloudflare/Access/Application.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Application.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added 29 SDK-typed application options: cookie flags, CORS, custom denial/pages, launcher styling/footer, MFA, SaaS/SCIM, hostnames/target criteria, isolation, WARP authentication and redirects. Create/update wire them and compare observed settings. DELETE only suppresses typed application-not-found. Normalize omitted `allowIframe:false` reported by live API. Live self-hosted CRUD, OAuth configuration, inline/reusable policy transitions, cold recovery, list, advanced cookie/CORS updates. WARP case returns early without Google IdP env. All specialized SaaS/SCIM/MFA combinations require their external service setup and are statically reviewed, not live verified. API rejects CORS headers together with preflight bypass."
+    },
+    {
+      "resource": "Access.Bookmark",
+      "source": "packages/alchemy/src/Cloudflare/Access/Bookmark.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Bookmark.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "All legacy create/update fields present. Failed list/discovery no longer becomes absence. Live missing-ID and legacy API probe; lifecycle gated on CLOUDFLARE_TEST_ACCESS_BOOKMARKS. Legacy API rejects with AccessBookmarkNotFound; modern Application `type:bookmark` remains available."
+    },
+    {
+      "resource": "Access.Certificate",
+      "source": "packages/alchemy/src/Cloudflare/Access/Certificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Certificate.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name, PEM, associated hostnames covered; certificate material immutable/replacement. Discovery errors propagate. Live missing certificate/probe; lifecycle gated by AccessCertificateQuotaExceeded code12130, maximum number of certificates reached."
+    },
+    {
+      "resource": "Access.CustomPage",
+      "source": "packages/alchemy/src/Cloudflare/Access/CustomPage.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/CustomPage.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name, HTML, app count/custom type fields present; listing errors propagate. Live read/probe; write gated AccessCustomPagesNotEntitled HTTP403 code12133, account does not have permission for custom pages."
+    },
+    {
+      "resource": "Access.Group",
+      "source": "packages/alchemy/src/Cloudflare/Access/Group.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Group.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name/include/exclude/require and account/zone scope present. Discovery errors propagate. Live create/update/rename/list and policy integration pass."
+    },
+    {
+      "resource": "Access.IdentityProvider",
+      "source": "packages/alchemy/src/Cloudflare/Access/IdentityProvider.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/IdentityProvider.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "SDK-typed discriminated configs and scoping cover provider variants; SAML certificate-set ID supported. `samlCertificateSet` is server certificate details, not desired credentials. `readOnly` is intentionally not exposed: it locks provider API mutation/deletion and conflicts with managed lifecycle. Live OIDC/account/zone CRUD, type/scope replacements, secret and certificate-set scenarios in existing suite. Server read-only objects cannot be fully lifecycle-managed."
+    },
+    {
+      "resource": "Access.InfrastructureTarget",
+      "source": "packages/alchemy/src/Cloudflare/Access/InfrastructureTarget.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/InfrastructureTarget.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Hostname, IPv4/IPv6, virtual network and port fields present. Live deployed list and target lifecycle pass."
+    },
+    {
+      "resource": "Access.KeyConfiguration",
+      "source": "packages/alchemy/src/Cloudflare/Access/KeyConfiguration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/KeyConfiguration.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Key rotation interval singleton settings present. Live capture/restore and singleton list pass; signing-key operational rotate is an action, not persistent desired state."
+    },
+    {
+      "resource": "Access.McpPortal",
+      "source": "packages/alchemy/src/Cloudflare/Access/McpPortal.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/McpPortal.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added complete `servers` request shape on create/update and drift comparison. Other portal name/hostname/IDP options already present. Live existing portal CRUD/list pass; nonempty external server integration is not live verified."
+    },
+    {
+      "resource": "Access.Organization",
+      "source": "packages/alchemy/src/Cloudflare/Access/Organization.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Organization.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added deny-unmatched flags/exempt zones and MFA configuration/PIV/all-apps options. Existing login/branding/WARP/session settings present. Live singleton read/list; mutations gated by CLOUDFLARE_TEST_AUTH_DOMAIN to preserve active team organization. Delete intentionally does not destroy team identity. New global settings statically verified only."
+    },
+    {
+      "resource": "Access.Policy",
+      "source": "packages/alchemy/src/Cloudflare/Access/Policy.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Policy.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added approvalGroups, connectionRules, isolationRequired, mfaConfig, purposeJustificationPrompt. Successful exhaustively paginated list now establishes missing IDs for read/delete; auth/transport failures propagate. Live CRUD/adoption/list, purpose prompt updates, out-of-band deletion and recreation. Approval/MFA/RDP/isolation configurations statically wired but require suitable apps/services for enforcement tests."
+    },
+    {
+      "resource": "Access.ServiceToken",
+      "source": "packages/alchemy/src/Cloudflare/Access/ServiceToken.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/ServiceToken.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Duration/name/client-secret rotation covered. Discovery errors propagate. Live creation, duration update, rotation, list/deletion pass; returned secrets stay redacted."
+    },
+    {
+      "resource": "Access.Tag",
+      "source": "packages/alchemy/src/Cloudflare/Access/Tag.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Access/Tag.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name identity and replacement behavior match tag API. Live creation/rename replacement/list pass."
+    },
+    {
+      "resource": "Account.Account",
+      "source": "packages/alchemy/src/Cloudflare/Account/Account.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Account/Account.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared create name/type/unit and update name/type/settings/managedBy. Added missing managedBy parent organization ID/name and dirty detection. Type/unit remain creation identity; optional settings intentionally unmanaged on omission, documented. Names nonunique so no unsafe cold name adoption; ID-based read/delete preserved. Actual read/list + AccountCreationForbidden code1002 probe passed. Tenant creation/update/delete and managedBy changes remain gated."
+    },
+    {
+      "resource": "Account.Member",
+      "source": "packages/alchemy/src/Cloudflare/Account/Member.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Account/Member.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared email/roles/policies/status and nested permission/resource group references. Replaced unsafe Input<Props> cast diff with isResolved narrowing, account and observed email/status identity; accepted-to-pending replacement now deletes first to allow reinvitation at same email. Paginated lookup, missing-member recovery, typed duplicate adoption retained. Actual invite/update roles/email replacement/out-of-band deletion recovery/list/delete passed. Policy-only enterprise branch and accepted reinvitation not live verified."
+    },
+    {
+      "resource": "Acm.CustomTrustStore",
+      "source": "packages/alchemy/src/Cloudflare/Acm/CustomTrustStore.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Acm/CustomTrustStore.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Create API accepts zone+PEM only, no mutable update operation. Certificate normalization/zone replacement, paginated certificate cold recovery, pending-deletion filtering and observe-before-delete with typed missing errors reviewed. AdvancedCertificateManagerRequired code1450 probe/list passed; root-CA creation/replacement live fixtures gated. Trust verification at Cloudflare origin edge not local workerd control plane."
+    },
+    {
+      "resource": "Acm.TotalTls",
+      "source": "packages/alchemy/src/Cloudflare/Acm/TotalTls.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Acm/TotalTls.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Full mutable API enabled+certificateAuthority exposed (validityPeriod response-only). Singleton baseline capture, desired-only optional CA, zone replacement and restore-on-delete reviewed; typed NoStateChange refresh and PreviousJobInProgress capped10x3s. Actual read/list + AdvancedCertificateManagerRequired probe passed; paid enable/CA/restore gated. Certificate issuance and DNS edge rollout require Cloudflare."
+    },
+    {
+      "resource": "Addressing.AddressMap",
+      "source": "packages/alchemy/src/Cloudflare/Addressing/AddressMap.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Addressing/AddressMap.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared defaultSni, description, enabled, IPs, memberships; all mutable fields exposed. Added account guard and replacement when managed defaultSni omitted (SDK lacks nullable reset). Existing IP/membership set reconciliation retained. API cannot reliably cold-find map from nonunique description; output UUID required. Actual create/list exercised existing entitlement-aware fixture; nondeletable system maps retained by design."
+    },
+    {
+      "resource": "Addressing.BgpPrefix",
+      "source": "packages/alchemy/src/Cloudflare/Addressing/BgpPrefix.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Addressing/BgpPrefix.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared cidr, advertised, asnPrependCount, onDemandEnabled, onDemandAuto. Added account/adopted identity guards; removed advertisement/prepend/auto settings reset false/0/false. Delete now reads current advertisement before withdrawing instead of trusting stale output. No DELETE API: managed BGP prefix withdrawal is supported teardown. List passed; BYOIP lifecycle gated."
+    },
+    {
+      "resource": "Addressing.Prefix",
+      "source": "packages/alchemy/src/Cloudflare/Addressing/Prefix.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Addressing/Prefix.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared all BYOIP create fields plus description and LOA identity. Added prefix-wide advertised property using get/patch advertisement status, reset previously-managed omission false and withdraw before destroy. LOA explicit add/remove replaces without treating server-generated LOA as desired. Account replacement added. Service-catalog/list reads passed; actual BYOIP ownership/LOA provisioning gated, advertisement addition reviewed only."
+    },
+    {
+      "resource": "Addressing.PrefixDelegation",
+      "source": "packages/alchemy/src/Cloudflare/Addressing/PrefixDelegation.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Addressing/PrefixDelegation.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Delegation immutable prefix/delegatedAccount/optionalCIDR fields complete. Added account/observed identity guards for replacement/adoption. Missing parent maps existing DelegationNotFound union code. Read-only list passed; external BYOIP account/delegation fixture gated."
+    },
+    {
+      "resource": "Addressing.ServiceBinding",
+      "source": "packages/alchemy/src/Cloudflare/Addressing/ServiceBinding.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Addressing/ServiceBinding.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Service binding immutable prefix/cidr/serviceId API inputs covered. Added account/observed identity guards; recovery lookup now matches serviceId as well as CIDR. Read-only list passed; owned BYOIP provisioning fixture gated."
+    },
+    {
+      "resource": "Alerting.NotificationPolicy",
+      "source": "packages/alchemy/src/Cloudflare/Alerting/NotificationPolicy.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Alerting/NotificationPolicy.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all writable policy fields and SDK-derived filters/mechanisms, account/alert-type replacement, Unowned natural-key lookup and typed delete. Description removal explicitly clears; API3/3 verifies it. Exact BadRequest17009 probe proves universalSSL rejects alertInterval30m. Official docs provide no universal default, so omitted interval leaves existing value unmanaged and no longer causes repeated dirty PUT; explicit interval forwarded when supported."
+    },
+    {
+      "resource": "Alerting.Silence",
+      "source": "packages/alchemy/src/Cloudflare/Alerting/Silence.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Alerting/Silence.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed bulk create/update mapping and tuple identity lookup, instant-normalized timestamps, typed concurrent SilenceAlreadyExists recovery, post-create discovery and typed delete. Bounded create discovery to 8 retries with 5-second delay cap. Policy/account replacement and Unowned cold lookup present. Existing actual deployed create/window-update/replacement/list passed."
+    },
+    {
+      "resource": "Alerting.Webhook",
+      "source": "packages/alchemy/src/Cloudflare/Alerting/Webhook.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Alerting/Webhook.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed name/url/secret create/update, account identity, observed equality and write-only secret prior-props comparison. Bounded create retries8 (~32sec). Existing real deployed destination Worker fixture passed; later whole-directory WorkerURL404 is separate runtime incident."
+    },
+    {
+      "resource": "ApiShield.Configuration",
+      "source": "packages/alchemy/src/Cloudflare/ApiShield/Configuration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiShield/Configuration.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed complete authIdCharacteristics list and baseline restoration. Added API normalize query flag to reads/writes and forces write when explicitly changed. Config lifecycle requires API Shield entitlement; suite12passed1gated does not verify normalize mutation."
+    },
+    {
+      "resource": "ApiShield.Label",
+      "source": "packages/alchemy/src/Cloudflare/ApiShield/Label.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiShield/Label.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed name identity and metadata map, short physical-name limit, typed missing/list hydration and replacement. Added metadata forwarding/read/deep comparison. Actual4/4 includes metadata create/update/name replacement/list."
+    },
+    {
+      "resource": "ApiShield.Operation",
+      "source": "packages/alchemy/src/Cloudflare/ApiShield/Operation.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiShield/Operation.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed complete method/host/endpoint input surface, endpoint variable-name canonicalization, cold discovery, Unowned adoption and typed absence. Diff now guards unresolved input and compares output identity on adoption. Deployed ApiShield12passed1gated includes operation create/replacement/list."
+    },
+    {
+      "resource": "ApiShield.UserSchema",
+      "source": "packages/alchemy/src/Cloudflare/ApiShield/UserSchema.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiShield/UserSchema.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed schema multipart source/name/kind/validation input, immutable configuration and observed schema source. Diff now compares adopted output instead of returning early without olds; schema source/name/validation/zone changes replace. Deployed create/replacement/list passed within ApiShield12passed1gated."
+    },
+    {
+      "resource": "ApiToken.AccountApiToken",
+      "source": "packages/alchemy/src/Cloudflare/ApiToken/AccountApiToken.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiToken/AccountApiToken.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Same full policy/condition/validity/status surface as user token plus account scope. Added status create-then-update and reset active on omission. Existing account identity replacement and one-time secret preservation retained. Removed blanket skipped suite: real create/update/noop/list/delete and new disabled-create\u2192status-omission\u2192active test all pass; token secret stays unchanged on update."
+    },
+    {
+      "resource": "ApiToken.UserApiToken",
+      "source": "packages/alchemy/src/Cloudflare/ApiToken/UserApiToken.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ApiToken/UserApiToken.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared complete token name/policies/IP condition/notBefore/expiresOn/update status. Added missing active/disabled/expired status; disabled create applies update after one-time secret capture; omission reactivates. No cold lookup since plaintext token cannot be recovered from GET. Preserves redacted token value on update; typed deletion. Replaced unconditional skipped suite with user-auth env gate and added status lifecycle fixture. Direct SDK list probe confirms Unauthorized under current scoped token; user-token writes gated."
+    },
+    {
+      "resource": "Argo.SmartRouting",
+      "source": "packages/alchemy/src/Cloudflare/Argo/SmartRouting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Argo/SmartRouting.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "API is singleton value on/off; enabled maps full mutable surface. Observed baseline capture, default true, zone replacement and restore-on-delete reviewed. Typed NotAuthorized code1015 subscription probe/list passed; actual paid enable/restore fixture gated. Cloud edge route selection cannot be reproduced by workerd."
+    },
+    {
+      "resource": "Argo.TieredCaching",
+      "source": "packages/alchemy/src/Cloudflare/Argo/TieredCaching.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Argo/TieredCaching.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Complete singleton value surface, observed baseline capture and enabled/default true updates. Added typed ZoneNotFound catch to GET read/delete paths (PATCH only declares InvalidObjectIdentifier). Actual enable/update/default/list/restore fixtures passed. Multi-colo cache hierarchy is Cloudflare control-plane behavior outside workerd."
+    },
+    {
+      "resource": "BotManagement.BotManagement",
+      "source": "packages/alchemy/src/Cloudflare/BotManagement/BotManagement.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/BotManagement/BotManagement.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed15 mutable APIsettings, observedsubsetcomparison, fullbaselinecapture and typedzoneabsence. Fixed historicalmanagedKeys so props removedbeforedelete stillrestoretheirinitialvalue. managedKeys notstable. StaleZoneConfiguration is serverdiagnostic ratherthanwritablepolicy. Traffic-changing lifecyclefixture gated to avoidchallenging everyother deployedzonefixture; noop/list actualtests run."
+    },
+    {
+      "resource": "Cache.OriginCloudRegion",
+      "source": "packages/alchemy/src/Cloudflare/Cache/OriginCloudRegion.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Cache/OriginCloudRegion.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed complete vendor/region/body+path IP fields, zone/IP replacement, get-or-upsert convergence, Unowned cold lookup, typed absent deletion and zone pagination. IP equality only trims/lowercases; equivalent expanded/compressed IPv6 may cause unnecessary replacement, not loss of requested state."
+    },
+    {
+      "resource": "Cache.RegionalTieredCache",
+      "source": "packages/alchemy/src/Cloudflare/Cache/RegionalTieredCache.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Cache/RegionalTieredCache.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed on/off value API, enabled default true, zone replacement, baseline capture and observed restore. Fanout transient-auth retry capped8x5seconds. Entitlement handling specific and no broad catches; deployment depends on paid plan."
+    },
+    {
+      "resource": "Cache.Reserve",
+      "source": "packages/alchemy/src/Cloudflare/Cache/Reserve.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Cache/CacheReserve.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed toggle baseline lifecycle plus asynchronous clear API. Fixed clearOnDelete: disable before clear, check In-progress before starting, return after accepted async clear instead of300second poll falsely accepting incomplete. Explicit clear leaves Reserve disabled; normal delete restores initialValue. Official docs say clear may take24h and cannot re-enable meanwhile. Disposable entitled-zone fixture added, current profile typed SettingUnavailableForPlan prevents clearing test."
+    },
+    {
+      "resource": "Cache.SmartTieredCache",
+      "source": "packages/alchemy/src/Cloudflare/Cache/SmartTieredCache.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Cache/SmartTieredCache.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed on/off translation with enabled default true, zone replacement, live observation no-op, baseline capture and observe-before-restore deletion. Fanout skips typed plan/auth/route rejects; no unexplained retries."
+    },
+    {
+      "resource": "Cache.Variants",
+      "source": "packages/alchemy/src/Cloudflare/Cache/Variants.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Cache/Variants.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all11 supported extension arrays against SDK, null/empty normalization, observed whole-value comparison and PATCH mapping, typed unconfigured/route absence and DELETE. Unlike toggle singletons it has true CRUD, but cold read is not Unowned and delete removes existing configuration; ownership behavior remains a review finding."
+    },
+    {
+      "resource": "Calls.App",
+      "source": "packages/alchemy/src/Cloudflare/Calls/App.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Calls/App.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full provider: name-only create/update API surface, account replacement, live get before update/create, typed delete absence; generated-name preservation fixed centrally. Secret is create-only and retained from cached output. Without persisted secret no meaningful read/adoption recovery is possible; list emits an empty redacted placeholder. Existing deployed lifecycle/list passes; lost-secret behavior is an explicit limitation."
+    },
+    {
+      "resource": "Calls.TurnKey",
+      "source": "packages/alchemy/src/Cloudflare/Calls/TurnKey.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Calls/TurnKey.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full provider parallel to Calls.App: name-only API surface, account replacement, get before mutation, typed absence, create-only key retained. Generated-name preservation fixed centrally. Cold state cannot reconstruct key from get/list; empty redacted list placeholder is not a usable key. Existing deployed lifecycle/list passes."
+    },
+    {
+      "resource": "CertificateAuthorities.HostnameAssociation",
+      "source": "packages/alchemy/src/Cloudflare/CertificateAuthorities/HostnameAssociation.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CertificateAuthorities/HostnameAssociation.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full hostname-set PUT for managed or uploaded CA; undefined certificate is a real identity. Observed scope/cert key, order-insensitive comparison, destroy clears list before dependency deletion. Actual managed/uploaded CA and replacement cases pass."
+    },
+    {
+      "resource": "ClientCertificate.ClientCertificate",
+      "source": "packages/alchemy/src/Cloudflare/ClientCertificate/ClientCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ClientCertificate/ClientCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full issuance fields, immutable CSR/validity/zone now compared against observed output; live status distinguishes revoked/revoking. Exact CSR/validity cold lookup and typed revocation handling. Live issuance, replacement and list pass."
+    },
+    {
+      "resource": "CloudConnector.Rules",
+      "source": "packages/alchemy/src/Cloudflare/CloudConnector/Rules.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CloudConnector/Rules.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed ordered whole-list PUT, all four provider variants and host field, enabled default and observed no-op. Live experiment found API changes rule id when contents change despite supplied id; id is diagnostic, not convergent desired state, so no misleading input was added. Final deployed3/3 passed; experiment was removed from fixtures."
+    },
+    {
+      "resource": "CloudforceOne.ScanConfig",
+      "source": "packages/alchemy/src/Cloudflare/CloudforceOne/ScanConfig.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CloudforceOne/ScanConfig.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all three writable fields, account replacement, list-only observation and typed update-race recovery. Cached-id lookup now exhausts pages; removed frequency/ports reset documented0/[default]. No natural key or get-by-id exists, so complete loss of id cannot safely recover. Subscription rejection probe verified; mutating defaults/pagination branch requires entitlement."
+    },
+    {
+      "resource": "Connectivity.DirectoryService",
+      "source": "packages/alchemy/src/Cloudflare/Connectivity/DirectoryService.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Connectivity/DirectoryService.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed fourhostunions (IPv4/IPv6/dualstack/hostname resolver), all ports/type/appProtocol/TLS inputs, typed namecollision recovery, live idthenname observation, Unowned coldread and accountreplacement. Optional ports/TLS fields use patch-style management (undefinedpreservesexisting); resolverIPs sorted for comparison. Source matches sameSDK used by VpcService; existing live lifecycle4passes but broaderoptionremoval unverified."
+    },
+    {
+      "resource": "Containers.ContainerApplication",
+      "source": "packages/alchemy/src/Cloudflare/Containers/ContainerApplication.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Container/ContainerApplication.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Docker image/build, instances/scaling, placement/affinities/constraints, rollout configuration and jobs creation mode. Observe live version and configuration before trusting deployment fingerprints; jobs mode replaces before create.\n\nFixture/evidence: `containers.md`. 11 deployed cases passed; jobs entitlement probe passes, full jobs lifecycle gated.\n\nLocal feasibility: Real Docker/workerd HTTP execution; production scheduling, geographical placement and quotas remain Cloudflare services."
+    },
+    {
+      "resource": "ContentScanning.ContentScanning",
+      "source": "packages/alchemy/src/Cloudflare/ContentScanning/ContentScanning.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ContentScanning/ContentScanning.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed enabled/disabled API, nullable disabled default, zone replacement, singleton baseline capture, observed no-op and typed absent restore. List enumerates zones and handles explicit entitlement/route errors. Local subset would require WAF request parsing and malware scanner; absent intentionally rather than fake pass."
+    },
+    {
+      "resource": "ContentScanning.Expression",
+      "source": "packages/alchemy/src/Cloudflare/ContentScanning/Expression.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ContentScanning/Expression.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed sole payload identity and immutable zone, paginated observation, Unowned matching, create-list result validation and observe-before-delete. Disabled parent maps to unobservable absence; reconcile correctly requires enabled scanning. Payload/ID are API-optional but persisted response assumed valid; missing id after create remains schema/API anomaly. Remote edge extraction not emulated."
+    },
+    {
+      "resource": "CustomCertificate.CustomCertificate",
+      "source": "packages/alchemy/src/Cloudflare/CustomCertificate/CustomCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CustomCertificate/CustomCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Certificate/key/CSR upload and rotation, bundle/geographic policy, priority, type and deploy target. Write-only deploy choice now participates in content fingerprint, so staging-to-production changes trigger PATCH. Ambiguous expiry matches no longer choose an unrelated certificate. Type/zone replace. Typed plan gate and list pass; actual edge certificate rotation requires paid entitlement."
+    },
+    {
+      "resource": "CustomHostname.CustomHostname",
+      "source": "packages/alchemy/src/Cloudflare/CustomHostname/CustomHostname.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CustomHostname/CustomHostname.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Hostname/zone observed identity replacement; full SSL settings/certificates, metadata, custom origin server/SNI mapping. Create followed by independent update-only-field sync; no broad failed-create swallowing. Optional fields use partial management. Existing SaaS quota probe passes; full issuance and customer DNS remain external."
+    },
+    {
+      "resource": "CustomHostname.FallbackOrigin",
+      "source": "packages/alchemy/src/Cloudflare/CustomHostname/FallbackOrigin.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CustomHostname/FallbackOrigin.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full origin singleton PUT; observes origin/status and handles deletion-in-progress before no-op. Zone replacement now uses observed output. Typed absence and delete. SaaS lifecycle is entitlement gated."
+    },
+    {
+      "resource": "CustomNameserver.CustomNameserver",
+      "source": "packages/alchemy/src/Cloudflare/CustomNameserver/CustomNameserver.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/CustomNameserver/CustomNameserver.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "FQDN/nsSet issuance and glue output; account change and observed immutable state now replace. Same-name set replacement deletes first. No update API. Typed entitlement/list passes; full nameserver lifecycle needs account entitlement and registrar glue outside local runtime."
+    },
+    {
+      "resource": "D1.Database",
+      "source": "packages/alchemy/src/Cloudflare/D1/Database.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/D1/Database.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: All create and replication settings, SQL import and migration sequencing. Preserve cached name, reread replication, reset import/migration fingerprints after physical recreation, never clone into a raced existing database.\n\nFixture/evidence: `D1/Database.test.ts`. 14 live cases plus actual out-of-band delete/redeploy import recovery.\n\nLocal feasibility: Native SQLite/D1 API, imports and migrations. Remote replication placement and cloud backup/time-travel require service APIs."
+    },
+    {
+      "resource": "DNS.AccountSettings",
+      "source": "packages/alchemy/src/Cloudflare/DNS/AccountSettings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/AccountSettings.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "All account setting and nested zone-default fields; partial management observes and PATCHes only differences. Managed-key history is mutable (removed from stables), retaining every touched field for destroy restoration. Actual baseline/updates/omission/restoration fixtures pass."
+    },
+    {
+      "resource": "DNS.Dnssec",
+      "source": "packages/alchemy/src/Cloudflare/DNS/Dnssec.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/Dnssec.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "All DNSSEC flags/status, observed comparison and baseline restoration; active includes pending DS activation. Bounded status polling reduced to10 attempts. Returns asynchronous current status if still propagating. Optional flags preserve server values when omitted. Existing live fixtures pass; registrar DS installation is external."
+    },
+    {
+      "resource": "DNS.Firewall",
+      "source": "packages/alchemy/src/Cloudflare/DNS/Firewall.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/Firewall.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete upstream IPs, cache/ratelimit/mitigation/retry settings plus reverse DNS; IP-count create-only replacement. Optional fields preserve defaults; observed update-only reverse DNS sync. Typed entitlement probes pass; production recursive caching/DNS mitigation not emulated."
+    },
+    {
+      "resource": "DNS.Record",
+      "source": "packages/alchemy/src/Cloudflare/DNS/Record.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/DnsRecord.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full DNS record union including structured data, settings, privateRouting, tags/comment and defaults. Relative names normalized for lookup; duplicate name/type disambiguation by content/data/priority; observed type/zone guides replacement. Typed create collision is retained if lookup fails. Actual metadata removal, drift, recovery, adoption ambiguity and replacement fixtures pass."
+    },
+    {
+      "resource": "DNS.View",
+      "source": "packages/alchemy/src/Cloudflare/DNS/View.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/View.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full name/zones API; account replacement, observed diff, name preservation and typed deletion. Cold lookup now paginates all matches. Names are nonunique and oldest exact match requires explicit adoption. Enterprise probe/list and available fixtures pass."
+    },
+    {
+      "resource": "DNS.ZoneSettings",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneSettings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneSettings.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full setting/SOA/nameserver/internal DNS fields; zone replacement, partial management and baseline restoration. Managed-key history removed from stables so later-added fields restore correctly. Actual deployed tests pass; unavailable settings retain typed entitlement errors."
+    },
+    {
+      "resource": "DNS.ZoneTransferAcl",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneTransferAcl.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneTransferAcl.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete name/ipRange; account replacement, paginated cold lookup, typed absence and observed PUT. Cached-name preservation. API CIDR normalization can cause a harmless repeated PUT if noncanonical CIDR is deliberately supplied. Actual lifecycle passes."
+    },
+    {
+      "resource": "DNS.ZoneTransferIncoming",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneTransferIncoming.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneTransferIncoming.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete peers/name/refresh interval, observed singleton update, scoped identity and typed delete. No local DNS transfer server. Existing live available lifecycle/probe suite passes."
+    },
+    {
+      "resource": "DNS.ZoneTransferOutgoing",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneTransferOutgoing.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneTransferOutgoing.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete peer/name config and separate enable/disable toggle, default enabled. Observed singleton update, typed absence and delete. Delete no longer swallows revoked entitlement as missing state. Enterprise outgoing-transfer probes pass; full transfer lifecycle gated."
+    },
+    {
+      "resource": "DNS.ZoneTransferPeer",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneTransferPeer.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneTransferPeer.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Create name then synchronize IP/port/TSIG/IXFR, retaining unspecified optional settings. Observes live settings, paginated lookup, account replacement, cached name and typed deletion. Existing real API lifecycle passes."
+    },
+    {
+      "resource": "DNS.ZoneTransferTsig",
+      "source": "packages/alchemy/src/Cloudflare/DNS/ZoneTransferTsig.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dns/ZoneTransferTsig.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete algorithm/name/redacted secret mapping. GET returns secret, enabling exact drift detection; typed get/delete and paginated cold lookup. Account replacement and cached name. Actual lifecycle passes."
+    },
+    {
+      "resource": "DdosProtection.AllowlistEntry",
+      "source": "packages/alchemy/src/Cloudflare/DdosProtection/AllowlistEntry.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/DdosProtection/AllowlistEntry.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All documented prefix identity + scope fields exposed. Added account/observed prefix replacement guard, observe-before-delete retained. List/probe passed; advanced TCP allowlist create gated by entitlement."
+    },
+    {
+      "resource": "DdosProtection.SynProtectionFilter",
+      "source": "packages/alchemy/src/Cloudflare/DdosProtection/SynProtectionFilter.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/DdosProtection/SynProtectionFilter.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared name/expression/mode and nested thresholds. Added account guard and natural-expression lookup before create for recovery. Typed entitlement probe/list passed; filter lifecycle gated."
+    },
+    {
+      "resource": "DdosProtection.SynProtectionRule",
+      "source": "packages/alchemy/src/Cloudflare/DdosProtection/SynProtectionRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/DdosProtection/SynProtectionRule.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All SDK rule nested fields compared. Added account/observed filter/scope/name identity guards; omitted mitigationType now resets documented challenge default. Extended real deployed fixture retransmit\u2192omission reset challenge; gated by advanced TCP entitlement; list passed."
+    },
+    {
+      "resource": "DdosProtection.TcpFlowProtectionFilter",
+      "source": "packages/alchemy/src/Cloudflare/DdosProtection/TcpFlowProtectionFilter.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/DdosProtection/TcpFlowProtectionFilter.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All documented name/expression/enabled/threshold configuration exposed. Added account guard and natural-expression cold reconcile recovery. List/probe passed; lifecycle gated."
+    },
+    {
+      "resource": "DdosProtection.TcpFlowProtectionRule",
+      "source": "packages/alchemy/src/Cloudflare/DdosProtection/TcpFlowProtectionRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/DdosProtection/TcpFlowProtectionRule.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All SDK rule inputs and scope/filter identity exposed. Added account/observed identity replacement guards, retained observed update/delete. List passed; deployed rule lifecycle gated."
+    },
+    {
+      "resource": "Devices.CustomProfile",
+      "source": "packages/alchemy/src/Cloudflare/Devices/CustomProfile.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/CustomProfile.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added dnsSearchSuffixes, globalAcceleration, virtualNetworks through typed create/patch; object comparison ignores nullish field noise. Existing full device settings/include/exclude/fallback management present. Live custom CRUD/list; suffix object create and clear tested. External acceleration/network effects require WARP clients."
+    },
+    {
+      "resource": "Devices.DefaultProfile",
+      "source": "packages/alchemy/src/Cloudflare/Devices/DefaultProfile.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/DefaultProfile.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Same three settings added. Observe complete GET response include/exclude/fallback collections; no longer convert failed auxiliary list calls to empty settings. Live singleton list; capture/restore mutations gated CLOUDFLARE_TEST_DEVICES=1. New global settings not mutated on shared account."
+    },
+    {
+      "resource": "Devices.DexTest",
+      "source": "packages/alchemy/src/Cloudflare/Devices/DexTest.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/DexTest.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "SDK probe data, name, enabled and interval fields present. Live entitlement/read probes; lifecycle gated Forbidden code11007 dex.api.entitlements.missing."
+    },
+    {
+      "resource": "Devices.ManagedNetwork",
+      "source": "packages/alchemy/src/Cloudflare/Devices/ManagedNetwork.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/ManagedNetwork.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name and TLS config fields cover API's TLS managed-network type. Live CRUD/list pass. Real network classification requires client access to configured TLS endpoint."
+    },
+    {
+      "resource": "Devices.PostureIntegration",
+      "source": "packages/alchemy/src/Cloudflare/Devices/PostureIntegration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/PostureIntegration.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Service-specific config, interval/name/type covered. Live rejection/read probe; external credentials lifecycle gated InvalidPostureIntegrationConfig code2046 invalid posture integration request: invalid credentials."
+    },
+    {
+      "resource": "Devices.PostureRule",
+      "source": "packages/alchemy/src/Cloudflare/Devices/PostureRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/PostureRule.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "All typed posture input/match/expiration/schedule fields present; changing type replaces. Live create/update/type replacement/list pass. Actual posture evaluation needs enrolled clients."
+    },
+    {
+      "resource": "Devices.Settings",
+      "source": "packages/alchemy/src/Cloudflare/Devices/Settings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Devices/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Account device settings SDK object covered. Live capture/restore, singleton list pass."
+    },
+    {
+      "resource": "Diagnostics.EndpointHealthcheck",
+      "source": "packages/alchemy/src/Cloudflare/Diagnostics/EndpointHealthcheck.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Diagnostics/EndpointHealthcheck.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed endpoint/name/checkType SDK mapping, ICMP-only API, immutable name replacement due observed API behavior, account scope, Unowned exact-name discovery, typed absence and bounded missing observation. Name not unique; cold lookup deterministically chooses id. API optional id still assumed present on successful create; actual endpoint lifecycle depends on private-network onboarding."
+    },
+    {
+      "resource": "Dlp.Entry",
+      "source": "packages/alchemy/src/Cloudflare/Dlp/Entry.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dlp/Entry.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "All aliased CreateDlpEntryCustomRequest=CreateDlpEntryRequest fields present. Description now participates in drift and clears on removal. Live list/read only; write lifecycle gated Forbidden code3314. Description removal code reviewed; not live exercised on current account."
+    },
+    {
+      "resource": "Dlp.Profile",
+      "source": "packages/alchemy/src/Cloudflare/Dlp/Profile.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Dlp/Profile.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added aiContextEnabled, contextAwareness, dataClasses, dataTags, sensitivityLevels, sharedEntries. Shared entries compare actual sharedEntries; object sensitivity IDs and entry descriptions compared. Existing entry IDs preserved; description removal sends null. Live list and entitlement probe. Added actual deployment fixture for context toggling and inline description removal behind CLOUDFLARE_TEST_DLP; skipped on this account."
+    },
+    {
+      "resource": "Email.Address",
+      "source": "packages/alchemy/src/Cloudflare/Email/Address.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/EmailAddress.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed email-only immutable identity/account diff, paginated address lookup, GET id usage, same-address cooldown recovery and typed delete. Removed blanket retry of every failure except cooldown; SDK transport retries are authoritative. Deletion cooldown15minutes requires standing retained fixture; current token lacks routing scope."
+    },
+    {
+      "resource": "Email.AllowPolicy",
+      "source": "packages/alchemy/src/Cloudflare/Email/AllowPolicy.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/AllowPolicy.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed supported policy booleans/pattern/regex/comments, paginated pattern lookup and Unowned cold read. Added missing account replacement and comments removal clearing. Deprecated recipient/sender/spoof aliases are excluded in favor of supported replacements. Natural pattern lookup can encounter differing patternType; explicit adoption is required."
+    },
+    {
+      "resource": "Email.BlockSender",
+      "source": "packages/alchemy/src/Cloudflare/Email/BlockSender.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/BlockSender.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "All pattern/patternType/isRegex/comments fields exposed. Added account identity guard and omitted-comments clear; paginated recovery/typed missing delete retained. Extended actual deployed fixture with removal at same logical ID. List passed; lifecycle gated by EmailSecurityNotEntitled. Cloudflare Email Security filtering control plane absent locally."
+    },
+    {
+      "resource": "Email.CatchAll",
+      "source": "packages/alchemy/src/Cloudflare/Email/CatchAll.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/EmailCatchAll.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all action union variants, constant all matcher, mutable enabled/name, resolved zone replacement and baseline capture/restore. Removed Forbidden suppression in read/delete; authorization failure no longer looks like absence/success. Missing captured Worker/address target explicitly falls back to disabled drop on restoration. Official API spec confirms source(api|wrangler) and ownerWorkerTag are writable; now exposed, forwarded, observed and included in initial restoration metadata. Current routing scope gate prevents Wrangler branch mutation. Final response-schema check: ownerWorkerTag is write-only. Last written tag is cached and compared with prior desired props. Original Wrangler ownership is not recoverable from a cold API read; if restoration needs an unavailable original tag, delete fails explicitly with CatchAllRestoreOwnerUnavailable. No invented SDK read field or false successful restoration."
+    },
+    {
+      "resource": "Email.Domain",
+      "source": "packages/alchemy/src/Cloudflare/Email/Domain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/Domain.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared full patch settings including allowed delivery modes/drop dispositions/folder/integration/IP restrictions/lookback/TLS/transport/domain/regions. Added missing regions and in-place API-supported domain rename; removed stable domain and rename replacement. Added account guard. Existing dashboard onboarding required (no create API), owned UUID observation and paginated cold lookup preserved; delete offboards. Other omitted settings intentionally unmanaged. Read/list passed; lifecycle needs explicit sacrificial onboarded Email Security domain and is gated."
+    },
+    {
+      "resource": "Email.ImpersonationRegistryEntry",
+      "source": "packages/alchemy/src/Cloudflare/Email/ImpersonationRegistryEntry.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/ImpersonationRegistryEntry.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed name/email/regex/comments fields, paginated tuple lookup and Unowned adoption, typed get/delete absence. Added account replacement and comments removal clearing. Directory linkage fields are external directory integration metadata; manual entry management does not synthesize directory identities. Current scope/entitlement lifecycle gated."
+    },
+    {
+      "resource": "Email.Routing",
+      "source": "packages/alchemy/src/Cloudflare/Email/Routing.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/EmailRouting.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed enable/disable endpoints and zoneReference replacement, observed enabled no-op and deletion. Removed blanket deletion failure suppression; auth/API errors propagate. Routing DNS setup uses external provider edge, no fake local routing control plane. Actual send_email local runtime handled independently."
+    },
+    {
+      "resource": "Email.Rule",
+      "source": "packages/alchemy/src/Cloudflare/Email/Rule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/EmailRule.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed action/matcher unions, observed update/create flow, name/id recovery and typed absence. Removed broad failed-update create fallback and added observed no-op. Account zone scope and Worker dependency retries explicit. Name metadata/default behavior follows API; destination verification and routing scope gates prevent current full lifecycle. Official API spec confirms source(api|wrangler) and ownerWorkerTag are writable; both now exposed, forwarded and observed. Wrangler branch requires configured routing scope and real owning script tag, not exercised by current profile. Final response-schema check: ownerWorkerTag is write-only, so output retains last configured tag and dirty comparison uses cached state; source is observable. No SDK response field invented."
+    },
+    {
+      "resource": "Email.SendingSubdomain",
+      "source": "packages/alchemy/src/Cloudflare/Email/SendingSubdomain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/SendingSubdomain.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "API create has only zone/name, no mutable update endpoint. Fixed resolved observed zone/name replacement during adoption. Natural name recovery, duplicate-create rescan, paginated inventory and missing delete reviewed; readiness poll bounded centrally to10x5s. Four deployed fixtures remain gated behind scoped email routing capability because unauthenticated zone route returns Forbidden. Sending domain DNS/DKIM provisioning needs actual Cloudflare DNS, not workerd."
+    },
+    {
+      "resource": "Email.TrustedDomain",
+      "source": "packages/alchemy/src/Cloudflare/Email/TrustedDomain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Email/TrustedDomain.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "All pattern/isRegex/isRecent/isSimilarity/comments fields wired, paginated natural lookup and typed deletion retained. Added account identity guard and omission reset of comments to empty; booleans already reset false. Extended actual lifecycle fixture with comment removal, gated by EmailSecurityNotEntitled; live list passed (empty under entitlement). No local inbound Email Security scanning appliance."
+    },
+    {
+      "resource": "Firewall.AccessRule",
+      "source": "packages/alchemy/src/Cloudflare/Firewall/AccessRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Firewall/AccessRule.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Target/value configuration immutable, account or zone scope distinguishes undefined zone as account identity; uses observed state on adoption. Modes/notes update in place. All actual rule suites pass."
+    },
+    {
+      "resource": "Firewall.Lockdown",
+      "source": "packages/alchemy/src/Cloudflare/Firewall/Lockdown.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Firewall/Lockdown.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full URL/configuration/priority/description/paused mapping; observed scope now guides replacement after adoption, resolved-input guard. Typed get/delete absence and normalized mutable comparisons. Actual CRUD/replacement/list suite passes."
+    },
+    {
+      "resource": "Firewall.UaRule",
+      "source": "packages/alchemy/src/Cloudflare/Firewall/UaRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Firewall/UaRule.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete user-agent configuration/mode/paused/description surface, observed scope replacement and resolved-input guard. Actual CRUD/replacement/list suite passes; edge UA matching is a remote zone feature."
+    },
+    {
+      "resource": "Flagship.App",
+      "source": "packages/alchemy/src/Cloudflare/Flagship/App.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Flagship/App.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full name CRUD; observed ID and paginated name recovery; cold foreign match now Unowned. Generated name preserved after omission; list hydrates ghost rows before returning them. Actual CRUD/list fixtures pass. Local evaluation implementation tracked in runtime ledger. Added offline local provider and native/Effect Worker/Action evaluation; actual deployed fixtures pass. App cold lookup GET-validates stale list entries before ownership checks. See runtime.md for targeting operators and percentage-hash fidelity limits."
+    },
+    {
+      "resource": "Flagship.Flag",
+      "source": "packages/alchemy/src/Cloudflare/Flagship/Flag.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Flagship/Flag.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full variation/rule nested clauses/operators/rollout/type SDK surface. Explicit type now participates in no-op decision; description removal clears; omitted key preserves deployed identity. Cold match is Unowned. New real fixture clears description/rules, restores enabled default, and checks same flag key. Actual lifecycle/replacement/recovery/list passes. Added offline local provider and native/Effect Worker/Action evaluation; actual deployed fixtures pass. App cold lookup GET-validates stale list entries before ownership checks. See runtime.md for targeting operators and percentage-hash fidelity limits."
+    },
+    {
+      "resource": "Fraud.DetectionSettings",
+      "source": "packages/alchemy/src/Cloudflare/Fraud/DetectionSettings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Fraud/FraudDetectionSettings.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed userProfiles,usernameExpressions and nestedstatus-code success/failurecriteria; subsetmanagement and fullbaselinecapture. Fixed historicalmanagedKeys restorationafterpropre moval; addedrealdeployno-op historyfixture and extendedgatedmutatingrestorecase. Typedsubscriptionprobe observed; partialnullauthenticationfields normalize."
+    },
+    {
+      "resource": "Gateway.Certificate",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/Certificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/Certificate.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Generation, validity/activation fields and replacement lifecycle reviewed. Basic activation/deactivation/read tests pass; replacement gated to avoid 3-certificates-per-24h quota. Existing quota helper may return early when exhausted."
+    },
+    {
+      "resource": "Gateway.Configuration",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/Configuration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/Configuration.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Full SDK configuration object and singleton capture/restore covered. Live capture/restore/list pass."
+    },
+    {
+      "resource": "Gateway.List",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/List.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/List.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name, type, description and all item shapes covered; type replacement. Live CRUD, item updates, type replacement pass."
+    },
+    {
+      "resource": "Gateway.Location",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/Location.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/Location.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added maxTtl create/update/diff; removing override sends inherit matching vendor update semantics. Existing DNS endpoints/networks/client settings covered. Live TTL create/update/removal, CRUD, out-of-band delete recovery/list pass."
+    },
+    {
+      "resource": "Gateway.Logging",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/Logging.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/Logging.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Full SDK settings and singleton reset semantics reviewed. Live capture/restore and list pass."
+    },
+    {
+      "resource": "Gateway.ProxyEndpoint",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/ProxyEndpoint.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/ProxyEndpoint.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name, kind, IP/subdomain/auth and subnet fields reviewed. Live supported endpoint CRUD/list; ip-kind typed entitlement probe passes."
+    },
+    {
+      "resource": "Gateway.Rule",
+      "source": "packages/alchemy/src/Cloudflare/Gateway/Rule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Gateway/Rule.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added expiration and schedule. Read/delete use successful exhaustive list evidence of absence and preserve failures. Live DNS schedule create/update plus out-of-band deletion recovery; list pass. Expiration and non-DNS actions statically wired; full traffic enforcement not exercised."
+    },
+    {
+      "resource": "GoogleTagGateway.GoogleTagGateway",
+      "source": "packages/alchemy/src/Cloudflare/GoogleTagGateway/GoogleTagGateway.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/GoogleTagGateway/GoogleTagGateway.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all five PUT fields, Reference resolution and zone replacement, nullable unconfigured response, baseline capture and restored configuration on delete; absent baseline disables endpoint. setUpTag omission intentionally preserves observed value. Equality covers all five fields; no untyped suppression."
+    },
+    {
+      "resource": "Healthcheck.Healthcheck",
+      "source": "packages/alchemy/src/Cloudflare/Healthcheck/Healthcheck.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Healthcheck/Healthcheck.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all nested HTTP/TCP request fields, mutable defaults, observation, name recovery and deletion. Added resolved-input and adopted zone identity guards. A typed create conflict now flows through desired-state synchronization instead of being mistaken for a successful create. Deployed5/5; concurrent create collision not induced."
+    },
+    {
+      "resource": "HostnameTlsSetting.HostnameTlsSetting",
+      "source": "packages/alchemy/src/Cloudflare/HostnameTlsSetting/HostnameTlsSetting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/HostnameTlsSetting/HostnameTlsSetting.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "All SDK TLS override values, cipher order preserved. Setting/hostname/zone identity uses observed output; list observation before PUT/delete, typed missing cleanup. Live entitlement/read evidence passes; edge TLS rollout remains service-controlled."
+    },
+    {
+      "resource": "Hyperdrive.Connection",
+      "source": "packages/alchemy/src/Cloudflare/Hyperdrive/Connection.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Hyperdrive/Hyperdrive.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Public, Access-protected and VPC origin union; caching, mTLS, origin connection limits. Typed get/name recovery and concurrent-create handling; cached generated name.\n\nFixture/evidence: `Hyperdrive`. 8 live/local SQL cases passed. New VPC shape statically compared with SDK; actual VPC database connectivity requires an external tunnel/database.\n\nLocal feasibility: Direct SQL connection; Access/VPC origins require explicit reachable development origin. Cloud pooling/caching/placement not reproduced."
+    },
+    {
+      "resource": "Iam.ResourceGroup",
+      "source": "packages/alchemy/src/Cloudflare/Iam/ResourceGroup.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Iam/ResourceGroup.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared create/update/get/list scope key and object keys; all mutable inputs exposed. Fixed account replacement and SDK scope response (actual object, vendor model array) on all four operations. Existing name lookup/observe-before-create and idempotent delete retained. Actual deployed create/update/list/delete plus out-of-band scope drift restored on subsequent rename passed. Unchanged-props deployment alone does not trigger provider reconcile in engine."
+    },
+    {
+      "resource": "Iam.UserGroup",
+      "source": "packages/alchemy/src/Cloudflare/Iam/UserGroup.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Iam/UserGroup.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared name and nested policies/access/permission-group IDs/resource-group IDs; full mutable API fields exposed. Added account replacement guard. Actual lifecycle/list and out-of-band policy removal followed by rename restored desired policy passed; no local IAM enforcement emulator."
+    },
+    {
+      "resource": "Iam.UserGroupMembership",
+      "source": "packages/alchemy/src/Cloudflare/Iam/UserGroupMembership.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Iam/UserGroupMembership.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Membership is immutable user/account-member + group tuple; added observed identity/account replacement guard for adoption and bounded group propagation retry. Actual deployed group replacement, list and teardown passed."
+    },
+    {
+      "resource": "Images.SigningKey",
+      "source": "packages/alchemy/src/Cloudflare/Images/SigningKey.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Images/SigningKey.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "List/get existence protects secret rotation; cold read Unowned; effective account replacement now handles removing override; delete remains idempotent except provider correctly surfaces protected last key. Account list is unpaginated capped key collection. Effective account diff corrected. ImagesAccessNotEnabled (5403) lifecycle entitlement; ungated typed probe passes; no second account for replacement."
+    },
+    {
+      "resource": "Images.Variant",
+      "source": "packages/alchemy/src/Cloudflare/Images/Variant.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Images/Variant.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed fit/width/height/metadata/neverRequireSignedURLs fields, account/name identity, observed update and typed missing handling. Fixed arbitrary variant-name response map and exhausted list; deletion confirmation bounded8x2seconds fails if still present. Deployed3/3. Native image processing itself separate runtime scope."
+    },
+    {
+      "resource": "Intel.IndicatorFeed",
+      "source": "packages/alchemy/src/Cloudflare/Intel/IndicatorFeed.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Intel/IndicatorFeed.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed create-then-sync update-only visibility flags, cached-id/name recovery, snapshot SHA256 write tracking and final re-read. No delete API; resource explicitly retains feed. Description omission preserves existing value; snapshot removal does not clear upstream content, and hash cache cannot detect out-of-band snapshot drift. Existing tests gated; do not claim content convergence for unsupported observation/deletion."
+    },
+    {
+      "resource": "Intel.IndicatorFeedPermission",
+      "source": "packages/alchemy/src/Cloudflare/Intel/IndicatorFeedPermission.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Intel/IndicatorFeedPermission.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed feedId/account/grantee identity and additive grant/revoke operations. API offers no grantee read, so cached identity and idempotent PUT are honest limited observation; absent feed typed deletion. No false remote-state read claim."
+    },
+    {
+      "resource": "KV.Namespace",
+      "source": "packages/alchemy/src/Cloudflare/KV/Namespace.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/KV/Namespace.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Title create/update/list/delete, cached-name preservation and typed collision recovery.\n\nFixture/evidence: `KV`. KV deployed suites included in storage run; namespace/key data-plane round trips.\n\nLocal feasibility: Persistent workerd KV with metadata/expiration/list. Cloud geographical consistency cannot be reproduced."
+    },
+    {
+      "resource": "KeylessCertificate.KeylessCertificate",
+      "source": "packages/alchemy/src/Cloudflare/KeylessCertificate/KeylessCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/KeylessCertificate/KeylessCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete host/port/name/enabled/tunnel and certificate/bundle upload. Scope checks survive missing old certificate; PEM/bundle rotation replaces, removal of un-clearable tunnel replaces. Observed sync and typed deletion. Enterprise gate probe/list passes; external key server required."
+    },
+    {
+      "resource": "LeakedCredentialCheck.Detection",
+      "source": "packages/alchemy/src/Cloudflare/LeakedCredentialCheck/Detection.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LeakedCredentialCheck/Detection.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "All username/password expression fields, paginated exact matching and observed update. Missing product entitlement is not proof of deletion: removed disabled-product swallowing from owned read/delete. True DetectionNotFound remains idempotent. Real available CRUD/list fixtures pass."
+    },
+    {
+      "resource": "LeakedCredentialCheck.LeakedCredentialCheck",
+      "source": "packages/alchemy/src/Cloudflare/LeakedCredentialCheck/LeakedCredentialCheck.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LeakedCredentialCheck/LeakedCredentialCheck.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Enabled defaults true, observed singleton state and initial snapshot restoration. Zone scope replacement. Actual enable/update/restore/list cases pass. Credential corpus and edge matching require Cloudflare."
+    },
+    {
+      "resource": "LoadBalancer.LoadBalancer",
+      "source": "packages/alchemy/src/Cloudflare/LoadBalancer/LoadBalancer.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LoadBalancer/LoadBalancer.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed parent zone identity, named pool/fallback/location/affinity/adaptive-routing/proximity/random/steering fields and nestedrules/networks SDK types. Added networks/rules props and full deep observed comparison. Optional body defaults/removal selectively managed per API; LB service entitlement gates end-to-end traffic verification."
+    },
+    {
+      "resource": "LoadBalancer.Monitor",
+      "source": "packages/alchemy/src/Cloudflare/LoadBalancer/Monitor.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LoadBalancer/Monitor.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "All monitor fields compared with SDK, including protocol, headers, consecutive health thresholds, path/codes/body and zone override. Omitted optional settings intentionally preserve service values. Cached description now survives omission; typed dependency retry capped. Plan entitlement/list fixtures pass."
+    },
+    {
+      "resource": "LoadBalancer.MonitorGroup",
+      "source": "packages/alchemy/src/Cloudflare/LoadBalancer/MonitorGroup.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LoadBalancer/MonitorGroup.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "All member flags and monitor IDs mapped with explicit defaults. Observed membership and description converge; cached description preserved, pagination and typed bounded dependency deletion. Entitled lifecycle remains gated; actual probe/list passes."
+    },
+    {
+      "resource": "LoadBalancer.Pool",
+      "source": "packages/alchemy/src/Cloudflare/LoadBalancer/Pool.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LoadBalancer/Pool.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed account/name, origins/headers/load-shedding/geo/health notifications and update-only checkRegions. Create now continues through sync to apply update-only field. Physical name preservation and bounded monitor readiness retries; paid entitlement gates active balancing behavior."
+    },
+    {
+      "resource": "Logpush.Job",
+      "source": "packages/alchemy/src/Cloudflare/Logpush/Job.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Logpush/Job.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed account/zone operation dispatch, immutable dataset/kind/scope, secret-redacted destination and omitted filter comparison via olds, observed defaults/subset output options, paginated name recovery and typed delete. Added supported legacy frequency/logpullOptions forwarding and dirty comparison; live R2 destination fixture verifies low/high frequency and legacy logpull options. Optional output/batch field omission intentionally preserves server settings; explicit resets require API-supported values. Existing dataset replacement test remains TODO."
+    },
+    {
+      "resource": "LogsControl.CmbConfig",
+      "source": "packages/alchemy/src/Cloudflare/LogsControl/CmbConfig.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LogsControl/CmbConfig.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full regions/out-of-region access API upsert and explicit account override. Read/delete now propagate authorization loss instead of silently discarding tracked config; only enumeration treats unavailable entitlement as empty. Typed actual probe/list passes; Compliance entitlement gates full lifecycle."
+    },
+    {
+      "resource": "LogsControl.RetentionFlag",
+      "source": "packages/alchemy/src/Cloudflare/LogsControl/RetentionFlag.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/LogsControl/RetentionFlag.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full flag singleton; observed no-op, initial baseline preserved/restored, zone replacement and missing-zone cleanup. Typed entitlement/list cases pass; Logpull storage behavior remains remote."
+    },
+    {
+      "resource": "MagicCloudNetworking.CatalogSync",
+      "source": "packages/alchemy/src/Cloudflare/MagicCloudNetworking/CatalogSync.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicCloudNetworking/CatalogSync.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "All destination/update mode/policy/name/description and deleteDestination fields. Added account replacement and cached-name preservation; destination type immutable, deletion mode refreshed in output and not stable. Actual entitlement/list passes; external cloud discovery required for full lifecycle."
+    },
+    {
+      "resource": "MagicCloudNetworking.CloudIntegration",
+      "source": "packages/alchemy/src/Cloudflare/MagicCloudNetworking/CloudIntegration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicCloudNetworking/CloudIntegration.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "All AWS/Azure/GCP credential references and cloud type mapped; observe/get/name discovery then create+sync. Added effective account replacement and preserved cached friendlyName. Cloud type immutable. Forwarded header is transport context, not resource desired state. Actual entitlement/list passes; full topology needs cloud account integration."
+    },
+    {
+      "resource": "MagicCloudNetworking.OnRamp",
+      "source": "packages/alchemy/src/Cloudflare/MagicCloudNetworking/OnRamp.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicCloudNetworking/OnRamp.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full SDK topology/create/patch fields and deletion mode. Added account replacement, preserved cached name, returned region and used observed region/ASN to enforce immutable replacement during adoption. Optional attached sets can be cleared with []; omitted optional topology preserves observation. Actual entitlement/list passes; external cloud topology lifecycle gated."
+    },
+    {
+      "resource": "MagicNetworkMonitoring.Config",
+      "source": "packages/alchemy/src/Cloudflare/MagicNetworkMonitoring/Config.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicNetworkMonitoring/Config.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all four mutable fields and nested WARP-device tuples, account replacement, nullable absent response, Unowned adoption, concurrent-create/update-null recovery and true delete. Replaced ambiguous WARP tuple string serialization with JSON tuples. Actual config create/update/delete/list included4/4 MNM suite."
+    },
+    {
+      "resource": "MagicNetworkMonitoring.Rule",
+      "source": "packages/alchemy/src/Cloudflare/MagicNetworkMonitoring/Rule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicNetworkMonitoring/Rule.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed every threshold/zscore/advanced_ddos field, immutable type, observed duration normalization, typed conflicts and missing delete. Fixed default-account change replacement, paginated name lookup and create-conflict recovery continuing through sync; bounded ConfigMissing retry under40sec. Optional type-specific thresholds preserve omitted state, explicit API values supported. Actual threshold update/type replacement/list included4/4 MNM suite."
+    },
+    {
+      "resource": "MagicTransit.App",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/App.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/App.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared name, type, hostnames, ipSubnets, sourceSubnets, protocol, port. Preserved earlier sourceSubnets addition, added account guard, paginated lookup and array omission reset empty. Typed MagicWanUnauthorized probe/list passed; application lifecycle gated."
+    },
+    {
+      "resource": "MagicTransit.GreTunnel",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/GreTunnel.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/GreTunnel.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Found missing BGP import/export filter IDs and dropped initial health direction/rate/type; added full wire fields. Added observed automaticReturnRouting and comparison, health/bgp output shape, account identity guard and omitted-setting replacement. Creation-only BGP updates now delete-first replace to avoid same-name adoption loop. Typed MagicTransitNotOnboarded probe/list passed; real GRE lifecycle gated."
+    },
+    {
+      "resource": "MagicTransit.IpsecTunnel",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/IpsecTunnel.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/IpsecTunnel.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Added BGP import/export filter IDs; fixed dirty detection for BGP-only/customer identity/automatic return routing changes. Redacted BGP secret maintained, psk write-only desired comparison. Added observed health/BGP/automatic routing, account guard/reset replacement. Added BGP-only ASN change to actual deployed fixture; gated by MagicTransitNotOnboarded; probe/list passed."
+    },
+    {
+      "resource": "MagicTransit.Site",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/Site.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/Site.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared connector IDs, description, location and name. Added account guard, full paginated name discovery, replacement to reset omitted managed optional fields where API lacks nullable clearing. Typed MagicWanUnauthorized probe/list passed; site graph lifecycle gated."
+    },
+    {
+      "resource": "MagicTransit.SiteAcl",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/SiteAcl.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/SiteAcl.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared description, protocols, forward/unidirectional, lan1/lan2 including lanName/ports/subnets. Added full observed LAN configuration, nested comparison, account/site identity guards, optional reset replacement and pagination. Typed Magic WAN rejection/list passed; actual ACL lifecycle gated."
+    },
+    {
+      "resource": "MagicTransit.SiteLan",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/SiteLan.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/SiteLan.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Found missing nested DHCP options and unnecessary required physport. Added exact SDK DHCP options type (type/name/values), optional physport for bonded LANs; observed full static addressing/routed subnets/NAT/bond/prioritization/breakout. Dirty comparison now covers DHCP-only and NAT-only changes with unchanged LAN address. Account/site/HA identity and reset replacement covered; pagination fixed. New real deployed regression fixture checks DHCP domain/NAT update, gated by Magic WAN entitlement; list passed."
+    },
+    {
+      "resource": "MagicTransit.SiteWan",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/SiteWan.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/SiteWan.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All writable priority/vlan/static addressing/physport fields compared. Added observed full static addressing and nested dirty comparison, account/site/HA guards, removal reset replacement, paginated lookup. List passed; network lifecycle gated."
+    },
+    {
+      "resource": "MagicTransit.StaticRoute",
+      "source": "packages/alchemy/src/Cloudflare/MagicTransit/StaticRoute.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MagicTransit/StaticRoute.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared prefix, nexthop, priority, weight, description, scope colo names/regions. Existing nonpaginated route API complete. Added account/identity guards and replacement to clear omitted managed optional configuration. Typed MagicTransitNotOnboarded probe/list passed; route lifecycle gated."
+    },
+    {
+      "resource": "ManagedTransforms.ManagedTransforms",
+      "source": "packages/alchemy/src/Cloudflare/ManagedTransforms/ManagedTransforms.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ManagedTransforms/ManagedTransforms.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full catalog ID-to-enabled request/response mapping, conflict outputs, partial management and initial snapshots. Added managed-ID history across deployments so removed props still restore on destroy. Extended actual fixture verifies removing a newly-managed field then restoring it. Removed transient-auth list skip; all four deployed fixtures pass."
+    },
+    {
+      "resource": "MtlsCertificate.MtlsCertificate",
+      "source": "packages/alchemy/src/Cloudflare/MtlsCertificate/MtlsCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/MtlsCertificate/MtlsCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete certificate/CA/name/private-key upload. Observed account/name/CA identity, immutable PEM/key changes, paginated lookup. Same-PEM changes delete first because Cloudflare reuses IDs; new deployed rename fixture verifies final name and live certificate survival. All five actual lifecycle cases pass. Private keys are not observable."
+    },
+    {
+      "resource": "NetworkInterconnects.Settings",
+      "source": "packages/alchemy/src/Cloudflare/NetworkInterconnects/Settings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/NetworkInterconnects/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed sole defaultAsn API field, baseline capture, observed no-op/restore and enterprise list probe. Added missing account replacement and read uses original cached account, preserving correct baseline when ambient account changes. No real cross-account fixture available; current entitlement gate records limitation."
+    },
+    {
+      "resource": "Organization.Organization",
+      "source": "packages/alchemy/src/Cloudflare/Organization/Organization.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Organization/Organization.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full provider and Profile/Flags contracts. Parent id replacement, Unowned cold exact-name lookup, typed get/delete absence, observed name/profile comparison; profile omission intentionally preserves observed profile. Name generator drift fixed centrally. Fixed exact parent matching so an omitted parent cannot select a same-name child organization. Live entitlement gate remains."
+    },
+    {
+      "resource": "OriginCaCertificate.OriginCaCertificate",
+      "source": "packages/alchemy/src/Cloudflare/OriginCaCertificate/OriginCaCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginCaCertificate/OriginCaCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Immutable CSR, hostname set, signing type and validity; diff now uses observed/persisted identity after adoption and normalizes CSR whitespace. GET omits CSR/validity, so cached values remain necessary. Revoked certificates are missing; hostname lookup paginates and refuses ambiguity; bounded typed revocation recovery. Live create/replacement/list/state-loss recovery passes."
+    },
+    {
+      "resource": "OriginPostQuantumEncryption.OriginPostQuantumEncryption",
+      "source": "packages/alchemy/src/Cloudflare/OriginPostQuantumEncryption/OriginPostQuantumEncryption.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginPostQuantumEncryption/OriginPostQuantumEncryption.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed complete three-value API, supported default, observed no-op, initialValue capture survives refresh/adoption, zone replacement and observe-before-restore delete. InvalidZoneIdentifier only treated as absence. Unknown future observed values normalize to supported; current SDK enum fully handled."
+    },
+    {
+      "resource": "OriginTlsClientAuth.Certificate",
+      "source": "packages/alchemy/src/Cloudflare/OriginTlsClientAuth/Certificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginTlsClientAuth/Certificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete zone certificate/private-key upload; observed scope replacement, known-only secret comparison, normalized certificate matching and typed delete. Actual create/rotation/list cases pass."
+    },
+    {
+      "resource": "OriginTlsClientAuth.HostnameAssociation",
+      "source": "packages/alchemy/src/Cloudflare/OriginTlsClientAuth/HostnameAssociation.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginTlsClientAuth/HostnameAssociation.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full hostname/certificate/enabled bulk config; observed zone/hostname replacement. Omitted hostname entry is cleared on delete while retaining unrelated entries; invalid orphaned certificate association handling reviewed. Actual replacement/update/delete suites pass."
+    },
+    {
+      "resource": "OriginTlsClientAuth.HostnameCertificate",
+      "source": "packages/alchemy/src/Cloudflare/OriginTlsClientAuth/HostnameCertificate.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginTlsClientAuth/HostnameCertificate.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete public certificate/private-key upload. Observed scope replacement and old-secret guards prevent spurious adoption rotation. Observe tombstones as missing; typed duplicate-content recovery and bounded propagation/dependency retries. Four actual fixtures pass."
+    },
+    {
+      "resource": "OriginTlsClientAuth.Setting",
+      "source": "packages/alchemy/src/Cloudflare/OriginTlsClientAuth/Setting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/OriginTlsClientAuth/Setting.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Enabled singleton with observe-before-PUT, scope identity and captured baseline restore. Actual updates/list/restoration pass; cloud origin TLS handshake is external."
+    },
+    {
+      "resource": "PageRule.PageRule",
+      "source": "packages/alchemy/src/Cloudflare/PageRule/PageRule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/PageRule/PageRule.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Full action/target union, priority/status default synchronization. Observed zone replacement and resolved-input guard. Actual CRUD/replacement/list cases pass; public-zone rule execution remains remote."
+    },
+    {
+      "resource": "PageShield.Policy",
+      "source": "packages/alchemy/src/Cloudflare/PageShield/Policy.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/PageShield/Policy.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all five mutable API fields, live observation, natural-name lookup and delete. Cold lookup now exhausts pagination and generated description preserves observed value. Actual updated suite pending."
+    },
+    {
+      "resource": "PageShield.Settings",
+      "source": "packages/alchemy/src/Cloudflare/PageShield/Settings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/PageShield/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all three mutable booleans and API defaults(true,true,false), baseline capture and full restoration. Zone identity replacement present. SDK has no typed zone-absence error for this operation; deleted-zone cleanup remains unverified."
+    },
+    {
+      "resource": "Pages.Deployment",
+      "source": "packages/alchemy/src/Cloudflare/Pages/Deployment.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pages/Deployment.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed immutable deployment request body and fields as snapshot: branch/commit/build/content/envVars/functions/routes/headers/redirects/config. Added12 omitted fields and replacement on immutable props. API-supplied multipart assets are caller responsibility, not build pipeline synthesis. Actual same-branch/cross-project tests pass; bounded retries maintained by parent."
+    },
+    {
+      "resource": "Pages.Domain",
+      "source": "packages/alchemy/src/Cloudflare/Pages/Domain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pages/Domain.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared API create{name}, get/delete path project/name, patch no body (validation retry). All fields covered; immutable project/name/account identity, scoped paginated inventory and idempotent parent/child not-found deletion reviewed. Actual attach/detach/name replacement fixtures passed; accountwide list fixture gated by CLOUDFLARE_TEST_PAGES_LIST. Real DNS/TLS validation cannot be emulated by workerd."
+    },
+    {
+      "resource": "Pages.Project",
+      "source": "packages/alchemy/src/Cloudflare/Pages/Project.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pages/Project.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "Compared full POST/PATCH top-level and nested deployment config/source config. Added source GitHub/GitLab repository triggers/config; webAnalyticsTag/webAnalyticsToken; AI/browser/Analytics Engine/DO/Hyperdrive/mTLS/Queue/service/Vectorize bindings; alwaysUseLatestCompatibilityDate/buildImageMajorVersion/limits/usageModel/wranglerConfigHash. R2 now accepts compatible string or {name,jurisdiction}. Typed map null SDK patch supports removing stale binding keys without erasing nested types. Observed dirty comparison includes every new field and desired-only nested source fields; persisted old props detect hidden secret changes. Existing project settings omission is documented unmanaged; explicit empty maps remove bindings. Actual lifecycle/name replacement/list plus new real EU R2 binding, queue binding removal, analytics tag and preview build/compatibility settings update pass. API rejects latest compatibility date true in production (typed BadRequest), fixture corrected to preview and property documented. Source Git integration and paid bindings remain reviewed-only. Local Pages Git build/deployment control plane absent; equivalent workerd Worker/Assets execution exists but this is not full Pages project emulation."
+    },
+    {
+      "resource": "Pipelines.LegacyPipeline",
+      "source": "packages/alchemy/src/Cloudflare/Pipelines/LegacyPipeline.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pipelines/LegacyPipeline.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Legacy source/transform/destination configuration, write-only credential rotation, observed reconciliation and typed deletion. Deprecated cascading force flags deliberately not exposed.\n\nFixture/evidence: `Pipelines/LegacyPipeline.test.ts`. Live CRUD/update/list; legacy limitations kept explicit.\n\nLocal feasibility: Legacy resource remains remote; modern pipeline runtime subset is documented separately."
+    },
+    {
+      "resource": "Pipelines.Pipeline",
+      "source": "packages/alchemy/src/Cloudflare/Pipelines/Pipeline.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pipelines/Pipeline.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: SQL definition and identity replacement, observe/get/list/create/delete, cached names and bounded consistency waits.\n\nFixture/evidence: `Pipelines/Pipeline.test.ts`. Live lifecycle passed; local SQL route replacement checked through deployed producer/R2 fixture.\n\nLocal feasibility: Native binding supports SQL projection/filter into local R2; unsupported SQL fails clearly."
+    },
+    {
+      "resource": "Pipelines.Sink",
+      "source": "packages/alchemy/src/Cloudflare/Pipelines/Sink.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pipelines/Sink.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Destination/configuration/schema/format/batching. Added schema and JSON decimal/timestamp/unstructured/compression options; immutable identity and typed reads/deletes.\n\nFixture/evidence: `Pipelines/Sink.test.ts`. Live JSON gzip and schema fixture passed.\n\nLocal feasibility: JSON and gzip into local R2; Iceberg/Parquet/cloud delivery guarantees require external implementations."
+    },
+    {
+      "resource": "Pipelines.Stream",
+      "source": "packages/alchemy/src/Cloudflare/Pipelines/Stream.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Pipelines/Stream.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Format/schema (including inference), HTTP ingestion and binding configuration; cached name and bounded consistency polling.\n\nFixture/evidence: `Pipelines/Stream.test.ts`. Live CRUD/stream binding tests passed; local schema validation and pipeline delivery passed.\n\nLocal feasibility: Native send binding routes into local pipelines; external ingestion/authentication endpoints require Cloudflare."
+    },
+    {
+      "resource": "Queues.Consumer",
+      "source": "packages/alchemy/src/Cloudflare/Queues/Consumer.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Queue/QueueConsumer.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Worker/pull settings and DLQ behavior. Propagate failed detach convergence, recognize missing parent and consumer, bound retries.\n\nFixture/evidence: `Queue/QueueConsumer.test.ts`. Live lifecycle and actual queue delivery fixtures passed.\n\nLocal feasibility: Native workerd queue events and ack/retry/DLQ; standalone cloud HTTP pull lease API is remote."
+    },
+    {
+      "resource": "Queues.Queue",
+      "source": "packages/alchemy/src/Cloudflare/Queues/Queue.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Queue/Queue.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Added deliveryDelay, deliveryPaused and messageRetentionPeriod. Observe actual settings before patch; normalize defaults, clear omitted managed settings and preserve physical name.\n\nFixture/evidence: `Queues/QueueSettings.test.ts`. Actual create/update/default removal, external drift, missing-resource recovery, state-loss adoption and cloud/local pause-resume fixtures passed.\n\nLocal feasibility: Durable SQLite broker, alarms, default/per-message delay, pause/resume and expiry; producer spool details in runtime ledger."
+    },
+    {
+      "resource": "Queues.Subscription",
+      "source": "packages/alchemy/src/Cloudflare/Queues/Subscription.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Queue/Subscription.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Source-specific subscription union, cached generated name and observed configuration/delete.\n\nFixture/evidence: `Queue/Subscription.test.ts`. Existing live subscription tests passed.\n\nLocal feasibility: Subscription to external Cloudflare events requires remote source; queue delivery itself is emulated."
+    },
+    {
+      "resource": "R2.Bucket",
+      "source": "packages/alchemy/src/Cloudflare/R2/Bucket.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/R2/Bucket.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Bucket identity/location/storage class, CORS, lifecycle, domains/public access and locks. Added Age/Date/Indefinite prefix locks with omission-preserves/empty-clears semantics.\n\nFixture/evidence: `R2/Bucket.test.ts`. Storage suites plus live lock lifecycle and local lock/lifecycle fixtures passed.\n\nLocal feasibility: Native persistent object/multipart API; local lock/expiration/storage-class policies. Public DNS, managed domains and S3 auth are external control planes."
+    },
+    {
+      "resource": "R2.BucketEventNotification",
+      "source": "packages/alchemy/src/Cloudflare/R2/BucketEventNotification.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/R2/BucketEventNotification.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Notification rule payloads, account/bucket/queue identity replacement, resolved-input guard and typed delete.\n\nFixture/evidence: `R2/BucketEventNotification.test.ts`. Create/update/replacement/list real deployments passed.\n\nLocal feasibility: Cloud R2 notification provisioning remains remote; event routing fidelity not established locally."
+    },
+    {
+      "resource": "R2.BucketSippy",
+      "source": "packages/alchemy/src/Cloudflare/R2/BucketSippy.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/R2/BucketSippy.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: AWS/GCS sources and destination credentials, account/bucket/jurisdiction replacement. Observe disabled state; preserve write-only credential semantics.\n\nFixture/evidence: `R2/BucketSippy.test.ts`. Typed disabled baseline/list checks pass; two lifecycles gated for external source credentials.\n\nLocal feasibility: Migration requires remote AWS/GCS systems; no local service clone."
+    },
+    {
+      "resource": "R2.DataCatalog",
+      "source": "packages/alchemy/src/Cloudflare/R2/DataCatalog.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/R2DataCatalog/R2DataCatalog.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Enable/disable, compaction/snapshot expiration and write-only maintenance token. Observe catalog state and independently converge maintenance settings.\n\nFixture/evidence: `R2/DataCatalog.test.ts`. Existing deployed lifecycle/list suite included in storage verification; entitlement gates remain visible in source.\n\nLocal feasibility: Iceberg catalog/maintenance service requires separate engine, not a fake CRUD registry."
+    },
+    {
+      "resource": "RealtimeKit.App",
+      "source": "packages/alchemy/src/Cloudflare/RealtimeKit/App.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/RealtimeKit/App.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed name-only creation, explicit unsupported rename/no-delete retention, accountreplacement, cached-id and name lookup. Fixed both lookups to exhaust app pagination via shared lookup (formerly first page only). Missing create id now fails instead of returning empty id. Deployed list fixture also traverses perPage1; RealtimeKit entitlement probe determines whether lifecycle actually runs."
+    },
+    {
+      "resource": "RealtimeKit.Preset",
+      "source": "packages/alchemy/src/Cloudflare/RealtimeKit/Preset.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/RealtimeKit/Preset.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed nested config/UI/permissions against all SDK create/update input interfaces. Added8 omitted fields: simulcast,livestreamViewerQualities,acceptStageRequests,stageAccess,stageEnabled,transcriptionEnabled,fontFamily,googleFont, including read projections. Fixed cold name recovery beyondfirst100 presets; full app/presetlist pagination nowshared. SDK requireddefaults built forfullPUT, observedsubset equality ignoresserverextras; option omission resetswholeconfig/UI/permissions todefaults but nestedoptional omissions preserveAPIdefaults."
+    },
+    {
+      "resource": "RealtimeKit.Webhook",
+      "source": "packages/alchemy/src/Cloudflare/RealtimeKit/Webhook.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/RealtimeKit/Webhook.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed nineevent types, enabled defaulttrue, app/account replacement, observed full body comparison with event-order normalization, typed duplicate-name recovery and missingdelete. Fixed app enumeration to paginate; webhook endpoint itself has no pagination arguments. Cold foreign name match is adopted without ownership marker, remaining policy difference."
+    },
+    {
+      "resource": "RegionalHostname.RegionalHostname",
+      "source": "packages/alchemy/src/Cloudflare/RegionalHostname/RegionalHostname.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/RegionalHostname/RegionalHostname.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Zone/hostname identity plus mutable region and create-only routing. Resolved observed identity now handles adoption; adding/changing/removing explicit routing replaces with deleteFirst because POST reuses path. Region changes PATCH. Typed entitlement probe passes; actual routing replacement requires Data Localization entitlement."
+    },
+    {
+      "resource": "Registrar.Domain",
+      "source": "packages/alchemy/src/Cloudflare/Registrar/Domain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Registrar/Domain.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed three mutable settings, read-only domain status and account scope. Added account replacement guard and historical managedKeys, so removed settings still restore their baseline while unrelated settings are preserved. Existing registration is required; no domain purchase performed. New restoration branch awaits configured-domain live verification."
+    },
+    {
+      "resource": "ResourceSharing.Share",
+      "source": "packages/alchemy/src/Cloudflare/ResourceSharing/Share.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ResourceSharing/Share.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Compared name, kind, resources(type/id/account/meta), recipients(account/org). Cold reconcile now looks up by name; lookup paginates all pages. Inline accountId alias maps canonical recipientAccountId; resource owner participates identity comparison. Read/list and typed write Forbidden probe passed; full sharing writes gated, so child/inline mutable convergence statically reviewed only."
+    },
+    {
+      "resource": "ResourceSharing.ShareRecipient",
+      "source": "packages/alchemy/src/Cloudflare/ResourceSharing/ShareRecipient.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ResourceSharing/ShareRecipient.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "Account/org recipient create fields covered. Fixed unchanged organization recipient replacement comparison by prioritizing old organizationId. Account/scope identity replacement covered. API observation exposes recipient account but no distinct organization field, so organization cold recovery is limited by service response. List passed, create/delete gated by sharing Forbidden."
+    },
+    {
+      "resource": "ResourceSharing.ShareResource",
+      "source": "packages/alchemy/src/Cloudflare/ResourceSharing/ShareResource.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/ResourceSharing/ShareResource.test.ts",
+      "review": "semantic",
+      "ledger": "network-iam.md",
+      "notes": "All input identity fields and mutable metadata exposed. Fixed account/adopted identity guard, paginated natural lookup and resourceAccountId matching. Child ResourceNotFound includes parent-not-found wire code; no broad catches added. List passed; deployed lifecycle gated by sharing Forbidden."
+    },
+    {
+      "resource": "RiskScoring.Integration",
+      "source": "packages/alchemy/src/Cloudflare/RiskScoring/Integration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/RiskScoring/Integration.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "All API tenant/reference/active fields present. Discovery now exhausts list pages when locating tenant URL. Live read/probe; create/update gated Forbidden HTTP403 code3314 and external Okta tenant."
+    },
+    {
+      "resource": "Rules.List",
+      "source": "packages/alchemy/src/Cloudflare/Rules/List.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Rules/List.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "All supported item unions, descriptions, bulk asynchronous item operations and kind replacement. Removed description now clears to empty string; bounded pending-operation waits and normalized items reviewed. Real lifecycle/options/removal cases pass."
+    },
+    {
+      "resource": "Ruleset.AccountEntrypoint",
+      "source": "packages/alchemy/src/Cloudflare/Ruleset/AccountEntrypoint.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Ruleset/AccountEntrypoint.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Account phase identity uses observed output after adoption, normalized desired-rule comparison and optional description. Delete empties observed phase using output identity, including absent old props. Full SDK rule surface. Existing account entitlement/list evidence passes."
+    },
+    {
+      "resource": "Ruleset.CustomRuleset",
+      "source": "packages/alchemy/src/Cloudflare/Ruleset/CustomRuleset.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Ruleset/CustomRuleset.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Account custom/managed kind, phase and full nested rule surface. Observed phase/kind replacement; cached name; normalized observed rule comparison avoids redundant versions; removed description sends empty string. Typed missing reads/deletes and pagination. Live available probes/list pass; account WAF lifecycle remains plan gated."
+    },
+    {
+      "resource": "Ruleset.Ruleset",
+      "source": "packages/alchemy/src/Cloudflare/Ruleset/Ruleset.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Ruleset/Ruleset.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Zone phase singleton; all SDK rule fields forwarded. Normalized rules ignore API IDs/defaults/version decorations, descriptions normalized, capture current state before PUT, clear rules on delete. Immutable phase now uses observed state. Four actual deployment/state-loss/list cases pass."
+    },
+    {
+      "resource": "Rum.Rule",
+      "source": "packages/alchemy/src/Cloudflare/Rum/Rule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Rum/Rule.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed host/paths/inclusive/isPaused API fields and ruleset identity. Omitted paths now resets to[], inclusive totrue and isPaused tofalse; previous code preserved observed values. Deployed8/8 Rum suite includes API-verified removal. Host omission remains patch-style preservation because SDK offers no clear sentinel."
+    },
+    {
+      "resource": "Rum.Site",
+      "source": "packages/alchemy/src/Cloudflare/Rum/Site.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Rum/Site.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed create/update fields, paired site/ruleset reads and zone identity. Added resolved/adopted-output replacement guard and autoInstall defaultfalse on creation/update. Deployed8/8 Rum suite verifies true-to-omitted reset. Omitted lite/enabled management remains selective."
+    },
+    {
+      "resource": "SchemaValidation.OperationSetting",
+      "source": "packages/alchemy/src/Cloudflare/SchemaValidation/OperationSetting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SchemaValidation/OperationSetting.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Individual operation PUT covers bulk PATCH equivalent fields; null action reads absent; cold Unowned; path identity replacement; typed missing deletion clears override. Parent operation enumeration for listing. Actual deployed test now deletes override while retaining parent operation, then verifies absence. Bulk multi-operation transaction is service operation, not extra per-resource desired state."
+    },
+    {
+      "resource": "SchemaValidation.Schema",
+      "source": "packages/alchemy/src/Cloudflare/SchemaValidation/Schema.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SchemaValidation/Schema.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Full source create/read, name/source immutable replacement, default validation true; false->true patch, true->false replacement per API. Paginated name cold discovery Unowned, typed gone delete. Bounded test polling. Schema kind currently API openapi_v3 only."
+    },
+    {
+      "resource": "SchemaValidation.Settings",
+      "source": "packages/alchemy/src/Cloudflare/SchemaValidation/Settings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SchemaValidation/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Zone singleton GET capture original; PUT full desired with omitted nullable override cleared; destroy restores initial actual settings; immutable zone replacement; no pagination. Fixture now captures actual baseline rather than mutating baseline before capture; verified omitted override reset. No source API-field gaps found."
+    },
+    {
+      "resource": "SecretsStore.Secret",
+      "source": "packages/alchemy/src/Cloudflare/SecretsStore/Secret.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SecretsStore/Secret.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Name/store/account identity, value/scopes/comment. Typed create race, observed metadata no-op, clear removed comments, bounded activation, and write-only value rotation.\n\nFixture/evidence: `SecretsStore/Secret.test.ts`. Deployed Worker verifies creation, value rotation, comment clearing, external deletion/recreation and cleanup; list/async/local binding suites pass.\n\nLocal feasibility: Native secrets binding backed by local gateway. Undetectable out-of-band write-only value changes are not claimed observable."
+    },
+    {
+      "resource": "SecretsStore.Store",
+      "source": "packages/alchemy/src/Cloudflare/SecretsStore/SecretsStore.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SecretsStore/SecretsStore.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "Optional creation name now matches the API; an existing account-shared store retains its observed name because there is no rename operation.\n\nAPI/reconciler review: Account default-store discovery, pagination and concurrent maximum-store recovery. Account changes replace. Shared store intentionally retained on stack destroy.\n\nFixture/evidence: `SecretsStore/SecretsStore.test.ts`. Live store discovery/list plus typed SDK probes pass; shared default store is not destructively recreated.\n\nLocal feasibility: Local persistent secrets gateway; store generation isolated by dev identity."
+    },
+    {
+      "resource": "SecurityTxt.SecurityTxt",
+      "source": "packages/alchemy/src/Cloudflare/SecurityTxt/SecurityTxt.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/SecurityTxt/SecurityTxt.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all RFC9116 fields, observed normalized full PUT, Unowned cold read and typed deletion. Actual4/4 suite now verifies removal of all five optional arrays and language directly through API; omitted values clear correctly. Bounded transient-auth retries under40sec."
+    },
+    {
+      "resource": "Snippets.Snippet",
+      "source": "packages/alchemy/src/Cloudflare/Snippets/Snippet.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Snippets/Snippet.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full multipart upsert and raw download MIME/source, entrypoint identity cache, name replacement and dependent-rule teardown. Exposed typed files plus code shorthand with duplicate/mainmodule validation. Actual5/5 covers multicomodule update/removal and no-op timestamp preservation. Binary download is text-decoded, so binaryuploads conservatively reupload; mainmodule metadata not observable."
+    },
+    {
+      "resource": "Snippets.SnippetRules",
+      "source": "packages/alchemy/src/Cloudflare/Snippets/SnippetRules.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Snippets/SnippetRules.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed ordered whole rule list, enableddefault and snippet-reference ordering, zone scope and true rule clearing. Typed requested-zone-not-found400 SDK correction makes never-provisioned delete idempotent. Actual5/5 snippets suite includes rule lifecycle/list/dependent teardown."
+    },
+    {
+      "resource": "Spectrum.Application",
+      "source": "packages/alchemy/src/Cloudflare/Spectrum/Application.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Spectrum/Application.test.ts",
+      "review": "semantic",
+      "ledger": "accounts-pages.md",
+      "notes": "All create/update mutable top-level fields and nested DNS/origin DNS/edge IP branches compared. Fixed observed zone replacement for adoption, originDns ttl/type-only updates, explicit false/off defaults, observed edgeIps/virtualNetworkId outputs, and delete-first replacement to reset omitted managed TLS/edge IP/network settings where request lacks nullable reset. Paginated identity lookup and typed delete preserved. Typed SpectrumProtocolNotAvailable probe/list passed; enterprise origin DNS/edge routing updates reviewed, gated."
+    },
+    {
+      "resource": "Speed.TestSchedule",
+      "source": "packages/alchemy/src/Cloudflare/Speed/TestSchedule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Speed/TestSchedule.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewedurl/region scopeidentity, createandobserve withtypedAlreadyExists, frequencydelete-create withquota rollback, paginatedzonelist and typeddelete. Fixed resolved-input/adoptedoutputdiff and frequencyremovalreset via APIdefault; fixedfieldurl/region remainstablewithinupdate. Currentdailycreationquota gates repeatedmutations; all recreation errors now attempt restoring the old schedule and preserve original failure; rollback itself can also fail and is surfaced."
+    },
+    {
+      "resource": "Ssl.CertificatePack",
+      "source": "packages/alchemy/src/Cloudflare/Ssl/CertificatePack.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Ssl/CertificatePack.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Complete order fields plus independent validation-method and branding updates. Observed hosts/CA/validity/zone now guide replacement even without old props. Async issuance is exposed without waiting for external DCV. Typed entitlement probe/list pass; full lifecycle requires Advanced Certificate Manager."
+    },
+    {
+      "resource": "Ssl.UniversalSsl",
+      "source": "packages/alchemy/src/Cloudflare/Ssl/UniversalSsl.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Ssl/UniversalSsl.test.ts",
+      "review": "semantic",
+      "ledger": "dns-certificates-rules.md",
+      "notes": "Boolean singleton with observed no-op and captured initial value restored on destroy; zone replacement and missing-zone handling reviewed. Read/list passes. Existing mutation fixtures are gated because toggling shared-zone Universal SSL can invalidate unrelated edge certificates."
+    },
+    {
+      "resource": "Stream.LiveInput",
+      "source": "packages/alchemy/src/Cloudflare/Stream/LiveInput.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Stream/LiveInput.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed recording,RTMPS/SRT/WebRTC outputs,meta,enabled/default-recording/hide/lifetime/low-latency fields, account scope and typed absence. Added preferLowLatency mapping and SDK bare-array/count response support; deployed3/3. Recording nullable retention reset still unverified on vendor service."
+    },
+    {
+      "resource": "Stream.LiveInputOutput",
+      "source": "packages/alchemy/src/Cloudflare/Stream/LiveInputOutput.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Stream/LiveInputOutput.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Parent/url/key immutable, enabled updates/default true reset, observe missing output before create, typed idempotent delete, account list via parent inputs. Parent API bare-array/count wrapper patch already present. Removed obsolete list gate; tested enabled omission reset and actual parent enumeration. Unlabelled server-generated output id cannot be recovered without state."
+    },
+    {
+      "resource": "Stream.SigningKey",
+      "source": "packages/alchemy/src/Cloudflare/Stream/SigningKey.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Stream/SigningKey.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Immutable generated key; preserve write-only PEM/JWK on read; observe existing id before creating; missing id recreated; idempotent typed deletion. List SDK pagination mode single matches API. Cold recovery cannot reconstruct secret material. No missing mutable API fields found. Secret material is only returned at creation."
+    },
+    {
+      "resource": "Stream.Watermark",
+      "source": "packages/alchemy/src/Cloudflare/Stream/Watermark.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Stream/Watermark.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "All fields immutable: replace on change; cold named match now Unowned; adoption compares observed props even without olds; omitted name preserves physical identity; typed missing deletion; list is single API collection. PNG multipart file mode added alongside JSON URL mode. SDK uploadWatermark new multipart operation; local Uint8Array property and source-mode replacement. Adoption/default removal/name preservation regression fixture. Cannot recover original uploaded file bytes; adopting file content requires replacement; download metadata is read-only."
+    },
+    {
+      "resource": "Stream.Webhook",
+      "source": "packages/alchemy/src/Cloudflare/Stream/Webhook.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Stream/Webhook.test.ts",
+      "review": "semantic",
+      "ledger": "runtime-resources.md",
+      "notes": "Account singleton GET/cold Unowned, PUT full desired URL, immutable account replacement, typed missing delete. Secret preserved from observed response. No pagination. No source changes needed. Deleting/recreating rotates service-generated secret; only empty account slot exercised."
+    },
+    {
+      "resource": "Tags.AccountResourceTags",
+      "source": "packages/alchemy/src/Cloudflare/Tags/AccountResourceTags.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tags/AccountResourceTags.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed whole tag-map PUT/remove behavior, ETag output and Unowned cold adoption. Fixed account/type/resource/optional-worker identity comparison using adopted outputs; removed nested Input type in Props. Read treats empty map as absence because API does not distinguish it. ifMatch is optimistic-concurrency precondition, not desired state; no ETag-based retry protocol implemented. Deployed Tags7/7."
+    },
+    {
+      "resource": "Tags.ZoneResourceTags",
+      "source": "packages/alchemy/src/Cloudflare/Tags/ZoneResourceTags.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tags/ZoneResourceTags.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed zone/type/resource/optional-access-parent path scope, whole tag replacement, typed missing-resource reads and create visibility retries. Fixed adopted-output/optional-parent removal replacement and resolved guard; removed nested Input in Props. Parent bounded shared retry helper. Current API ETag retained as output only, concurrent external writes can be overwritten by authoritative desired map. Deployed Tags7/7."
+    },
+    {
+      "resource": "TokenValidation.Configuration",
+      "source": "packages/alchemy/src/Cloudflare/TokenValidation/Configuration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/TokenValidation/TokenValidation.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed metadata/JWKS key union and title identity, paginated cold lookup, oldest deterministic match and observe/update/delete typed missing. Existing TokenValidation.test fixture covers key rotation; API Shield entitlement gates mutation. No local token validation policy runtime implemented."
+    },
+    {
+      "resource": "TokenValidation.Rule",
+      "source": "packages/alchemy/src/Cloudflare/TokenValidation/Rule.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/TokenValidation/Rule.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Complete action/expression/title/description/selector plus PATCH-only position. Full observed mutable comparison, explicit enabled/description defaults, sorted selector sets, cached title and zone identity. Position deliberately reapplied when supplied. Typed entitlement/list passes; actual JWT rule execution gated."
+    },
+    {
+      "resource": "Tunnel.Configuration",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/Configuration.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/Configuration.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Full typed ingress and originRequest configuration; delete suppresses only TunnelNotFound. Live tunnel config replacement/reset pass."
+    },
+    {
+      "resource": "Tunnel.HostnameRoute",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/HostnameRoute.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/HostnameRoute.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Hostname, tunnel, description fields present. Live CRUD/list pass."
+    },
+    {
+      "resource": "Tunnel.Route",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/Route.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/Route.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "CIDR, tunnel, comment, virtual-network fields present. Read/delete use exhaustive list identity; soft-deleted routes ignored; discovery failures propagate. Live CRUD/update/adoption/list pass. A concurrent delete after successful observation can still return API failure; retry discovers absence."
+    },
+    {
+      "resource": "Tunnel.Tunnel",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/Tunnel.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/Tunnel.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Configuration source, name, secret and typed originRequest options including Access validation present. Narrow missing-token/tunnel catches and discard soft-deleted records before reuse. Existing fixture/live lifecycle, config, list and remote API capability tests pass. Running cloudflared traffic not exercised."
+    },
+    {
+      "resource": "Tunnel.VirtualNetwork",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/VirtualNetwork.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/VirtualNetwork.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Name/comment/default-network settings present. SDK create `isDefault` is an alias of supported `isDefaultNetwork`, not another feature. Live CRUD/update, missing recovery/list pass."
+    },
+    {
+      "resource": "Tunnel.WarpConnector",
+      "source": "packages/alchemy/src/Cloudflare/Tunnel/WarpConnector.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Tunnel/WarpConnector.test.ts",
+      "review": "semantic",
+      "ledger": "zero-trust.md",
+      "notes": "Added HA creation/replacement and redacted tunnel-secret update. Omitted HA compares as false. Existing connector CRUD/list pass. New HA/secret paths statically wired; actual external WARP Connector enrollment/traffic not exercised."
+    },
+    {
+      "resource": "Turnstile.Widget",
+      "source": "packages/alchemy/src/Cloudflare/Turnstile/Widget.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Turnstile/Widget.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all mutable/immutable create/update fields, account/region replacement, secret hydration via GET, paginated name discovery and typed absence. Cold name match now Unowned. Omitted booleans resetfalse and clearance resetsno_clearance; actual4/4 suite verifies jschallenge removal through API plus out-of-band delete recovery. Collection order/direction/page controls are not widget configuration."
+    },
+    {
+      "resource": "UrlNormalization.UrlNormalization",
+      "source": "packages/alchemy/src/Cloudflare/UrlNormalization/UrlNormalization.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/UrlNormalization/UrlNormalization.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Full scope/type PUT, default incoming/cloudflare restored on omission, observed equality avoids writes; delete invokes true API reset, missing-zone handling and observed scope replacement. Four actual singleton tests pass."
+    },
+    {
+      "resource": "Vectorize.Index",
+      "source": "packages/alchemy/src/Cloudflare/Vectorize/VectorizeIndex.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Vectorize/VectorizeIndex.test.ts",
+      "review": "semantic",
+      "ledger": "runtime.md",
+      "notes": "All V2 create configuration fields are exposed: name, description, dimensions/metric or preset. API has get/list/create/delete, no mutable index update. Existing ensure catches missing index and create conflict, uses cached physical name and recorded account for delete. Diff now also detects observed immutable dimension/metric mismatch. Live explicit creation/deletion, preset, dimension replacement, list tests passed. Added dual RPC local provider and dev identity, Worker descriptor configuration. Unknown future presets require explicit local implementation (clear error); exact cloud preset validation, deleted-index name reuse latency and all cross-account permutations are not live verified."
+    },
+    {
+      "resource": "Vectorize.MetadataIndex",
+      "source": "packages/alchemy/src/Cloudflare/Vectorize/VectorizeMetadataIndex.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Vectorize/VectorizeMetadataIndex.test.ts",
+      "review": "semantic",
+      "ledger": "runtime.md",
+      "notes": "Exposes parent index, property and supported scalar type; create/list/delete covered. Existing reconciler incorrectly returned desired type while observing a different type. Observed type drives diff; reconcile deletes/recreates a drifted type with bounded typed conflict retry. Concurrent-create conflict checks observed type. Added dual RPC local provider, local metadata registry, Worker/Vite restart wiring. Local create/filter/remove lifecycle passed. Same-property type replacements now delete the old generation first. Cloud indexing is asynchronous. Five legacy asynchronous materialization cases are opt-in with CLOUDFLARE_TEST_VECTORIZE_ASYNC_METADATA=1 and bounded to ten 5s polls/120s test timeout. Ungated deployed mutation acceptance, repeated deploy, SDK parent verification and idempotent cleanup passed. Full materialization/adoption drift not live verified."
+    },
+    {
+      "resource": "VpcService.VpcService",
+      "source": "packages/alchemy/src/Cloudflare/VpcService/VpcService.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/VpcService/VpcService.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed four host unions, HTTP/TCP type/ports/appProtocol/TLS mapping, account replacement, exact name recovery and typed collision/missing errors. All discovered omitted fields added and live HTTP/IPv4/dual-stack/list plus TCP/TLS invalid-config probe verified. Optional unset ports/TLS follow API selective-management semantics."
+    },
+    {
+      "resource": "VulnerabilityScanner.Credential",
+      "source": "packages/alchemy/src/Cloudflare/VulnerabilityScanner/Credential.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/VulnerabilityScanner/Credential.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all create/update fields (name/location/locationName/value), credential-set/account replacement, live read then name lookup, Unowned cold match, both parent/child typed absence, write-only Redacted value compared against olds and applied on adoption. Generated-name preservation fixed centrally. Missing-update race propagates typed failure rather than duplicate creation; lifecycle requires vulnerability-scanner entitlement."
+    },
+    {
+      "resource": "VulnerabilityScanner.CredentialSet",
+      "source": "packages/alchemy/src/Cloudflare/VulnerabilityScanner/CredentialSet.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/VulnerabilityScanner/CredentialSet.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed name-only create/update API, account replacement, get/name fallback, deterministic duplicate selection, Unowned cold lookup, typed deletion. Generated-name preservation fixed centrally. Lifecycle entitlement gated."
+    },
+    {
+      "resource": "VulnerabilityScanner.TargetEnvironment",
+      "source": "packages/alchemy/src/Cloudflare/VulnerabilityScanner/TargetEnvironment.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/VulnerabilityScanner/TargetEnvironment.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed target zone union (only zone supported by SDK), name/description forwarding, null clears removed description, account/zone replacement, get/name fallback and Unowned cold read, typed delete. Generated-name preservation fixed centrally. Cold same-name lookup does not filter zone before adoption (explicit adoption needed); lifecycle entitlement gated."
+    },
+    {
+      "resource": "WaitingRoom.Settings",
+      "source": "packages/alchemy/src/Cloudflare/WaitingRoom/Settings.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/WaitingRoom/Settings.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed sole searchEngineCrawlerBypass boolean, defaultfalse, zone replacement, baseline capture/read/no-op/restore and typed zone absence. Exhaustive zone list with bounded auth retry. Current actual tests include gated entitlement branches."
+    },
+    {
+      "resource": "WaitingRoom.WaitingRoom",
+      "source": "packages/alchemy/src/Cloudflare/WaitingRoom/WaitingRoom.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/WaitingRoom/WaitingRoom.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed all22 mutable API fields including route/cookie nested structures, zone identity, paginated exact-name Unowned lookup and typed deletion. Fixed known-default removal: when observed nondefault, PUT now explicitly sends documented reset values instead of comparing against default but omitting mutation. Advanced options without documented resets remain selectively managed. Entitled real lifecycle needed to verify default removal branch."
+    },
+    {
+      "resource": "Web3.ContentList",
+      "source": "packages/alchemy/src/Cloudflare/Web3/ContentList.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Web3/ContentList.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed full configuration plus three entry fields through separate content-list/config APIs. Ordered replacement and empty-list clearing covered. Replaced delimiter-based equality with collision-free JSON tuples. Cold read currently lacks Unowned marker; actual updated suite pending."
+    },
+    {
+      "resource": "Web3.Hostname",
+      "source": "packages/alchemy/src/Cloudflare/Web3/Hostname.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Web3/Hostname.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed immutable zone/name/target, typed absent get/delete, deleting-state filtering and Unowned natural-key recovery. All supported API inputs mapped. Omitted description/dnslink preserve observed values; API clearing semantics unverified."
+    },
+    {
+      "resource": "Workers.AccountSetting",
+      "source": "packages/alchemy/src/Cloudflare/Workers/AccountSetting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/AccountSetting.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: defaultUsageModel and greenCompute singleton; partial desired state preserves unspecified values, captures/restores baseline, account change replaces.\n\nFixture/evidence: `Workers/AccountSetting.test.ts`. Actual singleton lifecycle/list tests pass with baseline restoration.\n\nLocal feasibility: Cloud account behavior remains remote."
+    },
+    {
+      "resource": "Workers.ObservabilityDestination",
+      "source": "packages/alchemy/src/Cloudflare/Workers/ObservabilityDestination.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/ObservabilityDestination.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Name/dataset immutable, endpoint/headers/enabled mutable; preflight, observed state, typed delete and exhaustive list.\n\nFixture/evidence: `Workers/ObservabilityDestination.test.ts`. Deployed OTLP endpoint fixture and destination lifecycle/list pass.\n\nLocal feasibility: Local tracing exists; Cloudflare export control plane and preflight remain remote."
+    },
+    {
+      "resource": "Workers.Route",
+      "source": "packages/alchemy/src/Cloudflare/Workers/Route.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/Route.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Zone/pattern/script routes, resolved input guard, identity replacement and typed deletion.\n\nFixture/evidence: `Workers/Route.test.ts`. Live route suites pass.\n\nLocal feasibility: Workers can be served locally; public zone routing is external."
+    },
+    {
+      "resource": "Workers.Subdomain",
+      "source": "packages/alchemy/src/Cloudflare/Workers/Subdomain.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/Subdomain.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Account workers.dev singleton, baseline-preserving lifecycle and immutable scope.\n\nFixture/evidence: `Workers/Subdomain.test.ts`. Actual read/list/lifecycle suite passes under configured test account.\n\nLocal feasibility: Local URLs replace public workers.dev routing."
+    },
+    {
+      "resource": "Workers.Worker",
+      "source": "packages/alchemy/src/Cloudflare/Workers/Worker.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/Worker.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Upload metadata and bindings, assets, preview/version traffic, domains/routes/cron, DO migrations. Added strict binding inheritance, keepBindings and full-cutover version annotations. Removed broad missing-resource catches; typed migration-tag recovery from real code10079.\n\nFixture/evidence: `Workers`. Actual inherited/kept secret, Worker/DO/KV/env/version/route fixtures. Full suite evidence recorded separately; some external/entitlement configurations remain gated.\n\nLocal feasibility: Workerd executes actual scripts, bindings/DOs/assets and workflow engine; cloud edge placement and control-plane scheduling are not local equivalence."
+    },
+    {
+      "resource": "WorkersForPlatforms.DispatchNamespace",
+      "source": "packages/alchemy/src/Cloudflare/WorkersForPlatforms/DispatchNamespace.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/WorkersForPlatforms/DispatchNamespace.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Name identity, observed get/list/create/delete and cached-name preservation; Worker uploads use dispatch namespace metadata path.\n\nFixture/evidence: `WorkersForPlatforms/DispatchNamespace.test.ts`. 4 namespace cases plus dispatch worker suite passed.\n\nLocal feasibility: Local namespace registry and dispatch proxy execute workerd targets; deployed fixture verifies same-name namespace isolation, updates, deletion and missing targets. Outbound routing and production CPU/subrequest limits remain unsupported locally."
+    },
+    {
+      "resource": "Workflows.Workflow",
+      "source": "packages/alchemy/src/Cloudflare/Workflows/Workflow.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts",
+      "review": "semantic",
+      "ledger": "core.md",
+      "notes": "API/reconciler review: Class/script identity, limits/schedules, observed PUT upsert and typed deletion. Native instance operations exercised in runtime suites.\n\nFixture/evidence: `Workers/Workflow.test.ts`. 13 live/local workflow cases passed, one pre-existing todo.\n\nLocal feasibility: Persistent native workflow engine; distributed execution limits are not emulated."
+    },
+    {
+      "resource": "Zaraz.Config",
+      "source": "packages/alchemy/src/Cloudflare/Zaraz/Config.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Zaraz/ZarazConfig.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed SDK-derived settings/analytics/consent plus arbitrary tools/triggers/variables; workflowseparateAPI, zoneReference replacement, full liveconfig merge preservesomittedprops and serverzarazVersion, stripsnulls/unwrapsRedacted values. Defaultdelete retainsconfig; opt-indelete resetsAPIdefaults/workflow. Stables onlyzoneId. Secret variable comparison masksserverredaction in diff; reconcile stillcomparesrawobservation, so forcedreconcile may reupload secrets."
+    },
+    {
+      "resource": "Zone.CustomNameservers",
+      "source": "packages/alchemy/src/Cloudflare/Zone/CustomNameservers.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Zone/CustomNameservers.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Reviewed full enabled/nsSet singleton against zones SDK; observed zone identity, baseline capture, omitted set preserves observed choice, destroy restores initial toggle/set. Typed missing-zone cleanup and missing original set handling. Available read/entitlement tests pass; full custom-nameserver activation requires entitlement."
+    },
+    {
+      "resource": "Zone.Hold",
+      "source": "packages/alchemy/src/Cloudflare/Zone/Hold.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Zone/Hold.test.ts",
+      "review": "semantic",
+      "ledger": "additional-services.md",
+      "notes": "Added missing PATCH holdAfter scheduling input. Scheduled temporarily inactive holds remain readable; removing schedule reactivates the hold, subdomain default resets false. Typed patch disappearance recreates before applying schedule. Full planned deployment fixture includes scheduling/reactivation, gated on Enterprise zone; actual probe/list passes."
+    },
+    {
+      "resource": "Zone.Setting",
+      "source": "packages/alchemy/src/Cloudflare/Zone/Setting.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Zone/Setting.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed heterogeneous setting value map, zone/name replacement, observed value/baseline restore and zone-wide list. Removed blanket read/list catch; real UndefinedZoneSetting400 modeled in SDK and caught precisely. Full setting-specific validation belongs to API; deployed4/4 includes baseline/replace/list. Final SDK review found ssl_recommender uses top-level enabled rather than value; boolean value mapping/read/restore and known-id listing now implemented. Actual standing zone rejects GET with typed UndefinedZoneSetting400; ungated probe pins it and full toggle fixture is environment-gated. Final suite5passed1gated; enabled-mapping fixture implemented but cannot run against current unavailable setting."
+    },
+    {
+      "resource": "Zone.Zone",
+      "source": "packages/alchemy/src/Cloudflare/Zone/Zone.ts",
+      "testSuite": "packages/alchemy/test/Cloudflare/Zone/Zone.test.ts",
+      "review": "semantic",
+      "ledger": "services.md",
+      "notes": "Reviewed account/name/type identity, live create/get/activation/deletion and paginated cold name lookup. Typed InvalidZoneIdentifier alone maps absence; prior blanket catch removed. Account-global zone ownership and asynchronousactivation cannot be emulated by metadata CRUD. Domain delegation remains external."
+    }
+  ],
+  "sdkCommit": "03c1bbe63"
+}

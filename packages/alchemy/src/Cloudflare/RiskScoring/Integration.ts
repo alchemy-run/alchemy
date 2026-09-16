@@ -1,5 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
@@ -108,6 +109,12 @@ export const isIntegration = (value: unknown): value is Integration =>
 
 export const IntegrationProvider = () =>
   Provider.succeed(Integration, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["integrationId", "accountId", "integrationType", "createdAt"],
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -239,11 +246,11 @@ const observeIntegration = (accountId: string, integrationId: string) =>
  * Find an integration by exact tenant URL.
  */
 const findByTenantUrl = (accountId: string, tenantUrl: string) =>
-  zeroTrust
-    .listRiskScoringIntegrations({ accountId })
-    .pipe(
-      Effect.map((list) => list.result.find((i) => i.tenantUrl === tenantUrl)),
-    );
+  zeroTrust.listRiskScoringIntegrations.items({ accountId }).pipe(
+    Stream.filter((integration) => integration.tenantUrl === tenantUrl),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
 const toAttributes = (
   integration: ObservedIntegration,

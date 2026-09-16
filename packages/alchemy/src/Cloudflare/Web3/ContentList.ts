@@ -333,6 +333,8 @@ const sameContentList = (
 
 const serializeEntries = (entries: ContentListEntry[]) =>
   entries
-    .map((entry) => `${entry.type} ${entry.content} ${entry.description ?? ""}`)
+    .map((entry) =>
+      JSON.stringify([entry.type, entry.content, entry.description ?? ""]),
+    )
     .sort()
-    .join("");
+    .join("\n");

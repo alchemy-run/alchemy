@@ -158,7 +158,7 @@ export const EndpointHealthcheckProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createHealthcheckName(id, news.name);
+      const name = yield* createHealthcheckName(id, news.name ?? output?.name);
       const desired = {
         checkType: news.checkType ?? ("icmp" as const),
         endpoint: news.endpoint,

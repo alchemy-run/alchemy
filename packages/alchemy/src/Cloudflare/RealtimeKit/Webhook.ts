@@ -1,3 +1,4 @@
+import { listAllApps } from "./lookup.ts";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -193,7 +194,7 @@ export const WebhookProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const appId = news.appId as string;
-      const name = yield* createWebhookName(id, news.name);
+      const name = yield* createWebhookName(id, news.name ?? output?.name);
       const desired = {
         name,
         url: news.url as string,
@@ -296,9 +297,9 @@ export const WebhookProvider = () =>
     // unentitled account simply has no webhooks. Neither endpoint paginates.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const appIds = yield* realtimeKit.getApp({ accountId }).pipe(
+      const appIds = yield* listAllApps(accountId).pipe(
         Effect.map((apps) =>
-          (apps.data ?? [])
+          apps
             .map((app) => app?.id)
             .filter((id): id is string => typeof id === "string"),
         ),

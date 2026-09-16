@@ -24,7 +24,7 @@ const getApp = (accountId: string, appId: string) =>
   calls.getSfu({ accountId, appId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );
@@ -38,7 +38,7 @@ const expectGone = (accountId: string, appId: string) =>
     Effect.retry({
       while: (e) => e._tag === "AppNotDeleted",
       schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
+        Schedule.spaced("2 seconds"),
         Schedule.recurs(10),
       ]),
     }),
@@ -107,6 +107,15 @@ test.provider("update name in place (same appId, secret preserved)", (stack) =>
     expect(noop.appId).toEqual(initial.appId);
     expect(Redacted.value(noop.secret)).toEqual(initialSecret);
 
+    const omittedName = yield* stack.deploy(
+      Cloudflare.Calls.App("UpdateApp", {}),
+    );
+    expect(omittedName.appId).toBe(initial.appId);
+    expect(omittedName.name).toBe("alchemy-calls-app-update-v2");
+    expect((yield* getApp(accountId, initial.appId)).name).toBe(
+      "alchemy-calls-app-update-v2",
+    );
+
     yield* stack.destroy();
 
     yield* expectGone(accountId, initial.appId);
@@ -158,7 +167,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* calls.deleteSfu({ accountId, appId: app.appId }).pipe(
       Effect.retry({
         while: (e) => e._tag === "Forbidden",
-        schedule: Schedule.exponential("500 millis"),
+        schedule: Schedule.spaced("2 seconds"),
         times: 8,
       }),
     );

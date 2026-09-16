@@ -53,6 +53,7 @@ test.provider(
 
       const input = yield* stack.deploy(
         Cloudflare.Stream.LiveInput("BroadcastInput", {
+          preferLowLatency: true,
           meta: { name: "alchemy-stream-live-input" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
         }),
@@ -66,10 +67,12 @@ test.provider(
       const live = yield* getLiveInput(accountId, input.liveInputId);
       expect(live.uid).toEqual(input.liveInputId);
       expect(live.enabled).toBe(true);
+      expect(live.preferLowLatency).toBe(true);
 
       // Update mutable props in place — same uid, no replacement.
       const updated = yield* stack.deploy(
         Cloudflare.Stream.LiveInput("BroadcastInput", {
+          preferLowLatency: false,
           enabled: false,
           meta: { name: "alchemy-stream-live-input-v2" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
@@ -84,10 +87,12 @@ test.provider(
 
       const observed = yield* getLiveInput(accountId, updated.liveInputId);
       expect(observed.enabled).toBe(false);
+      expect(observed.preferLowLatency).toBe(false);
 
       // Redeploying identical props is a no-op (still the same input).
       const noop = yield* stack.deploy(
         Cloudflare.Stream.LiveInput("BroadcastInput", {
+          preferLowLatency: false,
           enabled: false,
           meta: { name: "alchemy-stream-live-input-v2" },
           recording: { mode: "automatic", timeoutSeconds: 10 },
@@ -99,7 +104,7 @@ test.provider(
 
       yield* expectGone(accountId, input.liveInputId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 90_000 },
 );
 
 test.provider(
@@ -143,33 +148,14 @@ test.provider(
 
       yield* expectGone(accountId, healed.liveInputId);
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 90_000 },
 );
 
 // Canonical `list()` test (account collection): deploy a live input, then
 // resolve the typed provider and assert the deployed uid appears in the
 // exhaustively-enumerated result.
 //
-// GATED — blocked on a distilled schema mismatch, not an entitlement: the
-// account *can* create/list live inputs (the CRUD cases above pass), but
-// `stream.listLiveInputs` fails to decode the live response. The Cloudflare
-// REST API returns `result` as a bare array of live-input objects, while the
-// upstream cloudflare-typescript SDK (and therefore distilled) types the
-// `result` payload as the object `{ liveInputs, range, total }`. The decode
-// throws, verbatim:
-//
-//   CloudflareHttpError { status: 200, statusText: "Schema decode failed" }
-//   GET /accounts/{account_id}/stream/live_inputs
-//   body: {"result":[{"uid":"…","created":"…",…}],"success":true,…}
-//
-// Needed distilled patch: model `ListLiveInputsResponse` as
-// `Array<LiveInput>` decoded at ResponsePath("result") (not the wrapper
-// object). The current patch DSL can't express this — `op.responsePath`
-// ("result", from the SDK's `_thenUnwrap`) wins over `patch.responsePath`,
-// and `responseType: "array"` wraps the wrapper object rather than the item
-// — so it requires a generator/spec-level fix. Once landed, drop this gate
-// and map `response` (the array) directly in LiveInput.ts's `list()`.
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
+test.provider(
   "list enumerates the deployed live input",
   (stack) =>
     Effect.gen(function* () {
@@ -190,5 +176,5 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 90_000 },
 );

@@ -221,6 +221,18 @@ describe.sequential("Rule", () => {
         }),
       );
       expect(noop.rule.id).toEqual(initial.rule.id);
+      const reset = yield* stack.deploy(program(zone.id, { host: zoneName }));
+      expect(reset.rule.paths ?? []).toEqual([]);
+      expect(reset.rule.inclusive).toBe(true);
+      expect(reset.rule.isPaused).toBe(false);
+      const liveReset = yield* findRule(
+        accountId,
+        reset.rule.rulesetId,
+        reset.rule.id,
+      );
+      expect(liveReset?.paths ?? []).toEqual([]);
+      expect(liveReset?.inclusive).toBe(true);
+      expect(liveReset?.isPaused).toBe(false);
 
       const rulesetId = initial.rule.rulesetId;
       yield* stack.destroy();

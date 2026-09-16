@@ -84,5 +84,66 @@ test.provider.skipIf(!entitled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!entitled)(
+  "updates DHCP options and routed-subnet NAT without changing the LAN address",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const deploy = (domain: string, translatedPrefix: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const site = yield* Cloudflare.MagicTransit.MagicSite(
+              "ConfigSite",
+              { name: "alchemy-lan-config-site" },
+            );
+            const lan = yield* Cloudflare.MagicTransit.MagicSiteLan(
+              "ConfigLan",
+              {
+                siteId: site.siteId,
+                physport: 2,
+                name: "alchemy-lan-config",
+                staticAddressing: {
+                  address: "192.168.42.1/24",
+                  dhcpServer: {
+                    dhcpPoolStart: "192.168.42.10",
+                    dhcpPoolEnd: "192.168.42.100",
+                    dhcpOptions: [{ code: 15, type: "text", value: domain }],
+                  },
+                },
+                routedSubnets: [
+                  {
+                    prefix: "10.77.0.0/24",
+                    nextHop: "192.168.42.2",
+                    nat: { staticPrefix: translatedPrefix },
+                  },
+                ],
+              },
+            );
+            return { site, lan };
+          }),
+        );
+      const initial = yield* deploy("before.alchemy.test", "10.88.0.0/24");
+      const updated = yield* deploy("after.alchemy.test", "10.89.0.0/24");
+      expect(updated.lan.lanId).toEqual(initial.lan.lanId);
+      const observed = yield* magicTransit.getSiteLan({
+        accountId,
+        siteId: updated.site.siteId,
+        lanId: updated.lan.lanId,
+      });
+      expect(
+        observed.staticAddressing?.dhcpServer?.dhcpOptions?.[0]?.value,
+      ).toBe("after.alchemy.test");
+      expect(observed.routedSubnets?.[0]?.nat?.staticPrefix).toBe(
+        "10.89.0.0/24",
+      );
+      expect(updated.lan.routedSubnets?.[0]?.nat?.staticPrefix).toBe(
+        "10.89.0.0/24",
+      );
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

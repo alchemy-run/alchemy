@@ -172,7 +172,7 @@ export const CertificateProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createCertificateName(id, news.name);
+      const name = yield* createCertificateName(id, news.name ?? output?.name);
       const desiredHostnames = news.associatedHostnames ?? [];
 
       // Observe — prefer the cached id, fall back to a name lookup so we
@@ -276,7 +276,6 @@ const findCertificateByName = (acct: string, name: string) =>
     Stream.filter((c): c is ObservedCertificate => c.name === name),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
-    Effect.catch(() => Effect.succeed(undefined)),
   );
 
 const sameMembers = (a: readonly string[], b: readonly string[]) =>

@@ -4727,6 +4727,9 @@ importers:
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
+      fontkitten:
+        specifier: 1.0.3
+        version: 1.0.3
       magic-string:
         specifier: 'catalog:'
         version: 0.30.21

@@ -20,7 +20,8 @@ import type { ImagesBinding } from "../Images/ImagesBinding.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { LegacyPipeline } from "../Pipelines/LegacyPipeline.ts";
 import type { Stream as PipelinesStream } from "../Pipelines/Stream.ts";
-import type { Queue } from "../Queues/Queue.ts";
+import type { Queue, QueueSettings } from "../Queues/Queue.ts";
+import type { BucketLockRule } from "../R2/Bucket.ts";
 import type { Bucket } from "../R2/Bucket.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { StreamBinding } from "../Stream/StreamBinding.ts";
@@ -102,6 +103,8 @@ export type QueueWorkerBinding = Extract<
   { type: "queue" }
 > & {
   queueId?: string;
+  /** Local broker settings, stripped before upload. */
+  localQueueSettings?: QueueSettings;
   /**
    * Alchemy-only (stripped before upload): dev-mode remote-producer shim
    * for an `Alchemy.remote()` queue. Cloudflare preview sessions reject
@@ -135,6 +138,28 @@ export type ServiceWorkerBinding = Extract<
  * The wire-shape binding union the Cloudflare API accepts — {@link WorkerBinding}
  * minus the alchemy-only members that must be lowered before upload.
  */
+/** Local simulator configuration; ignored by the Cloudflare API encoder. */
+export type R2WorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "r2_bucket" }
+> & {
+  /** Local retention configuration; ignored by the Cloudflare API encoder. */
+  lockRules?: BucketLockRule[];
+  lifecycleRules?: import("../R2/Bucket.ts").Bucket.LifecycleRule[];
+  storageClass?: "Standard" | "InfrequentAccess";
+};
+
+export type VectorizeWorkerBinding = Extract<
+  DistilledWorkerBinding,
+  { type: "vectorize" }
+> & {
+  dimensions?: number;
+  metric?: "cosine" | "euclidean" | "dot-product";
+  metadataIndexes?: Record<string, "string" | "number" | "boolean">;
+  /** Local metadata index generation identities. */
+  metadataIndexVersions?: Record<string, string>;
+};
+
 export type WireWorkerBinding = Exclude<
   WorkerBinding,
   SelfUrlWorkerBinding | SelfServiceWorkerBinding
@@ -145,10 +170,14 @@ export type WorkerBinding =
       DistilledWorkerBinding,
       | { type: "durable_object_namespace" }
       | { type: "queue" }
+      | { type: "vectorize" }
+      | { type: "r2_bucket" }
       | { type: "service" }
     >
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
+  | VectorizeWorkerBinding
+  | R2WorkerBinding
   | ServiceWorkerBinding
   | SelfUrlWorkerBinding
   | SelfServiceWorkerBinding;

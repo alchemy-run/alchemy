@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-describe.skip("AccountApiToken", () => {
+describe("AccountApiToken", () => {
   test.provider("create and delete account token with default props", (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -166,7 +166,13 @@ describe.skip("AccountApiToken", () => {
       Effect.flatMap(() => Effect.fail(new TokenStillExists())),
       Effect.retry({
         while: (e): e is TokenStillExists => e instanceof TokenStillExists,
-        schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+        schedule: Schedule.max([
+          Schedule.min([
+            Schedule.exponential(200),
+            Schedule.spaced("4 seconds"),
+          ]),
+          Schedule.recurs(8),
+        ]),
       }),
       Effect.catchTag("TokenStillExists", () =>
         Effect.die(
@@ -218,3 +224,47 @@ describe("AccountApiToken list", () => {
     }).pipe(logLevel),
   );
 });
+
+test.provider(
+  "creates disabled token and restores active when status is removed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+      const props = {
+        name: "alchemy-audit-account-token-status",
+        policies: [
+          {
+            effect: "allow" as const,
+            permissionGroups: ["Workers Scripts Read" as const],
+            resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+          },
+        ],
+      };
+      const disabled = yield* stack.deploy(
+        Cloudflare.ApiToken.AccountApiToken("StatusToken", {
+          ...props,
+          status: "disabled",
+        }),
+      );
+      const first = yield* accounts.getToken({
+        accountId,
+        tokenId: disabled.tokenId,
+      });
+      expect(first.status).toEqual("disabled");
+      const active = yield* stack.deploy(
+        Cloudflare.ApiToken.AccountApiToken("StatusToken", props),
+      );
+      expect(active.tokenId).toEqual(disabled.tokenId);
+      expect(Redacted.value(active.value)).toEqual(
+        Redacted.value(disabled.value),
+      );
+      const second = yield* accounts.getToken({
+        accountId,
+        tokenId: active.tokenId,
+      });
+      expect(second.status).toEqual("active");
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

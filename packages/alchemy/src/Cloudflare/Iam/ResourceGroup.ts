@@ -141,6 +141,11 @@ export const isResourceGroup = (value: unknown): value is ResourceGroup =>
 export const ResourceGroupProvider = () =>
   Provider.succeed(ResourceGroup, {
     stables: ["resourceGroupId", "accountId"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -162,7 +167,7 @@ export const ResourceGroupProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createGroupName(id, news.name);
+      const name = yield* createGroupName(id, news.name ?? output?.name);
       // Inputs have been resolved to concrete strings by Plan.
       const desiredScope = resolveScope(news.scope);
 
@@ -241,7 +246,7 @@ export const ResourceGroupProvider = () =>
 type ObservedResourceGroup = {
   id: string;
   name?: string | null;
-  scope: iam.ResourceGroupsListResultItemScope;
+  scope: iam.GetResourceGroupResponse["scope"];
 };
 
 /**

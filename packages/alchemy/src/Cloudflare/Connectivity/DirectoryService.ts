@@ -330,7 +330,7 @@ export const DirectoryServiceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createServiceName(id, news.name);
+      const name = yield* createServiceName(id, news.name ?? output?.name);
 
       // Observe — the serviceId cached on `output` is a hint, not a
       // guarantee: a missing service falls through to a name scan

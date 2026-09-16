@@ -1,10 +1,12 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -235,7 +237,9 @@ export const GatewayProviderProvider = () =>
               (c) => c.alias === alias && c.providerSlug === olds?.providerSlug,
             );
           });
-      return match ? toAttributes(match, acct) : undefined;
+      if (!match) return undefined;
+      const attrs = toAttributes(match, acct);
+      return output ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -316,16 +320,23 @@ export const GatewayProviderProvider = () =>
  * A gateway allows only ONE config per (providerSlug, alias). There is no
  * update API and no get endpoint, so we observe through the list and:
  *   - already-desired occupant → adopt it (idempotent no-op / re-run)
- *   - stale occupant           → delete it, then create the desired one
+ *   - owned stale occupant     → delete it, then create the desired one
+ *   - foreign stale occupant   → fail without deleting it
  *   - no occupant              → create the desired one
  *
  * `createProviderConfig` can still race and fail with
  * `ProviderConfigAlreadyExists` when a leftover/sibling config the list had
  * not yet surfaced (eventual consistency) occupies the slot. Retrying the
- * whole observe→delete→create flow re-observes the now-visible occupant and
- * converges it, so re-runs and leftover state self-heal instead of failing.
+ * whole observe→delete→create flow re-observes the now-visible occupant.
+ * A matching occupant is accepted; a different unowned one is preserved.
  * Bounded so the engine never hangs.
  */
+export class GatewayProviderOwnershipConflict extends Data.TaggedError(
+  "GatewayProviderOwnershipConflict",
+)<{
+  readonly providerConfigId: string;
+}> {}
+
 const reconcileProviderConfig = (desired: {
   accountId: string;
   gatewayId: string;
@@ -369,7 +380,14 @@ const reconcileProviderConfig = (desired: {
       if (matchesDesired(attrs)) {
         return attrs;
       }
-      // No update API — delete the stale occupant before recreating.
+      if (observed.id !== currentId) {
+        return yield* Effect.fail(
+          new GatewayProviderOwnershipConflict({
+            providerConfigId: observed.id,
+          }),
+        );
+      }
+      // No update API — delete only the config identified by persisted state.
       yield* aiGateway
         .deleteProviderConfig({ accountId, gatewayId, id: observed.id })
         .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
@@ -411,9 +429,12 @@ const reconcileProviderConfig = (desired: {
  * empty list on this endpoint, so no not-found mapping is needed.
  */
 const listProviderConfigs = (accountId: string, gatewayId: string) =>
-  aiGateway
-    .listProviderConfigs({ accountId, gatewayId, perPage: 50 })
-    .pipe(Effect.map((page) => page.result));
+  aiGateway.listProviderConfigs
+    .pages({ accountId, gatewayId, perPage: 50 })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((pages) => pages.flatMap((page) => page.result ?? [])),
+    );
 
 const createAlias = (id: string, alias: string | undefined) =>
   Effect.gen(function* () {

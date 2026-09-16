@@ -1,0 +1,517 @@
+{
+  "service": "Cloudflare control-plane audit and Pipelines local runtime",
+  "scope": {
+    "originalControlPlaneResources": 179,
+    "directSemanticResources": [
+      "AI.CustomTopics",
+      "AI.Dataset",
+      "AI.Evaluation",
+      "AI.Gateway",
+      "AI.GatewayDynamicRouting",
+      "AI.GatewayProvider",
+      "AI.SearchInstance",
+      "AI.SearchToken",
+      "AI.SecuritySettings",
+      "Alerting.NotificationPolicy",
+      "Alerting.Silence",
+      "Alerting.Webhook",
+      "ApiShield.Configuration",
+      "ApiShield.Label",
+      "ApiShield.Operation",
+      "ApiShield.UserSchema",
+      "BotManagement.BotManagement",
+      "Cache.OriginCloudRegion",
+      "Cache.RegionalTieredCache",
+      "Cache.Reserve",
+      "Cache.SmartTieredCache",
+      "Cache.Variants",
+      "Calls.App",
+      "Calls.TurnKey",
+      "CloudConnector.Rules",
+      "CloudforceOne.ScanConfig",
+      "Connectivity.DirectoryService",
+      "ContentScanning.ContentScanning",
+      "ContentScanning.Expression",
+      "Diagnostics.EndpointHealthcheck",
+      "Email.Address",
+      "Email.AllowPolicy",
+      "Email.CatchAll",
+      "Email.ImpersonationRegistryEntry",
+      "Email.Routing",
+      "Email.Rule",
+      "Fraud.DetectionSettings",
+      "GoogleTagGateway.GoogleTagGateway",
+      "Healthcheck.Healthcheck",
+      "Images.Variant",
+      "Intel.IndicatorFeed",
+      "Intel.IndicatorFeedPermission",
+      "LoadBalancer.LoadBalancer",
+      "LoadBalancer.Pool",
+      "Logpush.Job",
+      "MagicNetworkMonitoring.Config",
+      "MagicNetworkMonitoring.Rule",
+      "NetworkInterconnects.Settings",
+      "Organization.Organization",
+      "OriginPostQuantumEncryption.OriginPostQuantumEncryption",
+      "PageShield.Policy",
+      "PageShield.Settings",
+      "Pages.Deployment",
+      "RealtimeKit.App",
+      "RealtimeKit.Preset",
+      "RealtimeKit.Webhook",
+      "Registrar.Domain",
+      "Rum.Rule",
+      "Rum.Site",
+      "SecurityTxt.SecurityTxt",
+      "Snippets.Snippet",
+      "Snippets.SnippetRules",
+      "Speed.TestSchedule",
+      "Stream.LiveInput",
+      "Tags.AccountResourceTags",
+      "Tags.ZoneResourceTags",
+      "TokenValidation.Configuration",
+      "Turnstile.Widget",
+      "VpcService.VpcService",
+      "VulnerabilityScanner.Credential",
+      "VulnerabilityScanner.CredentialSet",
+      "VulnerabilityScanner.TargetEnvironment",
+      "WaitingRoom.Settings",
+      "WaitingRoom.WaitingRoom",
+      "Web3.ContentList",
+      "Web3.Hostname",
+      "Zaraz.Config",
+      "Zone.Setting",
+      "Zone.Zone"
+    ],
+    "delegatedResources": "Root61 + zero39; ContentScanning remains direct79, total179. Combined ledger imports their semantic maps.",
+    "localExtra": [
+      "Pipelines.Stream",
+      "Pipelines.Sink",
+      "Pipelines.Pipeline"
+    ]
+  },
+  "resources": [
+    "AI.CustomTopics",
+    "AI.Dataset",
+    "AI.Evaluation",
+    "AI.Gateway",
+    "AI.GatewayDynamicRouting",
+    "AI.GatewayProvider",
+    "AI.SearchInstance",
+    "AI.SearchToken",
+    "AI.SecuritySettings",
+    "Alerting.NotificationPolicy",
+    "Alerting.Silence",
+    "Alerting.Webhook",
+    "ApiShield.Configuration",
+    "ApiShield.Label",
+    "ApiShield.Operation",
+    "ApiShield.UserSchema",
+    "BotManagement.BotManagement",
+    "Cache.OriginCloudRegion",
+    "Cache.RegionalTieredCache",
+    "Cache.Reserve",
+    "Cache.SmartTieredCache",
+    "Cache.Variants",
+    "Calls.App",
+    "Calls.TurnKey",
+    "CloudConnector.Rules",
+    "CloudforceOne.ScanConfig",
+    "Connectivity.DirectoryService",
+    "ContentScanning.ContentScanning",
+    "ContentScanning.Expression",
+    "Diagnostics.EndpointHealthcheck",
+    "Email.Address",
+    "Email.AllowPolicy",
+    "Email.CatchAll",
+    "Email.ImpersonationRegistryEntry",
+    "Email.Routing",
+    "Email.Rule",
+    "Fraud.DetectionSettings",
+    "GoogleTagGateway.GoogleTagGateway",
+    "Healthcheck.Healthcheck",
+    "Images.Variant",
+    "Intel.IndicatorFeed",
+    "Intel.IndicatorFeedPermission",
+    "LoadBalancer.LoadBalancer",
+    "LoadBalancer.Pool",
+    "Logpush.Job",
+    "MagicNetworkMonitoring.Config",
+    "MagicNetworkMonitoring.Rule",
+    "NetworkInterconnects.Settings",
+    "Organization.Organization",
+    "OriginPostQuantumEncryption.OriginPostQuantumEncryption",
+    "PageShield.Policy",
+    "PageShield.Settings",
+    "Pages.Deployment",
+    "RealtimeKit.App",
+    "RealtimeKit.Preset",
+    "RealtimeKit.Webhook",
+    "Registrar.Domain",
+    "Rum.Rule",
+    "Rum.Site",
+    "SecurityTxt.SecurityTxt",
+    "Snippets.Snippet",
+    "Snippets.SnippetRules",
+    "Speed.TestSchedule",
+    "Stream.LiveInput",
+    "Tags.AccountResourceTags",
+    "Tags.ZoneResourceTags",
+    "TokenValidation.Configuration",
+    "Turnstile.Widget",
+    "VpcService.VpcService",
+    "VulnerabilityScanner.Credential",
+    "VulnerabilityScanner.CredentialSet",
+    "VulnerabilityScanner.TargetEnvironment",
+    "WaitingRoom.Settings",
+    "WaitingRoom.WaitingRoom",
+    "Web3.ContentList",
+    "Web3.Hostname",
+    "Zaraz.Config",
+    "Zone.Setting",
+    "Zone.Zone"
+  ],
+  "testsPassed": [
+    {
+      "log": ".audit/cloudflare/pipelines-local.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Pipelines/Pipelines.local.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed (1 files, 4.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/snippets-modules.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Snippets --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed (2 files, 29.8s)"
+    },
+    {
+      "log": ".audit/cloudflare/logpush-legacy.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Logpush/Job.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed | 1 todo (1 files, 15.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/cache-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Cache --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 11 passed | 4 todo (5 files, 10.8s)"
+    },
+    {
+      "log": ".audit/cloudflare/cloudconnector-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/CloudConnector --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed (1 files, 9.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/realtime-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/RealtimeKit --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 7 passed (3 files, 26.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/apishield-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/ApiShield --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 12 passed | 1 todo (4 files, 10.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/speed-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Speed --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 1 passed | 4 todo (1 files, 5.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/bot-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/BotManagement --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed | 2 todo (1 files, 2.8s)"
+    },
+    {
+      "log": ".audit/cloudflare/fraud-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Fraud --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed | 1 todo (1 files, 4.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/rum-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Rum --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 8 passed (2 files, 99.4s)"
+    },
+    {
+      "log": ".audit/cloudflare/healthcheck-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Healthcheck --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed (1 files, 6.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/securitytxt-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/SecurityTxt --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 4 passed (1 files, 5.5s)"
+    },
+    {
+      "log": ".audit/cloudflare/routing-conflict.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/GatewayDynamicRouting.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed (1 files, 71.8s)"
+    },
+    {
+      "log": ".audit/cloudflare/alerting-interval.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Alerting/NotificationPolicy.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed (1 files, 16.6s)"
+    },
+    {
+      "log": ".audit/cloudflare/mnm-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/MagicNetworkMonitoring --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 4 passed (3 files, 5.3s)"
+    },
+    {
+      "log": ".audit/cloudflare/turnstile-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Turnstile --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 4 passed (1 files, 3.1s)"
+    },
+    {
+      "log": ".audit/cloudflare/tags-deep.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Tags --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 7 passed (2 files, 6.3s)"
+    },
+    {
+      "log": ".audit/cloudflare/searchinstance-deep2.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/SearchInstance.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 1 failed | 5 passed (1 files, 145.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/searchinstance-crawler-final.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/SearchInstance.test.ts -t 'creates a web-crawler instance' --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 1 passed (1 files, 38.3s)"
+    },
+    {
+      "log": ".audit/cloudflare/zone-setting-enabled-final.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Zone/Setting.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed | 1 todo (1 files, 10.4s)"
+    },
+    {
+      "log": ".audit/cloudflare/email-catchall-final.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/EmailCatchAll.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 0 passed | 4 skipped (1 files, 492ms)"
+    },
+    {
+      "log": ".audit/cloudflare/email-rule-final.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/EmailRule.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 0 passed | 1 skipped (1 files, 432ms)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Evaluation.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/Evaluation.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed (1 files, 19.4s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Dataset.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/Dataset.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 4 passed (1 files, 31.0s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/CloudforceOne.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/CloudforceOne --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed | 2 todo (1 files, 1.6s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/NetworkInterconnects.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/NetworkInterconnects --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed (1 files, 3.0s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/WaitingRoom.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/WaitingRoom --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed | 2 todo (2 files, 2.0s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/ContentScanning.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/ContentScanning --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed | 3 todo (2 files, 2.8s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Diagnostics.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Diagnostics --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed (1 files, 2.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/PageShield.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/PageShield --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 5 passed | 1 todo (2 files, 3.2s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Web3.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Web3 --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed | 4 todo (3 files, 1.0s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/SearchToken.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/SearchToken.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 4 passed (1 files, 32.7s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Registrar.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Registrar --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 3 passed (1 files, 2.2s)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/EmailAddress.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/EmailAddress.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 0 passed | 1 todo (1 files, 438ms)"
+    },
+    {
+      "log": ".audit/cloudflare/deep-final-batches/Organization.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Organization --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed | 2 todo (1 files, 118.5s)"
+    },
+    {
+      "log": ".audit/cloudflare/promoted-batches/AllowPolicy.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/AllowPolicy.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 1 passed | 3 todo (1 files, 711ms)"
+    },
+    {
+      "log": ".audit/cloudflare/promoted-batches/ImpersonationRegistryEntry.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/ImpersonationRegistryEntry.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 1 passed | 2 todo (1 files, 738ms)"
+    },
+    {
+      "log": ".audit/cloudflare/promoted-batches/EmailCatchAll.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/Email/EmailCatchAll.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 0 passed | 4 skipped (1 files, 438ms)"
+    },
+    {
+      "log": ".audit/cloudflare/promoted-batches/GatewayProvider.test.ts.log",
+      "command": "$ cd ./packages/alchemy && bun alchemy-test test/Cloudflare/AI/GatewayProvider.test.ts --profile testing --timeout 90000 --retry 0",
+      "result": "Tests: 0 failed | 2 passed (1 files, 29.1s)"
+    }
+  ],
+  "testCommand": "timeout 240 pnpm test <one file or directory> --profile testing --timeout 90000 --retry 0; exactcommands in testsPassed; test-namefilter only to rerun crawler after unrelated Flagship import repair.",
+  "files": [
+    ".audit/cloudflare/service_audit.md",
+    ".audit/cloudflare/service-semantic.json",
+    ".audit/cloudflare/service-scan.json",
+    ".audit/cloudflare/service-scan-candidates.txt",
+    ".audit/cloudflare/pipelines-local.md",
+    "packages/alchemy/src/Cloudflare/Organization/Organization.ts",
+    "packages/alchemy/src/Cloudflare/Calls/App.ts",
+    "packages/alchemy/src/Cloudflare/Calls/TurnKey.ts",
+    "packages/alchemy/src/Cloudflare/Alerting/NotificationPolicy.ts",
+    "packages/alchemy/src/Cloudflare/Alerting/Silence.ts",
+    "packages/alchemy/src/Cloudflare/SecurityTxt/SecurityTxt.ts",
+    "packages/alchemy/src/Cloudflare/Intel/IndicatorFeed.ts",
+    "packages/alchemy/src/Cloudflare/VulnerabilityScanner/Credential.ts",
+    "packages/alchemy/src/Cloudflare/VulnerabilityScanner/TargetEnvironment.ts",
+    "packages/alchemy/src/Cloudflare/VulnerabilityScanner/CredentialSet.ts",
+    "packages/alchemy/src/Cloudflare/Logpush/Job.ts",
+    "packages/alchemy/src/Cloudflare/CloudConnector/Rules.ts",
+    "packages/alchemy/src/Cloudflare/OriginPostQuantumEncryption/OriginPostQuantumEncryption.ts",
+    "packages/alchemy/src/Cloudflare/GoogleTagGateway/GoogleTagGateway.ts",
+    "packages/alchemy/src/Cloudflare/Cache/Variants.ts",
+    "packages/alchemy/src/Cloudflare/Cache/SmartTieredCache.ts",
+    "packages/alchemy/src/Cloudflare/Cache/RegionalTieredCache.ts",
+    "packages/alchemy/src/Cloudflare/Cache/Reserve.ts",
+    "packages/alchemy/src/Cloudflare/Cache/OriginCloudRegion.ts",
+    "packages/alchemy/src/Cloudflare/RealtimeKit/App.ts",
+    "packages/alchemy/src/Cloudflare/RealtimeKit/Webhook.ts",
+    "packages/alchemy/src/Cloudflare/RealtimeKit/Preset.ts",
+    "packages/alchemy/src/Cloudflare/Connectivity/DirectoryService.ts",
+    "packages/alchemy/src/Cloudflare/Zaraz/Config.ts",
+    "packages/alchemy/src/Cloudflare/BotManagement/BotManagement.ts",
+    "packages/alchemy/src/Cloudflare/Fraud/DetectionSettings.ts",
+    "packages/alchemy/src/Cloudflare/Speed/TestSchedule.ts",
+    "packages/alchemy/src/Cloudflare/Registrar/Domain.ts",
+    "packages/alchemy/src/Cloudflare/Healthcheck/Healthcheck.ts",
+    "packages/alchemy/src/Cloudflare/Rum/Rule.ts",
+    "packages/alchemy/src/Cloudflare/Rum/Site.ts",
+    "packages/alchemy/src/Cloudflare/Web3/Hostname.ts",
+    "packages/alchemy/src/Cloudflare/Web3/ContentList.ts",
+    "packages/alchemy/src/Cloudflare/PageShield/Settings.ts",
+    "packages/alchemy/src/Cloudflare/PageShield/Policy.ts",
+    "packages/alchemy/src/Cloudflare/ApiShield/Operation.ts",
+    "packages/alchemy/src/Cloudflare/ApiShield/UserSchema.ts",
+    "packages/alchemy/src/Cloudflare/ApiShield/Configuration.ts",
+    "packages/alchemy/src/Cloudflare/AI/Dataset.ts",
+    "packages/alchemy/src/Cloudflare/AI/Evaluation.ts",
+    "packages/alchemy/src/Cloudflare/AI/GatewayDynamicRouting.ts",
+    "packages/alchemy/src/Cloudflare/AI/SearchToken.ts",
+    "packages/alchemy/src/Cloudflare/CloudforceOne/ScanConfig.ts",
+    "packages/alchemy/src/Cloudflare/Diagnostics/EndpointHealthcheck.ts",
+    "packages/alchemy/src/Cloudflare/MagicNetworkMonitoring/Config.ts",
+    "packages/alchemy/src/Cloudflare/MagicNetworkMonitoring/Rule.ts",
+    "packages/alchemy/src/Cloudflare/NetworkInterconnects/Settings.ts",
+    "packages/alchemy/src/Cloudflare/WaitingRoom/Settings.ts",
+    "packages/alchemy/src/Cloudflare/WaitingRoom/WaitingRoom.ts",
+    "packages/alchemy/src/Cloudflare/ContentScanning/Expression.ts",
+    "packages/alchemy/src/Cloudflare/ContentScanning/ContentScanning.ts",
+    "packages/alchemy/src/Cloudflare/Email/Address.ts",
+    "packages/alchemy/src/Cloudflare/Email/AllowPolicy.ts",
+    "packages/alchemy/src/Cloudflare/Email/ImpersonationRegistryEntry.ts",
+    "packages/alchemy/src/Cloudflare/Email/CatchAll.ts",
+    "packages/alchemy/src/Cloudflare/Tags/AccountResourceTags.ts",
+    "packages/alchemy/src/Cloudflare/Tags/ZoneResourceTags.ts",
+    "packages/alchemy/src/Cloudflare/Turnstile/Widget.ts",
+    "packages/alchemy/src/Cloudflare/AI/GatewayProvider.ts",
+    "packages/alchemy/src/Cloudflare/AI/SearchInstance.ts",
+    "packages/alchemy/src/Cloudflare/AI/Gateway.ts",
+    "packages/alchemy/src/Cloudflare/Email/Rule.ts",
+    "packages/alchemy/src/Cloudflare/Email/Routing.ts",
+    "packages/alchemy/src/Cloudflare/VpcService/VpcService.ts",
+    "packages/alchemy/src/Cloudflare/Zone/Zone.ts",
+    "packages/alchemy/src/Cloudflare/Zone/Setting.ts",
+    "packages/alchemy/src/Cloudflare/Images/Variant.ts",
+    "packages/alchemy/src/Cloudflare/LoadBalancer/LoadBalancer.ts",
+    "packages/alchemy/src/Cloudflare/LoadBalancer/Pool.ts",
+    "packages/alchemy/src/Cloudflare/ApiShield/Label.ts",
+    "packages/alchemy/src/Cloudflare/Stream/LiveInput.ts",
+    "packages/alchemy/src/Cloudflare/Pages/Deployment.ts",
+    "packages/alchemy/src/Cloudflare/AI/CustomTopics.ts",
+    "packages/alchemy/src/Cloudflare/AI/SecuritySettings.ts",
+    "packages/alchemy/src/Cloudflare/TokenValidation/Configuration.ts",
+    "packages/alchemy/src/Cloudflare/Alerting/Webhook.ts",
+    "packages/alchemy/src/Cloudflare/Intel/IndicatorFeedPermission.ts",
+    "packages/alchemy/src/Cloudflare/Snippets/Snippet.ts",
+    "packages/alchemy/src/Cloudflare/Snippets/SnippetRules.ts"
+  ],
+  "patches": [
+    {
+      "service": "ai_search",
+      "file": "internalError.manual.json",
+      "reason": "Actual code7001 Internal Error on instance create/delete was incorrectly ValidationError; precise server tag and bounded retries repaired actual replacement/recovery cases."
+    },
+    {
+      "service": "snippets",
+      "reason": "Get-content exposed raw multipart body+Content-Type; typed400 requested-zone-not-found makes rule delete idempotent."
+    },
+    {
+      "service": "stream",
+      "reason": "ListLiveInputs returns barearray except count mode; SDK shape supports both."
+    },
+    {
+      "service": "images",
+      "reason": "Variant list is arbitrary-name map, not fixed variant key."
+    },
+    {
+      "service": "email_routing",
+      "reason": "getAddress and updateRule typed missing errors; email identifier lookup fixed to paginated list."
+    },
+    {
+      "service": "zones",
+      "reason": "UndefinedZoneSetting400 on real known-but-unavailable settings; broad catches removed."
+    },
+    {
+      "service": "connectivity",
+      "reason": "Exact invalid VPC service configuration typed400 discovered through TCP/TLS fixture."
+    },
+    {
+      "service": "dns",
+      "reason": "Typed RecordNotFound81044 and unavailable settings400; source now owned by root."
+    },
+    {
+      "service": "pipelines",
+      "reason": "Parent-authored JSON compression format patch preserved by local implementation."
+    }
+  ],
+  "skippedTests": {
+    "ssl_recommender": "UndefinedZoneSetting400: Undefined zone setting: ssl_recommender; full boolean mutation behind CLOUDFLARE_TEST_SSL_RECOMMENDER.",
+    "cacheReserve": "SettingUnavailableForPlan; async clear only in explicitly configured disposable entitled zone.",
+    "emailRouting": "Existing scope gate; address registration requires retained verified mailbox/cooldown; new Wrangler metadata branch unverified.",
+    "otherServices": "Exact existing entitlement probes/gates listed per-resource179ledger and per-log test summary. A skipped fixture is not a tested mutation."
+  },
+  "notes": [
+    "All79 directly owned resources have explicit semantic reviews. This is not a claim that every edge case or entitlement-specific combination is verified.",
+    "Initial75directory deployed sweep73green; Snippets fixed subsequently and Stream rerun by runtimeowner passed. Later touched suites rerun in finalresults.",
+    "SearchInstance full rerun5pass1failure was exclusively unrelated Flagship bundle import; focused corrected crawler1pass resolves that result. Do not sum repeated log counters as unique tests.",
+    "Pipelines local2actualnative Worker fixtures pass send->schema->SQLfilter/projection->R2NDJSON/gzip and routeupdate; unsupported SQL/formats explicitly rejected, see pipelines-local.md.",
+    "No newmockprovider tests retained. Source/SDK frozen for parent authoritative typecheck/build/docs/onePR.",
+    "SDK generate requires spec-to-smithy --resource then generate --resource in current checkout; final ai_search generated46operations.",
+    "Final Email typecheck correction: ownerWorkerTag is documented write-only; Rule/CatchAll cache lastwritten tag, and impossible original Wrangler owner restoration fails typed CatchAllRestoreOwnerUnavailable. SDKresponse intentionally unchanged."
+  ]
+}

@@ -1,3 +1,4 @@
+import { rulesEqual } from "./rulesEqual.ts";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -141,7 +142,7 @@ export const AccountEntrypointProvider = () =>
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // The phase is the entrypoint's identity.
-      if (olds.phase !== news.phase) {
+      if ((output?.phase ?? olds.phase) !== news.phase) {
         return { action: "replace" } as const;
       }
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -223,9 +224,20 @@ export const AccountEntrypointProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name =
         news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
-      // PUT is a true upsert on the phase entrypoint — one call observes
-      // nothing and converges everything, whether the entrypoint exists yet
-      // or not.
+      const observed = yield* rulesets
+        .getPhasForAccount({ accountId, rulesetPhase: news.phase })
+        .pipe(
+          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+        );
+      if (
+        observed &&
+        observed.name === name &&
+        (observed.description ?? "") === (news.description ?? "") &&
+        rulesEqual(observed.rules ?? [], news.rules)
+      ) {
+        return toAttributes(accountId, observed);
+      }
+      // PUT creates a missing entrypoint or updates the observed drift.
       const ruleset = yield* rulesets.putPhasForAccount({
         accountId,
         rulesetPhase: news.phase,
@@ -240,10 +252,19 @@ export const AccountEntrypointProvider = () =>
       // The entrypoint itself is a singleton — "delete" means emptying the
       // rules we own. Idempotent: an entrypoint that never materialized (or
       // was removed out-of-band) is not an error.
+      const observed = yield* rulesets
+        .getPhasForAccount({
+          accountId: output.accountId,
+          rulesetPhase: output.phase ?? olds.phase,
+        })
+        .pipe(
+          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
+        );
+      if (!observed || (observed.rules ?? []).length === 0) return;
       yield* rulesets
         .putPhasForAccount({
           accountId: output.accountId,
-          rulesetPhase: olds.phase,
+          rulesetPhase: output.phase ?? olds.phase,
           name: output.name,
           description: output.description,
           rules: [],

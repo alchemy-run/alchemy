@@ -5,7 +5,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -26,6 +26,30 @@ export class DeploymentFailed extends Data.TaggedError("DeploymentFailed")<{
 }> {}
 
 export interface DeploymentProps {
+  /** Whether the source checkout contains uncommitted changes. Changing it creates a new deployment. */
+  commitDirty?: pages.CreateProjectDeploymentRequest["commitDirty"];
+  /** Source commit hash for this deployment. Changing it creates a new deployment. */
+  commitHash?: pages.CreateProjectDeploymentRequest["commitHash"];
+  /** Source commit message. Changing it creates a new deployment. */
+  commitMessage?: pages.CreateProjectDeploymentRequest["commitMessage"];
+  /** JSON mapping asset paths to hashes of assets already uploaded to Cloudflare. Changing it creates a new deployment. */
+  manifest?: pages.CreateProjectDeploymentRequest["manifest"];
+  /** Build output directory recorded on the deployment. Changing it creates a new deployment. */
+  pagesBuildOutputDir?: pages.CreateProjectDeploymentRequest["pagesBuildOutputDir"];
+  /** Hash of the Wrangler configuration used for this deployment. Changing it creates a new deployment. */
+  wranglerConfigHash?: pages.CreateProjectDeploymentRequest["wranglerConfigHash"];
+  /** Contents of the Pages _headers configuration file. Changing it creates a new deployment. */
+  headers?: pages.CreateProjectDeploymentRequest["headers"];
+  /** Contents of the Pages _redirects configuration file. Changing it creates a new deployment. */
+  redirects?: pages.CreateProjectDeploymentRequest["redirects"];
+  /** Pages Functions routing configuration (_routes.json). Changing it creates a new deployment. */
+  routesJson?: pages.CreateProjectDeploymentRequest["routesJson"];
+  /** Prebuilt Pages Worker bundle. Changing it creates a new deployment. */
+  workerBundle?: pages.CreateProjectDeploymentRequest["workerBundle"];
+  /** Pages Worker source (_worker.js). Changing it creates a new deployment. */
+  workerJs?: pages.CreateProjectDeploymentRequest["workerJs"];
+  /** Generated Pages Functions file-path routing configuration. Changing it creates a new deployment. */
+  functionsFilepathRoutingConfigJson?: pages.CreateProjectDeploymentRequest["functionsFilepathRoutingConfigJson"];
   /**
    * Name of the Pages project to deploy to (e.g. `project.name`).
    * Deployments are immutable and belong to exactly one project —
@@ -103,7 +127,9 @@ export type Deployment = Resource<
  * immutable — every prop change triggers a replacement (a brand-new
  * deployment that supersedes the previous one).
  *
- * The deployment is created with an **empty asset manifest**: the full
+ * The deployment defaults to an **empty asset manifest**. Pass `manifest`
+ * to reference previously uploaded assets and Worker/configuration parts
+ * to configure the deployment. The full
  * direct-upload protocol (asset upload sessions driven by
  * `wrangler pages deploy`) is not part of the public REST surface, so this
  * resource cannot push file contents. It is useful for provisioning an
@@ -177,6 +203,7 @@ export const DeploymentProvider = () =>
       if (oldProject !== undefined && oldProject !== news.projectName) {
         return { action: "replace" } as const;
       }
+      if (!deepEqual(olds, news)) return { action: "replace" } as const;
       const oldBranch = olds?.branch;
       if (oldBranch !== news.branch) {
         return { action: "replace" } as const;
@@ -250,7 +277,19 @@ export const DeploymentProvider = () =>
           accountId,
           projectName,
           branch: news.branch,
-          manifest: "{}",
+          commitDirty: news.commitDirty,
+          commitHash: news.commitHash,
+          commitMessage: news.commitMessage,
+          manifest: news.manifest ?? "{}",
+          pagesBuildOutputDir: news.pagesBuildOutputDir,
+          wranglerConfigHash: news.wranglerConfigHash,
+          headers: news.headers,
+          redirects: news.redirects,
+          routesJson: news.routesJson,
+          workerBundle: news.workerBundle,
+          workerJs: news.workerJs,
+          functionsFilepathRoutingConfigJson:
+            news.functionsFilepathRoutingConfigJson,
         });
       }
 
@@ -337,7 +376,7 @@ const awaitDeployment = (
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (d) => isTerminalStage(d.latestStage),
-              times: 25,
+              times: 10,
             }),
           );
     if (

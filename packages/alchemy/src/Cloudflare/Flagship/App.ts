@@ -1,6 +1,17 @@
+import * as Layer from "effect/Layer";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import {
+  LOCAL_PROVIDERS_URL,
+  generateLocalId,
+  isLocalId,
+  localRuntimeServices,
+} from "../LocalRuntime.ts";
+import { localStore } from "./LocalStore.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";
@@ -57,6 +68,11 @@ export type App = Resource<TypeId, AppProps, AppAttributes, never, Providers>;
  * apps that map to your projects or services; the app's `appId` is what a
  * Worker's `Flagship` binding points at and what every evaluation call is
  * scoped to. The name is mutable in place; the app id never changes.
+ *
+ * Local mode persists apps and flags on disk and evaluates native Worker
+ * bindings offline. Flag updates become visible immediately. Local rollout
+ * hashing is deterministic but does not promise identical user assignments
+ * to Cloudflare; global propagation and edge caching are not simulated.
  * ### Creating an App
  * **Example:** App with a generated name
  * ```typescript
@@ -152,7 +168,7 @@ export const App = Resource<App>(TypeId);
 export const isApp = (value: unknown): value is App =>
   isResourceOfType(value, TypeId);
 
-export const AppProvider = () =>
+const AppProviderLive = () =>
   Provider.succeed(App, {
     stables: ["appId", "accountId", "createdAt"],
     diff: Effect.fn(function* ({ output }) {
@@ -176,11 +192,11 @@ export const AppProvider = () =>
       // have. Pick the oldest match for determinism.
       const name = yield* createAppName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match ? toAttributes(match, acct) : undefined;
+      return match ? Unowned(toAttributes(match, acct)) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* createAppName(id, news.name);
+      const name = yield* createAppName(id, news.name ?? output?.name);
 
       // Observe — the appId cached on `output` is a hint, not a guarantee:
       // a missing app falls through and we recreate.
@@ -257,10 +273,19 @@ const findByName = (accountId: string, name: string) =>
   flagship.listApps.items({ accountId }).pipe(
     Stream.filter((a) => a.name === name),
     Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .at(0),
+    Effect.flatMap((chunk) =>
+      Effect.gen(function* () {
+        // The list index can retain deleted ghost rows. Confirm existence before
+        // reporting a foreign app or an adoption candidate, just as list() does.
+        const candidates = Array.from(chunk).sort((a, b) =>
+          a.createdAt.localeCompare(b.createdAt),
+        );
+        for (const candidate of candidates) {
+          const observed = yield* getApp(accountId, candidate.id);
+          if (observed) return observed;
+        }
+        return undefined;
+      }),
     ),
   );
 
@@ -283,3 +308,52 @@ const toAttributes = (
   updatedAt: app.updatedAt,
   updatedBy: app.updatedBy,
 });
+
+/** Persistent offline App control plane, used by local Workers. */
+export const AppProviderLocal = () =>
+  RpcProvider.effect(
+    App,
+    LOCAL_PROVIDERS_URL,
+    Effect.gen(function* () {
+      const store = yield* localStore;
+      return {
+        stables: ["appId", "accountId", "createdAt"],
+        diff: Effect.fn(function* ({ output }) {
+          if (output && !isLocalId(output.appId))
+            return { action: "replace" } as const;
+        }),
+        read: Effect.fn(function* ({ output }) {
+          return output && isLocalId(output.appId)
+            ? yield* store.read<AppAttributes>(output.appId)
+            : output;
+        }),
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const appId =
+            output && isLocalId(output.appId)
+              ? output.appId
+              : generateLocalId();
+          const observed = yield* store.read<AppAttributes>(appId);
+          const name = yield* createAppName(id, news.name ?? output?.name);
+          if (observed?.name === name) return observed;
+          const timestamp = new Date().toISOString();
+          return yield* store.write(appId, {
+            appId,
+            accountId,
+            name,
+            createdAt: observed?.createdAt ?? timestamp,
+            updatedAt: timestamp,
+            updatedBy: "local",
+          });
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          if (isLocalId(output.appId)) yield* store.remove(output.appId);
+        }),
+      };
+    }),
+  );
+export const AppProvider = () =>
+  ProviderLayer.dual(App, {
+    live: () => AppProviderLive(),
+    local: () => AppProviderLocal().pipe(Layer.provide(localRuntimeServices())),
+  });

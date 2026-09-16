@@ -146,23 +146,14 @@ export const HostnameAssociationProvider = () =>
     // hostnames to read. Return [] rather than throwing.
     list: () => Effect.succeed<HostnameAssociationAttributes[]>([]),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (!isResolved(news)) return undefined;
-      // zoneId is Input<string>; compare only once both sides are concrete.
-      if (
-        typeof olds.zoneId === "string" &&
-        typeof news.zoneId === "string" &&
-        olds.zoneId !== news.zoneId
-      ) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const zoneId = output?.zoneId ?? olds?.zoneId;
+      if (zoneId !== undefined && zoneId !== news.zoneId)
         return { action: "replace" } as const;
-      }
-      // The hostname is the association's identity in Cloudflare's bulk
-      // upsert — changing it must void the old hostname's entry, so it is a
-      // replacement.
-      if (olds.hostname !== news.hostname) {
+      const hostname = output?.hostname ?? olds?.hostname;
+      if (hostname !== undefined && hostname !== news.hostname)
         return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

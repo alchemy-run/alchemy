@@ -95,6 +95,12 @@ export const isHostnameRoute = (value: unknown): value is HostnameRoute =>
 
 export const HostnameRouteProvider = () =>
   Provider.succeed(HostnameRoute, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     stables: ["hostnameRouteId", "accountId"],
 
     read: Effect.fn(function* ({ output, olds }) {

@@ -136,29 +136,18 @@ export const RoutingProvider = () =>
       const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
       const desired = news.enabled ?? true;
 
-      if (desired) {
-        const result = yield* emailRouting.enableEmailRouting({ zoneId });
-        return {
-          routingId: result.id,
-          zoneId,
-          name: result.name,
-          enabled: result.enabled,
-          status: (result.status ?? undefined) as RoutingStatus | undefined,
-        };
-      } else {
-        const result = yield* emailRouting.disableEmailRouting({ zoneId });
-        return {
-          routingId: result.id,
-          zoneId,
-          name: result.name,
-          enabled: result.enabled,
-          status: (result.status ?? undefined) as RoutingStatus | undefined,
-        };
-      }
+      const observed = yield* emailRouting.getEmailRouting({ zoneId });
+      if (observed.enabled === desired) return toAttributes(zoneId, observed);
+      const result = yield* desired
+        ? emailRouting.enableEmailRouting({ zoneId })
+        : emailRouting.disableEmailRouting({ zoneId });
+      return toAttributes(zoneId, result);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* emailRouting
-        .disableEmailRouting({ zoneId: output.zoneId })
-        .pipe(Effect.catch(() => Effect.void));
+      const observed = yield* emailRouting
+        .getEmailRouting({ zoneId: output.zoneId })
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+      if (!observed?.enabled) return;
+      yield* emailRouting.disableEmailRouting({ zoneId: output.zoneId });
     }),
   });

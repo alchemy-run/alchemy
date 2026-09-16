@@ -21,7 +21,10 @@ const logLevel = Effect.provideService(
 // lifecycle test is gated behind an entitled account flagged via env.
 const entitled = !!process.env.CLOUDFLARE_EMAIL_SECURITY;
 
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const pattern = "alchemy-block-sender@alchemy-test-2.us";
 
@@ -77,6 +80,14 @@ test.provider.skipIf(!entitled)(
       );
       expect(updated.blockSenderId).toEqual(created.blockSenderId);
       expect(updated.comments).toEqual("v2");
+      const cleared = yield* stack.deploy(
+        Cloudflare.Email.BlockSender("Blocked", {
+          pattern,
+          patternType: "EMAIL",
+          isRegex: false,
+        }),
+      );
+      expect(cleared.comments ?? "").toEqual("");
 
       yield* stack.destroy();
 

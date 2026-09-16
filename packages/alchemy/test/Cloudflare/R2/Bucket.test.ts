@@ -1262,8 +1262,14 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
     Layer.succeed(
       LocalRuntimeState,
       LocalRuntimeState.of({
+        pipelineStreams: MutableHashMap.empty(),
+        pipelineSinks: MutableHashMap.empty(),
+        pipelines: MutableHashMap.empty(),
+        pipelineWorkerStreams: new Map(),
         queues: MutableHashMap.empty(),
         queueConsumers: MutableHashMap.empty(),
+        vectorizeIndexes: MutableHashMap.empty(),
+        vectorizeMetadataIndexes: MutableHashMap.empty(),
         workerRestarts: MutableHashMap.empty(),
       }),
     ),

@@ -30,6 +30,8 @@ export interface MagicAppProps {
    * currently unsupported.)
    */
   ipSubnets?: string[];
+  /** Source IPv4 CIDRs used to match application traffic. */
+  sourceSubnets?: string[];
 }
 
 export interface MagicAppAttributes {
@@ -45,6 +47,8 @@ export interface MagicAppAttributes {
   hostnames: string[] | undefined;
   /** IPv4 CIDRs associated with traffic decisions, if set. */
   ipSubnets: string[] | undefined;
+  /** Source IPv4 CIDRs associated with this application. */
+  sourceSubnets?: string[];
 }
 
 export type MagicApp = Resource<
@@ -100,6 +104,11 @@ export const isMagicApp = (value: unknown): value is MagicApp =>
 export const MagicAppProvider = () =>
   Provider.succeed(MagicApp, {
     stables: ["appId", "accountId"],
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -137,8 +146,9 @@ export const MagicAppProvider = () =>
           accountId,
           name: news.name,
           type: news.type,
-          hostnames: news.hostnames,
-          ipSubnets: news.ipSubnets,
+          hostnames: news.hostnames ?? [],
+          ipSubnets: news.ipSubnets ?? [],
+          sourceSubnets: news.sourceSubnets ?? [],
         });
         return toAttributes(created, accountId);
       }
@@ -148,18 +158,18 @@ export const MagicAppProvider = () =>
       const dirty =
         (observed.name ?? undefined) !== news.name ||
         (observed.type ?? undefined) !== news.type ||
-        (news.hostnames !== undefined &&
-          !sameList(observed.hostnames, news.hostnames)) ||
-        (news.ipSubnets !== undefined &&
-          !sameList(observed.ipSubnets, news.ipSubnets));
+        !sameList(observed.hostnames, news.hostnames) ||
+        !sameList(observed.ipSubnets, news.ipSubnets) ||
+        !sameList(observed.sourceSubnets, news.sourceSubnets);
       if (dirty) {
         const updated = yield* magicTransit.patchApp({
           accountId,
           accountAppId: observed.accountAppId,
           name: news.name,
           type: news.type,
-          hostnames: news.hostnames,
-          ipSubnets: news.ipSubnets,
+          hostnames: news.hostnames ?? [],
+          ipSubnets: news.ipSubnets ?? [],
+          sourceSubnets: news.sourceSubnets ?? [],
         });
         observed = updated;
       }
@@ -204,6 +214,7 @@ interface ObservedApp {
   type?: string | null;
   hostnames?: string[] | null;
   ipSubnets?: string[] | null;
+  sourceSubnets?: string[] | null;
 }
 
 const isAccountApp = (
@@ -214,22 +225,24 @@ const isAccountApp = (
  * Read an account app by id via the list endpoint (there is no getApp).
  */
 const getApp = (accountId: string, appId: string) =>
-  magicTransit
-    .listApps({ accountId })
-    .pipe(
-      Effect.map((r): ObservedApp | undefined =>
-        r.result.filter(isAccountApp).find((app) => app.accountAppId === appId),
-      ),
-    );
+  magicTransit.listApps.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((r): ObservedApp | undefined =>
+      Array.from(r)
+        .filter(isAccountApp)
+        .find((app) => app.accountAppId === appId),
+    ),
+  );
 
 /**
  * Find an account app by exact name. Names are not enforced unique; pick
  * the first match deterministically by id.
  */
 const findByName = (accountId: string, name: string) =>
-  magicTransit.listApps({ accountId }).pipe(
+  magicTransit.listApps.items({ accountId }).pipe(
+    Stream.runCollect,
     Effect.map((r): ObservedApp | undefined =>
-      r.result
+      Array.from(r)
         .filter(isAccountApp)
         .filter((app) => app.name === name)
         .sort((a, b) => a.accountAppId.localeCompare(b.accountAppId))
@@ -253,4 +266,5 @@ const toAttributes = (
   type: app.type ?? "",
   hostnames: app.hostnames ?? undefined,
   ipSubnets: app.ipSubnets ?? undefined,
+  sourceSubnets: app.sourceSubnets ?? undefined,
 });

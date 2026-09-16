@@ -250,7 +250,7 @@ const normalizeTopics = (
  */
 const topicsEqual = (a: readonly Topic[], b: readonly Topic[]): boolean => {
   if (a.length !== b.length) return false;
-  const key = (t: Topic) => `${t.topic}${t.label}`;
+  const key = (t: Topic) => JSON.stringify([t.topic, t.label]);
   const as = a.map(key).sort();
   const bs = b.map(key).sort();
   return as.every((k, i) => k === bs[i]);

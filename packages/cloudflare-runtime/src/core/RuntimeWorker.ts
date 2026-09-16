@@ -7,6 +7,8 @@ import type { OutputSink } from "./workerd/Workerd.ts";
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
+  /** Local Workers for Platforms namespace containing this user worker. */
+  readonly namespace?: string;
   readonly proxySharedSecret?: string;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
@@ -23,7 +25,7 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly workflows?: ReadonlyArray<Workflow>;
   /**
    * Queues this worker consumes via its `queue()` handler. Each consumed
-   * queue gets an in-memory broker hosted in this worker's process; producers
+   * queue gets a persistent SQLite broker hosted in this worker's process; producers
    * (local or in other dev instances) deliver to it.
    */
   readonly queueConsumers?: ReadonlyArray<QueueConsumer>;

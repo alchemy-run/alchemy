@@ -186,6 +186,12 @@ export const AllowPolicyProvider = () =>
         );
     }),
 
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -239,8 +245,7 @@ export const AllowPolicyProvider = () =>
         (observed.isExemptRecipient ?? false) !== desired.isExemptRecipient ||
         (observed.isTrustedSender ?? false) !== desired.isTrustedSender ||
         (observed.verifySender ?? false) !== desired.verifySender ||
-        (news.comments !== undefined &&
-          (observed.comments ?? "") !== news.comments);
+        (observed.comments ?? "") !== (news.comments ?? "");
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -299,7 +304,7 @@ const withDefaults = (news: AllowPolicyProps) => ({
   isExemptRecipient: news.isExemptRecipient ?? false,
   isTrustedSender: news.isTrustedSender ?? false,
   verifySender: news.verifySender ?? true,
-  comments: news.comments,
+  comments: news.comments ?? "",
 });
 
 const toAttributes = (

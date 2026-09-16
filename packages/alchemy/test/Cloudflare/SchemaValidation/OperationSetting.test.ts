@@ -35,7 +35,7 @@ const getOverrideOob = (zoneId: string, operationId: string) =>
   schemaValidation.getSettingOperation({ zoneId, operationId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      schedule: Schedule.spaced("2 seconds"),
       times: 8,
     }),
   );
@@ -88,6 +88,18 @@ test.provider(
       expect(liveUpdated.mitigationAction).toEqual("none");
 
       const operationId = first.op.operationId;
+      // Keep the parent operation present so this verifies deleting the override
+      // itself, rather than relying on the parent's cascade during destroy.
+      yield* stack.deploy(
+        Cloudflare.ApiShield.Operation("TestOp", {
+          zoneId,
+          method: "GET",
+          host: zoneName,
+          endpoint: "/alchemy-sv-operation-setting-test",
+        }),
+      );
+      const cleared = yield* getOverrideOob(zoneId, operationId);
+      expect(cleared.mitigationAction ?? null).toBe(null);
       yield* stack.destroy();
 
       // Destroy cleared the override (the operation itself is destroyed

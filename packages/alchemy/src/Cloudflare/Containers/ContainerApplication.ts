@@ -101,6 +101,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   maxInstances?: number;
   /**
+   * Create the application in jobs mode. This is a creation-only API option;
+   * changing it deletes the previous application before creating its replacement.
+   * Requires the account APPLICATION_JOBS_POLICY capability.
+   * @default false
+   */
+  jobs?: boolean;
+  /**
    * Scheduling policy used by Cloudflare's containers control plane.
    * @default "default"
    */

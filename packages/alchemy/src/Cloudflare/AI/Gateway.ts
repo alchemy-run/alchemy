@@ -165,6 +165,16 @@ export type GatewaySpendLimits = {
 };
 
 export type GatewayProps = {
+  /** Backoff strategy for requests retried by the gateway. */
+  retryBackoff?: aiGateway.CreateAiGatewayRequest["retryBackoff"];
+  /** Delay between retry attempts in milliseconds (0–5000). */
+  retryDelay?: number;
+  /** Maximum attempts for failed requests (1–5). */
+  retryMaxAttempts?: number;
+  /** Billing mode for Workers AI inference routed through this gateway. */
+  workersAiBillingMode?: aiGateway.CreateAiGatewayRequest["workersAiBillingMode"];
+  /** Guardrail policies applied to gateway requests and responses. */
+  guardrails?: aiGateway.UpdateAiGatewayRequest["guardrails"];
   /**
    * Gateway identifier. If omitted, a unique ID will be generated.
    *
@@ -268,6 +278,16 @@ export type Gateway = Resource<
   "Cloudflare.AI.Gateway",
   GatewayProps,
   {
+    /** Backoff strategy for requests retried by the gateway. */
+    retryBackoff?: GatewayProps["retryBackoff"];
+    /** Delay between retry attempts in milliseconds (0–5000). */
+    retryDelay?: GatewayProps["retryDelay"];
+    /** Maximum attempts for failed requests (1–5). */
+    retryMaxAttempts?: GatewayProps["retryMaxAttempts"];
+    /** Billing mode for Workers AI inference routed through this gateway. */
+    workersAiBillingMode?: GatewayProps["workersAiBillingMode"];
+    /** Guardrail policies applied to gateway requests and responses. */
+    guardrails?: aiGateway.GetAiGatewayResponse["guardrails"];
     gatewayId: string;
     accountId: string;
     cacheInvalidateOnUpdate: boolean;
@@ -497,7 +517,16 @@ export const GatewayResourceProvider = () =>
         output ?? ((yield* desired(id, olds)) as Gateway["Attributes"]),
       );
       const nextMutable = mutable(next as Gateway["Attributes"]);
-      if (!deepEqual(oldMutable, nextMutable)) {
+      if (
+        !deepEqual(oldMutable, nextMutable) ||
+        Object.entries(gatewayFeatures(news)).some(
+          ([key, value]) =>
+            !deepEqual(
+              value,
+              output?.[key as keyof GatewayProps & keyof Gateway["Attributes"]],
+            ),
+        )
+      ) {
         return { action: "update" } as const;
       }
     }),
@@ -653,6 +682,11 @@ const mapGateway = (
     | aiGateway.UpdateAiGatewayResponse,
   accountId: string,
 ): Gateway["Attributes"] => ({
+  retryBackoff: gateway.retryBackoff ?? undefined,
+  retryDelay: gateway.retryDelay ?? undefined,
+  retryMaxAttempts: gateway.retryMaxAttempts ?? undefined,
+  workersAiBillingMode: gateway.workersAiBillingMode ?? undefined,
+  guardrails: gateway.guardrails ?? undefined,
   gatewayId: gateway.id,
   accountId,
   // accountTag: gateway.accountTag ?? undefined,
@@ -779,6 +813,17 @@ const spendLimitsForDiff = (spendLimits: GatewaySpendLimits | undefined) => {
     })),
   };
 };
+const gatewayFeatures = (props: GatewayProps | undefined) =>
+  Object.fromEntries(
+    Object.entries({
+      retryBackoff: props?.retryBackoff,
+      retryDelay: props?.retryDelay,
+      retryMaxAttempts: props?.retryMaxAttempts,
+      workersAiBillingMode: props?.workersAiBillingMode,
+      guardrails: props?.guardrails,
+    }).filter(([, value]) => value !== undefined),
+  );
+
 const createRequest = Effect.fn(function* (
   id: string,
   props: GatewayProps | undefined,
@@ -789,6 +834,10 @@ const createRequest = Effect.fn(function* (
   return {
     accountId,
     id: next.gatewayId,
+    retryBackoff: props?.retryBackoff,
+    retryDelay: props?.retryDelay,
+    retryMaxAttempts: props?.retryMaxAttempts,
+    workersAiBillingMode: props?.workersAiBillingMode,
     cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
     cacheTtl: next.cacheTtl,
     collectLogs: next.collectLogs,
@@ -813,6 +862,10 @@ const updateRequest = Effect.fn(function* (
   return {
     accountId,
     id: next.gatewayId,
+    retryBackoff: props?.retryBackoff,
+    retryDelay: props?.retryDelay,
+    retryMaxAttempts: props?.retryMaxAttempts,
+    workersAiBillingMode: props?.workersAiBillingMode,
     cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
     cacheTtl: next.cacheTtl,
     collectLogs: next.collectLogs,
@@ -821,6 +874,7 @@ const updateRequest = Effect.fn(function* (
     rateLimitingTechnique: next.rateLimitingTechnique,
     authentication: next.authentication,
     dlp: next.dlp,
+    guardrails: props?.guardrails,
     logManagement: next.logManagement,
     logManagementStrategy: next.logManagementStrategy,
     logpush: next.logpush,

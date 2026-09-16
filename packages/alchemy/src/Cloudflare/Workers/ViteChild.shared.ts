@@ -32,6 +32,7 @@ export interface ViteChildConfig {
   };
   worker: {
     name: string;
+    namespace?: string;
     compatibility: { date: string; flags: string[] };
     main: string | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;

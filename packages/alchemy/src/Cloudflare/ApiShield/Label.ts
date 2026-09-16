@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { deepEqual } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -15,6 +16,8 @@ const TypeId = "Cloudflare.ApiShield.Label" as const;
 type TypeId = typeof TypeId;
 
 export interface LabelProps {
+  /** Arbitrary API Shield label metadata. Mutable in place. */
+  metadata?: unknown;
   /**
    * Zone the label is defined on.
    *
@@ -38,6 +41,8 @@ export interface LabelProps {
 }
 
 export interface LabelAttributes {
+  /** Arbitrary metadata returned by Cloudflare. */
+  metadata?: unknown;
   /** Zone the label is defined on. */
   zoneId: string;
   /** Name of the label (its identity within the zone). */
@@ -75,8 +80,8 @@ export type Label = Resource<
  * (e.g. by team, service, or sensitivity).
  *
  * The label's `name` is its identity (and Cloudflare limits it to 24
- * characters), so renaming triggers a replacement; only the `description`
- * is mutable in place. Deleting a label detaches it from any operations
+ * characters), so renaming triggers a replacement; the `description` and `metadata`
+ * are mutable in place. Deleting a label detaches it from any operations
  * server-side.
  * ### Creating a Label
  * **Example:** Label with a generated name
@@ -218,11 +223,16 @@ export const LabelProvider = () =>
       // 3. Sync — diff the observed description against desired; skip the
       //    patch call entirely on a no-op.
       const desired = news.description ?? "";
-      if (observed.description !== desired) {
+      if (
+        observed.description !== desired ||
+        (news.metadata !== undefined &&
+          !deepEqual(news.metadata, observed.metadata))
+      ) {
         observed = yield* apiGateway.patchLabelUser({
           zoneId,
           name,
           description: desired,
+          metadata: news.metadata,
         });
       }
 
@@ -238,7 +248,7 @@ export const LabelProvider = () =>
 
 type ObservedLabel = Pick<
   apiGateway.GetLabelUserResponse,
-  "name" | "description" | "source" | "createdAt" | "lastUpdated"
+  "name" | "description" | "source" | "createdAt" | "lastUpdated" | "metadata"
 >;
 
 /**
@@ -276,6 +286,7 @@ const toAttributes = (
   zoneId,
   name: label.name,
   description: label.description,
+  metadata: label.metadata,
   source: label.source,
   createdAt: label.createdAt,
   lastUpdated: label.lastUpdated,

@@ -1,0 +1,43 @@
+{
+  "service": "flagship",
+  "resources": [
+    "Cloudflare.Flagship.App",
+    "Cloudflare.Flagship.Flag"
+  ],
+  "testsPassed": {
+    "nativeAndEffectWorkersAndAction": 2,
+    "retestedCloudLifecycleAndLocal": 6,
+    "initialWholeDirectory": {
+      "passed": 12,
+      "failed": 2,
+      "resolution": "Both failures were stale list ghosts falsely reported Unowned; getApp-validation patch and6test rerun passed."
+    }
+  },
+  "testCommand": "timeout 240 pnpm test test/Cloudflare/Flagship/Flag.test.ts test/Cloudflare/Flagship/Flagship.local.test.ts --profile testing --retry 0 --concurrency 4",
+  "logs": [
+    ".audit/cloudflare/flagship-local-final.log",
+    ".audit/cloudflare/flagship-all-final.log",
+    ".audit/cloudflare/flagship-cold-read-final.log"
+  ],
+  "files": [
+    "packages/alchemy/src/Cloudflare/Flagship/App.ts",
+    "packages/alchemy/src/Cloudflare/Flagship/Flag.ts",
+    "packages/alchemy/src/Cloudflare/Flagship/LocalStore.ts",
+    "packages/alchemy/src/Cloudflare/Flagship/ReadFlagsLocal.ts",
+    "packages/alchemy/src/Cloudflare/Local.ts",
+    "packages/alchemy/src/Cloudflare/Workers/RuntimeBindings.ts",
+    "packages/cloudflare-runtime/src/core/RuntimeServices.ts",
+    "packages/cloudflare-runtime/src/core/bindings/Flagship.ts",
+    "packages/cloudflare-runtime/src/core/bindings/Flagship.worker.ts",
+    "packages/cloudflare-runtime/src/core/bindings/FlagshipOptions.shared.ts",
+    "packages/alchemy/test/Cloudflare/Flagship/Flagship.local.test.ts"
+  ],
+  "patches": [],
+  "skippedTests": [],
+  "notes": [
+    "Persistent atomic per-app/per-flag local disk definitions with independent file updates. Native and Effect Worker bindings plus Action ReadFlagsLocal all work offline. Live App IDs retain HTTP/native remote bridge behavior.",
+    "All4types/value+details/raw,11operators,nestedAND/OR,number/date comparisons,priority,rollout0/50/100 cumulative thresholds,default/disabled/missing/context/type fallbacks,updates without Worker changes,restart persistence and deletion verified through actual deployment.",
+    "Rollout FNV-1a account/flag/context hashing is local implementation. Public docs do not specify cloud hash. Does not promise identical Cloudflare user assignments. Stable cumulative buckets and missing-key random behavior match documented model.",
+    "Cloud App coldname recovery now confirms each listcandidate via getApp to skip deleted ghostrows before Unowned. Existing foreign ownership behavior retained. No global replication delays or edge caches simulated."
+  ]
+}

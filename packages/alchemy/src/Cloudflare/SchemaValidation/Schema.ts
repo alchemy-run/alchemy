@@ -224,7 +224,7 @@ export const SchemaProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
-      const name = yield* createSchemaName(id, news.name);
+      const name = yield* createSchemaName(id, news.name ?? output?.name);
       const desiredEnabled = news.validationEnabled ?? true;
 
       // 1. Observe — the cached schemaId is a hint, not a guarantee: a

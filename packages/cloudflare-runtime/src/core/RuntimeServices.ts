@@ -1,3 +1,4 @@
+import * as Flagship from "./bindings/Flagship.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
@@ -11,12 +12,14 @@ import {
   Images,
   KvNamespace,
   Queue,
+  Pipelines,
   R2Bucket,
   RateLimit,
   SecretsStore,
   SendEmail,
   Stream,
   Workflows,
+  Vectorize,
 } from "./bindings/index.ts";
 import * as Docker from "./Docker.ts";
 import {
@@ -78,12 +81,15 @@ export const layerLocalBindings = () =>
     Images.ImagesLive,
     KvNamespace.KvNamespaceLive,
     Queue.QueueLive,
+    Pipelines.PipelinesLive,
     R2Bucket.R2BucketLive,
     RateLimit.RateLimitLive,
     SecretsStore.SecretsStoreLive,
     SendEmail.SendEmailLive,
     Stream.StreamLive,
     Workflows.WorkflowsLive,
+    Vectorize.VectorizeLive,
+    Flagship.FlagshipLive,
   );
 
 export type BindingServices =
@@ -93,11 +99,13 @@ export type BindingServices =
   | Cache.Cache
   | D1.D1
   | DispatchNamespace.DispatchNamespace
+  | Flagship.Flagship
   | Hyperdrive.Hyperdrive
   | Images.Images
   | KvNamespace.KvNamespace
   | Loopback.Loopback
   | Queue.Queue
+  | Pipelines.Pipelines
   | R2Bucket.R2Bucket
   | RateLimit.RateLimit
   | RemoteBindings.RemoteBindings
@@ -105,7 +113,8 @@ export type BindingServices =
   | SecretsStore.SecretsStore
   | SendEmail.SendEmail
   | Stream.Stream
-  | Workflows.Workflows;
+  | Workflows.Workflows
+  | Vectorize.Vectorize;
 
 export type RuntimeServices = Runtime.Runtime | BindingServices;
 

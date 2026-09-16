@@ -1,3 +1,8 @@
+import type {
+  LocalStream,
+  LocalSink,
+  LocalPipeline,
+} from "./Pipelines/Local.ts";
 import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,6 +13,8 @@ import { AlchemyContext } from "../AlchemyContext.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
 import { LOCAL_ID_PREFIX } from "../ProviderMode.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
+import type { Index } from "./Vectorize/VectorizeIndex.ts";
+import type { MetadataIndex } from "./Vectorize/VectorizeMetadataIndex.ts";
 import type { Queue } from "./Queues/Queue.ts";
 import type { Consumer } from "./Queues/Consumer.ts";
 import { moduleExtension } from "../Util/Node.ts";
@@ -31,6 +38,21 @@ export const LOCAL_PROVIDERS_URL = import.meta.resolve(
 export class LocalRuntimeState extends Context.Service<
   LocalRuntimeState,
   {
+    readonly pipelineStreams: MutableHashMap.MutableHashMap<
+      string,
+      LocalStream
+    >;
+    readonly pipelineSinks: MutableHashMap.MutableHashMap<string, LocalSink>;
+    readonly pipelines: MutableHashMap.MutableHashMap<string, LocalPipeline>;
+    readonly pipelineWorkerStreams: Map<string, string[]>;
+    readonly vectorizeIndexes: MutableHashMap.MutableHashMap<
+      string,
+      Index["Attributes"]
+    >;
+    readonly vectorizeMetadataIndexes: MutableHashMap.MutableHashMap<
+      string,
+      MetadataIndex["Attributes"]
+    >;
     readonly queues: MutableHashMap.MutableHashMap<
       Queue["Attributes"]["queueId"],
       Queue["Attributes"]
@@ -61,6 +83,12 @@ export class LocalRuntimeState extends Context.Service<
 const LocalRuntimeStateLive = Layer.succeed(
   LocalRuntimeState,
   LocalRuntimeState.of({
+    pipelineStreams: MutableHashMap.empty(),
+    pipelineSinks: MutableHashMap.empty(),
+    pipelines: MutableHashMap.empty(),
+    pipelineWorkerStreams: new Map(),
+    vectorizeIndexes: MutableHashMap.empty(),
+    vectorizeMetadataIndexes: MutableHashMap.empty(),
     queues: MutableHashMap.empty(),
     queueConsumers: MutableHashMap.empty(),
     workerRestarts: MutableHashMap.empty(),

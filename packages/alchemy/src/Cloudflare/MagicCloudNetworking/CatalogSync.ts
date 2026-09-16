@@ -157,6 +157,9 @@ export const CatalogSyncProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.accountId !== undefined && output.accountId !== accountId)
+        return { action: "replace" } as const;
       const oldDestination =
         output?.destinationType ??
         (olds !== undefined && isResolved(olds)
@@ -196,7 +199,7 @@ export const CatalogSyncProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* syncName(id, news.name);
+      const name = yield* syncName(id, news.name ?? output?.name);
       const deleteDestination = news.deleteDestination ?? true;
 
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:

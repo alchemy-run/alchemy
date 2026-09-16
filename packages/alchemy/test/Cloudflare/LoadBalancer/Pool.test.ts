@@ -106,6 +106,7 @@ test.provider.skipIf(!lbEnabled)(
             origins: [{ name: "origin-1", address: "203.0.113.10" }],
             monitor: monitor.monitorId,
             description: "v1",
+            checkRegions: ["WNAM"],
           });
           return { monitor, pool };
         }),
@@ -142,6 +143,7 @@ test.provider.skipIf(!lbEnabled)(
             ],
             monitor: monitor.monitorId,
             description: "v2",
+            checkRegions: ["ENAM"],
           });
           return { monitor, pool };
         }),
@@ -150,6 +152,7 @@ test.provider.skipIf(!lbEnabled)(
 
       const synced = yield* getPool(accountId, updated.pool.poolId);
       expect(synced.description).toEqual("v2");
+      expect(synced.checkRegions).toEqual(["ENAM"]);
       expect((synced.origins ?? []).map((o) => o.address).sort()).toEqual([
         "203.0.113.10",
         "203.0.113.11",

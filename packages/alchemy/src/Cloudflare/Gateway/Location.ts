@@ -37,6 +37,8 @@ export type LocationEndpoints = NonNullable<
 >;
 
 export interface LocationProps {
+  /** DNS response TTL cap: inherit account settings or specify a location override. */
+  maxTtl?: zeroTrust.CreateGatewayLocationRequest["maxTtl"];
   /**
    * Display name for the location. Used as a stable identifier so the
    * provider can locate it by name during adoption / state recovery. If
@@ -259,6 +261,7 @@ export const LocationProvider = () =>
             name,
             clientDefault: news.clientDefault,
             ecsSupport: news.ecsSupport,
+            maxTtl: news.maxTtl,
             dnsDestinationIpsId: news.dnsDestinationIpsId,
             endpoints: news.endpoints,
             networks: news.networks,
@@ -268,7 +271,10 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("5 seconds"),
+              ]),
               times: 8,
             }),
           );
@@ -281,6 +287,7 @@ export const LocationProvider = () =>
       //    unordered set; endpoints stringify-compare only when declared.
       const desired = {
         name,
+        maxTtl: news.maxTtl ?? { mode: "inherit" },
         clientDefault: news.clientDefault ?? observed.clientDefault ?? false,
         ecsSupport: news.ecsSupport ?? observed.ecsSupport ?? false,
         dnsDestinationIpsId: news.dnsDestinationIpsId,
@@ -289,6 +296,8 @@ export const LocationProvider = () =>
       };
       const dirty =
         observed.name !== desired.name ||
+        JSON.stringify(observed.maxTtl ?? { mode: "inherit" }) !==
+          JSON.stringify(desired.maxTtl) ||
         (observed.clientDefault ?? false) !== desired.clientDefault ||
         (observed.ecsSupport ?? false) !== desired.ecsSupport ||
         (news.dnsDestinationIpsId !== undefined &&
@@ -305,6 +314,7 @@ export const LocationProvider = () =>
             name: desired.name,
             clientDefault: desired.clientDefault,
             ecsSupport: desired.ecsSupport,
+            maxTtl: desired.maxTtl,
             dnsDestinationIpsId: desired.dnsDestinationIpsId,
             endpoints: desired.endpoints,
             networks: desired.networks,
@@ -314,7 +324,10 @@ export const LocationProvider = () =>
           .pipe(
             Effect.retry({
               while: isTransientFeatureAccessBlip,
-              schedule: Schedule.exponential("500 millis"),
+              schedule: Schedule.min([
+                Schedule.exponential("500 millis"),
+                Schedule.spaced("5 seconds"),
+              ]),
               times: 8,
             }),
           );

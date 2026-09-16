@@ -184,6 +184,9 @@ export const CloudIntegrationProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.accountId !== undefined && output.accountId !== accountId)
+        return { action: "replace" } as const;
       const oldCloudType =
         output?.cloudType ??
         (olds !== undefined && isResolved(olds) ? olds.cloudType : undefined);
@@ -214,7 +217,10 @@ export const CloudIntegrationProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = yield* integrationName(id, news.friendlyName);
+      const name = yield* integrationName(
+        id,
+        news.friendlyName ?? output?.friendlyName,
+      );
 
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
       //    a missing integration falls through to the name scan and create.

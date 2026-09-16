@@ -25,8 +25,12 @@ const logLevel = Effect.provideService(
 const getInstance = (accountId: string, id: string, namespace = "default") =>
   aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
+      while: (e) =>
+        e._tag === "Forbidden" || e._tag === "AiSearchInternalError",
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("5 seconds"),
+      ]),
       times: 8,
     }),
   );
@@ -118,7 +122,7 @@ test.provider(
         Effect.retry({
           while: (e) => e._tag === "InstanceUpdateNotApplied",
           schedule: Schedule.spaced("3 seconds"),
-          times: 20,
+          times: 8,
         }),
       );
       expect(liveUpdated.aiSearchModel).toEqual(
@@ -146,7 +150,7 @@ test.provider(
       // Destroy again — delete must be idempotent (already gone).
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 test.provider(
@@ -185,7 +189,7 @@ test.provider(
 
       yield* expectGone(accountId, replaced.instance.instanceId);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 test.provider(
@@ -210,8 +214,12 @@ test.provider(
         })
         .pipe(
           Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: Schedule.exponential("500 millis"),
+            while: (e) =>
+              e._tag === "Forbidden" || e._tag === "AiSearchInternalError",
+            schedule: Schedule.min([
+              Schedule.exponential("500 millis"),
+              Schedule.spaced("5 seconds"),
+            ]),
             times: 8,
           }),
         );
@@ -227,7 +235,7 @@ test.provider(
 
       yield* expectGone(accountId, healed.instance.instanceId);
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 // Canonical `list()` test: instances are namespace-scoped, so `list()`
@@ -258,7 +266,7 @@ test.provider(
         deployed.instance.instanceId,
       );
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );
 
 // A web-crawler source crawls a seed URL and needs no service token (unlike
@@ -374,5 +382,5 @@ test.provider(
         initial.namespace.name,
       );
     }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 90_000 },
 );

@@ -30,6 +30,11 @@ export type HoldProps = {
    * @default false
    */
   includeSubdomains?: boolean;
+  /**
+   * RFC3339 time at which the hold becomes active. A future time temporarily
+   * releases it. Removing this property reactivates the hold immediately.
+   */
+  holdAfter?: string;
 };
 
 export type HoldAttributes = {
@@ -180,7 +185,12 @@ export const HoldProvider = () =>
           Effect.succeed(undefined),
         ),
       );
-      if (observed === undefined || observed.hold !== true) return undefined;
+      if (
+        observed === undefined ||
+        (observed.hold !== true &&
+          !(observed.holdAfter && Date.parse(observed.holdAfter) > Date.now()))
+      )
+        return undefined;
       const attrs = toAttributes(zoneId, observed);
       // Cold read: a hold exists but we have no state for it. Holds carry
       // no ownership markers, so gate the takeover behind `--adopt`.
@@ -188,45 +198,42 @@ export const HoldProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      // Inputs have been resolved to concrete strings by Plan.
-      const zoneId = news.zoneId as string;
-      const desiredIncludeSubdomains = news.includeSubdomains ?? false;
-
-      // 1. Observe — is the zone currently held?
-      const observed = yield* zones.getHold({ zoneId });
-
-      // 2. Ensure — place the hold if the zone is not held.
-      if (observed.hold !== true) {
-        const created = yield* zones.createHold({
-          zoneId,
-          includeSubdomains: desiredIncludeSubdomains,
-        });
-        return toAttributes(zoneId, created);
+      const zoneId = news.zoneId;
+      const includeSubdomains = news.includeSubdomains ?? false;
+      let observed = yield* zones.getHold({ zoneId });
+      const scheduled =
+        observed.holdAfter !== undefined &&
+        observed.holdAfter !== null &&
+        Date.parse(observed.holdAfter) > Date.now();
+      if (
+        observed.hold !== true &&
+        (!scheduled || news.holdAfter === undefined)
+      ) {
+        observed = yield* zones.createHold({ zoneId, includeSubdomains });
       }
-
-      // 3. Sync — patch includeSubdomains when the observed value differs.
+      const scheduleChanged =
+        news.holdAfter !== undefined &&
+        Date.parse(observed.holdAfter ?? "") !== Date.parse(news.holdAfter);
       if (
         normalizeIncludeSubdomains(observed.includeSubdomains) !==
-        desiredIncludeSubdomains
+          includeSubdomains ||
+        scheduleChanged
       ) {
-        const patched = yield* zones
-          .patchHold({
-            zoneId,
-            includeSubdomains: desiredIncludeSubdomains,
-          })
+        observed = yield* zones
+          .patchHold({ zoneId, includeSubdomains, holdAfter: news.holdAfter })
           .pipe(
-            // The hold vanished between observe and patch (out-of-band
-            // removal race) — place it fresh with the desired settings.
             Effect.catchTag("ZoneHoldNotFound", () =>
-              zones.createHold({
-                zoneId,
-                includeSubdomains: desiredIncludeSubdomains,
+              Effect.gen(function* () {
+                yield* zones.createHold({ zoneId, includeSubdomains });
+                return yield* zones.patchHold({
+                  zoneId,
+                  includeSubdomains,
+                  holdAfter: news.holdAfter,
+                });
               }),
             ),
           );
-        return toAttributes(zoneId, patched);
       }
-
       return toAttributes(zoneId, observed);
     }),
 

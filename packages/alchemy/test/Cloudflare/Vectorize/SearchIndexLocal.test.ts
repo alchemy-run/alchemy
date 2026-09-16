@@ -50,8 +50,8 @@ test.provider(
 
               return Effect.fn(function* () {
                 const vectors: runtime.VectorizeVector[] = [
-                  { id: "1", values: v1 },
-                  { id: "2", values: v2 },
+                  { id: "1", values: v1, namespace: "first" },
+                  { id: "2", values: v2, namespace: "second" },
                 ];
 
                 const mutation = yield* vec.upsert(vectors);
@@ -68,11 +68,15 @@ test.provider(
                     Effect.repeat({
                       schedule: Schedule.spaced("3 seconds"),
                       until: (m) => m.matches.some((x) => x.id === "1"),
-                      times: 20,
+                      times: 10,
                     }),
                   );
 
                 const fetched = yield* vec.getByIds(["1"]);
+                const byId = yield* vec.queryById("1", {
+                  topK: 2,
+                  namespace: "second",
+                });
 
                 return {
                   indexName: yield* indexName,
@@ -80,6 +84,7 @@ test.provider(
                   topId: matches.matches[0]?.id,
                   matchIds: matches.matches.map((m) => m.id),
                   fetchedIds: fetched.map((v) => v.id),
+                  namespacedIds: byId.matches.map((v) => v.id),
                 };
               });
             }).pipe(Effect.provide(Cloudflare.Vectorize.SearchIndexLocal)),
@@ -95,6 +100,7 @@ test.provider(
       expect(out.topId).toBe("1");
       expect(out.matchIds).toContain("1");
       expect(out.fetchedIds).toContain("1");
+      expect(out.namespacedIds).toEqual(["2"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

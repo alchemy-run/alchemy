@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -231,27 +232,18 @@ export const ClientCertificateProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as Props;
-      const n = news as Props;
-      // No prior props to compare against — let the engine decide.
-      if (o.csr === undefined) return undefined;
-      // The API has no update for csr/validityDays — every change replaces.
-      if (normalizePem(o.csr) !== normalizePem(n.csr)) {
-        return { action: "replace" } as const;
-      }
-      if (o.validityDays !== n.validityDays) {
-        return { action: "replace" } as const;
-      }
-      // zoneId is Input<string>; compare only once both are concrete.
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return;
+      const previous = output ?? olds;
+      if (!previous) return;
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+        (previous.csr !== undefined &&
+          normalizePem(previous.csr) !== normalizePem(news.csr)) ||
+        (previous.validityDays !== undefined &&
+          previous.validityDays !== news.validityDays) ||
+        (previous.zoneId !== undefined && previous.zoneId !== news.zoneId)
+      )
         return { action: "replace" } as const;
-      }
-      return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {

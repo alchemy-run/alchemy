@@ -1,3 +1,4 @@
+import { rulesEqual } from "./rulesEqual.ts";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -154,10 +155,10 @@ export const CustomRulesetProvider = () =>
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // kind and phase are immutable on Cloudflare's API.
-      if ((olds.kind ?? "custom") !== (news.kind ?? "custom")) {
+      if ((output?.kind ?? olds.kind ?? "custom") !== (news.kind ?? "custom")) {
         return { action: "replace" } as const;
       }
-      if (olds.phase !== news.phase) {
+      if ((output?.phase ?? olds.phase) !== news.phase) {
         return { action: "replace" } as const;
       }
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -260,14 +261,10 @@ export const CustomRulesetProvider = () =>
       // 3. Sync — PUT the full desired state only when it differs from the
       //    observed cloud state.
       const observedAttributes = toCustomRulesetAttributes(accountId, observed);
-      const desiredRules = normalizeDesiredRules(news.rules);
       if (
         observedAttributes.name === name &&
-        observedAttributes.description === news.description &&
-        deepEqual(
-          normalizeObservedRules(observedAttributes.rules),
-          desiredRules,
-        )
+        (observedAttributes.description ?? "") === (news.description ?? "") &&
+        rulesEqual(observedAttributes.rules, news.rules)
       ) {
         return observedAttributes;
       }
@@ -275,7 +272,7 @@ export const CustomRulesetProvider = () =>
         accountId,
         rulesetId: observedAttributes.rulesetId,
         name,
-        description: news.description,
+        description: news.description ?? "",
         rules: news.rules,
       });
       return toCustomRulesetAttributes(accountId, updated);
@@ -348,13 +345,3 @@ const toCustomRulesetAttributes = (
   lastUpdated: ruleset.lastUpdated,
   version: ruleset.version,
 });
-
-/**
- * Strip server-assigned per-rule fields so observed rules can be compared
- * structurally against the desired props.
- */
-const normalizeObservedRules = (rules: OutputRule[]) =>
-  rules.map(({ id: _id, ...rule }) => rule);
-
-const normalizeDesiredRules = (rules: CustomRulesetRule[]) =>
-  rules.map(({ id: _id, ...rule }) => rule);

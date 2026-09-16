@@ -50,7 +50,10 @@ const resolveZoneId = Effect.gen(function* () {
 // own out-of-band verification calls by retrying the typed `Forbidden`
 // error (part of each email-sending operation's error union via distilled
 // patches).
-const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+const forbiddenRetrySchedule = Schedule.min([
+  Schedule.exponential("500 millis"),
+  Schedule.spaced("4 seconds"),
+]);
 
 const findByName = (zoneId: string, name: string) =>
   emailSending.listSubdomains.items({ zoneId }).pipe(
@@ -246,7 +249,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       const gone = yield* findByName(zoneId, NAME_ADOPT);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!emailRoutingScoped)(
@@ -291,7 +294,7 @@ test.provider.skipIf(!emailRoutingScoped)(
       const gone = yield* findByName(zoneId, NAME_LIST);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 120_000 },
 );
 
 /**

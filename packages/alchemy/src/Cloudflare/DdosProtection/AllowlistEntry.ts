@@ -117,14 +117,19 @@ export const DdosAllowlistEntryProvider = () =>
   Provider.succeed(DdosAllowlistEntry, {
     stables: ["allowlistId", "accountId", "prefix", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (olds === undefined) return undefined;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       // `news` runs at plan time and may still carry unresolved
       // expressions — bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
       // The API only patches comment/enabled — the prefix is the entry's
       // identity and cannot change.
-      if (olds.prefix !== news.prefix) {
+      if (
+        (output?.prefix ?? olds?.prefix) !== undefined &&
+        (output?.prefix ?? olds?.prefix) !== news.prefix
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;

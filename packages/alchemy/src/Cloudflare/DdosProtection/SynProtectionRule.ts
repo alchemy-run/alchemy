@@ -184,14 +184,20 @@ export const SynProtectionRuleProvider = () =>
         );
     }),
 
-    diff: Effect.fn(function* ({ olds, news }) {
-      if (olds === undefined) return undefined;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output && output.accountId !== accountId)
+        return { action: "replace" } as const;
       // `news` runs at plan time and may still carry unresolved
       // expressions — bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
       // The API only patches mode/sensitivities/mitigationType — the
       // scope + name pair is the rule's identity and cannot change.
-      if (olds.scope !== news.scope || ruleName(olds) !== ruleName(news)) {
+      if (
+        (output ?? olds) &&
+        ((output?.scope ?? olds?.scope) !== news.scope ||
+          ruleName((output ?? olds)!) !== ruleName(news))
+      ) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -248,7 +254,7 @@ export const SynProtectionRuleProvider = () =>
           mode: news.mode,
           burstSensitivity: news.burstSensitivity,
           rateSensitivity: news.rateSensitivity,
-          mitigationType: news.mitigationType,
+          mitigationType: news.mitigationType ?? "challenge",
         });
       }
 
@@ -258,8 +264,7 @@ export const SynProtectionRuleProvider = () =>
         observed.mode !== news.mode ||
         observed.burstSensitivity !== news.burstSensitivity ||
         observed.rateSensitivity !== news.rateSensitivity ||
-        (news.mitigationType !== undefined &&
-          observed.mitigationType !== news.mitigationType);
+        observed.mitigationType !== (news.mitigationType ?? "challenge");
       if (dirty) {
         observed = yield* ddos.patchAdvancedTcpProtectionSynProtectionRuleItem({
           accountId,
@@ -267,7 +272,7 @@ export const SynProtectionRuleProvider = () =>
           mode: news.mode,
           burstSensitivity: news.burstSensitivity,
           rateSensitivity: news.rateSensitivity,
-          mitigationType: news.mitigationType,
+          mitigationType: news.mitigationType ?? "challenge",
         });
       }
 

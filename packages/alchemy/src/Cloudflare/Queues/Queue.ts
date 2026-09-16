@@ -6,7 +6,7 @@ import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -27,12 +27,32 @@ import type { Providers } from "../Providers.ts";
 export const isQueue = (value: unknown): value is Queue =>
   isResourceOfType(value, "Cloudflare.Queues.Queue");
 
+/** Mutable queue-wide delivery settings. */
+export interface QueueSettings {
+  /** Default message delivery delay, in seconds (0–86400). @default 0 */
+  deliveryDelay?: number;
+  /** Pause delivery while continuing to accept messages. @default false */
+  deliveryPaused?: boolean;
+  /** Unconsumed message retention, in seconds (60–1209600). @default 86400 */
+  messageRetentionPeriod?: number;
+}
+
+const desiredSettings = (settings?: {
+  [K in keyof QueueSettings]?: QueueSettings[K] | null;
+}): Required<QueueSettings> => ({
+  deliveryDelay: settings?.deliveryDelay ?? 0,
+  deliveryPaused: settings?.deliveryPaused ?? false,
+  messageRetentionPeriod: settings?.messageRetentionPeriod ?? 86400,
+});
+
 export type QueueProps = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
+  /** Queue-wide delivery settings. Omitted fields reset to their defaults. */
+  settings?: QueueSettings;
 };
 
 export type Queue = Resource<
@@ -42,6 +62,8 @@ export type Queue = Resource<
     queueId: string;
     queueName: string;
     accountId: string;
+    /** Observed queue-wide delivery settings. */
+    settings?: QueueSettings;
   },
   never,
   Providers
@@ -134,15 +156,16 @@ export const ProviderLive = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const queueName = yield* createQueueName(id, news.name);
+      const queueName =
+        news.name ??
+        output?.queueName ??
+        (yield* createQueueName(id, undefined));
       const acct = output?.accountId ?? accountId;
 
       // Observe — re-fetch the cached queue; fall back to a name scan
       // when the cached id is gone (out-of-band delete or partial
       // state-persistence failure).
-      let observed:
-        | { queueId?: string | null; queueName?: string | null }
-        | undefined;
+      let observed: queues.GetQueueResponse | undefined;
       // A `dev:` id (a mis-stamped legacy local row) is not a real queue id —
       // skip the lookup (Cloudflare rejects it as a malformed parameter) and
       // fall through to the name scan.
@@ -173,27 +196,35 @@ export const ProviderLive = () =>
             queueName,
           })
           .pipe(
-            Effect.catchTag("QueueAlreadyExists", () =>
+            Effect.catchTag("QueueAlreadyExists", (cause) =>
               Effect.gen(function* () {
                 const match = yield* findQueueByName(queueName);
                 if (match && match.queueId && match.queueName) {
                   return match;
                 }
-                return yield* Effect.die(
-                  `Queue "${queueName}" already exists but could not be found`,
-                );
+                return yield* Effect.fail(cause);
               }),
             ),
           );
       }
 
-      // Sync — Cloudflare Queues have no mutable per-queue settings
-      // here (the queue name itself is treated as a replace by diff),
-      // so observed state is the answer.
+      // The create endpoint does not accept settings. Sync them after ensure
+      // so greenfield creation, adoption and drift repair follow the same path.
+      const settings = desiredSettings(news.settings);
+      if (
+        !deepEqual(desiredSettings(observed.settings ?? undefined), settings)
+      ) {
+        observed = yield* queues.patchQueue({
+          accountId: acct,
+          queueId: observed.queueId!,
+          settings,
+        });
+      }
       return {
         queueId: observed.queueId!,
         queueName: observed.queueName!,
         accountId: acct,
+        settings,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -217,7 +248,7 @@ export const ProviderLive = () =>
           Effect.retry({
             while: (e) => e._tag === "QueueInUseByEventNotification",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              Schedule.spaced("2 seconds"),
               Schedule.recurs(8),
             ]),
           }),
@@ -265,6 +296,7 @@ export const ProviderLive = () =>
                 queueId: q.queueId,
                 queueName: q.queueName,
                 accountId,
+                settings: desiredSettings(q.settings ?? undefined),
               })),
           ),
         ),
@@ -283,6 +315,7 @@ export const ProviderLive = () =>
               queueId: queue.queueId!,
               queueName: queue.queueName!,
               accountId: output.accountId,
+              settings: desiredSettings(queue.settings ?? undefined),
             })),
             Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
               Effect.succeed(undefined),
@@ -296,6 +329,7 @@ export const ProviderLive = () =>
           queueId: match.queueId,
           queueName: match.queueName,
           accountId,
+          settings: desiredSettings(match.settings ?? undefined),
         };
       }
       return undefined;
@@ -418,12 +452,18 @@ export const ProviderLocal = () =>
             return { action: "replace" };
           }
           if (!isResolved(news)) return undefined;
-          const name = yield* createQueueName(id, news.name);
-          const oldName = output?.queueName
-            ? yield* createQueueName(id, olds.name)
-            : yield* createQueueName(id, olds.name);
+          const oldName = output.queueName;
+          const name = news.name ?? oldName;
           if (name !== oldName || output.accountId !== accountId) {
             return { action: "replace" };
+          }
+          if (
+            !deepEqual(
+              desiredSettings(output.settings),
+              desiredSettings(news.settings),
+            )
+          ) {
+            return { action: "update" };
           }
           // If the resource is a noop, add it to the local runtime state so it's available downstream.
           // We do it here instead of in the reconcile function so it doesn't appear as an update.
@@ -447,10 +487,27 @@ export const ProviderLocal = () =>
               output?.queueId && !isLiveId(output.queueId)
                 ? output.queueId
                 : generateLocalId(),
-            queueName: yield* createQueueName(id, news.name),
+            queueName:
+              news.name ??
+              output?.queueName ??
+              (yield* createQueueName(id, undefined)),
             accountId: output?.accountId ?? accountId,
+            settings: desiredSettings(news.settings),
           };
           MutableHashMap.set(localRuntimeState.queues, queue.queueId, queue);
+          if (!deepEqual(output?.settings, queue.settings)) {
+            for (const consumer of MutableHashMap.values(
+              localRuntimeState.queueConsumers,
+            )) {
+              if (consumer.queueId === queue.queueId && consumer.scriptName) {
+                const restart = MutableHashMap.get(
+                  localRuntimeState.workerRestarts,
+                  consumer.scriptName,
+                );
+                if (Option.isSome(restart)) yield* restart.value;
+              }
+            }
+          }
           return queue;
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -468,7 +525,7 @@ export const ProviderLocal = () =>
                 Effect.retry({
                   while: (e) => e._tag === "QueueInUseByEventNotification",
                   schedule: Schedule.max([
-                    Schedule.exponential("1 second"),
+                    Schedule.spaced("2 seconds"),
                     Schedule.recurs(8),
                   ]),
                 }),

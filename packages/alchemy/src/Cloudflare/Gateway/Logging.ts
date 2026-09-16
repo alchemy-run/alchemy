@@ -124,6 +124,12 @@ export const isLogging = (value: unknown): value is Logging =>
 
 export const LoggingProvider = () =>
   Provider.succeed(Logging, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     nuke: { singleton: true },
     stables: ["accountId", "initialSettings"],
 

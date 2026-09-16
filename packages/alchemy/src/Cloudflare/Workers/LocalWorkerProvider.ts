@@ -66,7 +66,10 @@ import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
 import { createWorkerName } from "./WorkerName.ts";
-import { resolveTailConsumers } from "./WorkerProvider.ts";
+import {
+  resolveNamespaceName,
+  resolveTailConsumers,
+} from "./WorkerProvider.ts";
 import {
   materializeRuntimeBindings,
   WorkerValidationError,
@@ -226,6 +229,13 @@ export const LocalWorkerProvider = () =>
             if (queue) {
               consumers.push({
                 queueName: queue.queueName,
+                persistenceKey: queue.queueId,
+                deadLetterQueuePersistenceKey: [
+                  ...MutableHashMap.values(localRuntimeState.queues),
+                ].find(
+                  (target) => target.queueName === consumer.deadLetterQueue,
+                )?.queueId,
+                ...queue.settings,
                 deadLetterQueue: consumer.deadLetterQueue,
                 ...toRuntimeConsumerSettings(consumer.settings),
               });
@@ -474,6 +484,7 @@ export const LocalWorkerProvider = () =>
           /** Namespace-qualified id — the display prefix for every log line. */
           fqn,
           name,
+          namespace: resolveNamespaceName(props.namespace),
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
           env: props.env,
@@ -842,6 +853,7 @@ export const LocalWorkerProvider = () =>
                   runtime
                     .start({
                       name: worker.name,
+                      namespace: worker.namespace,
                       logging: {
                         // `(chunk, stream)` — chunk first; the stream name
                         // indexes the splitters directly.
@@ -1206,6 +1218,26 @@ export const LocalWorkerProvider = () =>
       /** The queue-consumer wiring (canonical JSON) each running Vite child
        * was started with, for the restart path's changed-wiring check. */
       const servedViteConsumers = new Map<string, string>();
+      const vectorizeDescriptors = (descriptors: WorkerBinding[]) =>
+        descriptors.map((binding) => {
+          if (binding.type !== "vectorize") return binding;
+          const metadataIndexes: Record<
+            string,
+            "string" | "number" | "boolean"
+          > = {};
+          const metadataIndexVersions: Record<string, string> = {};
+          for (const metadata of MutableHashMap.values(
+            localRuntimeState.vectorizeMetadataIndexes,
+          )) {
+            if (metadata.indexName === binding.indexName) {
+              metadataIndexes[metadata.propertyName] = metadata.indexType;
+              if (metadata.mutationId)
+                metadataIndexVersions[metadata.propertyName] =
+                  metadata.mutationId;
+            }
+          }
+          return { ...binding, metadataIndexes, metadataIndexVersions };
+        });
 
       // Serve a Vite dev-server child with the same two guarantees
       // `serveWith` gives a plain worker: a `workerRestarts` hook so sibling
@@ -1237,8 +1269,10 @@ export const LocalWorkerProvider = () =>
                 const current = yield* getQueueConsumers(worker.name);
                 if (
                   workerdScopes.has(worker.fqn) &&
-                  JSON.stringify(current) ===
-                    servedViteConsumers.get(worker.fqn)
+                  JSON.stringify([
+                    current,
+                    vectorizeDescriptors(worker.bindingDescriptors),
+                  ]) === servedViteConsumers.get(worker.fqn)
                 ) {
                   return;
                 }
@@ -1256,6 +1290,9 @@ export const LocalWorkerProvider = () =>
               // the wiring is stable across a start.
               while (true) {
                 const queueConsumers = yield* getQueueConsumers(worker.name);
+                const bindingDescriptors = vectorizeDescriptors(
+                  worker.bindingDescriptors,
+                );
                 // Break-before-make: tear the previous child down before
                 // starting its replacement (also covers a superseded child
                 // from the previous loop iteration).
@@ -1281,11 +1318,12 @@ export const LocalWorkerProvider = () =>
                       source,
                       worker: {
                         name: worker.name,
+                        namespace: worker.namespace,
                         compatibility: worker.compatibility,
                         main: worker.viteMain,
                         viteEnvironments: worker.viteEnvironments,
                         hasAssets: worker.hasAssets,
-                        bindingDescriptors: worker.bindingDescriptors,
+                        bindingDescriptors,
                         devRemote: worker.devRemote,
                         devAccess: worker.dev.access,
                         durableObjectNamespaces: worker.durableObjectNamespaces,
@@ -1342,8 +1380,10 @@ export const LocalWorkerProvider = () =>
                 );
                 const currentConsumers = yield* getQueueConsumers(worker.name);
                 if (
-                  JSON.stringify(currentConsumers) !==
-                  JSON.stringify(queueConsumers)
+                  JSON.stringify([
+                    currentConsumers,
+                    vectorizeDescriptors(worker.bindingDescriptors),
+                  ]) !== JSON.stringify([queueConsumers, bindingDescriptors])
                 ) {
                   // Wiring changed while the child was starting — serve
                   // again with the fresh consumers before exposing it.
@@ -1351,7 +1391,7 @@ export const LocalWorkerProvider = () =>
                 }
                 servedViteConsumers.set(
                   worker.fqn,
-                  JSON.stringify(queueConsumers),
+                  JSON.stringify([queueConsumers, bindingDescriptors]),
                 );
                 yield* proxy.set(child.url);
                 return;
@@ -1480,7 +1520,7 @@ export const LocalWorkerProvider = () =>
             // legacy-row mode marker; see LOCAL_ID_PREFIX).
             workerId: `dev:${name}`,
             workerName: name,
-            namespace: undefined,
+            namespace: resolveNamespaceName(news.namespace),
             logpush: undefined,
             url: urls[0],
             urls,
@@ -1513,7 +1553,7 @@ export const LocalWorkerProvider = () =>
             return {
               workerId: `dev:${config.name}`,
               workerName: config.name,
-              namespace: undefined,
+              namespace: config.namespace,
               logpush: undefined,
               url: urls[0],
               urls,
@@ -1583,7 +1623,7 @@ export const LocalWorkerProvider = () =>
           return {
             workerId: `dev:${config.name}`,
             workerName: config.name,
-            namespace: undefined,
+            namespace: config.namespace,
             logpush: undefined,
             url: urls[0],
             urls,

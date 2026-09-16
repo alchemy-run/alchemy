@@ -143,6 +143,12 @@ export const isDeviceSettings = (value: unknown): value is DeviceSettings =>
 
 export const DeviceSettingsProvider = () =>
   Provider.succeed(DeviceSettings, {
+    diff: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+    }),
     nuke: { singleton: true },
     stables: ["accountId", "initialSettings"],
 

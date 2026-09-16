@@ -4,7 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -62,6 +62,10 @@ export interface LocationStrategy {
 }
 
 export interface Props {
+  /** Networks where this load balancer is enabled. */
+  networks?: loadBalancers.CreateLoadBalancerRequest["networks"];
+  /** Ordered traffic steering rules (requires the Load Balancing rules entitlement). */
+  rules?: loadBalancers.CreateLoadBalancerRequest["rules"];
   /**
    * Zone the load balancer lives in. Stable — changing the zone triggers
    * replacement.
@@ -154,6 +158,10 @@ export interface Props {
 }
 
 export interface Attributes {
+  /** Networks where this load balancer is enabled. */
+  networks?: loadBalancers.GetLoadBalancerResponse["networks"];
+  /** Traffic steering rules returned by Cloudflare. */
+  rules?: loadBalancers.GetLoadBalancerResponse["rules"];
   /** Cloudflare-assigned load balancer identifier. */
   loadBalancerId: string;
   /** Zone that owns the load balancer. */
@@ -394,6 +402,8 @@ const resolvePools = (
 
 const buildBody = (news: Props) => ({
   name: news.name,
+  networks: news.networks,
+  rules: news.rules,
   defaultPools: news.defaultPools as string[],
   fallbackPool: news.fallbackPool as string,
   description: news.description,
@@ -433,8 +443,7 @@ const loadBalancerDirty = (
     actual: string | number | boolean | null | undefined,
   ) => desired !== undefined && desired !== (actual ?? undefined);
   const structDirty = (desired: unknown, actual: unknown) =>
-    desired !== undefined &&
-    JSON.stringify(desired) !== JSON.stringify(actual ?? {});
+    desired !== undefined && !deepEqual(desired, actual ?? {});
 
   return (
     (observed.name ?? "") !== body.name ||
@@ -456,7 +465,9 @@ const loadBalancerDirty = (
     structDirty(body.randomSteering, observed.randomSteering) ||
     structDirty(body.regionPools, observed.regionPools) ||
     structDirty(body.countryPools, observed.countryPools) ||
-    structDirty(body.popPools, observed.popPools)
+    structDirty(body.popPools, observed.popPools) ||
+    structDirty(body.networks, observed.networks) ||
+    structDirty(body.rules, observed.rules)
   );
 };
 
@@ -465,6 +476,8 @@ const toAttributes = (
   zoneId: string,
 ): Attributes => ({
   loadBalancerId: lb.id ?? "",
+  networks: lb.networks ?? undefined,
+  rules: lb.rules ?? undefined,
   zoneId,
   name: lb.name ?? "",
   enabled: lb.enabled ?? true,

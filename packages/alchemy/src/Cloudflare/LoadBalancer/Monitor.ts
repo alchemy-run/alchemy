@@ -245,7 +245,10 @@ export const MonitorProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const description = yield* createDescription(id, news.description);
+      const description = yield* createDescription(
+        id,
+        news.description ?? output?.description,
+      );
       const body = buildBody(news, description);
 
       // 1. Observe — output.monitorId is a hint, not a guarantee.
@@ -288,7 +291,10 @@ export const MonitorProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "MonitorInUse",
             schedule: Schedule.max([
-              Schedule.exponential("1 second"),
+              Schedule.min([
+                Schedule.exponential("1 second"),
+                Schedule.spaced("5 seconds"),
+              ]),
               Schedule.recurs(6),
             ]),
           }),

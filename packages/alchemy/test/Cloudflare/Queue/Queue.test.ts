@@ -1,10 +1,10 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
+import { isLiveId } from "@/Cloudflare/LocalRuntime";
 import * as Provider from "@/Provider";
 import { poll } from "@/Util/poll.ts";
 import { State } from "@/State";
-import type { CreatedResourceState } from "@/State/ResourceState";
+import { remote } from "@/ProviderMode";
 import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
@@ -18,109 +18,38 @@ import ProducerWorker from "./fixtures/dedicated-producer-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
+const { test: localTest } = Test.make({
+  providers: Cloudflare.providers(),
+  dev: true,
+});
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-/**
- * Seed a `created` Queue state row whose `queueId` is a `dev:` mock id —
- * i.e. the shape `alchemy dev` persists when a queue is "created" locally
- * against the in-memory local runtime instead of Cloudflare. Dev runs stamp
- * `providerMode: "local"` on every commit, so the seeded row carries it.
- */
-const seedDevQueue = (input: {
-  stackName: string;
-  stage: string;
-  fqn: string;
-  queueId: string;
-  queueName: string;
-  accountId: string;
-}) =>
-  Effect.gen(function* () {
-    const state = yield* yield* State;
-    yield* state.set({
-      stack: input.stackName,
-      stage: input.stage,
-      fqn: input.fqn,
-      value: {
-        kind: "resource",
-        status: "created",
-        resourceType: "Cloudflare.Queues.Queue",
-        namespace: undefined,
-        fqn: input.fqn,
-        logicalId: input.fqn,
-        instanceId: "00000000000000000000000000000001",
-        providerVersion: 0,
-        providerMode: "local",
-        bindings: [],
-        downstream: [],
-        props: {},
-        attr: {
-          queueId: input.queueId,
-          queueName: input.queueName,
-          accountId: input.accountId,
-        },
-      } satisfies CreatedResourceState,
-    });
-  });
-
-/**
- * Promotion: a queue that was "created" in dev (its persisted `queueId`
- * is a `dev:` mock id) must be promoted to a real Cloudflare queue on the
- * first live deploy.
- *
- * The row is stamped `providerMode: "local"`, which differs from the
- * deploy's resolved mode (`live`), so the engine plans a REPLACEMENT: the
- * live provider creates a real queue and the old local-mode generation is
- * deleted via the local provider (no cloud call for the `dev:` id). The
- * resulting `queueId` must be a live id and resolvable on Cloudflare.
- */
-test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
+localTest.provider("promotes a dev queue to a live queue on deploy", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
-
     yield* stack.destroy();
-
-    const devQueueId = generateLocalId();
-    yield* seedDevQueue({
-      stackName: stack.name,
-      stage: stack.stage,
-      fqn: "Q",
-      queueId: devQueueId,
-      queueName: "dev-placeholder-name",
-      accountId,
-    });
+    const local = yield* stack.deploy(Cloudflare.Queues.Queue("Q"));
+    expect(isLiveId(local.queueId)).toBe(false);
 
     const deployed = yield* stack.deploy(
-      Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queues.Queue("Q");
-        return { queue };
-      }),
+      Cloudflare.Queues.Queue("Q").pipe(remote()),
     );
-
-    // The dev id has been replaced with a real Cloudflare queue id.
-    expect(isLiveId(deployed.queue.queueId)).toBe(true);
-    expect(deployed.queue.queueId).not.toEqual(devQueueId);
-
-    // The promoted queue is a real, resolvable Cloudflare resource. A
-    // brand-new queue can briefly 404 from this out-of-band read under load,
-    // so ride out the read-after-create lag before asserting.
+    expect(isLiveId(deployed.queueId)).toBe(true);
+    expect(deployed.queueId).not.toEqual(local.queueId);
     const live = yield* queues
-      .getQueue({
-        accountId,
-        queueId: deployed.queue.queueId,
-      })
+      .getQueue({ accountId, queueId: deployed.queueId })
       .pipe(
         Effect.retry({
           while: (e) => e._tag === "QueueNotFound",
-          schedule: Schedule.exponential("500 millis"),
+          schedule: Schedule.spaced("2 seconds"),
           times: 8,
         }),
       );
-    expect(live.queueId).toEqual(deployed.queue.queueId);
-
-    // And the persisted state now carries the live id, not the dev one.
+    expect(live.queueId).toEqual(deployed.queueId);
     const persisted = yield* Effect.gen(function* () {
       const state = yield* yield* State;
       return yield* state.get({
@@ -128,16 +57,16 @@ test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
         stage: stack.stage,
         fqn: "Q",
       });
-    });
-    expect((persisted as any)?.attr?.queueId).toEqual(deployed.queue.queueId);
-
+    }).pipe(Effect.provide(stack.state));
+    expect((persisted as any)?.attr?.queueId).toEqual(deployed.queueId);
     yield* stack.destroy();
-
-    // After destroy the promoted (live) queue is gone on Cloudflare.
-    const exit = yield* Effect.exit(
-      queues.getQueue({ accountId, queueId: deployed.queue.queueId }),
-    );
-    expect(Exit.isFailure(exit)).toBe(true);
+    const missing = yield* queues
+      .getQueue({ accountId, queueId: deployed.queueId })
+      .pipe(
+        Effect.as(false),
+        Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+      );
+    expect(missing).toBe(true);
   }).pipe(logLevel),
 );
 
@@ -165,7 +94,7 @@ test.provider("list enumerates the deployed queue", (stack) =>
       predicate: (all) => all.some((q) => q.queueId === deployed.queueId),
       schedule: Schedule.max([
         Schedule.spaced("2 seconds"),
-        Schedule.recurs(20),
+        Schedule.recurs(10),
       ]),
     });
 
@@ -175,36 +104,12 @@ test.provider("list enumerates the deployed queue", (stack) =>
   }).pipe(logLevel),
 );
 
-/**
- * Suppressed delete: a queue that only ever existed in dev (its
- * persisted `queueId` is a `dev:` mock id) has no Cloudflare counterpart.
- * Destroying it must NOT issue a `deleteQueue` against Cloudflare — the
- * `dev:` id is not a valid queue id and the request URL would be
- * malformed. The row is stamped `providerMode: "local"`, so the engine
- * resolves the LOCAL provider's `delete` for it (an in-memory registry
- * removal), and destroy succeeds with the state row removed cleanly.
- */
-test.provider("suppresses deletion of a dev-only queue", (stack) =>
+localTest.provider("destroys a deployed local queue", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-
     yield* stack.destroy();
-
-    const devQueueId = generateLocalId();
-    yield* seedDevQueue({
-      stackName: stack.name,
-      stage: stack.stage,
-      fqn: "Q",
-      queueId: devQueueId,
-      queueName: "dev-placeholder-name",
-      accountId,
-    });
-
-    // Destroy must not attempt a (malformed) live delete against the dev id.
-    const exit = yield* Effect.exit(stack.destroy());
-    expect(Exit.isSuccess(exit)).toBe(true);
-
-    // The dev-only resource is removed from state.
+    const local = yield* stack.deploy(Cloudflare.Queues.Queue("Q"));
+    expect(isLiveId(local.queueId)).toBe(false);
+    yield* stack.destroy();
     const persisted = yield* Effect.gen(function* () {
       const state = yield* yield* State;
       return yield* state.get({
@@ -212,8 +117,9 @@ test.provider("suppresses deletion of a dev-only queue", (stack) =>
         stage: stack.stage,
         fqn: "Q",
       });
-    });
+    }).pipe(Effect.provide(stack.state));
     expect(persisted).toBeUndefined();
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 
@@ -261,7 +167,7 @@ test.provider.skipIf(!!process.env.FAST)(
                 Schedule.exponential("500 millis"),
                 Schedule.spaced("3 seconds"),
               ]),
-              Schedule.recurs(10),
+              Schedule.recurs(30),
             ]),
           }),
           Effect.orDie,
@@ -281,9 +187,9 @@ test.provider.skipIf(!!process.env.FAST)(
         Effect.flatMap((res) => res.json),
         Effect.map((body) => (body as { bodies?: string[] })?.bodies ?? []),
         Effect.repeat({
-          schedule: Schedule.spaced("4 seconds"),
+          schedule: Schedule.spaced("2 seconds"),
           until: (bodies) => bodies.includes("dedicated"),
-          times: 10,
+          times: 45,
         }),
         Effect.orDie,
       );
@@ -291,5 +197,5 @@ test.provider.skipIf(!!process.env.FAST)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );

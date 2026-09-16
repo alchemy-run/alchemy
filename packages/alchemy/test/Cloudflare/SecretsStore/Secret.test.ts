@@ -5,12 +5,77 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
+import * as secrets from "@distilled.cloud/cloudflare/secrets-store";
+import * as pathe from "pathe";
+import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
+);
+
+test.provider(
+  "rotates a deployed secret, clears its comment and recreates a deleted secret",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deploy = (value: string, comment?: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const store = yield* Cloudflare.SecretsStore.Store("RotationStore");
+            const secret = yield* Cloudflare.SecretsStore.Secret(
+              "RotationSecret",
+              {
+                store,
+                value: Redacted.make(value),
+                comment,
+              },
+            );
+            const worker = yield* Cloudflare.Worker("RotationWorker", {
+              main: pathe.resolve(
+                import.meta.dirname,
+                "fixtures/rotation-worker.ts",
+              ),
+              env: { SECRET: secret },
+            });
+            return { secret, worker };
+          }),
+        );
+      const initial = yield* deploy(
+        "fixture-first-value",
+        "managed description",
+      );
+      yield* expectUrlContains(initial.worker.url!, "fixture-first-value", {
+        timeout: "30 seconds",
+      });
+      const updated = yield* deploy("fixture-second-value");
+      expect(updated.secret.secretId).toBe(initial.secret.secretId);
+      const metadata = yield* secrets.getStoreSecret({
+        accountId: updated.secret.accountId,
+        storeId: updated.secret.storeId,
+        secretId: updated.secret.secretId,
+      });
+      expect(metadata.comment ?? "").toBe("");
+      yield* expectUrlContains(updated.worker.url!, "fixture-second-value", {
+        timeout: "30 seconds",
+      });
+      yield* secrets.deleteStoreSecret({
+        accountId: updated.secret.accountId,
+        storeId: updated.secret.storeId,
+        secretId: updated.secret.secretId,
+      });
+      const recreated = yield* deploy("fixture-recreated-value", "recreated");
+      expect(recreated.secret.secretId).not.toBe(updated.secret.secretId);
+      yield* expectUrlContains(
+        recreated.worker.url!,
+        "fixture-recreated-value",
+        { timeout: "30 seconds" },
+      );
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120000 },
 );
 
 // Canonical `list()` test (parent fan-out): secrets are sub-resources of a

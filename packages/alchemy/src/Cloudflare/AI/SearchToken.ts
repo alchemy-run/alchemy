@@ -8,6 +8,7 @@ import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -171,12 +172,14 @@ export const SearchTokenProvider = () =>
         : // Cold read (lost state): the display name is deterministic, so
           // scan the token list for it.
           yield* findTokenByName(acct, yield* createTokenName(id, olds?.name));
-      return observed ? toAttributes(observed, acct) : undefined;
+      if (!observed) return undefined;
+      const attrs = toAttributes(observed, acct);
+      return output ? attrs : Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = yield* createTokenName(id, news.name);
+      const name = yield* createTokenName(id, news.name ?? output?.name);
 
       // Observe — `output.id` is a cache, not a guarantee: a missing
       // token falls through to "missing" and we recreate. Without an id
@@ -222,8 +225,7 @@ export const SearchTokenProvider = () =>
         keyRotated ||
         observed.name !== name ||
         observed.cfApiId !== body.cfApiId ||
-        (news.legacy !== undefined &&
-          (observed.legacy ?? undefined) !== news.legacy);
+        (observed.legacy ?? true) !== body.legacy;
       if (!dirty) {
         return toAttributes(observed, acct);
       }
@@ -267,13 +269,10 @@ export const SearchTokenProvider = () =>
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "TokenInUseByInstances",
-            // The referencing instance tears down its managed Vectorize
-            // index asynchronously and can hold the token well past two
-            // minutes. Poll at a steady 5s and give it a generous overall
-            // budget (~5min) so the token delete reliably waits out the
-            // instance instead of racing the teardown and failing flakily.
+            // Bound teardown waiting; a still-referenced token remains in state
+            // and can be retried after its asynchronous dependency is gone.
             schedule: Schedule.spaced("5 seconds"),
-            times: 60,
+            times: 8,
           }),
           Effect.catchTag("TokenNotFound", () => Effect.void),
         );
@@ -333,7 +332,10 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "InvalidTokenCredentials",
-      schedule: Schedule.exponential("1 second"),
+      schedule: Schedule.min([
+        Schedule.exponential("1 second"),
+        Schedule.spaced("5 seconds"),
+      ]),
       times: 6,
     }),
   );
