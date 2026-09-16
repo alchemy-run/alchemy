@@ -34,7 +34,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
  * Optional GitHub token for PR state lookups on TTL expiry. Bound as a
  * Worker secret when `GITHUB_TOKEN` is set at deploy time.
  */
-export const GitHubToken = Config.redacted("GITHUB_TOKEN").pipe(Config.option);
+export const GitHubToken = Config.Redacted("GITHUB_TOKEN").pipe(Config.option);
 
 export default class PackageStore extends Cloudflare.DurableObject<PackageStore>()(
   "PackageStore",
@@ -152,6 +152,10 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
         recordDownload: (tag: string) =>
           Effect.gen(function* () {
             const current = yield* getState;
+            // KV can still point here after a tag is removed. The Durable
+            // Object owns tag membership, even while the tarball survives
+            // under another tag.
+            if (!current.tags.includes(tag)) return false;
             const downloads = { ...current.downloads };
             downloads[tag] = (downloads[tag] ?? 0) + 1;
             yield* setState({
@@ -159,6 +163,7 @@ export default class PackageStore extends Cloudflare.DurableObject<PackageStore>
               downloads,
               totalDownloads: current.totalDownloads + 1,
             });
+            return true;
           }),
 
         getStats: () =>

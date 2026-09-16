@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import * as path from "node:path";
 
 export type PollOptions = {
@@ -9,12 +9,27 @@ export type PollOptions = {
 export const pollUntil = async <T>(
   what: string,
   effect: () => T | undefined | Promise<T | undefined>,
-  options: PollOptions & { readonly diagnostics?: () => string } = {},
+  options: PollOptions & {
+    readonly diagnostics?: () => string;
+    /**
+     * Returns a reason to give up early (e.g. "the process exited"), or
+     * `undefined` to keep polling. Checked after every unsuccessful attempt so
+     * a dead subject fails in one tick instead of burning the whole budget.
+     */
+    readonly abandonIf?: () => string | undefined;
+  } = {},
 ): Promise<T> => {
-  const { tries = 30, delayMs = 1_000, diagnostics } = options;
+  const { tries = 30, delayMs = 1_000, diagnostics, abandonIf } = options;
   for (let attempt = 0; attempt < tries; attempt++) {
     const value = await effect();
     if (value !== undefined) return value;
+    const reason = abandonIf?.();
+    if (reason !== undefined) {
+      const detail = diagnostics?.();
+      throw new Error(
+        `Gave up waiting for ${what}: ${reason}.${detail ? `\n${detail}` : ""}`,
+      );
+    }
     await Bun.sleep(delayMs);
   }
   const detail = diagnostics?.();
@@ -128,6 +143,7 @@ export class DevCli {
       },
     );
     this.#process = child;
+    forwardSignals(child);
     const capture = (chunk: Buffer) => {
       const text = chunk.toString();
       this.#output += text;
@@ -153,6 +169,20 @@ export class DevCli {
     return pollUntil(what, effect, {
       ...options,
       diagnostics: () => this.outputTail,
+      // A dev child that died (crash, failed apply) never produces what we're
+      // waiting for — fail immediately with its output instead of sitting
+      // through the full poll budget.
+      abandonIf: () => {
+        const child = this.#process;
+        if (child === undefined) return "alchemy dev is not running";
+        if (child.exitCode !== null) {
+          return `alchemy dev exited with code ${child.exitCode}`;
+        }
+        if (child.signalCode !== null) {
+          return `alchemy dev was killed by ${child.signalCode}`;
+        }
+        return undefined;
+      },
     });
   }
 
@@ -207,3 +237,28 @@ export class DevCli {
     }
   }
 }
+
+/** Forward Ctrl-C to a detached CLI and let it finish its own cleanup. */
+export const forwardSignals = (child: ChildProcess): void => {
+  let interrupted: NodeJS.Signals | undefined;
+  const forward = (signal: NodeJS.Signals) => {
+    if (interrupted !== undefined) return;
+    interrupted = signal;
+    child.kill(signal);
+  };
+  const removeListeners = () => {
+    process.off("SIGINT", forward);
+    process.off("SIGTERM", forward);
+  };
+  process.on("SIGINT", forward);
+  process.on("SIGTERM", forward);
+  child.once("error", removeListeners);
+  child.once("exit", () => {
+    removeListeners();
+    // Bun skips afterAll on Ctrl-C. Exit only after the CLI has shut down,
+    // without resuming the interrupted tests or starting the next command.
+    if (interrupted !== undefined) {
+      process.exit(interrupted === "SIGINT" ? 130 : 143);
+    }
+  });
+};

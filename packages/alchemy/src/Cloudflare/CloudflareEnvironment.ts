@@ -17,7 +17,7 @@ export class CloudflareEnvironment extends Context.Service<
   readonly kind = "Environment" as const;
 }
 
-const CLOUDFLARE_ACCOUNT_ID = Config.string("CLOUDFLARE_ACCOUNT_ID");
+const CLOUDFLARE_ACCOUNT_ID = Config.String("CLOUDFLARE_ACCOUNT_ID");
 
 export const fromEnv = () =>
   Layer.effect(

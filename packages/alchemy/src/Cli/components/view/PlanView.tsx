@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
  * output, the approval prompt, and the live apply/dev/destroy progress —
@@ -17,7 +17,8 @@
  * - Property diffs (`detailed`) render in every mode, and the window is
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
-import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { JSX, ReactNode } from "react";
 import {
   Box,
   KeyBar,
@@ -298,7 +299,7 @@ function PlanContent(props: {
             state={state.tasks.get(
               row.type === "binding" ? row.hostKey : row.key,
             )}
-            defaultMode={tree.plan.defaultMode}
+            defaultMode={tree.defaultMode}
           />
         ))
       ) : (
@@ -313,7 +314,7 @@ function PlanContent(props: {
               state={state.tasks.get(
                 line.row.type === "binding" ? line.row.hostKey : line.row.key,
               )}
-              defaultMode={tree.plan.defaultMode}
+              defaultMode={tree.defaultMode}
             />
           ) : line.kind === "yaml" ? (
             <YamlLine
@@ -500,9 +501,12 @@ function PlanRowView(props: {
             </Text>
           }
           depth={row.depth}
+          detail={row.detail}
         >
           {modeNote && <Text tone="muted">({modeNote})</Text>}
-          <Text tone="muted">({row.resourceType})</Text>
+          {row.id !== row.resourceType ? (
+            <Text tone="muted">({row.resourceType})</Text>
+          ) : null}
         </TaskRow>
         {yaml}
       </Box>
@@ -534,8 +538,11 @@ function PlanRowView(props: {
               <Text tone="muted">{row.id}</Text>
             ) : (
               row.id
-            )}{" "}
-            <Text tone="muted">({row.resourceType})</Text>
+            )}
+            {row.id !== row.resourceType ? (
+              <Text tone="muted"> ({row.resourceType})</Text>
+            ) : null}
+            {row.detail ? <Text tone="muted"> · {row.detail}</Text> : null}
           </>
         }
         detail={rowDetail(rowState.status, rowState.message)}

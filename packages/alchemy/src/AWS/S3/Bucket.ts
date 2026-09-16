@@ -5,16 +5,15 @@ import * as Arr from "effect/Array";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { HttpClient } from "effect/unstable/http";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { diffTags } from "../../Tags.ts";
-import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -42,6 +41,13 @@ export interface BucketEncryption {
    * @default false
    */
   bucketKeyEnabled?: boolean;
+  /**
+   * Encryption types to block for new object writes. Currently supports SSE-C
+   * (server-side encryption with customer-provided keys).
+   * Omit to preserve the bucket's current restrictions. Set to `[]` to remove
+   * them and allow SSE-C; this sends AWS's `NONE` value.
+   */
+  blockedEncryptionTypes?: "SSE-C"[];
 }
 
 /**
@@ -336,6 +342,33 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
+ * ### Managing SSE-C Restrictions
+ * **Example:** Block writes encrypted with customer-provided keys
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ *     blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * Omit `blockedEncryptionTypes` to preserve the bucket's current restrictions,
+ * including when changing its default encryption algorithm or KMS key.
+ *
+ * **Example:** Allow SSE-C writes
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ *     blockedEncryptionTypes: [],
+ *   },
+ * });
+ * ```
+ *
+ * An empty array removes the restriction by sending AWS's `NONE` value.
+ * This affects new object writes; existing encrypted objects are unchanged.
+ *
  * ### Runtime Operations
  * Bind S3 operations in the init phase and use them in runtime
  * handlers. Bindings inject the bucket name and grant scoped IAM
@@ -516,11 +549,15 @@ export const BucketProvider = () =>
         // For us-east-1, BucketAlreadyOwnedByYou is not thrown, so we need to
         // pre-emptively check if the bucket exists for idempotency
         if (region === "us-east-1") {
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
 
           yield* Effect.logInfo(
             `S3 Bucket create: us-east-1 existence check for ${bucketName} -> ${exists}`,
@@ -569,10 +606,18 @@ export const BucketProvider = () =>
         }
 
         // Wait for bucket to exist (eventual consistency)
-        yield* Effect.retry(
-          s3.headBucket({ Bucket: bucketName }),
-          Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
-        );
+        yield* s3
+          .getBucketLocation({
+            Bucket: bucketName,
+            ExpectedBucketOwner: accountId,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: Schedule.exponential(100),
+              times: 8,
+            }),
+          );
         yield* Effect.logInfo(
           `S3 Bucket create: bucket is available ${bucketName}`,
         );
@@ -588,19 +633,12 @@ export const BucketProvider = () =>
         };
       });
 
-      const fetchBucketTags = (
-        bucketName: string,
-      ): Effect.Effect<
-        Record<string, string>,
-        never,
-        Credentials | HttpClient.HttpClient | Region
-      > =>
+      const fetchBucketTags = (bucketName: string) =>
         s3.getBucketTagging({ Bucket: bucketName }).pipe(
           Effect.map((r) =>
             Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key!, t.Value!])),
           ),
           Effect.catchTag("NoSuchTagSet", () => Effect.succeed({})),
-          Effect.catch(() => Effect.succeed({})),
         );
 
       const syncBucketTags = Effect.fn(function* ({
@@ -843,30 +881,44 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         if (encryption === undefined) return;
+        const current = yield* s3
+          .getBucketEncryption({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
+          );
         const desiredRule: s3.ServerSideEncryptionRule = {
           ApplyServerSideEncryptionByDefault: {
             SSEAlgorithm: encryption.sseAlgorithm,
             KMSMasterKeyID: encryption.kmsMasterKeyId,
           },
           BucketKeyEnabled: encryption.bucketKeyEnabled ?? false,
+          BlockedEncryptionTypes:
+            encryption.blockedEncryptionTypes === undefined
+              ? current?.BlockedEncryptionTypes
+              : {
+                  EncryptionType: encryption.blockedEncryptionTypes.length
+                    ? [...new Set(encryption.blockedEncryptionTypes)]
+                    : ["NONE"],
+                },
         };
-        const current = yield* s3
-          .getBucketEncryption({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
-            // Some partitions return 404 with no default config; treat any
-            // not-configured read as "no rule" so we converge by writing.
-            Effect.catch(() =>
-              Effect.succeed<s3.ServerSideEncryptionRule | undefined>(
-                undefined,
-              ),
-            ),
-          );
+        // SensitiveString decodes to Redacted; its JSON form hides the key identity.
+        const keyValue = (
+          key: s3.ServerSideEncryptionByDefault["KMSMasterKeyID"],
+        ) => (Redacted.isRedacted(key) ? Redacted.value(key) : key);
         const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
           JSON.stringify({
             alg: r?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-            key: r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
+            key:
+              keyValue(r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
+              null,
             bucketKey: r?.BucketKeyEnabled ?? false,
+            blockedEncryptionTypes: [
+              ...new Set(
+                r?.BlockedEncryptionTypes?.EncryptionType?.filter(
+                  (type) => type !== "NONE",
+                ) ?? [],
+              ),
+            ].sort(),
           });
         if (canon(current) === canon(desiredRule)) return;
         yield* s3.putBucketEncryption({
@@ -1333,10 +1385,10 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
-        // S3 bucket names are globally unique. `headBucket` succeeds only when
-        // the bucket exists in our account, so a successful response is itself
-        // proof of account-level ownership — there is no separate ownership
-        // signal to surface as `Unowned`.
+        // ListBuckets enumerates this account. Read verifies the same ownership
+        // with ExpectedBucketOwner; cross-account access alone is not ownership.
+        // GetBucketLocation needs configuration access, not HeadBucket's
+        // s3:ListBucket permission to enumerate the bucket's objects.
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
@@ -1373,11 +1425,15 @@ export const BucketProvider = () =>
           const bucketName =
             output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const { accountId, region } = yield* AWSEnvironment.current;
-          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
-            Effect.map(() => true),
-            Effect.catchTag("NotFound", () => Effect.succeed(false)),
-            Effect.catch(() => Effect.succeed(false)),
-          );
+          const exists = yield* s3
+            .getBucketLocation({
+              Bucket: bucketName,
+              ExpectedBucketOwner: accountId,
+            })
+            .pipe(
+              Effect.map(() => true),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+            );
           if (!exists) return undefined;
           return {
             bucketName,
@@ -1553,10 +1609,10 @@ export const BucketProvider = () =>
           //   operator-confirmed account teardown. Nuke enumerates buckets
           //   straight from the cloud (its `olds` is Attributes, not Props),
           //   so `forceDestroy` is never present there. S3 ownership is
-          //   account-level (see `list`/`read`: buckets are globally unique
-          //   and only enumerable/headable in our own account; this provider
-          //   deliberately does not stamp alchemy tags on buckets), so every
-          //   bucket nuke hands us is one this account owns.
+          //   account-level: list enumerates this account and read verifies
+          //   ExpectedBucketOwner. This provider deliberately does not stamp
+          //   alchemy tags on buckets, so every bucket nuke hands us is one
+          //   this account owns.
           // A normal destroy without `forceDestroy` must NOT empty the
           // bucket — a non-empty bucket fails with BucketNotEmpty, which is
           // the data-protection behavior users rely on.
