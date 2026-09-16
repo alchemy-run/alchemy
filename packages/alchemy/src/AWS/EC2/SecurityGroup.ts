@@ -603,15 +603,22 @@ export const SecurityGroupProvider = () =>
             });
           }
 
-          // Sync ingress + egress rules — revoke whatever is observed and
+          // Sync inline ingress + egress rules — preserve separately managed
+          // rules identified by their alchemy::id tag, revoke the rest, and
           // reapply the desired set. SG rule diffing on this SDK is non-
           // trivial because each rule has many possible source shapes
           // (cidr/group ref/prefix list), so the simplest convergent strategy
           // is full-replace each reconcile. Default egress (-1, 0.0.0.0/0)
-          // is restored when no explicit egress is desired.
+          // is restored only when egress is omitted; an empty array adds no rules.
           const currentRules = yield* describeSecurityGroupRules(groupId);
-          const currentIngress = currentRules.filter((r) => !r.IsEgress);
-          const currentEgress = currentRules.filter((r) => r.IsEgress);
+          const isStandaloneRule = (rule: ec2.SecurityGroupRule) =>
+            rule.Tags?.some((tag) => tag.Key === "alchemy::id") ?? false;
+          const currentIngress = currentRules.filter(
+            (rule) => !rule.IsEgress && !isStandaloneRule(rule),
+          );
+          const currentEgress = currentRules.filter(
+            (rule) => rule.IsEgress && !isStandaloneRule(rule),
+          );
           if (currentIngress.length > 0) {
             yield* ec2
               .revokeSecurityGroupIngress({
