@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -227,81 +228,150 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
   { timeout: 1_800_000 },
 );
 
-// Full standalone-instance lifecycle, gated behind RDS_TEST_LIFECYCLE=1.
-// Provisioning + modifying + deleting a real `db.t3.micro` takes ~10-15 min,
-// far beyond the default budget. It creates a gp3 Postgres instance with
-// explicit storage/backup knobs, asserts they round-trip, then does an
-// in-place modify (allocatedStorage up, backup retention, perf insights) and
-// re-reads to assert no replacement occurred (same ARN, same identifier).
+// RDS provisioning and port changes exceed the default live-test budget.
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: endpoint port changes once, unchanged ports do not modify (PR 1595)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      // The testing account has no default VPC/subnets, so provision a
-      // production-shaped network (VPC + subnets across 2 AZs) and a DB subnet
-      // group for the instance to live in.
       const network = Effect.gen(function* () {
         const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
-        // No fixed name — let the engine generate a unique physical name so a
-        // leftover group from an interrupted run can't force a cross-VPC
-        // ModifyDBSubnetGroup ("new Subnets are not in the same Vpc").
         const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
           description: "alchemy standalone instance lifecycle",
           subnetIds: net.privateSubnetIds,
         });
         return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
       });
-
-      const created = yield* stack.deploy(
+      const program = (port: number, round: string, grown = false) =>
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 20,
+            allocatedStorage: grown ? 25 : 20,
             storageType: "gp3",
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
-            backupRetentionPeriod: "1 day",
+            backupRetentionPeriod: grown ? "3 days" : "1 day",
+            enablePerformanceInsights: grown ? true : undefined,
             deletionProtection: false,
             dbSubnetGroupName,
             publiclyAccessible: false,
+            port,
+            tags: { round },
           });
-        }),
-      );
+        });
 
+      // A redundant port modify need not change the endpoint or emit an event.
+      // Observe real requests without changing transport, credentials or responses.
+      const client = yield* HttpClient.HttpClient;
+      const requests: URLSearchParams[] = [];
+      const observedClient = client.pipe(
+        HttpClient.tapRequest((request) =>
+          Effect.sync(() => {
+            if (request.body._tag !== "Uint8Array") return;
+            const parameters = new URLSearchParams(
+              new TextDecoder().decode(request.body.body),
+            );
+            if (
+              ["DescribeDBInstances", "ModifyDBInstance"].includes(
+                parameters.get("Action") ?? "",
+              )
+            ) {
+              requests.push(parameters);
+            }
+          }),
+        ),
+      );
+      const modifies = () =>
+        requests.filter(
+          (request) => request.get("Action") === "ModifyDBInstance",
+        );
+      const deploy = (port: number, round: string, grown = false) =>
+        stack
+          .deploy(program(port, round, grown))
+          .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+
+      const created = yield* deploy(5432, "created");
       expect(created.allocatedStorage).toBe(20);
       expect(created.storageType).toBe("gp3");
       expect(created.backupRetentionPeriod).toBe(1);
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      const initial = (yield* describe).DBInstances?.[0];
+      expect(initial?.Endpoint?.Port).toBe(5432);
+      // This is the AWS observation that the old comparison misinterpreted.
+      expect(initial?.DbInstancePort).toBe(0);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 25,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "3 days",
-            enablePerformanceInsights: true,
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
-      );
+      const samePort = program(5432, "same-port");
+      expect(
+        (yield* stack.plan(samePort)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "update" });
+      requests.length = 0;
+      yield* deploy(5432, "same-port");
+      expect(
+        requests.some(
+          (request) => request.get("Action") === "DescribeDBInstances",
+        ),
+      ).toBe(true);
+      expect(modifies()).toHaveLength(0);
+      const unchanged = (yield* describe).DBInstances?.[0];
+      expect(unchanged?.Endpoint?.Port).toBe(5432);
+      expect(unchanged?.PendingModifiedValues?.Port).toBeUndefined();
+      expect(unchanged?.TagList).toContainEqual({
+        Key: "round",
+        Value: "same-port",
+      });
 
-      // In-place modify — identity is preserved (no replacement).
+      expect(
+        (yield* stack.plan(program(5433, "changed", true))).resources
+          .StandaloneInstance,
+      ).toMatchObject({ action: "update" });
+      requests.length = 0;
+      const updated = yield* deploy(5433, "changed", true);
+      expect(modifies()).toHaveLength(1);
+      expect(modifies()[0]!.get("DBPortNumber")).toBe("5433");
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
-      expect(updated.backupRetentionPeriod).toBe(3);
+      expect(updated.endpointPort).toBe(5433);
+      const changed = (yield* describe).DBInstances?.[0];
+      expect(changed?.Endpoint?.Port).toBe(5433);
+      expect(changed?.AllocatedStorage).toBe(25);
+      expect(changed?.BackupRetentionPeriod).toBe(3);
+      expect(changed?.PendingModifiedValues?.Port).toBeUndefined();
+
+      requests.length = 0;
+      yield* deploy(5433, "changed-again", true);
+      expect(
+        requests.some(
+          (request) => request.get("Action") === "DescribeDBInstances",
+        ),
+      ).toBe(true);
+      expect(modifies()).toHaveLength(0);
+      const settled = (yield* describe).DBInstances?.[0];
+      expect(settled?.Endpoint?.Port).toBe(5433);
+      expect(settled?.PendingModifiedValues?.Port).toBeUndefined();
+      expect(settled?.TagList).toContainEqual({
+        Key: "round",
+        Value: "changed-again",
+      });
+      expect(
+        (yield* stack.plan(program(5433, "changed-again", true))).resources
+          .StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
