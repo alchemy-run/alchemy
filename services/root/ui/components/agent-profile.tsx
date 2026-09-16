@@ -36,10 +36,11 @@ import { useEffect, useRef, useState } from "react";
  * generous line height, paragraphs and lists spaced like a page.
  * Read-only, but it should read like a doc, not a chat bubble.
  */
-const DOC =
-  "mx-auto w-full max-w-2xl text-[15.5px] leading-[1.75] text-foreground/90 " +
+const PROSE =
+  "text-[15.5px] leading-[1.75] text-foreground/90 " +
   "[&_p]:my-3.5 [&_p:first-child]:mt-0 [&_ul]:my-3 [&_ol]:my-3 [&_li]:my-1 " +
   "[&_pre]:my-4 [&_blockquote]:my-4 [&_h1]:mt-8 [&_h2]:mt-7 [&_h3]:mt-6";
+const DOC = `mx-auto w-full max-w-2xl ${PROSE}`;
 
 const Pill = ({
   children,
@@ -64,78 +65,78 @@ const Pill = ({
   </span>
 );
 
-/** Scrolls itself into view when it becomes the path's selection. */
-const SelectableCard = ({
+/**
+ * One COLLAPSED row of a document list — Notion's toggle block: a
+ * quiet heading line (chevron, icon, name, trailing extras), the
+ * body only when opened. The path's selection opens itself and
+ * scrolls into view.
+ */
+const DocRow = ({
   selected,
+  icon: Icon,
+  name,
+  extras,
   children,
 }: {
   selected: boolean;
+  icon: typeof Wrench;
+  name: string;
+  /** Trailing header widgets (chips, the skill switch). */
+  extras?: React.ReactNode;
   children: React.ReactNode;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(selected);
   useEffect(() => {
     if (selected) {
+      setOpen(true);
       ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
     }
   }, [selected]);
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "rounded-lg",
-        selected && "ring-2 ring-primary/60 ring-offset-2 ring-offset-background",
-      )}
-    >
-      {children}
+    <div ref={ref} className={cn(selected && "rounded-md bg-primary/5")}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setOpen((current) => !current);
+          }
+        }}
+        className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-2.5 hover:bg-accent/40"
+      >
+        <ChevronRight
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground/70 transition-transform",
+            open && "rotate-90",
+          )}
+        />
+        <Icon className="size-4 shrink-0 text-muted-foreground/70" />
+        <span className="min-w-0 flex-1 truncate font-mono text-[15px] font-semibold tracking-tight">
+          {name}
+        </span>
+        {extras}
+      </div>
+      {open && <div className="pb-5 pl-[26px] pr-1">{children}</div>}
     </div>
   );
 };
 
-/** One tool as a document SECTION — a heading, the prose, a quiet
- *  meta line. No box: the Tools tab reads like one long page. */
-const ToolSection = ({ tool }: { tool: OrgTool }) => (
-  <section className="py-6">
-    <h3 className="flex flex-wrap items-center gap-2 font-mono text-[17px] font-semibold tracking-tight">
-      <Wrench className="size-4 shrink-0 text-muted-foreground/70" />
-      {tool.name}
-      <span className="rounded-full border border-border/60 px-1.5 py-px font-sans text-[10px] font-normal text-muted-foreground">
-        {tool.kind === "static" ? "tool" : "contract"}
-      </span>
-    </h3>
-    <div className="mt-2.5 text-[15.5px] leading-[1.75] text-foreground/85">
-      <MarkdownText text={tool.description} />
-    </div>
-    <div className="mt-3.5 flex flex-wrap gap-1.5">
-      {tool.params.map((param) => (
-        <Pill key={`in-${param}`} tone="muted" title="a parameter">
-          {param}
-        </Pill>
-      ))}
-      {tool.outputs.map((output) => (
-        <Pill key={`out-${output}`} tone="amber" title="an answer field">
-          → {output}
-        </Pill>
-      ))}
-      {tool.errors.map((error) => (
-        <Pill key={`err-${error}`} tone="red" title="a declared failure">
-          {error}
-        </Pill>
-      ))}
-    </div>
-  </section>
-);
-
-const SkillCard = ({
+/** The runtime switch — the gate the driver consults at activation
+ *  (PATCH /api/org/agents/:agent/skills/:skill). Lives in the row
+ *  HEADER, so it never toggles the row's expansion. */
+const SkillSwitch = ({
   agent,
   name,
   enabled,
-  teaching,
   onFlip,
 }: {
   agent: string;
   name: string;
   enabled: boolean;
-  teaching: string | undefined;
   onFlip: (enabled: boolean) => void;
 }) => {
   const [busy, setBusy] = useState(false);
@@ -151,52 +152,28 @@ const SkillCard = ({
       .finally(() => setBusy(false));
   };
   return (
-    <div
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={`${enabled ? "disable" : "enable"} the ${name} skill`}
+      disabled={busy}
+      onClick={(event) => {
+        event.stopPropagation();
+        flip();
+      }}
       className={cn(
-        "flex h-full flex-col gap-1.5 rounded-lg border p-3",
-        enabled
-          ? "border-border/70 bg-muted/10"
-          : "border-border/40 bg-muted/5 opacity-70",
+        "relative h-4 w-7 shrink-0 cursor-pointer rounded-full border transition-colors disabled:opacity-50",
+        enabled ? "border-moss bg-moss/60" : "border-border bg-muted",
       )}
     >
-      <div className="flex items-center gap-2">
-        <Blocks className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold">
-          {name}
-        </span>
-        {/* the runtime switch — the gate the driver consults at
-            activation (PATCH /api/org/agents/:agent/skills/:skill) */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          aria-label={`${enabled ? "disable" : "enable"} the ${name} skill`}
-          disabled={busy}
-          onClick={flip}
-          className={cn(
-            "relative h-4 w-7 shrink-0 cursor-pointer rounded-full border transition-colors disabled:opacity-50",
-            enabled ? "border-moss bg-moss/60" : "border-border bg-muted",
-          )}
-        >
-          <span
-            className={cn(
-              "absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-background shadow transition-all",
-              enabled ? "left-3.5" : "left-0.5",
-            )}
-          />
-        </button>
-      </div>
-      {teaching !== undefined && (
-        <div className="text-[11px] leading-relaxed text-muted-foreground">
-          <MarkdownText text={teaching} />
-        </div>
-      )}
-      {!enabled && (
-        <p className="text-[10px] text-muted-foreground">
-          switched off — activation is refused until re-enabled
-        </p>
-      )}
-    </div>
+      <span
+        className={cn(
+          "absolute top-1/2 size-3 -translate-y-1/2 rounded-full bg-background shadow transition-all",
+          enabled ? "left-3.5" : "left-0.5",
+        )}
+      />
+    </button>
   );
 };
 
@@ -211,12 +188,17 @@ export const AgentProfile = ({
   tab,
   item,
   onUp,
+  chat,
 }: {
   name: string;
-  tab: AgentTab;
+  /** `chat` when this surface IS the DM (`/c/:slug`) — same header,
+   *  same tabs, the feed as the body. */
+  tab: AgentTab | "chat";
   /** The selected card on the tab — a skill or tool name. */
   item?: string;
   onUp: () => void;
+  /** The agent's DM feed — the Chat tab's body. */
+  chat?: React.ReactNode;
 }) => {
   const [org, setOrg] = useState<OrgGraph | undefined>();
   useEffect(() => {
@@ -263,9 +245,15 @@ export const AgentProfile = ({
         </span>
       </header>
       {agent === undefined ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          {org === undefined ? "loading the org…" : `no agent named ${name}`}
-        </div>
+        chat !== undefined ? (
+          // the DM must not wait on the org fetch — the feed stands
+          // alone until the identity header can render
+          <div className="flex min-h-0 flex-1 flex-col">{chat}</div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            {org === undefined ? "loading the org…" : `no agent named ${name}`}
+          </div>
+        )
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* identity: who this is, on what, declared where */}
@@ -293,17 +281,23 @@ export const AgentProfile = ({
             </div>
           </div>
 
-          {/* the tabs — the tab is the path (`/a/:name/:tab/:item`);
-              Chat leads back to the agent's DM, so the DM header and
-              this page wear the SAME row */}
+          {/* the tabs — ONE header for both surfaces: Chat is the DM
+              (`/c/:slug`), the rest are the profile's sections
+              (`/a/:name/:tab/:item`) */}
           <nav
             aria-label="profile sections"
             className="flex shrink-0 items-center gap-1 border-b border-border px-4"
           >
             <button
               type="button"
+              aria-current={tab === "chat" ? "page" : undefined}
               onClick={() => showChannel(agent.slug)}
-              className="flex cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className={cn(
+                "flex cursor-pointer items-center gap-1.5 border-b-2 px-2.5 py-1.5 text-xs",
+                tab === "chat"
+                  ? "border-primary font-semibold text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
             >
               <MessageCircle className="size-3.5" />
               Chat
@@ -337,6 +331,10 @@ export const AgentProfile = ({
             ))}
           </nav>
 
+          {tab === "chat" ? (
+            /* the DM feed — it owns its scroll and composer */
+            <div className="flex min-h-0 flex-1 flex-col">{chat}</div>
+          ) : (
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
             {tab === "charter" && (
               /* the charter — the same prose the model reads, laid
@@ -352,61 +350,116 @@ export const AgentProfile = ({
                   no skills granted to this agent
                 </div>
               ) : (
-                /* skills — granted in code, switched at runtime */
-                <div className="grid content-start gap-2 md:grid-cols-2">
+                /* skills — a document LIST: collapsed rows, the
+                   teaching on expand; the switch rides the header */
+                <article className="mx-auto w-full max-w-2xl divide-y divide-border/40">
                   {agent.skills.map((grant) => (
-                    <SelectableCard
+                    <DocRow
                       key={grant.name}
                       selected={item === grant.name}
+                      icon={Blocks}
+                      name={grant.name}
+                      extras={
+                        <>
+                          {!grant.enabled && (
+                            <span className="shrink-0 text-[10px] text-muted-foreground">
+                              off — activation refused
+                            </span>
+                          )}
+                          <SkillSwitch
+                            agent={agent.name}
+                            name={grant.name}
+                            enabled={grant.enabled}
+                            onFlip={(enabled) =>
+                              setOrg((current) =>
+                                current === undefined
+                                  ? current
+                                  : {
+                                      ...current,
+                                      agents: current.agents.map((candidate) =>
+                                        candidate.name === agent.name
+                                          ? {
+                                              ...candidate,
+                                              skills: candidate.skills.map(
+                                                (entry) =>
+                                                  entry.name === grant.name
+                                                    ? { ...entry, enabled }
+                                                    : entry,
+                                              ),
+                                            }
+                                          : candidate,
+                                      ),
+                                    },
+                              )
+                            }
+                          />
+                        </>
+                      }
                     >
-                      <SkillCard
-                        agent={agent.name}
-                        name={grant.name}
-                        enabled={grant.enabled}
-                        teaching={
-                          org?.skills.find(
-                            (skill) => skill.name === grant.name,
-                          )?.teaching
-                        }
-                        onFlip={(enabled) =>
-                          setOrg((current) =>
-                            current === undefined
-                              ? current
-                              : {
-                                  ...current,
-                                  agents: current.agents.map((candidate) =>
-                                    candidate.name === agent.name
-                                      ? {
-                                          ...candidate,
-                                          skills: candidate.skills.map(
-                                            (entry) =>
-                                              entry.name === grant.name
-                                                ? { ...entry, enabled }
-                                                : entry,
-                                          ),
-                                        }
-                                      : candidate,
-                                  ),
-                                },
-                          )
-                        }
-                      />
-                    </SelectableCard>
+                      <div className={PROSE}>
+                        <MarkdownText
+                          text={
+                            org?.skills.find(
+                              (skill) => skill.name === grant.name,
+                            )?.teaching ?? ""
+                          }
+                        />
+                      </div>
+                    </DocRow>
                   ))}
-                </div>
+                </article>
               ))}
 
             {tab === "tools" && (
-              /* tools — one document, a section per tool */
+              /* tools — a document LIST: collapsed rows, the prose
+                 and schema pills on expand */
               <article className="mx-auto w-full max-w-2xl divide-y divide-border/40">
                 {agent.tools.map((tool) => (
-                  <SelectableCard key={tool.name} selected={item === tool.name}>
-                    <ToolSection tool={tool} />
-                  </SelectableCard>
+                  <DocRow
+                    key={tool.name}
+                    selected={item === tool.name}
+                    icon={Wrench}
+                    name={tool.name}
+                    extras={
+                      <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[10px] text-muted-foreground">
+                        {tool.kind === "static" ? "tool" : "contract"}
+                      </span>
+                    }
+                  >
+                    <div className={PROSE}>
+                      <MarkdownText text={tool.description} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {tool.params.map((param) => (
+                        <Pill key={`in-${param}`} tone="muted" title="a parameter">
+                          {param}
+                        </Pill>
+                      ))}
+                      {tool.outputs.map((output) => (
+                        <Pill
+                          key={`out-${output}`}
+                          tone="amber"
+                          title="an answer field"
+                        >
+                          → {output}
+                        </Pill>
+                      ))}
+                      {tool.errors.map((error) => (
+                        <Pill
+                          key={`err-${error}`}
+                          tone="red"
+                          title="a declared failure"
+                        >
+                          {error}
+                        </Pill>
+                      ))}
+                    </div>
+                  </DocRow>
                 ))}
               </article>
             )}
           </div>
+          )}
         </div>
       )}
     </section>

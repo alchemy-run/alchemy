@@ -33,7 +33,6 @@ import {
   overlayFromLocation,
   panesFromLocation,
   showChannel,
-  showAgent,
   showOverlay,
   threadFromLocation,
   type AgentPlace,
@@ -44,7 +43,6 @@ import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import {
   Hash,
-  MessageCircle,
   Moon,
   Pause,
   Play,
@@ -599,6 +597,24 @@ export const App = () => {
             item={agent.item}
             onUp={() => showChannel(channel.name)}
           />
+        ) : channel.dm ? (
+          /* a DM wears the SAME surface as the profile — one header,
+             Chat the active tab, the feed as its body */
+          <AgentProfile
+            key={`dm-${channel.name}`}
+            name={channel.name}
+            tab="chat"
+            onUp={() => pick("root")}
+            chat={
+              <ChannelFeed
+                key={channel.name}
+                channel={channel.name}
+                chat={channel.chat}
+                dm
+                placeholder={`Message @${channel.name}…`}
+              />
+            }
+          />
         ) : (
         <section
             data-column="feed"
@@ -606,52 +622,13 @@ export const App = () => {
             className="flex min-h-0 min-w-[220px] flex-col"
           >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-            {channel.dm ? (
-              /* a DM: the agent's identity + the SAME tab row its
-                 profile wears — Chat is this view; the others open
-                 the profile's sections */
-              <div className="flex min-w-0 shrink-0 items-center gap-2">
-                <Avatar name={channel.name} kind="agent" size={20} />
-                <span className="text-sm font-semibold">{channel.name}</span>
-                <KindBadge kind="agent" />
-                <nav
-                  aria-label="agent sections"
-                  className="ml-2 flex items-center gap-0.5"
-                >
-                  <span
-                    aria-current="page"
-                    className="flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-semibold"
-                  >
-                    <MessageCircle className="size-3.5" />
-                    Chat
-                  </span>
-                  {(["charter", "skills", "tools"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() =>
-                        showAgent(
-                          roster.find((entry) => entry.slug === channel.name)
-                            ?.name ?? channel.name,
-                          tab,
-                        )
-                      }
-                      className="flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-xs capitalize text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            ) : (
-              <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-                <Hash className="size-4 shrink-0 text-muted-foreground" />
-                <span className="text-sm font-medium">{channel.name}</span>
-                <span className="hidden min-w-0 truncate pl-1 font-mono text-[10px] text-muted-foreground lg:inline">
-                  {channel.chat}
-                </span>
-              </div>
-            )}
+            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+              <Hash className="size-4 shrink-0 text-muted-foreground" />
+              <span className="text-sm font-medium">{channel.name}</span>
+              <span className="hidden min-w-0 truncate pl-1 font-mono text-[10px] text-muted-foreground lg:inline">
+                {channel.chat}
+              </span>
+            </div>
             <div className="flex min-w-0 items-center gap-1.5">
               {/* search WITHIN the channel — filters the transcript */}
               <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 focus-within:border-border">
@@ -700,12 +677,7 @@ export const App = () => {
             key={channel.name}
             channel={channel.name}
             chat={channel.chat}
-            dm={channel.dm}
-            placeholder={
-              channel.dm
-                ? `Message @${channel.name}…`
-                : `Message #${channel.name}…`
-            }
+            placeholder={`Message #${channel.name}…`}
             filter={search}
           />
         </section>
