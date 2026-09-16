@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import { Bucket, BucketProvider, type BucketProps } from "@/Prisma/Bucket";
 import {
   BucketAccessKey,
@@ -250,7 +251,7 @@ describe("Prisma Bucket provider", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Bucket.Provider;
+      const provider = yield* Provider.findProvider(Bucket);
       const observed = yield* provider.read!({
         id: "Bucket",
         fqn: "Bucket",
@@ -490,7 +491,7 @@ describe("Prisma BucketAccessKey provider", () => {
       const persisted = persistedKeyAttrs("key-1");
 
       return Effect.gen(function* () {
-        const provider = yield* BucketAccessKey.Provider;
+        const provider = yield* Provider.findProvider(BucketAccessKey);
         const attrs = yield* provider.reconcile(
           reconcileInput(
             "BucketAccessKey",
@@ -531,7 +532,7 @@ describe("Prisma BucketAccessKey provider", () => {
     const persisted = persistedKeyAttrs("key-1");
 
     return Effect.gen(function* () {
-      const provider = yield* BucketAccessKey.Provider;
+      const provider = yield* Provider.findProvider(BucketAccessKey);
 
       const observed = yield* provider.read!({
         id: "BucketAccessKey",

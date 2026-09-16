@@ -46,7 +46,6 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 
 How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.
 
-- [Infrastructure as Effects](https://alchemy.run/infrastructure-as-effects) — One Effect program models both your runtime code and the infrastructure it runs on — Runtimes carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
 - [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, Container, or Server declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
 - [Bindings](https://alchemy.run/infrastructure-as-effects/binding) — A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
 - [Layers](https://alchemy.run/infrastructure-as-effects/layers) — A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
@@ -418,6 +417,47 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 - [Actions secrets & variables](https://alchemy.run/github/actions-config) — Manage GitHub Actions secrets and variables as Stack resources — encrypted secrets, plain-text variables, bulk helpers, and CI credentials provisioned as code.
 - [Webhooks & events](https://alchemy.run/github/events) — Provision GitHub repository webhooks as resources, or subscribe a Cloudflare Worker to repository events with typed payloads and verified deliveries.
 
+## Git
+
+A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.
+
+- [Git](https://alchemy.run/git) — A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API.
+- [Getting Started](https://alchemy.run/git/getting-started) — A complete quickstart for a Git host protected by a shared credential. Deploy it to Cloudflare, push a repository, and clone it back.
+- [Part 1: Push your first repository](https://alchemy.run/git/tutorial/part-1) — Deploy a Git host, push a commit, and clone it back. Add storage and hashing one layer at a time.
+- [Part 2: Control access](https://alchemy.run/git/tutorial/part-2) — Protect the existing Git host with one shared credential, then verify both accepted and rejected requests.
+- [Part 3: Publish a repository](https://alchemy.run/git/tutorial/part-3) — Allow anonymous clones of public repositories while preserving authenticated writes.
+- [Part 4: Give users their own credentials](https://alchemy.run/git/tutorial/part-4) — Replace the shared credential with Better Auth accounts and individual Git API keys.
+- [Cloning & pushing](https://alchemy.run/git/clone-and-push) — Standard git clients over smart HTTP. What the wire supports, where credentials go, and what to do when something hangs.
+- [Repositories](https://alchemy.run/git/repositories) — Create, fork, import, and manage repositories over the typed REST plane.
+- [Pull requests](https://alchemy.run/git/pull-requests) — Server-side merge base, tree diffs, and fast-forward or three-way merges, computed inside the repository.
+- [GitHub API compatibility](https://alchemy.run/git/github-api) — Point the gh CLI and Octokit at your host with the /api/v3 facade.
+- [Overview](https://alchemy.run/git/blocks) — One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
+- [HTTP routes](https://alchemy.run/git/blocks/server) — Compose Git route layers beside your application's Effect HTTP API, with your middleware and server.
+- [Repository](https://alchemy.run/git/blocks/repositories) — One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, compose operations through Git.Engine, or implement its shape over another store.
+- [Registry](https://alchemy.run/git/blocks/registry) — The registry resolves owner/name to a repository and serves listings. Keep it in a Durable Object or move it to a D1 database.
+- [Blob Store](https://alchemy.run/git/blocks/blob-store) — Bulk, immutable, content-addressed bytes. R2 by default, S3 when data has to live in AWS, or any store that can do ranged reads and multipart writes.
+- [Hasher](https://alchemy.run/git/blocks/hasher) — Every object a push sends is inflated and hashed before a ref moves. That is CPU, and where it runs is a Layer, in the Worker, in dynamically loaded Workers, or on Lambda.
+- [Authentication and authorization](https://alchemy.run/git/blocks/auth) — Use native Effect HTTP middleware and ordinary application effects to authorize Git operations.
+- [Overview](https://alchemy.run/git/recipes) — Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
+- [Scaling](https://alchemy.run/git/recipes/scaling) — Reads scale like a CDN and writes scale like git. The shape, the per-repository limits, the measured numbers, and a worked example of pushing something large and swapping the hasher.
+- [All on Cloudflare](https://alchemy.run/git/recipes/cloudflare) — A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
+- [Bytes in S3, hashing on Lambda](https://alchemy.run/git/recipes/cloudflare-aws) — Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
+- [Bring your own store](https://alchemy.run/git/recipes/your-own-store) — Bytes have to live somewhere that is neither R2 nor S3. Implement the five operations of Git.BlobStore and provide it in place of the shipped Layers.
+## Stripe
+
+Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.
+
+- [Stripe](https://alchemy.run/stripe) — Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
+- [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, and CI.
+- [Part 1: Your First Product](https://alchemy.run/stripe/tutorial/part-1) — Install Alchemy, create a Stack with a Stripe Product, and deploy it.
+- [Part 2: Price on a Worker](https://alchemy.run/stripe/tutorial/part-2) — Put the Product on a Cloudflare Worker, attach a recurring Price and a Coupon, and deploy.
+- [Part 3: Worker Bindings](https://alchemy.run/stripe/tutorial/part-3) — Retrieve the Product over HTTP and create Customers from the Worker.
+- [Part 4: Webhooks](https://alchemy.run/stripe/tutorial/part-4) — Handle customer.created on the Worker with consumeEvents.
+- [Sell from a Worker](https://alchemy.run/stripe/guides/sell-from-a-worker) — Read the catalog and create customers over HTTP from a Cloudflare Worker.
+- [Catalog](https://alchemy.run/stripe/guides/catalog) — Product, Price, Coupon, PromotionCode, and PaymentLink as one checkout catalog.
+- [Handle webhook events](https://alchemy.run/stripe/guides/webhooks) — WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
+- [Connect](https://alchemy.run/stripe/guides/connect) — Connected accounts, persons, and external accounts — implemented, live-gated on STRIPE_TEST_CONNECT.
+
 ## Docker
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
@@ -452,4 +492,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~911 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~941 KB) — only fetch it when you need to locate a specific resource's reference page.
