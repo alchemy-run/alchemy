@@ -8,7 +8,7 @@ import {
   syncWikiPage,
   wikiRepository,
   type WikiRepository,
-} from "@/GitHub/WikiPageGit.ts";
+} from "@/GitHub/WikiPage.ts";
 import * as Provider from "@/Provider.ts";
 import { exec } from "@/Util/exec.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
