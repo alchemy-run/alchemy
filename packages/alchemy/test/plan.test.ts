@@ -2,6 +2,8 @@ import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
+import { InstanceId } from "@/InstanceId.ts";
+import * as ProviderLayer from "@/Local/ProviderLayer.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
@@ -1638,6 +1640,358 @@ describe("prior crash in 'creating' state", () => {
       },
     },
   });
+});
+
+describe("interrupted-create recovery intent", () => {
+  type Service = Provider.ProviderService<
+    TestResource,
+    InstanceId | Stack.Stack | Stage,
+    InstanceId
+  >;
+  type ReadRequest = Parameters<NonNullable<Service["read"]>>[0];
+  const attrs: TestResource["Attributes"] = {
+    string: "observed",
+    stringArray: [],
+    stableString: "physical-id",
+    stableArray: [],
+    replaceString: "original",
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+  const row = {
+    instanceId,
+    providerVersion: 0,
+    logicalId: "Recovering",
+    fqn: "Recovering",
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "creating",
+    providerMode: "live",
+    props: { string: "original", replaceString: "original" },
+    attr: undefined,
+    bindings: [],
+    downstream: [],
+  } satisfies ResourceState;
+  const key = { stack: TEST_STACK, stage: TEST_STAGE, fqn: row.fqn };
+  const persisted = Effect.gen(function* () {
+    const state = yield* yield* State;
+    return yield* state.get(key);
+  });
+  const planRecovery = (
+    operations: Pick<Service, "read" | "diff">,
+    props: TestResourceProps = row.props,
+    adoption = false,
+  ) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      const provider = () =>
+        Provider.succeed(TestResource, {
+          ...operations,
+          reconcile: () => Effect.succeed(attrs),
+          delete: () => Effect.void,
+        });
+      const stack = yield* TestResource(row.logicalId, props).pipe(
+        Stack.make({
+          name: TEST_STACK,
+          state: Layer.succeed(State, state),
+          providers: ProviderLayer.dual(TestResource, {
+            live: provider,
+            local: provider,
+          }),
+        }),
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(Stage, TEST_STAGE),
+            Layer.succeed(AdoptPolicy, adoption),
+          ),
+        ),
+      );
+      return yield* Plan.make(stack).pipe(Effect.provide(stack.services));
+    });
+
+  for (const change of ["unchanged", "mutable", "immutable"] as const) {
+    test(
+      `recovers the persisted identity and diffs observed attrs for ${change} props`,
+      Effect.gen(function* () {
+        yield* seed({ Recovering: row });
+        const reads: ReadRequest[] = [];
+        const diffs: Parameters<NonNullable<Service["diff"]>>[0][] = [];
+        const props = {
+          string: change === "mutable" ? "desired" : "original",
+          replaceString: change === "immutable" ? "replacement" : "original",
+        };
+        const plan = yield* planRecovery(
+          {
+            read: Effect.fn(function* (request) {
+              reads.push(request);
+              expect(yield* InstanceId).toBe(instanceId);
+              expect(yield* Stage).toBe(TEST_STAGE);
+              expect((yield* Stack.Stack).name).toBe(TEST_STACK);
+              return attrs;
+            }),
+            diff: Effect.fn(function* (request) {
+              diffs.push(request);
+              expect(yield* InstanceId).toBe(instanceId);
+              return {
+                action:
+                  change === "immutable"
+                    ? ("replace" as const)
+                    : change === "mutable"
+                      ? ("update" as const)
+                      : ("noop" as const),
+              };
+            }),
+          },
+          props,
+        );
+        expect(reads).toEqual([
+          {
+            id: row.logicalId,
+            fqn: row.fqn,
+            instanceId,
+            olds: row.props,
+            output: undefined,
+            recovery: "interrupted-create",
+          },
+        ]);
+        expect(diffs).toHaveLength(1);
+        expect(diffs[0]).toMatchObject({
+          instanceId,
+          olds: row.props,
+          news: props,
+          output: attrs,
+        });
+        expect(plan.resources.Recovering).toMatchObject({
+          action: change === "immutable" ? "replace" : "create",
+          props,
+          state: { ...row, attr: attrs },
+        });
+        expect(yield* persisted).toEqual(row);
+      }),
+    );
+  }
+
+  for (const result of ["missing", "defect", "no read"] as const) {
+    test(
+      `${result} recovery keeps the original create identity without persisting attributes`,
+      Effect.gen(function* () {
+        yield* seed({ Recovering: row });
+        const reads: ReadRequest[] = [];
+        const plan = yield* planRecovery({
+          read:
+            result === "no read"
+              ? undefined
+              : Effect.fn(function* (request) {
+                  reads.push(request);
+                  return result === "defect"
+                    ? yield* Effect.die(new Error("stripped identity input"))
+                    : undefined;
+                }),
+        });
+        expect(reads).toHaveLength(result === "no read" ? 0 : 1);
+        if (reads.length > 0) {
+          expect(reads[0].recovery).toBe("interrupted-create");
+        }
+        expect(plan.resources.Recovering).toMatchObject({
+          action: "create",
+          state: row,
+        });
+        expect(plan.resources.Recovering.state?.attr).toBeUndefined();
+        expect(yield* persisted).toEqual(row);
+      }),
+    );
+  }
+
+  test(
+    "typed recovery failures propagate without altering persisted state",
+    Effect.gen(function* () {
+      yield* seed({ Recovering: row });
+      const failure = new Error("recovery read failed");
+      const result = yield* planRecovery({
+        read: Effect.fn(function* (request) {
+          expect(request.recovery).toBe("interrupted-create");
+          return yield* Effect.fail(failure);
+        }),
+      }).pipe(Effect.exit);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result)) {
+        expect(
+          result.cause.reasons.some(
+            (reason) => Cause.isFailReason(reason) && reason.error === failure,
+          ),
+        ).toBe(true);
+      }
+      expect(yield* persisted).toEqual(row);
+    }),
+  );
+
+  for (const adoption of [false, true]) {
+    test(
+      `recovery intent still ${adoption ? "requires explicit adoption and strips ownership branding" : "rejects foreign resources"}`,
+      Effect.gen(function* () {
+        yield* seed({ Recovering: row });
+        const reads: ReadRequest[] = [];
+        const result = yield* planRecovery(
+          {
+            read: Effect.fn(function* (request) {
+              reads.push(request);
+              return Unowned(attrs);
+            }),
+          },
+          row.props,
+          adoption,
+        ).pipe(Effect.exit);
+        expect(reads).toHaveLength(1);
+        expect(reads[0].recovery).toBe("interrupted-create");
+        if (adoption) {
+          expect(Exit.isSuccess(result)).toBe(true);
+          if (Exit.isSuccess(result)) {
+            const node = result.value.resources.Recovering;
+            expect(node).toMatchObject({
+              action: "create",
+              state: { ...row, attr: attrs },
+            });
+            expect(Unowned.is(node.state?.attr)).toBe(false);
+            expect(
+              Object.getOwnPropertySymbols(node.state?.attr ?? {}),
+            ).toEqual([]);
+          }
+        } else {
+          expect(Exit.isFailure(result)).toBe(true);
+          if (Exit.isFailure(result)) {
+            const reason = result.cause.reasons.find(Cause.isFailReason);
+            expect(reason?.error).toMatchObject({
+              _tag: "OwnedBySomeoneElse",
+              resourceType: row.resourceType,
+              logicalId: row.logicalId,
+            });
+          }
+        }
+        expect(yield* persisted).toEqual(row);
+      }),
+    );
+  }
+
+  test(
+    "ordinary discovery does not receive interrupted-create intent",
+    Effect.gen(function* () {
+      const reads: ReadRequest[] = [];
+      const plan = yield* planRecovery({
+        read: Effect.fn(function* (request) {
+          reads.push(request);
+          return attrs;
+        }),
+      });
+      expect(reads).toHaveLength(1);
+      expect(reads[0].recovery).toBeUndefined();
+      expect(plan.resources.Recovering.action).toBe("adopted");
+      expect(yield* persisted).toBeUndefined();
+    }),
+  );
+
+  for (const status of [
+    "creating",
+    "created",
+    "updating",
+    "updated",
+  ] as const) {
+    test(
+      `${status} rows with attributes never trigger interrupted-create recovery`,
+      Effect.gen(function* () {
+        const saved: ResourceState =
+          status === "updating"
+            ? {
+                ...row,
+                status,
+                attr: attrs,
+                old: { props: row.props, attr: attrs, bindings: [] },
+              }
+            : { ...row, status, attr: attrs };
+        yield* seed({ Recovering: saved });
+        const reads: ReadRequest[] = [];
+        const plan = yield* planRecovery({
+          read: Effect.fn(function* (request) {
+            reads.push(request);
+            return undefined;
+          }),
+        });
+        expect(reads).toEqual([]);
+        expect(plan.resources.Recovering.state?.attr).toEqual(attrs);
+        expect(yield* persisted).toEqual(saved);
+      }),
+    );
+  }
+
+  test(
+    "unresolved persisted props skip recovery rather than passing an unusable identity to read",
+    Effect.gen(function* () {
+      const saved = {
+        ...row,
+        props: { ...row.props, string: Output.literal("unresolved") },
+      };
+      yield* seed({ Recovering: saved });
+      const reads: ReadRequest[] = [];
+      const plan = yield* planRecovery({
+        read: Effect.fn(function* (request) {
+          reads.push(request);
+          return attrs;
+        }),
+      });
+      expect(reads).toEqual([]);
+      expect(plan.resources.Recovering).toMatchObject({
+        action: "create",
+        state: saved,
+      });
+      expect(plan.resources.Recovering.state?.attr).toBeUndefined();
+      expect(yield* persisted).toEqual(saved);
+    }),
+  );
+
+  test(
+    "an attribute-less deleting row does not receive create-recovery intent",
+    Effect.gen(function* () {
+      const saved = { ...row, status: "deleting" as const };
+      yield* seed({ Recovering: saved });
+      const reads: ReadRequest[] = [];
+      yield* planRecovery({
+        read: Effect.fn(function* (request) {
+          reads.push(request);
+          return attrs;
+        }),
+      });
+      expect(reads).toEqual([]);
+      expect(yield* persisted).toEqual(saved);
+    }),
+  );
+
+  test(
+    "a provider-mode switch replaces without recovering or diffing the old runtime",
+    Effect.gen(function* () {
+      const saved = { ...row, providerMode: "local" as const };
+      yield* seed({ Recovering: saved });
+      const reads: ReadRequest[] = [];
+      let diffs = 0;
+      const plan = yield* planRecovery({
+        read: Effect.fn(function* (request) {
+          reads.push(request);
+          return attrs;
+        }),
+        diff: Effect.fn(function* () {
+          diffs++;
+          return { action: "update" as const };
+        }),
+      });
+      expect(reads).toEqual([]);
+      expect(diffs).toBe(0);
+      expect(plan.resources.Recovering).toMatchObject({
+        action: "replace",
+        mode: "live",
+        state: saved,
+      });
+      expect(plan.resources.Recovering.state?.attr).toBeUndefined();
+      expect(yield* persisted).toEqual(saved);
+    }),
+  );
 });
 
 describe("prior crash in 'updating' state", () => {

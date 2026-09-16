@@ -1,6 +1,8 @@
 import { Action } from "@/Action";
 import { adopt, Unowned } from "@/AdoptPolicy";
 import type { DestroyError } from "@/Apply";
+import { isResolved } from "@/Diff.ts";
+import * as ProviderLayer from "@/Local/ProviderLayer.ts";
 import { Cli } from "@/Report.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
@@ -18,13 +20,14 @@ import {
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect } from "alchemy-test";
-import { Data, Layer } from "effect";
+import { Context, Data, Layer } from "effect";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -2185,6 +2188,562 @@ describe("from creating state", () => {
         expect(Unowned.is(persisted?.attr)).toBe(false);
       }),
   );
+});
+
+describe("interrupted-create recovery contract", () => {
+  type Service = Provider.ProviderService<TestResource>;
+  type ReadInput = Parameters<NonNullable<Service["read"]>>[0];
+  type DeleteInput = Parameters<Service["delete"]>[0];
+  type Mode = "live" | "local";
+
+  const attributes = (
+    props: TestResourceProps,
+    instanceId: string,
+  ): TestResource["Attributes"] => ({
+    string: props.string ?? "recovered",
+    stringArray: [],
+    stableString: instanceId,
+    stableArray: [instanceId],
+    replaceString: props.replaceString,
+    redacted: undefined,
+    redactedArray: undefined,
+  });
+
+  const capture = (
+    read: (
+      input: ReadInput,
+    ) => Effect.Effect<
+      TestResource["Attributes"] | undefined,
+      ResourceFailure
+    > = (input) => Effect.succeed(attributes(input.olds, input.instanceId)),
+  ) => ({
+    read,
+    reads: [] as Array<ReadInput & { mode: Mode }>,
+    deletes: [] as Array<DeleteInput & { mode: Mode }>,
+    precreates: [] as Array<Parameters<NonNullable<Service["precreate"]>>[0]>,
+    reconciles: [] as Array<Parameters<Service["reconcile"]>[0]>,
+    failRead: false,
+    failDelete: false,
+  });
+
+  class RecoveryCalls extends Context.Service<
+    RecoveryCalls,
+    ReturnType<typeof capture>
+  >()("Test.Apply.RecoveryCalls") {}
+
+  const recoveryCalls = Effect.serviceOption(RecoveryCalls).pipe(
+    Effect.map(Option.getOrThrow),
+  );
+
+  const provider = (mode: Mode) =>
+    Provider.succeed(TestResource, {
+      read: Effect.fn(function* (input) {
+        const calls = yield* recoveryCalls;
+        calls.reads.push({ ...input, mode });
+        if (calls.failRead) return yield* new ResourceFailure();
+        return yield* calls.read(input);
+      }),
+      diff: Effect.fn(function* ({ olds, news }) {
+        if (isResolved(news) && olds.replaceString !== news.replaceString) {
+          return { action: "replace" };
+        }
+      }),
+      precreate: Effect.fn(function* (input) {
+        const calls = yield* recoveryCalls;
+        calls.precreates.push(input);
+        return attributes(input.news, input.instanceId);
+      }),
+      reconcile: Effect.fn(function* (input) {
+        const calls = yield* recoveryCalls;
+        calls.reconciles.push(input);
+        return attributes(
+          input.news,
+          input.output?.stableString ?? input.instanceId,
+        );
+      }),
+      delete: Effect.fn(function* (input) {
+        const calls = yield* recoveryCalls;
+        calls.deletes.push({ ...input, mode });
+        if (calls.failDelete) return yield* new ResourceFailure();
+      }),
+    });
+
+  const { test } = Test.make({
+    providers: ProviderLayer.dual(TestResource, {
+      live: () => provider("live"),
+      local: () => provider("local"),
+    }),
+  });
+
+  const creating = (
+    instanceId: string,
+    providerMode: Mode = "live",
+  ): CreatingResourceState => ({
+    status: "creating",
+    fqn: "A",
+    logicalId: "A",
+    namespace: undefined,
+    resourceType: TestResource.Type,
+    instanceId,
+    providerVersion: 0,
+    providerMode,
+    props: {
+      string: `value-${instanceId}`,
+      replaceString: instanceId,
+      object: { string: `nested-${instanceId}` },
+    },
+    bindings: [],
+    downstream: [],
+  });
+
+  const replacement = (old: ResourceState): ReplacedResourceState => {
+    const current = creating("current");
+    return {
+      ...current,
+      status: "replaced",
+      attr: attributes(current.props, current.instanceId),
+      old,
+      deleteFirst: false,
+    };
+  };
+
+  const persist = Effect.fn(function* (value: ResourceState) {
+    const state = yield* yield* State;
+    const stk = yield* Stack;
+    yield* state.set({
+      stack: stk.name,
+      stage: stk.stage,
+      fqn: value.fqn,
+      value,
+    });
+  });
+
+  const target = (row: ResourceState) => ({
+    id: row.logicalId,
+    fqn: row.fqn,
+    instanceId: row.instanceId,
+    olds: row.props,
+  });
+
+  const expectDeleted = (
+    calls: ReturnType<typeof capture>,
+    row: ResourceState,
+    output = attributes(row.props ?? {}, row.instanceId),
+  ) => {
+    expect(calls.deletes).toHaveLength(1);
+    expect(calls.deletes[0]).toMatchObject({
+      ...target(row),
+      mode: row.providerMode,
+      bindings: [],
+    });
+    expect(calls.deletes[0]?.olds).toEqual(row.props);
+    expect(calls.deletes[0]?.output).toEqual(output);
+  };
+
+  const assertSettledAndDestroy = Effect.fn(function* (
+    stack: Test.ScratchStack,
+    calls: ReturnType<typeof capture>,
+    current?: ReplacedResourceState,
+  ) {
+    const persisted = yield* getState("A");
+    if (current) {
+      expect(persisted).toMatchObject({
+        status: "created",
+        instanceId: current.instanceId,
+        providerMode: current.providerMode,
+        props: current.props,
+        attr: current.attr,
+      });
+      expect(persisted).not.toHaveProperty("old");
+    } else {
+      expect(persisted).toBeUndefined();
+    }
+    yield* stack
+      .destroy()
+      .pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+    expect(yield* listState()).toEqual([]);
+  });
+
+  for (const mode of ["live", "local"] as const) {
+    test.provider(
+      `destroy marks only the interrupted ${mode} generation for recovery`,
+      (stack) =>
+        Effect.gen(function* () {
+          const row = {
+            ...creating(`interrupted-${mode}`, mode),
+            fqn: "nested/A",
+            namespace: { Id: "nested" },
+          };
+          const calls = capture();
+          yield* persist(row);
+          yield* stack
+            .destroy()
+            .pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+          expect(calls.reads).toEqual([
+            {
+              ...target(row),
+              mode,
+              recovery: "interrupted-create",
+              output: undefined,
+            },
+          ]);
+          expectDeleted(calls, row);
+          expect(yield* getState(row.fqn)).toBeUndefined();
+          expect(yield* listState()).toEqual([]);
+        }),
+    );
+  }
+
+  for (const drain of [false, true]) {
+    const operation = drain ? "replacement drain" : "destroy";
+
+    test.provider(
+      `${operation} skips recovery when attributes are known`,
+      (stack) =>
+        Effect.gen(function* () {
+          const original = creating("known");
+          const output = attributes(
+            { string: "persisted-physical-resource" },
+            "physical-id",
+          );
+          const row = { ...original, attr: output };
+          const current = replacement(row);
+          const calls = capture();
+          yield* persist(drain ? current : row);
+          yield* (
+            drain
+              ? TestResource("A", current.props).pipe(stack.deploy)
+              : stack.destroy()
+          ).pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+          expect(calls.reads).toEqual([]);
+          expectDeleted(calls, row, output);
+          yield* assertSettledAndDestroy(
+            stack,
+            calls,
+            drain ? current : undefined,
+          );
+        }),
+    );
+
+    for (const status of ["deleting", "updating"] as const) {
+      test.provider(
+        `${operation} does not mark an attr-less ${status} generation`,
+        (stack) =>
+          Effect.gen(function* () {
+            const original = creating(status);
+            const row: ResourceState =
+              status === "deleting"
+                ? { ...original, status, attr: undefined }
+                : {
+                    ...original,
+                    status,
+                    old: {
+                      props: { string: "previous-props" },
+                      attr: attributes({}, "previous-physical-id"),
+                      bindings: [],
+                    },
+                  };
+            const current = replacement(row);
+            const calls = capture();
+            yield* persist(drain ? current : row);
+            yield* (
+              drain
+                ? TestResource("A", current.props).pipe(stack.deploy)
+                : stack.destroy()
+            ).pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+            expect(calls.reads).toEqual([
+              {
+                ...target(row),
+                mode: "live",
+                recovery: undefined,
+                output: undefined,
+              },
+            ]);
+            expectDeleted(calls, row);
+            yield* assertSettledAndDestroy(
+              stack,
+              calls,
+              drain ? current : undefined,
+            );
+          }),
+      );
+    }
+
+    for (const result of ["missing", "unowned"] as const) {
+      for (const adoptEnabled of [false, true]) {
+        test.provider(
+          `${operation} never deletes ${result} recovery with adopt=${adoptEnabled}`,
+          (stack) =>
+            Effect.gen(function* () {
+              const row = creating("interrupted");
+              const current = replacement(row);
+              const foreign = Unowned(
+                attributes({ string: "foreign" }, "foreign-instance"),
+              );
+              const calls = capture(() =>
+                Effect.succeed(result === "missing" ? undefined : foreign),
+              );
+              yield* persist(drain ? current : row);
+              yield* (
+                drain
+                  ? TestResource("A", current.props).pipe(stack.deploy)
+                  : stack.destroy()
+              ).pipe(
+                adopt(adoptEnabled),
+                Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+              );
+              expect(calls.reads).toEqual([
+                {
+                  ...target(row),
+                  mode: "live",
+                  recovery: "interrupted-create",
+                  output: undefined,
+                },
+              ]);
+              expect(calls.deletes).toEqual([]);
+              expect(calls.reconciles).toEqual([]);
+              yield* assertSettledAndDestroy(
+                stack,
+                calls,
+                drain ? current : undefined,
+              );
+            }),
+        );
+      }
+    }
+
+    for (const failure of ["read", "delete"] as const) {
+      test.provider(
+        `${operation} retains a retryable generation after recovery ${failure} fails`,
+        (stack) =>
+          Effect.gen(function* () {
+            const row = creating("retryable");
+            const current = replacement(row);
+            const calls = capture();
+            calls.failRead = failure === "read";
+            calls.failDelete = failure === "delete";
+            yield* persist(drain ? current : row);
+            const run = drain
+              ? TestResource("A", current.props).pipe(stack.deploy)
+              : stack.destroy();
+            const failed = yield* run.pipe(
+              Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+              Effect.exit,
+            );
+            assert(Exit.isFailure(failed));
+            expect(failed.cause.reasons).toContainEqual(
+              expect.objectContaining({
+                error: expect.objectContaining({
+                  _tag: "DestroyError",
+                  failures: [
+                    expect.objectContaining({
+                      fqn: "A",
+                      logicalId: "A",
+                      resourceType: TestResource.Type,
+                    }),
+                  ],
+                }),
+              }),
+            );
+            const persisted = yield* getState("A");
+            if (drain) {
+              expect(persisted).toMatchObject({
+                status: "replaced",
+                instanceId: current.instanceId,
+                attr: current.attr,
+                old: row,
+              });
+            } else if (failure === "read") {
+              expect(persisted).toEqual(row);
+            } else {
+              expect(persisted).toMatchObject({
+                ...row,
+                status: "deleting",
+                attr: attributes(row.props, row.instanceId),
+              });
+            }
+            expect(calls.reads).toEqual([
+              {
+                ...target(row),
+                mode: "live",
+                recovery: "interrupted-create",
+                output: undefined,
+              },
+            ]);
+            if (failure === "delete") expectDeleted(calls, row);
+            else expect(calls.deletes).toEqual([]);
+
+            calls.failRead = false;
+            calls.failDelete = false;
+            calls.reads.length = 0;
+            calls.deletes.length = 0;
+            yield* run.pipe(
+              Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+            );
+            expect(calls.reads).toEqual(
+              !drain && failure === "delete"
+                ? []
+                : [
+                    {
+                      ...target(row),
+                      mode: "live",
+                      recovery: "interrupted-create",
+                      output: undefined,
+                    },
+                  ],
+            );
+            expectDeleted(calls, row);
+            yield* assertSettledAndDestroy(
+              stack,
+              calls,
+              drain ? current : undefined,
+            );
+          }),
+      );
+    }
+  }
+
+  test.provider(
+    "replacement recovers the original identity and props, not the successor's",
+    (stack) =>
+      Effect.gen(function* () {
+        const row = creating("original");
+        let reads = 0;
+        const calls = capture((input) =>
+          Effect.sync(() =>
+            ++reads === 1
+              ? undefined
+              : attributes(input.olds, input.instanceId),
+          ),
+        );
+        yield* persist(row);
+        const news = { string: "successor-value", replaceString: "successor" };
+        const output = yield* TestResource("A", news).pipe(
+          stack.deploy,
+          Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+        );
+        expect(calls.reads).toEqual(
+          Array.from({ length: 2 }, () => ({
+            ...target(row),
+            mode: "live",
+            recovery: "interrupted-create",
+            output: undefined,
+          })),
+        );
+        expectDeleted(calls, row);
+        const current = yield* getState("A");
+        expect(current).toMatchObject({
+          status: "created",
+          props: news,
+          attr: output,
+        });
+        expect(current?.instanceId).not.toBe(row.instanceId);
+        expect(output.stableString).toBe(current?.instanceId);
+        expect(current).not.toHaveProperty("old");
+        yield* stack
+          .destroy()
+          .pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+        expect(yield* listState()).toEqual([]);
+      }),
+  );
+
+  test.provider(
+    "replacement chains recover each generation's status, props, identity and mode",
+    (stack) =>
+      Effect.gen(function* () {
+        const oldest = creating("oldest", "local");
+        const middle: ReplacingResourceState = {
+          ...creating("middle"),
+          status: "replacing",
+          old: oldest,
+          deleteFirst: false,
+        };
+        const current = replacement(middle);
+        const calls = capture();
+        yield* persist(current);
+        yield* TestResource("A", current.props).pipe(
+          stack.deploy,
+          Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+        );
+        expect(calls.reads).toEqual([
+          {
+            ...target(middle),
+            mode: "live",
+            recovery: undefined,
+            output: undefined,
+          },
+          {
+            ...target(oldest),
+            mode: "local",
+            recovery: "interrupted-create",
+            output: undefined,
+          },
+        ]);
+        expect(calls.deletes).toHaveLength(2);
+        for (const [index, row] of [middle, oldest].entries()) {
+          expect(calls.deletes[index]).toMatchObject({
+            ...target(row),
+            mode: row.providerMode,
+            output: attributes(row.props, row.instanceId),
+          });
+        }
+        yield* assertSettledAndDestroy(stack, calls, current);
+      }),
+  );
+
+  for (const changed of [false, true]) {
+    test.provider(
+      `resumed create passes recovered attrs to reconcile without precreate (changed=${changed})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const row = creating("resumed");
+          const recovered = attributes(
+            row.props,
+            "already-created-physical-id",
+          );
+          const calls = capture(() => Effect.succeed(recovered));
+          const news = {
+            ...row.props,
+            ...(changed ? { string: "updated-value" } : {}),
+          };
+          yield* persist(row);
+          const output = yield* TestResource("A", news).pipe(
+            stack.deploy,
+            Effect.provide(Layer.succeed(RecoveryCalls, calls)),
+          );
+          expect(calls.reads).toEqual([
+            {
+              ...target(row),
+              mode: "live",
+              recovery: "interrupted-create",
+              output: undefined,
+            },
+          ]);
+          expect(calls.precreates).toEqual([]);
+          expect(calls.deletes).toEqual([]);
+          expect(calls.reconciles).toHaveLength(1);
+          expect(calls.reconciles[0]).toMatchObject({
+            id: "A",
+            fqn: "A",
+            instanceId: row.instanceId,
+            news,
+            olds: undefined,
+            output: recovered,
+          });
+          expect(output).toEqual(attributes(news, recovered.stableString));
+          expect(yield* getState("A")).toMatchObject({
+            status: "created",
+            instanceId: row.instanceId,
+            props: news,
+            attr: output,
+          });
+          yield* stack
+            .destroy()
+            .pipe(Effect.provide(Layer.succeed(RecoveryCalls, calls)));
+          expect(yield* listState()).toEqual([]);
+        }),
+    );
+  }
 });
 
 describe("from updating state", () => {
