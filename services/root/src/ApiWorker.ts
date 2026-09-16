@@ -24,6 +24,7 @@ import { ColleaguesLive, EngineeringChart } from "./engineering/Group.ts";
 import { ManagerLive } from "./engineering/Manager.ts";
 import { GeneralReviewer } from "./engineering/Reviewer.ts";
 import { TriageLive } from "./engineering/TriageDO.ts";
+import { GitRoutes } from "./forge/GitServer.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
@@ -253,6 +254,9 @@ export default class ApiWorker extends Cloudflare.Worker<ApiWorker>()(
     // (`Cloudflare.Website.Vite` in alchemy.run.ts) that forwards
     // /api, /attach, /terminal here over a service binding.
     main: import.meta.url,
+    // the embedded git server's needs: nodejs_compat, the raised CPU
+    // ceiling for pack ingest, and the self hasher binding
+    ...Git.GIT_WORKER_OPTIONS,
     // PINNED dev port (the Website pins 1337): stable addresses across
     // restarts
     dev: { port: 1340 },
@@ -260,7 +264,12 @@ export default class ApiWorker extends Cloudflare.Worker<ApiWorker>()(
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
     const calls = yield* Calls;
-    const api = yield* HttpRouter.toHttpEffect(yield* Api);
+    // ONE router: the app's Api beside the git server's routes
+    // (smart HTTP at /:owner/:repo/…, REST at /api/v1, the GitHub
+    // v3 facade at /api/v3 — no overlap with the app's /api names)
+    const api = yield* HttpRouter.toHttpEffect(
+      Layer.mergeAll(yield* Api, GitRoutes),
+    );
 
     return {
       fetch: Effect.gen(function* () {
