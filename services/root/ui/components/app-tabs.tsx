@@ -21,6 +21,30 @@ import {
   MessageCircle,
 } from "lucide-react";
 
+/** The Alchemy brand mark — the Sri-Yantra water triangle in a ring
+ *  with the bindu (geometry from website/src/brand/yantra.ts),
+ *  stroked in currentColor so it rides the theme (white on dark). */
+const Yantra = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" aria-hidden className={className}>
+    <circle
+      cx="12"
+      cy="12"
+      r="9.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.1"
+    />
+    <path
+      d="M12 21.225 L4.0109 7.3875 L19.9891 7.3875 Z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.1"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="12" r="1.1" fill="currentColor" />
+  </svg>
+);
+
 const TABS: ReadonlyArray<{
   id: AppTab;
   label: string;
@@ -45,7 +69,10 @@ export const AppTabs = ({ tab }: { tab: AppTab }) => {
       aria-label="app sections"
       className="flex shrink-0 items-center gap-1 border-b border-border bg-background px-3 py-1"
     >
-      <span className="mr-3 text-sm font-semibold">root</span>
+      <span className="mr-3 flex items-center gap-2 text-sm font-semibold">
+        <Yantra className="size-4 text-foreground" />
+        Alchemy
+      </span>
       {TABS.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
