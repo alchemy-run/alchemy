@@ -33,7 +33,6 @@ import {
   FileCode2,
   MessageSquare,
   ScrollText,
-  ShieldCheck,
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -105,17 +104,6 @@ const ToolCard = ({ tool }: { tool: OrgTool }) => (
       <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="font-mono text-xs font-semibold">{tool.name}</span>
       <Pill tone="muted">{tool.kind === "static" ? "tool" : "contract"}</Pill>
-      {tool.permissions.map((permission) => (
-        <Pill
-          key={`${permission.binding}:${permission.targets.join(",")}`}
-          tone="green"
-          title={`${permission.binding} on ${permission.targets.join(", ") || "the account"}`}
-        >
-          <ShieldCheck className="size-2.5 shrink-0" />
-          {permission.binding}
-          {permission.targets.length > 0 && ` → ${permission.targets.join(", ")}`}
-        </Pill>
-      ))}
     </div>
     <div className="text-[12px] leading-relaxed text-muted-foreground">
       <MarkdownText text={tool.description} />
@@ -409,7 +397,7 @@ export const AgentProfile = ({
               ))}
 
             {tab === "tools" && (
-              /* tools — the capability envelope, permissions included */
+              /* tools — the agent's granted tool surface */
               <div className="grid content-start gap-2 md:grid-cols-2">
                 {agent.tools.map((tool) => (
                   <SelectableCard key={tool.name} selected={item === tool.name}>

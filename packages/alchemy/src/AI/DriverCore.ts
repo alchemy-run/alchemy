@@ -17,7 +17,6 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import * as Layer from "effect/Layer";
-import { attributed } from "../BindingAttribution.ts";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { TickModel, type ModelLayer } from "./Model.ts";
@@ -931,7 +930,7 @@ export const makeResolvers = (
   >,
 ) => {
   // handlers `construct` built EAGERLY (the constant stance's defs —
-  // their inits already ran at Layer build, attributed) seed the cache
+  // their inits already ran at Layer build) seed the cache
   const handlerCache = new Map<
     string,
     (params: any) => Effect.Effect<any, any, any>
@@ -944,12 +943,11 @@ export const makeResolvers = (
     if (compiled.def !== undefined) {
       // a def a DYNAMIC turn spliced this tick: its INIT builds the
       // handler once per interpret, under the charter's captured
-      // context — attributed like the eager path
-      const handler = yield* (
-        Effect.provide(compiled.def.init, context) as Effect.Effect<
-          (params: any) => Effect.Effect<any, any, any>
-        >
-      ).pipe(attributed({ kind: "Agent", name: term }, { kind: "Tool", name }));
+      // context — like the eager path
+      const handler = yield* Effect.provide(
+        compiled.def.init,
+        context,
+      ) as Effect.Effect<(params: any) => Effect.Effect<any, any, any>>;
       handlerCache.set(name, handler);
       return handler;
     }
@@ -1837,8 +1835,8 @@ export interface SessionShape {
    * EAGERLY by {@link construct} — the defs' inits run where the Layer
    * builds (plan time in the deploy process, once per isolate at
    * runtime), so the bindings they acquire register on the host at
-   * plan phase, attributed. The resolvers seed their cache from this
-   * map; only a def a DYNAMIC turn splices per tick resolves lazily.
+   * plan phase. The resolvers seed their cache from this map; only a
+   * def a DYNAMIC turn splices per tick resolves lazily.
    */
   readonly defHandlers?: ReadonlyMap<
     string,
@@ -1870,9 +1868,6 @@ export const construct = (
       )
     : Effect.flatMap(
         (charter as Effect.Effect<unknown, unknown, any>).pipe(
-          // the charter runs under the agent's attribution frame, so
-          // any binding it acquires is stamped `Agent:<term>`
-          attributed({ kind: "Agent", name: term }),
           // failure OR defect (a `Service not found` for AI.Thread is a
           // defect): name the scope so the build error says where
           Effect.catchCause((cause) =>
@@ -1895,11 +1890,10 @@ export const construct = (
 /**
  * Run the constant stance's {@link ToolDef} inits — EAGERLY, in the
  * Layer build `construct` runs in, so the bindings they acquire
- * register on the host Worker/Function at PLAN phase, stamped
- * `[Agent:<term>, Tool:<name>]`. The resolved handlers ride the shape
- * (`defHandlers`); the resolvers serve them without re-running inits.
- * Defs spliced by a DYNAMIC turn Effect are invisible here and resolve
- * lazily (attributed the same way) on first call.
+ * register on the host Worker/Function at PLAN phase. The resolved
+ * handlers ride the shape (`defHandlers`); the resolvers serve them
+ * without re-running inits. Defs spliced by a DYNAMIC turn Effect are
+ * invisible here and resolve lazily on first call.
  */
 const initToolDefs = (
   driver: string,
@@ -1928,7 +1922,6 @@ const initToolDefs = (
       const handler = (yield* (
         def.init as Effect.Effect<unknown, unknown, any>
       ).pipe(
-        attributed({ kind: "Tool", name }),
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause as Cause.Cause<never>)
@@ -1943,7 +1936,7 @@ const initToolDefs = (
       defHandlers.set(name, handler);
     }
     return { ...shape, defHandlers };
-  }).pipe(attributed({ kind: "Agent", name: term }));
+  });
 
 /** Every {@link ToolDef} reachable from a fragment's splices,
  *  recursing through nested fragments. */

@@ -10,47 +10,9 @@ import {
   isResource,
   type ResourceLike,
 } from "./Resource.ts";
-import { AcquisitionRegistry, Attribution } from "./BindingAttribution.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
-
-export {
-  AcquisitionRegistry,
-  Attribution,
-  attributed,
-  makeAcquisitionRegistry,
-  type Acquisition,
-  type AttributionFrame,
-} from "./BindingAttribution.ts";
-
-/** The identity a bind argument contributes to an {@link Acquisition}
- *  row — a live Resource's, or a deferred constructor's static one. */
-const acquisitionTarget = (arg: unknown): string | undefined => {
-  if (isResource(arg)) return `${arg.Type}(${arg.LogicalId})`;
-  const meta = deferredResourceMeta(arg);
-  return meta === undefined ? undefined : `${meta.Type}(${meta.LogicalId})`;
-};
-
-/** Record one capability acquisition into the ambient registry (a
- *  no-op when none is provided). Reads targets from the ORIGINAL args
- *  (a deferred constructor keeps its static identity) and falls back
- *  to the resolved values (a Stack resolves them to instances). */
-const recordAcquisition = (
-  binding: string,
-  args: ReadonlyArray<unknown>,
-  resolved: ReadonlyArray<unknown>,
-): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    const registry = yield* Effect.serviceOption(AcquisitionRegistry);
-    if (Option.isNone(registry)) return;
-    const path = yield* Attribution;
-    const targets = resolved.flatMap((value, index) => {
-      const found = acquisitionTarget(value) ?? acquisitionTarget(args[index]);
-      return found === undefined ? [] : [found];
-    });
-    registry.value.record({ binding, targets, path });
-  });
 
 export interface ServiceLike {
   kind: "Service";
@@ -184,11 +146,6 @@ export const Service = <
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
       Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
-        // the PERMISSION edge: when an AcquisitionRegistry is ambient
-        // (an org host serving its own graph), record which capability
-        // was acquired against which resource(s), under the ambient
-        // attribution path (the acquiring agent/skill/tool)
-        Effect.tap((resolved) => recordAcquisition(id, args, resolved)),
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target

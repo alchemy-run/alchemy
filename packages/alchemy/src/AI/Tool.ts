@@ -1,7 +1,6 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { attributed } from "../BindingAttribution.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Thread } from "./Thread.ts";
 import type { In, Out, Thing } from "./Thing.ts";
@@ -161,9 +160,8 @@ export interface Tool<
    *
    * The INIT (`Effect<handler, never, Req>`) runs once where the host
    * agent's Layer builds — at plan time in the deploy process and once
-   * per isolate at runtime. Bindings and services are acquired there
-   * (and attributed to THIS tool in the permission graph); the
-   * returned HANDLER runs per call, its only implicit input the
+   * per isolate at runtime. Bindings and services are acquired there;
+   * the returned HANDLER runs per call, its only implicit input the
    * current session (`AI.Thread`).
    *
    * Splicing the def into a charter template grants the tool and
@@ -340,21 +338,6 @@ const makeTool = (
     ...(meta !== undefined ? { source: makeSource(meta, "Tool", name) } : {}),
   }) as any;
 };
-
-/**
- * A class tool's physics Layer, ATTRIBUTED — `Layer.effect(Tag, init)`
- * with the init run under a `Tool:<name>` attribution frame, so the
- * bindings it acquires are stamped to this tool in the permission
- * graph. Plain `Layer.effect` still works, just unattributed.
- */
-export const toolLayer = <I, S, E, R>(
-  tool: Context.Service<I, S> & { readonly "~alchemy/Name": string },
-  init: Effect.Effect<S, E, R>,
-): Layer.Layer<I, E, R> =>
-  Layer.effect(
-    tool,
-    attributed({ kind: "Tool", name: tool["~alchemy/Name"] })(init),
-  );
 
 /**
  * A spliced ERROR class — `Data.TaggedError` and `Schema.TaggedError`

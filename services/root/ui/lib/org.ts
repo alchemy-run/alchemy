@@ -4,11 +4,6 @@
  * Worker from its own Layer builds.
  */
 
-export interface OrgPermission {
-  readonly binding: string;
-  readonly targets: ReadonlyArray<string>;
-}
-
 export interface OrgTool {
   readonly name: string;
   readonly description: string;
@@ -16,7 +11,6 @@ export interface OrgTool {
   readonly params: ReadonlyArray<string>;
   readonly outputs: ReadonlyArray<string>;
   readonly errors: ReadonlyArray<string>;
-  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgSkillGrant {

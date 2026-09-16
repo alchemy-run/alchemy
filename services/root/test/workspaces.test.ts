@@ -164,8 +164,10 @@ test(
         );
         expect(yield* sh("git", ["rev-parse", "HEAD"], dist)).toBe(pin);
 
-        // the efficiency claim: not one git pack file under the tree
-        // (node_modules pruned — seeded, not git's)
+        // the efficiency claim: not one GIT OBJECT pack under the tree
+        // (node_modules pruned — seeded, not git's). Keyed on git's
+        // objects/pack layout: the repo legitimately ships *.pack
+        // FIXTURES (test/Git/fixtures/packs) that a checkout contains.
         expect(
           yield* sh(
             "find",
@@ -175,8 +177,8 @@ test(
               "node_modules",
               "-prune",
               "-o",
-              "-name",
-              "*.pack",
+              "-path",
+              "*objects/pack/*.pack",
               "-print",
             ],
             REPO,

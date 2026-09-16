@@ -12,8 +12,8 @@ import * as Context from "effect/Context";
  * exactly the structure it deployed — a roster kept by hand would
  * drift; this one CANNOT.
  *
- * OPTIONAL, like `Binding.AcquisitionRegistry`: no registry provided
- * means registration is a no-op. Rows de-dupe on kind + name.
+ * OPTIONAL: no registry provided means registration is a no-op.
+ * Rows de-dupe on kind + name.
  */
 export interface OrgNode {
   readonly kind: "Agent" | "Skill" | "Group";

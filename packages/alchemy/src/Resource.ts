@@ -5,7 +5,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
-import { Attribution, type AttributionFrame } from "./BindingAttribution.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -96,13 +95,6 @@ export type LogicalId = string;
 export interface ResourceBinding<Data = any> {
   sid: string;
   data: Data;
-  /**
-   * The org path that acquired this binding (agent → skill → tool),
-   * stamped from the ambient {@link Attribution} at registration.
-   * Identity ignores it (`dedupeBindings` keys by sid); the raw rows
-   * keep it as the permission edge of the org graph.
-   */
-  path?: ReadonlyArray<AttributionFrame>;
 }
 
 export interface ResourceLike<
@@ -455,16 +447,9 @@ export function Resource<R extends ResourceLike>(
           | [template: TemplateStringsArray, ...args: any[]]
       ) =>
         typeof args[0] === "string"
-          ? Effect.gen(function* () {
+          ? Effect.sync(() => {
               const [sid, data] = args as [sid: string, data: R["Binding"]];
-              // who acquired this binding — the ambient org path (an
-              // agent's charter, a ToolDef's init, a skill's physics)
-              const path = yield* Attribution;
-              (stack.bindings[fqn] ??= []).push({
-                sid,
-                data,
-                ...(path.length > 0 ? { path } : {}),
-              });
+              (stack.bindings[fqn] ??= []).push({ sid, data });
               return undefined;
             })
           : (data: R["Binding"]) => {

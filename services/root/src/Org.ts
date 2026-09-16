@@ -1,5 +1,4 @@
 import * as AI from "alchemy/AI";
-import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -15,10 +14,11 @@ import * as Option from "effect/Option";
  * is exactly the org deployed — a hand-kept table would drift; this
  * one cannot.
  *
- * Permissions come from the ambient `Binding.AcquisitionRegistry`
- * the same way: the Layer builds record every `Binding.Service`
- * acquisition under its org path (agent → skill → tool), so the
- * permission table is the boot's own proof.
+ * Deliberately NO per-tool permission table: a tool's reach is not
+ * statically knowable — it may depend on a `Context.Service` whose
+ * Layer (with its own bindings and resources) is provided to the
+ * AGENT, outside the tool's own init, so any attribution of bindings
+ * to tools would be partial and misleading.
  */
 
 export interface OrgTool {
@@ -31,14 +31,6 @@ export interface OrgTool {
   readonly params: ReadonlyArray<string>;
   readonly outputs: ReadonlyArray<string>;
   readonly errors: ReadonlyArray<string>;
-  /** The capability acquisitions attributed to this tool. */
-  readonly permissions: ReadonlyArray<OrgPermission>;
-}
-
-export interface OrgPermission {
-  /** The `Binding.Service` key (e.g. `GitHub.GetIssue`). */
-  readonly binding: string;
-  readonly targets: ReadonlyArray<string>;
 }
 
 export interface OrgSkill {
@@ -143,7 +135,6 @@ const renderMarked = (
 const toolEntry = (
   term: AI.Tool<string, any[]>,
   kind: OrgTool["kind"],
-  permissions: ReadonlyArray<OrgPermission>,
 ): OrgTool => {
   const params: string[] = [];
   const outputs: string[] = [];
@@ -161,34 +152,15 @@ const toolEntry = (
     params,
     outputs,
     errors,
-    permissions,
   };
 };
 
-/** Build the graph from the registered declarations, the attributed
- *  acquisitions, and the stored skill switch-offs (`agent/skill`). */
+/** Build the graph from the registered declarations and the stored
+ *  skill switch-offs (`agent/skill`). */
 export const buildOrgGraph = (
   nodes: ReadonlyArray<AI.OrgNode>,
-  acquisitions: ReadonlyArray<Binding.Acquisition>,
   disabled: ReadonlySet<string> = new Set(),
 ): OrgGraph => {
-  /** The acquisitions attributed to one tool (under one agent). */
-  const permissionsOf = (
-    agent: string,
-    tool: string,
-  ): ReadonlyArray<OrgPermission> =>
-    acquisitions
-      .filter(
-        (row) =>
-          row.path.some(
-            (frame) => frame.kind === "Agent" && frame.name === agent,
-          ) &&
-          row.path.some(
-            (frame) => frame.kind === "Tool" && frame.name === tool,
-          ),
-      )
-      .map((row) => ({ binding: row.binding, targets: row.targets }));
-
   const groups: OrgGroup[] = nodes
     .filter((node) => node.kind === "Group")
     .map((node) => ({
@@ -224,7 +196,7 @@ export const buildOrgGraph = (
         const toolName = nameOf(term);
         if (seen.has(toolName)) return;
         seen.add(toolName);
-        tools.push(toolEntry(term, kind, permissionsOf(name, toolName)));
+        tools.push(toolEntry(term, kind));
       };
       for (const ref of node.refs) {
         if (AI.isToolDef(ref)) grant(ref.tool, "static");
@@ -251,14 +223,10 @@ export const buildOrgGraph = (
   return { groups, agents, skills };
 };
 
-/** The graph over the ambient registries (empty without them). */
+/** The graph over the ambient registry (empty without one). */
 export const orgGraph: Effect.Effect<OrgGraph> = Effect.gen(function* () {
   const structure = yield* Effect.serviceOption(AI.OrgRegistry);
-  const acquisitions = yield* Effect.serviceOption(
-    Binding.AcquisitionRegistry,
-  );
   return buildOrgGraph(
     Option.isSome(structure) ? structure.value.list() : [],
-    Option.isSome(acquisitions) ? acquisitions.value.list() : [],
   );
 });
