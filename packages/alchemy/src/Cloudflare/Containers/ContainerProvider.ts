@@ -123,6 +123,23 @@ const digestFromImageRef = (imageRef: string) => {
   return isRegistryDigest(digest) ? digest : undefined;
 };
 
+const validateCachedApplicationAccount = Effect.fn(function* (
+  cached: ContainerApplication["Attributes"] | undefined,
+  accountId: string,
+) {
+  if (
+    cached?.applicationId &&
+    isLiveId(cached.applicationId) &&
+    cached.accountId !== accountId
+  ) {
+    return yield* Effect.fail(
+      new Error(
+        `Container application identity mismatch: cached account "${cached.accountId}" differs from configured account "${accountId}".`,
+      ),
+    );
+  }
+});
+
 const validateCachedApplicationIdentity = Effect.fn(function* (
   application: Containers.GetContainerApplicationResponse,
   cached: Pick<
@@ -1050,6 +1067,7 @@ export const LiveContainerProvider = () =>
             return undefined;
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* validateCachedApplicationAccount(output, accountId);
 
           const oldName =
             output?.applicationName ??
@@ -1174,17 +1192,7 @@ export const LiveContainerProvider = () =>
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
-          if (
-            output?.applicationId &&
-            isLiveId(output.applicationId) &&
-            output.accountId !== accountId
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                `Container application identity mismatch: cached account "${output.accountId}" differs from configured account "${accountId}".`,
-              ),
-            );
-          }
+          yield* validateCachedApplicationAccount(output, accountId);
           const env = makeContainerEnv(news, accountId, bindings);
           const { build, imageRef, imageHash, dev } = yield* computeImage(
             id,
@@ -1434,13 +1442,7 @@ export const LiveContainerProvider = () =>
           }
           if (output?.applicationId) {
             const { accountId } = yield* yield* CloudflareEnvironment;
-            if (output.accountId !== accountId) {
-              return yield* Effect.fail(
-                new Error(
-                  `Container application identity mismatch: cached account "${output.accountId}" differs from configured account "${accountId}".`,
-                ),
-              );
-            }
+            yield* validateCachedApplicationAccount(output, accountId);
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
