@@ -518,7 +518,9 @@ export const App = () => {
                   aria-label={`open the ${entry.name} channel`}
                   className={cn(
                     "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px]",
-                    entry.name === channel.name
+                    // ONE selection in the rail: an open profile takes
+                    // it; the channel stays only background context
+                    agent === undefined && entry.name === channel.name
                       ? "bg-accent font-medium"
                       : "text-muted-foreground hover:bg-accent/60",
                   )}
