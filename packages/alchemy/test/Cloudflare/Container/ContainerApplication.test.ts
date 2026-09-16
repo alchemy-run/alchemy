@@ -7,9 +7,7 @@ import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { assert, describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
@@ -88,10 +86,14 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
-  for (const operation of ["drift", "deploy"] as const) {
-    for (const field of ["applicationId", "accountId"] as const) {
+  for (const maxInstances of [2, 4]) {
+    for (const field of [
+      "applicationId",
+      "applicationName",
+      "accountId",
+    ] as const) {
       test.provider(
-        `rejects cached ${field} mismatches during ${operation}`,
+        `plans replacement for cached ${field} mismatches with ${maxInstances === 2 ? "unchanged" : "changed"} props`,
         (stack) =>
           Effect.gen(function* () {
             yield* stack.destroy();
@@ -116,37 +118,23 @@ describe("ContainerApplication", () => {
             assert(row?.status === "created" || row?.status === "updated");
 
             yield* Effect.gen(function* () {
-              yield* state.set({
-                ...key,
-                value: {
-                  ...row,
-                  attr: {
-                    ...row.attr,
-                    [field]:
-                      field === "applicationId"
-                        ? first.other.applicationId
-                        : "00000000000000000000000000000000",
-                  },
+              const inconsistent = {
+                ...row,
+                attr: {
+                  ...row.attr,
+                  [field]:
+                    field === "accountId"
+                      ? "00000000000000000000000000000000"
+                      : first.other[field],
                 },
-              });
+              };
+              yield* state.set({ ...key, value: inconsistent });
 
-              const result = yield* (
-                operation === "drift"
-                  ? Drift.repair(stack).pipe(Effect.asVoid)
-                  : stack.deploy(applications(4)).pipe(Effect.asVoid)
-              ).pipe(Effect.exit);
-              assert(Exit.isFailure(result));
-              const failure = Cause.pretty(result.cause);
-              expect(failure).toContain(
-                "Container application identity mismatch",
-              );
-              if (field === "applicationId") {
-                expect(failure).toContain(first.owned.applicationName);
-                expect(failure).toContain(first.other.applicationName);
-              } else {
-                expect(failure).toContain(accountId);
-                expect(failure).toContain("00000000000000000000000000000000");
-              }
+              const plan = yield* stack.plan(applications(maxInstances));
+              expect(plan.resources.CachedIdentity.action).toBe("replace");
+              expect(plan.resources.CachedIdentity.state).toEqual(inconsistent);
+              expect(plan.resources.OtherIdentity.action).toBe("noop");
+              expect(yield* state.get(key)).toEqual(inconsistent);
 
               for (const before of observed) {
                 const after = yield* Containers.getContainerApplication({
@@ -204,6 +192,58 @@ describe("ContainerApplication", () => {
       );
     }
   }
+
+  test.provider(
+    "replaces the fixture when its configured name changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const name = `renamed-${first.owned.applicationName.slice(-24)}`;
+        const renamed = applications(2, name);
+
+        const scaling = yield* stack.plan(applications(4));
+        expect(scaling.resources.CachedIdentity.action).toBe("update");
+        const plan = yield* stack.plan(renamed);
+        expect(plan.resources.CachedIdentity.action).toBe("replace");
+        expect(plan.resources.OtherIdentity.action).toBe("noop");
+        const before = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        expect(before.name).toBe(first.owned.applicationName);
+        expect(before.maxInstances).toBe(2);
+
+        const second = yield* stack.deploy(renamed);
+        expect(second.owned.applicationName).toBe(name);
+        expect(second.owned.applicationId).not.toBe(first.owned.applicationId);
+        expect(second.other.applicationId).toBe(first.other.applicationId);
+        const observed = yield* Containers.getContainerApplication({
+          accountId: second.owned.accountId,
+          applicationId: second.owned.applicationId,
+        });
+        expect(observed.name).toBe(name);
+
+        yield* stack.destroy();
+        for (const app of [first.owned, second.owned, second.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
 
   test.provider(
     "forwards the fixture's memoryMib to Cloudflare",
