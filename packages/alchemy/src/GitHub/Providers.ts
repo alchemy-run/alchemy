@@ -10,6 +10,7 @@ import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
 import { Issue, IssueProvider } from "./Issue.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
+import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -50,6 +51,7 @@ export const providers = (options?: ProvidersOptions) =>
       Milestone,
       Issue,
       PullRequest,
+      Release,
       Repository,
       Secret,
       Variable,
@@ -64,6 +66,7 @@ export const providers = (options?: ProvidersOptions) =>
         MilestoneProvider(),
         IssueProvider(),
         PullRequestProvider(),
+        ReleaseProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
