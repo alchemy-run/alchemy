@@ -1,4 +1,4 @@
-import type { Builder, RestartPolicyType } from "@distilled.cloud/railway";
+import type * as railway from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import {
@@ -21,6 +21,9 @@ import {
 } from "./hosted.ts";
 import { serveRailwayRpc } from "./rpc-server.ts";
 import { mintRpcToken } from "./rpc-token.ts";
+
+type Builder = railway.Scalars["Builder"];
+type RestartPolicyType = railway.Scalars["RestartPolicyType"];
 
 /**
  * A resource-valued prop: the resource itself, or an Effect that produces

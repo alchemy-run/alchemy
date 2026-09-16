@@ -5,7 +5,7 @@ import { reserveLowFds } from "alchemy/Dev/LowFdReserve";
 reserveLowFds();
 
 const [{ exec }, { runMain }] = await Promise.all([
-  import("alchemy/Cli"),
+  import("alchemy/Cli/exec"),
   import("alchemy/Util/PlatformServices"),
 ]);
 

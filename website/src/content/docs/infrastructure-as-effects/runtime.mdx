@@ -5,8 +5,9 @@ description: A Runtime is a Resource that carries the code it runs — a Worker,
 
 In Alchemy, a **Runtime** is a [Resource](/infrastructure-as-code/resource)
 that carries the code it runs: a Cloudflare Worker, Lambda Function,
-ECS Task, Container, or Server. The props are the cloud configuration. The
-Effect is the code:
+ECS Task, Container, or Server. The props are the cloud configuration.
+The Effect is the code. Here is the running example from
+[What is Alchemy?](/what-is-alchemy), which this page takes apart:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
@@ -164,68 +165,37 @@ work.
 
 ## Layers
 
-A Binding is infrastructure the Runtime uses directly. A Layer packages
-infrastructure behind a service of your own. Declare a
-`Context.Service` for what the handler needs, then implement it with a
-Layer that owns its own resources and bindings:
-
-```typescript
-import * as Alchemy from "alchemy";
-import * as Context from "effect/Context";
-import * as Layer from "effect/Layer";
-
-export class JobService extends Context.Service<
-  JobService,
-  { getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext> }
->()("JobService") {}
-
-export const JobServiceKV = Layer.effect(
-  JobService,
-  Effect.gen(function* () {
-    const Jobs = yield* Cloudflare.KV.Namespace("Jobs");
-    const kv = yield* Cloudflare.KV.ReadWriteNamespace(Jobs);
-
-    return {
-      getJob: (id: string) => kv.get<Job>(id, "json"),
-    };
-  }),
-);
-```
-
-The Runtime yields the service and provides the Layer:
+A Binding is infrastructure the Runtime uses directly. A Layer
+packages infrastructure behind a service of your own — it owns its
+resources and bindings internally, and providing it on the
+constructor is what brings them into the deploy:
 
 ```typescript
 export default Cloudflare.Worker(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const jobs = yield* JobService;
+    const jobs = yield* JobService; // a service of your own
 
     return {
       fetch: Effect.gen(function* () {
         return HttpServerResponse.json(yield* jobs.getJob("job-1"));
       }),
     };
-  }).pipe(
-    Effect.provide(
-      JobServiceKV.pipe(Layer.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
-    ),
-  ),
+  }).pipe(Effect.provide(JobServiceKV)), // the Layer brings a KV Namespace with it
 );
 ```
 
-Providing the Layer is what brings the infrastructure in. On the next
-deploy the `Jobs` namespace is created and bound to this Worker, and
-the handler only ever sees `JobService`. Swap `JobServiceKV` for a Layer
-backed by DynamoDB and the handler doesn't change. This is the
-fundamental building block of Infrastructure as Effects.
+On the next deploy the Layer's namespace is created and bound to this
+Worker, and the handler only ever sees `JobService`. Swap
+`JobServiceKV` for a DynamoDB-backed Layer and the handler doesn't
+change. This is the fundamental building block of Infrastructure as
+Effects, and [Layers](/infrastructure-as-effects/layers) builds one
+from scratch.
 
-:::note
-[Layers](/infrastructure-as-effects/layers) builds one from scratch and
-shows the swap across clouds.
-:::
+## Three ways to declare a Runtime
 
-## Three ways to declare one
+#### Inline
 
 The inline form above is enough when nothing else needs to reference
 the Worker by name:
@@ -233,6 +203,8 @@ the Worker by name:
 ```typescript
 export default Cloudflare.Worker("Api", { main: import.meta.url }, effect);
 ```
+
+#### Class
 
 Wrap it in a class and the type becomes nominal. Hovers, errors, and
 Stack outputs say `Api` instead of an anonymous shape:
@@ -244,6 +216,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
   effect,
 ) {}
 ```
+
+#### Tag and Layer
 
 The third form splits identity from implementation. The class declares
 only a **Tag**. `.make(props, effect)` produces the implementation
@@ -305,26 +279,9 @@ export default Cloudflare.Worker(
 );
 ```
 
-Because bindings are context, a handler can depend on a service of
-your own instead of a resource. With the `JobService` contract and
-`JobServiceKV` Layer from [Layers](#layers) above, the Worker yields
-the service and provides the Layer. The namespace comes with it, and
-swapping in a Layer backed by DynamoDB changes nothing in the handler:
-
-```typescript
-export default Cloudflare.Worker(
-  "Worker",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const jobs = yield* JobService;
-    return {
-      fetch: Effect.gen(function* () {
-        return HttpServerResponse.json(yield* jobs.getJob("job-1"));
-      }),
-    };
-  }).pipe(Effect.provide(JobServiceKV)),
-);
-```
+Because bindings are context, a handler can also depend on a service
+of your own instead of a resource, with the storage swapped by
+providing a different [Layer](#layers).
 
 The async style is a standard `async fetch`. Bindings go on the
 resource's `env` prop and are typed with `InferEnv`:

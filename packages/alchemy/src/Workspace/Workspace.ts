@@ -6,7 +6,11 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import { Thread } from "../AI/Thread.ts";
-import * as Git from "../Git/index.ts";
+// the specific modules, NOT the Git barrel: the barrel also exports
+// the Git hosting service (Server, DurableObjects), whose import
+// graph cycles back through the container runtimes into this file
+import * as Checkouts from "../Git/Checkouts.ts";
+import * as GitRemote from "../Git/Remote.ts";
 
 /**
  * The Workspace — the PLACE tool physics work in, sandboxed: a
@@ -16,7 +20,7 @@ import * as Git from "../Git/index.ts";
  *
  * - {@link fixed}: one static containment root — a desk that works
  *   the same checkout for every run.
- * - {@link perRun}: the root IS the current run's {@link Git.Checkouts}
+ * - {@link perRun}: the root IS the current run's {@link Checkouts.Checkouts}
  *   checkout, derived from `AI.Thread` at CALL time — the coding-agent
  *   shape. Tools physically cannot write outside the run's own
  *   worktree, so path discipline needs no prose, and concurrent runs
@@ -152,7 +156,7 @@ export const fixed = (
       const fs = yield* FileSystem.FileSystem;
 
       // self-provisioning on first use: checkouts land under it later —
-      // Git.Checkouts populates, we contain
+      // Checkouts.Checkouts populates, we contain
       const canonicalRoot = yield* Effect.cached(
         Effect.gen(function* () {
           const resolved = path.resolve(root);
@@ -186,7 +190,7 @@ export const fixed = (
 
 /**
  * The PER-RUN containment root: the current thread's
- * {@link Git.Checkouts} checkout. Every resolution derives the root
+ * {@link Checkouts.Checkouts} checkout. Every resolution derives the root
  * from `AI.Thread` at call time (tool handlers run with the thread
  * provided), so an agent's tools are physically confined to its own
  * worktree — "which directory am I in" is not a fact the model can
@@ -196,12 +200,12 @@ export const perRun = (options?: {
   /**
    * Check the run's worktree out LAZILY on first use, from this
    * remote — making this layer the ONE place that binds run key →
-   * worktree (`Git.Checkouts.checkout` is memoized by key, so any
+   * worktree (`Checkouts.Checkouts.checkout` is memoized by key, so any
    * other holder of the same key — a PR tool committing the work —
    * lands in the same tree). Without a remote, the charter's init
    * must have acquired the checkout itself.
    */
-  readonly remote?: Git.Remote;
+  readonly remote?: GitRemote.Remote;
   /**
    * The FIXED containment root for sessions with no checkout —
    * mixed-agent processes share one Workspace layer this way: a
@@ -215,14 +219,14 @@ export const perRun = (options?: {
 }): Layer.Layer<
   Workspace,
   never,
-  Path.Path | FileSystem.FileSystem | Git.Checkouts
+  Path.Path | FileSystem.FileSystem | Checkouts.Checkouts
 > =>
   Layer.effect(
     Workspace,
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      const checkouts = yield* Git.Checkouts;
+      const checkouts = yield* Checkouts.Checkouts;
 
       const fallbackRoot =
         options?.fallback === undefined

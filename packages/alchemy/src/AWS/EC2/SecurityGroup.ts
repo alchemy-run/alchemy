@@ -659,7 +659,7 @@ export const SecurityGroupProvider = () =>
               DryRun: false,
             });
             yield* session.note(`Applied ${news.egress.length} egress rules`);
-          } else {
+          } else if (news.egress === undefined) {
             yield* ec2.authorizeSecurityGroupEgress({
               GroupId: groupId,
               IpPermissions: [

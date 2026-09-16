@@ -47,8 +47,8 @@ packages/cloudflare-runtime/src/rolldown/out/
 !packages/cloudflare-runtime/src/rolldown/test/fixtures/**/*.js
 !packages/cloudflare-frameworks/src/nextjs/wrangler-stub/*.js
 !packages/cloudflare-*/src/**/*.d.ts
-!fixtures/**/*.d.ts
-!fixtures/**/*.js
+!packages/frontend-frameworks/fixtures/**/*.d.ts
+!packages/frontend-frameworks/fixtures/**/*.js
 
 .attest
 .cache
@@ -83,3 +83,5 @@ examples/cloudflare-worker/src/scratch.ts
 /vendor/
 
 .tool-output/
+
+!packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts

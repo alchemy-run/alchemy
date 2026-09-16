@@ -18,6 +18,7 @@ import {
   type CommandProps,
 } from "./Command.ts";
 import { makeCommandRedactor } from "./Redaction.ts";
+import { moduleExtension } from "../Util/Node.ts";
 
 export interface DevProps extends CommandProps {}
 
@@ -112,7 +113,7 @@ export const DevProviderLocal = () =>
   LocalProvider.make(
     Dev,
     import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
+      `./Local${moduleExtension(import.meta.url)}`,
       import.meta.url,
     ),
     Effect.gen(function* () {
