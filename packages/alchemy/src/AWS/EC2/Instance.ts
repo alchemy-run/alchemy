@@ -678,15 +678,10 @@ export const InstanceProvider = () =>
           const reusesFixedPrivateIp =
             news.privateIpAddress !== undefined &&
             (output?.privateIpAddress ?? olds.privateIpAddress) ===
-              news.privateIpAddress;
+              news.privateIpAddress &&
+            (news.subnetId === undefined ||
+              (output?.subnetId ?? olds.subnetId) === news.subnetId);
 
-          // A failed create-first replacement is persisted with no output.
-          // If a later provider version learns that the requested address
-          // cannot coexist with the live generation, restart the replacement
-          // with delete-first ordering instead of preserving the stale policy.
-          if (output === undefined && reusesFixedPrivateIp) {
-            return { action: "replace", deleteFirst: true } as const;
-          }
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
           if (
             hostModeChanged ||
@@ -699,10 +694,8 @@ export const InstanceProvider = () =>
             olds.privateIpAddress !== news.privateIpAddress ||
             olds.availabilityZone !== news.availabilityZone
           ) {
-            // AWS cannot launch a replacement while the previous instance
-            // still owns the same explicitly requested primary private IP.
-            // Preserve create-first behavior when no fixed IP is requested,
-            // or when the replacement moves to a different address.
+            // A primary private IP cannot belong to two instances in the
+            // same subnet. An omitted subnet may still resolve to that subnet.
             return reusesFixedPrivateIp
               ? ({ action: "replace", deleteFirst: true } as const)
               : ({ action: "replace" } as const);
