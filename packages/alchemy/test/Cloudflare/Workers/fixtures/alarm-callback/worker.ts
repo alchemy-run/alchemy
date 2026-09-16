@@ -1,9 +1,13 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { LegacyAlarmObject } from "./legacy.ts";
-import { AlarmObject } from "./object.ts";
+import { AlarmObject, type RegistrationResult } from "./object.ts";
 
 export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallbackWorker>()(
   "AlarmCallbackWorker",
@@ -35,6 +39,34 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           return HttpServerResponse.text("Method Not Allowed", { status: 405 });
         }
         switch (operation) {
+          case "worker-registration": {
+            const snapshot = yield* object.snapshot();
+            const context = yield* Alchemy.RuntimeContext;
+            const exit = yield* Effect.exit(
+              Alchemy.makeCallback(
+                "unsupported-worker",
+                (_payload: { value: string }) => Effect.void,
+              ),
+            );
+            const defect = Exit.isFailure(exit)
+              ? Result.getOrUndefined(Cause.findDefect(exit.cause))
+              : undefined;
+            const result: RegistrationResult & { runtimeType: string } = {
+              runtimeType: context.Type,
+              failure:
+                defect instanceof Alchemy.CallbackError
+                  ? {
+                      tag: defect._tag,
+                      callback: defect.callback,
+                      message: defect.message,
+                    }
+                  : null,
+              snapshot,
+            };
+            return yield* HttpServerResponse.json(result);
+          }
+          case "late-registration":
+            return yield* HttpServerResponse.json(yield* object.registerLate());
           case "timing":
             return yield* HttpServerResponse.json(yield* object.timing());
           case "atomic":

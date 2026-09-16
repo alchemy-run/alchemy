@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -9,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 
 class TransactionMarker extends Context.Service<
   TransactionMarker,
@@ -46,6 +48,15 @@ export interface Snapshot {
     run_at: number;
     version: string;
   }[];
+}
+
+export interface RegistrationResult {
+  failure: {
+    tag: "CallbackError";
+    callback: string;
+    message: string;
+  } | null;
+  snapshot: Snapshot;
 }
 
 export interface RollbackResult {
@@ -86,7 +97,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         value: string;
       }) => Effect.Effect<
         void,
-        Cloudflare.AlarmCallbackError | Cloudflare.DurableObjectStorageError,
+        Alchemy.CallbackError | Cloudflare.DurableObjectStorageError,
         RuntimeContext
       > = Effect.fn(function* (payload: { value: string }) {
         if (payload.value === "replace-first") {
@@ -98,14 +109,14 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         yield* record("archive", payload.value);
       });
 
-      const onArchive = yield* Cloudflare.makeAlarmCallback("archive", archive);
-      const onSecondary = yield* Cloudflare.makeAlarmCallback(
+      const onArchive = yield* Alchemy.makeCallback("archive", archive);
+      const onSecondary = yield* Alchemy.makeCallback(
         "secondary",
         Effect.fn(function* (payload: { value: string }) {
           yield* record("secondary", payload.value);
         }),
       );
-      const onRetry = yield* Cloudflare.makeAlarmCallback(
+      const onRetry = yield* Alchemy.makeCallback(
         "retry",
         Effect.fn(function* (payload: { value: string }) {
           const attempts = (yield* storage.get<Attempt[]>("attempts")) ?? [];
@@ -124,7 +135,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         { retry: { delay: "1 second" } },
       );
-      const onCrash = yield* Cloudflare.makeAlarmCallback(
+      const onCrash = yield* Alchemy.makeCallback(
         "crash",
         Effect.fn(function* (payload: { value: string }) {
           const attempts = (yield* storage.get<Attempt[]>("attempts")) ?? [];
@@ -148,7 +159,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
       const onOptional =
         (yield* storage.get<boolean>("optionalEnabled")) === false
           ? undefined
-          : yield* Cloudflare.makeAlarmCallback(
+          : yield* Alchemy.makeCallback(
               "optional",
               Effect.fn(function* (payload: { value: string }) {
                 yield* record("optional", payload.value);
@@ -228,6 +239,29 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
 
       return {
         snapshot,
+        registerLate: Effect.fn(function* () {
+          const exit = yield* Effect.exit(
+            Alchemy.makeCallback(
+              "late",
+              (_payload: { value: string }) => Effect.void,
+            ),
+          );
+          const defect = Exit.isFailure(exit)
+            ? Result.getOrUndefined(Cause.findDefect(exit.cause))
+            : undefined;
+          const result: RegistrationResult = {
+            failure:
+              defect instanceof Alchemy.CallbackError
+                ? {
+                    tag: defect._tag,
+                    callback: defect.callback,
+                    message: defect.message,
+                  }
+                : null,
+            snapshot: yield* snapshot(),
+          };
+          return result;
+        }),
         timing: Effect.fn(function* () {
           const at = yield* Effect.sync(() => Date.now() + 1_500);
           yield* storage.transaction(

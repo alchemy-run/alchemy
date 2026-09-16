@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -29,7 +30,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
         const deliveries = (yield* storage.get<Delivery[]>("deliveries")) ?? [];
         yield* storage.put("deliveries", [...deliveries, delivery]);
       });
-      const onArchive = yield* Cloudflare.makeAlarmCallback(
+      const onArchive = yield* Alchemy.makeCallback(
         "archive",
         Effect.fn(function* (payload: { value: string }) {
           yield* record({

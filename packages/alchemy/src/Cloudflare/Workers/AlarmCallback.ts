@@ -2,7 +2,6 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -15,58 +14,18 @@ import {
   ensureAlarmTables,
   reconcileDurableObjectAlarm,
 } from "./DurableObjectAlarmStorage.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
 import {
-  fromDurableObjectStorage,
-  type DurableObjectStorageError,
-} from "./DurableObjectStorage.ts";
-
-/** A scheduled alarm could not be registered, encoded, or dispatched. */
-export class AlarmCallbackError extends Data.TaggedError("AlarmCallbackError")<{
-  readonly callback: string;
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export interface AlarmCallbackOptions {
-  /** Recovery delay after an unsuccessful or interrupted delivery. Defaults to 30 seconds. */
-  readonly retry?: {
-    /** Must be a finite, positive duration. */
-    readonly delay: Duration.Input;
-  };
-}
-
-export type AlarmScheduleOptions<Payload> = {
-  /** JSON-serializable data delivered to the callback. */
-  readonly payload: Payload;
-} & (
-  | {
-      /** Absolute delivery time, as a Date or milliseconds since the Unix epoch. */
-      readonly at: Date | number;
-      readonly after?: never;
-    }
-  | {
-      /** Delay before delivery. Zero schedules the callback as soon as possible. */
-      readonly after: Duration.Input;
-      readonly at?: never;
-    }
-);
-
-export interface AlarmCallback<Payload> {
-  /** Schedule or replace the job identified by this callback's name and the supplied ID. */
-  readonly schedule: (
-    id: string,
-    options: AlarmScheduleOptions<Payload>,
-  ) => Effect.Effect<
-    void,
-    AlarmCallbackError | DurableObjectStorageError,
-    RuntimeContext
-  >;
-  /** Cancel a pending job. Cancelling an absent ID succeeds. */
-  readonly cancel: (
-    id: string,
-  ) => Effect.Effect<void, DurableObjectStorageError, RuntimeContext>;
-}
+  DurableObjectState,
+  fromDurableObjectState,
+} from "./DurableObjectState.ts";
+import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
+import {
+  CallbackError,
+  type Callback,
+  type CallbackOptions,
+  type CallbackScheduleOptions,
+  type CallbackFactory,
+} from "../../Callback.ts";
 
 type InvocationServices = RuntimeContext | DurableObjectState | Scope.Scope;
 interface RegisteredCallback {
@@ -97,81 +56,27 @@ export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
   };
 };
 
-/**
- * Register a durable alarm callback in a Durable Object's per-instance Effect.
- * Alchemy dispatches scheduled jobs through the native alarm handler and removes
- * each job only after its callback succeeds. Delivery is at least once: handlers
- * performing external I/O must be idempotent.
- *
- * ### Registering and Scheduling a Callback
- * **Example:** Persist a document and schedule its archival atomically
- * ```typescript
- * const state = yield* Cloudflare.DurableObjectState;
- * return Effect.gen(function* () {
- *   const onArchive = yield* Cloudflare.makeAlarmCallback(
- *     "archive",
- *     Effect.fn(function* (payload: { key: string; body: string }) {
- *       yield* archive.put(payload.key, payload.body);
- *     }),
- *   );
- *   return {
- *     save: Effect.fn(function* (id: string, body: string) {
- *       yield* state.storage.transaction(
- *         Effect.gen(function* () {
- *           yield* state.storage.put(id, body);
- *           yield* onArchive.schedule(id, {
- *             after: "30 seconds",
- *             payload: { key: id, body },
- *           });
- *         }),
- *       );
- *     }),
- *   };
- * });
- * ```
- *
- * ### Cancelling or Replacing a Job
- * **Example:** Use a stable ID within a callback
- * ```typescript
- * yield* onArchive.schedule("revision-42", {
- *   at: new Date("2026-10-01T09:00:00Z"),
- *   payload: { key: "42.txt", body: "hello" },
- * });
- * yield* onArchive.cancel("revision-42");
- * ```
- *
- * ### Delivery and Schema Upgrades <!-- api-prose -->
- * Before invoking a callback, the dispatcher persists a recovery wake (30 seconds
- * by default). Failures remain pending, including across instance reconstruction.
- * A successful handler does not acknowledge a replacement it scheduled under the
- * same ID. Up to 100 due jobs are processed per native alarm invocation.
- *
- * Callback names identify persisted jobs; retain a handler for old names while
- * jobs are pending. Payloads must be JSON-serializable and compatible with pending
- * jobs from previous deployments; TypeScript types do not perform runtime decoding.
- *
- * The original unversioned scheduleEvent table is schema version 0. Its rows are
- * preserved by the atomic version 1 migration and continue through an explicitly
- * returned alarm handler using processScheduledEvents. Both schedulers share the
- * earliest native wake-up. Unknown newer schema versions fail without modification.
- * Direct setAlarm/deleteAlarm calls bypass this coordination.
- *
- * @binding
- */
-export const makeAlarmCallback = <Payload, E, R>(
+/** @internal */
+export const makeDurableObjectCallbackFactory = (
+  raw: cf.DurableObjectState,
+): CallbackFactory => {
+  const state = fromDurableObjectState(raw);
+  return (name, handler, options) =>
+    makeAlarmCallback(state, name, handler, options);
+};
+
+const makeAlarmCallback = <Payload, E, R>(
+  state: DurableObjectState["Service"],
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
-  options?: AlarmCallbackOptions,
+  options?: CallbackOptions,
 ): Effect.Effect<
-  AlarmCallback<Payload>,
+  Callback<Payload>,
   never,
-  DurableObjectState | RuntimeContext | Exclude<R, InvocationServices>
+  RuntimeContext | Exclude<R, Scope.Scope>
 > =>
   Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    const context = (yield* Effect.context<
-      Exclude<R, InvocationServices>
-    >()).pipe(
+    const context = (yield* Effect.context<Exclude<R, Scope.Scope>>()).pipe(
       Context.omit(
         DurableObjectState,
         RuntimeContext,
@@ -184,7 +89,7 @@ export const makeAlarmCallback = <Payload, E, R>(
     const registry = registries.get(state.raw);
     if (!registry?.open || !name || registry.callbacks.has(name)) {
       return yield* Effect.die(
-        new AlarmCallbackError({
+        new CallbackError({
           callback: name,
           message: !registry?.open
             ? "Alarm callbacks must be registered during Durable Object instance initialization"
@@ -197,7 +102,7 @@ export const makeAlarmCallback = <Payload, E, R>(
     );
     if (!Number.isFinite(retryDelay) || retryDelay <= 0) {
       return yield* Effect.die(
-        new AlarmCallbackError({
+        new CallbackError({
           callback: name,
           message: "Alarm retry delay must be finite and positive",
         }),
@@ -222,7 +127,7 @@ export const makeAlarmCallback = <Payload, E, R>(
     return {
       schedule: Effect.fn(function* (
         id: string,
-        schedule: AlarmScheduleOptions<Payload>,
+        schedule: CallbackScheduleOptions<Payload>,
       ) {
         const now = yield* Clock.currentTimeMillis;
         const { at, payload } = yield* Effect.try({
@@ -262,47 +167,71 @@ export const makeAlarmCallback = <Payload, E, R>(
             return { at, payload };
           },
           catch: (cause) =>
-            new AlarmCallbackError({
+            new CallbackError({
               callback: name,
               message: "Invalid alarm schedule",
               cause,
             }),
         });
         const version = yield* Effect.sync(() => crypto.randomUUID());
-        yield* state.storage.transaction(
-          Effect.gen(function* () {
-            yield* ensureAlarmTables(raw);
-            yield* Effect.sync(() =>
-              raw.sql.exec(
-                `INSERT INTO alchemy_alarm_callbacks (callback, id, version, run_at, payload)
+        yield* state.storage
+          .transaction(
+            Effect.gen(function* () {
+              yield* ensureAlarmTables(raw);
+              yield* Effect.sync(() =>
+                raw.sql.exec(
+                  `INSERT INTO alchemy_alarm_callbacks (callback, id, version, run_at, payload)
            VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (callback, id) DO UPDATE SET
              version = excluded.version, run_at = excluded.run_at, payload = excluded.payload`,
-                name,
-                id,
-                version,
-                at,
-                payload,
+                  name,
+                  id,
+                  version,
+                  at,
+                  payload,
+                ),
+              );
+              yield* reconcileDurableObjectAlarm(raw);
+            }),
+          )
+          .pipe(
+            Effect.catchTag("DurableObjectStorageError", (cause) =>
+              Effect.fail(
+                new CallbackError({
+                  callback: name,
+                  message: "Callback storage transaction failed",
+                  cause,
+                }),
               ),
-            );
-            yield* reconcileDurableObjectAlarm(raw);
-          }),
-        );
+            ),
+          );
       }),
       cancel: Effect.fn(function* (id: string) {
-        yield* state.storage.transaction(
-          Effect.gen(function* () {
-            yield* ensureAlarmTables(raw);
-            yield* Effect.sync(() =>
-              raw.sql.exec(
-                "DELETE FROM alchemy_alarm_callbacks WHERE callback = ? AND id = ?",
-                name,
-                id,
+        yield* state.storage
+          .transaction(
+            Effect.gen(function* () {
+              yield* ensureAlarmTables(raw);
+              yield* Effect.sync(() =>
+                raw.sql.exec(
+                  "DELETE FROM alchemy_alarm_callbacks WHERE callback = ? AND id = ?",
+                  name,
+                  id,
+                ),
+              );
+              yield* reconcileDurableObjectAlarm(raw);
+            }),
+          )
+          .pipe(
+            Effect.catchTag("DurableObjectStorageError", (cause) =>
+              Effect.fail(
+                new CallbackError({
+                  callback: name,
+                  message: "Callback storage transaction failed",
+                  cause,
+                }),
               ),
-            );
-            yield* reconcileDurableObjectAlarm(raw);
-          }),
-        );
+            ),
+          );
       }),
     };
   });
@@ -337,7 +266,7 @@ export const dispatchAlarmCallbacks = (
       );
       if (legacy.length > 0) {
         return yield* Effect.fail(
-          new AlarmCallbackError({
+          new CallbackError({
             callback: "scheduleEvent",
             message:
               "Pending legacy events require an alarm handler calling processScheduledEvents",
@@ -379,7 +308,7 @@ export const dispatchAlarmCallbacks = (
       const result = yield* Effect.gen(function* () {
         if (!callback) {
           return yield* Effect.fail(
-            new AlarmCallbackError({
+            new CallbackError({
               callback: job.callback,
               message: "No handler is registered for a pending alarm",
             }),
@@ -388,7 +317,7 @@ export const dispatchAlarmCallbacks = (
         const payload = yield* Effect.try({
           try: () => JSON.parse(job.payload),
           catch: (cause) =>
-            new AlarmCallbackError({
+            new CallbackError({
               callback: job.callback,
               message: "Invalid persisted alarm payload",
               cause,

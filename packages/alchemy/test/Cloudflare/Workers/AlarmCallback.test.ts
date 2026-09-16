@@ -6,6 +6,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type {
+  RegistrationResult,
   RollbackResult,
   Snapshot,
 } from "./fixtures/alarm-callback/object.ts";
@@ -109,7 +110,7 @@ const assertRollback = (snapshot: Snapshot) => {
 describe.concurrent.each([
   { dev: true, stage: "alarm-callback-local" },
   { dev: false, stage: "alarm-callback-live" },
-])("makeAlarmCallback (dev: $dev)", ({ dev, stage }) => {
+])("makeCallback (dev: $dev)", ({ dev, stage }) => {
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
@@ -131,6 +132,59 @@ describe.concurrent.each([
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
     timeout: 30_000,
   });
+
+  test(
+    "Worker callback registration stays unsupported after a Durable Object call",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const result = yield* json<RegistrationResult & { runtimeType: string }>(
+        `${url}/worker-registration/worker-registration`,
+        "POST",
+      );
+      expect(result.snapshot.boots).toBeGreaterThan(0);
+      expect(result.runtimeType).toBe("Cloudflare.Worker");
+      expect(result.failure).toEqual({
+        tag: "CallbackError",
+        callback: "unsupported-worker",
+        message: `Durable callbacks are not supported by ${result.runtimeType}`,
+      });
+      expect(result.snapshot.pendingJobs).toEqual([]);
+      expect(result.snapshot.alarm).toBeNull();
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "late DO registration defects without disabling initialized callbacks",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const base = `${url}/late-registration`;
+      const rejected = yield* json<RegistrationResult>(
+        `${base}/late-registration`,
+        "POST",
+      );
+      expect(rejected.failure?.tag).toBe("CallbackError");
+      expect(rejected.failure?.callback).toBe("late");
+      expect(rejected.failure?.message).toContain("instance initialization");
+      expect(rejected.snapshot.pendingJobs).toEqual([]);
+      expect(rejected.snapshot.deliveries).toEqual([]);
+      expect(rejected.snapshot.alarm).toBeNull();
+      const scheduled = yield* json<Snapshot>(`${base}/timing`, "POST");
+      expect(scheduled.id).toBe(rejected.snapshot.id);
+      expect(scheduled.alarm).not.toBeNull();
+      const delivered = yield* poll<Snapshot>(`${base}/snapshot`, drained(5));
+      expect(delivered.id).toBe(rejected.snapshot.id);
+      expect(deliveries(delivered)).toEqual([
+        "archive:checkpoint",
+        "archive:date",
+        "archive:duration",
+        "archive:latest",
+        "secondary:other-callback",
+      ]);
+      expect(delivered.pendingJobs).toEqual([]);
+    }),
+    { timeout: 90_000 },
+  );
 
   test(
     "native alarms deliver typed payloads, overwrite by callback and ID, and cancel",

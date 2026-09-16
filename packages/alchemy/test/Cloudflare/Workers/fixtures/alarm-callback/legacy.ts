@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
 
 export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObject>()(
@@ -6,7 +7,7 @@ export class LegacyAlarmObject extends Cloudflare.DurableObject<LegacyAlarmObjec
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const registered = yield* Cloudflare.makeAlarmCallback(
+      const registered = yield* Alchemy.makeCallback(
         "registered",
         Effect.fn(function* (payload: { value: string }) {
           yield* state.storage.put("registered", payload.value);

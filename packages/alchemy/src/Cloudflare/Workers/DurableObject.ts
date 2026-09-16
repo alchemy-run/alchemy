@@ -830,16 +830,18 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
- * ### Transactional Alarm Callbacks
- * Register callbacks in the inner, per-instance Effect. Scheduling participates
- * in the current storage transaction, and Alchemy acknowledges each job only
- * after its handler succeeds. No explicit `alarm` handler is needed.
+ * ### Durable Callbacks
+ * Register `Alchemy.makeCallback` handlers in the inner, per-instance Effect.
+ * Durable Objects supply callback registration on their instance RuntimeContext
+ * using SQLite and native alarms. Scheduling participates in the current storage
+ * transaction, and each job is acknowledged only after its handler succeeds.
+ * No explicit `alarm` handler is needed.
  *
  * **Example:** Save state and schedule a typed callback atomically
  * ```typescript
  * const state = yield* Cloudflare.DurableObjectState;
  * return Effect.gen(function* () {
- *   const onArchive = yield* Cloudflare.makeAlarmCallback(
+ *   const onArchive = yield* Alchemy.makeCallback(
  *     "archive",
  *     Effect.fn(function* (payload: { key: string; body: string }) {
  *       yield* archive.put(payload.key, payload.body);
@@ -865,7 +867,9 @@ export class DurableObjectScope extends Context.Service<
  * external writes must be idempotent. A recovery wake is persisted before each
  * attempt; configure its delay with the third argument, `{ retry: { delay:
  * "1 minute" } }`. Scheduling the same callback name and ID replaces the pending
- * job; `onArchive.cancel(id)` cancels it.
+ * job; `onArchive.cancel(id)` cancels it. Retain handlers for old callback names
+ * while their jobs are pending. Each native alarm processes up to 100 due jobs;
+ * direct `setAlarm`/`deleteAlarm` calls bypass the scheduler's coordination.
  *
  * The scheduler migrates its original unversioned SQLite schema to version 1
  * atomically, preserving existing events. Old events still use the explicit

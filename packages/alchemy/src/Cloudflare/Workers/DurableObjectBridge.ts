@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -12,7 +13,9 @@ import { HttpServerResponse } from "effect/unstable/http";
 import {
   dispatchAlarmCallbacks,
   initializeAlarmCallbacks,
+  makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { buildEventTelemetry } from "../../Telemetry.ts";
 import type {
   DurableObjectExport,
@@ -67,8 +70,12 @@ export const makeDurableObjectBridge =
 
         this.#instance = state.blockConcurrencyWhile(() =>
           build((promise) => void (state as any).waitUntil?.(promise)).then(
-            ({ context, export: exported, telemetry }) => {
+            ({ context, runtimeContext, export: exported, telemetry }) => {
               const { constructor, services } = exported;
+              const instanceRuntimeContext = {
+                ...runtimeContext,
+                makeCallback: makeDurableObjectCallbackFactory(this.#state),
+              };
               const doContext = Layer.succeed(
                 DurableObjectState,
                 fromDurableObjectState(this.#state),
@@ -81,15 +88,23 @@ export const makeDurableObjectBridge =
                 Effect.flatMap((instance) =>
                   Effect.suspend(() => {
                     const seal = initializeAlarmCallbacks(this.#state);
+                    const instanceContext = Layer.succeed(
+                      RuntimeContext,
+                      instanceRuntimeContext,
+                    ).pipe(Layer.provideMerge(doContext));
                     return instance.pipe(
-                      Effect.provide(doContext),
+                      Effect.provide(instanceContext),
                       Effect.ensuring(Effect.sync(seal)),
                     );
                   }),
                 ),
                 Effect.map((instance) => ({
                   instance,
-                  services,
+                  services: Context.add(
+                    services,
+                    RuntimeContext,
+                    instanceRuntimeContext,
+                  ),
                   context,
                   telemetry,
                 })),
