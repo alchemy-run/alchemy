@@ -31,6 +31,24 @@ export interface RegistryCredentials {
   password: string | Redacted.Redacted<string>;
 }
 
+const RegistryAuth = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value) => {
+      const decoded = Encoding.decodeBase64(value);
+      return Result.isSuccess(decoded) && decoded.success.indexOf(58) > 0;
+    }),
+  ),
+);
+
+const decodeRegistryAuthConfig = Schema.Struct({
+  auths: Schema.Record(
+    Schema.String,
+    Schema.Struct({ auth: RegistryAuth }),
+  ).pipe(Schema.NullOr, Schema.optional),
+}).pipe(Schema.fromJsonString, (schema) =>
+  Schema.decodeEffect(schema, { onExcessProperty: "error" }),
+);
+
 export class Docker extends Context.Service<
   Docker,
   {
@@ -574,65 +592,36 @@ export const DockerLive = Layer.effect(
         }),
       );
 
-    const registryEnvironment = Effect.fn("registryEnvironment")(function* (
-      credentials: RegistryCredentials,
-    ) {
-      const current = yield* Config.redacted("DOCKER_AUTH_CONFIG").pipe(
-        Config.withDefault(Redacted.make("{}")),
-        Effect.flatMap((value) =>
-          Schema.decodeEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                auths: Schema.optional(
-                  Schema.NullOr(
-                    Schema.Record(
-                      Schema.String,
-                      Schema.Struct({
-                        auth: Schema.String.check(
-                          Schema.makeFilter((value) => {
-                            const decoded = Encoding.decodeBase64(value);
-                            // Docker requires a nonempty username followed by
-                            // a colon. Retain the original encoded credentials.
-                            return (
-                              Result.isSuccess(decoded) &&
-                              decoded.success.indexOf(58) > 0
-                            );
-                          }),
-                        ),
-                      }),
-                    ),
-                  ),
-                ),
+    const registryEnvironment = Effect.fn("registryEnvironment")(
+      (credentials: RegistryCredentials) =>
+        Config.Redacted("DOCKER_AUTH_CONFIG").pipe(
+          Config.withDefault(Redacted.make("{}")),
+          Effect.map((value) => Redacted.value(value) || "{}"),
+          Effect.flatMap(decodeRegistryAuthConfig),
+          // Schema diagnostics may include credential input. Do not retain them.
+          Effect.mapError(() =>
+            systemError({
+              _tag: "InvalidData",
+              args: ["buildx", "build"],
+              description: "Invalid DOCKER_AUTH_CONFIG; expected an auths map.",
+            }),
+          ),
+          Effect.map((current) => {
+            const password = Redacted.isRedacted(credentials.password)
+              ? Redacted.value(credentials.password)
+              : credentials.password;
+            const auth = Encoding.encodeBase64(
+              `${credentials.username}:${password}`,
+            );
+            // Preserve Docker's file/helper fallback, contexts, and builders.
+            return {
+              DOCKER_AUTH_CONFIG: JSON.stringify({
+                auths: { ...current.auths, [credentials.server]: { auth } },
               }),
-            ),
-            { onExcessProperty: "error" },
-          )(Redacted.value(value) || "{}"),
-        ),
-        // Schema diagnostics may include credential input. Do not retain them.
-        Effect.mapError(() =>
-          systemError({
-            _tag: "InvalidData",
-            args: ["buildx", "build"],
-            description: "Invalid DOCKER_AUTH_CONFIG; expected an auths map.",
+            };
           }),
         ),
-      );
-      return yield* Effect.sync(() => {
-        const password = Redacted.isRedacted(credentials.password)
-          ? Redacted.value(credentials.password)
-          : credentials.password;
-        const auth = Buffer.from(
-          `${credentials.username}:${password}`,
-        ).toString("base64");
-        // The in-memory credential store retains file/helper fallback. Leave
-        // DOCKER_CONFIG intact so contexts, builders and source auth still work.
-        return {
-          DOCKER_AUTH_CONFIG: JSON.stringify({
-            auths: { ...current.auths, [credentials.server]: { auth } },
-          }),
-        };
-      });
-    });
+    );
 
     const requireRegistryExporter = Effect.gen(function* () {
       const unsupported = () =>
