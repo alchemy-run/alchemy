@@ -615,6 +615,7 @@ export const makeOperations = Effect.gen(function* () {
               url: payload.source.url,
               ref: payload.source.ref,
               depth: payload.source.depth,
+              maxPackBytes: payload.source.maxPackBytes,
             },
           })
           .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));

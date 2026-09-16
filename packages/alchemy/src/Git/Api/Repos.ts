@@ -133,6 +133,10 @@ export const ImportRepo = HttpApiEndpoint.post("import", "/repos/import", {
       ref: Schema.optional(Schema.String),
       /** Depth-limit the imported history. */
       depth: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+      /** Raise the pack cap for THIS import (bytes) — a caller who
+       *  knows its runtime's memory may afford more than the 50 MiB
+       *  default. Who may say so is the middleware's policy call. */
+      maxPackBytes: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
     }),
   }),
   success: RepoCreated,

@@ -46,6 +46,14 @@ export interface ImportSource {
   readonly ref?: string | undefined;
   /** Depth-limit the imported history (`deepen <n>`). */
   readonly depth?: number | undefined;
+  /**
+   * Raise the pack cap for THIS import (bytes). The default guards
+   * the Repo DO's memory; a caller who knows its runtime can afford
+   * more (a local dev host) may say so. Rides the job detail to the
+   * import alarm.
+   * @default 52_428_800 (50 MiB, the same cap as push ingest)
+   */
+  readonly maxPackBytes?: number | undefined;
 }
 
 /** One ref parsed from the remote advertisement. */
@@ -423,7 +431,7 @@ export const runImport = Effect.fn(function* (options: ImportOptions) {
   const wants = Array.from(new Set(selected.map((r) => r.oid)));
   const { shallow, pack } = yield* fetchPack(source.url, wants, {
     depth: source.depth,
-    maxPackBytes: options.maxPackBytes,
+    maxPackBytes: options.maxPackBytes ?? source.maxPackBytes,
   });
 
   return {
