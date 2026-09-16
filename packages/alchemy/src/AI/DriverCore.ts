@@ -2651,7 +2651,13 @@ export const makeSessionEngine = (
         // waiters — as a TYPED failure the caller can catch
         yield* failAllWaiters(s, abandoned);
       } else {
-        s.busy = { attempts, since: Date.now() };
+        // re-entry keeps the round's invocations — recovery resumes
+        // the SAME round, still answering the same messages
+        s.busy = {
+          attempts,
+          since: Date.now(),
+          invocations: s.busy?.invocations,
+        };
         yield* putMeta(s);
         yield* scheduleReentry(
           s.key,
@@ -2822,8 +2828,16 @@ export const makeSessionEngine = (
       s.tick++;
       quiescent = response.toolCalls.length === 0;
       // PROGRESS: a completed sampling resets the recovery budget;
-      // a quiescent one closes the round entirely
-      s.busy = quiescent ? undefined : { attempts: 0, since: Date.now() };
+      // a quiescent one closes the round entirely. The round's
+      // invocations OUTLIVE the sampling — `Thread.invocations` must
+      // answer for every sampling of the round, not just the first
+      s.busy = quiescent
+        ? undefined
+        : {
+            attempts: 0,
+            since: Date.now(),
+            invocations: s.busy?.invocations,
+          };
       yield* putMeta(s);
       if (quiescent) {
         yield* resolveRoundWaiters(s, response.text);

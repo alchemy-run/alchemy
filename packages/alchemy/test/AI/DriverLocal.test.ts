@@ -150,6 +150,46 @@ describe("DriverLocal (in-memory)", () => {
     }).pipe(Effect.scoped, Effect.provide(testLayer(model, search.layer)));
   });
 
+  it.effect(
+    "Thread.invocations answers for EVERY sampling of the round",
+    () => {
+      // two tool samplings before the answer — the second sampling's
+      // tool call must still see the round's invocation (regression:
+      // the post-sampling progress write dropped `busy.invocations`,
+      // so any tool call after the first sampling saw an empty round)
+      const model = Model.make([
+        () => [
+          Model.toolCall("search", { query: "first" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [
+          Model.toolCall("search", { query: "second" }),
+          Model.finish("tool-calls"),
+        ],
+        () => [Model.text("It is IaE."), Model.finish()],
+      ]);
+      const seen: Array<ReadonlyArray<string>> = [];
+      const search = Layer.succeed(Search, ((_: { query: string }) =>
+        Effect.gen(function* () {
+          const thread = yield* AI.Thread;
+          const invocations = yield* thread.invocations;
+          seen.push(invocations.map((message) => message.id));
+          return { results: "results" };
+        })) as never);
+      return Effect.gen(function* () {
+        const researcher = yield* interpret(Researcher, ResearcherCharter);
+        const answer = yield* researcher.dispatch({
+          id: "m-round-1",
+          author: "sam",
+          content: "What is alchemy?",
+        });
+        expect(answer).toBe("It is IaE.");
+        // both samplings' tool calls saw the SAME round invocation
+        expect(seen).toEqual([["m-round-1"], ["m-round-1"]]);
+      }).pipe(Effect.scoped, Effect.provide(testLayer(model, search)));
+    },
+  );
+
   it.effect("steer splices at the sampling boundary, mid-run", () => {
     const model = Model.make([
       () => [
