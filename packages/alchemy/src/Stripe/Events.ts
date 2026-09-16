@@ -3,10 +3,12 @@
  * (`events: [CustomerCreated]`) and the value the handler receives.
  */
 import type {
+  Account,
   CheckoutSession,
   Customer,
   Invoice,
   PaymentIntent,
+  Subscription,
 } from "@distilled.cloud/stripe/stripe";
 
 export interface StripeEventClass<
@@ -64,4 +66,29 @@ export class PaymentIntentFailed {
   static readonly type = "payment_intent.payment_failed" as const;
   readonly type = "payment_intent.payment_failed" as const;
   constructor(readonly object: PaymentIntent) {}
+}
+export class CustomerSubscriptionCreated {
+  static readonly type = "customer.subscription.created" as const;
+  readonly type = "customer.subscription.created" as const;
+  constructor(readonly object: Subscription) {}
+}
+export class CustomerSubscriptionUpdated {
+  static readonly type = "customer.subscription.updated" as const;
+  readonly type = "customer.subscription.updated" as const;
+  constructor(readonly object: Subscription) {}
+}
+export class CustomerSubscriptionDeleted {
+  static readonly type = "customer.subscription.deleted" as const;
+  readonly type = "customer.subscription.deleted" as const;
+  constructor(readonly object: Subscription) {}
+}
+/**
+ * Fires whenever a Connect account changes — most usefully when a merchant
+ * finishes hosted onboarding and `charges_enabled` / `payouts_enabled`
+ * flip to `true`.
+ */
+export class AccountUpdated {
+  static readonly type = "account.updated" as const;
+  readonly type = "account.updated" as const;
+  constructor(readonly object: Account) {}
 }

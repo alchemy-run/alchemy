@@ -1111,15 +1111,17 @@ export default defineConfig({
               label: "Guides",
               items: [
                 {
-                  label: "Sell from a Worker",
-                  link: "/stripe/guides/sell-from-a-worker",
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
                 },
-                { label: "Catalog", link: "/stripe/guides/catalog" },
                 {
-                  label: "Handle webhook events",
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
                   link: "/stripe/guides/webhooks",
                 },
-                { label: "Connect", link: "/stripe/guides/connect" },
               ],
             },
             providerResourcesEntry("Stripe"),

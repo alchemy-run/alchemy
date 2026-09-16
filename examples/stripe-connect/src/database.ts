@@ -1,9 +1,9 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 
 /**
- * A D1 database that stores connected-account ids after onboarding.
- * Files under `./migrations` are sorted by numeric prefix and applied in
- * order on every deploy; already-applied migrations are skipped.
+ * The platform's merchant table. One row per connected account, keyed by
+ * the Stripe `acct_…` id. Files under `./migrations` are applied in order
+ * on every deploy; already-applied migrations are skipped.
  */
 export const Database = Cloudflare.D1.Database("Database", {
   migrations: "./migrations",

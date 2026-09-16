@@ -25,6 +25,8 @@ export type StripePermission =
   | "billing_meters_write"
   | "billing_portal_read"
   | "billing_portal_write"
+  | "checkout_sessions_read"
+  | "checkout_sessions_write"
   | "coupons_read"
   | "coupons_write"
   | "credit_grants_read"

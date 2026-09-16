@@ -1,94 +1,109 @@
 ---
 title: Stripe
-description: Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
+description: Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
 ---
 
-Stripe catalog, customers, and webhooks as Stack resources. Declare
-the `Product` and `Price` on the Worker that sells them, bind
-`RetrieveProduct` / `CreateCustomer`, and subscribe to
-`customer.created` with `consumeEvents` — the webhook endpoint is
-provisioned for you.
+Stripe with alchemy means your billing lives in the same TypeScript
+program as the app that does the billing. The `Product` and `Price`
+are declared on the Worker that sells them. The Worker calls Stripe
+through typed bindings that carry their own permissions. Webhooks are
+one function call that provisions the endpoint and hands your handler
+a typed event. `bun alchemy deploy` ships all of it; `alchemy destroy`
+takes it down without leaving orphans in the Dashboard.
 
-New here? [Set up credentials](/stripe/setup) first.
+New here? [Set up credentials](/stripe/setup), then pick the guide
+that matches what you're building.
 
-## Resources
+## What are you building?
 
-A `Product` is the catalog item. A `Price` takes the Product (or a
-`prod_…` id). HTTP bindings run inside the Worker — provide the
-`*Http` layers on the Worker Effect:
+- **A SaaS that charges monthly** →
+  [Sell a subscription](/stripe/guides/subscriptions). Hosted Checkout,
+  the Billing Portal, and an entitlement record kept current by
+  webhooks. One Worker, one KV namespace.
+- **A platform that pays other businesses** →
+  [Onboard merchants with Connect](/stripe/guides/connect). Express
+  accounts, hosted onboarding with link refresh, and `account.updated`
+  driving a D1 merchant table.
+- **Anything that needs to know what Stripe did** →
+  [React to Stripe events](/stripe/guides/webhooks). Which events, how
+  `consumeEvents` works, when to declare the endpoint yourself.
+
+Both guides walk a runnable example under `examples/` end to end and
+end with the full source.
+
+## What it looks like
 
 ```typescript
-// src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
+// src/Api.ts
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const product = yield* Stripe.Product("Pro", {
-      name: "Pro",
-      description: "Billed monthly",
-    });
+    // Catalog — deployed with the Worker.
+    const product = yield* Stripe.Product("Pro", { name: "Pro" });
     const price = yield* Stripe.Price("ProMonthly", {
       product,
       currency: "usd",
       unitAmount: 2000,
       recurring: { interval: "month" },
     });
-    const retrieveProduct = yield* Stripe.RetrieveProduct(product);
+    const priceId = yield* price.id;
+
+    // Runtime calls — each adds its permission to the Worker's token.
+    const createCustomer = yield* Stripe.CreateCustomer();
+    const createCheckout = yield* Stripe.CreateCheckoutSession();
+
+    // Stripe → app.
+    yield* Stripe.consumeEvents(
+      "Events",
+      { events: [Stripe.CustomerSubscriptionCreated] },
+      Effect.fn(function* (event) {
+        yield* Effect.log(`${event.object.customer} subscribed`);
+      }),
+    );
+
     return {
       fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        if (request.url.startsWith("/product")) {
-          const live = yield* retrieveProduct().pipe(Effect.orDie);
-          return yield* HttpServerResponse.json({
-            id: live.id,
-            name: live.name,
-          });
-        }
-        return HttpServerResponse.text("ok");
-      }),
+        const customer = yield* createCustomer({ email: "a@example.com" });
+        const session = yield* createCheckout({
+          mode: "subscription",
+          customer: customer.id,
+          line_items: [{ price: yield* priceId, quantity: 1 }],
+          success_url: "https://example.com/welcome",
+          cancel_url: "https://example.com/pricing",
+        });
+        return HttpServerResponse.redirect(session.url!);
+      }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Stripe.RetrieveProductHttp)),
+  }).pipe(
+    Effect.provide([
+      Stripe.CreateCustomerHttp,
+      Stripe.CreateCheckoutSessionHttp,
+      Stripe.ConsumeEventsLive,
+    ]),
+  ),
 ) {}
 ```
 
-`Coupon`, `PromotionCode`, and `PaymentLink` complete checkout —
-see [Catalog](/stripe/guides/catalog). Webhook events use the same
-Worker:
+Three ideas carry the whole integration:
 
-```typescript
-// src/api.ts
-yield* Stripe.consumeEvents(
-  "Events",
-  {
-    events: [Stripe.CustomerCreated, Stripe.CheckoutSessionCompleted],
-  },
-  Effect.fn(function* (event) {
-    yield* Effect.log(event.type);
-  }),
-);
-```
+- **Resources** (`Product`, `Price`, `Coupon`, `WebhookEndpoint`,
+  `BillingPortalConfiguration`, …) are Stack-managed. Alchemy creates,
+  updates, and deletes them. Objects Stripe won't hard-delete are
+  deactivated instead.
+- **Bindings** (`CreateCustomer`, `CreateCheckoutSession`,
+  `RetrieveProduct`, …) are what a Worker calls at runtime. Yielding
+  one registers the permission it needs on a
+  [`RestrictedApiKey`](/providers/stripe/restrictedapikey) and returns
+  a callable. Provide the matching `*Http` layer once at the end.
+- **Outputs** like `price.id` are yielded at plan time to get an
+  accessor, then yielded again inside a route. That's how a resource
+  id reaches runtime.
 
-`consumeEvents` creates the `WebhookEndpoint` pointing at the Worker
-and binds its signing secret — see [Webhooks](/stripe/guides/webhooks).
+## Tutorial
 
-## The Stripe path
-
-1. [Setup](/stripe/setup) — secret key, profile, CI
-2. [Tutorial](/stripe/tutorial/part-1) — Product, Worker, Price,
-   bindings, webhooks
-3. [Catalog](/stripe/guides/catalog) — Product / Price / Coupon /
-   PaymentLink together
-4. [Sell from a Worker](/stripe/guides/sell-from-a-worker) — retrieve
-   the catalog and create customers
-
-Connect accounts and Issuing require onboarding on the Stripe account
-before their APIs are available — see [Connect](/stripe/guides/connect).
+Prefer to build up from nothing? The [tutorial](/stripe/tutorial/part-1)
+goes Product → Worker → Price → bindings → webhooks in four parts.
 
 ## Reference
 
@@ -96,9 +111,8 @@ before their APIs are available — see [Connect](/stripe/guides/connect).
 [Price](/providers/stripe/price) ·
 [Coupon](/providers/stripe/coupon) ·
 [Customer](/providers/stripe/customer) ·
-[PaymentLink](/providers/stripe/paymentlink) ·
+[BillingPortalConfiguration](/providers/stripe/billingportalconfiguration) ·
 [WebhookEndpoint](/providers/stripe/webhookendpoint) ·
 [RestrictedApiKey](/providers/stripe/restrictedapikey)
 
-The full resource list lives in the [Resources](/providers) sidebar
-group on this hub.
+The full list is under **Resources** in the sidebar.

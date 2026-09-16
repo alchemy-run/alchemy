@@ -70,10 +70,15 @@ Create a customer through `/customers` and the handler logs
 The Worker retrieves the Product, creates Customers, and handles
 Stripe events.
 
-- [Catalog](/stripe/guides/catalog)
-- [Sell from a Worker](/stripe/guides/sell-from-a-worker)
-- [Handle webhook events](/stripe/guides/webhooks)
-- [Connect](/stripe/guides/connect)
+From here, the guides take the same Worker to production shape:
+
+- [Sell a subscription](/stripe/guides/subscriptions) — hosted
+  Checkout, the Billing Portal, and an entitlement record driven by
+  subscription webhooks.
+- [Onboard merchants with Connect](/stripe/guides/connect) — Express
+  accounts, onboarding links, and `account.updated`.
+- [React to Stripe events](/stripe/guides/webhooks) — every event
+  class and when to declare the endpoint yourself.
 
 `alchemy destroy` tears the test catalog down with the stack.
 Prices with history are deactivated; products that still have prices
