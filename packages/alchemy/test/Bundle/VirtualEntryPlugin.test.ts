@@ -147,6 +147,50 @@ export default bootstrap;
     }),
   );
 
+  // The bundle `cwd` is the nearest package.json above the entry, which can
+  // be a parent that does not depend on alchemy (a deploy directory inside
+  // a monorepo). The generated entry's imports resolve from the entry's own
+  // directory, so that layout still bundles.
+  it.effect(
+    "a generated entry resolves alchemy from the entry's directory, not cwd",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const project = isolatedProject(
+          "bootstrap-parent-cwd",
+          import.meta.filename,
+        );
+        yield* materializeIsolatedProject(project);
+        const cwd = yield* fs.makeTempDirectory();
+        const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+        try {
+          const result = yield* Bundle.build(
+            {
+              cwd,
+              input: project.main,
+              platform: "node",
+              external: ["bun", "bun:*"],
+              resolve: { conditionNames: [...Bundle.BUN_CONDITION_NAMES] },
+              plugins: [
+                virtualEntryPlugin(
+                  () => `
+import * as bootstrap from "alchemy/Runtime/Bootstrap/Docker";
+export default bootstrap;
+`,
+                ),
+              ],
+            },
+            { format: "esm" },
+          );
+          expect(bareImports(result)).toEqual([]);
+        } finally {
+          yield* fs.remove(cwd, { recursive: true });
+          yield* removeIsolatedProject(project);
+        }
+      }),
+    { timeout: 120_000 },
+  );
+
   // Deliberate externals (runtime-provided modules such as `bun:*`,
   // `cloudflare:workers`) resolve to `{ external: true }`, not to nothing, so
   // the guard leaves them alone.
