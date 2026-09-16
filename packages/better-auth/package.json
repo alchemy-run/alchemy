@@ -45,16 +45,16 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
-    "@neondatabase/serverless": "catalog:database",
+    "@neondatabase/serverless": "catalog:",
     "alchemy": "workspace:*",
-    "better-auth": "catalog:auth",
-    "drizzle-orm": "catalog:database",
-    "effect": "catalog:effect",
-    "kysely": "catalog:database",
-    "mysql2": "catalog:database",
-    "pg": "catalog:database"
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
   },
   "peerDependenciesMeta": {
     "@cloudflare/workers-types": {
@@ -80,22 +80,22 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:cloudflare-runtime",
+    "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "workspace:*",
-    "@effect/platform-bun": "catalog:effect",
-    "@neondatabase/serverless": "catalog:database",
-    "@types/bun": "catalog:tooling",
-    "@types/pg": "catalog:database",
+    "@effect/platform-bun": "catalog:",
+    "@neondatabase/serverless": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
     "alchemy": "workspace:*",
     "alchemy-test": "workspace:*",
-    "better-auth": "catalog:auth",
-    "drizzle-orm": "catalog:database",
-    "effect": "catalog:effect",
-    "kysely": "catalog:database",
-    "mysql2": "catalog:database",
-    "pathe": "catalog:tooling",
-    "pg": "catalog:database",
-    "typescript": "catalog:build"
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pathe": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public"

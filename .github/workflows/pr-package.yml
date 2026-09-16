@@ -102,7 +102,8 @@ jobs:
               { "dir": "submodules/distilled/packages/cloudflare",  "name": "@distilled.cloud/cloudflare",        "group": "Distilled", "submodule": true },
               { "dir": "submodules/distilled/packages/hetzner",     "name": "@distilled.cloud/hetzner",           "group": "Distilled", "submodule": true },
               { "dir": "submodules/distilled/packages/neon",        "name": "@distilled.cloud/neon",              "group": "Distilled", "submodule": true },
-              { "dir": "submodules/distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true }
+              { "dir": "submodules/distilled/packages/planetscale", "name": "@distilled.cloud/planetscale",       "group": "Distilled", "submodule": true },
+              { "dir": "submodules/distilled/packages/railway",    "name": "@distilled.cloud/railway",          "group": "Distilled", "submodule": true }
             ]
           pr-package-token: ${{ secrets.PR_PACKAGE_TOKEN }}
 
@@ -156,6 +157,7 @@ jobs:
             @distilled.cloud/hetzner
             @distilled.cloud/neon
             @distilled.cloud/planetscale
+            @distilled.cloud/railway
           )
           encode_project() {
             python3 -c 'import urllib.parse,sys; print("/".join(urllib.parse.quote(p, safe="") for p in sys.argv[1].split("/")))' "$1"

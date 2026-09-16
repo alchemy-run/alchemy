@@ -1,12 +1,12 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { Box as SigilBox, type DOMElement } from "@alchemy.run/sigil";
-import {
-  forwardRef,
-  type ComponentProps,
-  type ForwardRefExoticComponent,
-  type PropsWithoutRef,
-  type ReactNode,
-  type RefAttributes,
+import { forwardRef } from "@alchemy.run/sigil/react";
+import type {
+  ComponentProps,
+  ForwardRefExoticComponent,
+  PropsWithoutRef,
+  ReactNode,
+  RefAttributes,
 } from "react";
 import { theme } from "../../../Util/Theme.ts";
 import { useCliEnvironment, useGlyphs } from "./Environment.tsx";

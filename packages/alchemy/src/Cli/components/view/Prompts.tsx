@@ -1,5 +1,6 @@
-/** @jsxImportSource react */
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+/** @jsxImportSource @alchemy.run/sigil */
+import { useEffect, useMemo, useState } from "@alchemy.run/sigil/react";
+import type { ReactNode } from "react";
 import type {
   ConfirmOptions,
   CycleSelectOptions,

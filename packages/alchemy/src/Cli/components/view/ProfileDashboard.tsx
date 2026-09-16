@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
  * mounted for the whole session and screens replace each other in place:
@@ -18,7 +18,8 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import {
   Alert,
   Box,

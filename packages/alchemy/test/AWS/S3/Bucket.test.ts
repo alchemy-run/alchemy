@@ -25,6 +25,129 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+test.provider(
+  "PR1585 discovers an owned bucket without ListBucket and rejects denied location reads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(Bucket("OwnershipBucket", {}));
+      const { accountId } = yield* AWSEnvironment.current;
+      const definition = (value: string) =>
+        Bucket("OwnershipBucket", { tags: { revision: value } });
+      const discovery = Effect.gen(function* () {
+        yield* definition("updated");
+        return yield* Bucket("DiscoveryProbe", {
+          bucketName: bucket.bucketName,
+        });
+      });
+
+      const deny = (action: string) =>
+        S3.putBucketPolicy({
+          Bucket: bucket.bucketName,
+          Policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Deny",
+                Principal: "*",
+                Action: action,
+                Resource: bucket.bucketArn,
+              },
+            ],
+          }),
+        });
+      const restorePolicy = S3.deleteBucketPolicy({
+        Bucket: bucket.bucketName,
+      });
+
+      yield* Effect.gen(function* () {
+        yield* deny("s3:ListBucket");
+        const listDenied = yield* S3.listObjectsV2({
+          Bucket: bucket.bucketName,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+          Effect.repeat({
+            until: Boolean,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(listDenied).toBe(true);
+        yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: accountId,
+        });
+
+        // The probe is planned, not applied: the original resource retains ownership.
+        const plan = yield* stack.plan(discovery);
+        expect(plan.resources.DiscoveryProbe?.action).toBe("adopted");
+        yield* stack.deploy(definition("updated"));
+        expect(
+          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+        ).toContainEqual({ Key: "revision", Value: "updated" });
+
+        const wrongOwner = `${accountId.slice(0, -1)}${accountId.endsWith("0") ? "1" : "0"}`;
+        const mismatch = yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: wrongOwner,
+        }).pipe(Effect.flip);
+        expect(mismatch._tag).toBe("AccessDeniedException");
+
+        yield* deny("s3:GetBucketLocation");
+        const locationDenied = yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: accountId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+          Effect.repeat({
+            until: Boolean,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(locationDenied).toBe(true);
+        // HeadBucket remains allowed; treating this rejection as absence would plan a create.
+        yield* S3.listObjectsV2({ Bucket: bucket.bucketName }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "AccessDeniedException",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        const failure = yield* stack.plan(discovery).pipe(Effect.flip);
+        expect(failure._tag).toBe("AccessDeniedException");
+      }).pipe(Effect.ensuring(restorePolicy.pipe(Effect.orDie)));
+
+      yield* S3.getBucketLocation({
+        Bucket: bucket.bucketName,
+        ExpectedBucketOwner: accountId,
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AccessDeniedException",
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+        }),
+      );
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+      const absent = yield* S3.getBucketLocation({
+        Bucket: bucket.bucketName,
+      }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+        Effect.repeat({
+          until: Boolean,
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+        }),
+      );
+      expect(absent).toBe(true);
+    }),
+  { timeout: 120_000 },
+);
+
 for (const aspect of ["tagging", "encryption"] as const) {
   test.provider(
     `PR1586 preserves ${aspect} when its read is denied but writes are allowed`,
@@ -524,7 +647,7 @@ test.provider(
           const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
-            stage: "test",
+            stage: stack.stage,
             fqn: "AdoptableBucket",
           });
         }).pipe(Effect.provide(stack.state));
