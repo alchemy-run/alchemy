@@ -14,7 +14,7 @@
     "build:llms": "bun scripts/generate-llms-txt.ts",
     "docs:generate": "bun run build:reference && bun run build:llms",
     "docs:build": "bun run build",
-    "docs:check": "bun run build:reference && DOCS_FAST=1 astro build",
+    "docs:check": "bun run docs:generate && DOCS_FAST=1 astro build",
     "generate:readme-hero": "bun scripts/generate-readme-hero.ts",
     "build": "bun scripts/generate-brand-assets.ts && bun run build:reference && bun run build:llms && astro build",
     "dev:site": "astro dev",

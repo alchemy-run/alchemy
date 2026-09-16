@@ -93,7 +93,9 @@ test.provider(
       const outboundDisabledAgain = yield* stack.deploy(
         securityGroupStack({ egress: [] }),
       );
-      expect(yield* describeEgress(outboundDisabledAgain.sg.groupId)).toEqual([]);
+      expect(yield* describeEgress(outboundDisabledAgain.sg.groupId)).toEqual(
+        [],
+      );
 
       yield* stack.destroy();
       yield* assertSecurityGroupGone(outboundDisabledAgain.sg.groupId);

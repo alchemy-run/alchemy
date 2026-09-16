@@ -1,26 +1,27 @@
-import * as Effect from "effect/Effect"
-import { isResolved } from "../Diff.ts"
-import * as Provider from "../Provider.ts"
-import { Resource } from "../Resource.ts"
-import { dedent } from "../Util/dedent.ts"
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts"
-import type * as GitHub from "./Providers.ts"
+import type { Octokit as GitHubClient } from "@octokit/rest";
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { dedent } from "../Util/dedent.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface PullRequestProps {
   /**
    * Repository owner (user or organization).
    */
-  owner: string
+  owner: string;
 
   /**
    * Repository name.
    */
-  repository: string
+  repository: string;
 
   /**
    * Pull request title.
    */
-  title: string
+  title: string;
 
   /**
    * Pull request body (supports GitHub Markdown).
@@ -30,17 +31,17 @@ export interface PullRequestProps {
    * `Output<string>` at the call site via `Output.interpolate` to embed
    * resource attributes that are not yet resolved.
    */
-  body?: string
+  body?: string;
 
   /**
    * The name of the branch where your changes are implemented (the source).
    */
-  head: string
+  head: string;
 
   /**
    * The name of the branch you want the changes pulled into (the target).
    */
-  base: string
+  base: string;
 
   /**
    * State of the pull request. Use "open" to reopen a closed PR or "closed"
@@ -48,50 +49,48 @@ export interface PullRequestProps {
    * push access can close PRs.
    * @default "open"
    */
-  state?: "open" | "closed"
+  state?: "open" | "closed";
 
   /**
    * Whether the pull request is a draft.
    * @default false
    */
-  draft?: boolean
+  draft?: boolean;
 
   /**
    * Labels to attach to the pull request. The provided list fully replaces
    * any existing labels.
    */
-  labels?: string[]
+  labels?: string[];
 
   /**
    * Assignees (user logins) to assign to the pull request. The provided list
    * fully replaces existing assignees.
    */
-  assignees?: string[]
+  assignees?: string[];
 
   /**
    * Reviewers (user logins) to request reviews from. The provided list fully
    * replaces existing review requests.
    */
-  reviewers?: string[]
+  reviewers?: string[];
 
   /**
    * Team slugs (for organization repos) to request reviews from.
    */
-  teamReviewers?: string[]
+  teamReviewers?: string[];
 
   /**
    * Milestone number to assign to the pull request. Use `null` to remove
    * milestone.
    */
-  milestone?: number | null
+  milestone?: number | null;
 
   /**
-   * Whether to maintain the original author of the PR when updating. When
-   * false (default), updates may change apparent authorship depending on
-   * token permissions.
-   * @default false
+   * Whether maintainers of the base repository can modify the pull
+   * request's head branch. This does not change the pull request author.
    */
-  maintainerCanModify?: boolean
+  maintainerCanModify?: boolean;
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -100,7 +99,7 @@ export interface PullRequestProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string
+  baseUrl?: string;
 }
 
 export interface PullRequest extends Resource<
@@ -110,42 +109,42 @@ export interface PullRequest extends Resource<
     /**
      * The numeric ID of the pull request in GitHub.
      */
-    prNumber: number
+    prNumber: number;
 
     /**
      * GraphQL node ID of the pull request.
      */
-    nodeId: string
+    nodeId: string;
 
     /**
      * URL to view the pull request in a browser.
      */
-    htmlUrl: string
+    htmlUrl: string;
 
     /**
      * State of the pull request (open or closed).
      */
-    state: "open" | "closed"
+    state: "open" | "closed";
 
     /**
      * Whether the pull request is merged.
      */
-    merged: boolean
+    merged: boolean;
 
     /**
      * Whether the pull request is a draft.
      */
-    draft: boolean
+    draft: boolean;
 
     /**
      * ISO-8601 timestamp of when the pull request was created.
      */
-    createdAt: string
+    createdAt: string;
 
     /**
      * ISO-8601 timestamp of the last update.
      */
-    updatedAt: string
+    updatedAt: string;
   },
   never,
   GitHub.Providers
@@ -252,7 +251,7 @@ export interface PullRequest extends Resource<
  */
 export const PullRequest = Resource<PullRequest>("GitHub.PullRequest", {
   defaultRemovalPolicy: "retain",
-})
+});
 
 export const PullRequestProvider = () =>
   Provider.succeed(PullRequest, {
@@ -262,8 +261,8 @@ export const PullRequestProvider = () =>
     // of these replaces the resource: a fresh PR is created with the new
     // configuration, and the old one is retained by default.
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return
-      if (olds === undefined) return
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
@@ -271,122 +270,122 @@ export const PullRequestProvider = () =>
         news.base !== olds.base ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
-        return { action: "replace" }
+        return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl)
-      const body = news.body ? dedent(news.body) : undefined
-
-      // Observe — GitHub assigns `number` server-side. Probe for live state
-      // via the cached number; a 404 (deleted out-of-band, or never created)
-      // collapses to "no observed PR" so we converge by creating a fresh one.
-      const observedNumber = output?.prNumber
-        ? yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                const { data } = await octokit.rest.pulls.get({
-                  owner: news.owner,
-                  repo: news.repository,
-                  pull_number: output.prNumber,
-                })
-                return data.number
-              } catch (error: any) {
-                if (error.status === 404) return undefined
-                throw error
-              }
-            },
-            catch: (e) => e as Error,
-          })
-        : undefined
-
-      // Ensure — when no live PR exists, POST creates one.
-      if (observedNumber === undefined) {
-        const { data } = yield* Effect.tryPromise(() =>
-          octokit.rest.pulls.create({
-            owner: news.owner,
-            repo: news.repository,
+      const octokit = yield* octokitFor(news.baseUrl);
+      const scope = { owner: news.owner, repo: news.repository };
+      const body = news.body === undefined ? undefined : dedent(news.body);
+      const findOpen = () =>
+        request(() =>
+          octokit.rest.pulls.list({
+            ...scope,
+            head: news.head.includes(":")
+              ? news.head
+              : `${news.owner}:${news.head}`,
+            base: news.base,
+            state: "open",
+            per_page: 100,
+          }),
+        ).pipe(Effect.map(({ data }) => data[0]?.number));
+      let number = output?.prNumber;
+      let observed =
+        number === undefined
+          ? undefined
+          : yield* getPull(octokit, news, number);
+      if (observed === undefined) {
+        number = yield* findOpen();
+        if (number === undefined) {
+          number = yield* request(() =>
+            octokit.rest.pulls.create({
+              ...scope,
+              title: news.title,
+              body,
+              head: news.head,
+              base: news.base,
+              draft: news.draft,
+              maintainer_can_modify: news.maintainerCanModify,
+            }),
+          ).pipe(
+            Effect.map(({ data }) => data.number),
+            Effect.catchIf(
+              (error) => error.status === 422,
+              (error) =>
+                findOpen().pipe(
+                  Effect.flatMap((existing) =>
+                    existing === undefined
+                      ? Effect.fail(error)
+                      : Effect.succeed(existing),
+                  ),
+                ),
+            ),
+          );
+        }
+        observed = yield* getPull(octokit, news, number);
+      }
+      if (observed === undefined) {
+        return yield* Effect.fail(
+          new Error("Pull request disappeared during reconciliation"),
+        );
+      }
+      const state = news.state ?? "open";
+      const draft = news.draft ?? false;
+      const draftChanged = draft !== (observed.draft ?? false);
+      const syncState = draftChanged ? "open" : state;
+      if (
+        observed.title !== news.title ||
+        (body !== undefined && (observed.body ?? "") !== body) ||
+        observed.state !== syncState ||
+        (news.maintainerCanModify !== undefined &&
+          observed.maintainer_can_modify !== news.maintainerCanModify)
+      ) {
+        yield* request(() =>
+          octokit.rest.pulls.update({
+            ...scope,
+            pull_number: observed.number,
             title: news.title,
             body,
-            head: news.head,
-            base: news.base,
-            draft: news.draft,
+            state: syncState,
             maintainer_can_modify: news.maintainerCanModify,
           }),
-        )
-
-        // Apply labels, assignees, milestone, and reviewers after creation
-        yield* syncPullRequestMeta(octokit, news, data.number)
-
-        return {
-          prNumber: data.number,
-          nodeId: data.node_id,
-          htmlUrl: data.html_url,
-          state: data.state as "open" | "closed",
-          merged: data.merged,
-          draft: data.draft ?? false,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        }
+        );
       }
-
-      // Sync — PATCH the existing PR with the desired properties. GitHub's
-      // update is idempotent, so we always issue the call rather than diffing.
-      const { data } = yield* Effect.tryPromise(() =>
-        octokit.rest.pulls.update({
-          owner: news.owner,
-          repo: news.repository,
-          pull_number: observedNumber,
-          title: news.title,
-          body,
-          state: news.state,
-          base: news.base,
-          maintainer_can_modify: news.maintainerCanModify,
-        }),
-      )
-
-      // Sync draft state separately (different endpoint)
-      if (news.draft !== undefined) {
-        if (news.draft && !data.draft) {
-          yield* Effect.tryPromise(() =>
-            octokit.rest.pulls.update({
-              owner: news.owner,
-              repo: news.repository,
-              pull_number: observedNumber,
-              // @ts-expect-error draft is valid but not in types
-              draft: true,
-            }),
-          )
-        } else if (!news.draft && data.draft) {
-          yield* Effect.tryPromise(() =>
-            octokit.rest.pulls.markAsReadyForReview({
-              owner: news.owner,
-              repo: news.repository,
-              pull_number: observedNumber,
-            }),
-          )
-        }
+      // GitHub only permits draft transitions while a pull request is open.
+      if (draftChanged) {
+        const mutation = draft
+          ? "convertPullRequestToDraft"
+          : "markPullRequestReadyForReview";
+        yield* request(() =>
+          octokit.graphql(
+            `mutation($id: ID!) { ${mutation}(input: {pullRequestId: $id}) { pullRequest { id } } }`,
+            { id: observed.node_id },
+          ),
+        );
       }
-
-      // Sync labels, assignees, milestone, and reviewers
-      yield* syncPullRequestMeta(octokit, news, observedNumber)
-
-      return {
-        prNumber: data.number,
-        nodeId: data.node_id,
-        htmlUrl: data.html_url,
-        state: data.state as "open" | "closed",
-        merged: data.merged,
-        draft: data.draft ?? false,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
+      yield* syncPullRequestMeta(octokit, news, observed.number);
+      if (draftChanged && state === "closed") {
+        yield* request(() =>
+          octokit.rest.pulls.update({
+            ...scope,
+            pull_number: observed.number,
+            state: "closed",
+          }),
+        );
       }
+      const final = yield* getPull(octokit, news, observed.number);
+      if (final === undefined) {
+        return yield* Effect.fail(
+          new Error("Pull request disappeared after reconciliation"),
+        );
+      }
+      return attributes(final);
     }),
 
     // Enumerate every pull request across the repositories the token can see.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit
+      const octokit = yield* Octokit;
 
       const repos = yield* Effect.tryPromise({
         try: () =>
@@ -394,7 +393,7 @@ export const PullRequestProvider = () =>
             per_page: 100,
           }),
         catch: (e) => e as Error,
-      })
+      });
 
       const perRepo = yield* Effect.forEach(
         repos,
@@ -402,117 +401,170 @@ export const PullRequestProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const pulls = await octokit.paginate(
-                  octokit.rest.pulls.list,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    state: "all",
-                    per_page: 100,
-                  },
-                )
+                const pulls = await octokit.paginate(octokit.rest.pulls.list, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  state: "all",
+                  per_page: 100,
+                });
                 return pulls.map((pr) => ({
                   prNumber: pr.number,
                   nodeId: pr.node_id,
                   htmlUrl: pr.html_url,
                   state: pr.state as "open" | "closed",
-                  merged: pr.merged ?? false,
+                  merged: pr.merged_at !== null,
                   draft: pr.draft ?? false,
                   createdAt: pr.created_at,
                   updatedAt: pr.updated_at,
-                }))
+                }));
               } catch (error: any) {
                 if (error.status === 403 || error.status === 404) {
-                  return []
+                  return [];
                 }
-                throw error
+                throw error;
               }
             },
             catch: (e) => e as Error,
           }),
         { concurrency: 10 },
-      )
+      );
 
-      return perRepo.flat()
+      return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl)
+      const octokit = yield* octokitFor(olds.baseUrl);
 
-      // Close the PR on delete (GitHub API does not support deleting PRs)
-      if (output?.prNumber !== undefined) {
-        yield* Effect.tryPromise(async () => {
-          try {
-            await octokit.rest.pulls.update({
-              owner: olds.owner,
-              repo: olds.repository,
-              pull_number: output.prNumber,
-              state: "closed",
-            })
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error
-            }
-          }
-        })
+      // GitHub preserves pull request history; destruction closes it.
+      const observed = yield* getPull(octokit, olds, output.prNumber);
+      if (observed?.state === "open") {
+        yield* request(() =>
+          octokit.rest.pulls.update({
+            owner: olds.owner,
+            repo: olds.repository,
+            pull_number: output.prNumber,
+            state: "closed",
+          }),
+        ).pipe(
+          Effect.catchIf(
+            (error) => error.status === 404,
+            () => Effect.void,
+          ),
+        );
       }
     }),
-  })
+  });
+
+const request = <A>(run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) => error as Error & { status?: number },
+  });
+
+type Pull = Awaited<ReturnType<GitHubClient["rest"]["pulls"]["get"]>>["data"];
+
+const getPull = (
+  octokit: GitHubClient,
+  props: PullRequestProps,
+  number: number,
+) =>
+  request(() =>
+    octokit.rest.pulls.get({
+      owner: props.owner,
+      repo: props.repository,
+      pull_number: number,
+    }),
+  ).pipe(
+    Effect.map(({ data }) => data),
+    Effect.catchIf(
+      (error) => error.status === 404,
+      () => Effect.succeed(undefined),
+    ),
+  );
+
+const attributes = (data: Pull) => ({
+  prNumber: data.number,
+  nodeId: data.node_id,
+  htmlUrl: data.html_url,
+  state: data.state as "open" | "closed",
+  merged: data.merged,
+  draft: data.draft ?? false,
+  createdAt: data.created_at,
+  updatedAt: data.updated_at,
+});
+
+const sameNames = (left: string[], right: string[]) =>
+  JSON.stringify([...new Set(left)].sort()) ===
+  JSON.stringify([...new Set(right)].sort());
 
 const syncPullRequestMeta = Effect.fn(function* (
-  octokit: any,
+  octokit: GitHubClient,
   props: PullRequestProps,
   prNumber: number,
 ) {
-  // Sync labels
-  if (props.labels !== undefined) {
-    yield* Effect.tryPromise(() =>
-      octokit.rest.issues.setLabels({
-        owner: props.owner,
-        repo: props.repository,
-        issue_number: prNumber,
-        labels: props.labels,
-      }),
-    )
+  const scope = { owner: props.owner, repo: props.repository };
+  const issue = { ...scope, issue_number: prNumber };
+  const { data } = yield* request(() => octokit.rest.issues.get(issue));
+  const labels = data.labels.map((label) =>
+    typeof label === "string" ? label : (label.name ?? ""),
+  );
+  if (props.labels !== undefined && !sameNames(labels, props.labels)) {
+    yield* request(() =>
+      octokit.rest.issues.setLabels({ ...issue, labels: props.labels }),
+    );
   }
-
-  // Sync assignees
-  if (props.assignees !== undefined) {
-    yield* Effect.tryPromise(() =>
-      octokit.rest.issues.addAssignees({
-        owner: props.owner,
-        repo: props.repository,
-        issue_number: prNumber,
-        assignees: props.assignees,
-      }),
-    )
+  const assignees = data.assignees?.map((user) => user.login) ?? [];
+  if (props.assignees !== undefined && !sameNames(assignees, props.assignees)) {
+    yield* request(() =>
+      octokit.rest.issues.update({ ...issue, assignees: props.assignees }),
+    );
   }
-
-  // Sync milestone
-  if (props.milestone !== undefined) {
-    yield* Effect.tryPromise(() =>
-      octokit.rest.issues.update({
-        owner: props.owner,
-        repo: props.repository,
-        issue_number: prNumber,
-        milestone: props.milestone === null ? null : props.milestone,
-      }),
-    )
-  }
-
-  // Sync reviewers
   if (
-    props.reviewers !== undefined ||
-    props.teamReviewers !== undefined
+    props.milestone !== undefined &&
+    (data.milestone?.number ?? null) !== props.milestone
   ) {
-    yield* Effect.tryPromise(() =>
-      octokit.rest.pulls.requestReviewers({
-        owner: props.owner,
-        repo: props.repository,
-        pull_number: prNumber,
-        reviewers: props.reviewers ?? [],
-        team_reviewers: props.teamReviewers ?? [],
-      }),
-    )
+    yield* request(() =>
+      octokit.rest.issues.update({ ...issue, milestone: props.milestone }),
+    );
   }
-})
+  if (props.reviewers !== undefined || props.teamReviewers !== undefined) {
+    const pull = { ...scope, pull_number: prNumber };
+    const { data: current } = yield* request(() =>
+      octokit.rest.pulls.listRequestedReviewers(pull),
+    );
+    const users = current.users.map((user) => user.login);
+    const teams = current.teams.map((team) => team.slug);
+    const removeUsers =
+      props.reviewers === undefined
+        ? []
+        : users.filter((user) => !props.reviewers!.includes(user));
+    const removeTeams =
+      props.teamReviewers === undefined
+        ? []
+        : teams.filter((team) => !props.teamReviewers!.includes(team));
+    if (removeUsers.length || removeTeams.length) {
+      yield* request(() =>
+        octokit.rest.pulls.removeRequestedReviewers({
+          ...pull,
+          reviewers: removeUsers,
+          team_reviewers: removeTeams,
+        }),
+      );
+    }
+    const addUsers = (props.reviewers ?? []).filter(
+      (user) => !users.includes(user),
+    );
+    const addTeams = (props.teamReviewers ?? []).filter(
+      (team) => !teams.includes(team),
+    );
+    if (addUsers.length || addTeams.length) {
+      yield* request(() =>
+        octokit.rest.pulls.requestReviewers({
+          ...pull,
+          reviewers: addUsers,
+          team_reviewers: addTeams,
+        }),
+      );
+    }
+  }
+});

@@ -19,7 +19,8 @@
  * ### Providing the store
  * **Example:** R2 (the default)
  * ```typescript
- * const GitLive = Git.ServerLive.pipe(
+ * const GitLive = Git.ApiLive.pipe(
+ *   Layer.provide(Git.ApiHandlersLive),
  *   Layer.provide(Git.BlobStoreR2(MyBucket)),
  *   // ...
  * );

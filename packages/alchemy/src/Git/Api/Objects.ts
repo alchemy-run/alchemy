@@ -4,7 +4,7 @@
  * octet-stream, and a file at a path under a ref. The raw routes declare
  * no success schema and answer with the response they build.
  */
-import * as Http from "../../Http/index.ts";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import {
@@ -25,7 +25,7 @@ import {
 } from "./Schema.ts";
 
 /** Reads one commit. */
-export class GetCommit extends Http.get<GetCommit>()(
+export const GetCommit = HttpApiEndpoint.get(
   "commit",
   "/repos/:owner/:repo/commits/:oid",
   {
@@ -33,29 +33,25 @@ export class GetCommit extends Http.get<GetCommit>()(
     success: CommitInfo,
     error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
-) {}
+);
 
 /** Pages the commit history from a ref or oid. */
-export class GetLog extends Http.get<GetLog>()(
-  "log",
-  "/repos/:owner/:repo/log",
-  {
-    params: RepoPath,
-    query: Schema.Struct({
-      /** Refname or oid to start from. @default HEAD */
-      ref: Schema.optional(Schema.String),
-      cursor: Schema.optional(Schema.String),
-      limit: Schema.optional(
-        Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
-      ),
-    }),
-    success: Paginated(CommitInfo),
-    error: [RepoNotFound, RefNotFound],
-  },
-) {}
+export const GetLog = HttpApiEndpoint.get("log", "/repos/:owner/:repo/log", {
+  params: RepoPath,
+  query: Schema.Struct({
+    /** Refname or oid to start from. @default HEAD */
+    ref: Schema.optional(Schema.String),
+    cursor: Schema.optional(Schema.String),
+    limit: Schema.optional(
+      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
+    ),
+  }),
+  success: Paginated(CommitInfo),
+  error: [RepoNotFound, RefNotFound],
+});
 
 /** Reads one tree's entries. */
-export class GetTree extends Http.get<GetTree>()(
+export const GetTree = HttpApiEndpoint.get(
   "tree",
   "/repos/:owner/:repo/trees/:oid",
   {
@@ -66,10 +62,10 @@ export class GetTree extends Http.get<GetTree>()(
     }),
     error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
-) {}
+);
 
 /** Reads a small blob as base64 JSON (≤ 1 MiB; 422 otherwise — use /raw). */
-export class GetBlob extends Http.get<GetBlob>()(
+export const GetBlob = HttpApiEndpoint.get(
   "blob",
   "/repos/:owner/:repo/blobs/:oid",
   {
@@ -84,7 +80,7 @@ export class GetBlob extends Http.get<GetBlob>()(
     }),
     error: [RepoNotFound, ObjectNotFound, WrongObjectType, ObjectTooLarge],
   },
-) {}
+);
 
 /**
  * The changed-file list of a commit vs its FIRST parent (empty tree for a
@@ -93,7 +89,7 @@ export class GetBlob extends Http.get<GetBlob>()(
  * `removed` + `added`; clients may pair entries whose old/new oids match
  * for a cheap exact-rename display.
  */
-export class GetDiff extends Http.get<GetDiff>()(
+export const GetDiff = HttpApiEndpoint.get(
   "diff",
   "/repos/:owner/:repo/commits/:oid/diff",
   {
@@ -101,14 +97,14 @@ export class GetDiff extends Http.get<GetDiff>()(
     success: CommitDiff,
     error: [RepoNotFound, ObjectNotFound, WrongObjectType],
   },
-) {}
+);
 
 /**
  * Three-dot comparison: merge base, ahead/behind counts, head-side
  * commits, and the file diff of mergeBase..head. `base`/`head` accept a
  * refname (short or full) or a 40-hex oid; annotated tags are peeled.
  */
-export class Compare extends Http.get<Compare>()(
+export const Compare = HttpApiEndpoint.get(
   "compare",
   "/repos/:owner/:repo/compare",
   {
@@ -128,27 +124,27 @@ export class Compare extends Http.get<Compare>()(
       NoMergeBase,
     ],
   },
-) {}
+);
 
 /**
  * A blob's bytes as an octet-stream, no size cap (the per-object 64 MiB
  * ingest cap is the outer bound). Streams the response it builds.
  */
-export class GetBlobRaw extends Http.get<GetBlobRaw>()(
+export const GetBlobRaw = HttpApiEndpoint.get(
   "blobRaw",
   "/repos/:owner/:repo/blobs/:oid/raw",
   {},
-) {}
+);
 
 /**
  * A file at `?path=` under `?ref=` (refname or oid; the default branch
  * when absent), walked tree by tree, as an octet-stream.
  */
-export class GetFile extends Http.get<GetFile>()(
+export const GetFile = HttpApiEndpoint.get(
   "file",
   "/repos/:owner/:repo/file",
   {},
-) {}
+);
 
 /** The `objects` group, mounted at `/api/v1`. */
 export class Objects extends HttpApiGroup.make("objects")
