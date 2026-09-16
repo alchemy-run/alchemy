@@ -15,7 +15,10 @@
  * each channel's transcript.
  */
 import { ChatView } from "@/components/chat";
+import { AppTabs } from "@/components/app-tabs";
 import { ChannelFeed, ThreadView } from "@/components/channel-feed";
+import { CodeBrowser } from "@/components/code-browser";
+import { WorkPage } from "@/components/issues";
 import { PaneContext } from "@/components/pane-context";
 import { CallThread } from "@/components/call";
 import { MembersPanel } from "@/components/members";
@@ -34,10 +37,16 @@ import {
   panesFromLocation,
   showChannel,
   showOverlay,
+  codeFromLocation,
+  tabFromLocation,
   threadFromLocation,
+  workFromLocation,
   type AgentPlace,
+  type AppTab,
+  type CodePlace,
   type Overlay,
   type Pane,
+  type WorkPlace,
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -252,6 +261,14 @@ const RAIL_MAX = 480;
 normalizeLegacyLocation();
 
 export const App = () => {
+  /** The TOP TAB — Chat (the whole chat app), Code, Issues, Pulls. */
+  const [tab, setTab] = useState<AppTab>(() => tabFromLocation());
+  const [codePlace, setCodePlace] = useState<CodePlace>(() =>
+    codeFromLocation(),
+  );
+  const [workPlace, setWorkPlace] = useState<WorkPlace>(() =>
+    workFromLocation(),
+  );
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
   );
@@ -321,6 +338,9 @@ export const App = () => {
 
   useEffect(() => {
     const sync = () => {
+      setTab(tabFromLocation());
+      setCodePlace(codeFromLocation());
+      setWorkPlace(workFromLocation());
       setOverlay(overlayFromLocation());
       setPanes(panesFromLocation());
       setAgent(agentFromLocation());
@@ -499,6 +519,15 @@ export const App = () => {
 
   return (
     <div className="relative flex h-dvh flex-col bg-background text-foreground">
+      {/* the org, four ways: Chat | Code | Issues | Pulls */}
+      <AppTabs tab={tab} />
+      {tab === "code" ? (
+        <CodeBrowser place={codePlace} />
+      ) : tab === "issues" ? (
+        <WorkPage kind="issues" place={workPlace} />
+      ) : tab === "pulls" ? (
+        <WorkPage kind="pulls" place={workPlace} />
+      ) : (
       <div className="relative flex min-h-0 flex-1">
         {/* the rail: one channel per group — the org chart, as rooms */}
         <nav
@@ -796,6 +825,7 @@ export const App = () => {
           agent === undefined &&
           !channel.dm && <MembersPanel channel={channel.name} />}
       </div>
+      )}
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>
   );

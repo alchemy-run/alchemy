@@ -221,5 +221,96 @@ export const IssuesApi = Effect.gen(function* () {
     }),
   );
 
-  return Layer.mergeAll(list, create, get, patch, comments, comment);
+  /* ── the APP PLANE: the human's door (the UI), same origin as the
+     rest of /api — no forge credential, authored as the operator ── */
+
+  const appCreate = HttpRouter.add(
+    "POST",
+    "/api/forge/repos/:owner/:repo/issues",
+    Effect.gen(function* () {
+      const repo = yield* repoOf;
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const body = (yield* request.json.pipe(Effect.orDie)) as {
+        title?: string;
+        body?: string;
+        labels?: ReadonlyArray<string>;
+      };
+      if (typeof body.title !== "string" || body.title.trim().length === 0) {
+        return HttpServerResponse.jsonUnsafe(
+          { message: "title is required" },
+          { status: 422 },
+        );
+      }
+      const row = yield* issues.create({
+        repo,
+        title: body.title,
+        body: body.body,
+        labels: body.labels,
+        author: "sam",
+      });
+      return yield* HttpServerResponse.json(issueJson(row, 0), {
+        status: 201,
+      });
+    }),
+  );
+
+  const appPatch = HttpRouter.add(
+    "PATCH",
+    "/api/forge/repos/:owner/:repo/issues/:number",
+    Effect.gen(function* () {
+      const repo = yield* repoOf;
+      const params = yield* HttpRouter.params;
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const body = (yield* request.json.pipe(Effect.orDie)) as {
+        title?: string;
+        body?: string;
+        state?: "open" | "closed";
+      };
+      const row = yield* issues.update(repo, Number(params.number), body);
+      if (row === undefined) return notFound;
+      const counts = yield* issues.commentCounts(repo, [row.number]);
+      return yield* HttpServerResponse.json(
+        issueJson(row, counts[row.number] ?? 0),
+      );
+    }),
+  );
+
+  const appComment = HttpRouter.add(
+    "POST",
+    "/api/forge/repos/:owner/:repo/issues/:number/comments",
+    Effect.gen(function* () {
+      const repo = yield* repoOf;
+      const params = yield* HttpRouter.params;
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const body = (yield* request.json.pipe(Effect.orDie)) as {
+        body?: string;
+      };
+      if (typeof body.body !== "string" || body.body.trim().length === 0) {
+        return HttpServerResponse.jsonUnsafe(
+          { message: "body is required" },
+          { status: 422 },
+        );
+      }
+      const row = yield* issues.addComment(repo, Number(params.number), {
+        author: "sam",
+        body: body.body,
+      });
+      if (row === undefined) return notFound;
+      return yield* HttpServerResponse.json(commentJson(row), {
+        status: 201,
+      });
+    }),
+  );
+
+  return Layer.mergeAll(
+    list,
+    create,
+    get,
+    patch,
+    comments,
+    comment,
+    appCreate,
+    appPatch,
+    appComment,
+  );
 });

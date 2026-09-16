@@ -32,6 +32,83 @@ const navigate = (url: string): void => {
 const segments = (): ReadonlyArray<string> =>
   window.location.pathname.split("/").filter(Boolean);
 
+/* ── the app's TOP TABS: Chat | Code | Issues | Pulls ─────────────── */
+
+export type AppTab = "chat" | "code" | "issues" | "pulls";
+
+/** Which top tab the path lives under — every chat-era path is Chat. */
+export const tabFromLocation = (): AppTab => {
+  const head = segments()[0];
+  return head === "code" || head === "issues" || head === "pulls"
+    ? head
+    : "chat";
+};
+
+export interface CodePlace {
+  readonly repo: string;
+  readonly ref: string;
+  /** Directory or file path inside the tree ("" = the root). */
+  readonly path: string;
+}
+
+/** `/code/:repo[/:ref[/*path]]` — the forge's code browser. */
+export const codePath = (
+  repo = "alchemy",
+  ref = "main",
+  path = "",
+): string =>
+  `/code/${encodeURIComponent(repo)}/${encodeURIComponent(ref)}` +
+  (path === "" ? "" : `/${path.split("/").map(encodeURIComponent).join("/")}`);
+
+export const codeFromLocation = (): CodePlace => {
+  const parts = segments();
+  return {
+    repo: parts[1] === undefined ? "alchemy" : decodeURIComponent(parts[1]),
+    ref: parts[2] === undefined ? "main" : decodeURIComponent(parts[2]),
+    path: parts.slice(3).map(decodeURIComponent).join("/"),
+  };
+};
+
+export const showCode = (repo?: string, ref?: string, path?: string): void =>
+  navigate(codePath(repo, ref, path));
+
+export interface WorkPlace {
+  readonly repo: string;
+  /** The open item's number — undefined on the list. */
+  readonly number?: number;
+}
+
+/** `/issues/:repo[/:number]` and `/pulls/:repo[/:number]`. */
+export const workPath = (
+  tab: "issues" | "pulls",
+  repo = "alchemy",
+  number?: number,
+): string =>
+  `/${tab}/${encodeURIComponent(repo)}${number === undefined ? "" : `/${number}`}`;
+
+export const workFromLocation = (): WorkPlace => {
+  const parts = segments();
+  const number = Number(parts[2]);
+  return {
+    repo: parts[1] === undefined ? "alchemy" : decodeURIComponent(parts[1]),
+    number: Number.isFinite(number) && number > 0 ? number : undefined,
+  };
+};
+
+export const showWork = (
+  tab: "issues" | "pulls",
+  repo?: string,
+  number?: number,
+): void => navigate(workPath(tab, repo, number));
+
+/** Chat remembers its place across tab hops (module state is enough —
+ *  a reload lands on the tab the URL names). */
+let lastChatPath = "/";
+export const rememberChatPath = (): void => {
+  lastChatPath = window.location.pathname + window.location.search;
+};
+export const showChat = (): void => navigate(lastChatPath);
+
 export const channelPath = (name: string): string =>
   name === "root" ? "/" : `/c/${encodeURIComponent(name)}`;
 
