@@ -131,7 +131,15 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       const instance = yield* stack.deploy(
         Effect.gen(function* () {
+          const network = yield* Network("ListNet", {
+            cidrBlock: "10.43.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("ListSubnetGroup", {
+            description: "alchemy instance list lifecycle",
+            subnetIds: network.privateSubnetIds,
+          });
           const cluster = yield* DBCluster("ListCluster", {
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             serverlessV2ScalingConfiguration: {
@@ -161,7 +169,6 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
 );
 
 // RDS provisioning and storage optimization exceed the default test budget.
@@ -355,6 +362,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
 
       const identifier = "alchemy-rds-fingerprint";
+      const startedAt = yield* Effect.sync(() => new Date());
 
       // The testing account has no default VPC/subnets — provision a network
       // and DB subnet group like the standalone lifecycle test above.
@@ -395,8 +403,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         .describeEvents({
           SourceIdentifier: identifier,
           SourceType: "db-instance",
-          // Minutes of lookback — generously covers the whole test run.
-          Duration: 180,
+          StartTime: startedAt,
         })
         .pipe(
           Effect.map((response) =>
@@ -433,14 +440,16 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // round "two" (unchanged password) never triggered a reset.
       const events = yield* resetEvents.pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
+          schedule: Schedule.min([
+            Schedule.exponential("5 seconds"),
+            Schedule.spaced("1 minute"),
+          ]),
           until: (found) => found.length > 0,
-          times: 8,
+          times: 10,
         }),
       );
       expect(events).toHaveLength(1);
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
 );

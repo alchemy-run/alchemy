@@ -721,9 +721,7 @@ export const DBInstanceProvider = () =>
         return response?.DBInstances?.[0];
       });
 
-      // Bounded readiness wait. Gate on `DBInstanceStatus === "available"` so a
-      // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
-      // `waitForAvailable` budgets ~10 min (60 * 10s) for slow provisioning;
+      // Storage optimization is online and can continue for hours after a resize.
       // `requireAvailable: false` only waits for the ARN to appear.
       const waitForInstance = Effect.fn(function* (
         instanceId: string,
@@ -746,6 +744,7 @@ export const DBInstanceProvider = () =>
             if (
               requireAvailable &&
               status !== "available" &&
+              status !== "storage-optimization" &&
               status !== "incompatible-parameters" &&
               status !== "incompatible-restore"
             ) {
@@ -765,16 +764,20 @@ export const DBInstanceProvider = () =>
         instanceId: string,
         converged: (instance: rds.DBInstance) => boolean,
       ) {
+        // RDS can remain available while an accepted storage resize is pending.
         const instance = yield* readInstance(instanceId).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
             times: 10,
             until: (instance) => instance !== undefined && converged(instance),
           }),
         );
         if (!instance?.DBInstanceArn || !converged(instance)) {
           return yield* new InvalidDBInstanceStorage({
-            message: `DB instance '${instanceId}' storage did not converge`,
+            message: `DB instance '${instanceId}' storage did not converge (status: ${instance?.DBInstanceStatus}, allocated: ${instance?.AllocatedStorage}, maximum: ${instance?.MaxAllocatedStorage}, pending allocation: ${instance?.PendingModifiedValues?.AllocatedStorage})`,
           });
         }
         return instance;
