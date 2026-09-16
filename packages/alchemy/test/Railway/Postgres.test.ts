@@ -121,6 +121,20 @@ class NotReady extends Data.TaggedError("NotReady")<{
   }
 }
 
+// Deploy the database first, then extend the same stack with its clients.
+// Each setup phase gets its own bounded budget; a remote image build no
+// longer shares its deadline with database and volume provisioning.
+const DatabaseFixtureStack = Alchemy.Stack(
+  "RailwayPostgresFixture",
+  {
+    providers: Railway.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    return yield* Db;
+  }),
+);
+
 const FixtureStack = Alchemy.Stack(
   "RailwayPostgresFixture",
   {
@@ -303,6 +317,7 @@ describe("ConnectPostgres runtime integrations", () => {
     providers: Railway.providers(),
   });
 
+  beforeAll(deploy(DatabaseFixtureStack), { timeout: 120_000 });
   const fixture = beforeAll(deploy(FixtureStack), {
     timeout: 120_000,
   });
