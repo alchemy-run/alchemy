@@ -3,7 +3,6 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { syncEncryption } from "../S3/Encryption.ts";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -26,7 +25,7 @@ import {
   Default as DefaultEnvironment,
 } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
-import type { BucketEncryption } from "../S3/Bucket.ts";
+import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
 
 /**
  * The bookkeeping object that stores a stack's resolved output. Lives
@@ -470,7 +469,7 @@ const ensureStateBucket = (
       });
     }
 
-    yield* syncEncryption(bucket, options.encryption);
+    yield* syncBucketEncryption(bucket, options.encryption);
 
     const desiredPublicAccess: s3.PublicAccessBlockConfiguration = {
       BlockPublicAcls: true,

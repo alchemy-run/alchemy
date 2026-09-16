@@ -2,15 +2,11 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
-import {
-  desiredEncryptionRule,
-  encryptionFingerprint,
-  readBucketEncryption,
-  syncEncryption,
-} from "./Encryption.ts";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
@@ -882,20 +878,6 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket versioning: ${bucketName}`);
       });
 
-      const syncBucketEncryption = Effect.fn(function* ({
-        bucketName,
-        encryption,
-        session,
-      }: {
-        bucketName: string;
-        encryption?: BucketEncryption;
-        session: ScopedPlanStatusSession;
-      }) {
-        if (yield* syncEncryption(bucketName, encryption)) {
-          yield* session.note(`Updated bucket encryption: ${bucketName}`);
-        }
-      });
-
       const syncPublicAccessBlock = Effect.fn(function* ({
         bucketName,
         publicAccessBlock,
@@ -1494,11 +1476,13 @@ export const BucketProvider = () =>
             session,
           });
 
-          yield* syncBucketEncryption({
-            bucketName: resolved.bucketName,
-            encryption: news.encryption,
-            session,
-          });
+          if (
+            yield* syncBucketEncryption(resolved.bucketName, news.encryption)
+          ) {
+            yield* session.note(
+              `Updated bucket encryption: ${resolved.bucketName}`,
+            );
+          }
 
           yield* syncBucketCors({
             bucketName: resolved.bucketName,
@@ -1685,3 +1669,77 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+class BucketEncryptionNotConverged extends Data.TaggedError(
+  "BucketEncryptionNotConverged",
+)<{ bucket: string }> {}
+
+const desiredEncryptionRule = (
+  encryption?: BucketEncryption,
+): s3.ServerSideEncryptionRule => {
+  const algorithm = encryption?.sseAlgorithm ?? "AES256";
+  const blocked = encryption?.blockedEncryptionTypes ?? [];
+  return {
+    ApplyServerSideEncryptionByDefault: {
+      SSEAlgorithm: algorithm,
+      KMSMasterKeyID:
+        algorithm === "AES256" ? undefined : encryption?.kmsMasterKeyId,
+    },
+    BucketKeyEnabled: encryption?.bucketKeyEnabled ?? false,
+    BlockedEncryptionTypes: {
+      EncryptionType: blocked.length ? [...new Set(blocked)] : ["NONE"],
+    },
+  };
+};
+
+const encryptionFingerprint = (
+  rule: s3.ServerSideEncryptionRule | undefined,
+) => {
+  const key = rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+  return JSON.stringify({
+    algorithm: rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
+    key: (Redacted.isRedacted(key) ? Redacted.value(key) : key) ?? null,
+    bucketKey: rule?.BucketKeyEnabled ?? false,
+    blocked: [
+      ...new Set(
+        rule?.BlockedEncryptionTypes?.EncryptionType?.filter(
+          (type) => type !== "NONE",
+        ) ?? [],
+      ),
+    ].sort(),
+  });
+};
+
+const readBucketEncryption = (bucket: string) =>
+  s3
+    .getBucketEncryption({ Bucket: bucket })
+    .pipe(
+      Effect.map(
+        (result) => result.ServerSideEncryptionConfiguration?.Rules?.[0],
+      ),
+    );
+
+export const syncBucketEncryption = Effect.fn(function* (
+  bucket: string,
+  encryption?: BucketEncryption,
+) {
+  const desired = desiredEncryptionRule(encryption);
+  const matches = (rule: s3.ServerSideEncryptionRule | undefined) =>
+    encryptionFingerprint(rule) === encryptionFingerprint(desired);
+  if (matches(yield* readBucketEncryption(bucket))) return false;
+  yield* s3.putBucketEncryption({
+    Bucket: bucket,
+    ServerSideEncryptionConfiguration: { Rules: [desired] },
+  });
+  const observed = yield* readBucketEncryption(bucket).pipe(
+    Effect.repeat({
+      until: matches,
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+  if (!matches(observed)) {
+    return yield* Effect.fail(new BucketEncryptionNotConverged({ bucket }));
+  }
+  return true;
+});
