@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -234,10 +235,42 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 // in-place modify (allocatedStorage up, backup retention, perf insights) and
 // re-reads to assert no replacement occurred (same ARN, same identifier).
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: real pending observations settle before returning available (PR 1597)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+
+      // Read the real, cached response body; never replace responses or clocks.
+      // This distinguishes a polled pending state from an already-ready read.
+      const client = yield* HttpClient.HttpClient;
+      const observations: { action: string; statuses: string[] }[] = [];
+      const observedClient = client.pipe(
+        HttpClient.tap((response) =>
+          Effect.gen(function* () {
+            const bodyBytes = response.request.body;
+            if (bodyBytes._tag !== "Uint8Array") return;
+            const action = yield* Effect.sync(() =>
+              new URLSearchParams(new TextDecoder().decode(bodyBytes.body)).get(
+                "Action",
+              ),
+            );
+            if (
+              action !== "DescribeDBInstances" &&
+              action !== "ModifyDBInstance"
+            )
+              return;
+            const body = yield* response.text;
+            observations.push({
+              action,
+              statuses: [
+                ...body.matchAll(
+                  /<DBInstanceStatus>([^<]+)<\/DBInstanceStatus>/g,
+                ),
+              ].map((match) => match[1]!),
+            });
+          }),
+        ),
+      );
 
       // The testing account has no default VPC/subnets, so provision a
       // production-shaped network (VPC + subnets across 2 AZs) and a DB subnet
@@ -254,54 +287,98 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
       });
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 20,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "1 day",
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
-      );
+      const created = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const { dbSubnetGroupName } = yield* network;
+            return yield* DBInstance("StandaloneInstance", {
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 20,
+              storageType: "gp3",
+              masterUsername: "alchemy",
+              manageMasterUserPassword: true,
+              backupRetentionPeriod: "1 day",
+              deletionProtection: false,
+              dbSubnetGroupName,
+              publiclyAccessible: false,
+            });
+          }),
+        )
+        .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+
+      const creationReads = observations
+        .filter(({ action }) => action === "DescribeDBInstances")
+        .flatMap(({ statuses }) => statuses);
+      expect(creationReads).toContain("creating");
+      expect(creationReads.at(-1)).toBe("available");
+      expect(created.status).toBe("available");
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      const initial = (yield* describe).DBInstances?.[0];
+      expect(initial?.DBInstanceStatus).toBe("available");
+      expect(initial?.DBInstanceArn).toBe(created.dbInstanceArn);
+      expect(initial?.Endpoint?.Address).toBeTruthy();
+      expect(initial?.AllocatedStorage).toBe(20);
 
       expect(created.allocatedStorage).toBe(20);
       expect(created.storageType).toBe("gp3");
       expect(created.backupRetentionPeriod).toBe(1);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 25,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "3 days",
-            enablePerformanceInsights: true,
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
-      );
+      observations.length = 0;
+      const updated = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const { dbSubnetGroupName } = yield* network;
+            return yield* DBInstance("StandaloneInstance", {
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              allocatedStorage: 25,
+              storageType: "gp3",
+              masterUsername: "alchemy",
+              manageMasterUserPassword: true,
+              backupRetentionPeriod: "3 days",
+              enablePerformanceInsights: true,
+              deletionProtection: false,
+              dbSubnetGroupName,
+              publiclyAccessible: false,
+            });
+          }),
+        )
+        .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
 
-      // In-place modify — identity is preserved (no replacement).
+      expect(
+        observations.filter(({ action }) => action === "ModifyDBInstance"),
+      ).toHaveLength(1);
+      const updateReads = observations
+        .filter(({ action }) => action === "DescribeDBInstances")
+        .flatMap(({ statuses }) => statuses);
+      expect(updateReads.at(-1)).toBe("available");
+      expect(updated.status).toBe("available");
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(updated.backupRetentionPeriod).toBe(3);
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.DBInstanceStatus).toBe("available");
+      expect(observed?.AllocatedStorage).toBe(25);
+      expect(observed?.BackupRetentionPeriod).toBe(3);
+      expect(observed?.PerformanceInsightsEnabled).toBe(true);
+      expect(observed?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+      expect(
+        observed?.PendingModifiedValues?.BackupRetentionPeriod,
+      ).toBeUndefined();
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
