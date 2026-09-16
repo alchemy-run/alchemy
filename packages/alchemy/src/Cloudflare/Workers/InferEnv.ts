@@ -41,7 +41,7 @@ import type { RateLimitBinding } from "./RateLimitBinding.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
 import type { SecretKeyBinding } from "./SecretKeyBinding.ts";
 import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
-import type { Worker } from "./Worker.ts";
+import type { ExportedHandlerMethod, RpcMethods, Worker } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
 
@@ -160,23 +160,27 @@ export type GetBindingType<T> =
  * `RpcErrorEnvelope`, `RpcStreamEnvelope`), so the mapped types reflect what
  * the raw binding actually resolves to. `fetch` is dropped from the user
  * shape and re-introduced via `Service` so callers get the standard
- * `(input, init?) => Promise<Response>` signature.
+ * `(input, init?) => Promise<Response>` signature. Other
+ * {@link ExportedHandlerMethod}s (`scheduled`, `email`, `queue`, …) are
+ * dropped too — they are event listeners, not RPC methods.
  *
  * Use {@link toRpcAsync} to wrap a binding into a Promise<T>-flavored view
  * where envelopes are decoded for you.
  */
 export type RpcWireShape<Shape> = {
-  [K in keyof Shape as K extends "fetch" ? never : K]: Shape[K] extends (
+  [K in keyof RpcMethods<Shape>]: RpcMethods<Shape>[K] extends (
     ...args: infer A
   ) => Effect.Effect<infer T, any, any>
     ? (...args: A) => Promise<T | RpcErrorEnvelope>
-    : Shape[K] extends (...args: infer A) => Stream.Stream<any, any, any>
+    : RpcMethods<Shape>[K] extends (
+          ...args: infer A
+        ) => Stream.Stream<any, any, any>
       ? (...args: A) => Promise<RpcStreamEnvelope | RpcErrorEnvelope>
-      : Shape[K] extends Effect.Effect<infer T, any, any>
+      : RpcMethods<Shape>[K] extends Effect.Effect<infer T, any, any>
         ? Promise<T | RpcErrorEnvelope>
-        : Shape[K] extends Stream.Stream<any, any, any>
+        : RpcMethods<Shape>[K] extends Stream.Stream<any, any, any>
           ? Promise<RpcStreamEnvelope | RpcErrorEnvelope>
-          : Shape[K] extends (...args: infer A) => infer R
+          : RpcMethods<Shape>[K] extends (...args: infer A) => infer R
             ? (...args: A) => Promise<Awaited<R>>
-            : Promise<Shape[K]>;
+            : Promise<RpcMethods<Shape>[K]>;
 };
