@@ -208,6 +208,8 @@ export interface Milestone extends Resource<
  * ### Wiring with Other Resources
  * **Example:** Create Repository with Milestone
  * ```typescript
+ * import * as Output from "alchemy/Output";
+ *
  * const repo = yield* GitHub.Repository("api", {
  *   owner: "my-org",
  *   name: "api",
@@ -216,7 +218,7 @@ export interface Milestone extends Resource<
  *
  * yield* GitHub.Milestone("launch", {
  *   owner: repo.owner!,
- *   repository: repo.name!,
+ *   repository: Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!),
  *   title: "Initial Launch",
  *   dueOn: "2026-12-31",
  * });
@@ -247,6 +249,15 @@ export const MilestoneProvider = () =>
 
     reconcile: Effect.fn(function* ({ news }) {
       const octokit = yield* octokitFor(news.baseUrl);
+      const state = news.state ?? "open";
+      const description = news.description ?? "";
+      const requestedDueOn = news.dueOn;
+      const dueOn =
+        requestedDueOn === undefined
+          ? null
+          : yield* Effect.try(() =>
+              new Date(requestedDueOn).toISOString().replace(".000Z", "Z"),
+            );
 
       // Observe — probe for an existing milestone by title. GitHub's list
       // endpoint supports filtering by state, but we need to check both open
@@ -262,7 +273,7 @@ export const MilestoneProvider = () =>
         catch: (e) => e as Error,
       });
 
-      const observed = existingMilestones.find((m) => m.title === news.title);
+      let observed = existingMilestones.find((m) => m.title === news.title);
 
       // Ensure — when no milestone exists, create one
       if (observed === undefined) {
@@ -272,27 +283,42 @@ export const MilestoneProvider = () =>
               owner: news.owner,
               repo: news.repository,
               title: news.title,
-              state: news.state,
-              description: news.description,
-              due_on: news.dueOn,
+              state,
+              description,
+              due_on: dueOn ?? undefined,
             }),
           catch: (e) => e as Error,
         });
 
-        return attrsOf(data);
+        observed = data;
       }
 
-      // Sync — update the existing milestone if any properties differ
+      // Creation can shift the due date; converge the returned state too.
+      if (
+        observed.state === state &&
+        (observed.description ?? "") === description &&
+        observed.due_on === dueOn
+      ) {
+        return attrsOf(observed);
+      }
+
+      // Octokit's endpoint type omits the API's nullable due_on field.
       const { data } = yield* Effect.tryPromise({
         try: () =>
-          octokit.rest.issues.updateMilestone({
+          octokit.request<
+            Awaited<
+              ReturnType<typeof octokit.rest.issues.updateMilestone>
+            >["data"]
+          >({
+            method: "PATCH",
+            url: "/repos/{owner}/{repo}/milestones/{milestone_number}",
             owner: news.owner,
             repo: news.repository,
             milestone_number: observed.number,
             title: news.title,
-            state: news.state,
-            description: news.description,
-            due_on: news.dueOn,
+            state,
+            description,
+            due_on: dueOn,
           }),
         catch: (e) => e as Error,
       });

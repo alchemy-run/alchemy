@@ -1,261 +1,285 @@
 ---
-title: "Part 1: A git server in one file"
-description: Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
+title: "Part 1: Push your first repository"
+description: Deploy a Git host, push a commit, and clone it back. Add storage and hashing one layer at a time.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-You have a Cloudflare account connected to alchemy and an empty
-project. By the end of this part a git server is deployed, and you
-know what each line of it decides. [Getting Started](/git/getting-started) deploys the
-finished file directly if you would rather start there.
+Start with a Git remote you can push to. This part deploys a Worker backed by
+Durable Objects and R2, then sends a real commit through it and clones it back.
 
-## Install
+:::caution
+This first deployment is open: anyone who knows its URL can create repositories,
+read them, and write to them. Use a disposable repository. [Part 2](/git/tutorial/part-2)
+adds access control before you use the host for private work.
+:::
+
+## Create the project
+
+You need Bun or Node.js 22+, Git, and a Cloudflare account with Workers, Durable Objects, and R2.
+Complete [Cloudflare setup](/cloudflare/setup) to connect your account.
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
-    <Code code="bun add alchemy" lang="sh" />
+    <Code code={`mkdir git-tutorial
+cd git-tutorial
+bun init -y
+bun add alchemy effect
+mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
-    <Code code="npm install alchemy" lang="sh" />
+    <Code code={`mkdir git-tutorial
+cd git-tutorial
+npm init -y
+npm install alchemy effect
+mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="pnpm" icon="pnpm">
-    <Code code="pnpm add alchemy" lang="sh" />
+    <Code code={`mkdir git-tutorial
+cd git-tutorial
+pnpm init
+pnpm add alchemy effect
+mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
-    <Code code="yarn add alchemy" lang="sh" />
+    <Code code={`mkdir git-tutorial
+cd git-tutorial
+yarn init -y
+yarn add alchemy effect
+mkdir src`} lang="sh" />
   </TabItem>
 </Tabs>
 
-## A Worker that serves git
+Run the remaining commands from this project directory. Keep the same directory,
+stack name, and deployment stage throughout the tutorial so each deploy updates
+this host.
 
-`Git.Server` is the HTTP surface: the git wire protocol, a REST plane,
-and a GitHub-compatible facade behind one `fetch`. It is a service, not
-a Worker, so the Worker is yours:
+## Add the Git routes
+
+Create `src/git.ts`:
 
 ```typescript
 // src/git.ts
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
-import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
-export default class GitHost extends Cloudflare.Worker<GitHost>()(
-  "Git",
-  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
-  Effect.gen(function* () {
-    const git = yield* Git.Server;
-    return { fetch: git.fetch };
-  }),
-) {}
+export const GitLive = Git.ApiLive.pipe(
+  Layer.provide(Git.ApiHandlersLive),
+);
 ```
 
-`GIT_WORKER_OPTIONS` sets `nodejs_compat` and a CPU limit large enough
-to verify a push. This does not compile yet. `Git.Server` needs the
-blocks it is made of, and the compiler lists them.
+`Git.ApiLive` registers the Git HTTP endpoints, including the protocol used by
+`git push` and `git clone`. `Git.ApiHandlersLive` implements those endpoints.
+Its remaining dependencies describe where repositories live and how incoming
+objects are checked. Supply each one below before deploying.
 
-## Where refs and objects live
-
-`Git.ReposDurableObject` gives every repository its own Durable Object.
-Refs, the object index, the commit graph, and pull requests live in its
-SQLite, and a push's ref update is one transaction:
+## Store repository data
 
 ```diff lang="typescript"
-import * as Effect from "effect/Effect";
-+import * as Layer from "effect/Layer";
-
-+const GitLive = Git.ServerLive.pipe(
+// src/git.ts
+export const GitLive = Git.ApiLive.pipe(
+  Layer.provide(Git.ApiHandlersLive),
 +  Layer.provide(Git.ReposDurableObject),
-+);
-+
-export default class GitHost extends Cloudflare.Worker<GitHost>()(
-  "Git",
-  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
-  Effect.gen(function* () {
-    const git = yield* Git.Server;
-    return { fetch: git.fetch };
--  }),
-+  }).pipe(Effect.provide(GitLive)),
-) {}
+);
 ```
 
-## How names resolve
+`Git.ReposDurableObject` gives each repository a Durable Object. It stores the
+repository's refs and object metadata and coordinates writes to that repository.
 
-`acme/web` has to become a repository id. `Git.RegistryDurableObject`
-is one object that owns that mapping, enforces uniqueness, and answers
-listings:
+## Look up repositories by name
 
 ```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
+// src/git.ts
   Layer.provide(Git.ReposDurableObject),
 +  Layer.provide(Git.RegistryDurableObject),
 );
 ```
 
-## Where bytes go
+The registry maps an `owner/name`, such as `acme/web`, to its repository. This
+lets an incoming request find the right Durable Object.
 
-Packs, clone bundles, and the bodies of large pushes are bulk bytes.
-Declare a bucket and hand it to `Git.BlobStoreR2`. The one Layer
-serves the Worker streaming a clone and the Durable Object writing a
-pack:
+## Verify incoming Git objects
 
 ```diff lang="typescript"
-+export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
-+
-const GitLive = Git.ServerLive.pipe(
-  Layer.provide(Git.ReposDurableObject),
+// src/git.ts
   Layer.provide(Git.RegistryDurableObject),
-+  Layer.provide(Git.BlobStoreR2(GitObjects)),
-);
-```
-
-## What verifies a push
-
-Every object a push sends is inflated and hashed before a ref moves.
-`Git.HasherInline` does that on the Worker that received the push,
-which is right until pushes are tens of megabytes:
-
-```diff lang="typescript"
-const GitLive = Git.ServerLive.pipe(
-  Layer.provide(Git.ReposDurableObject),
-  Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
 +  Layer.provide(Git.HasherInline),
 );
 ```
 
-## Who is calling
+Git objects are identified by hashes of their contents. `Git.HasherInline`
+verifies incoming objects in the Worker during a push.
 
-The engine holds no users and no credentials. Who may call a route is
-decided by the middleware of the API that mounts it, before the engine
-sees a request. `Git.Api` is every git route: the REST plane, the git
-wire, the raw reads, and the GitHub facade. The smallest thing that
-secures a fresh host is one shared secret, sent the way `git` sends
-credentials: as the password of HTTP Basic. The secret is an
-`Alchemy.Random`, a resource minted on the first deploy and stable
-after it, declared here so the stack can read it back:
+## Store packs and large objects
 
 ```diff lang="typescript"
-+import * as Alchemy from "alchemy";
-+import * as Redacted from "effect/Redacted";
-+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
-+import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
+// src/git.ts
++import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
+import * as Layer from "effect/Layer";
 
-export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
-+export const GitSecret = Alchemy.Random("GitSecret");
++const GitObjects = Cloudflare.R2.Bucket("GitObjects", { forceDestroy: true });
 +
-+export class Authenticated extends HttpApiMiddleware.Service<
-+  Authenticated,
-+  { requires: Alchemy.RuntimeContext }
-+>()("Authenticated") {}
-+
-+export const AuthenticatedLive = Layer.effect(
-+  Authenticated,
-+  Effect.gen(function* () {
-+    const secret = yield* (yield* GitSecret).text;
-+    return (httpEffect) =>
-+      Effect.gen(function* () {
-+        const { password } = yield* HttpApiBuilder.securityDecode(
-+          HttpApiSecurity.basic,
-+        );
-+        if (Redacted.value(password) === Redacted.value(yield* secret)) {
-+          return yield* httpEffect;
-+        }
-+        return HttpServerResponse.empty({
-+          status: 401,
-+          headers: { "www-authenticate": 'Basic realm="git"' },
-+        });
-+      });
-+  }),
-+);
+export const GitLive = Git.ApiLive.pipe(
 ```
 
-An `HttpApi` middleware wraps every route it is declared on. This one
-runs once per request: a matching secret runs the route, anything else
-answers `401` with `WWW-Authenticate`, so `git` asks for a password.
-Yielding the `Random` in the Layer gives the Worker its value at
-runtime; `requires: Alchemy.RuntimeContext` is what lets a middleware
-read it.
+This bucket holds packs, clone bundles, and large objects. `forceDestroy: true`
+lets you remove the tutorial stack even when the bucket contains data; destroying
+this stack also deletes those objects.
 
-## The API the host serves
-
-The middleware goes on the API, and the API is what `Git.Server`
-serves. `Git.Api.middleware(Authenticated)` puts it in front of every
-git route, and `Git.Handlers` is the engine's implementation of each:
+Connect the bucket to Git:
 
 ```diff lang="typescript"
-+export class Api extends Git.Api.middleware(Authenticated) {}
-+
--const GitLive = Git.ServerLive.pipe(
-+const GitLive = Git.Server.layer(Api).pipe(
-+  Layer.provide(Git.Handlers),
-+  Layer.provide(AuthenticatedLive),
-  Layer.provide(Git.ReposDurableObject),
-  Layer.provide(Git.RegistryDurableObject),
-  Layer.provide(Git.BlobStoreR2(GitObjects)),
+// src/git.ts
   Layer.provide(Git.HasherInline),
++  Layer.provide(Git.BlobStoreR2(GitObjects)),
 );
 ```
 
-The file compiles. Each line is a Layer you can replace later without
-touching the others. `Git.ServerLive`, the line you started with, is
-`Git.Api` with `Git.Handlers` and nothing in front. Part 3 replaces the
-secret with Better Auth, and Part 4 adds rules about which refs may
-move.
+The R2 layer supplies the blob-storage operations used by the Worker and the
+repository Durable Objects.
 
-## Add it to a stack
+## Serve Git from a Worker
 
-The `Random` is a resource like any other, so the stack yields it and
-outputs its value:
+Create `src/host.ts`:
+
+```typescript
+// src/host.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Git from "alchemy/Git";
+import * as Http from "alchemy/Http";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import { GitLive } from "./git.ts";
+
+export default class GitHost extends Cloudflare.Worker<GitHost>()(
+  "GitHost",
+  { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
+  Effect.gen(function* () {
+    const fetch = yield* HttpRouter.toHttpEffect(
+      GitLive.pipe(Layer.provide(Http.Platform)),
+    );
+    return { fetch };
+  }),
+) {}
+```
+
+`HttpRouter.toHttpEffect` turns the route layer into the Worker's `fetch` handler.
+`Http.Platform` provides its HTTP platform dependencies. `GIT_WORKER_OPTIONS`
+sets the Worker compatibility flags and CPU limit used by Git.
+
+## Declare the stack
+
+Create `alchemy.run.ts`:
 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import GitHost, { GitSecret } from "./src/git.ts";
+import GitHost from "./src/host.ts";
 
 export default Alchemy.Stack(
-  "GitService",
+  "GitTutorial",
   { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
-    const git = yield* GitHost;
-    const secret = yield* GitSecret;
-    return {
-      url: git.url.as<string>(),
-      secret: Output.map(secret.text, Redacted.value),
-    };
+    const host = yield* GitHost;
+    return { url: host.url.as<string>() };
   }),
 );
 ```
+
+Yielding the Worker includes its bucket and Durable Object bindings in the
+stack. The output gives you the URL clients will use.
 
 ## Deploy
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
-    <Code code="bun alchemy deploy" lang="sh" />
+    <Code code={`bun alchemy deploy`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
-    <Code code="npm run alchemy deploy" lang="sh" />
+    <Code code={`npx alchemy deploy`} lang="sh" />
   </TabItem>
   <TabItem label="pnpm" icon="pnpm">
-    <Code code="pnpm alchemy deploy" lang="sh" />
+    <Code code={`pnpm alchemy deploy`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
-    <Code code="yarn alchemy deploy" lang="sh" />
+    <Code code={`yarn alchemy deploy`} lang="sh" />
   </TabItem>
 </Tabs>
 
-The stack prints the Worker's URL and the secret. It created a bucket,
-two Durable Object namespaces, one random secret bound to one Worker,
-and nothing runs until a request arrives. Part 2 calls them `$HOST`
-and `$GIT_SECRET`.
+Copy the printed URL, including `https://`, without a trailing slash:
 
-## Where next
+```sh
+export HOST="https://your-worker.workers.dev"
+```
 
-[Part 2](/git/tutorial/part-2) creates a repository on it, pushes, and
-clones it back anonymously. The reference for each line you wrote is
-under [Building blocks](/git/blocks).
+Verify that the Git API is reachable:
+
+```sh
+curl --fail-with-body "$HOST/api/v1/repos"
+```
+
+It returns a JSON repository list. On a new host the list is empty. A new
+`workers.dev` deployment can briefly return a Cloudflare 404 while it propagates;
+repeat this read check until the API responds before creating the repository.
+Updates in later parts can also briefly serve the previous version.
+
+## Create a repository
+
+```sh
+curl --fail-with-body -X POST "$HOST/api/v1/repos" \
+  -H "Content-Type: application/json" \
+  -d '{"owner":"acme","name":"web"}'
+```
+
+The repository is named `acme/web`. At this stage `acme` is just a namespace;
+there are no user accounts. Creating a repository reserves that name before you
+push any commits.
+
+## Push a commit
+
+```sh
+git init -b main work
+git -C work config user.name "Tutorial"
+git -C work config user.email "tutorial@example.com"
+printf '# My repository\n' > work/README.md
+git -C work add README.md
+git -C work commit -m "First commit"
+git -C work remote add origin "$HOST/acme/web.git"
+git -C work push -u origin main
+```
+
+The push uploads the commit and its objects, then creates `main` on your host.
+
+## Clone it back
+
+```sh
+git clone "$HOST/acme/web.git" verify
+git -C verify fsck --strict
+git -C work rev-parse HEAD
+git -C verify rev-parse HEAD
+```
+
+The two commit IDs should match, and `fsck` should report no corrupt or missing
+objects. You now have a working Git remote.
+
+Continue to [Part 2: Control access](/git/tutorial/part-2). If you stop here,
+remove the open learning deployment:
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npx alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm alchemy destroy`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn alchemy destroy`} lang="sh" />
+  </TabItem>
+</Tabs>
