@@ -48,6 +48,10 @@ import {
   ServerProvider as WebsiteServerProvider,
 } from "../Website/Server.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
+import {
+  SandboxCheckpoint,
+  SandboxCheckpointProvider,
+} from "./SandboxCheckpoint.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
@@ -111,6 +115,7 @@ export const providers = () =>
       Bucket,
       CloudAgent,
       Sandbox,
+      SandboxCheckpoint,
       Random,
       WebsiteServer,
     ]),
@@ -139,6 +144,7 @@ export const providers = () =>
         BucketProvider(),
         CloudAgentProvider(),
         SandboxProvider(),
+        SandboxCheckpointProvider(),
         RandomProvider(),
         WebsiteServerProvider(),
       ),
