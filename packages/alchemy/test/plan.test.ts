@@ -1160,7 +1160,7 @@ test.provider(
       const state = yield* yield* State;
       yield* state.set({
         stack: scratch.name,
-        stage: TEST_STAGE,
+        stage: scratch.stage,
         fqn: "A",
         value: {
           instanceId,
@@ -1204,7 +1204,7 @@ test.provider(
       expect(
         yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "A",
         }),
       ).toMatchObject({
@@ -3224,7 +3224,7 @@ describe("engine-level adoption", () => {
       expect(
         yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "Adopted",
         }),
       ).toMatchObject({
@@ -3270,7 +3270,7 @@ describe("engine-level adoption", () => {
         expect(
           yield* state.get({
             stack: scratch.name,
-            stage: TEST_STAGE,
+            stage: scratch.stage,
             fqn: "Adopted",
           }),
         ).toMatchObject({
@@ -3286,7 +3286,7 @@ describe("engine-level adoption", () => {
         expect(updates).toBe(0);
         const completed = yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "Adopted",
         });
         expect(completed).toMatchObject({ status: "updated" });

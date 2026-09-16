@@ -517,7 +517,7 @@ generatedProjectRecovery.test.provider(
         "project-generated",
         apiProject("project-generated", name, null),
       );
-      const provider = yield* PrismaProject.Provider;
+      const provider = yield* Provider.findProvider(PrismaProject);
       const observed = yield* provider.read!({
         id: "Project",
         instanceId,
@@ -988,7 +988,7 @@ generatedDatabaseRecovery.test.provider(
         }),
         connections: [],
       });
-      const provider = yield* PrismaDatabase.Provider;
+      const provider = yield* Provider.findProvider(PrismaDatabase);
       const observed = yield* provider.read!({
         id: "Database",
         instanceId,
@@ -1491,7 +1491,7 @@ customDomains.test.provider(
         failureReason: "DNS verification failed",
         failureCategory: "dns",
       });
-      const provider = yield* PrismaCustomDomain.Provider;
+      const provider = yield* Provider.findProvider(PrismaCustomDomain);
       const failed = yield* provider.read!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
@@ -1847,7 +1847,7 @@ branches.test.provider(
       expect(branchCloud.get(main.id)?.isDefault).toBe(false);
       expect(branchCloud.get(main.id)?.role).toBe("production");
 
-      const provider = yield* PrismaBranch.Provider;
+      const provider = yield* Provider.findProvider(PrismaBranch);
       const alreadyDefaultDiff = yield* provider.diff!({
         id: "Preview",
         instanceId: "00000000000000000000000000000000",

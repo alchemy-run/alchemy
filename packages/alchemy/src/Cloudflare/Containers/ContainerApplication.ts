@@ -8,7 +8,7 @@ import {
   type PlatformServices,
 } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
-import * as Server from "../../Server/index.ts";
+import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { ContainerTypeId } from "./Container.ts";
@@ -108,7 +108,8 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   /**
    * Instance type for each deployment. Defaults to wrangler's `"lite"` tier
    * (1/16 vCPU, 256 MiB, 2 GB disk) when no explicit {@link vcpu}/{@link memory}/
-   * {@link disk} is set. (`"dev"` is wrangler's deprecated alias for `"lite"`.)
+   * {@link memoryMib}/{@link disk} is set. (`"dev"` is wrangler's deprecated
+   * alias for `"lite"`.)
    * @default "lite"
    */
   instanceType?: ContainerApplication.InstanceType;
@@ -132,6 +133,12 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Memory allocation override for each deployment.
    */
   memory?: string;
+  /**
+   * Memory allocation override for each deployment, in MiB.
+   * Custom sizing requires at least 1 {@link vcpu} and 3072 MiB of memory
+   * per vCPU for the first 4 vCPUs.
+   */
+  memoryMib?: number;
   /**
    * Disk allocation override for each deployment.
    */
@@ -344,7 +351,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
 export type ContainerServices =
   | ContainerApplication
   | PlatformServices
-  | Server.ProcessServices;
+  | ProcessServices;
 
 export type ContainerShape = Main<ContainerServices>;
 
