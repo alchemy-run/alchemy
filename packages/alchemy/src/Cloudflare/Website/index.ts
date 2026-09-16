@@ -6,4 +6,5 @@ export * from "./Octane.ts";
 export * from "./StaticSite.ts";
 export * from "./SvelteKit.ts";
 export * from "./Vite.ts";
+export * from "./Vocs.ts";
 export * from "./Waku.ts";

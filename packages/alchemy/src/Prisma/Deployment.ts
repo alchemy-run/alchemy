@@ -192,9 +192,8 @@ export interface Deployment extends Resource<
  * persisted state contains a Foundry version ID, refresh may safely recover the
  * matching deployment.
  *
- * @resource
- * @section Creating a Deployment
- * @example Fork the currently promoted artifact
+ * ### Creating a Deployment
+ * **Example:** Fork the currently promoted artifact
  * ```typescript
  * const deployment = yield* Prisma.Deployment("web-v2", {
  *   app: app.appId,
@@ -204,7 +203,7 @@ export interface Deployment extends Resource<
  * });
  * ```
  *
- * @example Upload a prebuilt artifact
+ * **Example:** Upload a prebuilt artifact
  * ```typescript
  * const deployment = yield* Prisma.Deployment("web-v3", {
  *   app: app.appId,
@@ -214,6 +213,8 @@ export interface Deployment extends Resource<
  *   promote: true,
  * });
  * ```
+ *
+ * @resource
  */
 export const Deployment = Resource<Deployment>("Prisma.Deployment");
 

@@ -11,9 +11,8 @@ import * as Binding from "../../Binding.ts";
  * (Virtual Deliverability Manager) to be enabled; a malformed query surfaces
  * the typed `BadRequestException`. Account-level operation. Provide the
  * implementation with `Effect.provide(AWS.SES.BatchGetMetricDataHttp)`.
- * @binding
- * @section Deliverability Insights
- * @example Query Send and Delivery Counts
+ * ### Deliverability Insights
+ * **Example:** Query Send and Delivery Counts
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getMetrics = yield* SES.BatchGetMetricData();
@@ -31,6 +30,8 @@ import * as Binding from "../../Binding.ts";
  *   ],
  * });
  * ```
+ *
+ * @binding
  */
 export interface BatchGetMetricData extends Binding.Service<
   BatchGetMetricData,

@@ -224,11 +224,8 @@ export type List = Resource<
  * replacement. The list's items are managed as part of the resource: on any
  * change the full contents are replaced via the asynchronous bulk items
  * operation, which the provider polls to completion.
- * @resource
- * @product Rules
- * @category Rules & Configuration
- * @section Creating a List
- * @example IP list with items
+ * ### Creating a List
+ * **Example:** IP list with items
  * ```typescript
  * const blocklist = yield* Cloudflare.Rules.List("blocklist", {
  *   kind: "ip",
@@ -240,7 +237,7 @@ export type List = Resource<
  * });
  * ```
  *
- * @example ASN list with an explicit name
+ * **Example:** ASN list with an explicit name
  * ```typescript
  * const asns = yield* Cloudflare.Rules.List("bad-asns", {
  *   name: "bad_asns",
@@ -249,7 +246,7 @@ export type List = Resource<
  * });
  * ```
  *
- * @example Redirect list for Bulk Redirects
+ * **Example:** Redirect list for Bulk Redirects
  * ```typescript
  * const redirects = yield* Cloudflare.Rules.List("redirects", {
  *   kind: "redirect",
@@ -265,8 +262,8 @@ export type List = Resource<
  * });
  * ```
  *
- * @section Referencing a List from rules
- * @example Use the list name in a Ruleset expression
+ * ### Referencing a List from rules
+ * **Example:** Use the list name in a Ruleset expression
  * ```typescript
  * const list = yield* Cloudflare.Rules.List("blocklist", { kind: "ip" });
  *
@@ -276,6 +273,10 @@ export type List = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/waf/tools/lists/
+ *
+ * @resource
+ * @product Rules
+ * @category Rules & Configuration
  */
 export const List = Resource<List>(TypeId);
 

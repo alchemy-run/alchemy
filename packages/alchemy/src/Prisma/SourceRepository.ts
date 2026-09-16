@@ -147,15 +147,14 @@ export interface SourceRepository extends Resource<
  * roll back branch and resource attachments. Existing links require explicit
  * adoption.
  *
- * @resource
- * @section Finding the Repository ID
- * @example Read the numeric GitHub repository ID
+ * ### Finding the Repository ID
+ * **Example:** Read the numeric GitHub repository ID
  * ```bash
  * gh api repos/OWNER/REPO --jq '.id'
  * ```
  *
- * @section Linking a Repository
- * @example GitHub repository
+ * ### Linking a Repository
+ * **Example:** GitHub repository
  * ```typescript
  * const repo = yield* Prisma.SourceRepository("repo", {
  *   project: project.projectId,
@@ -167,6 +166,8 @@ export interface SourceRepository extends Resource<
  *   branchGitName: repo.defaultBranch,
  * });
  * ```
+ *
+ * @resource
  */
 export const SourceRepository = Resource<SourceRepository>(
   "Prisma.SourceRepository",

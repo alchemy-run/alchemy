@@ -57,11 +57,8 @@ export type FallbackOrigin = Resource<
  * Safety: when there is no prior state, `read` reports an existing
  * fallback origin as `Unowned`, so the engine refuses to overwrite an
  * out-of-band configuration unless `--adopt` (or `adopt(true)`) is set.
- * @resource
- * @product Custom Hostnames
- * @category Domains & DNS
- * @section Setting the Fallback Origin
- * @example Point custom hostname traffic at your origin
+ * ### Setting the Fallback Origin
+ * **Example:** Point custom hostname traffic at your origin
  * ```typescript
  * const record = yield* Cloudflare.DNS.Record("Origin", {
  *   zoneId: zone.zoneId,
@@ -75,6 +72,10 @@ export type FallbackOrigin = Resource<
  *   origin: record.name,
  * });
  * ```
+ *
+ * @resource
+ * @product Custom Hostnames
+ * @category Domains & DNS
  */
 export const FallbackOrigin = Resource<FallbackOrigin>(
   "Cloudflare.CustomHostname.FallbackOrigin",

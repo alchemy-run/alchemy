@@ -40,6 +40,10 @@ export {
 export type MakeOptions<ROut = any> = Core.MakeOptions<ROut>;
 export type ScratchStack = Core.ScratchStack;
 export type TestEffect<A, R = never> = Core.TestEffect<A, R>;
+export const ALCHEMY_TEST_DEV = Core.ALCHEMY_TEST_DEV;
+export const resolveDev = Core.resolveDev;
+export const defaultStage = Core.defaultStage;
+export const resolveStage = Core.resolveStage;
 
 interface TestFn {
   (name: string, eff: TestEffect<void>, options?: TestOptions): void;
@@ -235,6 +239,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
           }),
         ),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+      exclusive: exclusiveOf(hookOptions),
     });
     return Effect.sync(() => result);
   };
@@ -250,6 +255,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerHook("afterAll", {
       body: () => wrap(eff),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+      exclusive: exclusiveOf(hookOptions),
     });
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
@@ -257,6 +263,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     registerHook("afterAll", {
       body: () => wrap(eff),
       timeout: timeoutOf(hookOptions) ?? DEFAULT_TIMEOUT,
+      exclusive: exclusiveOf(hookOptions),
     });
   };
 

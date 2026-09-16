@@ -62,9 +62,8 @@ export interface Contact extends Resource<
 /**
  * An Amazon SES v2 contact — a single email address on a `SES.ContactList`,
  * with its own topic subscription preferences and unsubscribe state.
- * @resource
- * @section Adding Contacts
- * @example Basic Contact
+ * ### Adding Contacts
+ * **Example:** Basic Contact
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -75,7 +74,7 @@ export interface Contact extends Resource<
  * });
  * ```
  *
- * @example Contact with Topic Preferences
+ * **Example:** Contact with Topic Preferences
  * ```typescript
  * const contact = yield* SES.Contact("Subscriber", {
  *   contactListName: list.contactListName,
@@ -87,7 +86,7 @@ export interface Contact extends Resource<
  * });
  * ```
  *
- * @example Unsubscribe a Contact from Everything
+ * **Example:** Unsubscribe a Contact from Everything
  * ```typescript
  * // unsubscribeAll overrides every per-topic preference.
  * const contact = yield* SES.Contact("Subscriber", {
@@ -97,8 +96,8 @@ export interface Contact extends Resource<
  * });
  * ```
  *
- * @section Application Metadata
- * @example Attach Your Own Data to a Contact
+ * ### Application Metadata
+ * **Example:** Attach Your Own Data to a Contact
  * ```typescript
  * // Serialized to the JSON string SES stores; re-ordering the keys is not a
  * // change, so this does not churn on every deploy.
@@ -108,6 +107,8 @@ export interface Contact extends Resource<
  *   attributes: { plan: "pro", signupSource: "docs" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Contact = Resource<Contact>("AWS.SES.Contact");
 

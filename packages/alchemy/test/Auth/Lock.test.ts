@@ -1,10 +1,11 @@
 import { sanitizeLockKey, withLock } from "@/Auth/Lock.ts";
-import { rootDir } from "@/Auth/Profile.ts";
+import { rootDir } from "@/Auth/Paths.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { assert, describe, expect, it, layer } from "alchemy-test";
 import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -41,7 +42,7 @@ describe("sanitizeLockKey", () => {
 layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
   const lockPathOf = Effect.fn(function* (key: string) {
     const path = yield* Path.Path;
-    return path.join(rootDir, "lock", `${sanitizeLockKey(key)}.lock`);
+    return path.join(rootDir(), "lock", `${sanitizeLockKey(key)}.lock`);
   });
 
   /** Create a foreign lock as another process would have left it. */
@@ -360,5 +361,57 @@ layer(NodeServices.layer, { excludeTestServices: true })("withLock", (it) => {
         yield* Fiber.await(fiber);
       }),
     { timeout: 30_000 },
+  );
+  /**
+   * A locked operation that never completes used to be entirely invisible:
+   * the deploy sat there with no output at any log level (#1231). The stall
+   * notice is the backstop that makes a hang self-describing, so it has to
+   * name the operation and it must stay quiet for flows that legitimately
+   * block on the user.
+   */
+  const captureConsole = () => {
+    const messages: Array<string> = [];
+    return {
+      messages,
+      provide: <A, E, R>(self: Effect.Effect<A, E, R>) =>
+        Console.consoleWith((base) =>
+          Effect.provideService(self, Console.Console, {
+            ...base,
+            error: (...args: ReadonlyArray<any>) => {
+              messages.push(args.join(" "));
+            },
+          }),
+        ),
+    };
+  };
+
+  it.effect("names the stalled operation on the console", () =>
+    Effect.gen(function* () {
+      const console = captureConsole();
+      yield* console.provide(
+        withLock("stall-notice-key", Effect.sleep("250 millis"), {
+          label: "AWS.read (profile 'probe')",
+          stallInterval: "50 millis",
+        }),
+      );
+      expect(console.messages.length).toBeGreaterThan(0);
+      expect(console.messages[0]).toContain("AWS.read (profile 'probe')");
+      expect(console.messages[0]).toContain("stall-notice-key.lock");
+      yield* removeLock(yield* lockPathOf("stall-notice-key"));
+    }),
+  );
+
+  it.effect("stays silent when the watchdog is disabled", () =>
+    Effect.gen(function* () {
+      const console = captureConsole();
+      yield* console.provide(
+        withLock("stall-quiet-key", Effect.sleep("250 millis"), {
+          watchdog: false,
+          stallInterval: "50 millis",
+        }),
+      );
+      expect(console.messages).toEqual([]);
+      yield* removeLock(yield* lockPathOf("stall-quiet-key"));
+    }),
   );
 });

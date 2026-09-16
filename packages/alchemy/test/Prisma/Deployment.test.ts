@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import {
   Deployment as PrismaDeployment,
   DeploymentProvider,
@@ -810,7 +811,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const output = yield* provider.read!({
         id: "Version",
         fqn: "Version",
@@ -855,7 +856,7 @@ describe("Prisma Deployment", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
+        const provider = yield* Provider.findProvider(PrismaDeployment);
         const output = yield* provider.read!({
           id: "Deployment",
           fqn: "Deployment",
@@ -906,7 +907,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const output = yield* provider.read!({
         id: "Version",
         fqn: "Version",
@@ -984,7 +985,7 @@ describe("Prisma Deployment", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
+        const provider = yield* Provider.findProvider(PrismaDeployment);
         const output = yield* provider.read!({
           id: "Version",
           fqn: "Version",
@@ -1055,7 +1056,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const error = yield* provider.read!({
         id: "Deployment",
         fqn: "Deployment",
@@ -1889,7 +1890,7 @@ describe("Prisma Deployment", () => {
           );
         });
 
-        const provider = yield* PrismaDeployment.Provider.pipe(
+        const provider = yield* Provider.findProvider(PrismaDeployment).pipe(
           Effect.provide(deploymentProviderLive()),
           Effect.provide(PlatformServices),
         );

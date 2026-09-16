@@ -157,13 +157,18 @@ export interface DatabaseProps {
    */
   source?: DatabaseSourceInput;
   /**
-   * Branch ID to attach the database to. Mutually exclusive with branchGitName.
+   * Branch ID to attach the database to. Mutually exclusive with
+   * branchGitName. Every Prisma database belongs to a Branch: omit both
+   * fields to let the Management API attach it to the project's default
+   * Branch, which Alchemy then leaves unmanaged.
    */
-  branchId?: string | null;
+  branchId?: string;
   /**
-   * Branch git name to attach the database to. Mutually exclusive with branchId.
+   * Branch git name to attach the database to (the Branch is created when it
+   * does not exist). Mutually exclusive with branchId. Omit both fields to
+   * attach to the project's default Branch.
    */
-  branchGitName?: string | null;
+  branchGitName?: string;
   /**
    * Local database settings for `alchemy dev`. Set to `false` to keep only
    * placeholder IDs.
@@ -258,9 +263,8 @@ export interface Database extends Resource<
  * name and branch attachment can converge in place. Destroying this resource
  * deletes its database and data.
  *
- * @resource
- * @section Creating a Database
- * @example Database in a project
+ * ### Creating a Database
+ * **Example:** Database in a project
  * ```typescript
  * const project = yield* Prisma.Project("app", { createDatabase: false });
  * const database = yield* Prisma.Database("db", {
@@ -269,13 +273,15 @@ export interface Database extends Resource<
  * });
  * ```
  *
- * @example Database attached to a preview branch
+ * **Example:** Database attached to a preview branch
  * ```typescript
  * const database = yield* Prisma.Database("preview-db", {
  *   project,
  *   branchId: preview.branchId,
  * });
  * ```
+ *
+ * @resource
  */
 export const Database = Resource<Database>("Prisma.Database");
 
@@ -491,10 +497,10 @@ const branchNeedsSync = Effect.fn(function* (
     return database.branchId !== props.branchId;
   }
   if (props.branchGitName === undefined) {
-    return database.branchId !== null;
-  }
-  if (props.branchGitName === null) {
-    return database.branchId !== null;
+    // No attachment requested: the Management API attaches every database to
+    // a Branch (the project default when omitted) and rejects detaching, so
+    // the observed attachment is left alone.
+    return false;
   }
   const branchId = yield* branchIdForGitName(projectId, props.branchGitName);
   return branchId === undefined || branchId !== database.branchId;
@@ -528,6 +534,16 @@ const validateDatabaseProps = (props: DatabaseProps) =>
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
       return yield* Effect.fail(
         new Error("branchId and branchGitName are mutually exclusive."),
+      );
+    }
+    if (
+      (props.branchId as unknown) === null ||
+      (props.branchGitName as unknown) === null
+    ) {
+      return yield* Effect.fail(
+        new Error(
+          "Every Prisma database belongs to a Branch; the Management API rejects detaching (null). Omit both branchId and branchGitName to attach to the project's default branch, or provide one of them.",
+        ),
       );
     }
   });
@@ -626,6 +642,9 @@ const ProviderLive = () =>
           const desiredName = yield* createName(id, news.name);
           const observedName =
             output?.databaseName ?? (yield* createName(id, olds.name));
+          // Omitting both branch fields leaves the observed attachment
+          // unmanaged (every database belongs to a Branch; detaching is not
+          // an API operation), so only an explicit target can mismatch.
           let branchMismatch = false;
           if (isResolved(news.branchId) && news.branchId !== undefined) {
             branchMismatch =
@@ -635,10 +654,7 @@ const ProviderLive = () =>
             isResolved(news.branchGitName) &&
             news.branchGitName !== undefined
           ) {
-            if (news.branchGitName === null) {
-              branchMismatch =
-                (output?.branchId ?? olds.branchId ?? null) !== null;
-            } else if (output && newProjectId !== undefined) {
+            if (output && newProjectId !== undefined) {
               const desiredBranchId = yield* branchIdForGitName(
                 newProjectId,
                 news.branchGitName,
@@ -649,12 +665,6 @@ const ProviderLive = () =>
             } else {
               branchMismatch = news.branchGitName !== olds.branchGitName;
             }
-          } else if (
-            isResolved(news.branchId) &&
-            isResolved(news.branchGitName)
-          ) {
-            branchMismatch =
-              (output?.branchId ?? olds.branchId ?? null) !== null;
           }
           if (desiredName !== observedName || branchMismatch) {
             return { action: "update" } as const;
@@ -830,16 +840,12 @@ const ProviderLive = () =>
             database.name !== name ||
             (yield* branchNeedsSync(projectId, database, desired));
           if (needsPatch) {
-            const updateAttachment =
-              attach.branchId === undefined &&
-              attach.branchGitName === undefined
-                ? { branchId: null, branchGitName: undefined }
-                : attach;
+            // Omitted branch props preserve the attachment; null is rejected.
             database = (yield* patchV1DatabasesByDatabaseId({
               databaseId: database.id,
               name,
-              branchId: updateAttachment.branchId,
-              branchGitName: updateAttachment.branchGitName,
+              branchId: attach.branchId,
+              branchGitName: attach.branchGitName,
             })).data;
           }
 

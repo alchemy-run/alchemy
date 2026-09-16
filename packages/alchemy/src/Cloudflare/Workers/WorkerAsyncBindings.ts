@@ -56,6 +56,7 @@ import {
   isSelfUrl,
   isWorker,
   type Worker,
+  type WorkerObservability,
   type WorkerProps,
 } from "./Worker.ts";
 import type { WorkerAccessApplication } from "./WorkerAccess.ts";
@@ -214,6 +215,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               className,
               scriptName: resource.workerName,
               limits: binding.limits,
+              schedules: binding.schedules,
             });
           }
         }
@@ -291,7 +293,14 @@ const bindContainerClass = Effect.fn(function* (
   bindingName: string,
   decl: Container.Decl.Any,
 ) {
-  const className = decl["~alchemy/Container/ClassName"] ?? bindingName;
+  // Effect-valued container props (the shape that threads a sibling
+  // resource's outputs into `env`) can only surface `className` here, once
+  // the props Effect runs.
+  const declaredClassName = decl["~alchemy/Container/ClassName"];
+  const className =
+    (Effect.isEffect(declaredClassName)
+      ? yield* declaredClassName
+      : declaredClassName) ?? bindingName;
   // Resolve the ContainerApplication resource declaration carried on the
   // class. An effectful (`main`) container has no application declaration of
   // its own here (it is created by its `.make()` Layer inside a Durable
@@ -306,12 +315,26 @@ const bindContainerClass = Effect.fn(function* (
       `Worker binding '${bindingName}' is a Container without a deployable image. Declare the container with props (image, or context/dockerfile) to bind it on an async Worker — effectful (main) containers require an Effect-native Durable Object host.`,
     );
   }
+  // Both halves of the Worker's side describe the same env entry, so they
+  // share one `sid`. Binding rows are collapsed by sid (last write wins), so
+  // splitting them across two `bind` calls silently drops the namespace
+  // binding whenever the two sids coincide — e.g. the env key and the
+  // Container's logical id match (`Sandbox: Container("Sandbox", …)`). The
+  // Worker then uploads the Container declaration itself as a `json` binding
+  // and `env.NAME` is not a DO namespace at runtime.
   yield* resource.bind`${bindingName}`({
     bindings: [
       {
         type: "durable_object_namespace",
         name: bindingName,
         className,
+      },
+    ],
+    containers: [
+      {
+        className,
+        dev: application.dev,
+        hash: application.hash.pipe(Output.map((h) => h?.image)),
       },
     ],
   });
@@ -321,9 +344,6 @@ const bindContainerClass = Effect.fn(function* (
         Output.map((namespaces) => namespaces?.[className]),
       ),
     },
-  });
-  yield* resource.bind`${application.LogicalId}`({
-    containers: [{ className, dev: application.dev }],
   });
 });
 
@@ -650,4 +670,31 @@ export const getCacheBinding = (
     enabled: configs.some((c) => c.enabled),
     crossVersionCache: configs.some((c) => c.crossVersionCache) || undefined,
   };
+};
+
+const DEFAULT_OBSERVABILITY: WorkerObservability = {
+  enabled: true,
+  logs: {
+    enabled: true,
+    invocationLogs: true,
+  },
+};
+
+/**
+ * Resolve the observability metadata to upload. An explicit
+ * `news.observability.traces` wins; otherwise the traces contributed by
+ * `Cloudflare.Telemetry()` (a single binding row — rows are collapsed by
+ * sid) fill in without clobbering the logs config. A cache-style `??` on
+ * the whole object would drop the default `logs.invocationLogs`.
+ */
+export const resolveObservability = (
+  news: Pick<WorkerProps, "observability">,
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+): WorkerObservability => {
+  const observability = news.observability ?? DEFAULT_OBSERVABILITY;
+  const bound = bindings.find((b) => b.data.observability?.traces != null)?.data
+    .observability?.traces;
+  return observability.traces != null || bound == null
+    ? observability
+    : { ...observability, traces: bound };
 };

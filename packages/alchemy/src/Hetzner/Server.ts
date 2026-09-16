@@ -140,7 +140,21 @@ export interface ServerProps {
    */
   placementGroup?: Ref<ServerPlacementGroup>;
   /**
-   * Cloud-Init user data (max 32 KiB). Applied only at create time.
+   * Cloud-init user data run on the Server's **first boot** — the place to
+   * install packages, write config files, or add users.
+   *
+   * Accepts a shell script (`#!/bin/bash …`), a `#cloud-config` document,
+   * or a bare shell snippet (a `#!/bin/bash` shebang is added for you).
+   * Alchemy combines it with its own bootstrap script (which preinstalls
+   * Node 26 for `Hetzner.Service`) into a multipart cloud-init document, so
+   * both run — the bootstrap first. A document that already starts with a
+   * `Content-Type:` / `MIME-Version:` header is passed through untouched,
+   * taking over the whole payload including the bootstrap.
+   *
+   * Capped at 32 KiB (Hetzner's limit) after composition.
+   *
+   * Cloud-init only runs once, on first boot, so changing this replaces
+   * the Server.
    */
   userData?: string;
   /**
@@ -252,11 +266,10 @@ export type Server = Resource<
  * delete protection, and (when set) Networks / Firewalls / Volumes /
  * Placement Group update in place. SSH keys are injected only at create.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#servers
  *
- * @section Creating a Server
- * @example Basic Server
+ * ### Creating a Server
+ * **Example:** Basic Server
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   serverType: "cpx12",
@@ -265,7 +278,7 @@ export type Server = Resource<
  * });
  * ```
  *
- * @example Named Server with labels
+ * **Example:** Named Server with labels
  * ```typescript
  * const server = yield* Hetzner.Server("web", {
  *   name: "app-web",
@@ -276,8 +289,8 @@ export type Server = Resource<
  * });
  * ```
  *
- * @section Attachments
- * @example SSH key and Placement Group
+ * ### Attachments
+ * **Example:** SSH key and Placement Group
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
  *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
@@ -291,6 +304,37 @@ export type Server = Resource<
  *   placementGroup: group,
  * });
  * ```
+ *
+ * ### Custom init script
+ * **Example:** Install packages on first boot
+ * ```typescript
+ * const server = yield* Hetzner.Server("web", {
+ *   serverType: "cpx12",
+ *   image: "ubuntu-24.04",
+ *   userData: `#!/bin/bash
+ * apt-get update
+ * DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+ * systemctl enable --now nginx`,
+ * });
+ * ```
+ *
+ * **Example:** cloud-config document
+ * ```typescript
+ * const server = yield* Hetzner.Server("web", {
+ *   serverType: "cpx12",
+ *   image: "ubuntu-24.04",
+ *   userData: `#cloud-config
+ * packages:
+ *   - nginx
+ *   - postgresql-client`,
+ * });
+ * ```
+ *
+ * `userData` is merged with Alchemy's own bootstrap script into a
+ * multipart cloud-init document, so both run. It is applied on first boot
+ * only — changing it replaces the Server.
+ *
+ * @resource
  */
 export const Server = Resource<Server>("Hetzner.Server");
 
@@ -298,6 +342,18 @@ export class ServerNotResolved extends Data.TaggedError(
   "Hetzner.ServerNotResolved",
 )<{
   name: string;
+}> {}
+
+/**
+ * The composed cloud-init document (Alchemy's bootstrap plus the Server's
+ * `userData`) exceeds Hetzner's 32 KiB user-data limit.
+ */
+export class ServerUserDataTooLarge extends Data.TaggedError(
+  "Hetzner.ServerUserDataTooLarge",
+)<{
+  name: string;
+  bytes: number;
+  limit: number;
 }> {}
 
 type CloudServer = GetServerResponseServer | ListServersResponseServersItem;
@@ -373,6 +429,22 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
+/** Companion deploy keys are not stack resources — delete must be idempotent. */
+const deleteDeployKey = (id: number | undefined) =>
+  id === undefined
+    ? Effect.void
+    : Services.sshKeys.deleteSshKey({ id }).pipe(
+        Effect.retry({
+          while: (e) =>
+            retryable(e) ||
+            e._tag === "UnprocessableEntity" ||
+            e._tag === "Conflict",
+          times: 8,
+          schedule: backoff,
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
+
 const createServerName = (
   id: string,
   name: string | undefined,
@@ -390,17 +462,115 @@ const createServerName = (
     );
   });
 
+/**
+ * Preinstall Node 26 so `Hetzner.Service`'s first deploy does not have to.
+ * Mirrors the SSH-side install in `./hosted.ts`. Never fails the boot:
+ * `hosted.ts` installs Node over SSH if this did not manage to.
+ */
 const ALCHEMY_BOOTSTRAP = `#!/bin/bash
 set -uo pipefail
 export HOME=/root
-command -v curl >/dev/null 2>&1 || {
-  apt-get update
+if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+  apt-get update || true
   DEBIAN_FRONTEND=noninteractive apt-get install -y curl unzip ca-certificates || true
-}
-if [ ! -x /root/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash || true
 fi
+if ! command -v node >/dev/null 2>&1; then
+  for attempt in 1 2 3; do
+    curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs && break
+    sleep 5
+  done
+fi
+exit 0
 `;
+
+/** Hetzner rejects user data larger than 32 KiB. */
+const MAX_USER_DATA_BYTES = 32 * 1024;
+
+const MIME_BOUNDARY = "==ALCHEMY==";
+
+/**
+ * Cloud-init dispatches on a document's first line. Anything unrecognized
+ * is treated as a shell script.
+ */
+const CLOUD_INIT_FORMATS: ReadonlyArray<readonly [string, string]> = [
+  ["#cloud-config", "text/cloud-config"],
+  ["#cloud-boothook", "text/cloud-boothook"],
+  ["#include", "text/x-include-url"],
+  ["#upstart-job", "text/upstart-job"],
+  ["#part-handler", "text/part-handler"],
+  ["#!", "text/x-shellscript"],
+];
+
+type UserDataPart = {
+  readonly contentType: string;
+  readonly body: string;
+};
+
+const classifyUserData = (doc: string): UserDataPart => {
+  const first = doc.split("\n", 1)[0]?.trim() ?? "";
+  for (const [prefix, contentType] of CLOUD_INIT_FORMATS) {
+    if (first.startsWith(prefix)) return { contentType, body: doc };
+  }
+  // A bare snippet (`apt-get install -y nginx`) is the common case —
+  // cloud-init needs a shebang before it will execute one.
+  return { contentType: "text/x-shellscript", body: `#!/bin/bash\n${doc}` };
+};
+
+/**
+ * Wrap the parts in a multipart cloud-init document. Parts are named
+ * `part-001`, `part-002`, … the way cloud-init names anonymous parts
+ * itself — scripts run in that (lexical) order, so the bootstrap goes
+ * first.
+ */
+const mimeMultipart = (parts: ReadonlyArray<UserDataPart>) =>
+  [
+    `Content-Type: multipart/mixed; boundary="${MIME_BOUNDARY}"`,
+    "MIME-Version: 1.0",
+    "",
+    ...parts.flatMap((part, index) => [
+      `--${MIME_BOUNDARY}`,
+      `Content-Type: ${part.contentType}; charset="utf-8"`,
+      "MIME-Version: 1.0",
+      `Content-Disposition: attachment; filename="part-${String(index + 1).padStart(3, "0")}"`,
+      "",
+      part.body.replace(/\n+$/, ""),
+    ]),
+    `--${MIME_BOUNDARY}--`,
+    "",
+  ].join("\n");
+
+/**
+ * Compose the cloud-init document sent at create: Alchemy's bootstrap
+ * script plus the caller's `userData`, if any.
+ */
+export const composeUserData = (userData: string | undefined): string => {
+  if (userData === undefined) return ALCHEMY_BOOTSTRAP;
+  const doc = userData.replace(/^\uFEFF/, "").replace(/^[\s\n]+/, "");
+  if (doc === "") return ALCHEMY_BOOTSTRAP;
+  // An explicit MIME document is passed through verbatim — the caller owns
+  // the whole payload, bootstrap included.
+  if (/^(content-type|mime-version):/i.test(doc)) return userData;
+  return mimeMultipart([
+    { contentType: "text/x-shellscript", body: ALCHEMY_BOOTSTRAP },
+    classifyUserData(doc),
+  ]);
+};
+
+const buildUserData = Effect.fn(function* (input: {
+  name: string;
+  userData: string | undefined;
+}) {
+  const doc = yield* Effect.sync(() => composeUserData(input.userData));
+  const bytes = yield* Effect.sync(() => Buffer.byteLength(doc, "utf8"));
+  if (bytes > MAX_USER_DATA_BYTES) {
+    return yield* new ServerUserDataTooLarge({
+      name: input.name,
+      bytes,
+      limit: MAX_USER_DATA_BYTES,
+    });
+  }
+  return doc;
+});
 
 const u32be = (n: number) => {
   const buf = Buffer.alloc(4);
@@ -473,6 +643,21 @@ const unwrapPrivateKey = (
   return typeof value === "string" ? value : Redacted.value(value);
 };
 
+const deployKeyName = (name: string) => `${name.slice(0, 55)}-d`;
+
+const findDeployKeyId = Effect.fn(function* (id: string, name: string) {
+  const keyName = deployKeyName(name);
+  const { ssh_keys } = yield* Services.sshKeys.listSshKeys({
+    name: keyName,
+    per_page: 50,
+  });
+  const key = ssh_keys.find((item) => item.name === keyName);
+  return key !== undefined &&
+    (yield* hasAlchemyLabels(id, tagRecord(key.labels)))
+    ? key.id
+    : undefined;
+});
+
 const ensureDeployKey = Effect.fn(function* (input: {
   name: string;
   labels: Record<string, string>;
@@ -494,7 +679,7 @@ const ensureDeployKey = Effect.fn(function* (input: {
     };
   }
   const generated = yield* generateDeployKey;
-  const keyName = `${input.name.slice(0, 55)}-d`;
+  const keyName = deployKeyName(input.name);
   const created = yield* Services.sshKeys
     .createSshKey({
       name: keyName,
@@ -594,6 +779,11 @@ const waitUntilGone = (serverId: number) =>
       until: (gone) => gone,
       times: 10,
     }),
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(new ServerTimeout({ serverId, status: "deleting" })),
+    ),
   );
 
 const numericId = (
@@ -760,9 +950,14 @@ export const ServerProvider = () =>
         );
       return items.map(toAttrs);
     }),
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, olds, output }) {
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
+        // Cloud-init runs once, on first boot — a changed init script can
+        // only take effect on a freshly provisioned Server.
+        if (news.userData !== olds?.userData) {
+          return { action: "replace" } as const;
+        }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
           return { action: "replace" } as const;
@@ -782,9 +977,10 @@ export const ServerProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
+      const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({
         id,
-        name: olds?.name ?? output?.name,
+        name,
         outputId: output?.id ?? output?.serverId,
       });
       if (found === undefined) return undefined;
@@ -793,8 +989,14 @@ export const ServerProvider = () =>
         privateKey: output?.privateKey,
         deploySshKeyId: output?.deploySshKeyId,
       };
-      const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
-      return owned ? attrs : Unowned(attrs);
+      if (!(yield* hasAlchemyLabels(id, tagRecord(found.labels)))) {
+        return Unowned(attrs);
+      }
+      return {
+        ...attrs,
+        deploySshKeyId:
+          attrs.deploySshKeyId ?? (yield* findDeployKeyId(id, found.name)),
+      };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* createServerName(id, news.name, output?.name);
@@ -811,7 +1013,7 @@ export const ServerProvider = () =>
       const placementGroupId = numericId(news.placementGroup, ["id"]);
       const startAfterCreate = news.startAfterCreate ?? true;
       const desiredProtection = news.deleteProtection ?? false;
-      const userData = news.userData ?? ALCHEMY_BOOTSTRAP;
+      const userData = yield* buildUserData({ name, userData: news.userData });
 
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
@@ -863,7 +1065,22 @@ export const ServerProvider = () =>
                   }
                 : undefined,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            Effect.retry({
+              while: (e) =>
+                e._tag === "ServerLimitExceeded" ||
+                e._tag === "ServerPlacementError",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            // The deploy key is a side-effect, not a stack resource. If
+            // createServer fails after minting it (quota skip, timeout),
+            // nothing is persisted for Server.delete to clean up.
+            Effect.tapError(() =>
+              deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore),
+            ),
+          );
         if (created !== undefined) {
           if (created.action) {
             yield* waitForActions([created.action, ...created.next_actions]);
@@ -966,6 +1183,9 @@ export const ServerProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // Keep the server discoverable if key deletion fails. Removing the project
+      // key does not revoke the public key already injected into the server.
+      yield* deleteDeployKey(output.deploySshKeyId);
       const current = yield* getById(output.id);
       if (current !== undefined) {
         if (current.protection.delete) {
@@ -992,12 +1212,6 @@ export const ServerProvider = () =>
           yield* waitForAction(deleted.action);
         }
         yield* waitUntilGone(current.id);
-      }
-
-      if (output.deploySshKeyId !== undefined) {
-        yield* Services.sshKeys
-          .deleteSshKey({ id: output.deploySshKeyId })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
     }),
   });

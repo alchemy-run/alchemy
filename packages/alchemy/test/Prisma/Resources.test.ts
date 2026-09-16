@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import { Unowned } from "@/AdoptPolicy";
 import { InstanceId } from "@/InstanceId";
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
@@ -1857,14 +1858,16 @@ describe("Prisma resource providers", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const projectProvider = yield* PrismaProject.Provider;
-      const databaseProvider = yield* PrismaDatabase.Provider;
-      const connectionProvider = yield* PrismaConnection.Provider;
-      const branchProvider = yield* PrismaBranch.Provider;
-      const serviceProvider = yield* PrismaApp.Provider;
-      const versionProvider = yield* PrismaDeployment.Provider;
-      const envProvider = yield* PrismaEnvironmentVariable.Provider;
-      const repoProvider = yield* PrismaSourceRepository.Provider;
+      const projectProvider = yield* Provider.findProvider(PrismaProject);
+      const databaseProvider = yield* Provider.findProvider(PrismaDatabase);
+      const connectionProvider = yield* Provider.findProvider(PrismaConnection);
+      const branchProvider = yield* Provider.findProvider(PrismaBranch);
+      const serviceProvider = yield* Provider.findProvider(PrismaApp);
+      const versionProvider = yield* Provider.findProvider(PrismaDeployment);
+      const envProvider = yield* Provider.findProvider(
+        PrismaEnvironmentVariable,
+      );
+      const repoProvider = yield* Provider.findProvider(PrismaSourceRepository);
 
       const project = yield* projectProvider.read!(
         readInput("Project", { name: "app" }),
@@ -2504,7 +2507,7 @@ describe("Prisma resource providers", () => {
       });
 
       return Effect.gen(function* () {
-        const domainProvider = yield* PrismaCustomDomain.Provider;
+        const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
         const error = yield* domainProvider
           .reconcile(
             reconcileInput("CustomDomain", {
@@ -2572,7 +2575,7 @@ describe("Prisma resource providers", () => {
     });
 
     return Effect.gen(function* () {
-      const domainProvider = yield* PrismaCustomDomain.Provider;
+      const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
       const domain = yield* domainProvider.read!(
         readInput("CustomDomain", {
           app: "service-1",
@@ -2799,7 +2802,9 @@ describe("Prisma resource providers", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        const envProvider = yield* Provider.findProvider(
+          PrismaEnvironmentVariable,
+        );
         const observed = yield* envProvider.read!(
           readInput("EnvironmentVariable", {
             project: "project-1",
@@ -2883,7 +2888,9 @@ describe("Prisma resource providers", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const envProvider = yield* Provider.findProvider(
+        PrismaEnvironmentVariable,
+      );
       const observed = yield* envProvider.read!(
         readInput("EnvironmentVariable", {
           project: "project-1",
@@ -3888,94 +3895,85 @@ describe("Prisma resource providers", () => {
     },
   );
 
-  it.effect("detaches an observed branch when branch props are omitted", () => {
-    const calls: Call[] = [];
-    const database = {
-      id: "database-1",
-      type: "database" as const,
-      url: "https://api.prisma.test/v1/databases/database-1",
-      name: "main",
-      status: "ready" as const,
-      createdAt,
-      isDefault: false,
-      defaultConnectionId: "connection-1",
-      connections: [],
-      project: resourceRef("projects", "project-1", "app"),
-      region: { id: "us-east-1", name: "US East" },
-      source: { type: "empty" as const },
-      branchId: "branch-1",
-    };
-    const client = {
-      getDatabase: (id: string) =>
-        Effect.sync(() => {
-          calls.push(["getDatabase", id]);
-          return database;
-        }),
-      updateDatabase: (id: string, input: unknown) =>
-        Effect.sync(() => {
-          calls.push(["updateDatabase", { id, input }]);
-          return { ...database, branchId: null };
-        }),
-      rotateConnection: () =>
-        Effect.die("persisted credentials must prevent an unrelated rotation"),
-    } as unknown as PrismaManagementClient;
+  it.effect(
+    "leaves the observed branch alone when branch props are omitted",
+    () => {
+      const calls: Call[] = [];
+      const database = {
+        id: "database-1",
+        type: "database" as const,
+        url: "https://api.prisma.test/v1/databases/database-1",
+        name: "main",
+        status: "ready" as const,
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-1",
+        connections: [],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" as const },
+        branchId: "branch-1",
+      };
+      const client = {
+        getDatabase: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getDatabase", id]);
+            return database;
+          }),
+        updateDatabase: () =>
+          Effect.die(
+            "every database belongs to a Branch; omitted branch props must not detach",
+          ),
+        rotateConnection: () =>
+          Effect.die(
+            "persisted credentials must prevent an unrelated rotation",
+          ),
+      } as unknown as PrismaManagementClient;
 
-    return Effect.gen(function* () {
-      const provider = yield* PrismaDatabase.Provider;
-      const result = yield* provider.reconcile(
-        reconcileInput(
-          "Database",
-          {
-            project: "project-1",
-            name: "main",
-            region: "us-east-1",
-          },
-          {
-            databaseId: "database-1",
-            databaseName: "main",
-            projectId: "project-1",
-            status: "ready" as const,
-            region: "us-east-1",
-            isDefault: false,
-            branchId: "branch-1",
-            defaultConnectionId: "connection-1",
-            createdAt,
-            directConnectionString: Redacted.make("postgres://persisted"),
-            pooledConnectionString: undefined,
-            accelerateConnectionString: undefined,
-            host: "db.prisma.test",
-            user: "user",
-            password: undefined,
-          },
-          {
-            project: "project-1",
-            name: "main",
-            region: "us-east-1",
-            branchId: "branch-1",
-          },
-        ),
-      );
-
-      expect(result.branchId).toBeNull();
-      expect(calls).toEqual([
-        ["getDatabase", "database-1"],
-        [
-          "updateDatabase",
-          {
-            id: "database-1",
-            input: {
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDatabase.Provider;
+        const result = yield* provider.reconcile(
+          reconcileInput(
+            "Database",
+            {
+              project: "project-1",
               name: "main",
-              branchId: null,
-              branchGitName: undefined,
+              region: "us-east-1",
             },
-          },
-        ],
-      ]);
-    }).pipe(
-      Effect.provide(providerLayer(client)),
-      Effect.provide(managementApi(client).layer),
-    );
-  });
+            {
+              databaseId: "database-1",
+              databaseName: "main",
+              projectId: "project-1",
+              status: "ready" as const,
+              region: "us-east-1",
+              isDefault: false,
+              branchId: "branch-1",
+              defaultConnectionId: "connection-1",
+              createdAt,
+              directConnectionString: Redacted.make("postgres://persisted"),
+              pooledConnectionString: undefined,
+              accelerateConnectionString: undefined,
+              host: "db.prisma.test",
+              user: "user",
+              password: undefined,
+            },
+            {
+              project: "project-1",
+              name: "main",
+              region: "us-east-1",
+              branchId: "branch-1",
+            },
+          ),
+        );
+
+        expect(result.branchId).toBe("branch-1");
+        expect(calls).toEqual([["getDatabase", "database-1"]]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(managementApi(client).layer),
+      );
+    },
+  );
 
   it.effect(
     "forces Project and Database reconcile when adoption rotation is enabled",
@@ -4334,7 +4332,7 @@ describe("Prisma resource providers", () => {
     });
 
     return Effect.gen(function* () {
-      const projectProvider = yield* PrismaProject.Provider;
+      const projectProvider = yield* Provider.findProvider(PrismaProject);
       const observed = yield* projectProvider.read!(
         readInput("Project", { name: "app", region: "us-east-1" }),
       );

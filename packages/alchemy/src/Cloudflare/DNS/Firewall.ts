@@ -196,11 +196,8 @@ export type Firewall = Resource<
  *
  * All settings are mutable in place; only `name` (the cold-state recovery
  * identity) triggers a replacement.
- * @resource
- * @product DNS Firewall
- * @category Domains & DNS
- * @section Creating a Cluster
- * @example Basic cluster
+ * ### Creating a Cluster
+ * **Example:** Basic cluster
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1", "192.0.2.2"],
@@ -209,7 +206,7 @@ export type Firewall = Resource<
  * const ips = cluster.dnsFirewallIps;
  * ```
  *
- * @example Tuned caching and attack mitigation
+ * **Example:** Tuned caching and attack mitigation
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
@@ -225,8 +222,8 @@ export type Firewall = Resource<
  * });
  * ```
  *
- * @section Reverse DNS
- * @example Managing PTR records for cluster IPs
+ * ### Reverse DNS
+ * **Example:** Managing PTR records for cluster IPs
  * ```typescript
  * const cluster = yield* Cloudflare.DNS.Firewall("dns-shield", {
  *   upstreamIps: ["192.0.2.1"],
@@ -237,6 +234,10 @@ export type Firewall = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/dns-firewall/
+ *
+ * @resource
+ * @product DNS Firewall
+ * @category Domains & DNS
  */
 export const Firewall = Resource<Firewall>(TypeId, {
   aliases: ["Cloudflare.DnsFirewall"],

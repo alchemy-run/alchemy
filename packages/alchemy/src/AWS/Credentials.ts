@@ -62,7 +62,7 @@ export const makeAssumeRoleResolver = (options: {
   readonly roleArn: Effect.Effect<string>;
   /** Layer supplying the long-lived credentials used to sign `AssumeRole`. */
   readonly base: Layer.Layer<Credentials>;
-  /** STS role session name. @default "alchemy-microvm" */
+  /** STS role session name. @default "alchemy" */
   readonly roleSessionName?: string;
   /**
    * Region for the STS endpoint. STS `AssumeRole` is global, so this only
@@ -78,7 +78,7 @@ export const makeAssumeRoleResolver = (options: {
       const response = yield* sts
         .assumeRole({
           RoleArn: roleArn,
-          RoleSessionName: options.roleSessionName ?? "alchemy-microvm",
+          RoleSessionName: options.roleSessionName ?? "alchemy",
         })
         .pipe(
           // A freshly-created IAM user/role/access-key is eventually
@@ -113,11 +113,17 @@ export const makeAssumeRoleResolver = (options: {
       // Sign AssumeRole with the static base credentials, and provide a
       // (regional) STS endpoint + HttpClient so the resolve effect is
       // self-contained (`R = never`).
-      Effect.provide(options.base),
       Effect.provide(
-        Layer.succeed(Region, Effect.succeed(options.region ?? "us-east-1")),
+        options.base.pipe(
+          Layer.provideMerge(
+            Layer.succeed(
+              Region,
+              Effect.succeed(options.region ?? "us-east-1"),
+            ),
+          ),
+          Layer.provideMerge(FetchHttpClient.layer),
+        ),
       ),
-      Effect.provide(FetchHttpClient.layer),
       Effect.mapError((cause) =>
         cause instanceof AwsCredentialProviderError
           ? cause
@@ -182,7 +188,7 @@ export const fromAssumeRole = (options: {
   readonly roleArn: string;
   /** Static credentials used to sign the `AssumeRole` call. */
   readonly base: Layer.Layer<Credentials>;
-  /** STS role session name. @default "alchemy-microvm" */
+  /** STS role session name. @default "alchemy" */
   readonly roleSessionName?: string;
   /**
    * Region for the STS endpoint. STS `AssumeRole` is global, so this only

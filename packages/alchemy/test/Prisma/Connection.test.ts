@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import { Unowned } from "@/AdoptPolicy";
 import {
   PrismaApiError,
@@ -199,7 +200,7 @@ describe("Prisma Connection provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Connection.Provider;
+        const provider = yield* Provider.findProvider(Connection);
         const first = yield* provider.reconcile(reconcileInput());
         // Simulate create succeeding but state persistence failing. Refresh
         // recovers the deterministic key without its one-time credentials.
@@ -479,7 +480,7 @@ describe("Prisma Connection provider", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Connection.Provider;
+      const provider = yield* Provider.findProvider(Connection);
       const output = yield* provider.read!(readInput(undefined, instanceId));
 
       expect(output?.connectionId).toBe("connection-1");
@@ -499,7 +500,7 @@ describe("Prisma Connection provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Connection.Provider;
+        const provider = yield* Provider.findProvider(Connection);
         const output = yield* provider.read!(readInput());
 
         expect(output?.connectionId).toBe("connection-1");
@@ -534,7 +535,7 @@ describe("Prisma Connection provider", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Connection.Provider;
+        const provider = yield* Provider.findProvider(Connection);
         const observed = yield* provider.read!(
           readInput(undefined, currentInstanceId),
         );
@@ -604,7 +605,7 @@ describe("Prisma Connection provider", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Connection.Provider;
+      const provider = yield* Provider.findProvider(Connection);
       const observed = yield* provider.read!(readInput(undefined, instanceId));
       expect(observed?.connectionName).toBe("api");
       expect(Unowned.is(observed)).toBe(true);
@@ -653,7 +654,7 @@ describe("Prisma Connection provider", () => {
     };
 
     return Effect.gen(function* () {
-      const provider = yield* Connection.Provider;
+      const provider = yield* Provider.findProvider(Connection);
       const error = yield* provider.read!(readInput(output, instanceId)).pipe(
         Effect.flip,
       );
@@ -676,7 +677,7 @@ describe("Prisma Connection provider", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Connection.Provider;
+      const provider = yield* Provider.findProvider(Connection);
       const error = yield* provider.read!(
         readInput(undefined, "cccccccccccccccccccccccccccccccc"),
       ).pipe(Effect.flip);

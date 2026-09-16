@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,7 +8,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
-import { rootDir } from "./Profile.ts";
+import { rootDir } from "./Paths.ts";
 
 const semaphores = new Map<string, Semaphore.Semaphore>();
 
@@ -17,6 +18,9 @@ const STALE = Duration.seconds(30);
 const REFRESH = Duration.seconds(10);
 const RETRY_INTERVAL = Duration.millis(50);
 const DEFAULT_TIMEOUT = Duration.minutes(2);
+// How often to remind the user that a lock wait / locked operation is still
+// outstanding. Long enough that healthy runs never print it.
+const STALL_INTERVAL = Duration.seconds(30);
 
 class LockHeld extends Data.TaggedError("LockHeld") {}
 
@@ -131,6 +135,46 @@ const acquireFileLock = Effect.fn(function* (
   );
 });
 
+type Phase = { current: "waiting" | "held" };
+
+/**
+ * Periodic "I am not dead, I am stuck here" notice, forked for the lifetime
+ * of a {@link withLock} call.
+ *
+ * Deliberately `Console.error` rather than `Effect.logWarning`: the CLI's
+ * telemetry layer replaces the console logger with the OTLP one (see
+ * `Telemetry/Layer.ts`), so log records reach `.alchemy/log/out` but never
+ * the terminal. The whole point of this notice is to reach the user who is
+ * watching a frozen terminal, so it must not go through the logger.
+ */
+const stallNotice = (
+  lockPath: string,
+  label: string,
+  phase: Phase,
+  interval: Duration.Input,
+) =>
+  Effect.gen(function* () {
+    const start = yield* Clock.currentTimeMillis;
+    const notice = Effect.gen(function* () {
+      // Report real elapsed time, not an accumulated interval count — the
+      // notice cadence and the reported wait must not drift apart.
+      const now = yield* Clock.currentTimeMillis;
+      const seconds = Math.round((now - start) / 1000);
+      yield* Console.error(
+        phase.current === "waiting"
+          ? `alchemy: ${seconds}s waiting for the auth lock '${lockPath}' (${label}). ` +
+              `Another alchemy process holds it; if none is running, delete that directory.`
+          : `alchemy: ${label} has been running for ${seconds}s while holding the auth lock ` +
+              `'${lockPath}'. Re-run with --log-level debug for detail.`,
+      );
+    });
+    // `Effect.schedule` (unlike `Effect.repeat`) consults the schedule
+    // before the first run, and `Schedule.fixed`'s first recurrence comes
+    // after one full interval — so notices fire at interval, 2*interval, …
+    // on true wall-clock boundaries.
+    yield* Effect.schedule(notice, Schedule.fixed(interval));
+  });
+
 /**
  * Serialise execution of `effect` for the same `key`, both within this
  * process (a semaphore) and across processes on the same machine (an atomic
@@ -144,9 +188,33 @@ const acquireFileLock = Effect.fn(function* (
 export const withLock = <A, E, R>(
   key: string,
   effect: Effect.Effect<A, E, R>,
-  options?: { readonly timeout?: Duration.Input },
+  options?: {
+    readonly timeout?: Duration.Input;
+    /**
+     * Human-readable name of the work being serialised, used in the debug
+     * log lines and the stall notice. Defaults to `key`.
+     */
+    readonly label?: string;
+    /**
+     * Print a periodic notice to stderr while this lock is being waited on
+     * or held (see {@link stallNotice}). Pass `false` for flows that
+     * legitimately block on the user — a browser OAuth round-trip, an
+     * `aws sso login` child process — where a repeating notice would be
+     * both wrong and destructive to the prompt on screen.
+     *
+     * @default true
+     */
+    readonly watchdog?: boolean;
+    /**
+     * Interval between stall notices.
+     *
+     * @internal exposed so tests need not wait 30 real seconds.
+     */
+    readonly stallInterval?: Duration.Input;
+  },
 ) => {
   const safeKey = sanitizeLockKey(key);
+  const label = options?.label ?? key;
   let semaphore = semaphores.get(safeKey);
   if (semaphore === undefined) {
     semaphore = Semaphore.makeUnsafe(1);
@@ -155,15 +223,40 @@ export const withLock = <A, E, R>(
   return semaphore.withPermit(
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      // Read `rootDir` here, not at module eval, so the
-      // `Profile -> AuthProvider -> Lock -> Profile` import cycle never
-      // sees it uninitialised.
-      const lockPath = path.join(rootDir, "lock", `${safeKey}.lock`);
+      const lockPath = path.join(rootDir(), "lock", `${safeKey}.lock`);
+      const phase: Phase = { current: "waiting" };
+      if (options?.watchdog !== false) {
+        yield* Effect.forkScoped(
+          stallNotice(
+            lockPath,
+            label,
+            phase,
+            options?.stallInterval ?? STALL_INTERVAL,
+          ),
+        );
+      }
+      yield* Effect.logDebug(`auth lock: acquiring '${lockPath}' for ${label}`);
       yield* acquireFileLock(
         lockPath,
         options?.timeout ?? DEFAULT_TIMEOUT,
       ).pipe(Effect.orDie);
-      return yield* effect;
+      phase.current = "held";
+      yield* Effect.logDebug(`auth lock: acquired '${lockPath}' for ${label}`);
+      return yield* effect.pipe(
+        Effect.onExit(() =>
+          Effect.logDebug(`auth lock: releasing '${lockPath}' for ${label}`),
+        ),
+      );
     }).pipe(Effect.scoped),
   );
 };
+
+/**
+ * Serialize an operation with every credential mutation for a profile. The
+ * lock key is shared by every credential operation for the profile,
+ * including profile-wide rename and delete operations.
+ */
+export const withProfileCredentialsLock = <A, E, R>(
+  profileName: string,
+  effect: Effect.Effect<A, E, R>,
+) => withLock(`profile-credentials-${profileName}`, effect);

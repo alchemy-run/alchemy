@@ -172,14 +172,13 @@ type ProjectAttributes = Project["Attributes"];
  * Creating a project also provisions the project's default branch (named
  * "main" by default), an initial role, an initial database, and a
  * read-write compute endpoint, exposed as `connectionUri`.
- * @resource
- * @section Creating a Project
- * @example Basic project
+ * ### Creating a Project
+ * **Example:** Basic project
  * ```typescript
  * const project = yield* Neon.Project("my-project");
  * ```
  *
- * @example Project with explicit region and PG version
+ * **Example:** Project with explicit region and PG version
  * ```typescript
  * const project = yield* Neon.Project("my-project", {
  *   region: "aws-eu-central-1",
@@ -187,15 +186,15 @@ type ProjectAttributes = Project["Attributes"];
  * });
  * ```
  *
- * @example Project with logical replication enabled
+ * **Example:** Project with logical replication enabled
  * ```typescript
  * const project = yield* Neon.Project("my-project", {
  *   enableLogicalReplication: true,
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations and seed files
+ * ### Migrations and seed data
+ * **Example:** Apply migrations and seed files
  * ```typescript
  * const project = yield* Neon.Project("my-project", {
  *   migrations: "./migrations",
@@ -203,14 +202,16 @@ type ProjectAttributes = Project["Attributes"];
  * });
  * ```
  *
- * @section Branching
- * @example Create a branch off the project's default branch
+ * ### Branching
+ * **Example:** Create a branch off the project's default branch
  * ```typescript
  * const project = yield* Neon.Project("my-project");
  * const dev = yield* Neon.Branch("dev-branch", { project });
  * ```
  *
  * @see https://neon.tech/docs/manage/projects/
+ *
+ * @resource
  */
 export const Project = Resource<Project>("Neon.Project");
 

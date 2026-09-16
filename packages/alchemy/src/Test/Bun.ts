@@ -25,6 +25,8 @@ export {
 export type MakeOptions<ROut = any> = Core.MakeOptions<ROut>;
 export type ScratchStack = Core.ScratchStack;
 export type TestEffect<A, R = never> = Core.TestEffect<A, R>;
+export const defaultStage = Core.defaultStage;
+export const resolveStage = Core.resolveStage;
 
 export interface TestApi {
   test: TestFn;
@@ -194,12 +196,25 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     bun.beforeEach(() => runEff(eff), hookOptions);
   };
 
+  // bun:test stops running later `afterAll` hooks once one throws, which
+  // would skip the fallback cleanup hook below — leaking the shared scope
+  // and the sidecar for the rest of the process whenever a teardown
+  // assertion fails. Guard every user teardown: on failure, run the
+  // (idempotent) cleanup before rethrowing so the failure still fails the
+  // suite. (`closeAll` is initialized below; hooks only run after `make`
+  // returns.)
+  const guardTeardown = (eff: TestEffect<any>) => () =>
+    runEff(eff).catch(async (error) => {
+      await Effect.runPromise(closeAll);
+      throw error;
+    });
+
   const afterAll = ((eff, hookOptions) => {
-    bun.afterAll(() => runEff(eff), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
+    bun.afterAll(guardTeardown(eff), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
   }) as AfterAllFn;
   afterAll.skipIf = (predicate) => (eff, hookOptions) => {
     if (predicate) return;
-    bun.afterAll(() => runEff(eff), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
+    bun.afterAll(guardTeardown(eff), hookOptions ?? DEFAULT_HOOK_TIMEOUT);
   };
 
   const afterEach: AfterEachFn = (eff, hookOptions) => {

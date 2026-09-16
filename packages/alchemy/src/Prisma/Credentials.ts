@@ -4,7 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
-import { AlchemyProfile } from "../Auth/Profile.ts";
+import { ProfileStore } from "../Auth/Profile.ts";
 import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
 
 export { Credentials } from "@distilled.cloud/prisma-postgres";
@@ -47,13 +47,13 @@ export const fromAuthProvider = () =>
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const authProviders = yield* AuthProviders;
-      const profile = yield* AlchemyProfile;
+      const profile = yield* ProfileStore;
       const environment = Layer.buildWithScope(
         fromProfile().pipe(
           Layer.provide(
             Layer.mergeAll(
               Layer.succeed(AuthProviders, authProviders),
-              Layer.succeed(AlchemyProfile, profile),
+              Layer.succeed(ProfileStore, profile),
             ),
           ),
         ),

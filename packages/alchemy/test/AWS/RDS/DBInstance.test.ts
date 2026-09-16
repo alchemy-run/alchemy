@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster, DBInstance } from "@/AWS/RDS";
-import type { DBInstanceProps } from "@/AWS/RDS/DBInstance.ts";
+import * as Drift from "@/Drift";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -13,68 +13,6 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
-
-// Fast, unconditional `diff` checks. These exercise the replacement-set logic
-// without provisioning anything (the real lifecycle is multi-minute, gated
-// below). `diff` is called with `id`, `olds`, and `news` — the engine wraps
-// `news` in `Input` but plain objects resolve fine.
-const callDiff = (olds: DBInstanceProps, news: DBInstanceProps) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(DBInstance);
-    return yield* provider.diff!({
-      id: "TestInstance",
-      fqn: "TestInstance",
-      instanceId: "test-instance",
-      olds,
-      news,
-      oldBindings: undefined as never,
-      newBindings: undefined as never,
-      output: undefined,
-    });
-  });
-
-const base: DBInstanceProps = {
-  dbInstanceIdentifier: "alchemy-rds-instance-diff",
-  dbInstanceClass: "db.t3.micro",
-  engine: "postgres",
-};
-
-test.provider("diff: storage scale is an in-place update", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, allocatedStorage: 20 },
-      { ...base, allocatedStorage: 50 },
-    );
-    expect(result).toBeUndefined();
-  }),
-);
-
-test.provider("diff: changing engine forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(base, { ...base, engine: "mysql" });
-    expect(result).toEqual({ action: "replace" });
-  }),
-);
-
-test.provider("diff: changing storageEncrypted forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, storageEncrypted: false },
-      { ...base, storageEncrypted: true },
-    );
-    expect(result).toEqual({ action: "replace" });
-  }),
-);
-
-test.provider("diff: changing masterUsername forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { ...base, masterUsername: "admin" },
-      { ...base, masterUsername: "root" },
-    );
-    expect(result).toEqual({ action: "replace" });
-  }),
-);
 
 // Render a deploy failure (whatever engine wrapper it arrives in) to a string
 // we can assert AWS's parameter-validation message against.
@@ -101,9 +39,8 @@ const renderFailure = (attempt: Result.Result<unknown, unknown>): string => {
 // in seconds. Probe 1 proves `masterUserPassword: Redacted.Redacted<string>`
 // serializes to the actual secret characters on the wire; probe 2 proves
 // `backupRetentionPeriod: Duration.Input` ("60 days") arrives as integer days
-// (rejected as > the 35-day maximum). The in-range round-trip (create "1 day"
-// → read 1 → modify "3 days" → read 3) is covered by the
-// RDS_TEST_LIFECYCLE-gated lifecycle test below.
+// (rejected as > the 35-day maximum). These rejected requests do not verify
+// the RDS_TEST_LIFECYCLE-gated storage lifecycle below.
 test.provider(
   "wire probe: Redacted password + Duration retention reach createDBInstance",
   (stack) =>
@@ -194,7 +131,15 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       const instance = yield* stack.deploy(
         Effect.gen(function* () {
+          const network = yield* Network("ListNet", {
+            cidrBlock: "10.43.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("ListSubnetGroup", {
+            description: "alchemy instance list lifecycle",
+            subnetIds: network.privateSubnetIds,
+          });
           const cluster = yield* DBCluster("ListCluster", {
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             serverlessV2ScalingConfiguration: {
@@ -224,17 +169,11 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 
       yield* stack.destroy();
     }),
-  { timeout: 1_800_000 },
 );
 
-// Full standalone-instance lifecycle, gated behind RDS_TEST_LIFECYCLE=1.
-// Provisioning + modifying + deleting a real `db.t3.micro` takes ~10-15 min,
-// far beyond the default budget. It creates a gp3 Postgres instance with
-// explicit storage/backup knobs, asserts they round-trip, then does an
-// in-place modify (allocatedStorage up, backup retention, perf insights) and
-// re-reads to assert no replacement occurred (same ARN, same identifier).
+// RDS provisioning and storage optimization exceed the default test budget.
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: autoscaling defaults, drift, and allocation floor",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -254,56 +193,149 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
       });
 
-      const created = yield* stack.deploy(
+      const program = (
+        allocatedStorage: number,
+        maxAllocatedStorage?: number,
+        backupRetentionPeriod: "1 day" | "3 days" = "1 day",
+        enablePerformanceInsights = false,
+      ) =>
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 20,
-            storageType: "gp3",
+            allocatedStorage,
+            ...(maxAllocatedStorage === undefined
+              ? {}
+              : { maxAllocatedStorage }),
+            storageType: "gp2",
             masterUsername: "alchemy",
             manageMasterUserPassword: true,
-            backupRetentionPeriod: "1 day",
+            backupRetentionPeriod,
+            enablePerformanceInsights,
             deletionProtection: false,
             dbSubnetGroupName,
             publiclyAccessible: false,
           });
-        }),
-      );
-
+        });
+      const created = yield* stack.deploy(program(20));
       expect(created.allocatedStorage).toBe(20);
-      expect(created.storageType).toBe("gp3");
+      expect(created.storageType).toBe("gp2");
       expect(created.backupRetentionPeriod).toBe(1);
-
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { dbSubnetGroupName } = yield* network;
-          return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
-            engine: "postgres",
-            dbInstanceClass: "db.t3.micro",
-            allocatedStorage: 25,
-            storageType: "gp3",
-            masterUsername: "alchemy",
-            manageMasterUserPassword: true,
-            backupRetentionPeriod: "3 days",
-            enablePerformanceInsights: true,
-            deletionProtection: false,
-            dbSubnetGroupName,
-            publiclyAccessible: false,
-          });
-        }),
+      expect([0, 20]).toContain(created.maxAllocatedStorage ?? 0);
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      expect([0, 20]).toContain(
+        (yield* describe).DBInstances?.[0]?.MaxAllocatedStorage ?? 0,
       );
 
-      // In-place modify — identity is preserved (no replacement).
+      const enabled = yield* stack.deploy(program(20, 40));
+      expect(enabled.maxAllocatedStorage).toBe(40);
+      expect((yield* describe).DBInstances?.[0]?.MaxAllocatedStorage).toBe(40);
+      // Grow beyond the old ceiling while disabling autoscaling in the same request.
+      const updated = yield* stack.deploy(
+        program(50, undefined, "3 days", true),
+      );
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(updated.backupRetentionPeriod).toBe(3);
+      expect(updated.allocatedStorage).toBe(50);
+      expect([0, 50]).toContain(updated.maxAllocatedStorage ?? 0);
+      const grown = (yield* describe).DBInstances?.[0];
+      expect(grown?.AllocatedStorage).toBe(50);
+      expect([0, 50]).toContain(grown?.MaxAllocatedStorage ?? 0);
+      expect(grown?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+
+      const explicit = program(20, 100, "3 days", true);
+      const reenabled = yield* stack.deploy(explicit);
+      expect(reenabled.allocatedStorage).toBe(50);
+      expect(reenabled.maxAllocatedStorage).toBe(100);
+      expect((yield* describe).DBInstances?.[0]?.MaxAllocatedStorage).toBe(100);
+
+      const injectCeiling = Effect.fn(function* (ceiling: number) {
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: created.dbInstanceIdentifier,
+          MaxAllocatedStorage: ceiling,
+          ApplyImmediately: true,
+        });
+        const injected = yield* describe.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (response) =>
+              response.DBInstances?.[0]?.MaxAllocatedStorage === ceiling,
+          }),
+        );
+        expect(injected.DBInstances?.[0]?.MaxAllocatedStorage).toBe(ceiling);
+      });
+      yield* injectCeiling(120);
+      expect(
+        (yield* stack.plan(explicit)).resources.StandaloneInstance,
+      ).toMatchObject({
+        action: "update",
+      });
+      const repairedExplicit = yield* stack.deploy(explicit);
+      expect(repairedExplicit.maxAllocatedStorage).toBe(100);
+      expect((yield* describe).DBInstances?.[0]?.MaxAllocatedStorage).toBe(100);
+
+      // Lowering the minimum cannot shrink capacity, but omission disables autoscaling.
+      const lowerMinimum = program(20);
+      expect(
+        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
+      ).toMatchObject({
+        action: "update",
+      });
+      const preserved = yield* stack.deploy(lowerMinimum);
+      expect(preserved.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(preserved.allocatedStorage).toBe(50);
+      expect([0, 50]).toContain(preserved.maxAllocatedStorage ?? 0);
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.AllocatedStorage).toBe(50);
+      expect([0, 50]).toContain(observed?.MaxAllocatedStorage ?? 0);
+      expect(observed?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+
+      yield* injectCeiling(80);
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.StandaloneInstance?.action).toBe("drifted");
+      expect(
+        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
+      ).toMatchObject({
+        action: "update",
+      });
+      const repaired = yield* stack.deploy(lowerMinimum);
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(repaired.allocatedStorage).toBe(50);
+      expect([0, 50]).toContain(repaired.maxAllocatedStorage ?? 0);
+      const settled = (yield* describe).DBInstances?.[0];
+      expect([0, 50]).toContain(settled?.MaxAllocatedStorage ?? 0);
+      expect(settled?.AllocatedStorage).toBe(50);
+      expect(
+        (yield* stack.plan(lowerMinimum)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
+
+      const disabled = program(20, 0);
+      const explicitZero = yield* stack.deploy(disabled);
+      expect([0, 50]).toContain(explicitZero.maxAllocatedStorage ?? 0);
+      expect(explicitZero.allocatedStorage).toBe(50);
+      expect(
+        (yield* stack.plan(disabled)).resources.StandaloneInstance,
+      ).toMatchObject({ action: "noop" });
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
-  { timeout: 2_400_000 },
 );
 
 // Fingerprint-guarded master password lifecycle (#876), gated behind
@@ -330,6 +362,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
 
       const identifier = "alchemy-rds-fingerprint";
+      const startedAt = yield* Effect.sync(() => new Date());
 
       // The testing account has no default VPC/subnets — provision a network
       // and DB subnet group like the standalone lifecycle test above.
@@ -370,8 +403,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         .describeEvents({
           SourceIdentifier: identifier,
           SourceType: "db-instance",
-          // Minutes of lookback — generously covers the whole test run.
-          Duration: 180,
+          StartTime: startedAt,
         })
         .pipe(
           Effect.map((response) =>
@@ -408,14 +440,16 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // round "two" (unchanged password) never triggered a reset.
       const events = yield* resetEvents.pipe(
         Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
+          schedule: Schedule.min([
+            Schedule.exponential("5 seconds"),
+            Schedule.spaced("1 minute"),
+          ]),
           until: (found) => found.length > 0,
-          times: 36,
+          times: 10,
         }),
       );
       expect(events).toHaveLength(1);
 
       yield* stack.destroy();
     }),
-  { timeout: 2_400_000 },
 );

@@ -41,9 +41,8 @@ export interface Namespace extends Resource<
 /**
  * A namespace within an Amazon S3 Tables {@link TableBucket} — a logical
  * grouping of {@link Table}s, equivalent to a database in an Iceberg catalog.
- * @resource
- * @section Creating Namespaces
- * @example Basic Namespace
+ * ### Creating Namespaces
+ * **Example:** Basic Namespace
  * ```typescript
  * import * as S3Tables from "alchemy/AWS/S3Tables";
  *
@@ -53,13 +52,15 @@ export interface Namespace extends Resource<
  * });
  * ```
  *
- * @example Named Namespace
+ * **Example:** Named Namespace
  * ```typescript
  * const ns = yield* S3Tables.Namespace("Events", {
  *   tableBucket: bucket.tableBucketArn,
  *   namespace: "raw_events",
  * });
  * ```
+ *
+ * @resource
  */
 export const Namespace = Resource<Namespace>("AWS.S3Tables.Namespace");
 

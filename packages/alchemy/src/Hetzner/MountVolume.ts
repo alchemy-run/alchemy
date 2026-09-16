@@ -53,13 +53,12 @@ export interface ServiceBinding {
  *
  * `yield* Hetzner.MountVolume(volume, { path: "/data" })` inside a
  * Service impl registers `{ env, volumes: [{ volumeId, path }] }` on the
- * host. Service reconcile attaches the Volume (automount ok) and SSHs
+ * host. Service reconcile attaches the Volume (no automount) and SSHs
  * `mkdir` + `mount` + fstab at `path`. The same `(volume, server, path)`
  * from two Services is one attach and one mount.
  *
- * @binding
- * @section Mounting volumes
- * @example Share a Volume between two Services
+ * ### Mounting volumes
+ * **Example:** Share a Volume between two Services
  * ```typescript
  * const volume = yield* Hetzner.Volume("data", {
  *   size: 10,
@@ -70,6 +69,8 @@ export interface ServiceBinding {
  * // mount.path === "/data"
  * // mount.device === volume.linuxDevice
  * ```
+ *
+ * @binding
  */
 export interface MountVolume extends Binding.Service<
   MountVolume,

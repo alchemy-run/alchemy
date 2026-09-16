@@ -12,6 +12,11 @@
  *     is observed at the URL without another deploy — the sidecar watch
  *     loop rebuilds, uploads to the emulator's assets bucket, and floci's
  *     reactive S3 sync re-extracts (measured latency reported);
+ *   - an engine-driven update (env change) between two rewrites does not
+ *     detach the function from the watch loop's dev key — the next rewrite
+ *     still serves (regression: the watcher memoized its one-time
+ *     enrollment and never re-pointed the function after the live
+ *     reconcile moved it to a content-addressed key);
  *   - a dualized Queue + a `bundle: false` Function + a distilled
  *     event-source mapping pump SQS messages through the containerized
  *     function into a dualized Bucket;
@@ -191,6 +196,69 @@ test.provider.skipIf(!dockerAvailable)(
       yield* Effect.log(
         `second hot reload (reactive S3 sync) observed in ${secondSwapLatencyMs}ms`,
       );
+
+      // Engine-driven UPDATE between swaps (a prop change — here `env`):
+      // the live reconcile re-uploads the bundle to a content-addressed key
+      // and re-points the function THERE, detaching it from the watch
+      // loop's stable dev key. The watcher must notice and re-enroll on its
+      // next swap; before the fix the marker below never served (the
+      // PutObject landed on a key the function no longer read) until the
+      // next engine update happened to re-bundle it.
+      const updated = yield* stack.deploy(
+        AWS.Lambda.Function("DevFn", {
+          main: mainPath,
+          handler: "handler",
+          isExternal: true,
+          functionUrl: true,
+          env: { DEV_MARKER: "env-updated" },
+        }),
+      );
+      expect(updated.functionUrl).toBe(fn.functionUrl);
+      const afterUpdate = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({
+            status: response.status,
+            body,
+          })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("250 millis"),
+          times: 20,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("250 millis"),
+          until: (res): boolean =>
+            res.status === 200 && res.body === "marker-v3:env-updated",
+          times: 240,
+        }),
+      );
+      expect(afterUpdate.body).toBe("marker-v3:env-updated");
+
+      yield* fs.writeFileString(
+        mainPath,
+        source.replace(`"marker-v1"`, `"marker-v4"`),
+      );
+      const afterUpdateSwap = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({
+            status: response.status,
+            body,
+          })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("250 millis"),
+          times: 20,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("250 millis"),
+          until: (res): boolean =>
+            res.status === 200 && res.body.startsWith("marker-v4"),
+          times: 240,
+        }),
+      );
+      expect(afterUpdateSwap.body).toBe("marker-v4:env-updated");
 
       // Destroy: the function (and its role) must be gone from the
       // emulator.

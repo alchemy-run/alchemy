@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { AlchemyProfile, ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStore, ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
@@ -71,7 +71,7 @@ const standaloneManagementApiLayer = () =>
         // The Prisma-scoped upload client (node transport) rides the
         // providers' output so artifact uploads can reach it at op time.
         PrismaUploadClientLive,
-        Layer.provide(ProfileLive, PlatformServices),
+        Layer.provide(ProfileStoreLive, PlatformServices),
         Layer.provide(CredentialsStoreLive, PlatformServices),
       ),
     ),
@@ -87,47 +87,8 @@ const standaloneManagementApiLayer = () =>
 /**
  * Stack provider discovery must register auth without requiring credentials.
  * The management client is resolved on its first API operation, after
- * `alchemy login` has had a chance to configure the registered Prisma auth
- * provider. The nested client layer shares the provider layer's lifetime.
- *
- * The distilled `Credentials` and `Retry` services are merged in here so the
- * auth layers below satisfy both them and the management client. The
- * transport is not: `providers()` supplies it with `Layer.provide` so it can
- * never override the ambient `HttpClient` other providers in the stack use.
- *
- * Note the retry envelope changed with the distilled migration:
- * `Retry.makeDefault` (8 retries, 250ms base, honors `Retry-After`) replaced
- * the client's 4×100ms idempotent-only policy, and creates opt out with
- * `Retry.none`.
- *
- * The hand-rolled client's client-side guards did not survive the migration:
- * its 10s request deadline, its 2-minute provisioning deadline on creates
- * and deletes, and its pagination-walk caps (deadline, page/item/byte caps,
- * repeated-cursor detection) have no distilled equivalent, so a stalled call
- * or a server that repeats a cursor is now bounded only by the transport and
- * the retry policy. Accepted for parity with the Neon provider; revisit if a
- * live run hangs here. (The one cap that did survive is the malformed-page
- * check: every walk still fails loudly on `hasMore: true` without a cursor.)
- *
- * Two more inherited deltas, both properties of distilled's shared REST
- * protocol rather than of this provider:
- *
- * - **Server error text is no longer sanitized.** The old client reduced an
- *   API error message to `HTTP {status}` or a regex-validated error code and
- *   kept the raw body `Redacted`. Distilled puts the server's `error.message`
- *   — or the raw body text — verbatim into the typed error's message, and
- *   `UnknownPrismaPostgresError` carries the whole body un-redacted, so those
- *   strings reach user-visible logs. If the API ever echoes submitted secret
- *   material back in a 4xx, it is now readable there. Re-wrapping every
- *   operation would undo the point of the migration, so the question of
- *   whether sanitization belongs in `protocol-rest` is left to distilled.
- * - **2xx bodies are no longer schema-validated.** The old client failed with
- *   a labeled `PrismaApiDecodeError` when a 2xx lacked the `{ data }`
- *   envelope; `protocol-rest` only key-maps the body, so a malformed 200
- *   yields `undefined` that either crashes later or persists into resource
- *   attributes. The dropped `Accept: application/json` and `User-Agent`
- *   request headers go with it. Per-call-site validation in alchemy is the
- *   wrong layer; this is also a distilled-side question.
+ * `alchemy profile edit` has had a chance to configure the registered Prisma
+ * auth provider. The nested client layer shares the provider layer's lifetime.
  */
 const stackManagementApiLayer = () =>
   Layer.effect(
@@ -135,7 +96,7 @@ const stackManagementApiLayer = () =>
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
       const authProviders = yield* AuthProviders;
-      const profile = yield* AlchemyProfile;
+      const profileStore = yield* ProfileStore;
       const client = Layer.buildWithScope(
         PrismaClientLive.pipe(
           Layer.provideMerge(
@@ -143,7 +104,7 @@ const stackManagementApiLayer = () =>
               Layer.provide(
                 Layer.mergeAll(
                   Layer.succeed(AuthProviders, authProviders),
-                  Layer.succeed(AlchemyProfile, profile),
+                  Layer.succeed(ProfileStore, profileStore),
                 ),
               ),
             ),
@@ -168,7 +129,7 @@ const stackManagementApiLayer = () =>
         // The Prisma-scoped upload client (node transport) rides the
         // providers' output so artifact uploads can reach it at op time.
         PrismaUploadClientLive,
-        Layer.provide(ProfileLive, PlatformServices),
+        Layer.provide(ProfileStoreLive, PlatformServices),
         Layer.provide(CredentialsStoreLive, PlatformServices),
       ),
     ),

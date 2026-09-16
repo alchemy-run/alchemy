@@ -67,11 +67,8 @@ export type ZoneTransferTsig = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. All fields are mutable in place; the secret is redacted and
  * never persisted in attributes.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a TSIG
- * @example HMAC-SHA512 key
+ * ### Creating a TSIG
+ * **Example:** HMAC-SHA512 key
  * ```typescript
  * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
@@ -79,8 +76,8 @@ export type ZoneTransferTsig = Resource<
  * });
  * ```
  *
- * @section Using with a Peer
- * @example Authenticate transfers from a primary nameserver
+ * ### Using with a Peer
+ * **Example:** Authenticate transfers from a primary nameserver
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -90,6 +87,10 @@ export type ZoneTransferTsig = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferTsig = Resource<ZoneTransferTsig>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferTsig"],

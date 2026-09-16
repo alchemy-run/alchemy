@@ -148,16 +148,16 @@ export interface Connection extends Resource<
  * database or name replaces the connection; changing `rotate` from `false` to
  * `true` keeps the connection ID and requests fresh credentials.
  *
- * @section Creating a Connection
- * @example Application connection
+ * ### Creating a Connection
+ * **Example:** Application connection
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database: database.databaseId,
  * });
  * ```
  *
- * @section Binding to Platforms
- * @example Pass database URLs to Compute env
+ * ### Binding to Platforms
+ * **Example:** Pass database URLs to Compute env
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
@@ -173,7 +173,7 @@ export interface Connection extends Resource<
  * });
  * ```
  *
- * @example Use a connection inside an Effect-native Compute app
+ * **Example:** Use a connection inside an Effect-native Compute app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -191,7 +191,7 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @example Use a connection inside an Effect-native Lambda function
+ * **Example:** Use a connection inside an Effect-native Lambda function
  * ```typescript
  * export default AWS.Lambda.Function(
  *   "api",
@@ -209,7 +209,7 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @example Use a connection inside an Effect-native Cloudflare Worker
+ * **Example:** Use a connection inside an Effect-native Cloudflare Worker
  * ```typescript
  * export default Cloudflare.Worker(
  *   "api",
@@ -227,8 +227,8 @@ export interface Connection extends Resource<
  * );
  * ```
  *
- * @section Rotating Credentials
- * @example Request one rotation
+ * ### Rotating Credentials
+ * **Example:** Request one rotation
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
@@ -236,8 +236,8 @@ export interface Connection extends Resource<
  * });
  * ```
  *
- * @section Connecting over Hyperdrive
- * @example Front Prisma Postgres with Cloudflare Hyperdrive
+ * ### Connecting over Hyperdrive
+ * **Example:** Front Prisma Postgres with Cloudflare Hyperdrive
  * ```typescript
  * const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("api-hd", {
  *   origin: connection.origin.as<Prisma.PostgresOrigin>(),

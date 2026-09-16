@@ -1,4 +1,5 @@
 import * as rds from "@distilled.cloud/aws/rds";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -43,12 +44,18 @@ export interface DBInstanceProps {
    */
   dbName?: string;
   /**
-   * Allocated storage in GiB (standalone instances). In-place modify.
+   * Minimum allocated storage in GiB (standalone instances). RDS cannot
+   * shrink storage; increases made by storage autoscaling are preserved.
    * @default undefined
    */
   allocatedStorage?: number;
   /**
-   * Upper limit (GiB) for storage autoscaling. In-place modify.
+   * Upper limit (GiB) for storage autoscaling on standalone instances.
+   * Omission or `0` disables autoscaling, including after adoption or drift.
+   * Disabling never shrinks allocated storage. RDS requires the current
+   * allocation as the modify request's reset value, not a zero ceiling.
+   * Not supported for cluster members or RDS Custom.
+   * @default 0
    */
   maxAllocatedStorage?: number;
   /**
@@ -433,9 +440,8 @@ export interface DBInstance extends Resource<
  * observed cloud state; immutable fields (`engine`, `dbName`,
  * `masterUsername`, `availabilityZone`, `storageEncrypted`, `kmsKeyId`,
  * `dbSubnetGroupName`) force a replacement.
- * @resource
- * @section Standalone Instance
- * @example A gp3 MySQL instance
+ * ### Standalone Instance
+ * **Example:** A gp3 MySQL instance
  * ```typescript
  * const db = yield* DBInstance("Db", {
  *   engine: "mysql",
@@ -449,8 +455,50 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
- * @section Cluster Member
- * @example An Aurora writer instance
+ * ### Storage Autoscaling
+ * `allocatedStorage` is a minimum, not a shrink target. RDS can increase the
+ * allocation but cannot reduce it in place. `maxAllocatedStorage` controls
+ * future automatic growth; omitting it or setting it to `0` disables autoscaling.
+ *
+ * **Example:** Start with 20 GiB and allow automatic growth to 100 GiB
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   storageType: "gp2",
+ *   allocatedStorage: 20,
+ *   maxAllocatedStorage: 100,
+ * });
+ * ```
+ *
+ * If RDS grows this database to 30 GiB, redeploying keeps that capacity and the
+ * 100 GiB autoscaling limit. It does not attempt to shrink the database to 20 GiB.
+ * An externally changed autoscaling limit is reset to the declared value.
+ *
+ * ### Disabling Storage Autoscaling
+ * Removing `maxAllocatedStorage` resets autoscaling to its disabled default.
+ * Existing allocated storage and database contents remain intact.
+ *
+ * **Example:** Remove the autoscaling limit to disable future automatic growth
+ * ```diff lang="typescript"
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   storageType: "gp2",
+ *   allocatedStorage: 20,
+ * - maxAllocatedStorage: 100,
+ * });
+ * ```
+ *
+ * `maxAllocatedStorage: 0` has the same behavior. Redeploying with either form
+ * also disables autoscaling if it was enabled outside Alchemy.
+ *
+ * ### Cluster Member
+ * **Example:** An Aurora writer instance
  * ```typescript
  * const writer = yield* DBInstance("Writer", {
  *   dbClusterIdentifier: cluster.dbClusterIdentifier,
@@ -459,8 +507,8 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
- * @section Monitoring & Logs
- * @example Enhanced monitoring + log export
+ * ### Monitoring & Logs
+ * **Example:** Enhanced monitoring + log export
  * ```typescript
  * const db = yield* DBInstance("Db", {
  *   engine: "postgres",
@@ -472,6 +520,8 @@ export interface DBInstance extends Resource<
  *   enableCloudwatchLogsExports: ["postgresql", "upgrade"],
  * });
  * ```
+ *
+ * @resource
  */
 export const DBInstance = Resource<DBInstance>("AWS.RDS.DBInstance");
 
@@ -586,6 +636,69 @@ const logExportDelta = (
   };
 };
 
+class InvalidDBInstanceStorage extends Data.TaggedError(
+  "InvalidDBInstanceStorage",
+)<{ message: string }> {}
+
+const toStorageConfiguration = Effect.fn(function* (props: DBInstanceProps) {
+  const supportsAutoscaling =
+    props.dbClusterIdentifier === undefined &&
+    !props.engine.startsWith("aurora") &&
+    !props.engine.startsWith("custom-");
+  if (!supportsAutoscaling && props.maxAllocatedStorage !== undefined) {
+    return yield* new InvalidDBInstanceStorage({
+      message:
+        "maxAllocatedStorage is not supported for cluster members or RDS Custom",
+    });
+  }
+  const maxAllocatedStorage = supportsAutoscaling
+    ? (props.maxAllocatedStorage ?? 0)
+    : undefined;
+  if (
+    maxAllocatedStorage !== undefined &&
+    (!Number.isInteger(maxAllocatedStorage) || maxAllocatedStorage < 0)
+  ) {
+    return yield* new InvalidDBInstanceStorage({
+      message: "maxAllocatedStorage must be a nonnegative integer in GiB",
+    });
+  }
+  return {
+    allocatedStorage:
+      props.dbClusterIdentifier === undefined
+        ? props.allocatedStorage
+        : undefined,
+    maxAllocatedStorage,
+  };
+});
+
+type StorageConfiguration = Effect.Success<
+  ReturnType<typeof toStorageConfiguration>
+>;
+
+const allocationConverged = (
+  desired: StorageConfiguration,
+  observed: rds.DBInstance,
+) =>
+  desired.allocatedStorage === undefined ||
+  (observed.AllocatedStorage !== undefined &&
+    observed.AllocatedStorage >= desired.allocatedStorage);
+
+const autoscalingConverged = (
+  desired: StorageConfiguration,
+  observed: rds.DBInstance,
+) => {
+  const ceiling = desired.maxAllocatedStorage;
+  if (ceiling === undefined) return true;
+  // RDS reports disabled autoscaling as zero; equality also prevents growth.
+  if (ceiling === 0 || ceiling === observed.AllocatedStorage) {
+    return (
+      (observed.MaxAllocatedStorage ?? 0) === 0 ||
+      observed.MaxAllocatedStorage === observed.AllocatedStorage
+    );
+  }
+  return ceiling === observed.MaxAllocatedStorage;
+};
+
 export const DBInstanceProvider = () =>
   Provider.effect(
     DBInstance,
@@ -608,9 +721,7 @@ export const DBInstanceProvider = () =>
         return response?.DBInstances?.[0];
       });
 
-      // Bounded readiness wait. Gate on `DBInstanceStatus === "available"` so a
-      // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
-      // `waitForAvailable` budgets ~10 min (60 * 10s) for slow provisioning;
+      // Storage optimization is online and can continue for hours after a resize.
       // `requireAvailable: false` only waits for the ARN to appear.
       const waitForInstance = Effect.fn(function* (
         instanceId: string,
@@ -633,6 +744,7 @@ export const DBInstanceProvider = () =>
             if (
               requireAvailable &&
               status !== "available" &&
+              status !== "storage-optimization" &&
               status !== "incompatible-parameters" &&
               status !== "incompatible-restore"
             ) {
@@ -646,6 +758,29 @@ export const DBInstanceProvider = () =>
           }),
           Effect.retry({ schedule: readinessPolicy }),
         );
+      });
+
+      const waitForStorage = Effect.fn(function* (
+        instanceId: string,
+        converged: (instance: rds.DBInstance) => boolean,
+      ) {
+        // RDS can remain available while an accepted storage resize is pending.
+        const instance = yield* readInstance(instanceId).pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (instance) => instance !== undefined && converged(instance),
+          }),
+        );
+        if (!instance?.DBInstanceArn || !converged(instance)) {
+          return yield* new InvalidDBInstanceStorage({
+            message: `DB instance '${instanceId}' storage did not converge (status: ${instance?.DBInstanceStatus}, allocated: ${instance?.AllocatedStorage}, maximum: ${instance?.MaxAllocatedStorage}, pending allocation: ${instance?.PendingModifiedValues?.AllocatedStorage})`,
+          });
+        }
+        return instance;
       });
 
       return {
@@ -681,7 +816,7 @@ export const DBInstanceProvider = () =>
               Effect.succeed([] as DBInstance["Attributes"][]),
             ),
           ),
-        diff: Effect.fn(function* ({ id, olds, news }) {
+        diff: Effect.fn(function* ({ id, olds, news, output }) {
           if (!isResolved(news)) return undefined;
           if (
             (yield* toIdentifier(id, olds ?? ({} as DBInstanceProps))) !==
@@ -701,6 +836,19 @@ export const DBInstanceProvider = () =>
               olds.dbSubnetGroupName !== news.dbSubnetGroupName)
           ) {
             return { action: "replace" } as const;
+          }
+          const storage = yield* toStorageConfiguration(news);
+          if (output !== undefined) {
+            const instance = yield* readInstance(output.dbInstanceIdentifier);
+            if (!instance?.DBInstanceArn) {
+              return { action: "update", stables: [] } as const;
+            }
+            if (
+              !allocationConverged(storage, instance) ||
+              !autoscalingConverged(storage, instance)
+            ) {
+              return { action: "update" } as const;
+            }
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -755,6 +903,7 @@ export const DBInstanceProvider = () =>
             news.monitoringInterval,
           );
 
+          const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
 
@@ -769,8 +918,9 @@ export const DBInstanceProvider = () =>
                 Engine: news.engine,
                 EngineVersion: news.engineVersion,
                 DBName: news.dbName,
-                AllocatedStorage: news.allocatedStorage,
-                MaxAllocatedStorage: news.maxAllocatedStorage,
+                AllocatedStorage: storage.allocatedStorage,
+                // Omission at creation leaves autoscaling disabled.
+                MaxAllocatedStorage: storage.maxAllocatedStorage || undefined,
                 StorageType: news.storageType,
                 Iops: news.iops,
                 StorageThroughput: news.storageThroughput,
@@ -851,8 +1001,19 @@ export const DBInstanceProvider = () =>
             };
             setIf("DBInstanceClass", news.dbInstanceClass, observed.DBInstanceClass); // prettier-ignore
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
-            setIf("AllocatedStorage", news.allocatedStorage, observed.AllocatedStorage); // prettier-ignore
-            setIf("MaxAllocatedStorage", news.maxAllocatedStorage, observed.MaxAllocatedStorage); // prettier-ignore
+            // Keep allocation increases coupled to declared storage/IOPS changes.
+            if (
+              storage.allocatedStorage !== undefined &&
+              (observed.AllocatedStorage === undefined ||
+                storage.allocatedStorage > observed.AllocatedStorage)
+            ) {
+              core.AllocatedStorage = storage.allocatedStorage;
+              core.MaxAllocatedStorage =
+                storage.maxAllocatedStorage === 0
+                  ? storage.allocatedStorage
+                  : storage.maxAllocatedStorage;
+              coreDirty = true;
+            }
             setIf("StorageType", news.storageType, observed.StorageType);
             setIf("Iops", news.iops, observed.Iops);
             setIf("StorageThroughput", news.storageThroughput, observed.StorageThroughput); // prettier-ignore
@@ -913,6 +1074,11 @@ export const DBInstanceProvider = () =>
             if (coreDirty) {
               yield* rds.modifyDBInstance(core);
               observed = yield* waitForInstance(identifier);
+              if (core.AllocatedStorage !== undefined) {
+                observed = yield* waitForStorage(identifier, (instance) =>
+                  allocationConverged(storage, instance),
+                );
+              }
             }
 
             // syncCloudwatchLogsExports — delta-shaped; separate call so it
@@ -929,6 +1095,52 @@ export const DBInstanceProvider = () =>
               });
               observed = yield* waitForInstance(identifier);
             }
+          }
+
+          // RDS cannot shrink storage, including allocation added by autoscaling.
+          if (
+            storage.allocatedStorage !== undefined &&
+            (observed.AllocatedStorage === undefined ||
+              storage.allocatedStorage > observed.AllocatedStorage)
+          ) {
+            yield* rds.modifyDBInstance({
+              DBInstanceIdentifier: identifier,
+              AllocatedStorage: storage.allocatedStorage,
+              Iops: news.iops,
+              MaxAllocatedStorage:
+                storage.maxAllocatedStorage === 0
+                  ? storage.allocatedStorage
+                  : storage.maxAllocatedStorage,
+              ApplyImmediately: true,
+            });
+            observed = yield* waitForInstance(identifier);
+            observed = yield* waitForStorage(identifier, (instance) =>
+              allocationConverged(storage, instance),
+            );
+          }
+          if (!autoscalingConverged(storage, observed)) {
+            const ceiling =
+              storage.maxAllocatedStorage === 0
+                ? observed.AllocatedStorage
+                : storage.maxAllocatedStorage;
+            if (ceiling === undefined) {
+              return yield* new InvalidDBInstanceStorage({
+                message:
+                  "RDS did not return the allocated storage needed to disable autoscaling",
+              });
+            }
+            // AWS disables autoscaling when the ceiling equals live allocation.
+            yield* rds.modifyDBInstance({
+              DBInstanceIdentifier: identifier,
+              MaxAllocatedStorage: ceiling,
+              ApplyImmediately: true,
+            });
+            observed = yield* waitForStorage(
+              identifier,
+              (instance) =>
+                allocationConverged(storage, instance) &&
+                autoscalingConverged(storage, instance),
+            );
           }
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
@@ -967,10 +1179,13 @@ export const DBInstanceProvider = () =>
           const finalDBSnapshotIdentifier = skipFinalSnapshot
             ? undefined
             : (output.finalDBSnapshotIdentifier ??
-              `${output.dbInstanceIdentifier}-final-${new Date()
-                .toISOString()
-                .replaceAll(/[:.]/g, "-")
-                .toLowerCase()}`);
+              (yield* Effect.sync(
+                () =>
+                  `${output.dbInstanceIdentifier}-final-${new Date()
+                    .toISOString()
+                    .replaceAll(/[:.]/g, "-")
+                    .toLowerCase()}`,
+              )));
           yield* rds
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,

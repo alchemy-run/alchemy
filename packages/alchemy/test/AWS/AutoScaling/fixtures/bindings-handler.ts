@@ -25,6 +25,7 @@ import {
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Output from "@/Output";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -81,6 +82,11 @@ export default AsgBindingsFunction.make(
   {
     main: import.meta.url,
     functionUrl: true,
+    // The AWS defaults (128 MB / 3s) are too tight for the AutoScaling
+    // client: cold routes time out at exactly 3s (the function URL turns
+    // that into a 502) with memory pegged at 127/128 MB.
+    timeout: Duration.seconds(30),
+    memorySize: 512,
   },
   Effect.gen(function* () {
     const { group } = yield* BindingsFleet;

@@ -49,7 +49,7 @@ stage, and logical ID.
 
 ## Bind it to a Worker
 
-Bind the bucket in the Worker's init phase and use the typed client
+Bind the bucket in the Worker's Construction phase and use the typed client
 in the runtime handlers. This Worker stores objects on `PUT /:key`
 and serves them back on `GET /:key`:
 
@@ -124,6 +124,24 @@ layer on the Worker:
 Your runtime code depends only on the capability
 (`ReadBucket(Bucket)` etc.) — swapping the implementation layer
 doesn't touch the handlers.
+
+## Public development URL
+
+Buckets are private by default. Set `publicAccess: true` to serve
+objects from Cloudflare's managed `r2.dev` domain — useful for
+preview stacks and anywhere a signed S3 URL or a custom domain
+isn't an option. The hostname lands on `publicDomain`:
+
+```typescript
+const bucket = yield* Cloudflare.R2.Bucket("Assets", {
+  publicAccess: true,
+});
+// https://pub-….r2.dev/photo.jpg
+```
+
+This endpoint is rate-limited and intended for non-production use.
+For production traffic, attach a hostname you control with
+`domains`.
 
 ## Destroying a bucket
 

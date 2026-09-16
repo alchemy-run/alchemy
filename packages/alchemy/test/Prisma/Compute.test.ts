@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import {
   Compute,
   ComputeDevProvider,
@@ -516,7 +517,11 @@ describe("Prisma Compute", () => {
         appName: "api",
         healthCheck: { path: "/api/health" },
         pollIntervalMs: 1,
-        urlReadinessTimeoutSeconds: 0.1,
+        // Wall-clock deadline (live clock). The mock succeeds on the second
+        // poll, so the pass path never waits this long — it only needs to
+        // not fire spuriously when a saturated event loop (full-suite run)
+        // delays the second poll beyond a tight budget.
+        urlReadinessTimeoutSeconds: 30,
       });
 
       expect(requests).toEqual([
@@ -1360,7 +1365,7 @@ describe("Prisma Compute", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
+        const provider = yield* Provider.findProvider(Compute);
         const output = yield* provider.read!({
           id: "App",
           fqn: "App",
@@ -1433,7 +1438,7 @@ describe("Prisma Compute", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Compute.Provider;
+      const provider = yield* Provider.findProvider(Compute);
       const output = yield* provider.read!({
         id: "App",
         fqn: "App",
@@ -1508,7 +1513,7 @@ describe("Prisma Compute", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
+        const provider = yield* Provider.findProvider(Compute);
         const output = yield* provider.read!({
           id: "App",
           fqn: "App",
@@ -3708,9 +3713,17 @@ describe("Prisma Compute", () => {
         expect(JSON.parse(manifest)).toMatchObject({
           entrypoint: "bundle/index.js",
         });
-        expect(bundle).toContain("Prisma Compute bootstrap starting");
+        // The generated entry is a shim over alchemy/Runtime/Bootstrap/Prisma;
+        // its label and the shared "bootstrap starting" message are separate
+        // literals joined at runtime (see Runtime/Bootstrap/Process.ts).
+        expect(bundle).toContain("Prisma Compute");
+        expect(bundle).toContain("bootstrap starting");
         expect(bundle).toMatch(/hostname\s*:\s*["'`]0\.0\.0\.0["'`]/);
-        expect(bundle.match(/prisma-runtime-stage-sentinel/g)).toHaveLength(2);
+        // The deploy-time stack identity is baked into the artifact (the shim
+        // passes it to the bootstrap once; the module fans it out to `Stack`
+        // and `Stage`).
+        expect(bundle).toContain("prisma-runtime-stack-sentinel");
+        expect(bundle).toContain("prisma-runtime-stage-sentinel");
         expect(bundle).toContain("ALCHEMY_PHASE");
         expect(bundle).toContain("runtime");
         expect(bundle).toContain("effect-native-ok");
@@ -6707,7 +6720,7 @@ describe("Prisma Compute", () => {
 
   it.effect("returns an empty tail stream before a deployment exists", () =>
     Effect.gen(function* () {
-      const provider = yield* Compute.Provider;
+      const provider = yield* Provider.findProvider(Compute);
       const chunks = yield* Stream.runCollect(
         provider.tail!({
           id: "App",
@@ -7171,7 +7184,7 @@ describe("Prisma Compute", () => {
           );
         });
 
-        const provider = yield* Compute.Provider.pipe(
+        const provider = yield* Provider.findProvider(Compute).pipe(
           Effect.provide(computeProviderLive()),
         );
         const lines = yield* provider.tail!({

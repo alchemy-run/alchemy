@@ -127,11 +127,10 @@ export type FloatingIp = Resource<
  * Floating IP (new address). `name`, `description`, `labels`, and
  * `deleteProtection` update in place.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#floating-ips
  *
- * @section Creating a Floating IP
- * @example Unassigned IPv4 in nbg1
+ * ### Creating a Floating IP
+ * **Example:** Unassigned IPv4 in nbg1
  * ```typescript
  * const ip = yield* Hetzner.FloatingIp("public-ip", {
  *   type: "ipv4",
@@ -139,7 +138,7 @@ export type FloatingIp = Resource<
  * });
  * ```
  *
- * @example IPv6 with description and labels
+ * **Example:** IPv6 with description and labels
  * ```typescript
  * const ip = yield* Hetzner.FloatingIp("v6", {
  *   type: "ipv6",
@@ -149,8 +148,8 @@ export type FloatingIp = Resource<
  * });
  * ```
  *
- * @section Updating a Floating IP
- * @example Rename and relabel
+ * ### Updating a Floating IP
+ * **Example:** Rename and relabel
  * ```typescript
  * const ip = yield* Hetzner.FloatingIp("public-ip", {
  *   type: "ipv4",
@@ -160,6 +159,8 @@ export type FloatingIp = Resource<
  *   labels: { env: "prod" },
  * });
  * ```
+ *
+ * @resource
  */
 export const FloatingIp = Resource<FloatingIp>("Hetzner.FloatingIp");
 

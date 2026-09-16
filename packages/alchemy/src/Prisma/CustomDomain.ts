@@ -107,15 +107,16 @@ export interface CustomDomain extends Resource<
  * API cannot replace a live domain atomically. Create a second resource,
  * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
- * @resource
- * @section Creating a Custom Domain
- * @example Attach a hostname to an app
+ * ### Creating a Custom Domain
+ * **Example:** Attach a hostname to an app
  * ```typescript
  * const domain = yield* Prisma.CustomDomain("api-domain", {
  *   app: api.appId,
  *   hostname: "api.example.com",
  * });
  * ```
+ *
+ * @resource
  */
 export const CustomDomain = Resource<CustomDomain>("Prisma.CustomDomain");
 
