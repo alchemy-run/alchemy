@@ -140,7 +140,7 @@ export const managementApi = () =>
  * Build a layer that registers all Prisma resource providers, the Prisma
  * auth provider, resolved credentials, and an HTTP client.
  *
- * Every resource is registered with {@link ../Local/ProviderLayer.ts
+ * Every resource is registered with {@link ../Dev/ProviderLayer.ts
  * ProviderLayer.dual}: a **live** implementation backed by the Prisma
  * Management API and a **local** implementation used by `alchemy dev`
  * (fabricated `dev:` identifiers; `Prisma.Database` boots a local

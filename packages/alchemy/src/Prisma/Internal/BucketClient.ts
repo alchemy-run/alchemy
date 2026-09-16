@@ -13,6 +13,7 @@ import * as Stream from "effect/Stream";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { concatBytes } from "../../Util/bytes.ts";
 import {
   BucketError,
   type BucketCredentials,
@@ -180,17 +181,6 @@ export const objectFromListEntry = (entry: S3.Object): BucketObject => ({
   contentType: undefined,
   metadata: {},
 });
-
-const concatBytes = (chunks: readonly Uint8Array[]): Uint8Array => {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const result = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
-};
 
 /**
  * Wrap a `GetObject` response as a {@link BucketObjectBody}. The body is a

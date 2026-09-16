@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { ServerHost } from "@/Server/Process.ts";
+import { Host } from "@/Local/Process.ts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -20,7 +20,7 @@ export const keyPair = AWS.EC2.KeyPair("Ec2E2EKeyPair", {
  *
  * The props Effect provisions the networking (a public-subnet VPC) and the
  * instance's security group, then launches the instance into it. The program
- * Effect registers a `ServerHost.run` background loop (the #706 pattern) and
+ * Effect registers a `Host.run` background loop (the #706 pattern) and
  * returns a `{ fetch }` handler that the instance's Bun HTTP server serves on
  * `port`. `/ticks` reports the loop counter so the test can prove the
  * background loop runs inside the deployed instance.
@@ -83,7 +83,7 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
     };
   }),
   Effect.gen(function* () {
-    const host = yield* ServerHost;
+    const host = yield* Host;
     const ticks = yield* Ref.make(0);
 
     // Long-running background loop (the `host.run` pattern from #706).

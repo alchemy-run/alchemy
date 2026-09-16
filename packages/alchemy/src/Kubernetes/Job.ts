@@ -14,7 +14,7 @@ import {
   unpackEnvValue,
   RuntimeContext,
 } from "../RuntimeContext.ts";
-import type { HostRuntimeContext } from "../Server/Process.ts";
+import type { HostRuntimeContext } from "../Local/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
 import * as Output from "../Output.ts";
@@ -388,6 +388,9 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(
             Effect.asVoid,
           ),
+          // A Job is one-shot: `serve` registers the shape's `run` effect,
+          // never an HTTP server, so it never binds a port.
+          serves: false,
         })),
       };
       return context;

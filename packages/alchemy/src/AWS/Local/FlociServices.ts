@@ -7,7 +7,7 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
 import type { Platform } from "../../Platform.ts";
 import type { ResourceClassLike, ResourceLike } from "../../Resource.ts";
 import { DEFAULT_LOCAL_ENDPOINT, LOCAL_ACCOUNT_ID } from "../AuthProvider.ts";
@@ -68,7 +68,7 @@ let flociServicesLayer: ReturnType<typeof makeFlociServices> | undefined;
 /**
  * The floci-scoped override context for local-mode AWS providers, as a
  * **module-memoized layer reference** (see the note on
- * [Local/ProviderLayer.ts](../../Local/ProviderLayer.ts)): every
+ * [Dev/ProviderLayer.ts](../../Dev/ProviderLayer.ts)): every
  * {@link flociDual} registration shares this one reference, so the stack
  * build's MemoMap constructs it — and runs `ensureFloci()` — exactly once
  * per stack build, and only when a local-mode provider is actually demanded.

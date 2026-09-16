@@ -13,7 +13,7 @@ import type { ResourceBinding } from "../../Resource.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
-} from "../../Server/Process.ts";
+} from "../../Local/Process.ts";
 import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";

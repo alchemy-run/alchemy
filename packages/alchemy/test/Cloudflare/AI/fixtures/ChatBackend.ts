@@ -30,8 +30,8 @@ export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()
       }).pipe(Effect.provide(Cloudflare.AI.DurableObjectChatPersistence));
 
       return {
-        send: (threadId: string, prompt: string) =>
-          Effect.gen(function* () {
+        send: Effect.fn(
+          function* (threadId: string, prompt: string) {
             const chat = yield* persistence.getOrCreate(threadId);
             const response = yield* chat.generateText({ prompt });
             const history = yield* Ref.get(chat.history);
@@ -39,7 +39,10 @@ export default class ChatBackend extends Cloudflare.DurableObject<ChatBackend>()
               text: response.text,
               turns: history.content.length,
             };
-          }).pipe(Effect.provide(languageModel), Effect.orDie),
+          },
+          Effect.provide(languageModel),
+          Effect.orDie,
+        ),
       };
     });
   }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding))),

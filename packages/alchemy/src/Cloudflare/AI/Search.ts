@@ -283,8 +283,8 @@ export type Search = SearchInstance & {
  * @product AI Search
  * @category AI
  */
-export const Search = (id: string, props: Props) =>
-  Effect.gen(function* () {
+export const Search = Effect.fn(
+  function* (id: string, props: Props) {
     const {
       source,
       prefix,
@@ -375,7 +375,9 @@ export const Search = (id: string, props: Props) =>
     // so a `Search` is usable anywhere a `SearchInstance` is expected —
     // `Cloudflare.AI.QuerySearch(search)`, `env: { SEARCH: search }`, etc.
     return Object.assign(instance, { serviceToken }) as Search;
-  }).pipe(CoreNamespace.push(id));
+  },
+  (effect, id) => effect.pipe(CoreNamespace.push(id)),
+);
 
 /** Drop `undefined` entries; return `undefined` when nothing is left. */
 const clean = <T extends object>(

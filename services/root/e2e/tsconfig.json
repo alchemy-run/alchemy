@@ -1,0 +1,10 @@
+{
+  // Playwright's transform reads the nearest tsconfig and chokes on the
+  // monorepo's directory-style project references (see
+  // fixtures/tsconfig.playwright.json). This one is reference-free; the
+  // package tsconfig still type-checks these files.
+  "compilerOptions": {
+    "allowJs": true,
+    "resolveJsonModule": true
+  }
+}

@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
+import { Attribution, type AttributionFrame } from "./BindingAttribution.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps, PropsInput } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -95,6 +96,13 @@ export type LogicalId = string;
 export interface ResourceBinding<Data = any> {
   sid: string;
   data: Data;
+  /**
+   * The org path that acquired this binding (agent → skill → tool),
+   * stamped from the ambient {@link Attribution} at registration.
+   * Identity ignores it (`dedupeBindings` keys by sid); the raw rows
+   * keep it as the permission edge of the org graph.
+   */
+  path?: ReadonlyArray<AttributionFrame>;
 }
 
 export interface ResourceLike<
@@ -183,6 +191,39 @@ export const isResource = (value: any): value is ResourceLike => {
     "FQN" in value
   );
 };
+
+/**
+ * Static identity carried by an UN-YIELDED resource constructor Effect
+ * (the deferred form — `export const repo = GitHub.Repository("repo",
+ * {...})`). The Effect exposes nothing through the Effect protocol, but
+ * consumers that only need the resource's declared identity (event
+ * catalogs deriving display names, bindings resolving plain-string
+ * identity props) can read it synchronously here instead of yielding —
+ * yielding is only required to obtain the live instance.
+ */
+export interface DeferredResourceMeta<
+  Type extends string = string,
+  Props = unknown,
+> {
+  readonly Type: Type;
+  readonly LogicalId: string;
+  /** The constructor's input props — possibly unresolved `Input`s. */
+  readonly Props: Props;
+}
+
+const DeferredMeta = Symbol.for("alchemy/Resource/DeferredMeta");
+
+/**
+ * Read the {@link DeferredResourceMeta} off an un-yielded resource
+ * constructor Effect. `undefined` for anything else (a resolved
+ * instance, an arbitrary Effect, a `.ref()` Effect).
+ */
+export const deferredResourceMeta = (
+  value: unknown,
+): DeferredResourceMeta | undefined =>
+  (typeof value === "object" || typeof value === "function") && value !== null
+    ? (value as { [DeferredMeta]?: DeferredResourceMeta })[DeferredMeta]
+    : undefined;
 
 /**
  * Does `value` reference an instance of the resource type `type` —
@@ -353,6 +394,17 @@ export function Resource<R extends ResourceLike>(
   const constructor = (
     id: string,
     props: Props | Effect.Effect<Props> | undefined,
+    // the returned Effect ALSO carries its static identity (see
+    // DeferredResourceMeta): the deferred form is a legal module-scope
+    // export, and catalogs/bindings can read Type/LogicalId/Props off it
+    // without yielding
+  ) =>
+    Object.assign(makeConstructorEffect(id, props), {
+      [DeferredMeta]: { Type: type, LogicalId: id, Props: props },
+    });
+  const makeConstructorEffect = (
+    id: string,
+    props: Props | Effect.Effect<Props> | undefined,
   ) =>
     Effect.gen(function* () {
       const stack = yield* Stack;
@@ -405,9 +457,13 @@ export function Resource<R extends ResourceLike>(
         typeof args[0] === "string"
           ? Effect.gen(function* () {
               const [sid, data] = args as [sid: string, data: R["Binding"]];
+              // who acquired this binding — the ambient org path (an
+              // agent's charter, a ToolDef's init, a skill's physics)
+              const path = yield* Attribution;
               (stack.bindings[fqn] ??= []).push({
                 sid,
                 data,
+                ...(path.length > 0 ? { path } : {}),
               });
               return undefined;
             })

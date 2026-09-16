@@ -7,8 +7,8 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { isResolved } from "../../Diff.ts";
-import * as ProviderLayer from "../../Local/ProviderLayer.ts";
-import * as RpcProvider from "../../Local/RpcProvider.ts";
+import * as ProviderLayer from "../../Dev/ProviderLayer.ts";
+import * as RpcProvider from "../../Dev/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { isResourceOfType, Resource } from "../../Resource.ts";

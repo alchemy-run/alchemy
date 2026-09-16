@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -130,9 +131,24 @@ export const AccessKeyProvider = () =>
         existing?.CreateDate ?? output?.createDate;
 
       if (!existing) {
-        const created = yield* iam.createAccessKey({
-          UserName: news.userName,
-        });
+        const created = yield* iam
+          .createAccessKey({
+            UserName: news.userName,
+          })
+          .pipe(
+            // The user may be reconciling CONCURRENTLY in this same apply
+            // (its stable name lets the engine start this resource early)
+            // or recreating after its data plane was wiped (a recreated
+            // local emulator) — a missing user is a dependency violation
+            // to wait out, not a terminal failure.
+            Effect.retry({
+              while: (e) => e._tag === "NoSuchEntityException",
+              schedule: Schedule.max([
+                Schedule.fixed(2_000),
+                Schedule.recurs(15),
+              ]),
+            }),
+          );
         accessKeyId = created.AccessKey.AccessKeyId;
         secretAccessKey = toRedactedString(created.AccessKey.SecretAccessKey);
         createDate = created.AccessKey.CreateDate;

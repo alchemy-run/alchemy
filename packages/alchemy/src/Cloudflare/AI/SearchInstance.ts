@@ -693,8 +693,9 @@ export const SearchInstanceProvider = () =>
               created: true as const,
               instance: created as ObservedInstance,
             })),
-            Effect.catchTag("InstanceAlreadyExists", (originalError) =>
-              Effect.gen(function* () {
+            Effect.catchTag(
+              "InstanceAlreadyExists",
+              Effect.fn(function* (originalError) {
                 const existing = yield* getInstance(
                   acct,
                   namespace,
@@ -851,10 +852,12 @@ const getInstance = (accountId: string, namespace: string, id: string) =>
       ),
     );
 
-const createInstanceId = (id: string, instanceId: string | undefined) =>
-  Effect.gen(function* () {
-    return instanceId ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createInstanceId = Effect.fn(function* (
+  id: string,
+  instanceId: string | undefined,
+) {
+  return instanceId ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 /**
  * Cloudflare returns `null` (and sometimes `""` for model enums) for

@@ -38,13 +38,16 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObject<ChatBack
       }).pipe(Effect.provide(Cloudflare.AI.DurableObjectChatPersistence));
 
       const handlers = ChatBackendRpcs.toLayer({
-        send: ({ prompt }) =>
-          Effect.gen(function* () {
+        send: Effect.fn(
+          function* ({ prompt }) {
             const chat = yield* persistence.getOrCreate("thread");
             const response = yield* chat.generateText({ prompt });
             const history = yield* Ref.get(chat.history);
             return { text: response.text, turns: history.content.length };
-          }).pipe(Effect.provide(languageModel), Effect.orDie),
+          },
+          Effect.provide(languageModel),
+          Effect.orDie,
+        ),
         streamMessage: ({ prompt }) =>
           persistence.getOrCreate("thread").pipe(
             // `streamText` on a persisted chat saves the appended turn

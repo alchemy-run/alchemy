@@ -29,6 +29,15 @@ export interface BaseRuntimeContext {
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**
+   * Extra props the platform contributes AFTER init has run, merged
+   * into the resource's Props alongside the collected `env` — the
+   * lowering channel for plan-time state a runtime context accumulates
+   * during init (e.g. Dockerfile statements contributed by bindings via
+   * `Docker.Host`). Must be cheap and pure at runtime (init re-runs
+   * inside deployed bundles, where nothing accumulates).
+   */
+  planProps?: Effect.Effect<Record<string, unknown>>;
+  /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,
@@ -173,3 +182,19 @@ export class RuntimeContext extends Context.Service<
 export const CurrentRuntimeContext = Effect.serviceOption(RuntimeContext).pipe(
   Effect.map(Option.getOrUndefined),
 );
+
+/**
+ * Bind a PLAIN plan-time value into the runtime's env under an
+ * (already-canonical) key — `RuntimeContext.set` for callers that must
+ * not import `Output` themselves. `Output` is the engine's expression
+ * root (it reaches `Stack`, state, the terminal UI), and the AI terms
+ * that bind their source paths (`AI/Source.ts`) sit in the browser's
+ * import graph through `alchemy/AI/React`; this seam lets them set a
+ * literal without carrying the engine along. Provided beside
+ * {@link RuntimeContext} where the platform runs a Function's init
+ * (`Platform.ts`); absent in a bare test, where nothing is bound.
+ */
+export class RuntimeLiteral extends Context.Service<
+  RuntimeLiteral,
+  (key: string, value: unknown) => Effect.Effect<string>
+>()("RuntimeLiteral") {}

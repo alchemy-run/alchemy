@@ -9,7 +9,7 @@ import {
 } from "../Platform.ts";
 import type { HttpEffect } from "../Http.ts";
 import type { Resource } from "../Resource.ts";
-import type { ServerHost } from "../Server/Process.ts";
+import type { Host as ServerHost } from "../Local/Process.ts";
 import type { ServiceBinding } from "./MountVolume.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";

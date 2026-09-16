@@ -5,9 +5,52 @@ import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
-import { isResource, type ResourceLike } from "./Resource.ts";
+import {
+  deferredResourceMeta,
+  isResource,
+  type ResourceLike,
+} from "./Resource.ts";
+import { AcquisitionRegistry, Attribution } from "./BindingAttribution.ts";
 import { Self } from "./Self.ts";
+import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
+
+export {
+  AcquisitionRegistry,
+  Attribution,
+  attributed,
+  makeAcquisitionRegistry,
+  type Acquisition,
+  type AttributionFrame,
+} from "./BindingAttribution.ts";
+
+/** The identity a bind argument contributes to an {@link Acquisition}
+ *  row — a live Resource's, or a deferred constructor's static one. */
+const acquisitionTarget = (arg: unknown): string | undefined => {
+  if (isResource(arg)) return `${arg.Type}(${arg.LogicalId})`;
+  const meta = deferredResourceMeta(arg);
+  return meta === undefined ? undefined : `${meta.Type}(${meta.LogicalId})`;
+};
+
+/** Record one capability acquisition into the ambient registry (a
+ *  no-op when none is provided). Reads targets from the ORIGINAL args
+ *  (a deferred constructor keeps its static identity) and falls back
+ *  to the resolved values (a Stack resolves them to instances). */
+const recordAcquisition = (
+  binding: string,
+  args: ReadonlyArray<unknown>,
+  resolved: ReadonlyArray<unknown>,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const registry = yield* Effect.serviceOption(AcquisitionRegistry);
+    if (Option.isNone(registry)) return;
+    const path = yield* Attribution;
+    const targets = resolved.flatMap((value, index) => {
+      const found = acquisitionTarget(value) ?? acquisitionTarget(args[index]);
+      return found === undefined ? [] : [found];
+    });
+    registry.value.record({ binding, targets, path });
+  });
 
 export interface ServiceLike {
   kind: "Service";
@@ -18,6 +61,19 @@ export interface ServiceShape<
   Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
 >
   extends Context.ServiceClass.Shape<Identifier, Shape>, ServiceLike {}
+
+// A parameter that ALREADY admits Effects (e.g. GitHub's
+// `RepositoryLike = Repository | Effect<Repository, any, any>`)
+// is passed exactly as declared — re-wrapping it in
+// `Effect<T, never, Req>` would make TS infer the argument's
+// own R into Req and leak it onto the caller (a deferred resource
+// constructor's Stack/provider requirements, which the impl never
+// incurs when it resolves identity statically).
+type BindParameter<T, Req> = [
+  Extract<T, Effect.Effect<any, any, any>>,
+] extends [never]
+  ? Input<T> | Effect.Effect<T, never, Req>
+  : T;
 
 type BindParameters<
   Parameters extends any[],
@@ -30,30 +86,16 @@ type BindParameters<
     // which recurses forever (TS2589).
     number extends Parameters["length"]
     ? Parameters extends [infer First, ...infer Rest]
-      ? [
-          Input<First> | Effect.Effect<First, never, Req>,
-          ...Array<
-            Input<Rest[number]> | Effect.Effect<Rest[number], never, Req>
-          >,
-        ]
-      : Array<
-          | Input<Parameters[number]>
-          | Effect.Effect<Parameters[number], never, Req>
-        >
+      ? [BindParameter<First, Req>, ...Array<BindParameter<Rest[number], Req>>]
+      : Array<BindParameter<Parameters[number], Req>>
     : Parameters extends [infer First, ...infer Rest]
-      ? [
-          Input<First> | Effect.Effect<First, never, Req>,
-          ...BindParameters<Rest, Req>,
-        ]
+      ? [BindParameter<First, Req>, ...BindParameters<Rest, Req>]
       : // Optional head (e.g. `(bus?: EventBus)`) — `[infer F, ...R]` does
         // not match a tuple with an optional first element, which used to
         // collapse the whole parameter list to `[]` (`PutEvents(bus)` failed
         // with "Expected 0 arguments").
         Parameters extends [(infer First)?, ...infer Rest]
-        ? [
-            (Input<First> | Effect.Effect<First, never, Req>)?,
-            ...BindParameters<Rest, Req>,
-          ]
+        ? [BindParameter<First, Req>?, ...BindParameters<Rest, Req>]
         : [];
 
 /**
@@ -121,12 +163,32 @@ export const Service = <
   id: Self["key"],
 ): Self => {
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
+  // Effect args are resolved before the impl sees them. ONE exception:
+  // an un-yielded resource constructor (the deferred form) only resolves
+  // under a Stack — when no Stack is ambient (e.g. a local factory
+  // process binding `GitHub.ListIssues(repo)` off the exported const) it
+  // passes through as-is, and the impl reads its static identity via
+  // deferredResourceMeta instead.
+  const resolveArg = (arg: any): Effect.Effect<any> =>
+    !Effect.isEffect(arg)
+      ? Effect.succeed(arg)
+      : deferredResourceMeta(arg) === undefined
+        ? (arg as Effect.Effect<any>)
+        : Effect.serviceOption(Stack).pipe(
+            Effect.flatMap((stack) =>
+              Option.isSome(stack)
+                ? (arg as Effect.Effect<any>)
+                : Effect.succeed(arg),
+            ),
+          );
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(
+      Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
+        // the PERMISSION edge: when an AcquisitionRegistry is ambient
+        // (an org host serving its own graph), record which capability
+        // was acquired against which resource(s), under the ambient
+        // attribution path (the acquiring agent/skill/tool)
+        Effect.tap((resolved) => recordAcquisition(id, args, resolved)),
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target

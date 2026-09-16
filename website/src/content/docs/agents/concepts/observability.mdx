@@ -1,0 +1,87 @@
+---
+title: Observability
+description: Every run as a structured observation stream — project it into chat summaries, stream it over the AI SDK protocol, and build your own board.
+---
+
+Agent systems fail silently without a window into them. The kernel's
+answer is a structured event stream with batteries included: a
+projection into per-run chat state, and an adapter for the
+[Vercel AI SDK UI protocol](https://ai-sdk.dev/docs/ai-sdk-ui) so any
+`useChat` front end can render live transcripts.
+
+## The observation stream
+
+Provide an `AI.KernelObserver` and the kernel reports everything it
+does — typed, ordered, per run:
+
+| observation | when |
+|---|---|
+| `admitted` | a run starts (carries the dispatch parent, if any) |
+| `input` | a message joins the thread |
+| `assistant-delta` | a streaming text/reasoning token slice |
+| `tool-call` / `tool-result` | a tool runs |
+| `assistant` | a sampling's canonical record |
+| `dispatched` | a delegation left this run (tool, target, child key) |
+| `parked` / `settled` / `crashed` | lifecycle |
+
+## The Chats projection
+
+`AI.Chats` folds observations into queryable state — a summary per
+run (status, tick count, parent, first input) plus a ring-buffered
+log and live streaming buffers — with subscriptions for tailing:
+
+```typescript
+const OrgChats = AI.ChatsMemory();
+
+const Kernel = Layer.mergeAll(
+  AI.KernelMemory.pipe(Layer.provide(Model)),
+  AI.ChatsObserver.pipe(Layer.provide(OrgChats)),   // kernel → projection
+);
+
+// anywhere the OrgChats layer reaches:
+const chats = yield* AI.Chats;
+yield* chats.list();          // every run: id, status, ticks, parent
+yield* chats.snapshot(id);    // one run's log + in-flight sampling
+yield* chats.subscribe(id);   // a queue of observations from now on
+```
+
+Statuses are honest about the actor model: `running` while a tick is
+in flight, `idle` when parked (waiting on the world — the normal
+state of a healthy org), `settled`/`crashed` at the end.
+
+## AI SDK UIMessages
+
+`AI.toUIMessages` renders a snapshot as `UIMessage[]` — inputs as
+user messages, each sampling burst as an assistant message with
+reasoning, text, and tool parts; delegations carry their child run's
+key so a UI can link a dispatch card straight to the worker's thread.
+`AI.makeChunkTranslator` does the same for live streaming as
+`UIMessageChunk` server-sent events. The org server's whole chat API
+is a few lines per route:
+
+```typescript
+// GET /api/chats/:id/messages
+const snapshot = yield* chats.snapshot(id);
+return yield* HttpServerResponse.json(
+  AI.toUIMessages(snapshot.log, snapshot.streaming),
+);
+
+// POST /api/chats/:id/stream — SSE for useChat
+const { queue, unsubscribe } = yield* chats.subscribe(id);
+const translate = AI.makeChunkTranslator();
+// ...stream chunks until the translator reports the burst done
+```
+
+On the client, that is just `useChat` pointed at your endpoints —
+thinking traces stream in, tool calls render as they happen, and a
+dispatch shows as a card linking into the sub-agent's transcript.
+
+## The board pattern
+
+Raw runs are agent-shaped; your domain probably isn't. The factory
+projects chat summaries into an **issue board** — every run keyed
+`org/repo#N` groups under its GitHub issue, with the owner thread as
+the anchor and its dispatched workers (via the parent edges) nested
+beneath. That file is ~150 lines of plain projection over
+`chats.list()` — the pattern is: kernel emits, `Chats` accumulates,
+*your* code shapes it into the domain's picture.

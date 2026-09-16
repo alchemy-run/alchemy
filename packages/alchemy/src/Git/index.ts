@@ -73,3 +73,11 @@ export {
   HasherSelf,
   HASHER_BINDING,
 } from "./Hasher/Hasher.ts";
+
+// ── repository CHECKOUTS (workspaces over clones/worktrees) ────────
+// The org's working-copy machinery — disjoint from the hosting
+// service above: checkouts of remote repos, credentials, worktrees.
+export * from "./Checkouts.ts";
+export * from "./CheckoutsWorktree.ts";
+export * from "./Credentials.ts";
+export * from "./Remote.ts";

@@ -355,10 +355,12 @@ const findByName = (accountId: string, gatewayId: string, name: string) =>
       Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
     );
 
-const createDatasetName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createDatasetName = Effect.fn(function* (
+  id: string,
+  name: string | undefined,
+) {
+  return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 /**
  * Strip readonly markers / open-union widening from the wire filters so they

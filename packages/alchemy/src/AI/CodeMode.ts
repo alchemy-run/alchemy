@@ -1,0 +1,216 @@
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as S from "effect/Schema";
+import * as AiTool from "effect/unstable/ai/Tool";
+import { Eval, type EvalResult, type EvalTool } from "./Eval.ts";
+import { Tools, type ToolMention, type ToolPresentation } from "./Tools.ts";
+
+export interface CodeModeOptions {
+  /**
+   * Wall-clock budget for one `eval` call.
+   * @default "120 seconds"
+   */
+  readonly timeout?: Duration.Input;
+}
+
+/**
+ * One CODEMODE convention — a {@link Tools} that collapses a
+ * tick's mentions into ONE `eval` tool and delegates execution to the
+ * {@link Eval} service. It owns the CONVENTION entirely:
+ *
+ * - `wrap` — the return shape in the generated signatures;
+ * - `teach` — how the model is instructed to write the program (a
+ *   COMPLETE ES module importing its capabilities from `"./tools.js"`
+ *   and default-exporting the program);
+ * - `program` — builds the module graph `Eval` runs from the model's
+ *   module: a `"tools.js"` adapter over the evaluator's reserved
+ *   `"tools.raw.js"` bridges (the effect convention re-shapes them
+ *   into Effect-returning), the model's code verbatim as
+ *   `"program.js"`, and a runner whose default export is the async
+ *   thunk the evaluator invokes — so `Eval` never learns which
+ *   convention called it.
+ */
+export const makeCodeMode = (convention: {
+  readonly wrap: (returns: string, errors: string) => string;
+  readonly teach: (signatures: string) => string;
+  readonly program: (
+    code: string,
+    toolNames: ReadonlyArray<string>,
+  ) => {
+    readonly modules: Record<string, string>;
+    readonly main: string;
+  };
+  readonly options?: CodeModeOptions;
+}): Layer.Layer<Tools, never, Eval> =>
+  Layer.effect(
+    Tools,
+    Effect.map(Eval, (evaluator) => ({
+      present: (mentions) =>
+        Effect.sync((): ToolPresentation => {
+          const signatures = mentions
+            .map((mention) => renderSignature(mention, convention.wrap))
+            .join("\n\n");
+          const timeout = convention.options?.timeout ?? "120 seconds";
+          const tools: ReadonlyArray<EvalTool> = mentions.map((mention) => ({
+            name: mention.name,
+            call: mention.handler,
+          }));
+          const toolNames = mentions.map((mention) => mention.name);
+          return {
+            tools: [compileEvalTool(convention.teach(signatures))],
+            handlers: {
+              // `title` is for the reader (the card's label) — the
+              // program is what runs
+              eval: (input: { title: string; code: string }) =>
+                evaluator
+                  .run({
+                    ...convention.program(input.code, toolNames),
+                    tools,
+                    timeout,
+                  })
+                  .pipe(Effect.map(renderResult)) as Effect.Effect<string, any>,
+            },
+          };
+        }),
+    })),
+  );
+
+// ── JSON schema → TS-ish signature text ─────────────────────────────
+
+const renderType = (schema: any, depth = 0): string => {
+  if (schema === undefined || schema === null || depth > 6) return "unknown";
+  if (schema.$ref !== undefined) return "unknown";
+  if (Array.isArray(schema.anyOf)) {
+    return schema.anyOf
+      .map((member: any) => renderType(member, depth + 1))
+      .join(" | ");
+  }
+  if (Array.isArray(schema.enum)) {
+    return schema.enum.map((value: any) => JSON.stringify(value)).join(" | ");
+  }
+  switch (schema.type) {
+    // not JSON schema — the driver's marker for a tool that answers
+    // nothing (see the mention building in DriverCore.ts)
+    case "void":
+      return "void";
+    case "string":
+      return "string";
+    case "number":
+    case "integer":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "null":
+      return "null";
+    case "array":
+      return `Array<${renderType(schema.items, depth + 1)}>`;
+    case "object": {
+      const properties = schema.properties ?? {};
+      const required = new Set<string>(schema.required ?? []);
+      const fields = Object.entries(properties).map(
+        ([key, value]) =>
+          `${key}${required.has(key) ? "" : "?"}: ${renderType(value, depth + 1)}`,
+      );
+      return fields.length === 0 ? "{}" : `{ ${fields.join("; ")} }`;
+    }
+    default:
+      return "unknown";
+  }
+};
+
+/**
+ * A DECLARED failure as a type the model can program against: the
+ * tagged shape `{ _tag: "NotFound"; message: string }` — the `_tag`
+ * is the literal the program catches on (`Effect.catchTag`, or a
+ * `_tag` check in a promise rejection handler), and the fields are
+ * whatever the error schema can describe (a `Schema.TaggedError`
+ * carries them; a `Data.TaggedError` contributes the tag alone).
+ */
+const renderErrorType = (error: {
+  readonly tag: string;
+  readonly fields?: unknown;
+}): string => {
+  const schema = (error.fields ?? {}) as {
+    properties?: Record<string, unknown>;
+    required?: ReadonlyArray<string>;
+  };
+  const properties = { ...schema.properties };
+  delete properties._tag; // ours to render — always the literal
+  const required = new Set(schema.required ?? []);
+  const fields = Object.entries(properties).map(
+    ([key, value]) =>
+      `${key}${required.has(key) ? "" : "?"}: ${renderType(value, 1)}`,
+  );
+  const tag = `_tag: ${JSON.stringify(error.tag)}`;
+  return fields.length === 0
+    ? `{ ${tag} }`
+    : `{ ${tag}; ${fields.join("; ")} }`;
+};
+
+/**
+ * One `declare function` line per mention, with its doc as a comment —
+ * plus a line per DECLARED failure, so the model can see what a call
+ * may fail with and handle it. `wrap` reflects the convention's return
+ * shape: it receives the SUCCESS type (every tool declares one — an
+ * explicit `returns` schema or `${AI.out(…)}` splices; see ToolReturns
+ * in Tool.ts) and the union of the declared failures as TAGGED SHAPES
+ * (`{ _tag: "NotFound"; message: string } | …`, `never` when the tool
+ * declares none) — the effect convention puts that union in the
+ * `Effect<A, E>` error channel verbatim.
+ */
+export const renderSignature = (
+  mention: ToolMention,
+  wrap: (returns: string, errors: string) => string,
+): string => {
+  const lines = mention.description.split("\n");
+  for (const error of mention.errors) {
+    lines.push(`@throws ${renderErrorType(error)}`);
+  }
+  const doc = lines.map((line) => `// ${line}`).join("\n");
+  const errors =
+    mention.errors.length === 0
+      ? "never"
+      : mention.errors.map(renderErrorType).join(" | ");
+  return `${doc}\ndeclare function ${mention.name}(input: ${renderType(
+    mention.parameters,
+  )}): ${wrap(renderType(mention.returns), errors)}`;
+};
+
+/** Render an eval result as the tool result the model reads —
+ *  the output, plus captured console logs when the program printed. */
+const renderResult = (result: EvalResult): string => {
+  const output =
+    result.output === undefined
+      ? "undefined"
+      : typeof result.output === "string"
+        ? result.output
+        : (JSON.stringify(result.output, null, 2) ?? String(result.output));
+  return result.logs.length === 0
+    ? output
+    : `${output}\n\n--- logs ---\n${result.logs.join("\n")}`;
+};
+
+/** What the model must say about EACH program besides the code — the
+ *  label an operator reads above the (collapsed) source, so a run
+ *  tells its story in titles. */
+const TITLE_TEACHING = `Give every program a \`title\`: ONE short line, in plain words, saying what this particular run is trying to find out or do ("find every open dependabot PR", "read the five pulls before naming the thread"). It labels the run for the operator, who sees the title and the result first and opens the code only when curious — so name the intent, never restate the code.`;
+
+const compileEvalTool = (description: string) =>
+  AiTool.make("eval", {
+    description: `${description}
+
+${TITLE_TEACHING}`,
+    parameters: S.Struct({
+      title: S.String.annotate({
+        description:
+          "One short line: what this program is trying to find out or do — the label the operator reads above the collapsed code.",
+      }),
+      code: S.String.annotate({
+        description: "The complete module to run.",
+      }),
+    }) as any,
+    success: S.Unknown,
+    failure: S.Unknown,
+    failureMode: "return",
+  }).annotate(AiTool.Strict, false);

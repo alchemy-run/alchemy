@@ -24,7 +24,7 @@ import { AWSEnvironment } from "../Environment.ts";
  * Method identity/shape is preserved exactly — the Provider interface is
  * structural, and the Proxy forwards non-function members (`version`,
  * `stables`, `aliases`, `nuke`, ...) untouched. Modeled on the lifecycle
- * Proxy in [Local/RpcProvider.ts](../../Local/RpcProvider.ts).
+ * Proxy in [Dev/RpcProvider.ts](../../Dev/RpcProvider.ts).
  */
 export const withProviderContext = <R extends ResourceLike>(
   provider: ProviderService<R>,

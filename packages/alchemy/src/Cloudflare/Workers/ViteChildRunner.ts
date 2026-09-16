@@ -12,7 +12,7 @@ import {
 } from "../../Artifacts.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import * as Credentials from "../Credentials.ts";
-import * as RpcServerEnvironment from "../../Local/RpcServerEnvironment.ts";
+import * as RpcServerEnvironment from "../../Dev/RpcServerEnvironment.ts";
 import { PlatformServices, runMain } from "../../Util/PlatformServices.ts";
 import { materializeRuntimeBindings } from "./RuntimeBindings.ts";
 import { loadSource, SourceProviderError } from "./Source.ts";

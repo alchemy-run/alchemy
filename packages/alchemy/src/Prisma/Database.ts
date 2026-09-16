@@ -13,7 +13,7 @@ import {
   ensurePrismaDevDatabase,
 } from "./PrismaDevDatabase.ts";
 import { DEV_TIMESTAMP, attrOrString, devId } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import {
   PrismaClient,

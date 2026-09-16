@@ -9,6 +9,7 @@ export { Region } from "@distilled.cloud/aws/Region";
 
 export * as AccessAnalyzer from "./AccessAnalyzer/index.ts";
 export * as Account from "./Account/index.ts";
+export * as AI from "./AI/index.ts";
 export * as ACM from "./ACM/index.ts";
 export * as ACMPCA from "./ACMPCA/index.ts";
 export * as AIOps from "./AIOps/index.ts";

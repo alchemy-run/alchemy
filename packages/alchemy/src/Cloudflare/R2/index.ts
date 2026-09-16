@@ -1,3 +1,4 @@
+export * from "./AccessKey.ts";
 export * from "./Bucket.ts";
 export * from "./BucketEventNotification.ts";
 export * from "./BucketTypes.ts";
@@ -11,6 +12,7 @@ export * from "./ReadWriteBucket.ts";
 export * from "./ReadWriteBucketBinding.ts";
 export * from "./ReadWriteBucketHttp.ts";
 export * from "./ReadWriteBucketLocal.ts";
+export * from "./Tigrisfs.ts";
 export * from "./WriteBucket.ts";
 export * from "./WriteBucketBinding.ts";
 export * from "./WriteBucketHttp.ts";

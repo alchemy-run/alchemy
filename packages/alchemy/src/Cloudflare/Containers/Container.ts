@@ -384,6 +384,53 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }
  * ```
  *
+ * ### Binding-Contributed Image Statements
+ * Bindings used inside an Effect-native container's `.make()` init can
+ * contribute Dockerfile statements to the generated image via the
+ * `Docker.Host` service (which every image-generating platform
+ * provides — Cloudflare Containers, AWS MicroVMs, ECS Tasks…) — so a
+ * binding carries its own system dependencies instead of demanding
+ * them from every image that binds it. `FUSE.MountTigrisfs`
+ * is the canonical example: it installs `fuse3` + `tigrisfs` into
+ * whatever image hosts the mount. Fragments are pure functions of the
+ * image target (`{ arch }`), rendered once per architecture, so one
+ * contribution serves both the `linux/amd64` deploy image and a
+ * native-arch dev image.
+ *
+ * **Example:** A container that FUSE-mounts a bucket, no Dockerfile needed
+ * ```typescript
+ * export default Sandbox.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const persist = yield* FUSE.Mount(Bucket, { path: "/persist" });
+ *     // ... the generated image now carries fuse3 + tigrisfs
+ *   }).pipe(Effect.provide(FUSE.MountTigrisfs)),
+ * );
+ * ```
+ *
+ * ### Local Development
+ * Under `alchemy dev`, Effect-native (`main`) containers build their
+ * dev image for the HOST architecture by default — on Apple Silicon
+ * this avoids linux/amd64 emulation, which makes heavy image builds
+ * (apt installs, compiles) take minutes instead of seconds. This is
+ * safe because the generated Dockerfile and any binding-contributed
+ * fragments are architecture-parameterized. Deploys are unaffected:
+ * the deployed image always builds `linux/amd64`, Cloudflare's
+ * container platform.
+ *
+ * **Example:** Pin the dev image to amd64 (production parity)
+ * ```typescript
+ * export default Sandbox.make(
+ *   {
+ *     main: import.meta.url,
+ *     // opt out of native-arch dev builds — e.g. an inline `dockerfile`
+ *     // preamble hardcodes an amd64-only binary
+ *     dev: { platform: "linux/amd64" },
+ *   },
+ *   Effect.gen(function* () { ... }),
+ * );
+ * ```
+ *
  * ### Configuration
  * The props object — the first argument to `.make()` — accepts `main`
  * (entrypoint file), `instanceType` (compute size), `runtime`

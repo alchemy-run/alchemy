@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as zlib from "node:zlib";
+import { concatBytes } from "./bytes.ts";
 
 const encoder = new TextEncoder();
 
@@ -88,17 +89,6 @@ const gnuLongLink = (name: string): Uint8Array[] => {
   });
   const pad = pad512(bytes.length);
   return pad > 0 ? [header, bytes, new Uint8Array(pad)] : [header, bytes];
-};
-
-const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const total = chunks.reduce((n, chunk) => n + chunk.byteLength, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
 };
 
 type WalkEntry = {
@@ -203,6 +193,6 @@ export const tarGzipDirectory = Effect.fn(function* (
     if (pad > 0) chunks.push(new Uint8Array(pad));
   }
   chunks.push(new Uint8Array(1024));
-  const tar = concat(chunks);
+  const tar = concatBytes(chunks);
   return yield* Effect.sync(() => zlib.gzipSync(tar));
 });

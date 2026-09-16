@@ -24,7 +24,7 @@ import type { ResourceBinding } from "../Resource.ts";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
-} from "../Server/Process.ts";
+} from "../Local/Process.ts";
 import {
   copyExtraFiles,
   contextRootOf,

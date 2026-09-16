@@ -1,0 +1,89 @@
+---
+title: Human in the loop
+description: Approval as composition — humans are slow, authoritative tool implementations, and supervised mode is a Layer swap, not a framework feature.
+---
+
+Most agent frameworks bake "human approval" in as a special node. In
+alchemy it needs no machinery at all, because the pieces already
+exist: **tools gate actions**, **runs park for free**, and **who
+satisfies a gate is a Layer choice**. A human is, structurally, a
+slow and authoritative tool implementation.
+
+## The gate lives in tool physics
+
+The factory's merge tool refuses to act without an approval on
+record:
+
+```typescript
+// services/alchemy-org/src/tools/MergePullRequest.ts
+const recorded = yield* approvals.isApproved(input.pr);
+if (!recorded) {
+  const reviews = yield* listReviews({ pull_number: input.pr.number });
+  if (!reviews.some((review) => review.state === "APPROVED")) {
+    return yield* Effect.fail(
+      `refusing to merge #${input.pr.number}: no approval on record ` +
+        `and no APPROVED GitHub review. ...if a reviewer already ` +
+        `recommended approval, a HUMAN review is still pending — ` +
+        `note it, set a reminder, and retry after it lands`,
+    );
+  }
+}
+```
+
+The invariant — *no merge without approval* — is code, indifferent to
+whether the approver has a pulse. The refusal is a model-visible fact
+the agent can act on sensibly: note the state, park on a
+[reminder](/agents/concepts/runs), retry when the world moves.
+
+## The dial is a Layer
+
+Whether the *machine's* verdict satisfies that gate is decided by
+which implementation of the `Approve` tool the reviewer gets:
+
+```typescript
+// autonomous: the reviewer's approval is recorded — the org runs itself
+const Approval = ApproveRecorded;
+
+// supervised: the verdict becomes an ADVISORY comment; nothing recorded
+const Approval = ApproveRequested;
+```
+
+Same charters, same prose, same tools everywhere — the second key of
+the two-key ceremony moves from machine to human purely by
+composition. The factory flips it with an environment variable:
+
+```typescript
+const Approval =
+  process.env.ORG_SUPERVISED === "1" ? ApproveRequested : ApproveRecorded;
+```
+
+In supervised mode the reviewer still judges and still calls
+`approve` — its handler just posts "reviewer recommends approval —
+advisory" on the PR instead of writing the approvals ledger. The
+owner's merge then refuses, it sets itself a reminder, and parks.
+
+## The human's key
+
+The approval arrives through whatever door fits your world:
+
+- **Where the artifact lives** — a real APPROVED review on GitHub,
+  which the merge tool already honors. The cleanest audit trail.
+- **Your own surface** — the factory's org server exposes
+  `POST /api/prs/:number/approve`, which writes the same approvals
+  ledger the merge ratifies against and posts a confirmation comment.
+  (It exists because a single-token sandbox can't self-approve on
+  GitHub; real deployments with separate bot and maintainer
+  identities prefer the review.)
+- **A chat message** — any comment wakes the parked owner, whose
+  retry then *verifies* the actual approval state; a lying "approved"
+  comment merges nothing.
+
+## Why this scales
+
+Notice what never appeared: no pause/resume API, no approval node
+type, no callback registration. The agent parks because quiescence is
+free; the human answers on their own time; the answer arrives as an
+ordinary event; and the invariant holds because it lives in tool
+physics rather than in anyone's judgment. Any action you'd gate on a
+human — deletes, spends, sends — is the same recipe: a tool whose
+implementation checks a ledger only humans (or trusted code) write.

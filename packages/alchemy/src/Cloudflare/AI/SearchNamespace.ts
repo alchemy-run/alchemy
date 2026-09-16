@@ -247,8 +247,9 @@ export const SearchNamespaceProvider = () =>
           })
           .pipe(
             Effect.map((created) => ({ created: true as const, ns: created })),
-            Effect.catchTag("NamespaceAlreadyExists", (originalError) =>
-              Effect.gen(function* () {
+            Effect.catchTag(
+              "NamespaceAlreadyExists",
+              Effect.fn(function* (originalError) {
                 const existing = yield* getNamespace(acct, name);
                 if (!existing) return yield* Effect.fail(originalError);
                 return { created: false as const, ns: existing };
@@ -343,15 +344,16 @@ const getNamespace = (accountId: string, name: string) =>
       Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
     );
 
-const createNamespaceName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    // Cloudflare restricts namespace names to lowercase alphanumerics and
-    // hyphens, 1-28 characters.
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 28 }))
-    );
-  });
+const createNamespaceName = Effect.fn(function* (
+  id: string,
+  name: string | undefined,
+) {
+  // Cloudflare restricts namespace names to lowercase alphanumerics and
+  // hyphens, 1-28 characters.
+  return (
+    name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 28 }))
+  );
+});
 
 /**
  * Cloudflare returns `null` for an unset description; desired-state

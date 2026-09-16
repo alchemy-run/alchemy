@@ -134,8 +134,8 @@ export type ProviderKey = {
  * @product AI Gateway
  * @category AI
  */
-export const ProviderKey = (id: string, props: InputProps<ProviderKeyProps>) =>
-  Effect.gen(function* () {
+export const ProviderKey = Effect.fn(
+  function* (id: string, props: InputProps<ProviderKeyProps>) {
     const alias = props.alias ?? "default";
     const secret = yield* Secret("Secret", {
       store: props.store,
@@ -159,4 +159,6 @@ export const ProviderKey = (id: string, props: InputProps<ProviderKeyProps>) =>
       secret,
       gatewayProvider,
     } satisfies ProviderKey;
-  }).pipe(Namespace.push(id));
+  },
+  (effect, id) => effect.pipe(Namespace.push(id)),
+);

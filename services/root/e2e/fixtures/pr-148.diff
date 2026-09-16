@@ -1,0 +1,14 @@
+diff --git a/flow-test/sum.ts b/flow-test/sum.ts
+new file mode 100644
+index 0000000..3b1c2d4
+--- /dev/null
++++ b/flow-test/sum.ts
+@@ -0,0 +1,8 @@
++/** Sums the first n positive integers. */
++export function sumToN(n: number): number {
++  let total = 0;
++  for (let i = 1; i < n; i++) {
++    total += i;
++  }
++  return total;
++}

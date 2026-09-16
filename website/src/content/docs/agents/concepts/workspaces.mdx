@@ -1,0 +1,80 @@
+---
+title: Workspaces
+description: Git checkouts as capabilities — per-run worktrees with escape-proof containment, and workspace topology decided by run keys.
+---
+
+Coding agents need somewhere to work. Alchemy models that as two
+capabilities: **`Git.Workspaces`** (a repository checked out
+somewhere, addressed by key) and **`Workspace`** (the containment
+root an agent's file tools resolve against).
+
+## Checkouts by key
+
+```typescript
+import * as Git from "alchemy/Git";
+
+const workspaces = yield* Git.Workspaces;
+const ws = yield* workspaces.checkout({ key, remote });
+// ws.root, ws.branch — idempotent: same key, same tree
+```
+
+`checkout` is **idempotent by key**: the key is the address, and any
+holder of the same key lands in the same tree. The local physics is
+`Git.WorkspacesWorktree` — one central blobless clone per remote,
+one `git worktree add` per key — so per-run trees are cheap and share
+an object store. The contract is a Layer like everything else;
+container- and cloud-backed implementations slot in without touching
+consumers.
+
+## Containment: `Workspace.perRun`
+
+Agents don't handle paths to their checkout — their file tools
+resolve through the `Workspace` capability, whose `perRun` layer
+derives the root from the **current run's key** at call time:
+
+```typescript
+// the entrypoint, once:
+Layer.provide(Workspace.perRun({ remote: GitHub.remote(repo) })),
+Layer.provide(Git.WorkspacesWorktree({ root: workspaceRoot })),
+```
+
+Every `grep`, `readFile`, and `bash` call now operates inside the
+run's own worktree — checked out lazily on first use — and paths that
+try to escape fail with a model-visible error. Path discipline needs
+no prose: an agent physically cannot touch another run's tree.
+
+## Topology is the key
+
+Because checkouts are addressed by key, *who shares an environment
+with whom* is decided wherever run keys are derived — usually a
+[door's](/agents/concepts/delegation) policy, one line of code next
+to the prose:
+
+```typescript
+// ISOLATED: each worker gets its own tree
+(p, thread) => ({ task: p.task, key: `${thread.key}/Engineer/build` })
+
+// SHARED: both workers keyed by the issue → one tree
+(p, thread) => ({ task: p.task, key: thread.key })
+```
+
+The factory uses the shared form: its Engineer *and* Reviewer are
+both keyed by the issue, so the reviewer explores the exact tree the
+engineer built in and runs the test suite itself before approving —
+verification against reality, not against the diff's claims. The
+owner sequences the two through call/reply, so the shared tree is
+never touched concurrently.
+
+The artifact that crosses machine boundaries is always the **pushed
+branch**, never a shared filesystem — two agents that must
+collaborate either take turns in one tree (same key, sequenced) or
+work in separate trees and meet through git.
+
+## Digest-guarded edits
+
+The file tools layer (`WorkspaceFiles`) guards mutation with content
+digests: `readFile` returns a SHA-256, `editFile` requires the digest
+it expects to be editing, and a stale digest is a model-visible
+refusal. The read-before-edit discipline taught in the `Coding` skill
+is thus also *enforced* — an agent can never overwrite a version it
+hasn't seen.

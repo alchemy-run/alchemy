@@ -316,10 +316,12 @@ const findTokenByName = (accountId: string, name: string) =>
     Effect.map(Option.getOrUndefined),
   );
 
-const createTokenName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createTokenName = Effect.fn(function* (
+  id: string,
+  name: string | undefined,
+) {
+  return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 /**
  * A freshly minted underlying API token may not have propagated yet when

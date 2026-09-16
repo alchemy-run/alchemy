@@ -33,7 +33,7 @@ export interface ConnectionInfo {
    * Per-execution pools (Lambda invoke, Worker event) never need it — the
    * `Connect` runtime effect re-runs on each execution and mints a fresh
    * token as `password`/`url`. Long-lived serverful pools (ECS Task /
-   * ServerHost) should wire this into the driver's lazy-password hook
+   * Host) should wire this into the driver's lazy-password hook
    * (`postgres.js` `pass: () => ...`, `pg` `password: () => ...`) so every
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.

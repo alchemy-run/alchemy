@@ -1,5 +1,5 @@
 import * as AWS from "alchemy/AWS";
-import { SQSQueueEventSource } from "alchemy/Server/SQSQueueEventSource";
+import { SQSQueueEventSource } from "alchemy/Local/SQSQueueEventSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

@@ -63,37 +63,36 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
       model: TOOL_MODEL,
       parameters: { temperature: 0.2, maxTokens: 1024 },
     });
-    const dumpRawStream = (
+    const dumpRawStream = Effect.fn(function* (
       model: string,
       messages: ReadonlyArray<{ role: string; content: string }>,
       streamOptions: Record<string, unknown> | undefined,
-    ) =>
-      Effect.gen(function* () {
-        const ai = yield* aiGateway.raw;
-        const gatewayId = yield* aiGateway.id;
-        const response = yield* Effect.tryPromise({
-          try: () =>
-            ai.run(
-              model as keyof AiModels,
-              {
-                messages,
-                stream: true,
-                ...streamOptions,
-              } as unknown as AiModels[keyof AiModels]["inputs"],
-              { gateway: { id: gatewayId }, returnRawResponse: true },
-            ),
-          catch: (e) => e,
-        });
-        if (response.body == null)
-          return HttpServerResponse.text("no body", { status: 500 });
-        const body = Stream.fromReadableStream<Uint8Array, never>({
-          evaluate: () => response.body!,
-          onError: () => undefined as never,
-        });
-        return HttpServerResponse.stream(body, {
-          headers: { "content-type": "text/event-stream" },
-        });
-      }).pipe(Effect.orDie);
+    ) {
+      const ai = yield* aiGateway.raw;
+      const gatewayId = yield* aiGateway.id;
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          ai.run(
+            model as keyof AiModels,
+            {
+              messages,
+              stream: true,
+              ...streamOptions,
+            } as unknown as AiModels[keyof AiModels]["inputs"],
+            { gateway: { id: gatewayId }, returnRawResponse: true },
+          ),
+        catch: (e) => e,
+      });
+      if (response.body == null)
+        return HttpServerResponse.text("no body", { status: 500 });
+      const body = Stream.fromReadableStream<Uint8Array, never>({
+        evaluate: () => response.body!,
+        onError: () => undefined as never,
+      });
+      return HttpServerResponse.stream(body, {
+        headers: { "content-type": "text/event-stream" },
+      });
+    }, Effect.orDie);
 
     return {
       fetch: Effect.gen(function* () {

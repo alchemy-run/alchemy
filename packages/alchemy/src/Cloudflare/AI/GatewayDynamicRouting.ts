@@ -423,8 +423,9 @@ export const DynamicRoutingProvider = () =>
             // `RouteAlreadyExists` via a distilled patch). Route names are
             // unique and deterministic, so the holder is a stale duplicate
             // of this logical resource — delete it and retry the rename.
-            Effect.catchTag("RouteAlreadyExists", (error) =>
-              Effect.gen(function* () {
+            Effect.catchTag(
+              "RouteAlreadyExists",
+              Effect.fn(function* (error) {
                 const holder = yield* findByName(accountId, gatewayId, name);
                 if (holder === undefined || holder.id === routeId) {
                   return yield* Effect.fail(error);
@@ -526,32 +527,31 @@ export const DynamicRoutingProvider = () =>
  * deployment/version metadata, no `version.data` — so hydrate every route with
  * a per-route `get` to populate `elements` into the exact `read` shape.
  */
-const listRoutes = (accountId: string, gatewayId: string) =>
-  Effect.gen(function* () {
-    const perPage = 50;
-    const ids: string[] = [];
-    for (let page = 1; ; page++) {
-      const response = yield* aiGateway.listDynamicRoutings({
-        accountId,
-        gatewayId,
-        page,
-        perPage,
-      });
-      const routes = response.data.routes;
-      for (const route of routes) {
-        ids.push(route.id);
-      }
-      if (routes.length < perPage) break;
+const listRoutes = Effect.fn(function* (accountId: string, gatewayId: string) {
+  const perPage = 50;
+  const ids: string[] = [];
+  for (let page = 1; ; page++) {
+    const response = yield* aiGateway.listDynamicRoutings({
+      accountId,
+      gatewayId,
+      page,
+      perPage,
+    });
+    const routes = response.data.routes;
+    for (const route of routes) {
+      ids.push(route.id);
     }
-    const hydrated = yield* Effect.forEach(
-      ids,
-      (id) => getRoute(accountId, gatewayId, id),
-      { concurrency: 10 },
-    );
-    return hydrated
-      .filter((r) => r !== undefined)
-      .map((route) => toAttributes(route, accountId));
-  });
+    if (routes.length < perPage) break;
+  }
+  const hydrated = yield* Effect.forEach(
+    ids,
+    (id) => getRoute(accountId, gatewayId, id),
+    { concurrency: 10 },
+  );
+  return hydrated
+    .filter((r) => r !== undefined)
+    .map((route) => toAttributes(route, accountId));
+});
 
 /**
  * Read a route by id, mapping "gone" (`RouteNotFound`, Cloudflare error code
@@ -574,10 +574,12 @@ const findByName = (accountId: string, gatewayId: string, name: string) =>
     Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
   );
 
-const createRouteName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-  });
+const createRouteName = Effect.fn(function* (
+  id: string,
+  name: string | undefined,
+) {
+  return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+});
 
 /**
  * The deployed element graph. Cloudflare returns it as `version.data` (the

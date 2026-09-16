@@ -10,7 +10,7 @@ import {
   devId,
   devProvider,
 } from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {

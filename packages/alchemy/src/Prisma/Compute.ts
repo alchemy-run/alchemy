@@ -26,10 +26,10 @@ import type { InputProps } from "../Input.ts";
 import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as ProviderLayer from "../Dev/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import type * as Server from "../Server/index.ts";
+import type * as Server from "../Local/index.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import {

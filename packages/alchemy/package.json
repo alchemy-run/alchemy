@@ -34,7 +34,8 @@
   "scripts": {
     "clear:state": "cd ../../ && bun clear:state",
     "dev": "tsdown --watch",
-    "build": "rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle && bun ../../scripts/copy-package-files.ts alchemy",
+    "build": "bun generate:eval-runtime && rm -rf lib && tsc -b --force && tsc -b tsconfig.bin.json --force && bun bundle && bun ../../scripts/copy-package-files.ts alchemy",
+    "generate:eval-runtime": "bun scripts/generate-eval-effect-runtime.ts",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "test": "alchemy-test --exclude test/Railway",
@@ -64,6 +65,14 @@
       "bun": "./src/AI/index.ts",
       "worker": "./src/AI/index.ts",
       "import": "./lib/AI/index.js"
+    },
+    "./AI/React": {
+      "types": "./lib/AI/React.d.ts",
+      "bun": "./src/AI/React.ts",
+      "worker": "./src/AI/React.ts",
+      "import": "./lib/AI/React.js",
+      "react-server": "./src/AI/React.ts",
+      "default": "./src/AI/React.ts"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -131,11 +140,11 @@
       "worker": "./src/Docker/index.ts",
       "import": "./lib/Docker/index.js"
     },
-    "./Git": {
-      "types": "./lib/Git/index.d.ts",
-      "bun": "./src/Git/index.ts",
-      "worker": "./src/Git/index.ts",
-      "import": "./lib/Git/index.js"
+    "./FUSE": {
+      "types": "./lib/FUSE/index.d.ts",
+      "bun": "./src/FUSE/index.ts",
+      "worker": "./src/FUSE/index.ts",
+      "import": "./lib/FUSE/index.js"
     },
     "./Git/Hasher": {
       "types": "./lib/Git/Hasher/index.d.ts",
@@ -214,6 +223,24 @@
       "bun": "./src/Axiom/index.ts",
       "worker": "./src/Axiom/index.ts",
       "import": "./lib/Axiom/index.js"
+    },
+    "./Discord": {
+      "types": "./lib/Discord/index.d.ts",
+      "bun": "./src/Discord/index.ts",
+      "worker": "./src/Discord/index.ts",
+      "import": "./lib/Discord/index.js"
+    },
+    "./Git": {
+      "types": "./lib/Git/index.d.ts",
+      "bun": "./src/Git/index.ts",
+      "worker": "./src/Git/index.ts",
+      "import": "./lib/Git/index.js"
+    },
+    "./Workspace": {
+      "types": "./lib/Workspace/index.d.ts",
+      "bun": "./src/Workspace/index.ts",
+      "worker": "./src/Workspace/index.ts",
+      "import": "./lib/Workspace/index.js"
     },
     "./GitHub": {
       "types": "./lib/GitHub/index.d.ts",
@@ -357,6 +384,12 @@
       "worker": "./src/SQL/*.ts",
       "import": "./lib/SQL/*.js"
     },
+    "./Code": {
+      "types": "./lib/Code/index.d.ts",
+      "bun": "./src/Code/index.ts",
+      "worker": "./src/Code/index.ts",
+      "import": "./lib/Code/index.js"
+    },
     "./SQLite": {
       "types": "./lib/SQLite/index.d.ts",
       "bun": "./src/SQLite/index.ts",
@@ -369,11 +402,11 @@
       "worker": "./src/TUI/index.ts",
       "import": "./lib/TUI/index.js"
     },
-    "./Server": {
-      "types": "./lib/Server/index.d.ts",
-      "bun": "./src/Server/index.ts",
-      "worker": "./src/Server/index.ts",
-      "import": "./lib/Server/index.js"
+    "./Local": {
+      "types": "./lib/Local/index.d.ts",
+      "bun": "./src/Local/index.ts",
+      "worker": "./src/Local/index.ts",
+      "import": "./lib/Local/index.js"
     },
     "./Stack": {
       "types": "./lib/Stack.d.ts",
@@ -451,6 +484,7 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
+    "@effect/ai-anthropic": "catalog:",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
@@ -459,6 +493,7 @@
     "@octokit/webhooks": "catalog:",
     "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
+    "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
@@ -471,6 +506,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@ai-sdk/react": "^3.0.0",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:",
     "@cloudflare/containers": "catalog:",

@@ -97,7 +97,7 @@ release blog post under website/src/content/docs/blog/.
 ```
 
 Each tool is an `AI.Tool` — an Effect service with schema-typed
-parameters (`AI.Parameter`) — so implementations are swappable
+parameters (`AI.Thing`) — so implementations are swappable
 layers. `src/tools/Fs.ts` ships two `WriteFile` implementations:
 `WriteFileR2` puts files in an R2 bucket, `WriteFileDevBox` writes to
 the container's filesystem. The DO picks one at layer-composition

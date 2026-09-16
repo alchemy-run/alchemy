@@ -1,0 +1,49 @@
+diff --git a/src/arrays.ts b/src/arrays.ts
+new file mode 100644
+index 0000000..9f1a2b3
+--- /dev/null
++++ b/src/arrays.ts
+@@ -0,0 +1,14 @@
++export function chunk<T>(values: T[], size: number): T[][] {
++  if (!Number.isInteger(size) || size < 1) {
++    throw new Error("chunk size must be a positive integer");
++  }
++  const chunks: T[][] = [];
++  for (let index = 0; index + size <= values.length; index += size) {
++    chunks.push(values.slice(index, index + size));
++  }
++  return chunks;
++}
++
++export function unique<T>(values: T[]): T[] {
++  return [...new Set(values)];
++}
+diff --git a/test/arrays.test.ts b/test/arrays.test.ts
+new file mode 100644
+index 0000000..c4d5e6f
+--- /dev/null
++++ b/test/arrays.test.ts
+@@ -0,0 +1,23 @@
++import { describe, it, expect } from "bun:test";
++import { chunk, unique } from "../src/arrays";
++
++describe("arrays", () => {
++  it("should chunk an array into equal parts", () => {
++    expect(chunk([1, 2, 3, 4], 2)).toEqual([
++      [1, 2],
++      [3, 4],
++    ]);
++  });
++
++  it("should chunk into single-element parts", () => {
++    expect(chunk([1, 2, 3], 1)).toEqual([[1], [2], [3]]);
++  });
++
++  it("should throw on a non-positive size", () => {
++    expect(() => chunk([1], 0)).toThrow();
++  });
++
++  it("should dedupe preserving order", () => {
++    expect(unique([3, 1, 3, 2, 1])).toEqual([3, 1, 2]);
++  });
++});

@@ -1,0 +1,20 @@
+// Throwaway: scoped typecheck of src/AI + test/AI against src (no project
+// references / stale lib), while an unrelated pre-existing error in
+// src/Cloudflare blocks `tsc -b` emission. Delete once that is fixed.
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src/AI/**/*.ts", "test/AI/**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "skipLibCheck": true,
+    "rewriteRelativeImportExtensions": false,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+  }
+}

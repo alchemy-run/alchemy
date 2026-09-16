@@ -92,7 +92,7 @@ export const isFunction = (value: any): value is Function => {
 /**
  * True for any Alchemy host that accepts the `{ env, policyStatements }`
  * binding contract: the Lambda `Function`, the ECS `Task` and `Service`, and
- * the EKS `ServerHost`. AWS `Binding.Service` implementations guard their
+ * the EKS `Host`. AWS `Binding.Service` implementations guard their
  * deploy-time
  * `host.bind` registration with this predicate so every existing capability
  * (S3, DynamoDB, SQS, …) lands its IAM on whichever of the three hosts is in

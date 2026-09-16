@@ -1,4 +1,5 @@
 import * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -11,6 +12,7 @@ import type { ValidationException } from "@distilled.cloud/aws/Errors";
 import * as Artifacts from "../../Artifacts.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
+import { hostStatementsFor, type Host } from "../../Docker/Host.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -18,6 +20,7 @@ import { createInternalTags, diffTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { Assets } from "../Assets.ts";
 import {
+  type ArtifactFile,
   buildMicrovmDockerfile,
   bundleMicrovmProgram,
   DEFAULT_MICROVM_PORT,
@@ -83,6 +86,13 @@ const buildPropsIdentity = (news: MicrovmImageProps) =>
     additionalOsCapabilities: [...(news.additionalOsCapabilities ?? [])].sort(),
     hooks: news.hooks ?? null,
     env: news.env ?? {},
+    // Fingerprints only — the directory contents are hashed into the
+    // artifact at apply time; the fingerprint is the cheap plan-time
+    // identity that triggers the rebuild.
+    contextInclude: (news.contextInclude ?? []).map((include) => ({
+      to: include.to,
+      fingerprint: include.fingerprint ?? null,
+    })),
   });
 
 interface ResolvedArtifact {
@@ -105,7 +115,17 @@ type ArtifactContent = {
    * already carry (`sha256(identity + ":" + propsId)`).
    */
   readonly identity: string;
-} & ({ readonly archive: Uint8Array } | { readonly uri: string });
+} & (
+  | {
+      /**
+       * Materializes the archive on demand — deferred because a baked
+       * `contextInclude` can be ~1GB, and an unchanged artifact (or a
+       * diff-time hash) must never pay the read + zip.
+       */
+      readonly buildArchive: Effect.Effect<Uint8Array, any, any>;
+    }
+  | { readonly uri: string }
+);
 
 /** The props that decide what the artifact's CONTENT is. */
 type ContentInputs = Pick<
@@ -119,6 +139,9 @@ type ContentInputs = Pick<
   | "isExternal"
   | "external"
   | "build"
+  | "contextInclude"
+  | "imageStatements"
+  | "cpuConfigurations"
 >;
 
 /**
@@ -143,6 +166,9 @@ const resolvedContentInputs = (
     isExternal: n.isExternal,
     external: n.external,
     build: n.build,
+    contextInclude: n.contextInclude,
+    imageStatements: n.imageStatements,
+    cpuConfigurations: n.cpuConfigurations,
   };
   if (!isResolved(picked)) return undefined;
   // `isResolved` has verified every field; the cast only re-states that
@@ -200,12 +226,48 @@ const defaultBaseImageArn = Effect.fn(function* () {
 });
 
 /**
+ * The single target architecture of a MicroVM image, in Docker naming.
+ * An image VERSION fans out to one server-side build per configured
+ * architecture from ONE Dockerfile — so binding-contributed statements
+ * (which are rendered per-arch) require the config to pin exactly one.
+ */
+export const resolveImageArchitecture = (
+  news: ContentInputs,
+): Effect.Effect<Host.Architecture> => {
+  const arches = [
+    ...new Set(
+      (news.cpuConfigurations ?? []).map((config): Host.Architecture =>
+        config.architecture === "ARM_64" ? "arm64" : "amd64",
+      ),
+    ),
+  ];
+  // AWS defaults an unset cpuConfigurations to X86_64
+  if (arches.length === 0) return Effect.succeed("amd64");
+  if (arches.length > 1 && hasHostStatements(news)) {
+    return Effect.die(
+      new Error(
+        "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image builds for MULTIPLE architectures — per-arch statements cannot fan out into one Dockerfile. Pin a single architecture in `cpuConfigurations`.",
+      ),
+    );
+  }
+  return Effect.succeed(arches[0]!);
+};
+
+const hasHostStatements = (news: ContentInputs): boolean =>
+  (news.imageStatements?.amd64.length ?? 0) > 0 ||
+  (news.imageStatements?.arm64.length ?? 0) > 0;
+
+/**
  * Bundle (or package) the image's code and hash the result. Nothing is
- * uploaded here and no prop outside {@link contentInputs} is read: `diff`
+ * uploaded here and no prop outside {@link ContentInputs} is read: `diff`
  * calls this before the props have resolved (the build role is an Output
  * at plan time) to see a content-only edit of the in-VM program, and
  * `reconcile` calls it again for the archive to upload. Memoized per
  * resource for the run so a diff→reconcile cycle bundles once.
+ *
+ * The archive is LAZY (`buildArchive`): a baked `contextInclude` can be
+ * ~1GB, and its identity rides the declared fingerprints — the diff never
+ * has to read the directory, and an unchanged artifact never zips it.
  */
 const artifactContent = (
   id: string,
@@ -213,6 +275,17 @@ const artifactContent = (
   note: (message: string) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* (): Generator<any, ArtifactContent, any> {
+    if (!news.main && hasHostStatements(news)) {
+      // bindings contributed Dockerfile fragments, but this image ships a
+      // user-owned build context — the contribution would be silently
+      // dropped, so fail loud instead
+      return yield* Effect.die(
+        new Error(
+          "A binding contributed Dockerfile statements (via Docker.Host.install), but this MicroVM image does not generate its Dockerfile — only `main` (Effect-native) images accept contributions. Install the binding's system dependencies in your own Dockerfile, or switch to `main`.",
+        ),
+      );
+    }
+
     if (news.main) {
       const runtime = news.runtime ?? "node";
       const port = news.port ?? DEFAULT_MICROVM_PORT;
@@ -225,14 +298,65 @@ const artifactContent = (
         port,
         build: news.build,
       });
-      const dockerfile = buildMicrovmDockerfile(news.dockerfile, runtime, port);
-      const identity = `${bundleHash}:${dockerfile}`;
+      const dockerfile = buildMicrovmDockerfile(
+        news.dockerfile,
+        runtime,
+        port,
+        hostStatementsFor(news, yield* resolveImageArchitecture(news)),
+      );
+      // `contextInclude` directories ride the artifact under their `to`
+      // prefixes. When EVERY include declares a fingerprint, the
+      // fingerprints ARE the identity — computed without touching the
+      // filesystem. Only a fingerprint-less include falls back to
+      // reading the directory and hashing its bytes.
+      const includes = news.contextInclude ?? [];
+      const readIncludes = Effect.gen(function* () {
+        const includeFiles: ArtifactFile[] = [];
+        for (const include of includes) {
+          const entries = yield* readContextDirectory(include.from);
+          for (const entry of entries) {
+            includeFiles.push({
+              path: `${include.to}/${entry.path}`,
+              content: entry.content,
+            });
+          }
+        }
+        return includeFiles;
+      });
+
+      let includeFiles: ArtifactFile[] | undefined;
+      let includeId: string;
+      if (includes.every((i) => i.fingerprint !== undefined)) {
+        includeId = includes
+          .map((i) => `${i.to}:${i.fingerprint}`)
+          .sort()
+          .join("|");
+      } else {
+        includeFiles = yield* readIncludes;
+        includeId = (yield* Effect.forEach(
+          [...includeFiles].sort((a, b) => (a.path < b.path ? -1 : 1)),
+          (f) => Effect.map(sha256(f.content), (hash) => `${f.path}:${hash}`),
+        )).join("|");
+      }
+      // Keep the pre-`contextInclude` formula byte-identical for images
+      // without includes so already-deployed images are not rebuilt once.
+      const identity =
+        includes.length === 0
+          ? `${bundleHash}:${dockerfile}`
+          : `${bundleHash}:${dockerfile}:${includeId}`;
       const contentHash = yield* sha256(identity);
-      const archive = yield* zipFiles([
+      const staticFiles: ArtifactFile[] = [
         { path: "Dockerfile", content: dockerfile },
         ...files,
-      ]);
-      return { contentHash, identity, archive };
+      ];
+      const alreadyRead = includeFiles;
+      const buildArchive = Effect.gen(function* () {
+        return yield* zipFiles([
+          ...staticFiles,
+          ...(alreadyRead ?? (yield* readIncludes)),
+        ]);
+      });
+      return { contentHash, identity, buildArchive };
     }
 
     if (news.context) {
@@ -256,11 +380,10 @@ const artifactContent = (
         [...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
         (f) => Effect.map(sha256(f.content), (hash) => `${f.path}:${hash}`),
       )).join("|");
-      const archive = yield* zipFiles(files);
       return {
         contentHash: yield* sha256(contentId),
         identity: contentId,
-        archive,
+        buildArchive: zipFiles(files),
       };
     }
 
@@ -281,6 +404,9 @@ const resolveArtifact = Effect.fn(function* (
   id: string,
   news: MicrovmImageProps,
   session: ScopedPlanStatusSession,
+  /** The last deployed artifact — when the computed identity matches
+   *  its hash, packaging and upload are skipped entirely. */
+  existing?: { uri?: string; hash?: string },
 ) {
   const propsId = buildPropsIdentity(news);
   const content = yield* artifactContent(id, news, session.note);
@@ -293,7 +419,22 @@ const resolveArtifact = Effect.fn(function* (
     } satisfies ResolvedArtifact;
   }
   const assets = yield* Assets;
-  const key = yield* assets.uploadAsset(hash, content.archive);
+  if (existing?.hash === hash && existing.uri !== undefined) {
+    // Trust the hash for identity, but VERIFY the artifact still
+    // exists before skipping the upload: a local emulator's S3 is
+    // ephemeral (recreating the container wipes it), and handing the
+    // builder a dangling URI fails the build far from the cause.
+    if (yield* assets.hasAsset(hash)) {
+      return {
+        uri: existing.uri,
+        hash,
+        contentHash: content.contentHash,
+      } satisfies ResolvedArtifact;
+    }
+  }
+  yield* session.note("Packaging MicroVM code artifact...");
+  const archive = yield* content.buildArchive;
+  const key = yield* assets.uploadAsset(hash, archive);
   const bucket = yield* assets.bucketName;
   return {
     uri: `s3://${bucket}/${key}`,
@@ -485,8 +626,14 @@ export const MicrovmImageProvider = () =>
       const baseImageArn =
         resolveBaseImageArn(news) ?? (yield* defaultBaseImageArn());
 
-      // Resolve + upload the artifact and compute its build identity.
-      const artifact = yield* resolveArtifact(id, news, session);
+      // Resolve the artifact's build identity — packaging + upload are
+      // skipped when it matches the deployed artifact.
+      const artifact = yield* resolveArtifact(
+        id,
+        news,
+        session,
+        output?.codeArtifact,
+      );
 
       // Observe — prefer the cached ARN; otherwise look up by name (a name
       // is not a valid `getMicrovmImage` identifier).
@@ -495,6 +642,8 @@ export const MicrovmImageProvider = () =>
         : yield* findImageByName(name);
 
       // Ensure + sync: rebuild only when the build identity changed.
+      const updated =
+        observed !== undefined && output?.codeArtifact?.hash !== artifact.hash;
       const image = !observed
         ? yield* createImage(
             name,
@@ -504,7 +653,7 @@ export const MicrovmImageProvider = () =>
             desiredTags,
             session,
           )
-        : output?.codeArtifact?.hash === artifact.hash
+        : !updated
           ? observed
           : yield* updateImage(
               observed.imageArn,
@@ -513,6 +662,24 @@ export const MicrovmImageProvider = () =>
               baseImageArn,
               session,
             );
+
+      // A new version means every RUNNING MicroVM serves STALE code —
+      // opted-in images recycle them (sessions relaunch on demand).
+      if (updated && news.recycleMicrovmsOnUpdate === true) {
+        yield* session.note("Recycling MicroVMs of the previous version...");
+        yield* terminateRunningMicrovms(image.imageArn, session);
+      }
+
+      // Superseded versions cost storage (and pin multi-GB docker images
+      // in the local emulator) — this resource only ever serves the
+      // latest, so prune the rest best-effort.
+      if (updated) {
+        yield* pruneStaleVersions(
+          image.imageArn,
+          image.latestActiveImageVersion,
+          session,
+        );
+      }
 
       yield* syncTags(
         image.imageArn,
@@ -626,6 +793,50 @@ const terminateRunningMicrovms = Effect.fn(function* (
   );
 });
 
+// Delete every non-current version of the image. Best-effort: a version
+// still backing live MicroVMs (possible when `recycleMicrovmsOnUpdate` is
+// off) rejects the delete and is retried on the next update.
+const pruneStaleVersions = Effect.fn(function* (
+  imageArn: string,
+  currentVersion: string | undefined,
+  session: ScopedPlanStatusSession,
+) {
+  const versions = yield* microvms.listMicrovmImageVersions
+    .items({ imageIdentifier: imageArn })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.catch(() =>
+        Effect.succeed([] as microvms.MicrovmImageVersionSummary[]),
+      ),
+    );
+  const stale = versions.filter(
+    (v) => v.imageVersion !== currentVersion && v.state !== "DELETED",
+  );
+  if (stale.length === 0) return;
+  yield* session.note(`Pruning ${stale.length} superseded image version(s)...`);
+  yield* Effect.forEach(
+    stale,
+    (v) =>
+      microvms
+        .deleteMicrovmImageVersion({
+          imageIdentifier: imageArn,
+          imageVersion: v.imageVersion,
+        })
+        .pipe(
+          Effect.catchTag(
+            [
+              "ResourceNotFoundException",
+              "ConflictException",
+              "ValidationException",
+            ],
+            () => Effect.void,
+          ),
+        ),
+    { concurrency: 3, discard: true },
+  );
+});
+
 // Drill into the failed version's `stateReason` (and per-architecture build
 // state reasons) so a build failure surfaces an actionable message instead of
 // just `CREATE_FAILED`.
@@ -663,37 +874,51 @@ const buildFailureReason = Effect.fn(function* (
 
 const waitForReady = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
-    const image = yield* microvms.getMicrovmImage({
-      imageIdentifier: imageArn,
-    });
-    if (READY_STATES.has(image.state)) return image;
-    if (FAILED_STATES.has(image.state)) {
-      const reason = yield* buildFailureReason(
-        imageArn,
-        image.latestFailedImageVersion,
-      );
+    const startedAt = yield* Clock.currentTimeMillis;
+    const poll = Effect.gen(function* () {
+      const image = yield* microvms.getMicrovmImage({
+        imageIdentifier: imageArn,
+      });
+      if (READY_STATES.has(image.state)) return image;
+      if (FAILED_STATES.has(image.state)) {
+        const reason = yield* buildFailureReason(
+          imageArn,
+          image.latestFailedImageVersion,
+        );
+        yield* session.note(
+          `MicroVM image build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        );
+        yield* Effect.logError(
+          `MicroVM image ${imageArn} build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        );
+        return yield* new ImageFailed({ imageArn, state: image.state, reason });
+      }
+      return yield* new ImageBuilding({ imageArn, state: image.state });
+    }).pipe(
+      Effect.retry({
+        while: (e) => e._tag === "ImageBuilding",
+        // 30 minutes: image builds run a full Dockerfile server-side — an
+        // image that BAKES a repository (clone + install + type-check,
+        // e.g. the org sandbox) legitimately needs far more than a slim
+        // tools-only image.
+        schedule: Schedule.max([Schedule.fixed(10_000), Schedule.recurs(180)]),
+      }),
+    );
+    // The elapsed note ticks every second (a build is minutes of dead
+    // air otherwise); the API is still only polled every 10 seconds.
+    // raceFirst interrupts the infinite ticker the moment the poll
+    // settles, success or failure.
+    const tick = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
       yield* session.note(
-        `MicroVM image build ${image.state}: ${reason ?? "(no reason reported)"}`,
+        `Waiting for MicroVM image build... (${Math.round((now - startedAt) / 1000)}s)`,
       );
-      yield* Effect.logError(
-        `MicroVM image ${imageArn} build ${image.state}: ${reason ?? "(no reason reported)"}`,
-      );
-      return yield* new ImageFailed({ imageArn, state: image.state, reason });
-    }
-    return yield* new ImageBuilding({ imageArn, state: image.state });
-  }).pipe(
-    Effect.retry({
-      while: (e) => e._tag === "ImageBuilding",
-      schedule: Schedule.max([
-        Schedule.fixed(10_000),
-        Schedule.recurs(72),
-      ]).pipe(
-        Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for MicroVM image build... (${attempt * 10}s)`),
-        ),
-      ),
-    }),
-  );
+    }).pipe(
+      Effect.repeat(Schedule.spaced(1_000)),
+      Effect.andThen(Effect.never),
+    );
+    return yield* Effect.raceFirst(poll, tick);
+  });
 
 const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {

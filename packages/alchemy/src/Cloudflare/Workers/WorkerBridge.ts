@@ -23,6 +23,7 @@ import { buildEventTelemetry } from "../../Telemetry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
+import { IoContextScheduler } from "./IoContextScheduler.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -88,41 +89,54 @@ export const makeWorkerBridge = (
     ) => T | Promise<T>,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    // Pins this event's fibers to its own request context: a fiber woken
+    // inside another request's task (a shared `Effect.cached` / Semaphore
+    // from the isolate-wide layer build) yields and resumes at home before
+    // touching request-pinned I/O. Constructed here, inside the event's
+    // context, so the trampoline is armed at home; `keepAlive` so a request
+    // parked on a foreign wakeup is not aborted as hung first.
+    const scheduler = new IoContextScheduler({ keepAlive: true });
     return build((promise) => ctx.waitUntil(promise as Promise<any>))
       .then(
         (built) => {
           const [eff, services] = makeEffect(built);
-          return eff.pipe(
-            // Per-event services take precedence over the captured services
-            // and the built isolate context: the isolate context carries the
-            // *deferred* WorkerExecutionContext (yieldable in the top-level
-            // closure), which must be shadowed by the real per-event one
-            // here, and the fresh request `Scope` so `Effect.addFinalizer`
-            // in a handler attaches to the request scope (closed into
-            // `ctx.waitUntil` below).
-            Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(
-                  WorkerExecutionContext,
-                  fromExecutionContext(ctx, env),
+          return scheduler.enter(() =>
+            eff.pipe(
+              // Per-event services take precedence over the captured services
+              // and the built isolate context: the isolate context carries the
+              // *deferred* WorkerExecutionContext (yieldable in the top-level
+              // closure), which must be shadowed by the real per-event one
+              // here, and the fresh request `Scope` so `Effect.addFinalizer`
+              // in a handler attaches to the request scope (closed into
+              // `ctx.waitUntil` below).
+              Effect.provide(
+                Layer.mergeAll(
+                  Layer.succeed(
+                    WorkerExecutionContext,
+                    fromExecutionContext(ctx, env),
+                  ),
+                  Layer.succeed(Scope.Scope, scope),
+                  // The configured telemetry exporters. Constructed as part
+                  // of this per-event layer, but `buildEventTelemetry`
+                  // attaches their batching fibers and flush finalizers to
+                  // the request `scope` (not this build's transient scope),
+                  // so buffered telemetry flushes when the scope closes into
+                  // `ctx.waitUntil` below — never on workerd's ephemeral
+                  // isolate scope.
+                  Layer.effectContext(
+                    buildEventTelemetry(
+                      built.context,
+                      scope,
+                      built.telemetry(),
+                    ),
+                  ),
+                ).pipe(
+                  Layer.provideMerge(Layer.succeedContext(services)),
+                  Layer.provideMerge(Layer.succeedContext(built.context)),
                 ),
-                Layer.succeed(Scope.Scope, scope),
-                // The configured telemetry exporters. Constructed as part
-                // of this per-event layer, but `buildEventTelemetry`
-                // attaches their batching fibers and flush finalizers to
-                // the request `scope` (not this build's transient scope),
-                // so buffered telemetry flushes when the scope closes into
-                // `ctx.waitUntil` below — never on workerd's ephemeral
-                // isolate scope.
-                Layer.effectContext(
-                  buildEventTelemetry(built.context, scope, built.telemetry()),
-                ),
-              ).pipe(
-                Layer.provideMerge(Layer.succeedContext(services)),
-                Layer.provideMerge(Layer.succeedContext(built.context)),
               ),
+              (effect) => Effect.runPromiseExit(effect, { scheduler }),
             ),
-            Effect.runPromiseExit,
           );
         },
         // A failed isolate build reaches callers as a defect exit so the RPC
@@ -130,8 +144,9 @@ export const makeWorkerBridge = (
         (error) => Exit.die(error),
       )
       .then((exit) => onExit(exit, scope))
-      .finally(() =>
-        isScopeEjected(scope)
+      .finally(() => {
+        scheduler.close();
+        return isScopeEjected(scope)
           ? undefined
           : ctx.waitUntil(
               // The HttpMiddleware tracer ends the request's root span in a
@@ -142,8 +157,8 @@ export const makeWorkerBridge = (
               new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
                 Effect.runPromise(Scope.close(scope, Exit.void)),
               ),
-            ),
-      );
+            );
+      });
   };
   class WorkerBridge extends Base {
     constructor(

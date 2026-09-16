@@ -21,6 +21,8 @@ packages:
   - benchmark/*
   - demos/*
   - submodules/distilled/packages/*
+  - fixtures/*
+  - services/*
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
@@ -43,6 +45,8 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.1"
   "@cloudflare/vitest-plugin": "^1.0.0"
   "@cloudflare/workers-types": "5.20260901.1"
+  "@effect/ai-anthropic": ">=4.0.0-rc.115 || >=4.0.0"
+  "@effect/ai-openai": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/atom-react": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/language-service": "^0.87.2"
   "@effect/platform-bun": ">=4.0.0-rc.115 || >=4.0.0"
@@ -114,6 +118,7 @@ catalog:
   "@vitejs/plugin-rsc": "^0.5.27"
   "@vitejs/plugin-vue": "^6.0.5"
   "@vue/tsconfig": "^0.9.1"
+  ai: "^6.0.62"
   astro: "7.3.1"
   aws4fetch: "^1.0.20"
   better-auth: "^1.6.2"
@@ -222,6 +227,11 @@ catalogs:
     "@types/node": "^22.10.2"
     "@vitejs/plugin-react": "^5.1.4"
 overrides:
+  # ONE @types/node for the whole graph: the `ai` / `@ai-sdk/react`
+  # packages pin their own @types/node@20 (non-generic Buffer), which
+  # otherwise enters programs beside v26's generic Buffer and breaks
+  # `Buffer.toString(encoding)` resolution under tsgo
+  "@types/node": 26.2.0
   "@cloudflare/workers-types": 5.20260901.1
   workerd: 1.20260901.1
   effect: 4.0.0-rc.115

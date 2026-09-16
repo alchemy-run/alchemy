@@ -1,0 +1,411 @@
+/**
+ * The org under test on the Cloudflare driver: two agents, two tools,
+ * and a DETERMINISTIC model — so every assertion lands on driver
+ * mechanics (run identity, durable threads, `AI.reply`, cross-DO
+ * delegation, the alarm clock) instead of on model behavior.
+ *
+ * The model is a pure function of the prompt it is handed, which is
+ * what makes it usable here: a scripted call-list would be isolate
+ * state, and a Durable Object may be evicted between rounds. Reading
+ * the thread instead means the model REPORTS the thread — exactly the
+ * fact these tests need to observe.
+ */
+import * as AI from "@/AI/index.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as PersistentRef from "@/PersistentRef.ts";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as S from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
+import type * as Prompt from "effect/unstable/ai/Prompt";
+import type * as Response from "effect/unstable/ai/Response";
+
+// ── the deterministic model ──────────────────────────────────────────
+
+/** Every user-role text in the thread, oldest first. */
+const userTexts = (prompt: Prompt.Prompt): Array<string> =>
+  prompt.content.flatMap((message) =>
+    message.role === "user"
+      ? message.content.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        )
+      : [],
+  );
+
+/**
+ * The prompt is the instruction set. A user message of
+ * `call:<verb>:<argument>` asks for one tool call; anything else asks
+ * for a report. Outstanding requests are counted against tool results
+ * already in the thread, so the loop advances instead of re-calling
+ * the same tool forever — and it stays STATELESS, which is what lets
+ * an evicted run resume correctly.
+ */
+const respond = (prompt: Prompt.Prompt): Array<Response.PartEncoded> => {
+  const users = userTexts(prompt);
+  const requests = users.filter((text) => text.startsWith("call:"));
+  const answered = prompt.content.filter(
+    (message) => message.role === "tool",
+  ).length;
+
+  if (requests.length > answered) {
+    const [, verb, ...rest] = requests[requests.length - 1]!.split(":");
+    const argument = rest.join(":");
+    switch (verb) {
+      case "write":
+        return [toolCall("write", { line: argument }), finish("tool-calls")];
+      case "remind":
+        return [
+          toolCall("remind", { seconds: Number(argument) || 2 }),
+          finish("tool-calls"),
+        ];
+      // the Supervisor's OWN delegation tool (a charter dispatching a
+      // named agent directly, the org's thread→engineer shape)
+      case "handoff":
+        return [toolCall("handoff", { task: argument }), finish("tool-calls")];
+      // a handler that never answers on its own — the eraser tests cut it
+      case "stall":
+        return [toolCall("stall", { label: argument }), finish("tool-calls")];
+      // the container fixture's sandbox probe (DriverContainerWorker)
+      case "probe":
+        return [toolCall("probe", { cmd: argument }), finish("tool-calls")];
+      // the driver's own delegation tool — `agent` must name an agent
+      // the charter mentions, `session` makes the child resumable
+      case "delegate":
+        return [
+          toolCall("dispatch", { agent: "Scribe", task: argument }),
+          finish("tool-calls"),
+        ];
+      case "session":
+        return [
+          toolCall("dispatch", {
+            agent: "Scribe",
+            task: argument,
+            session: "s1",
+          }),
+          finish("tool-calls"),
+        ];
+      default:
+        break;
+    }
+  }
+
+  return [
+    text(
+      JSON.stringify({
+        users: users.length,
+        tools: answered,
+        assistants: prompt.content.filter(
+          (message) => message.role === "assistant",
+        ).length,
+        last: users[users.length - 1] ?? null,
+        thread: users,
+      }),
+    ),
+    finish(),
+  ];
+};
+
+/**
+ * The CRASH directive, for the durability tests: while a directive
+ * `call:crash:<id>:<n>` is the last REAL user message and its budget
+ * `n` is not spent, the sampling DIES — the way an eviction, deploy,
+ * or defect kills a burst mid-round. Driver-authored `<note>` rows
+ * (recovery notices, abandonment) are skipped when finding it, so a
+ * recovery re-sample crashes again until the budget is spent — but
+ * any later ordinary message (a post-mortem poll) shields it. The
+ * budget is isolate memory on purpose: recovery re-enters in the same
+ * isolate, and the (n+1)th sampling succeeding is exactly the
+ * "transient failure" shape.
+ */
+const crashBudgets = new Map<string, number>();
+
+const crashRequested = (prompt: Prompt.Prompt): string | undefined => {
+  const real = userTexts(prompt).filter((text) => !text.startsWith("<note>"));
+  const last = real[real.length - 1];
+  const match = last?.match(/^call:crash:([^:]+):(\d+)$/);
+  if (match === null || match === undefined) return undefined;
+  const [, id, budget] = match;
+  const used = crashBudgets.get(id!) ?? 0;
+  if (used >= Number(budget)) return undefined;
+  crashBudgets.set(id!, used + 1);
+  return id;
+};
+
+const text = (content: string): Response.PartEncoded =>
+  ({ type: "text", text: content }) as Response.PartEncoded;
+
+const toolCall = (name: string, params: unknown): Response.PartEncoded =>
+  ({
+    type: "tool-call",
+    id: `call-${name}`,
+    name,
+    params,
+  }) as Response.PartEncoded;
+
+const finish = (reason: "stop" | "tool-calls" = "stop"): Response.PartEncoded =>
+  ({
+    type: "finish",
+    reason,
+    response: undefined,
+    usage: {
+      inputTokens: {
+        uncached: undefined,
+        total: undefined,
+        cacheRead: undefined,
+        cacheWrite: undefined,
+      },
+      outputTokens: { total: undefined, text: undefined, reasoning: undefined },
+    },
+  }) as unknown as Response.PartEncoded;
+
+export const DeterministicModel = Layer.effect(
+  LanguageModel.LanguageModel,
+  LanguageModel.make({
+    generateText: (options) =>
+      Effect.suspend(() => {
+        const crash = crashRequested(options.prompt);
+        return crash !== undefined
+          ? Effect.die(new Error(`scripted crash '${crash}'`))
+          : Effect.sync(() => respond(options.prompt));
+      }),
+    streamText: (options) => {
+      const crash = crashRequested(options.prompt);
+      // a DEFECT, not a failure: it skips the driver's in-round retry
+      // the way an eviction would, and lands in the crash path
+      return crash !== undefined
+        ? Stream.fromEffect(Effect.die(new Error(`scripted crash '${crash}'`)))
+        : Stream.fromIterable(respond(options.prompt).flatMap(streamed));
+    },
+  }),
+);
+
+/** Re-cut a whole part as the start/delta/end triple a provider streams. */
+const streamed = (
+  part: Response.PartEncoded,
+  index: number,
+): Array<Response.StreamPartEncoded> => {
+  if (part.type === "text" || part.type === "reasoning") {
+    const id = `part-${index}`;
+    return [
+      { type: `${part.type}-start`, id },
+      { type: `${part.type}-delta`, id, delta: part.text },
+      { type: `${part.type}-end`, id },
+    ] as Array<Response.StreamPartEncoded>;
+  }
+  return [part as Response.StreamPartEncoded];
+};
+
+// ── the org ──────────────────────────────────────────────────────────
+
+export const line = AI.Thing("line", S.String)`
+The line to write into the record.`;
+
+export class Write extends (AI.Tool<Write>()("write")`
+Write ${line} into the record, and hand the record back to whoever
+asked for it.`) {}
+
+/**
+ * The `AI.reply` seam: the ANSWER to the round is the artifact this
+ * handler produced, not the model's closing text. Replying neither
+ * parks nor ends the run.
+ */
+export const WriteLive = Layer.succeed(Write, ((input: { line: string }) =>
+  AI.reply({ wrote: input.line })) as never);
+
+export const seconds = AI.Thing("seconds", S.Int)`
+How long to wait, in seconds.`;
+
+export class Remind extends (AI.Tool<Remind>()("remind")`
+Come back to this in ${seconds} — you will be woken with a note.`) {}
+
+export const RemindLive = Layer.succeed(
+  Remind,
+  Effect.fn(function* (input: { seconds: number }) {
+    const thread = yield* AI.Thread;
+    yield* thread.remind(`${input.seconds} seconds`, "the timer elapsed");
+  }) as never,
+);
+
+export const label = AI.Thing("label", S.String)`What is being waited on.`;
+
+export class Stall extends (AI.Tool<Stall>()("stall")`
+Wait on ${label} for as long as it takes.`) {}
+
+/** Blocks until INTERRUPTED — a tool mid-command (a test suite on the
+ *  machine) at the moment the operator erases the session. */
+export const StallLive = Layer.succeed(Stall, ((_input: { label: string }) =>
+  Effect.never.pipe(
+    Effect.onInterrupt(() => Effect.log("[fixture] stall interrupted")),
+  )) as never);
+
+export class Scribe extends AI.Agent<Scribe>()("Scribe") {}
+
+export const ScribeLive = Scribe.make(
+  AI.fragment`
+    You keep the record. Put anything you are handed into it with
+    ${Write}, use ${Remind} when you are asked to wait, and ${Stall}
+    when you are asked to wait on something.
+
+    When you are not calling a tool, report the state of your thread.
+  `,
+).pipe(Layer.provide([WriteLive, RemindLive, StallLive]));
+
+export const task = AI.Thing("task", S.String)`The task to hand off.`;
+
+export class Handoff extends (AI.Tool<Handoff>()("handoff")`
+Hand ${task} to the Scribe under a session of its own and wait for
+what comes back.`) {}
+
+/** The key a handoff's Scribe session runs under — fixed, so a test
+ *  can address (and erase) the session the handler dispatched. A task
+ *  of the form `<suffix>|<task>` runs under `handoff-scribe-<suffix>`
+ *  instead, so tests in one file address distinct children. */
+export const HANDOFF_KEY = "handoff-scribe";
+
+export const handoffKey = (task: string): { key: string; task: string } => {
+  const match = task.match(/^([\w-]+)\|(.*)$/s);
+  return match === null
+    ? { key: HANDOFF_KEY, task }
+    : { key: `${HANDOFF_KEY}-${match[1]}`, task: match[2]! };
+};
+
+/** A charter dispatching a named agent DIRECTLY (not through the
+ *  driver's own delegation tool) — alchemy-org's thread→engineer
+ *  shape: the child is a session in its own right, and this handler
+ *  is parked on its outcome for as long as it runs. Naming this
+ *  session as the child's `parent` from inside the round puts the
+ *  child under the supervisor's cascade (DriverCore `supervised`):
+ *  the supervisor's stop or abort settles the child too. */
+export const HandoffLive = Layer.effect(
+  Handoff,
+  Effect.gen(function* () {
+    const scribe = yield* Scribe;
+    return Effect.fn(function* (input: { task: string }) {
+      const session = yield* AI.Thread;
+      const { key, task } = handoffKey(input.task);
+      const outcome = yield* scribe.dispatch(task, {
+        key,
+        parent: { term: "Supervisor", key: session.key },
+      });
+      return { outcome };
+    }) as never;
+  }),
+);
+
+export class Supervisor extends AI.Agent<Supervisor>()("Supervisor") {}
+
+/** Mentioning ${Scribe} compiles the driver's delegation tool — whose
+ *  handler RPCs into the Scribe's OWN Durable Object. */
+export const SupervisorLive = Supervisor.make(
+  AI.fragment`
+    You do no work yourself. Hand every task to ${Scribe} and report
+    what came back — or ${Handoff} it when asked to.
+  `,
+).pipe(Layer.provide(HandoffLive));
+
+/** A method's DECLARED failure — crosses the DO wire as a failure (a
+ *  plain `{ _tag, ...fields }` on the far side). */
+export class Overdrawn extends Data.TaggedError("Overdrawn")<{
+  balance: number;
+  requested: number;
+}> {}
+
+/**
+ * The agent as an OBJECT on the Durable Object placement: an API
+ * beside the loop, state in DECLARED cells (`PersistentRef.of`) that
+ * resolve over the DO's own storage in whichever method touches them
+ * — set through `open`, so a method call after eviction still sees
+ * the owner and the balance. `Ledger.Default` is the Layer (the
+ * inferred inline form); the charter is one Effect, run at build.
+ */
+export class Ledger extends AI.Agent<Ledger>()(
+  "Ledger",
+  Effect.gen(function* () {
+    const owner = PersistentRef.of<string | null>("owner", () => null);
+    const balance = PersistentRef.of("balance", () => 0);
+    return {
+      turn: Effect.flatMap(
+        owner,
+        (o) =>
+          AI.fragment`You keep ${o ?? "nobody"}'s ledger. Report the thread.`,
+      ),
+      // OPEN the ledger: who it is for, and the opening balance — the
+      // state a constructor argument would have carried, as a method
+      open: Effect.fn(function* (input: { owner: string; opening: number }) {
+        yield* PersistentRef.set(owner, input.owner);
+        yield* PersistentRef.set(balance, input.opening);
+      }),
+      // the object PUBLISHES its view: every attached viewer (the DO's
+      // hibernatable sockets) takes the fresh balance as a `state` frame
+      deposit: Effect.fn(function* (amount: number) {
+        const thread = yield* AI.Thread; // the session, at call time
+        const next = yield* PersistentRef.modify(balance, (b) => [
+          b + amount,
+          b + amount,
+        ]);
+        yield* thread.publish({ balance: next });
+        return next;
+      }),
+      withdraw: Effect.fn(function* (amount: number) {
+        const current = yield* balance;
+        if (amount > current) {
+          return yield* new Overdrawn({
+            balance: current,
+            requested: amount,
+          });
+        }
+        yield* PersistentRef.set(balance, current - amount);
+        return current - amount;
+      }),
+      statement: () =>
+        Effect.all({ thread: AI.Thread, owner, balance }).pipe(
+          Effect.map(({ thread, owner, balance }) => ({
+            key: thread.key,
+            owner,
+            balance,
+          })),
+        ),
+    };
+  }),
+) {}
+
+/**
+ * Every driver observation into the Worker's log, which is what makes
+ * a hang legible in `wrangler tail`: the last phase logged is the
+ * phase that stalled.
+ */
+export const LoggingObserver = Layer.succeed(AI.Events, {
+  emit: (observation) =>
+    Effect.log(
+      `[driver] ${observation.term}/${observation.key} #${observation.seq} ${observation.type}`,
+    ),
+});
+
+/**
+ * The org as ONE layer, exactly as an app composes it: the agents over
+ * the driver over the model. This is what the Worker provides to its
+ * constructor's init effect.
+ */
+export const Agents = SupervisorLive.pipe(
+  Layer.provideMerge(ScribeLive),
+  Layer.provideMerge(Ledger.Default),
+  Layer.provideMerge(Cloudflare.AI.DriverCloudflare),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      DeterministicModel,
+      LoggingObserver,
+      // recovery in SECONDS, not the production half-minute, so the
+      // durability tests can watch the alarm re-enter a broken round
+      Layer.succeed(Cloudflare.AI.DriverDurability, {
+        recoverAfterMillis: 3_000,
+        maxAttempts: 2,
+      }),
+      // the driver's own breadcrumbs are Debug — a deployed test that
+      // can't be attached to is only as debuggable as its log level
+      Layer.succeed(MinimumLogLevel, "Debug"),
+    ),
+  ),
+);
