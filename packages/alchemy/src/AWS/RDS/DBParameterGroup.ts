@@ -26,13 +26,13 @@ export interface DBParameterGroupProps {
   /**
    * Instance parameter overrides, e.g. `{ time_zone: "Australia/Sydney" }`.
    *
-   * This map owns all user overrides. Undeclared overrides are reset to engine
-   * defaults. Omission is equivalent to `{}`, including on adoption and when
-   * planning with unchanged inputs.
+   * This map is the group's entire user-owned surface: entries are written,
+   * and undeclared user overrides are reset to engine defaults. Omitting the
+   * map is equivalent to `{}`, including on adoption and unchanged-input deploys.
    *
-   * Values must use RDS's reported form (for example, `1` rather than `ON`).
-   * Reconciliation returns observed values and fails if they do not converge
-   * within the bounded readback budget.
+   * Values must be in the form RDS reports back (it canonicalises some — a
+   * boolean set as `ON` reads back as `1`). Reconciliation waits for those
+   * reported values and fails if they do not converge within the observation budget.
    *
    * Static parameters are applied with `pending-reboot`, dynamic parameters
    * with `immediate`.
@@ -66,7 +66,8 @@ export interface DBParameterGroup extends Resource<
     description: string | undefined;
     /**
      * Observed user overrides and explicitly managed engine defaults.
-     * Static values may still require an instance reboot.
+     * Omitting `parameters` removes all user overrides during reconciliation.
+     * These are group settings; static values still require an instance reboot.
      */
     parameters: Record<string, string>;
     /**
@@ -138,7 +139,9 @@ const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
 
 class DBParameterGroupNotSettled extends Data.TaggedError(
   "DBParameterGroupNotSettled",
-)<{ name: string }> {}
+)<{
+  name: string;
+}> {}
 
 export const DBParameterGroupProvider = () =>
   Provider.effect(
@@ -228,15 +231,13 @@ export const DBParameterGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Plans normally use persisted outputs. Read only this managed group's
-          // parameters so out-of-band edits are visible without a separate sync.
           if (output !== undefined) {
+            const group = yield* readGroup(output.dbParameterGroupName);
+            if (!group) return { action: "update", stables: [] } as const;
+            const desired = news.parameters ?? {};
             const parameters = yield* readParameters(
               output.dbParameterGroupName,
             ).pipe(
-              Effect.map((parameters) =>
-                toManagedParameterRecord(parameters, news.parameters),
-              ),
               Effect.catchTag("DBParameterGroupNotFoundFault", () =>
                 Effect.succeed(undefined),
               ),
@@ -244,7 +245,18 @@ export const DBParameterGroupProvider = () =>
             if (parameters === undefined) {
               return { action: "update", stables: [] } as const;
             }
-            if (!deepEqual(news.parameters ?? {}, parameters)) {
+            const observed = toManagedParameterRecord(parameters, desired);
+            const desiredTags = {
+              ...news.tags,
+              ...(yield* createInternalTags(id)),
+            };
+            if (
+              !deepEqual(desired, observed) ||
+              !deepEqual(
+                desiredTags,
+                yield* readTags(group.DBParameterGroupArn),
+              )
+            ) {
               return { action: "update" } as const;
             }
           }
@@ -425,6 +437,10 @@ export const DBParameterGroupProvider = () =>
             });
           }
 
+          // A successful modify/reset only acknowledges the request. Read back
+          // the managed group values, including absence of undeclared overrides.
+          // Reuse the existing parameter-group consistency budget; retry reads
+          // for a pending observation, never repeat accepted mutations here.
           const parameters = yield* readParameters(name).pipe(
             Effect.flatMap((parameters) => {
               const observed = toManagedParameterRecord(
