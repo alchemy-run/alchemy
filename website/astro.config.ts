@@ -141,6 +141,7 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
@@ -240,10 +241,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
@@ -1154,20 +1151,28 @@ export default defineConfig({
               label: "Tutorial",
               items: [
                 {
-                  label: "Part 1: A git server in one file",
+                  label: "Part 1: Push your first repository",
                   link: "/git/tutorial/part-1",
                 },
                 {
-                  label: "Part 2: Repositories",
+                  label: "Part 2: Control access",
                   link: "/git/tutorial/part-2",
                 },
                 {
-                  label: "Part 3: Your own API",
+                  label: "Part 3: Publish a repository",
                   link: "/git/tutorial/part-3",
                 },
                 {
-                  label: "Part 4: Your own rules",
+                  label: "Part 4: Give users their own credentials",
                   link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
                 },
               ],
             },
@@ -1187,7 +1192,8 @@ export default defineConfig({
               label: "Building blocks",
               items: [
                 { label: "Overview", link: "/git/blocks" },
-                { label: "Server", link: "/git/blocks/server" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
                 { label: "Repository", link: "/git/blocks/repositories" },
                 { label: "Registry", link: "/git/blocks/registry" },
                 { label: "Blob Store", link: "/git/blocks/blob-store" },

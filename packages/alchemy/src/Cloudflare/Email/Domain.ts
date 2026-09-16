@@ -185,7 +185,7 @@ export const isDomain = (value: unknown): value is Domain =>
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
-    stables: ["domainId", "accountId", "o365TenantId", "createdAt"],
+    stables: ["domainId", "accountId", "domain", "o365TenantId", "createdAt"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -194,6 +194,10 @@ export const DomainProvider = () =>
       if (!isResolved(news)) return undefined;
       // The domain name is the resource's identity — changing it means
       // re-adopting a different onboarded domain.
+      const oldDomain = output?.domain ?? olds?.domain;
+      if (oldDomain !== undefined && oldDomain !== news.domain) {
+        return { action: "replace" } as const;
+      }
       return undefined;
     }),
 
@@ -341,10 +345,6 @@ const settingsDelta = (
     "accountId" | "domainId"
   > = {};
   let dirty = false;
-  if (observed.domain !== news.domain) {
-    delta.domain = news.domain;
-    dirty = true;
-  }
   if (
     news.regions !== undefined &&
     !sameArray(observed.regions, news.regions)

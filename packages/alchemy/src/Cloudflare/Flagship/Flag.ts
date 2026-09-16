@@ -2,7 +2,7 @@ import * as Layer from "effect/Layer";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   generateLocalId,
   isLocalId,
   localRuntimeServices,
@@ -43,6 +43,17 @@ export type FlagConditionOperator =
  * A single targeting condition: either a flat attribute comparison or a
  * nested group of clauses combined with AND/OR.
  */
+/**
+ * Value a flat condition compares against — a scalar, a JSON object, or a
+ * list (for `in` / `not_in`).
+ */
+export type FlagConditionValue =
+  | string
+  | number
+  | boolean
+  | { [key: string]: unknown }
+  | unknown[];
+
 export type FlagCondition =
   | {
       /**
@@ -56,7 +67,7 @@ export type FlagCondition =
       /**
        * Value to compare against.
        */
-      value: unknown;
+      value: FlagConditionValue;
     }
   | {
       /**
@@ -548,7 +559,7 @@ const normalizeConditions = (conditions: readonly unknown[]): FlagCondition[] =>
       const flat = condition as {
         attribute: string;
         operator: string;
-        value: unknown;
+        value: FlagConditionValue;
       };
       return [
         {
@@ -587,7 +598,7 @@ const toAttributes = (
 export const FlagProviderLocal = () =>
   RpcProvider.effect(
     Flag,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const store = yield* localStore;
       return {

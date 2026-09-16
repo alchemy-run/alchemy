@@ -2,7 +2,7 @@ import * as Layer from "effect/Layer";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   generateLocalId,
   isLocalId,
   localRuntimeServices,
@@ -313,7 +313,7 @@ const toAttributes = (
 export const AppProviderLocal = () =>
   RpcProvider.effect(
     App,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const store = yield* localStore;
       return {

@@ -1,3 +1,8 @@
+/**
+ * The Cloudflare provider group served by the dev sidecar (see
+ * `Local/Sidecar.ts`): the workerd-backed local providers, built per
+ * session the first time a stack asks for one of their types.
+ */
 import { AppProviderLocal } from "./Flagship/App.ts";
 import { FlagProviderLocal } from "./Flagship/Flag.ts";
 import {
@@ -7,7 +12,7 @@ import {
 } from "./Pipelines/Local.ts";
 import * as Layer from "effect/Layer";
 import { DockerLive } from "../Docker/Docker.ts";
-import * as RpcServer from "../Local/RpcServer.ts";
+import type * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import { LocalContainerProvider } from "./Containers/LocalContainerProvider.ts";
@@ -29,7 +34,7 @@ const cloudflareServices = Layer.provide(
   CloudflareAuth,
 );
 
-Layer.mergeAll(
+export default Layer.mergeAll(
   LocalWorkerProvider(),
   AppProviderLocal(),
   FlagProviderLocal(),
@@ -47,5 +52,4 @@ Layer.mergeAll(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
   Layer.provide(DockerLive),
-  RpcServer.launch,
-);
+) satisfies RpcServer.ProviderLayer;

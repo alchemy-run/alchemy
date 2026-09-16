@@ -1,6 +1,7 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { useWindowSize } from "@alchemy.run/sigil";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo } from "@alchemy.run/sigil/react";
+import type { ReactNode } from "react";
 import type { CliKitCapabilities } from "../types.ts";
 import { glyphsFor, theme, type KeyHint } from "../../../Util/Theme.ts";
 

@@ -1,6 +1,6 @@
 ---
 title: Git
-description: A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
+description: A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API.
 ---
 
 `alchemy/Git` is a pluggable, embeddable, self-hostable git server. It
@@ -14,73 +14,83 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as Http from "alchemy/Http";
+import { Authentication } from "./api.ts";
 
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
-const GitLive = Git.Server.layer(Api).pipe( // Api: Git.Api behind your middleware
-  Layer.provide(Git.Handlers), // the engine's implementation of every route
-  Layer.provide(AuthenticatedLive), // your middleware: who may call what
+const GitLive = Git.ApiLive.pipe( // ordinary routes beside your application API
+  Layer.provide(Git.ApiHandlersLive), // shared Git handlers
+  Layer.provide(Authentication.layer), // your middleware: who may call what
   Layer.provide(Git.ReposDurableObject), // refs, objects, pull requests
   Layer.provide(Git.RegistryDurableObject), // owner/name → repo
-  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
   Layer.provide(Git.HasherInline), // push verification
+  Layer.provide(Git.BlobStoreR2(GitObjects)), // packs, bundles, large pushes
 );
 
 export default Cloudflare.Worker(
   "Git",
   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
   Effect.gen(function* () {
-    const git = yield* Git.Server;
-    return { fetch: git.fetch };
-  }).pipe(Effect.provide(GitLive)),
+    const fetch = yield* HttpRouter.toHttpEffect(GitLive.pipe(Layer.provide(Http.Platform)));
+    return { fetch };
+  }),
 );
 ```
+
+`Authentication` is the application's route middleware. [Getting Started](/git/getting-started)
+defines it; [HTTP routes](/git/blocks/server#add-git-to-your-application) explains their composition.
 
 Each line of the graph is one decision with its own implementations.
 Changing a line changes the decision and nothing else:
 
 ```diff lang="typescript"
-const GitLive = Git.Server.layer(Api).pipe(
-  Layer.provide(Git.Handlers),
-  Layer.provide(AuthenticatedLive),
-+  Layer.provide(ProtectedMain),
+-const GitObjects = Cloudflare.R2.Bucket("GitObjects");
++const GitObjects = AWS.S3.Bucket("GitObjects");
+
+const GitLive = Git.ApiLive.pipe(
+  Layer.provide(Git.ApiHandlersLive),
+  Layer.provide(Authentication.layer),
   Layer.provide(Git.ReposDurableObject),
   Layer.provide(Git.RegistryDurableObject),
--  Layer.provide(Git.BlobStoreR2(GitObjects)),
-+  Layer.provide(Git.BlobStoreS3()),
   Layer.provide(Git.HasherInline),
+-  Layer.provide(Git.BlobStoreR2(GitObjects)),
++  Layer.provide(Git.BlobStoreS3(GitObjects)),
 );
 ```
 
-Bytes now live in S3 and `main` only moves for its owner. A missing
-line is a type error.
+Bytes now live in S3. Application authorization stays in your HTTP handlers.
 
 The engine holds no users, no credentials, and no policy. Who may call
-a route is the middleware of the API that mounts it, so the same host
+a route is the middleware applied to its route layer, so the same host
 runs behind a shared secret, behind Better Auth, or behind any other
-authentication, and which refs may move is git's pre-receive hook as a
-service. Every route is a class with a pluggable implementation, so
-the host is also an API that can be extended and reshaped one route at
-a time.
+authentication. Your handler decodes the push, authorizes its proposed changes,
+then calls `Git.Engine.preparePush` and `commitPush`. Endpoints use Effect's `HttpApiEndpoint`; implementations use
+`HttpApiBuilder.group` and `handleAll`. Add your own groups or replace a
+handler in a Git group before registering it.
 [git.alchemy.run](https://git.alchemy.run) runs this file. The alchemy
 monorepo, 44,051 objects in a 67 MiB pack, is hosted on it and clones
 back byte-identical under `git fsck --strict`.
 
 ## Build one
 
-[Getting Started](/git/getting-started) deploys the file above and pushes to it in ten
-minutes. The tutorial then builds it from an empty file, one decision
-per part:
+[Getting Started](/git/getting-started) is a complete shared-credential quickstart.
+The tutorial starts with a Git push and builds one behavior at a time. Every
+part ends with a deployment and a check you can run:
 
-1. [A git server in one file](/git/tutorial/part-1) — each block,
-   named as you type it.
-2. [Repositories](/git/tutorial/part-2) — create, push, make public,
-   clone anonymously.
-3. [Your own API](/git/tutorial/part-3) — the git routes inside your
-   `HttpApi` behind Better Auth, a route of your own, and one of the
-   engine's replaced.
-4. [Your own rules](/git/tutorial/part-4) — git's pre-receive hook as
-   a service: protect `main`, let a team share a repository.
+1. [Push your first repository](/git/tutorial/part-1) — deploy Git, push a commit,
+   and clone it back.
+2. [Control access](/git/tutorial/part-2) — require a shared credential and verify
+   anonymous requests fail.
+3. [Publish a repository](/git/tutorial/part-3) — allow anonymous clones while
+   keeping writes protected.
+4. [Give users their own credentials](/git/tutorial/part-4) — use accounts and
+   individual API keys.
+5. [Add your application's API](/git/tutorial/part-5) — serve `/me` beside Git
+   with the same authenticated user.
+6. [Protect a branch](/git/tutorial/part-6) — reject deletion of `main` with an
+   application policy.
 
 ## Use it
 

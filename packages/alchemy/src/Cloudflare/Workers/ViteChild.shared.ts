@@ -48,6 +48,7 @@ export interface ViteChildConfig {
     workflows: Workflow[];
     hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     queueConsumers: QueueConsumer[];
+    crons: RuntimeWorker["crons"];
     assets: RuntimeWorker["assets"];
   };
 }

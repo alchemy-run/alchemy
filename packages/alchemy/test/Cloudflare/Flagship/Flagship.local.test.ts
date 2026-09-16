@@ -13,7 +13,13 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const comparisons: Array<[string, unknown, unknown]> = [
+      const comparisons: Array<
+        [
+          Cloudflare.Flagship.FlagConditionOperator,
+          Cloudflare.Flagship.FlagConditionValue,
+          unknown,
+        ]
+      > = [
         ["equals", "US", "US"],
         ["not_equals", "US", "CA"],
         ["greater_than", 18, 21],
@@ -63,8 +69,7 @@ test.provider(
                       conditions: [
                         {
                           attribute: "value",
-                          operator:
-                            operator as Cloudflare.Flagship.FlagConditionOperator,
+                          operator,
                           value: expected,
                         },
                       ],

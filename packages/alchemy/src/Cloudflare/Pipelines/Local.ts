@@ -9,7 +9,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
   isLocalId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
 } from "../LocalRuntime.ts";
 import { Stream, type StreamProps, type StreamAttributes } from "./Stream.ts";
@@ -124,7 +124,7 @@ const restartPipelinesWorkers = Effect.gen(function* () {
 export const StreamProviderLocal = () =>
   RpcProvider.effect(
     Stream,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const state = yield* LocalRuntimeState;
       return {
@@ -192,7 +192,7 @@ export const StreamProviderLocal = () =>
 export const SinkProviderLocal = () =>
   RpcProvider.effect(
     Sink,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const state = yield* LocalRuntimeState;
       return {
@@ -252,7 +252,7 @@ export const SinkProviderLocal = () =>
 export const PipelineProviderLocal = () =>
   RpcProvider.effect(
     Pipeline,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const state = yield* LocalRuntimeState;
       return {

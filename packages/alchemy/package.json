@@ -465,9 +465,7 @@
     "libsodium-wrappers": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
-    "react": "catalog:",
     "rolldown": "catalog:",
-    "string-width": "catalog:",
     "tinyglobby": "catalog:",
     "undici": "catalog:",
     "yaml": "catalog:"
@@ -522,6 +520,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",

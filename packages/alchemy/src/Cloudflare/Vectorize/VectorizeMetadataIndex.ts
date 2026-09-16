@@ -7,7 +7,7 @@ import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import {
   generateLocalId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localRuntimeServices,
 } from "../LocalRuntime.ts";
@@ -320,7 +320,7 @@ const findExisting = (acct: string, indexName: string, propertyName: string) =>
 export const MetadataIndexProviderLocal = () =>
   RpcProvider.effect(
     MetadataIndex,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const state = yield* LocalRuntimeState;
       const key = (indexName: string, propertyName: string) =>

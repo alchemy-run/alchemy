@@ -7,7 +7,7 @@ import * as RpcProvider from "../../Local/RpcProvider.ts";
 import {
   generateLocalId,
   isLocalId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localRuntimeServices,
 } from "../LocalRuntime.ts";
@@ -313,7 +313,7 @@ const presetDimensions: Record<string, number> = {
 export const IndexProviderLocal = () =>
   RpcProvider.effect(
     Index,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const state = yield* LocalRuntimeState;
       return {
