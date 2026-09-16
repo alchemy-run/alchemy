@@ -25,6 +25,149 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+for (const aspect of ["tagging", "encryption"] as const) {
+  test.provider(
+    `PR1586 preserves ${aspect} when its read is denied but writes are allowed`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const initialProps = {
+          tags: { revision: "before" },
+          encryption: { sseAlgorithm: "AES256" as const },
+        };
+        const bucket = yield* stack.deploy(
+          Bucket("ReadFailureBucket", initialProps),
+        );
+        const tagging = yield* S3.getBucketTagging({
+          Bucket: bucket.bucketName,
+        });
+        const encryption = yield* S3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        });
+        const restorePolicy = S3.deleteBucketPolicy({
+          Bucket: bucket.bucketName,
+        });
+        const read = Effect.gen(function* () {
+          if (aspect === "tagging") {
+            yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+          } else {
+            yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
+          }
+        });
+        const desired = Bucket("ReadFailureBucket", {
+          tags: { revision: "after" },
+          encryption: {
+            sseAlgorithm: aspect === "encryption" ? "aws:kms" : "AES256",
+          },
+        });
+
+        yield* Effect.gen(function* () {
+          yield* S3.putBucketPolicy({
+            Bucket: bucket.bucketName,
+            Policy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Deny",
+                  Principal: "*",
+                  Action:
+                    aspect === "tagging"
+                      ? "s3:GetBucketTagging"
+                      : "s3:GetEncryptionConfiguration",
+                  Resource: bucket.bucketArn,
+                },
+              ],
+            }),
+          });
+          const denied = yield* read.pipe(
+            Effect.as(false),
+            Effect.catchTag("AccessDeniedException", () =>
+              Effect.succeed(true),
+            ),
+            Effect.repeat({
+              until: Boolean,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+          expect(denied).toBe(true);
+          // Reapply the observed configuration to prove the write permission remains usable.
+          if (aspect === "tagging") {
+            yield* S3.putBucketTagging({
+              Bucket: bucket.bucketName,
+              Tagging: { TagSet: tagging.TagSet },
+            });
+          } else {
+            yield* S3.putBucketEncryption({
+              Bucket: bucket.bucketName,
+              ServerSideEncryptionConfiguration:
+                encryption.ServerSideEncryptionConfiguration!,
+            });
+          }
+          const plan = yield* stack.plan(desired);
+          expect(plan.resources.ReadFailureBucket?.action).toBe("update");
+          const failure = yield* stack.deploy(desired).pipe(Effect.flip);
+          expect(failure._tag).toBe("AccessDeniedException");
+        }).pipe(Effect.ensuring(restorePolicy.pipe(Effect.orDie)));
+
+        yield* read.pipe(
+          Effect.retry({
+            while: (error) => error._tag === "AccessDeniedException",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        if (aspect === "tagging") {
+          expect(
+            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+          ).toEqual(tagging.TagSet);
+        } else {
+          expect(
+            (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+              .ServerSideEncryptionConfiguration,
+          ).toEqual(encryption.ServerSideEncryptionConfiguration);
+        }
+        yield* stack.deploy(desired);
+        if (aspect === "tagging") {
+          expect(
+            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+          ).toContainEqual({ Key: "revision", Value: "after" });
+        } else {
+          expect(
+            (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+              .ServerSideEncryptionConfiguration?.Rules[0]
+              ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+          ).toBe("aws:kms");
+        }
+        yield* stack.destroy();
+        yield* assertBucketDeleted(bucket.bucketName);
+      }),
+    { timeout: 120_000 },
+  );
+}
+
+test.provider(
+  "PR1586 initializes tags after a real NoSuchTagSet response",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(Bucket("UntaggedBucket", {}));
+      const absent = yield* S3.getBucketTagging({
+        Bucket: bucket.bucketName,
+      }).pipe(Effect.flip);
+      expect(absent._tag).toBe("NoSuchTagSet");
+      yield* stack.deploy(
+        Bucket("UntaggedBucket", { tags: { initialized: "yes" } }),
+      );
+      expect(
+        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+      ).toEqual([{ Key: "initialized", Value: "yes" }]);
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { timeout: 120_000 },
+);
+
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
