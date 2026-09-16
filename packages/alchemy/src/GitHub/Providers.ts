@@ -8,6 +8,7 @@ import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
+import { Issue, IssueProvider } from "./Issue.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -46,6 +47,7 @@ export const providers = (options?: ProvidersOptions) =>
       Environment,
       Label,
       Milestone,
+      Issue,
       Repository,
       Secret,
       Variable,
@@ -58,6 +60,7 @@ export const providers = (options?: ProvidersOptions) =>
         EnvironmentProvider(),
         LabelProvider(),
         MilestoneProvider(),
+        IssueProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),

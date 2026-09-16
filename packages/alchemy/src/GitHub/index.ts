@@ -13,3 +13,4 @@ export * from "./Variable.ts";
 export * from "./Variables.ts";
 export * from "./Webhook.ts";
 export * from "./Milestone.ts";
+export * from "./Issue.ts";
