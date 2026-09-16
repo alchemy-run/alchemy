@@ -28,73 +28,9 @@ const fixtureNames = [
   "alchemy-pr-1571-collaborator-list",
 ];
 
-// Restrict every provider-created client, including list pagination, to test fixtures.
-const testCredentials = Layer.effect(
-  GitHubCredentials,
-  Effect.gen(function* () {
-    const credentials = yield* yield* GitHubCredentials;
-    return Effect.succeed({
-      ...credentials,
-      baseUrl: undefined,
-      octokit: () => {
-        const client = credentials.octokit({ baseUrl: undefined });
-        client.hook.before("request", (options) => {
-          const endpoint = client.request.endpoint(options);
-          const url = new URL(endpoint.url);
-          if (url.hostname !== "api.github.com") {
-            throw new Error(`Refusing GitHub test host ${url.hostname}`);
-          }
-          if (options.method === "GET" && url.pathname === "/user/repos") {
-            url.pathname = `/orgs/${owner}/repos`;
-            options.url = url.toString();
-          }
-          const parts = url.pathname.split("/").filter(Boolean);
-          const fixture =
-            parts[0] === "repos" &&
-            parts[1] === owner &&
-            fixtureNames.includes(parts[2]!);
-          if (options.method === "GET") {
-            if (
-              fixture ||
-              (parts[0] === "orgs" && parts[1] === owner) ||
-              url.pathname === `/users/${owner}` ||
-              /^\/repositories\/\d+$/.test(url.pathname)
-            ) {
-              return;
-            }
-          } else if (
-            (fixture &&
-              !(options.method === "DELETE" && parts.length === 3) &&
-              (parts[3] !== "collaborators" ||
-                parts[4] === process.env.GITHUB_TEST_COLLABORATOR_USERNAME)) ||
-            (options.method === "POST" &&
-              url.pathname === `/orgs/${owner}/repos` &&
-              fixtureNames.includes(String(options.name)))
-          ) {
-            return;
-          }
-          throw new Error(
-            `Refusing GitHub test request ${options.method} ${url.pathname}`,
-          );
-        });
-        client.hook.after("request", (response, options) => {
-          if (
-            new URL(client.request.endpoint(options).url).pathname ===
-              `/orgs/${owner}/repos` &&
-            Array.isArray(response.data)
-          ) {
-            response.data = response.data.filter((repo) =>
-              fixtureNames.includes(repo.name),
-            );
-          }
-        });
-        return client;
-      },
-    });
-  }),
-).pipe(Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" })));
-
-const { test } = Test.make({ providers: testCredentials });
+const { test } = Test.make({
+  providers: GitHub.providers({ baseUrl: "github.com" }),
+});
 
 const verifiedMember = Effect.gen(function* () {
   const client = yield* Octokit;
@@ -271,8 +207,44 @@ test.provider(
         catch: (error) => error as Error,
       });
       expect(expected.length).toBeGreaterThan(0);
+      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Collaborator);
-      const listed = yield* provider.list();
+      // list() enumerates /user/repos; confine it to this suite's fixture.
+      const listed = yield* provider.list().pipe(
+        Effect.provideService(
+          GitHubCredentials,
+          Effect.succeed({
+            ...credentials,
+            octokit: (override) => {
+              const octokit = credentials.octokit(override);
+              octokit.hook.before("request", (options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === "/user/repos") {
+                  url.pathname = `/orgs/${owner}/repos`;
+                  options.url = url.toString();
+                }
+                if (
+                  url.origin !== "https://api.github.com" ||
+                  (url.pathname !== `/orgs/${owner}/repos` &&
+                    url.pathname !==
+                      `/repos/${owner}/${fixtureNames[2]!}/collaborators`)
+                ) {
+                  throw new Error(`Unsafe Collaborator list request: ${url}`);
+                }
+              });
+              octokit.hook.after("request", (response, options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === `/orgs/${owner}/repos`) {
+                  response.data = (
+                    response.data as Array<{ name: string }>
+                  ).filter((repo) => repo.name === fixtureNames[2]!);
+                }
+              });
+              return octokit;
+            },
+          }),
+        ),
+      );
       for (const member of expected) {
         expect(
           listed.some((collaborator) => collaborator.username === member.login),
