@@ -46,6 +46,14 @@ export interface RunOptions {
    */
   readonly paths: ReadonlyArray<string>;
   /**
+   * Exclusion filters (`--exclude`). Existing files/directories exclude by
+   * path prefix; anything else is a case-insensitive substring exclusion on
+   * test file paths. A positional root explicitly given inside an excluded
+   * path overrides the exclusion (so `alchemy-test test/Railway` still works
+   * when the package script bakes in `--exclude test/Railway`).
+   */
+  readonly exclude?: ReadonlyArray<string> | undefined;
+  /**
    * `-t` test-name filter, applied to the full title
    * (`file > describe chain > name`).
    */
@@ -200,9 +208,37 @@ export const discover = Effect.fn(function* (options: RunOptions) {
       nameFilters.push(p.toLowerCase());
     }
   }
+  // Roots the user asked for explicitly (before defaulting to `test`) are
+  // exempt from `--exclude` — a baked-in package-script exclusion must not
+  // make `alchemy-test test/Railway/Foo.test.ts` silently run nothing.
+  const explicitRoots = [...roots];
   if (roots.length === 0) {
     roots.push(path.resolve(options.root, "test"));
   }
+
+  // Excludes mirror positional semantics: existing paths exclude by prefix,
+  // anything else is a case-insensitive substring exclusion.
+  const excludePrefixes: Array<string> = [];
+  const excludeSubstrings: Array<string> = [];
+  for (const e of options.exclude ?? []) {
+    const abs = path.isAbsolute(e) ? e : path.resolve(options.root, e);
+    const exists = yield* fs
+      .exists(abs)
+      .pipe(Effect.orElseSucceed(() => false));
+    if (exists) {
+      excludePrefixes.push(abs);
+    } else {
+      excludeSubstrings.push(e.toLowerCase());
+    }
+  }
+  const isWithin = (file: string, dir: string): boolean =>
+    file === dir || file.startsWith(dir + path.sep);
+  const isExcluded = (file: string): boolean => {
+    if (excludePrefixes.some((prefix) => isWithin(file, prefix))) return true;
+    const rel = path.relative(options.root, file).toLowerCase();
+    return excludeSubstrings.some((substring) => rel.includes(substring));
+  };
+  const exemptRoots = explicitRoots.filter(isExcluded);
 
   for (const abs of roots) {
     const stat = yield* fs
@@ -225,6 +261,12 @@ export const discover = Effect.fn(function* (options: RunOptions) {
       const rel = path.relative(options.root, file).toLowerCase();
       return nameFilters.some((filter) => rel.includes(filter));
     });
+  }
+  if (excludePrefixes.length > 0 || excludeSubstrings.length > 0) {
+    unique = unique.filter(
+      (file) =>
+        exemptRoots.some((root) => isWithin(file, root)) || !isExcluded(file),
+    );
   }
   return unique.sort();
 });

@@ -10,7 +10,7 @@ import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { initialCwd } from "../Util/Node.ts";
+import { initialCwd, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
 /**
@@ -398,10 +398,25 @@ export const ServerProviderLive = () =>
           const built = yield* runBuild(news);
           return yield* makeOutput(news, built);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
           if (output.distDir === undefined) return;
+          const root = path.resolve(initialCwd, olds.root ?? ".");
           const distDir = path.resolve(initialCwd, output.distDir);
-          if (!(yield* fs.exists(distDir))) return;
+          if (!(yield* fs.exists(root)) || !(yield* fs.exists(distDir))) return;
+          // Some frameworks (Next.js) serve from the project root itself.
+          // Only dedicated output directories inside that root are disposable.
+          // Canonical paths also protect roots reached through a symlink.
+          const relative = path.relative(
+            yield* fs.realPath(root),
+            yield* fs.realPath(distDir),
+          );
+          if (
+            relative === "" ||
+            relative === ".." ||
+            relative.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relative)
+          )
+            return;
           yield* fs.remove(distDir, { recursive: true });
         }),
       };
@@ -457,6 +472,21 @@ const resolveDevPort = Effect.fn(function* (options: {
 });
 
 /**
+ * A framework dev server may advertise its *bind* address — nuxt echoes the
+ * host it was told to listen on, so a Router-attached site (which binds
+ * `0.0.0.0` to be reachable from the emulator container) reports
+ * `http://0.0.0.0:{port}/`. The unspecified address is not a connectable
+ * host: normalize it to `localhost` for the `url` attribute (browser links,
+ * Router dev routing, the emulated CloudFront edge dialing the origin). The
+ * server itself still listens on every interface.
+ */
+const normalizeAdvertisedUrl = (url: string) =>
+  url.replace(
+    /^(https?:\/\/)(?:0\.0\.0\.0|\[::\]|\[0+(?::0+){7}\])(?=[:/]|$)/,
+    "$1localhost",
+  );
+
+/**
  * The `alchemy dev` variant: runs the framework's own dev server (native
  * HMR through the framework's kit — nuxt, astro, ...) inside the dev
  * sidecar, so it survives user-code hot reloads. Restarts when the
@@ -466,7 +496,7 @@ export const ServerProviderLocal = () =>
   LocalProvider.make(
     Server,
     import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? "./ServerLocal.ts" : "./ServerLocal.js",
+      `./ServerLocal${moduleExtension(import.meta.url)}`,
       import.meta.url,
     ),
     Effect.gen(function* () {
@@ -536,7 +566,7 @@ export const ServerProviderLocal = () =>
             distDir: undefined,
             clientDir: undefined,
             serverEntry: undefined,
-            url,
+            url: normalizeAdvertisedUrl(url),
             hash: { input: undefined, output: undefined },
           };
         }),

@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import {
   Compute,
   ComputeDevProvider,
@@ -1212,7 +1213,7 @@ describe("Prisma Compute", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
+        const provider = yield* Provider.findProvider(Compute);
         const output = yield* provider.read!({
           id: "App",
           fqn: "App",
@@ -1284,7 +1285,7 @@ describe("Prisma Compute", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* Compute.Provider;
+      const provider = yield* Provider.findProvider(Compute);
       const output = yield* provider.read!({
         id: "App",
         fqn: "App",
@@ -1358,7 +1359,7 @@ describe("Prisma Compute", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* Compute.Provider;
+        const provider = yield* Provider.findProvider(Compute);
         const output = yield* provider.read!({
           id: "App",
           fqn: "App",
@@ -6499,7 +6500,7 @@ describe("Prisma Compute", () => {
 
   it.effect("returns an empty tail stream before a deployment exists", () =>
     Effect.gen(function* () {
-      const provider = yield* Compute.Provider;
+      const provider = yield* Provider.findProvider(Compute);
       const chunks = yield* Stream.runCollect(
         provider.tail!({
           id: "App",
@@ -6970,7 +6971,7 @@ describe("Prisma Compute", () => {
             }),
         } as unknown as PrismaManagementClient;
 
-        const provider = yield* Compute.Provider.pipe(
+        const provider = yield* Provider.findProvider(Compute).pipe(
           Effect.provide(computeProviderLive()),
           Effect.provide(
             Layer.succeed(PrismaClient, withDefaultBranch(client)),

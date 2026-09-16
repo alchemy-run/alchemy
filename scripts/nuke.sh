@@ -1,3 +1,30 @@
+args=("$@")
+has_profile=false
+for ((i = 0; i < ${#args[@]}; i++)); do
+  case "${args[i]}" in
+    --) break ;;
+    --profile)
+      if [[ -z "${args[i+1]:-}" || "${args[i+1]}" == -* ]]; then
+        echo "Error: --profile requires a profile name." >&2
+        exit 1
+      fi
+      has_profile=true
+      ((i++))
+      ;;
+    --profile=*)
+      if [[ -z "${args[i]#--profile=}" ]]; then
+        echo "Error: --profile requires a profile name." >&2
+        exit 1
+      fi
+      has_profile=true
+      ;;
+  esac
+done
+if [[ "$has_profile" != true ]]; then
+  echo "Error: pass --profile <name> explicitly to nuke resources." >&2
+  exit 1
+fi
+
 # AWS.BackupSearch.SearchJob: AWS retains search-job records ~7 days; no delete API
 # Cloudflare.Cache.RegionalTieredCache / Cloudflare.Logs.RetentionFlag /
 # Cloudflare.AI.SecuritySettings: zone-singleton settings that always exist
@@ -8,7 +35,7 @@
 # Cloudflare.Email.Address alchemy-list-test@: standing test address — Cloudflare
 # refuses to delete an address for ~15 min after creation (code 2032), so the
 # EmailAddress test retains and re-adopts it instead of create/destroy churn.
-bun alchemy unsafe nuke ./stacks/nuke.ts  \
+bun alchemy unsafe nuke --config ./stacks/nuke.ts  \
   --exclude 'AWS.BackupSearch.SearchJob' \
   --exclude 'Cloudflare.Zone*' \
   --exclude 'Cloudflare.Account*' \
@@ -33,14 +60,14 @@ bun alchemy unsafe nuke ./stacks/nuke.ts  \
   --exclude 'AWS.Notifications.*' \
   --exclude 'AWS.NotificationsContacts.*' \
   --exclude 'AWS.ApiGateway.Account' \
-  --profile testing  \
   --concurrency 32 \
   --timeout 300 \
-  --filter 'resource.Type === "Cloudflare.Worker" && resource.workerName?.startsWith("alchemy-state") || resource.workerName === "Api"' \
+  --filter 'resource.Type === "Cloudflare.Worker" && (resource.workerName?.startsWith("alchemy-state") || resource.workerName === "Api" || ["alchemy-website-preview","alchemy-website-main","alchemy-website-prod"].includes(resource.workerName))' \
   --filter 'resource.Type === "AWS.IAM.Role" && (["alchemy-github-actions", "distilled-github-oidc-role"].includes(resource.roleName) || resource.roleName?.startsWith("AWSReservedSSO"))' \
   --filter 'resource.Type === "AWS.S3.Bucket" && (String(resource.bucketName).startsWith("alchemy-state") || String(resource.bucketName).startsWith("alchemy-assets"))' \
   --filter 'typeof resource.name === "string" && (resource.name.startsWith("DO-NOT-DELETE") || resource.name.startsWith("AppConfig.") || resource.name.startsWith("system_") || ["primary","AwsDataCatalog","DefaultConfiguration","Default","default","open-access","default.dax1.0"].includes(resource.name))' \
   --filter 'resource.Type === "Cloudflare.AI.Gateway" && resource.gatewayId === "default"' \
   --filter 'resource.Type === "Cloudflare.Email.Address" && resource.email === "alchemy-list-test@alchemy-test-2.us"' \
   --filter 'String(resource.logGroupName).startsWith("/aws/vendedlogs/b2bi/")' \
+  --filter 'resource.Type === "Fly.Bucket" && resource.name === "fly-buovnrccm7qpb3be3utsdvlj6x"' \
   "$@"

@@ -10,6 +10,7 @@
  * Extra alchemy-test args are forwarded (`-t`, `--retry`, paths, …).
  */
 import { Glob } from "bun";
+import { preferLocalFlociImage } from "./floci-image.ts";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -93,7 +94,8 @@ for (const root of requestedRoots) {
 }
 
 process.env.ALCHEMY_TEST_DEV = "1";
-process.env.ALCHEMY_FLOCI_IMAGE ??= "floci:dev";
+
+preferLocalFlociImage("test:aws:floci");
 
 if (!flags.includes("--profile")) {
   flags.unshift("--profile", "testing");
@@ -121,8 +123,7 @@ if (!flags.includes("--concurrency") && !flags.includes("-c")) {
 // loop"). Set `ALCHEMY_FLOCI_NO_RESET=1` to keep state across runs while
 // iterating on a single suite.
 if (!process.env.ALCHEMY_FLOCI_NO_RESET) {
-  const endpoint =
-    process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
+  const endpoint = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
   try {
     const res = await fetch(`${endpoint}/_floci/state/reset`, {
       method: "POST",
