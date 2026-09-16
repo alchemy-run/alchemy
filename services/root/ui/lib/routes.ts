@@ -56,18 +56,50 @@ export const taskFromLocation = (): string | undefined => {
     : undefined;
 };
 
-/** An agent's PROFILE — the mirror of its charter (`/a/Head`). */
-export const agentPath = (name: string): string =>
-  `/a/${encodeURIComponent(name)}`;
+/** The profile's TABS — the charter is the page; skills and tools
+ *  are its two indexes. */
+export type AgentTab = "charter" | "skills" | "tools";
 
-export const agentFromLocation = (): string | undefined => {
+export interface AgentPlace {
+  readonly name: string;
+  readonly tab: AgentTab;
+  /** The selected item on the tab — a skill or tool name. */
+  readonly item?: string;
+}
+
+/** An agent's PROFILE — the mirror of its charter (`/a/Head`), with
+ *  the tab and selection in the path (`/a/Head/tools/explore`) so a
+ *  pill click anywhere deep-links to the exact card. */
+export const agentPath = (
+  name: string,
+  tab: AgentTab = "charter",
+  item?: string,
+): string =>
+  `/a/${encodeURIComponent(name)}` +
+  (tab === "charter"
+    ? ""
+    : `/${tab}${item === undefined ? "" : `/${encodeURIComponent(item)}`}`);
+
+export const agentFromLocation = (): AgentPlace | undefined => {
   const parts = segments();
-  return parts[0] === "a" && parts[1] !== undefined
-    ? decodeURIComponent(parts[1])
-    : undefined;
+  if (parts[0] !== "a" || parts[1] === undefined) return undefined;
+  const tab =
+    parts[2] === "skills" || parts[2] === "tools" ? parts[2] : "charter";
+  return {
+    name: decodeURIComponent(parts[1]),
+    tab,
+    item:
+      tab !== "charter" && parts[3] !== undefined
+        ? decodeURIComponent(parts[3])
+        : undefined,
+  };
 };
 
-export const showAgent = (name: string): void => navigate(agentPath(name));
+export const showAgent = (
+  name: string,
+  tab: AgentTab = "charter",
+  item?: string,
+): void => navigate(agentPath(name, tab, item));
 
 export const showChannel = (name: string): void => navigate(channelPath(name));
 

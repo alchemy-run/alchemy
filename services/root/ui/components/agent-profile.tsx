@@ -2,23 +2,28 @@
  * An AGENT's PROFILE — the mirror of its declaration (`/a/:name`).
  *
  * The org is type-safe code; deploying it produces this page: the
- * charter prose (the same text the model reads), the pinned model,
- * the granted tools with their schema summaries and PERMISSION pills
- * (the attributed binding acquisitions), the skills with their
- * runtime switches (the gate the driver consults), and the group
- * membership trail. Editing the page IS editing the code — except
- * the skill switches, the one runtime dial.
+ * charter prose (the same text the model reads) under three TABS —
+ * Charter | Skills | Tools — with the tab and selected card in the
+ * path (`/a/Head/tools/explore`), so a splice pill clicked anywhere
+ * deep-links to the exact card. Editing the page IS editing the
+ * code — except the skill switches, the one runtime dial.
  */
 import { Avatar, KindBadge } from "@/components/avatar";
 import { MarkdownText } from "@/components/chat";
 import {
   fetchOrg,
+  invalidateOrg,
   setAgentSkill,
   type OrgAgent,
   type OrgGraph,
   type OrgTool,
 } from "@/lib/org";
-import { showChannel, showOverlay } from "@/lib/routes";
+import {
+  showAgent,
+  showChannel,
+  showOverlay,
+  type AgentTab,
+} from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -27,10 +32,11 @@ import {
   Cpu,
   FileCode2,
   MessageSquare,
+  ScrollText,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** Where "Message" goes: channel agents open their channel; the
  *  others open their standing session's working pane. */
@@ -66,8 +72,35 @@ const Pill = ({
   </span>
 );
 
+/** Scrolls itself into view when it becomes the path's selection. */
+const SelectableCard = ({
+  selected,
+  children,
+}: {
+  selected: boolean;
+  children: React.ReactNode;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) {
+      ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [selected]);
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-lg",
+        selected && "ring-2 ring-primary/60 ring-offset-2 ring-offset-background",
+      )}
+    >
+      {children}
+    </div>
+  );
+};
+
 const ToolCard = ({ tool }: { tool: OrgTool }) => (
-  <div className="flex flex-col gap-1.5 rounded-lg border border-border/70 bg-muted/10 p-3">
+  <div className="flex h-full flex-col gap-1.5 rounded-lg border border-border/70 bg-muted/10 p-3">
     <div className="flex flex-wrap items-center gap-2">
       <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="font-mono text-xs font-semibold">{tool.name}</span>
@@ -125,14 +158,17 @@ const SkillCard = ({
     setBusy(true);
     setAgentSkill(agent, name, !enabled)
       .then((response) => {
-        if (response.ok) onFlip(!enabled);
+        if (response.ok) {
+          invalidateOrg();
+          onFlip(!enabled);
+        }
       })
       .finally(() => setBusy(false));
   };
   return (
     <div
       className={cn(
-        "flex flex-col gap-1.5 rounded-lg border p-3",
+        "flex h-full flex-col gap-1.5 rounded-lg border p-3",
         enabled
           ? "border-border/70 bg-muted/10"
           : "border-border/40 bg-muted/5 opacity-70",
@@ -166,7 +202,7 @@ const SkillCard = ({
         </button>
       </div>
       {teaching !== undefined && (
-        <div className="max-h-24 overflow-hidden text-[11px] leading-relaxed text-muted-foreground [mask-image:linear-gradient(to_bottom,black_60%,transparent)]">
+        <div className="text-[11px] leading-relaxed text-muted-foreground">
           <MarkdownText text={teaching} />
         </div>
       )}
@@ -179,11 +215,22 @@ const SkillCard = ({
   );
 };
 
+const TABS: ReadonlyArray<{ id: AgentTab; icon: typeof ScrollText }> = [
+  { id: "charter", icon: ScrollText },
+  { id: "skills", icon: Blocks },
+  { id: "tools", icon: Wrench },
+];
+
 export const AgentProfile = ({
   name,
+  tab,
+  item,
   onUp,
 }: {
   name: string;
+  tab: AgentTab;
+  /** The selected card on the tab — a skill or tool name. */
+  item?: string;
   onUp: () => void;
 }) => {
   const [org, setOrg] = useState<OrgGraph | undefined>();
@@ -235,9 +282,9 @@ export const AgentProfile = ({
           {org === undefined ? "loading the org…" : `no agent named ${name}`}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* identity: who this is, on what, declared where */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex shrink-0 flex-wrap items-center gap-3 p-4 pb-3">
             <Avatar name={agent.slug} kind="agent" size={44} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -245,10 +292,12 @@ export const AgentProfile = ({
                 <KindBadge kind="agent" />
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <Cpu className="size-3" />
-                  {agent.model.label}
-                </span>
+                {agent.model !== undefined && (
+                  <span className="inline-flex items-center gap-1">
+                    <Cpu className="size-3" />
+                    {agent.model.label}
+                  </span>
+                )}
                 {agent.source !== undefined && (
                   <span className="inline-flex items-center gap-1 font-mono">
                     <FileCode2 className="size-3" />
@@ -267,71 +316,109 @@ export const AgentProfile = ({
             </button>
           </div>
 
-          {/* the charter — the same prose the model reads */}
-          <section aria-label="charter" className="flex flex-col gap-2">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Charter
-            </h2>
-            <div className="rounded-lg border border-border/70 bg-muted/10 p-3 text-[13px]">
-              <MarkdownText text={agent.charter} />
-            </div>
-          </section>
+          {/* the tabs — the tab is the path (`/a/:name/:tab/:item`) */}
+          <nav
+            aria-label="profile sections"
+            className="flex shrink-0 items-center gap-1 border-b border-border px-4"
+          >
+            {TABS.map(({ id, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                aria-current={tab === id ? "page" : undefined}
+                onClick={() => showAgent(agent.name, id)}
+                className={cn(
+                  "flex cursor-pointer items-center gap-1.5 border-b-2 px-2.5 py-1.5 text-xs capitalize",
+                  tab === id
+                    ? "border-primary font-semibold text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5" />
+                {id}
+                {id === "skills" && agent.skills.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {agent.skills.length}
+                  </span>
+                )}
+                {id === "tools" && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {agent.tools.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
 
-          {/* skills — granted in code, switched at runtime */}
-          {agent.skills.length > 0 && (
-            <section aria-label="skills" className="flex flex-col gap-2">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Skills — {agent.skills.length}
-              </h2>
-              <div className="grid gap-2 md:grid-cols-2">
-                {agent.skills.map((grant) => (
-                  <SkillCard
-                    key={grant.name}
-                    agent={agent.name}
-                    name={grant.name}
-                    enabled={grant.enabled}
-                    teaching={
-                      org?.skills.find((skill) => skill.name === grant.name)
-                        ?.teaching
-                    }
-                    onFlip={(enabled) =>
-                      setOrg((current) =>
-                        current === undefined
-                          ? current
-                          : {
-                              ...current,
-                              agents: current.agents.map((candidate) =>
-                                candidate.name === agent.name
-                                  ? {
-                                      ...candidate,
-                                      skills: candidate.skills.map((entry) =>
-                                        entry.name === grant.name
-                                          ? { ...entry, enabled }
-                                          : entry,
-                                      ),
-                                    }
-                                  : candidate,
-                              ),
-                            },
-                      )
-                    }
-                  />
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {tab === "charter" && (
+              /* the charter — the same prose the model reads */
+              <div className="rounded-lg border border-border/70 bg-muted/10 p-3 text-[13px]">
+                <MarkdownText text={agent.charter} />
+              </div>
+            )}
+
+            {tab === "skills" &&
+              (agent.skills.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  no skills granted to this agent
+                </div>
+              ) : (
+                /* skills — granted in code, switched at runtime */
+                <div className="grid content-start gap-2 md:grid-cols-2">
+                  {agent.skills.map((grant) => (
+                    <SelectableCard
+                      key={grant.name}
+                      selected={item === grant.name}
+                    >
+                      <SkillCard
+                        agent={agent.name}
+                        name={grant.name}
+                        enabled={grant.enabled}
+                        teaching={
+                          org?.skills.find(
+                            (skill) => skill.name === grant.name,
+                          )?.teaching
+                        }
+                        onFlip={(enabled) =>
+                          setOrg((current) =>
+                            current === undefined
+                              ? current
+                              : {
+                                  ...current,
+                                  agents: current.agents.map((candidate) =>
+                                    candidate.name === agent.name
+                                      ? {
+                                          ...candidate,
+                                          skills: candidate.skills.map(
+                                            (entry) =>
+                                              entry.name === grant.name
+                                                ? { ...entry, enabled }
+                                                : entry,
+                                          ),
+                                        }
+                                      : candidate,
+                                  ),
+                                },
+                          )
+                        }
+                      />
+                    </SelectableCard>
+                  ))}
+                </div>
+              ))}
+
+            {tab === "tools" && (
+              /* tools — the capability envelope, permissions included */
+              <div className="grid content-start gap-2 md:grid-cols-2">
+                {agent.tools.map((tool) => (
+                  <SelectableCard key={tool.name} selected={item === tool.name}>
+                    <ToolCard tool={tool} />
+                  </SelectableCard>
                 ))}
               </div>
-            </section>
-          )}
-
-          {/* tools — the capability envelope, permissions included */}
-          <section aria-label="tools" className="flex flex-col gap-2">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Tools — {agent.tools.length}
-            </h2>
-            <div className="grid gap-2 md:grid-cols-2">
-              {agent.tools.map((tool) => (
-                <ToolCard key={tool.name} tool={tool} />
-              ))}
-            </div>
-          </section>
+            )}
+          </div>
         </div>
       )}
     </section>

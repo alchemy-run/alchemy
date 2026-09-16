@@ -74,6 +74,7 @@ import type { UIMessage } from "ai";
 import { useAgent, useChat } from "alchemy/AI/React";
 import {
   AlarmClock,
+  AtSign,
   Blocks,
   Braces,
   ChevronDown,
@@ -100,7 +101,25 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { showTask, taskPath } from "@/lib/routes";
+import {
+  agentFromLocation,
+  showAgent,
+  showChannel,
+  showTask,
+  taskPath,
+} from "@/lib/routes";
+import {
+  fetchOrg,
+  findTool,
+  skillOwner,
+  toolOwner,
+  type OrgGraph,
+} from "@/lib/org";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import {
   Avatar,
   HUMAN,
@@ -437,6 +456,11 @@ const SPLICE_KINDS: Record<
   string,
   { icon: LucideIcon; className: string; title: string }
 > = {
+  agent: {
+    icon: AtSign,
+    className: "bg-primary/15 text-primary",
+    title: "an agent",
+  },
   tool: {
     icon: Wrench,
     className: "bg-primary/15 text-primary",
@@ -474,7 +498,121 @@ const SPLICE_KINDS: Record<
   },
 };
 
-/** One spliced reference, rendered first-class. */
+/** The graph behind every pill's hover and click — one shared fetch
+ *  (lib/org caches the promise). */
+const useOrg = (): OrgGraph | undefined => {
+  const [org, setOrg] = useState<OrgGraph | undefined>();
+  useEffect(() => {
+    let alive = true;
+    fetchOrg()
+      .then((graph) => {
+        if (alive) setOrg(graph);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return org;
+};
+
+/** Hover previews clamp long prose to a window. */
+const PreviewProse = ({ text }: { text: string }) => (
+  <div className="max-h-56 overflow-hidden text-[12px] leading-relaxed [mask-image:linear-gradient(to_bottom,black_75%,transparent)]">
+    <MarkdownText text={text} />
+  </div>
+);
+
+/** What one pill previews on hover and where it goes on click. */
+const spliceActions = (
+  org: OrgGraph | undefined,
+  kind: string,
+  name: string,
+): { preview?: ReactNode; open?: () => void } => {
+  if (org === undefined) return {};
+  switch (kind) {
+    case "tool": {
+      const tool = findTool(org, name);
+      const open = () => {
+        const owner = toolOwner(org, name, agentFromLocation()?.name);
+        if (owner !== undefined) showAgent(owner.name, "tools", name);
+      };
+      return {
+        open,
+        preview:
+          tool === undefined ? undefined : (
+            <PreviewProse text={tool.description} />
+          ),
+      };
+    }
+    case "skill": {
+      const skill = org.skills.find((entry) => entry.name === name);
+      const open = () => {
+        const owner = skillOwner(org, name, agentFromLocation()?.name);
+        if (owner !== undefined) showAgent(owner.name, "skills", name);
+      };
+      return {
+        open,
+        preview:
+          skill === undefined ? undefined : (
+            <PreviewProse text={skill.teaching} />
+          ),
+      };
+    }
+    case "group": {
+      const group = org.groups.find((entry) => entry.name === name);
+      if (group === undefined) return {};
+      return {
+        // the group's place is its channel
+        open: () => showChannel(group.slug),
+        preview: (
+          <div className="flex flex-col gap-1.5">
+            <PreviewProse text={group.chart} />
+            <div className="text-[10px] text-muted-foreground">
+              {group.members.length} member
+              {group.members.length === 1 ? "" : "s"} — #{group.slug}
+            </div>
+          </div>
+        ),
+      };
+    }
+    case "agent": {
+      const agent = org.agents.find(
+        (entry) =>
+          entry.slug === name.toLowerCase() ||
+          entry.name.toLowerCase() === name.toLowerCase(),
+      );
+      if (agent === undefined) return {};
+      return {
+        open: () => showAgent(agent.name),
+        preview: (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Avatar name={agent.slug} kind="agent" size={20} />
+              <span className="font-mono text-xs font-semibold">
+                {agent.slug}
+              </span>
+              {agent.model !== undefined && (
+                <span className="text-[10px] text-muted-foreground">
+                  {agent.model.label}
+                </span>
+              )}
+            </div>
+            <PreviewProse text={agent.charter} />
+          </div>
+        ),
+      };
+    }
+    default:
+      return {};
+  }
+};
+
+/** One spliced reference, rendered first-class: hover previews the
+ *  referent (the tool's prose, the skill's teaching, the group's
+ *  chart, the agent's charter); click goes to its place (the owning
+ *  profile's tab with the card selected, the group's channel, the
+ *  agent's page). */
 export const SplicePill = ({
   kind,
   name,
@@ -484,17 +622,43 @@ export const SplicePill = ({
 }) => {
   const spec = SPLICE_KINDS[kind] ?? SPLICE_KINDS.param!;
   const Icon = spec.icon;
-  return (
-    <span
+  const org = useOrg();
+  const { preview, open } = spliceActions(org, kind, name);
+  const pill = (
+    <button
+      type="button"
+      disabled={open === undefined}
+      onClick={
+        open === undefined
+          ? undefined
+          : (event) => {
+              event.stopPropagation();
+              open();
+            }
+      }
       title={`${name} — ${spec.title}`}
       className={cn(
         "inline-flex max-w-full items-center gap-1 truncate rounded px-1 py-0 align-baseline font-mono text-[11px] font-medium",
         spec.className,
+        open !== undefined && "cursor-pointer hover:brightness-125",
       )}
     >
       <Icon className="size-3 shrink-0" aria-hidden />
       {name}
-    </span>
+    </button>
+  );
+  if (preview === undefined) return pill;
+  return (
+    <HoverCard openDelay={300} closeDelay={100}>
+      <HoverCardTrigger asChild>{pill}</HoverCardTrigger>
+      <HoverCardContent
+        align="start"
+        className="w-96 max-w-[90vw] p-3"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {preview}
+      </HoverCardContent>
+    </HoverCard>
   );
 };
 
@@ -511,7 +675,6 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
     const at = rest.indexOf("/");
     const kind = at < 0 ? rest : rest.slice(0, at);
     const name = at < 0 ? "" : decodeURIComponent(rest.slice(at + 1));
-    if (kind === "agent") return <Mention name={name} />;
     return <SplicePill kind={kind} name={name} />;
   }
   // an agent mention (`/agents/name`) — the discord chip

@@ -36,6 +36,7 @@ import {
   showOverlay,
   taskFromLocation,
   threadFromLocation,
+  type AgentPlace,
   type Overlay,
   type Pane,
 } from "@/lib/routes";
@@ -247,13 +248,14 @@ export const App = () => {
   const [task, setTask] = useState<string | undefined>(() =>
     taskFromLocation(),
   );
-  /** The open agent PROFILE (`/a/:name`) — the org's mirror page. */
-  const [agent, setAgent] = useState<string | undefined>(() =>
+  /** The open agent PROFILE (`/a/:name/:tab?/:item?`) — the org's
+   *  mirror page, tab and selected card in the path. */
+  const [agent, setAgent] = useState<AgentPlace | undefined>(() =>
     agentFromLocation(),
   );
   /** The AGENTS rail section — the roster from `/api/org`. */
   const [roster, setRoster] = useState<
-    ReadonlyArray<{ name: string; slug: string; model: string }>
+    ReadonlyArray<{ name: string; slug: string; model: string | undefined }>
   >([]);
   /** The OPEN thread — discord's side panel, riding the path. */
   const [thread, setThread] = useState<string | undefined>(() =>
@@ -301,7 +303,7 @@ export const App = () => {
           graph.agents.map((entry) => ({
             name: entry.name,
             slug: entry.slug,
-            model: entry.model.label,
+            model: entry.model?.label,
           })),
         ),
       )
@@ -548,7 +550,7 @@ export const App = () => {
                     className={cn(
                       "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
                       agent !== undefined &&
-                        agent.toLowerCase() === entry.name.toLowerCase()
+                        agent.name.toLowerCase() === entry.name.toLowerCase()
                         ? "bg-accent font-medium"
                         : "text-muted-foreground hover:bg-accent/60",
                     )}
@@ -583,8 +585,10 @@ export const App = () => {
             feed */}
         {agent !== undefined ? (
           <AgentProfile
-            key={agent}
-            name={agent}
+            key={agent.name}
+            name={agent.name}
+            tab={agent.tab}
+            item={agent.item}
             onUp={() => showChannel(channel.name)}
           />
         ) : task !== undefined ? (
