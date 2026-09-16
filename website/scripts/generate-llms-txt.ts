@@ -417,6 +417,20 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Stripe",
+    intro:
+      "Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.",
+    pages: {
+      slugs: [
+        "stripe/index",
+        "stripe/setup",
+        "stripe/guides/subscriptions",
+        "stripe/guides/connect",
+        "stripe/guides/webhooks",
+      ],
+    },
+  },
+  {
     heading: "Docker",
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
