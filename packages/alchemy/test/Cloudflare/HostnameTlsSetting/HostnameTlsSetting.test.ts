@@ -53,11 +53,18 @@ test.provider(
 
       // Reading a hostname's override works on any zone; the standing test
       // zone has no overrides, so the probe resolves to "none".
-      const observed = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId: "min_tls_version",
-        hostname: `alchemy-htls-gate.${zoneName}`,
-      });
+      const observed = yield* hostnames
+        .listSettingsTls({
+          zoneId,
+          settingId: "min_tls_version",
+        })
+        .pipe(
+          Effect.map((settings) =>
+            settings.find(
+              (setting) => setting.hostname === `alchemy-htls-gate.${zoneName}`,
+            ),
+          ),
+        );
       expect(observed).toBeUndefined();
 
       // The standard testing zone lacks the ACM entitlement — a write must
@@ -85,8 +92,8 @@ test.provider(
 
 // Canonical `list()` test (zone-scoped collection): there is no account-wide
 // API for per-hostname overrides, so `list()` enumerates every zone via
-// `listAllZones` and probes each of the three TLS settings with the
-// per-hostname GET. The standing test zone has no ACM entitlement and therefore
+// `listAllZones` and lists the overrides for each of the three TLS settings.
+// The standing test zone has no ACM entitlement and therefore
 // no overrides, so the well-typed result is normally empty; when an entitled
 // zone + hostname is supplied via env we deploy one and assert its presence.
 test.provider(
@@ -164,11 +171,16 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
       expect(created.value).toEqual("1.2");
 
       // Out-of-band verification via the distilled API.
-      const live = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId: "min_tls_version",
-        hostname,
-      });
+      const live = yield* hostnames
+        .listSettingsTls({
+          zoneId,
+          settingId: "min_tls_version",
+        })
+        .pipe(
+          Effect.map((settings) =>
+            settings.find((setting) => setting.hostname === hostname),
+          ),
+        );
       expect(live).toBeDefined();
       expect(live!.value).toEqual("1.2");
 
@@ -189,11 +201,16 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
       expect(updated.hostname).toEqual(hostname);
       expect(updated.value).toEqual("1.3");
 
-      const liveUpdated = yield* hostnames.getSettingTls({
-        zoneId,
-        settingId: "min_tls_version",
-        hostname,
-      });
+      const liveUpdated = yield* hostnames
+        .listSettingsTls({
+          zoneId,
+          settingId: "min_tls_version",
+        })
+        .pipe(
+          Effect.map((settings) =>
+            settings.find((setting) => setting.hostname === hostname),
+          ),
+        );
       expect(liveUpdated!.value).toEqual("1.3");
 
       yield* stack.destroy();
@@ -201,8 +218,11 @@ test.provider.skipIf(!acmZoneId || !acmHostname)(
       // Removal is eventually consistent — poll the GET (bounded) until
       // the override disappears and the hostname reverts to zone defaults.
       const gone = yield* hostnames
-        .getSettingTls({ zoneId, settingId: "min_tls_version", hostname })
+        .listSettingsTls({ zoneId, settingId: "min_tls_version" })
         .pipe(
+          Effect.map((settings) =>
+            settings.find((setting) => setting.hostname === hostname),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("3 seconds"),
             until: (entry) => entry === undefined,
