@@ -25,6 +25,272 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
+test.provider(
+  "PR1585 discovers an owned bucket without ListBucket and rejects denied location reads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(Bucket("OwnershipBucket", {}));
+      const { accountId } = yield* AWSEnvironment.current;
+      const definition = (value: string) =>
+        Bucket("OwnershipBucket", { tags: { revision: value } });
+      const discovery = Effect.gen(function* () {
+        yield* definition("updated");
+        return yield* Bucket("DiscoveryProbe", {
+          bucketName: bucket.bucketName,
+        });
+      });
+
+      const deny = (action: string) =>
+        S3.putBucketPolicy({
+          Bucket: bucket.bucketName,
+          Policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Deny",
+                Principal: "*",
+                Action: action,
+                Resource: bucket.bucketArn,
+              },
+            ],
+          }),
+        });
+      const restorePolicy = S3.deleteBucketPolicy({
+        Bucket: bucket.bucketName,
+      });
+
+      yield* Effect.gen(function* () {
+        yield* deny("s3:ListBucket");
+        const listDenied = yield* S3.listObjectsV2({
+          Bucket: bucket.bucketName,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+          Effect.repeat({
+            until: Boolean,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(listDenied).toBe(true);
+        yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: accountId,
+        });
+
+        // The probe is planned, not applied: the original resource retains ownership.
+        const plan = yield* stack.plan(discovery);
+        expect(plan.resources.DiscoveryProbe?.action).toBe("adopted");
+        yield* stack.deploy(definition("updated"));
+        expect(
+          (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+        ).toContainEqual({ Key: "revision", Value: "updated" });
+
+        const wrongOwner = `${accountId.slice(0, -1)}${accountId.endsWith("0") ? "1" : "0"}`;
+        const mismatch = yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: wrongOwner,
+        }).pipe(Effect.flip);
+        expect(mismatch._tag).toBe("AccessDeniedException");
+
+        yield* deny("s3:GetBucketLocation");
+        const locationDenied = yield* S3.getBucketLocation({
+          Bucket: bucket.bucketName,
+          ExpectedBucketOwner: accountId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),
+          Effect.repeat({
+            until: Boolean,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(locationDenied).toBe(true);
+        // HeadBucket remains allowed; treating this rejection as absence would plan a create.
+        yield* S3.listObjectsV2({ Bucket: bucket.bucketName }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "AccessDeniedException",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        const failure = yield* stack.plan(discovery).pipe(Effect.flip);
+        expect(failure._tag).toBe("AccessDeniedException");
+      }).pipe(Effect.ensuring(restorePolicy.pipe(Effect.orDie)));
+
+      yield* S3.getBucketLocation({
+        Bucket: bucket.bucketName,
+        ExpectedBucketOwner: accountId,
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "AccessDeniedException",
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+        }),
+      );
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+      const absent = yield* S3.getBucketLocation({
+        Bucket: bucket.bucketName,
+      }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+        Effect.repeat({
+          until: Boolean,
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+        }),
+      );
+      expect(absent).toBe(true);
+    }),
+  { timeout: 120_000 },
+);
+
+for (const aspect of ["tagging", "encryption"] as const) {
+  test.provider(
+    `PR1586 preserves ${aspect} when its read is denied but writes are allowed`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const initialProps = {
+          tags: { revision: "before" },
+          encryption: { sseAlgorithm: "AES256" as const },
+        };
+        const bucket = yield* stack.deploy(
+          Bucket("ReadFailureBucket", initialProps),
+        );
+        const tagging = yield* S3.getBucketTagging({
+          Bucket: bucket.bucketName,
+        });
+        const encryption = yield* S3.getBucketEncryption({
+          Bucket: bucket.bucketName,
+        });
+        const restorePolicy = S3.deleteBucketPolicy({
+          Bucket: bucket.bucketName,
+        });
+        const read = Effect.gen(function* () {
+          if (aspect === "tagging") {
+            yield* S3.getBucketTagging({ Bucket: bucket.bucketName });
+          } else {
+            yield* S3.getBucketEncryption({ Bucket: bucket.bucketName });
+          }
+        });
+        const desired = Bucket("ReadFailureBucket", {
+          tags: { revision: "after" },
+          encryption: {
+            sseAlgorithm: aspect === "encryption" ? "aws:kms" : "AES256",
+          },
+        });
+
+        yield* Effect.gen(function* () {
+          yield* S3.putBucketPolicy({
+            Bucket: bucket.bucketName,
+            Policy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Deny",
+                  Principal: "*",
+                  Action:
+                    aspect === "tagging"
+                      ? "s3:GetBucketTagging"
+                      : "s3:GetEncryptionConfiguration",
+                  Resource: bucket.bucketArn,
+                },
+              ],
+            }),
+          });
+          const denied = yield* read.pipe(
+            Effect.as(false),
+            Effect.catchTag("AccessDeniedException", () =>
+              Effect.succeed(true),
+            ),
+            Effect.repeat({
+              until: Boolean,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+          expect(denied).toBe(true);
+          // Reapply the observed configuration to prove the write permission remains usable.
+          if (aspect === "tagging") {
+            yield* S3.putBucketTagging({
+              Bucket: bucket.bucketName,
+              Tagging: { TagSet: tagging.TagSet },
+            });
+          } else {
+            yield* S3.putBucketEncryption({
+              Bucket: bucket.bucketName,
+              ServerSideEncryptionConfiguration:
+                encryption.ServerSideEncryptionConfiguration!,
+            });
+          }
+          const plan = yield* stack.plan(desired);
+          expect(plan.resources.ReadFailureBucket?.action).toBe("update");
+          const failure = yield* stack.deploy(desired).pipe(Effect.flip);
+          expect(failure._tag).toBe("AccessDeniedException");
+        }).pipe(Effect.ensuring(restorePolicy.pipe(Effect.orDie)));
+
+        yield* read.pipe(
+          Effect.retry({
+            while: (error) => error._tag === "AccessDeniedException",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        if (aspect === "tagging") {
+          expect(
+            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+          ).toEqual(tagging.TagSet);
+        } else {
+          expect(
+            (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+              .ServerSideEncryptionConfiguration,
+          ).toEqual(encryption.ServerSideEncryptionConfiguration);
+        }
+        yield* stack.deploy(desired);
+        if (aspect === "tagging") {
+          expect(
+            (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+          ).toContainEqual({ Key: "revision", Value: "after" });
+        } else {
+          expect(
+            (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
+              .ServerSideEncryptionConfiguration?.Rules[0]
+              ?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm,
+          ).toBe("aws:kms");
+        }
+        yield* stack.destroy();
+        yield* assertBucketDeleted(bucket.bucketName);
+      }),
+    { timeout: 120_000 },
+  );
+}
+
+test.provider(
+  "PR1586 initializes tags after a real NoSuchTagSet response",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(Bucket("UntaggedBucket", {}));
+      const absent = yield* S3.getBucketTagging({
+        Bucket: bucket.bucketName,
+      }).pipe(Effect.flip);
+      expect(absent._tag).toBe("NoSuchTagSet");
+      yield* stack.deploy(
+        Bucket("UntaggedBucket", { tags: { initialized: "yes" } }),
+      );
+      expect(
+        (yield* S3.getBucketTagging({ Bucket: bucket.bucketName })).TagSet,
+      ).toEqual([{ Key: "initialized", Value: "yes" }]);
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucket.bucketName);
+    }),
+  { timeout: 120_000 },
+);
+
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
