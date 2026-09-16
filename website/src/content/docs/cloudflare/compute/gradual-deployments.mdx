@@ -9,7 +9,9 @@ a snapshot of code, bindings, and compatibility settings. A
 *deployment* routes traffic across up to two versions by percentage.
 By default alchemy deploys each new version at 100%. The `version`
 prop unlocks the other shapes: gradual rollouts, canaries, and
-traffic-free previews.
+traffic-free version uploads. For branch and pull-request testing,
+use [Worker Previews](/cloudflare/compute/previews) (`preview.of`)
+instead of a zero-traffic version.
 
 ## Roll out a deploy gradually
 
@@ -116,39 +118,34 @@ yield* Cloudflare.Worker("ApiCanary", {
 
 Destroying the canary restores 100% of traffic to the live version.
 
-## Preview versions
+## Upload a version without routing traffic
 
-With `parent` set and no `traffic`, the version receives no traffic.
-It is reachable only at its preview URL. This is the PR-preview
-workflow:
+With `traffic: 0` the version is uploaded and reachable at its Version
+URL, but it is not in the live deployment. Use this to inspect a
+specific upload before a gradual rollout. For branch and pull-request
+testing — isolated Durable Objects, Preview-specific bindings, custom
+domain Preview URLs — use
+[Worker Previews](/cloudflare/compute/previews) (`preview.of`) instead.
 
 ```typescript
-const parent = yield* Cloudflare.Worker.ref("Api", { stage: "staging" });
-
-const preview = yield* Cloudflare.Worker("Api", {
+yield* Cloudflare.Worker("Api", {
   main: "./src/api.ts",
-  version: { parent, message: `PR #${process.env.PR_NUMBER}` },
+  version: { traffic: 0, tag: process.env.GITHUB_SHA },
 });
-
-// https://<alias>-<name>.<subdomain>.workers.dev — stable across
-// re-deploys, always serving the latest uploaded version
-preview.url;
 ```
 
-Alchemy derives the alias from the stack, stage, and logical id
-(override with `version.alias`). The version carries its own bindings,
-so a PR can bind its own KV namespaces, D1 databases, and secrets.
-Preview URLs require the parent's workers.dev subdomain (on by
-default); `workersDev: { enabled: false, previewsEnabled: true }`
-keeps previews working with the stable URL off.
+`version.parent` with no `traffic` still uploads a Version URL of
+another stage's Worker (the previous PR-preview path). Prefer
+`preview.of` for that job going forward.
 
-### Preview version or preview stage?
+### Version, Preview, or stage?
 
-Deploying the stack to its own stage is also a preview, a fully
-independent one, with its own script and its own copies of every
-resource. A preview *version* rides the parent's script, settings, and
-version history, and adds no scripts to the account. Use a stage to
-preview infrastructure changes; use a version to preview code.
+A Preview is a named copy of a Worker with isolated Durable Object
+state. A version rides the parent's script and version history. A
+stage is a fully independent stack. Use a stage to preview
+infrastructure changes; use a Preview to preview code; use a version
+to canary or inspect an upload. See
+[Worker Previews](/cloudflare/compute/previews).
 
 ## Smoke test before shifting traffic
 

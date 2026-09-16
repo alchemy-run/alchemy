@@ -1,11 +1,10 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { useAnimation } from "@alchemy.run/sigil";
 import type { ReactNode } from "react";
-import stringWidth from "string-width";
+import { stringWidth } from "@alchemy.run/sigil/ansi";
 import {
   spinnerFramesFor,
   statusColor,
-  statusPaint,
   theme,
   type StatusVariant,
 } from "../../../Util/Theme.ts";
@@ -38,23 +37,16 @@ export function Status({ variant = "info", children, detail }: StatusProps) {
 
 export type ToastProps = StatusProps;
 
-/** Compact application notice, distinguished by its semantic rail. */
+/**
+ * Compact application notice. Severity is carried by the status glyph and
+ * its colour alone — the same vocabulary as transcript lines — so a notice
+ * row never needs a rail of its own.
+ */
 export function Toast({ variant = "info", children, detail }: ToastProps) {
-  const borderStyle = useBorderStyle();
   return (
-    <Box
-      paddingLeft={1}
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-    >
-      <Status variant={variant} detail={detail}>
-        {children}
-      </Status>
-    </Box>
+    <Status variant={variant} detail={detail}>
+      {children}
+    </Status>
   );
 }
 
@@ -62,34 +54,25 @@ export interface AlertProps extends StatusProps {
   readonly title?: ReactNode;
 }
 
+/** Glyph + bold title on one row, body indented beneath it. */
 export function Alert({
   variant = "info",
   title,
   children,
   detail,
 }: AlertProps) {
-  const borderStyle = useBorderStyle();
   const glyphs = useGlyphs();
   return (
-    <Box
-      flexDirection="column"
-      borderStyle={borderStyle}
-      borderLeft
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      borderColor={statusPaint(variant)}
-      paddingLeft={1}
-    >
+    <Box flexDirection="column">
       <Box gap={1} alignItems="center">
         <Text bold color={statusColor(variant)}>
-          {glyphs[variant]} {variant.toUpperCase()}
+          {glyphs[variant]}
         </Text>
         {title === undefined ? null : <Text bold>{title}</Text>}
         {detail === undefined ? null : <Text tone="muted">· {detail}</Text>}
       </Box>
-      <Box paddingLeft={1}>
-        <Text>{children}</Text>
+      <Box paddingLeft={theme.space.indent}>
+        <Text tone="muted">{children}</Text>
       </Box>
     </Box>
   );
@@ -197,50 +180,6 @@ export function Spinner({ label, detail }: SpinnerProps) {
     <Box gap={1}>
       <SpinnerGlyph />
       <Text>{label}</Text>
-      {detail === undefined ? null : <Text tone="muted">{detail}</Text>}
-    </Box>
-  );
-}
-
-type ProgressBarProps = {
-  /** Completion ratio. Values outside 0..1 are clamped. */
-  readonly value: number;
-  readonly width?: number;
-  readonly showPercent?: boolean;
-  readonly label?: ReactNode;
-  readonly detail?: ReactNode;
-  readonly variant?: StatusVariant;
-};
-
-export function ProgressBar({
-  value,
-  width = 24,
-  showPercent = true,
-  label,
-  detail,
-  variant = "success",
-}: ProgressBarProps) {
-  const { unicode } = useCliEnvironment();
-  const ratio = Math.max(0, Math.min(1, value));
-  const cells = Math.max(1, Math.floor(width));
-  const filled = Math.round(cells * ratio);
-  return (
-    <Box
-      gap={1}
-      aria-role="progressbar"
-      aria-label={`${Math.round(ratio * 100)}%`}
-      aria-state={{ busy: ratio < 1 }}
-    >
-      <Text>
-        <Text color={statusPaint(variant)}>
-          {(unicode ? "█" : "#").repeat(filled)}
-        </Text>
-        <Text tone="muted">{(unicode ? "░" : ".").repeat(cells - filled)}</Text>
-      </Text>
-      {showPercent ? (
-        <Text tone="muted">{`${Math.round(ratio * 100)}%`.padStart(4)}</Text>
-      ) : null}
-      {label === undefined ? null : <Text>{label}</Text>}
       {detail === undefined ? null : <Text tone="muted">{detail}</Text>}
     </Box>
   );

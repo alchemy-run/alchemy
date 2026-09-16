@@ -1,17 +1,35 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Drift from "@/Drift.ts";
+import { Docker, DockerLive } from "@/Docker/Docker.ts";
+import * as Layer from "effect/Layer";
+import * as Config from "effect/Config";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { ExternalContainer } from "./fixtures/external/object.ts";
+import ExternalContainerWorker from "./fixtures/external/worker.ts";
+import MyContainerLive, {
+  MyContainer,
+} from "./fixtures/effectful/container.ts";
+import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { describe, expect } from "alchemy-test";
+import { assert, describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { applications } from "./fixtures/identity/applications.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -84,6 +102,406 @@ const patchRow = <A extends Record<string, any>>(
   });
 
 describe("ContainerApplication", () => {
+  for (const fixture of [
+    {
+      name: "Dockerfile",
+      program: Effect.gen(function* () {
+        const worker = yield* ExternalContainerWorker;
+        const app: Cloudflare.ContainerApplication =
+          yield* ExternalContainer.Application;
+        return { app, url: worker.url.as<string>() };
+      }),
+      route: "/hello",
+      response: "hello from external container",
+    },
+    {
+      name: "generated",
+      program: Effect.gen(function* () {
+        const worker = yield* EffectfulContainerWorker;
+        const app: Cloudflare.ContainerApplication =
+          yield* MyContainer.Application;
+        return { app, url: worker.url.as<string>() };
+      }).pipe(Effect.provide(MyContainerLive)),
+      route: "/ping",
+      response: "pong",
+    },
+  ]) {
+    test.provider(
+      `exports ${fixture.name} builds from a non-loading builder to the registry`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const docker = yield* Docker;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const configDir = yield* Config.String("DOCKER_CONFIG").pipe(
+            Config.orElse(() =>
+              Config.String("HOME").pipe(
+                Config.map((home) => path.join(home, ".docker")),
+              ),
+            ),
+          );
+          const configFile = path.join(configDir, "config.json");
+          const readConfig = fs
+            .readFileString(configFile)
+            .pipe(
+              Effect.catchReason("PlatformError", "NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const configBefore = yield* readConfig;
+          const builder = `alchemy-registry-export-${fixture.name.toLowerCase()}`;
+          yield* Effect.acquireRelease(
+            docker.run([
+              "buildx",
+              "create",
+              "--name",
+              builder,
+              "--driver",
+              "docker-container",
+            ]),
+            () =>
+              docker
+                .run(["buildx", "rm", "--force", builder])
+                .pipe(Effect.orDie),
+          );
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              const previous = {
+                builder: process.env.BUILDX_BUILDER,
+                attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
+              };
+              process.env.BUILDX_BUILDER = builder;
+              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = "false";
+              return previous;
+            }),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous.builder === undefined)
+                  delete process.env.BUILDX_BUILDER;
+                else process.env.BUILDX_BUILDER = previous.builder;
+                if (previous.attestations === undefined)
+                  delete process.env.BUILDX_NO_DEFAULT_ATTESTATIONS;
+                else
+                  process.env.BUILDX_NO_DEFAULT_ATTESTATIONS =
+                    previous.attestations;
+              }),
+          );
+          const selected = yield* docker.run(["buildx", "inspect"]);
+          expect(selected.stdout).toMatch(/Driver:\s+docker-container/);
+          expect(selected.stdout).toContain(builder);
+
+          const deployed = yield* stack.deploy(fixture.program);
+          const tag = taggedRefOf(deployed.app);
+          const local = yield* docker.image
+            .inspect(tag)
+            .pipe(
+              Effect.catchReason("PlatformError", "NotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          expect(local).toBeUndefined();
+          expect(deployed.app.hash?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+          const { accountId, applicationId } = deployed.app;
+          const credentials =
+            yield* Containers.createContainerRegistryCredentials({
+              accountId,
+              registryId: "registry.cloudflare.com",
+              permissions: ["pull"],
+              expirationMinutes: 15,
+            });
+          const username = credentials.username ?? credentials.user;
+          assert(username);
+          const client = yield* HttpClient.HttpClient;
+          const repository = tag.slice(
+            "registry.cloudflare.com/".length,
+            tag.lastIndexOf(":"),
+          );
+          const manifest = yield* client.execute(
+            HttpClientRequest.get(
+              `https://registry.cloudflare.com/v2/${repository}/manifests/${deployed.app.hash!.digest}`,
+            ).pipe(
+              HttpClientRequest.basicAuth(username, credentials.password),
+              HttpClientRequest.setHeader(
+                "Accept",
+                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
+              ),
+            ),
+          );
+          expect(manifest.status).toBe(200);
+          expect(manifest.headers["docker-content-digest"]).toBe(
+            deployed.app.hash!.digest,
+          );
+          const index = yield* manifest.json.pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.Struct({
+                  mediaType: Schema.String,
+                  manifests: Schema.Array(
+                    Schema.Struct({
+                      platform: Schema.Struct({
+                        os: Schema.String,
+                        architecture: Schema.String,
+                      }),
+                    }),
+                  ),
+                }),
+              ),
+            ),
+          );
+          expect(index.mediaType).toBe(
+            "application/vnd.oci.image.index.v1+json",
+          );
+          expect(
+            index.manifests.some(
+              ({ platform }) =>
+                platform.os === "linux" && platform.architecture === "amd64",
+            ),
+          ).toBe(true);
+          const observed = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId,
+          });
+          expect(observed.configuration.image).toBe(
+            deployed.app.configuration.image,
+          );
+
+          const response = yield* Effect.gen(function* () {
+            const response = yield* client.get(
+              `${deployed.url}${fixture.route}`,
+            );
+            return { status: response.status, body: yield* response.text };
+          }).pipe(
+            Effect.timeout("45 seconds"),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (response) =>
+                response.status === 200 &&
+                response.body.includes(fixture.response),
+              times: 8,
+            }),
+          );
+          expect(response.status).toBe(200);
+          expect(response.body).toContain(fixture.response);
+          expect(yield* readConfig).toBe(configBefore);
+          const unchanged = yield* stack.deploy(fixture.program);
+          expect(unchanged.app.applicationId).toBe(applicationId);
+          expect(unchanged.app.hash).toEqual(deployed.app.hash);
+
+          yield* stack.destroy();
+          const deleted = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }).pipe(logLevel, Effect.scoped),
+      { timeout: 120_000, exclusive: true },
+    );
+  }
+
+  for (const maxInstances of [2, 4]) {
+    for (const field of [
+      "applicationId",
+      "applicationName",
+      "accountId",
+    ] as const) {
+      test.provider(
+        `plans replacement for cached ${field} mismatches with ${maxInstances === 2 ? "unchanged" : "changed"} props`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const first = yield* stack.deploy(applications());
+            const { accountId } = first.owned;
+            const observed = yield* Effect.forEach(
+              [first.owned, first.other],
+              (app) =>
+                Containers.getContainerApplication({
+                  accountId,
+                  applicationId: app.applicationId,
+                }),
+            );
+            const state = yield* yield* State;
+            const key = {
+              stack: stack.name,
+              stage: stack.stage,
+              fqn: "CachedIdentity",
+            };
+            const row = yield* state.get(key);
+            assert(row?.status === "created" || row?.status === "updated");
+
+            yield* Effect.gen(function* () {
+              const inconsistent = {
+                ...row,
+                attr: {
+                  ...row.attr,
+                  [field]:
+                    field === "accountId"
+                      ? "00000000000000000000000000000000"
+                      : first.other[field],
+                },
+              };
+              yield* state.set({ ...key, value: inconsistent });
+
+              const plan = yield* stack.plan(applications(maxInstances));
+              expect(plan.resources.CachedIdentity.action).toBe("replace");
+              expect(plan.resources.CachedIdentity.state).toEqual(inconsistent);
+              expect(plan.resources.OtherIdentity.action).toBe("noop");
+              expect(yield* state.get(key)).toEqual(inconsistent);
+
+              for (const before of observed) {
+                const after = yield* Containers.getContainerApplication({
+                  accountId,
+                  applicationId: before.id,
+                });
+                expect(after).toMatchObject({
+                  id: before.id,
+                  name: before.name,
+                  version: before.version,
+                  maxInstances: before.maxInstances,
+                  configuration: before.configuration,
+                });
+              }
+            }).pipe(
+              // Restore the real identity before teardown, even on failure.
+              Effect.ensuring(
+                state.set({ ...key, value: row }).pipe(Effect.orDie),
+              ),
+            );
+
+            const checked = yield* Drift.detect(stack);
+            expect(checked.resources.CachedIdentity.attr).toMatchObject({
+              applicationId: first.owned.applicationId,
+              applicationName: first.owned.applicationName,
+              accountId,
+            });
+            const recovered = yield* stack.deploy(applications());
+            expect(recovered.owned.applicationId).toBe(
+              first.owned.applicationId,
+            );
+            expect(recovered.other.applicationId).toBe(
+              first.other.applicationId,
+            );
+
+            yield* stack.destroy();
+            for (const app of [first.owned, first.other]) {
+              const deleted = yield* Containers.getContainerApplication({
+                accountId,
+                applicationId: app.applicationId,
+              }).pipe(
+                Effect.catchTag("ContainerApplicationNotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+                Effect.repeat({
+                  schedule: Schedule.spaced("1 second"),
+                  until: (app) => app === undefined,
+                  times: 8,
+                }),
+              );
+              expect(deleted).toBeUndefined();
+            }
+          }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
+  }
+
+  test.provider(
+    "replaces the fixture when its configured name changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const name = `renamed-${first.owned.applicationName.slice(-24)}`;
+        const renamed = applications(2, name);
+
+        const scaling = yield* stack.plan(applications(4));
+        expect(scaling.resources.CachedIdentity.action).toBe("update");
+        const plan = yield* stack.plan(renamed);
+        expect(plan.resources.CachedIdentity.action).toBe("replace");
+        expect(plan.resources.OtherIdentity.action).toBe("noop");
+        const before = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        expect(before.name).toBe(first.owned.applicationName);
+        expect(before.maxInstances).toBe(2);
+
+        const second = yield* stack.deploy(renamed);
+        expect(second.owned.applicationName).toBe(name);
+        expect(second.owned.applicationId).not.toBe(first.owned.applicationId);
+        expect(second.other.applicationId).toBe(first.other.applicationId);
+        const observed = yield* Containers.getContainerApplication({
+          accountId: second.owned.accountId,
+          applicationId: second.owned.applicationId,
+        });
+        expect(observed.name).toBe(name);
+
+        yield* stack.destroy();
+        for (const app of [first.owned, second.owned, second.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "forwards the fixture's memoryMib to Cloudflare",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const app = yield* stack.deploy(RemoteContainer.Application);
+        expect(app.configuration.memoryMib).toBe(4096);
+        const live = yield* Containers.getContainerApplication({
+          accountId: app.accountId,
+          applicationId: app.applicationId,
+        });
+        expect(live.configuration.memoryMib).toBe(4096);
+        expect(live.configuration.instanceType).not.toBe("lite");
+
+        yield* stack.destroy();
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: app.accountId,
+          applicationId: app.applicationId,
+        }).pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
   // Canonical `list()` test (Cloudflare account collection, pattern (b)).
   // `listContainerApplications` returns the full application objects in one
   // (non-paginated) response, so `list()` maps each into the exact `read`

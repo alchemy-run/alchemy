@@ -8,6 +8,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
+import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {
@@ -20,6 +21,7 @@ import {
   resolveStackArgs,
 } from "./flags.ts";
 import { suppressInterruptMessages } from "./errors.ts";
+import { moduleExtension } from "alchemy/Util/Node";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -51,6 +53,9 @@ export const devCommand = Command.make(
       // hits both processes and the interrupt message prints twice.
       yield* suppressInterruptMessages;
       const options = yield* Schema.encodeEffect(DevOptions)(args);
+      // A missing entry is this process's error to report, not a stack
+      // trace out of the exec child.
+      yield* resolveStackEntrypoint(options.main);
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
@@ -84,9 +89,7 @@ export const devCommand = Command.make(
         // second import of the same URL hits the module cache.
         const entry = fileURLToPath(
           import.meta.resolve(
-            import.meta.url.endsWith(".ts")
-              ? "alchemy/bin/exec.ts"
-              : "alchemy/bin/exec.js",
+            `alchemy/bin/exec${moduleExtension(import.meta.url)}`,
           ),
         );
         command = [
