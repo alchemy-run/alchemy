@@ -38,6 +38,11 @@ import { ForgeAuthLive, ForgeCaller } from "./GitAuth.ts";
 /** The forge's bytes: packs, clone bundles, oversize objects. */
 export const GitObjects = Cloudflare.R2.Bucket("GitObjects");
 
+/** The blob store over that bucket — some read paths resolve it per
+ *  request (the DO-less clone fast path), so the host provides it
+ *  around the git http effect too. */
+export const GitBlobStore = BlobStoreR2(GitObjects);
+
 /** The GitHub facade group with OUR `/user` probe: the engine has no
  *  user to answer with, so the middleware's caller answers (`gh` and
  *  Octokit probe this before anything else). */
@@ -79,6 +84,6 @@ export const GitRoutes = Layer.mergeAll(
   // in-process hashing: the reference layer — fan-out is a scaling
   // seam we can swap later without touching anything else
   Layer.provide(HasherInline),
-  Layer.provide(BlobStoreR2(GitObjects)),
+  Layer.provide(GitBlobStore),
   Layer.provide(Http.Platform),
 );

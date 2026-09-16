@@ -264,9 +264,9 @@ export default class ApiWorker extends Cloudflare.Worker<ApiWorker>()(
   Effect.gen(function* () {
     const sessions = yield* AI.Sessions;
     const calls = yield* Calls;
-    // ONE router: the app's Api beside the git server's routes
-    // (smart HTTP at /:owner/:repo/…, REST at /api/v1, the GitHub
-    // v3 facade at /api/v3 — no overlap with the app's /api names)
+    // ONE router: the app's route layers merged beside the git
+    // server's (smart HTTP at /:owner/:repo/…, REST at /api/v1, the
+    // GitHub v3 facade at /api/v3) — the tutorial-blessed embedding
     const api = yield* HttpRouter.toHttpEffect(
       Layer.mergeAll(yield* Api, GitRoutes),
     );
