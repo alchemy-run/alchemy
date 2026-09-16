@@ -1104,10 +1104,6 @@ export default defineConfig({
             { label: "Overview", link: "/stripe" },
             { label: "Setup", link: "/stripe/setup" },
             {
-              label: "Tutorial",
-              items: [{ autogenerate: { directory: "stripe/tutorial" } }],
-            },
-            {
               label: "Guides",
               items: [
                 {
