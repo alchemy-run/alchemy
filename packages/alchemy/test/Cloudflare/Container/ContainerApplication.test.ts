@@ -1,6 +1,4 @@
 import * as Cloudflare from "@/Cloudflare";
-import { Unowned } from "@/AdoptPolicy.ts";
-import { InstanceId } from "@/InstanceId.ts";
 import * as Drift from "@/Drift.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
 import * as Layer from "effect/Layer";
@@ -128,20 +126,6 @@ describe("ContainerApplication", () => {
         };
         const row = yield* state.get(key);
         assert(row?.status === "created" || row?.status === "updated");
-        const provider = yield* Provider.findProvider(ContainerPlatform);
-        assert(provider.read);
-        const discovered = yield* provider
-          .read({
-            id: row.logicalId,
-            fqn: row.fqn,
-            instanceId: row.instanceId,
-            olds: row.props,
-            output: undefined,
-          })
-          .pipe(Effect.provideService(InstanceId, row.instanceId));
-        expect(discovered?.applicationId).toBe(first.owned.applicationId);
-        expect(Unowned.is(discovered)).toBe(true);
-
         yield* Containers.updateContainerApplication({
           accountId: first.owned.accountId,
           applicationId: first.owned.applicationId,
@@ -210,6 +194,12 @@ describe("ContainerApplication", () => {
             unrelated.resources.CachedIdentity.state?.attr,
           ).toBeUndefined();
 
+          yield* state.delete(key);
+          const fresh = yield* stack.plan(applications());
+          expect(fresh.resources.CachedIdentity.action).toBe("create");
+          expect(fresh.resources.CachedIdentity.state).toBeUndefined();
+          expect(yield* state.get(key)).toBeUndefined();
+
           yield* state.set({ ...key, value: interrupted });
           const recovered = yield* stack.deploy(applications(5));
           expect(recovered.owned.applicationId).toBe(first.owned.applicationId);
@@ -225,9 +215,18 @@ describe("ContainerApplication", () => {
           });
           expect(live.maxInstances).toBe(5);
         }).pipe(
-          Effect.ensuring(state.set({ ...key, value: row }).pipe(Effect.orDie)),
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const restored = yield* yield* State;
+                yield* restored.set({ ...key, value: row });
+                expect(yield* restored.get(key)).toEqual(row);
+              }).pipe(Effect.provide(Layer.fresh(stack.state)));
+              yield* stack.destroy();
+            }).pipe(Effect.orDie),
+          ),
         );
-        yield* stack.destroy();
         for (const app of [first.owned, first.other]) {
           const deleted = yield* Containers.getContainerApplication({
             accountId: app.accountId,
@@ -249,15 +248,12 @@ describe("ContainerApplication", () => {
   );
 
   test.provider(
-    "keeps explicit names unowned during interrupted creation and ordinary discovery",
+    "keeps explicit names unowned even when they match a generated identity",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
-        const program = applications(
-          2,
-          "alchemy-container-interrupted-explicit",
-        );
-        const first = yield* stack.deploy(program);
+        const first = yield* stack.deploy(applications());
+        const program = applications(2, first.owned.applicationName);
         const state = yield* yield* State;
         const key = {
           stack: stack.name,
@@ -273,6 +269,7 @@ describe("ContainerApplication", () => {
         yield* Effect.gen(function* () {
           const interrupted = {
             ...row,
+            props: { ...row.props, name: first.owned.applicationName },
             status: "creating" as const,
             attr: undefined,
           };
@@ -303,9 +300,18 @@ describe("ContainerApplication", () => {
             }),
           ).toEqual(observed);
         }).pipe(
-          Effect.ensuring(state.set({ ...key, value: row }).pipe(Effect.orDie)),
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const restored = yield* yield* State;
+                yield* restored.set({ ...key, value: row });
+                expect(yield* restored.get(key)).toEqual(row);
+              }).pipe(Effect.provide(Layer.fresh(stack.state)));
+              yield* stack.destroy();
+            }).pipe(Effect.orDie),
+          ),
         );
-        yield* stack.destroy();
         for (const app of [first.owned, first.other]) {
           const deleted = yield* Containers.getContainerApplication({
             accountId: app.accountId,

@@ -1432,7 +1432,6 @@ export const make = <A>(
               fqn,
               instanceId: oldState.instanceId,
               olds: oldState.props,
-              recovery: "interrupted-create",
               output: oldState.attr,
             })
             .pipe(
