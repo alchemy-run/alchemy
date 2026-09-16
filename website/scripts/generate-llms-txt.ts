@@ -102,7 +102,6 @@ const SECTIONS: Section[] = [
       "How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.",
     pages: {
       slugs: [
-        "infrastructure-as-effects/index",
         "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
         "infrastructure-as-effects/layers",
@@ -414,6 +413,20 @@ const SECTIONS: Section[] = [
         "git/recipes/cloudflare",
         "git/recipes/cloudflare-aws",
         "git/recipes/your-own-store",
+      ],
+    },
+  },
+  {
+    heading: "Stripe",
+    intro:
+      "Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.",
+    pages: {
+      slugs: [
+        "stripe/index",
+        "stripe/setup",
+        "stripe/guides/subscriptions",
+        "stripe/guides/connect",
+        "stripe/guides/webhooks",
       ],
     },
   },

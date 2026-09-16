@@ -442,6 +442,7 @@ test(
       payload: { newOid: asOid(head), expectedOid: asOid(parent) },
     });
     expect(moved.oid).toBe(head);
+
     // pointing a ref at an object we do not have → typed 404
     yield* expectTag(
       admin.refs.update({
@@ -2320,12 +2321,12 @@ test(
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
-// (c) the pre-receive hook
+// (c) application ref authorization
 // ═══════════════════════════════════════════════════════════════════════════
 
-// A SECOND assembly, identical except for a `Git.Hooks` in its graph with
+// A second assembly, with custom native HTTP handlers sharing
 // one rule: `refs/heads/main` moves only for the repository's owner (the
-// fixture's `ProtectedMain`). Its own entry module: a Worker's generated
+// fixture's `protectMain`). Its own entry module: a Worker's generated
 // entry serves its main module's DEFAULT export, so one Worker class per
 // entry module. Deployed inside the test so the shared fixture stays one
 // worker for the e2e suites.
@@ -2340,7 +2341,7 @@ const ProtectedLocalStack = Alchemy.Stack(
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(ProtectedLocalStack));
 
 test(
-  "hooks: a pre-receive hook protects main — per-ref rule over the parsed updates",
+  "policies: an application handler protects main — per-ref rule over the parsed updates",
   Effect.gen(function* () {
     const { url } = yield* deploy(ProtectedLocalStack);
     expect(url).toMatch(/^http:\/\/localhost:\d+$/);
@@ -2360,12 +2361,12 @@ test(
     yield* mustGit(w, "add", "-A");
     yield* mustGit(w, "commit", "-m", "c1");
 
-    // The middleware lets the user push; the hook lets any OTHER branch
+    // The middleware lets the user push; the policy lets any OTHER branch
     // through...
     yield* mustGit(w, "push", "origin", "HEAD:refs/heads/feature");
 
     // ...but a direct push to main is refused PER-REF, after the pack is
-    // parsed, with the reason the hook gave.
+    // parsed, with the reason the policy gave.
     const denied = yield* mustFailGit(
       w,
       "push",
@@ -2374,7 +2375,7 @@ test(
     );
     expect(denied.stderr).toContain("not permitted");
 
-    // The owner passes the same hook.
+    // The owner passes the same policy.
     const adminRemote = yield* authRemote(url, TEST_SECRET, "e2e", "protected");
     yield* mustGit(w, "push", adminRemote, "HEAD:refs/heads/main");
 
@@ -2387,7 +2388,7 @@ test(
     expect(probe.status).toBe(401);
     expect(probe.headers["www-authenticate"]).toContain("Basic");
 
-    // The REST ref writes run the same hook: the user is refused on main
+    // The REST ref writes run the same policy: the user is refused on main
     // (a typed 403) and may still create a feature branch.
     const head = yield* revParse(w, "HEAD");
     const tokenClient = yield* makeClient(url, token);
@@ -2397,7 +2398,7 @@ test(
         query: { name: "refs/heads/main" },
         payload: { newOid: asOid(head) },
       }),
-      "HookRejected",
+      "PushDenied",
     );
     const moved = yield* tokenClient.refs.update({
       params: { owner: "e2e", repo: "protected" },
@@ -2405,6 +2406,37 @@ test(
       payload: { newOid: asOid(head), expectedOid: null },
     });
     expect(moved.oid).toBe(head);
+
+    // A policy can inspect the newly uploaded commit without publishing it.
+    yield* fs.writeFileString(path.join(w, "new.txt"), "not published yet\n");
+    yield* mustGit(w, "add", "-A");
+    yield* mustGit(w, "commit", "-m", "[reject-content]");
+    const rejectedOid = yield* revParse(w, "HEAD");
+    const rejectedContent = yield* mustFailGit(
+      w,
+      "push",
+      adminRemote,
+      "HEAD:refs/heads/main",
+    );
+    expect(rejectedContent.stderr).toContain(
+      "commit rejected by content policy",
+    );
+    const ownerClient = yield* makeClient(url, TEST_SECRET);
+    yield* expectTag(
+      ownerClient.objects.commit({
+        params: { owner: "e2e", repo: "protected", oid: asOid(rejectedOid) },
+      }),
+      "ObjectNotFound",
+    );
+    expect(
+      (yield* ownerClient.refs.get({
+        params: { owner: "e2e", repo: "protected" },
+        query: { name: "refs/heads/main" },
+      })).oid,
+    ).toBe(head);
+    // Retry with an acceptable commit: aborted staging must not poison ingestion.
+    yield* mustGit(w, "commit", "--amend", "-m", "accepted content");
+    yield* mustGit(w, "push", adminRemote, "HEAD:refs/heads/main");
   }).pipe(logLevel),
   { timeout: 240_000 },
 );
