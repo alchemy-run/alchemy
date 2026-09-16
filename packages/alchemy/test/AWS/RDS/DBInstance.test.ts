@@ -234,7 +234,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
 // in-place modify (allocatedStorage up, backup retention, perf insights) and
 // re-reads to assert no replacement occurred (same ARN, same identifier).
 test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
-  "standalone instance: create with storage knobs, then in-place modify",
+  "standalone instance: preserve grown storage above a lower minimum (PR 1593)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -258,7 +258,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
             allocatedStorage: 20,
@@ -281,7 +280,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
-            dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
             dbInstanceClass: "db.t3.micro",
             allocatedStorage: 25,
@@ -300,8 +298,56 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // In-place modify — identity is preserved (no replacement).
       expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
       expect(updated.backupRetentionPeriod).toBe(3);
+      expect(updated.allocatedStorage).toBe(25);
+
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+      });
+      const grown = (yield* describe).DBInstances?.[0];
+      expect(grown?.AllocatedStorage).toBe(25);
+      expect(grown?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+
+      // Exercise live allocation above the declaration without filling a disk
+      // to trigger autoscaling or waiting through another storage cooldown.
+      const lowerMinimum = Effect.gen(function* () {
+        const { dbSubnetGroupName } = yield* network;
+        return yield* DBInstance("StandaloneInstance", {
+          engine: "postgres",
+          dbInstanceClass: "db.t3.micro",
+          allocatedStorage: 20,
+          storageType: "gp3",
+          masterUsername: "alchemy",
+          manageMasterUserPassword: true,
+          backupRetentionPeriod: "4 days",
+          enablePerformanceInsights: true,
+          deletionProtection: false,
+          dbSubnetGroupName,
+          publiclyAccessible: false,
+        });
+      });
+      const plan = yield* stack.plan(lowerMinimum);
+      expect(plan.resources.StandaloneInstance).toMatchObject({
+        action: "update",
+      });
+      const preserved = yield* stack.deploy(lowerMinimum);
+      expect(preserved.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(preserved.allocatedStorage).toBe(25);
+      const observed = (yield* describe).DBInstances?.[0];
+      expect(observed?.AllocatedStorage).toBe(25);
+      expect(observed?.BackupRetentionPeriod).toBe(4);
+      expect(observed?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
 
       yield* stack.destroy();
+      const gone = yield* describe.pipe(
+        Effect.as(false),
+        Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (absent) => absent,
+        }),
+      );
+      expect(gone).toBe(true);
     }),
   { timeout: 2_400_000 },
 );
