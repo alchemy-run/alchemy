@@ -17,7 +17,7 @@ import {
   type OrgGraph,
   type OrgTool,
 } from "@/lib/org";
-import { showAgent, type AgentTab } from "@/lib/routes";
+import { showAgent, showChannel, type AgentTab } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Cpu,
   FileCode2,
+  MessageCircle,
   ScrollText,
   Wrench,
 } from "lucide-react";
@@ -292,11 +293,21 @@ export const AgentProfile = ({
             </div>
           </div>
 
-          {/* the tabs — the tab is the path (`/a/:name/:tab/:item`) */}
+          {/* the tabs — the tab is the path (`/a/:name/:tab/:item`);
+              Chat leads back to the agent's DM, so the DM header and
+              this page wear the SAME row */}
           <nav
             aria-label="profile sections"
             className="flex shrink-0 items-center gap-1 border-b border-border px-4"
           >
+            <button
+              type="button"
+              onClick={() => showChannel(agent.slug)}
+              className="flex cursor-pointer items-center gap-1.5 border-b-2 border-transparent px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <MessageCircle className="size-3.5" />
+              Chat
+            </button>
             {TABS.map(({ id, icon: Icon }) => (
               <button
                 key={id}

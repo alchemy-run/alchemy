@@ -138,6 +138,7 @@ export const ChannelFeed = ({
   chat,
   placeholder,
   filter,
+  dm = false,
 }: {
   /** The channel's name (`root`, `engineering`) — the feed's scope. */
   channel: string;
@@ -146,6 +147,8 @@ export const ChannelFeed = ({
   placeholder?: string;
   /** The header's search box — filters whole threads by text. */
   filter?: string;
+  /** A DM — the empty state speaks to the agent, not a room. */
+  dm?: boolean;
 }) => {
   const { posts, refresh } = useChannelPosts(channel);
   const live = posts !== undefined && posts.some(isLive);
@@ -195,7 +198,9 @@ export const ChannelFeed = ({
           <div className="px-2 py-6 text-[12px] text-muted-foreground">
             {needle.length > 0
               ? "nothing matches the search"
-              : `nothing here yet — say something in #${channel}`}
+              : dm
+                ? `nothing here yet — say something to @${channel}`
+                : `nothing here yet — say something in #${channel}`}
           </div>
         ) : (
           <div className="space-y-6 py-3">
