@@ -87,7 +87,12 @@ export const Model: {
  */
 export class TickModel extends Context.Service<
   TickModel,
-  { readonly select: (model: ModelLayer) => void }
+  {
+    /** Record the selection: the ready Layer plus the model class's
+     *  KEY (its `Context.Service` identifier) — the registry's name
+     *  for it. */
+    readonly select: (model: ModelLayer, key: string) => void;
+  }
 >()("alchemy/AI/TickModel") {}
 
 /**
@@ -118,5 +123,8 @@ export const selectModel = <Self>(
         "AI.selectModel: no tick in scope — select the model from a turn hook (the `turn` key of the charter's methods record)",
       );
     }
-    holder.value.select(yield* model as never as Effect.Effect<ModelLayer>);
+    holder.value.select(
+      yield* model as never as Effect.Effect<ModelLayer>,
+      (model as unknown as { key: string }).key,
+    );
   }) as never;

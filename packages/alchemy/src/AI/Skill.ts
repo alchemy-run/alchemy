@@ -40,6 +40,10 @@ export interface Teaching<
 > {
   readonly template: TemplateStringsArray;
   readonly refs: Refs;
+  /** The term this teaching implements — the Agent/Skill/Group class
+   *  the Layer provides. What lets a deployed roster be WALKED: given
+   *  the Layer, know whose teaching it is. */
+  readonly subject: unknown;
 }
 
 /**

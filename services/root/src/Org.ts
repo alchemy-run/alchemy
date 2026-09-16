@@ -2,50 +2,23 @@ import * as AI from "alchemy/AI";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Head, HeadLive } from "./Head.ts";
-import Root, { RootChart } from "./Root.ts";
-import { CharterGuidance, CharterGuidanceGeneral } from "./CharterGuidance.ts";
-import { ToolGuidance, ToolGuidanceGeneral } from "./coding/ToolGuidance.ts";
-import Engineering, { EngineeringChart } from "./engineering/Group.ts";
-import { Engineer, GeneralEngineer } from "./engineering/Engineer.ts";
-import { Manager, ManagerLive } from "./engineering/Manager.ts";
-import { GeneralReviewer, Reviewer } from "./engineering/Reviewer.ts";
-import { OrgGuidance, OrgGuidanceGeneral } from "./OrgGuidance.ts";
-import { AwsEmulation, AwsEmulationGeneral } from "./process/AwsEmulation.ts";
-import {
-  CloudflareEmulation,
-  CloudflareEmulationGeneral,
-} from "./process/CloudflareEmulation.ts";
-import {
-  Distillation,
-  DistillationGeneral,
-} from "./process/Distillation.ts";
-import {
-  ProviderEngineering,
-  ProviderEngineeringGeneral,
-} from "./process/ProviderEngineering.ts";
-import {
-  Verification,
-  VerificationGeneral,
-} from "./process/Verification.ts";
-import {
-  SandboxGuidance,
-  SandboxGuidanceGeneral,
-} from "./sandbox/SandboxGuidance.ts";
 
 /**
- * THE ORG GRAPH — the company's structure as data, walked from the
- * same static declarations the driver runs: every agent's charter is
- * a module-scope template (`Head.make`…``), every group's chart and
- * skill's teaching ride their Layers as `Teaching` statics, and every
- * tool is either a static `ToolDef` or a class tool term. Nothing
- * here executes a charter; the graph IS the code, projected.
+ * THE ORG GRAPH — the company's structure as data, DERIVED, never
+ * re-declared.
+ *
+ * Every Agent, Skill, and Group Layer that builds registers its
+ * static declaration (`Teaching` — the template and refs the driver
+ * runs) into the ambient `AI.OrgRegistry`; this module only PROJECTS
+ * those rows. There is no roster here: the same Layer builds that
+ * boot the deployed Worker populate the registry, so the graph served
+ * is exactly the org deployed — a hand-kept table would drift; this
+ * one cannot.
  *
  * Permissions come from the ambient `Binding.AcquisitionRegistry`
- * (provided by the Worker): the same Layer builds that construct the
- * agents record every `Binding.Service` acquisition under its org
- * path (agent → skill → tool), so the deployed Worker serves exactly
- * the permission table its own boot proved.
+ * the same way: the Layer builds record every `Binding.Service`
+ * acquisition under its org path (agent → skill → tool), so the
+ * permission table is the boot's own proof.
  */
 
 export interface OrgTool {
@@ -80,7 +53,9 @@ export interface OrgAgent {
   readonly name: string;
   readonly slug: string;
   readonly source: string | undefined;
-  readonly model: { readonly id: string; readonly label: string };
+  /** The model the agent's turn hook pins (`AI.selectModel`),
+   *  probed where the charter ran. */
+  readonly model: { readonly id: string; readonly label: string } | undefined;
   /** The charter, rendered — the same prose the model reads. */
   readonly charter: string;
   readonly tools: ReadonlyArray<OrgTool>;
@@ -103,56 +78,16 @@ export interface OrgGraph {
   readonly skills: ReadonlyArray<OrgSkill>;
 }
 
-/** Every agent pins Haiku today (`AI.selectModel(Haiku)` in its turn
- *  hook); the pin is per agent, so the entry rides the roster. */
-const HAIKU = { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" };
-
-interface Teaching {
-  readonly template: TemplateStringsArray;
-  readonly refs: ReadonlyArray<unknown>;
-}
-
-/** The roster — the same exports ApiWorker deploys. */
-const AGENTS: ReadonlyArray<{
-  cls: { "~alchemy/Name": string; source?: { path?: string } };
-  live: Teaching;
-  model: typeof HAIKU;
-}> = [
-  { cls: Head, live: HeadLive, model: HAIKU },
-  { cls: Manager, live: ManagerLive, model: HAIKU },
-  { cls: Engineer, live: GeneralEngineer, model: HAIKU },
-  { cls: Reviewer, live: GeneralReviewer, model: HAIKU },
-];
-
-const GROUPS: ReadonlyArray<{
-  cls: { "~alchemy/Name": string; source?: { path?: string } };
-  chart: Teaching;
-}> = [
-  { cls: Root, chart: RootChart },
-  { cls: Engineering, chart: EngineeringChart },
-];
-
-/** Skill class → its General teaching Layer (the org's default). */
-const SKILLS: ReadonlyArray<{
-  cls: { "~alchemy/Name": string; source?: { path?: string } };
-  general: Teaching;
-}> = [
-  { cls: Verification, general: VerificationGeneral },
-  { cls: ProviderEngineering, general: ProviderEngineeringGeneral },
-  { cls: Distillation, general: DistillationGeneral },
-  { cls: AwsEmulation, general: AwsEmulationGeneral },
-  { cls: CloudflareEmulation, general: CloudflareEmulationGeneral },
-  { cls: OrgGuidance, general: OrgGuidanceGeneral },
-  { cls: CharterGuidance, general: CharterGuidanceGeneral },
-  { cls: ToolGuidance, general: ToolGuidanceGeneral },
-  { cls: SandboxGuidance, general: SandboxGuidanceGeneral },
-];
-
 const nameOf = (term: unknown): string =>
   (term as { "~alchemy/Name": string })["~alchemy/Name"];
 
-const sourceOf = (cls: { source?: { path?: string } }): string | undefined =>
-  cls.source?.path;
+/** The registry's model key (`root/Haiku`) as the UI's `{ id, label }`. */
+const modelOf = (
+  key: string | undefined,
+): OrgAgent["model"] =>
+  key === undefined
+    ? undefined
+    : { id: key, label: key.slice(key.lastIndexOf("/") + 1) };
 
 /* ── marked prose: every splice a FIRST-CLASS reference ──────────────
  *
@@ -191,7 +126,7 @@ const markRef = (ref: unknown): string => {
   return String(ref);
 };
 
-/** Render a template with every splice as a `ref://` reference. */
+/** Render a template with every splice as a typed reference link. */
 const renderMarked = (
   template: TemplateStringsArray,
   refs: ReadonlyArray<unknown>,
@@ -230,10 +165,10 @@ const toolEntry = (
   };
 };
 
-/** Build the graph — the static structure plus the attributed
- *  acquisitions recorded by the host's Layer builds and the stored
- *  skill switch-offs (`agent/skill` keys). */
+/** Build the graph from the registered declarations, the attributed
+ *  acquisitions, and the stored skill switch-offs (`agent/skill`). */
 export const buildOrgGraph = (
+  nodes: ReadonlyArray<AI.OrgNode>,
   acquisitions: ReadonlyArray<Binding.Acquisition>,
   disabled: ReadonlySet<string> = new Set(),
 ): OrgGraph => {
@@ -254,64 +189,76 @@ export const buildOrgGraph = (
       )
       .map((row) => ({ binding: row.binding, targets: row.targets }));
 
-  const groups: OrgGroup[] = GROUPS.map((entry) => ({
-    name: nameOf(entry.cls),
-    slug: AI.memberSlug(nameOf(entry.cls)),
-    source: sourceOf(entry.cls),
-    chart: renderMarked(entry.chart.template, entry.chart.refs),
-    members: entry.chart.refs.filter(AI.isAgent).map(nameOf),
-  }));
+  const groups: OrgGroup[] = nodes
+    .filter((node) => node.kind === "Group")
+    .map((node) => ({
+      name: node.name,
+      slug: AI.memberSlug(node.name),
+      source: node.source,
+      chart: renderMarked(node.template, node.refs),
+      members: node.refs.filter(AI.isAgent).map(nameOf),
+    }));
 
-  const skills: OrgSkill[] = SKILLS.map((entry) => ({
-    name: nameOf(entry.cls),
-    source: sourceOf(entry.cls),
-    teaching: renderMarked(entry.general.template, entry.general.refs),
-    // a teaching may mention a tool several times — one grant
-    tools: [...new Set(entry.general.refs.filter(AI.isTool).map(nameOf))],
-  }));
+  const skills: OrgSkill[] = nodes
+    .filter((node) => node.kind === "Skill")
+    .map((node) => ({
+      name: node.name,
+      source: node.source,
+      teaching: renderMarked(node.template, node.refs),
+      // a teaching may mention a tool several times — one grant
+      tools: [...new Set(node.refs.filter(AI.isTool).map(nameOf))],
+    }));
 
-  const agents: OrgAgent[] = AGENTS.map((entry) => {
-    const name = nameOf(entry.cls);
-    // prose may mention a tool several times — one grant per name
-    const tools: OrgTool[] = [];
-    const seen = new Set<string>();
-    const grantedSkills = new Set<string>();
-    const grant = (term: AI.Tool<string, any[]>, kind: OrgTool["kind"]) => {
-      const toolName = nameOf(term);
-      if (seen.has(toolName)) return;
-      seen.add(toolName);
-      tools.push(toolEntry(term, kind, permissionsOf(name, toolName)));
-    };
-    for (const ref of entry.live.refs) {
-      if (AI.isToolDef(ref)) grant(ref.tool, "static");
-      else if (AI.isTool(ref)) grant(ref, "class");
-      else if (AI.isSkill(ref)) grantedSkills.add(nameOf(ref));
-    }
-    return {
-      name,
-      slug: AI.memberSlug(name),
-      source: sourceOf(entry.cls),
-      model: entry.model,
-      charter: renderMarked(entry.live.template, entry.live.refs),
-      tools,
-      skills: [...grantedSkills].map((skill) => ({
-        name: skill,
-        enabled: !disabled.has(`${name}/${skill}`),
-      })),
-      groups: groups
-        .filter((group) => group.members.includes(name))
-        .map((group) => group.name),
-    };
-  });
+  const agents: OrgAgent[] = nodes
+    .filter((node) => node.kind === "Agent")
+    .map((node) => {
+      const name = node.name;
+      // prose may mention a tool several times — one grant per name
+      const tools: OrgTool[] = [];
+      const seen = new Set<string>();
+      const grantedSkills = new Set<string>();
+      const grant = (
+        term: AI.Tool<string, any[]>,
+        kind: OrgTool["kind"],
+      ) => {
+        const toolName = nameOf(term);
+        if (seen.has(toolName)) return;
+        seen.add(toolName);
+        tools.push(toolEntry(term, kind, permissionsOf(name, toolName)));
+      };
+      for (const ref of node.refs) {
+        if (AI.isToolDef(ref)) grant(ref.tool, "static");
+        else if (AI.isTool(ref)) grant(ref, "class");
+        else if (AI.isSkill(ref)) grantedSkills.add(nameOf(ref));
+      }
+      return {
+        name,
+        slug: AI.memberSlug(name),
+        source: node.source,
+        model: modelOf(node.model),
+        charter: renderMarked(node.template, node.refs),
+        tools,
+        skills: [...grantedSkills].map((skill) => ({
+          name: skill,
+          enabled: !disabled.has(`${name}/${skill}`),
+        })),
+        groups: groups
+          .filter((group) => group.members.includes(name))
+          .map((group) => group.name),
+      };
+    });
 
   return { groups, agents, skills };
 };
 
-/** The graph over the ambient registry (empty permissions without one). */
-export const orgGraph: Effect.Effect<OrgGraph> = Effect.map(
-  Effect.serviceOption(Binding.AcquisitionRegistry),
-  (registry) =>
-    buildOrgGraph(
-      Option.isSome(registry) ? registry.value.list() : [],
-    ),
-);
+/** The graph over the ambient registries (empty without them). */
+export const orgGraph: Effect.Effect<OrgGraph> = Effect.gen(function* () {
+  const structure = yield* Effect.serviceOption(AI.OrgRegistry);
+  const acquisitions = yield* Effect.serviceOption(
+    Binding.AcquisitionRegistry,
+  );
+  return buildOrgGraph(
+    Option.isSome(structure) ? structure.value.list() : [],
+    Option.isSome(acquisitions) ? acquisitions.value.list() : [],
+  );
+});

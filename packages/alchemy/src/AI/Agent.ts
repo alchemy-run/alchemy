@@ -1,6 +1,9 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { TickModel } from "./Model.ts";
+import { OrgRegistry } from "./OrgRegistry.ts";
 import type { Teaching } from "./Skill.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
@@ -566,17 +569,49 @@ export const makeTerm = (
  * and the RPC methods.
  */
 const staticCharter = (
+  cls: { "~alchemy/Name": string; source?: Source },
   template: TemplateStringsArray,
   refs: any[],
   extras?: unknown,
 ): Charter =>
   Effect.gen(function* () {
     const stance = yield* fragment(template, ...refs);
-    if (extras === undefined) return stance;
-    const record = (
-      Effect.isEffect(extras) ? yield* extras as Effect.Effect<any> : extras
-    ) as Record<string, unknown>;
-    const { turn: hook, ...methods } = record;
+    const record =
+      extras === undefined
+        ? undefined
+        : ((Effect.isEffect(extras)
+            ? yield* extras as Effect.Effect<any>
+            : extras) as Record<string, unknown>);
+    const hook = record?.turn as Effect.Effect<void, any, any> | undefined;
+    // the org, DERIVED: the same build that runs this charter
+    // registers its declaration — plan time and isolate boot alike
+    // (OrgRegistry.ts). The hook is probed once, under a recording
+    // TickModel, for the model its `AI.selectModel` pins; a
+    // frame-dependent hook simply registers no model.
+    const registry = yield* Effect.serviceOption(OrgRegistry);
+    if (Option.isSome(registry)) {
+      let model: string | undefined;
+      if (hook !== undefined) {
+        yield* hook.pipe(
+          Effect.provideService(TickModel, {
+            select: (_, key) => {
+              model = key;
+            },
+          }),
+          Effect.catchCause(() => Effect.void),
+        );
+      }
+      registry.value.register({
+        kind: "Agent",
+        name: cls["~alchemy/Name"],
+        source: cls.source?.path,
+        template,
+        refs,
+        ...(model !== undefined ? { model } : {}),
+      });
+    }
+    if (record === undefined) return stance;
+    const { turn: _hook, ...methods } = record;
     return {
       turn: stance,
       ...(hook !== undefined ? { "~alchemy/tick": hook } : {}),
@@ -595,17 +630,21 @@ const staticAgentLayer = (
   refs: any[],
 ) => {
   const attach = (extras: unknown) =>
-    Object.assign(layer(cls as any, staticCharter(template, refs, extras)), {
-      template,
-      refs,
-    });
+    Object.assign(
+      layer(cls as any, staticCharter(cls as any, template, refs, extras)),
+      {
+        template,
+        refs,
+        subject: cls,
+      },
+    );
   // the callable IS the bare Layer: prototype-chained onto it so
   // Layer machinery reads through (the Tool-term trick)
   Object.setPrototypeOf(
     attach,
-    layer(cls as any, staticCharter(template, refs)),
+    layer(cls as any, staticCharter(cls as any, template, refs)),
   );
-  return Object.assign(attach, { template, refs }) as any;
+  return Object.assign(attach, { template, refs, subject: cls }) as any;
 };
 
 const isTemplateStringsArray = (

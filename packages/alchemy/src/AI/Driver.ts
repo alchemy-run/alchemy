@@ -11,6 +11,7 @@ import type { DriverError } from "./Errors.ts";
 import type { Fragment } from "./Fragment.ts";
 import type { Thread, Tick } from "./Thread.ts";
 import type { TickModel } from "./Model.ts";
+import { OrgRegistry } from "./OrgRegistry.ts";
 import {
   isSkill,
   type Skill,
@@ -406,6 +407,18 @@ export const layer: {
               actors.set(slug, service.value);
             }
             const roster = members.map((member) => member.slug);
+            // the org, DERIVED: the build that assembles the group
+            // registers its chart (OrgRegistry.ts)
+            const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
+            if (Option.isSome(orgRegistry)) {
+              orgRegistry.value.register({
+                kind: "Group",
+                name: groupName,
+                source: (term as { source?: { path?: string } }).source?.path,
+                template,
+                refs,
+              });
+            }
             const head = members[0];
             if (head === undefined) {
               return yield* Effect.die(
@@ -447,7 +460,11 @@ export const layer: {
           ) as any,
         ),
         // the org chart as static data on the Layer (Teaching)
-        { template: charterOrTemplate as TemplateStringsArray, refs },
+        {
+          template: charterOrTemplate as TemplateStringsArray,
+          refs,
+          subject: term,
+        },
       )
     : isSkill(term)
       ? Object.assign(
@@ -482,6 +499,18 @@ export const layer: {
                     )
                   : service.value;
               }
+              // the org, DERIVED: the build that assembles the skill
+              // registers its teaching (OrgRegistry.ts)
+              const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
+              if (Option.isSome(orgRegistry)) {
+                orgRegistry.value.register({
+                  kind: "Skill",
+                  name: term["~alchemy/Name"] as string,
+                  source: (term as { source?: { path?: string } }).source?.path,
+                  template,
+                  refs,
+                });
+              }
               return { template, refs, tools } satisfies SkillService;
             }).pipe(
               attributed({
@@ -491,7 +520,11 @@ export const layer: {
             ) as any,
           ),
           // the teaching as static data on the Layer (Teaching)
-          { template: charterOrTemplate as TemplateStringsArray, refs },
+          {
+            template: charterOrTemplate as TemplateStringsArray,
+            refs,
+            subject: term,
+          },
         )
       : Layer.effect(
           term,

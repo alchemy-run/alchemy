@@ -1,3 +1,4 @@
+import * as AI from "alchemy/AI";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -26,9 +27,12 @@ import { skillConfig } from "./platform/SkillGateD1.ts";
  * taken here would lose whichever side finished later.
  */
 export const OrgApi = Effect.gen(function* () {
+  const structure = yield* Effect.serviceOption(AI.OrgRegistry);
   const registry = yield* Effect.serviceOption(Binding.AcquisitionRegistry);
   const config = yield* skillConfig;
 
+  const nodes = () =>
+    Option.isSome(structure) ? structure.value.list() : [];
   const acquisitions = () =>
     Option.isSome(registry) ? registry.value.list() : [];
 
@@ -40,7 +44,7 @@ export const OrgApi = Effect.gen(function* () {
         .disabled()
         .pipe(Effect.catchCause(() => Effect.succeed(new Set<string>())));
       return yield* HttpServerResponse.json(
-        buildOrgGraph(acquisitions(), disabled),
+        buildOrgGraph(nodes(), acquisitions(), disabled),
       );
     }),
   );
@@ -52,7 +56,7 @@ export const OrgApi = Effect.gen(function* () {
       const params = yield* HttpRouter.params;
       const agent = decodeURIComponent(String(params.agent ?? ""));
       const skill = decodeURIComponent(String(params.skill ?? ""));
-      const found = buildOrgGraph([]).agents.find(
+      const found = buildOrgGraph(nodes(), []).agents.find(
         (candidate) => candidate.name === agent,
       );
       if (

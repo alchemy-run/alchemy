@@ -16,6 +16,7 @@ export * from "./Sessions.ts";
 export * from "./Fragment.ts";
 export * from "./Message.ts";
 export * from "./Model.ts";
+export * from "./OrgRegistry.ts";
 export * from "./Thing.ts";
 export * from "./Sandbox.ts";
 export * from "./SandboxHttp.ts";

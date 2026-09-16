@@ -38,6 +38,7 @@ import { DistillationGeneral } from "./process/Distillation.ts";
 import { ProviderEngineeringGeneral } from "./process/ProviderEngineering.ts";
 import { VerificationGeneral } from "./process/Verification.ts";
 import { ProposalsLive } from "./proposals/ProposalsDO.ts";
+import { RootChart } from "./Root.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
 
@@ -46,6 +47,14 @@ import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
  *  and `GET /api/org` serves the permission table from it. */
 const OrgRegistry = Layer.sync(Binding.AcquisitionRegistry, () =>
   Binding.makeAcquisitionRegistry(),
+);
+
+/** ONE org registry per isolate — every Agent/Skill/Group Layer that
+ *  builds registers its static declaration (template + refs + pinned
+ *  model), and `GET /api/org` serves the org graph from it: the
+ *  organization, derived, never re-declared. */
+const OrgStructure = Layer.sync(AI.OrgRegistry, () =>
+  AI.makeOrgRegistry(),
 );
 
 /** The artifact store on the session's workspaces. */
@@ -149,6 +158,14 @@ const EngineeringLive = EngineeringChart.pipe(
  *  resource the company works in, the target of `/terminal/Workspace/…`. */
 const WorkspaceWorker = WorkspaceAgentLive.pipe(Layer.provide(SandboxSession));
 
+/** The ROOT GROUP — the chart over the Head and the team it names.
+ *  Deployed like every group: its Layer build IS its registration in
+ *  the org registry (nothing lists Root by hand). */
+const RootLive = Layer.suspend(() => RootChart).pipe(
+  Layer.provide(Layer.suspend(() => HeadWorker)),
+  Layer.provide(EngineeringLive),
+);
+
 /** The HEAD — ⊤: the Root Thread's resident. */
 const HeadWorker = Layer.suspend(() => HeadLive).pipe(
   Layer.provide(EngineeringLive),
@@ -203,6 +220,7 @@ const CheckoutsRouter = Layer.succeed(Git.Checkouts, {
  */
 const Company = Layer.mergeAll(
   HeadWorker,
+  RootLive,
   EngineeringLive,
   ManagerWorker,
   EngineerWorker,
@@ -220,6 +238,7 @@ const Company = Layer.mergeAll(
   Layer.provideMerge(PostsLive),
   Layer.provideMerge(CheckoutsRouter),
   Layer.provideMerge(OrgRegistry),
+  Layer.provideMerge(OrgStructure),
   // the runtime switch over skill activation (the profile UI's
   // toggles) — consulted by the driver's activation doors
   Layer.provideMerge(SkillGateD1),
