@@ -9,6 +9,7 @@ import type { Actor, Agent, AgentService, Stub, StubVerbs } from "./Agent.ts";
 import type { DriverError } from "./Errors.ts";
 import type { Fragment } from "./Fragment.ts";
 import type { Thread, Tick } from "./Thread.ts";
+import type { TickModel } from "./Model.ts";
 import {
   isSkill,
   type Skill,
@@ -178,7 +179,12 @@ export type Charter = Effect.Effect<SessionResult, any, any>;
  * plan time); `Tick` exists only inside the loop, so turns and tool
  * handlers see it and methods do not.
  */
-export type TurnServices = Thread | Tick | RuntimeContext | PersistentRef.Store;
+export type TurnServices =
+  | Thread
+  | Tick
+  | RuntimeContext
+  | PersistentRef.Store
+  | TickModel;
 
 /** The requirements of one session result, minus the frame. */
 export type ResultServices<A> =

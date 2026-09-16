@@ -152,13 +152,24 @@ export interface Tool<
   impl: (props: this["params"]) => Effect.Effect<any, any, any>;
   new (): Tool<Name, Refs>;
   /**
-   * Apply the implementation — the INLINE tool form. The result is an
-   * Effect so the charter's INIT `yield*`s it: that is what charges
-   * the template's own splices (`${Comment}` in the description) to
-   * the init's requirement channel, making the tool's dependencies a
-   * type-level fact of the Layer. The yielded {@link ToolImpl} is then
-   * spliced into prose; the HANDLER's requirements ride the splice
-   * (they are turn-time, satisfied by the driver at call time).
+   * Apply the implementation — SYNCHRONOUSLY. The result is a
+   * {@link ToolDef}: pure declaration data (name, prose, typed I/O,
+   * and the INIT Effect), constructed with no Effect run.
+   *
+   * The INIT (`Effect<handler, never, Req>`) runs once where the host
+   * agent's Layer builds — at plan time in the deploy process and once
+   * per isolate at runtime. Bindings and services are acquired there
+   * (and attributed to THIS tool in the permission graph); the
+   * returned HANDLER runs per call, its only implicit input the
+   * current session (`AI.Thread`).
+   *
+   * Splicing the def into a charter template grants the tool and
+   * charges `Req | Services<Refs>` to the charter Layer's requirement
+   * channel — a tool's dependencies are a type-level fact.
+   *
+   * (Transitional: the def is also a yieldable Effect resolving to
+   * the legacy inline {@link ToolImpl}, so pre-static charters that
+   * `yield*` the application keep working until they migrate.)
    */
   <Err extends ToolErrors<Refs[number]> = never, Req = never>(
     impl: Effect.Effect<
@@ -166,12 +177,12 @@ export interface Tool<
       Err,
       Req
     >,
-  ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
+  ): ToolDef<this, Err, Req | Services<Refs>>;
   <Err extends ToolErrors<Refs[number]> = never, Req = never>(
     impl: (
       props: this["params"],
     ) => Effect.Effect<ToolReturns<Refs[number]>, Err, Req>,
-  ): Effect.Effect<ToolImpl<this, Err, Req>, never, Services<Refs>>;
+  ): ToolDef<this, Err, Req | Services<Refs>>;
 }
 
 export interface ToolImpl<
@@ -184,6 +195,50 @@ export interface ToolImpl<
   impl: (props: T["params"]) => Effect.Effect<any, Err, Req>;
   new (): {};
 }
+
+/**
+ * A TOOL DEFINITION — the static value `AI.Tool(name)`…`(init)`
+ * produces, synchronously: the term (name, prose, typed I/O) plus the
+ * INIT Effect that builds its handler.
+ *
+ * The def is pure declaration data, mintable at module scope with no
+ * Effect run — which is what makes a tool's dependencies (and its
+ * BINDINGS, acquired inside `init`) statically knowable: the graph
+ * walks defs without executing anything, and the plan-phase Layer
+ * build executes `init` under attribution to learn the permissions.
+ *
+ * Splice a def into a charter template to grant the tool; `Req`
+ * charges the charter Layer's requirement channel.
+ *
+ * Transitional: a def is also a yieldable Effect resolving to the
+ * legacy {@link ToolImpl} (init runs at the yield), so pre-static
+ * charters that `yield*` the application keep working during the
+ * migration.
+ */
+export interface ToolDef<
+  T extends Tool<any, any> = any,
+  Err = any,
+  Req = any,
+> extends Effect.Effect<ToolImpl<T, Err, never>, never, Req> {
+  readonly "~alchemy/Kind": "ToolDef";
+  readonly tool: T;
+  /**
+   * INIT — runs once where the host agent's Layer builds (plan time
+   * and isolate boot): acquires bindings/services, returns the
+   * per-call HANDLER. The handler's one implicit input is the current
+   * session (`AI.Thread`); everything else arrives as arguments.
+   */
+  readonly init: Effect.Effect<
+    (props: T["params"]) => Effect.Effect<any, Err, any>,
+    never,
+    Req
+  >;
+}
+
+export const isToolDef = (value: unknown): value is ToolDef =>
+  (typeof value === "object" || typeof value === "function") &&
+  value !== null &&
+  (value as Record<string, unknown>)["~alchemy/Kind"] === "ToolDef";
 
 export const Tool: {
   <Name extends string>(
@@ -242,10 +297,27 @@ const makeTool = (
   refs: any[],
   meta?: ImportMeta,
 ) => {
-  const term = function (impl: (props: any) => Effect.Effect<any, any, any>) {
-    // an Effect, so init `yield*`s it — the template refs' requirements
-    // are phantom on the R channel (see the Tool interface call signature)
-    return Effect.succeed({ "~alchemy/Kind": "ToolImpl", tool: term, impl });
+  const term = function (
+    impl:
+      | ((props: any) => Effect.Effect<any, any, any>)
+      | Effect.Effect<(props: any) => Effect.Effect<any, any, any>, any, any>,
+  ) {
+    // SYNCHRONOUS application → a ToolDef. The INIT is the given
+    // Effect (or the bare handler lifted): it runs once per host
+    // Layer build, under attribution, and yields the handler.
+    const init = Effect.isEffect(impl) ? impl : Effect.succeed(impl);
+    // the def doubles as a yieldable Effect resolving to the legacy
+    // ToolImpl — the transitional bridge for `yield*` call sites
+    const def = Effect.map(init, (handler) => ({
+      "~alchemy/Kind": "ToolImpl",
+      tool: term,
+      impl: handler,
+    }));
+    return Object.assign(def, {
+      "~alchemy/Kind": "ToolDef",
+      tool: term,
+      init,
+    });
   };
   Object.setPrototypeOf(
     term,

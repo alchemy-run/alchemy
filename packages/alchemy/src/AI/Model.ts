@@ -36,6 +36,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 
 /** What a Model service holds: a ready Layer for `LanguageModel`. */
@@ -77,3 +78,45 @@ export const Model: {
       Layer.effect(cls as any, Effect.map(service, ready)),
   });
 }) as any;
+
+/**
+ * The tick's model SELECTION — an internal, driver-provided holder a
+ * turn hook writes through {@link selectModel}. Provided by the
+ * driver around the hook's evaluation only; part of the frame (like
+ * `AI.Tick`), never something a user Layer provides.
+ */
+export class TickModel extends Context.Service<
+  TickModel,
+  { readonly select: (model: ModelLayer) => void }
+>()("alchemy/AI/TickModel") {}
+
+/**
+ * SELECT the model this tick samples with — from a turn hook:
+ *
+ * ```ts
+ * Head.make`…`({
+ *   turn: Effect.gen(function* () {
+ *     yield* AI.selectModel(ClaudeHaiku45);
+ *   }),
+ * });
+ * ```
+ *
+ * The requirement is inferred: `selectModel(ClaudeHaiku45)` types as
+ * `Effect<void, never, ClaudeHaiku45>` — the agent's Layer must be
+ * provided the model implementation (`ClaudeHaiku45Live`), so WHICH
+ * models an agent can sample with is a static, type-level fact of the
+ * org. Without a selection the driver's default `LanguageModel`
+ * samples, as always.
+ */
+export const selectModel = <Self>(
+  model: Model<Self>,
+): Effect.Effect<void, never, Self> =>
+  Effect.gen(function* () {
+    const holder = yield* Effect.serviceOption(TickModel);
+    if (Option.isNone(holder)) {
+      return yield* Effect.die(
+        "AI.selectModel: no tick in scope — select the model from a turn hook (the `turn` key of the charter's methods record)",
+      );
+    }
+    holder.value.select(yield* model as never as Effect.Effect<ModelLayer>);
+  }) as never;

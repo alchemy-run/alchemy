@@ -2,7 +2,7 @@ import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
-import type { ToolImpl } from "./Tool.ts";
+import type { ToolDef, ToolImpl } from "./Tool.ts";
 
 /**
  * A `Fragment` is one rendered unit of a charter's document: a tagged
@@ -175,11 +175,13 @@ export const dedentTemplate = (parts: readonly string[]): readonly string[] => {
 export type RefServices<R> =
   R extends ToolImpl<any, any, infer Req>
     ? Req
-    : R extends Context.Service<infer Id, any>
-      ? Id
-      : R extends Effect.Effect<any, any, infer R2>
-        ? R2
-        : never;
+    : R extends ToolDef<any, any, infer Req>
+      ? Req
+      : R extends Context.Service<infer Id, any>
+        ? Id
+        : R extends Effect.Effect<any, any, infer R2>
+          ? R2
+          : never;
 
 /**
  * Folds a fragment's interpolated expressions into its requirement

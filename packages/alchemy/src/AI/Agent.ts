@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
+import type { Teaching } from "./Skill.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
   layer,
@@ -342,15 +343,34 @@ export interface Agent<
    */
   readonly make: {
     /**
-     * Static charter shorthand. Splices are still evaluated at render
-     * time, every tick — an `Effect` splice may read `AI.Thread`/
-     * `AI.Tick` — so their requirements are charged as TURN
-     * requirements.
+     * THE STATIC CHARTER — `make` as a tagged template, the same
+     * shape as `Group.make` / `Skill.make`: the charter is declared
+     * at module scope, synchronously, so nothing in it CAN close
+     * over init-resolved values. The template + refs ride the Layer
+     * as static data (`Teaching`) — walkable without building — and
+     * the result is additionally CALLABLE, once, to attach behavior:
+     *
+     * ```ts
+     * export const HeadLive = Head.make`
+     *   You are the HEAD… ${readFile}… ${Coding}… ${Engineering}`({
+     *   turn: Effect.gen(function* () {
+     *     yield* AI.selectModel(ClaudeHaiku45);
+     *   }),
+     *   getName: Effect.fn("getName")(function* () { return "head"; }),
+     * });
+     * ```
+     *
+     * `turn` is the optional per-tick HOOK — side effects and
+     * `AI.selectModel` only; it returns void and never contributes
+     * prose. When methods need services, pass an INIT Effect that
+     * returns the record (`Head.make`…`(Effect.gen(function* () {
+     * const posts = yield* Posts; return { … }; }))`) — the init
+     * implements methods; the charter is already fixed above it.
      */
     <const Refs extends any[]>(
       template: TemplateStringsArray,
       ...refs: Refs
-    ): Layer.Layer<Self, never, Driver | Exclude<Services<Refs>, TurnServices>>;
+    ): AgentTemplateLayer<Self, Refs>;
     <C extends ImplementationOf<Contract>>(
       charter: C,
     ): Layer.Layer<Self, never, Driver | CharterServices<C>>;
@@ -361,6 +381,56 @@ export interface Agent<
    * shape is the agent namespace: the actor verbs plus `at`.
    */
   new (_: never): AgentService<Contract> & { readonly "~alchemy/Name": Name };
+}
+
+/**
+ * The BEHAVIOR a static charter attaches: the optional per-tick
+ * `turn` hook (side effects + `AI.selectModel`; void — never prose)
+ * and the RPC methods callers reach via `agent.at(key).method(…)`.
+ */
+export interface StaticExtras {
+  readonly turn?: Effect.Effect<void, any, any>;
+  readonly [method: string]: unknown;
+}
+
+/** The requirements the extras contribute — each method's `R` and the
+ *  hook's, minus the driver-provided frame. */
+export type ExtrasServices<E> = {
+  [K in keyof E]: E[K] extends Effect.Effect<any, any, infer R>
+    ? R
+    : E[K] extends (...args: any) => Effect.Effect<any, any, infer R>
+      ? R
+      : never;
+}[keyof E];
+
+/**
+ * What the static `make` template returns: the agent's Layer with the
+ * charter riding it as static data ({@link Teaching}) — usable as a
+ * Layer directly, or APPLIED once to attach the {@link StaticExtras}
+ * (a record, or an init Effect returning the record).
+ */
+export interface AgentTemplateLayer<Self, Refs extends any[]>
+  extends
+    Layer.Layer<Self, never, Driver | Exclude<Services<Refs>, TurnServices>>,
+    Teaching<Refs> {
+  /** An INIT Effect returning the record — methods may need services. */
+  <E extends StaticExtras, R>(
+    extras: Effect.Effect<E, any, R>,
+  ): Layer.Layer<
+    Self,
+    never,
+    Driver | Exclude<Services<Refs> | ExtrasServices<E> | R, TurnServices>
+  > &
+    Teaching<Refs>;
+  /** The record itself — the hook and methods, no init. */
+  <const E extends StaticExtras>(
+    extras: E,
+  ): Layer.Layer<
+    Self,
+    never,
+    Driver | Exclude<Services<Refs> | ExtrasServices<E>, TurnServices>
+  > &
+    Teaching<Refs>;
 }
 
 /** An agent declared WITH its implementation carries the Layer. */
@@ -483,13 +553,59 @@ export const makeTerm = (
     make: (charterOrTemplate?: any, ...refs: any[]) =>
       kind === "Skill" || kind === "Group"
         ? layer(cls as any, charterOrTemplate, ...refs)
-        : layer(
-            cls as any,
-            isTemplateStringsArray(charterOrTemplate)
-              ? fragment(charterOrTemplate, ...refs)
-              : charterOrTemplate,
-          ),
+        : isTemplateStringsArray(charterOrTemplate)
+          ? staticAgentLayer(cls as any, charterOrTemplate, refs)
+          : layer(cls as any, charterOrTemplate),
   }) as any;
+};
+
+/**
+ * The charter a STATIC template compiles to: the stance is the
+ * template (a constant fragment); the applied extras contribute the
+ * per-tick hook (under the internal key `SessionShape.tick` reads)
+ * and the RPC methods.
+ */
+const staticCharter = (
+  template: TemplateStringsArray,
+  refs: any[],
+  extras?: unknown,
+): Charter =>
+  Effect.gen(function* () {
+    const stance = yield* fragment(template, ...refs);
+    if (extras === undefined) return stance;
+    const record = (
+      Effect.isEffect(extras) ? yield* extras as Effect.Effect<any> : extras
+    ) as Record<string, unknown>;
+    const { turn: hook, ...methods } = record;
+    return {
+      turn: stance,
+      ...(hook !== undefined ? { "~alchemy/tick": hook } : {}),
+      ...methods,
+    };
+  });
+
+/**
+ * The static `make` result: a Layer (the bare template's), CALLABLE
+ * once to attach extras, with the charter riding it as static data
+ * (`Teaching`) either way.
+ */
+const staticAgentLayer = (
+  cls: Agent<any, any> & Context.Service<any, any>,
+  template: TemplateStringsArray,
+  refs: any[],
+) => {
+  const attach = (extras: unknown) =>
+    Object.assign(layer(cls as any, staticCharter(template, refs, extras)), {
+      template,
+      refs,
+    });
+  // the callable IS the bare Layer: prototype-chained onto it so
+  // Layer machinery reads through (the Tool-term trick)
+  Object.setPrototypeOf(
+    attach,
+    layer(cls as any, staticCharter(template, refs)),
+  );
+  return Object.assign(attach, { template, refs }) as any;
 };
 
 const isTemplateStringsArray = (

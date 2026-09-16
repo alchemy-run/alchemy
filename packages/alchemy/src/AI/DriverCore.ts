@@ -16,8 +16,10 @@ import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as Layer from "effect/Layer";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
+import { TickModel, type ModelLayer } from "./Model.ts";
 import type { Actor } from "./Agent.ts";
 import { isAgent, type Agent } from "./Agent.ts";
 import { isGroup } from "./Group.ts";
@@ -65,8 +67,10 @@ import {
   errorTag,
   isErrorTerm,
   isTool,
+  isToolDef,
   isToolImpl,
   type Tool,
+  type ToolDef,
 } from "./Tool.ts";
 import { Tools, type ToolPresentation } from "./Tools.ts";
 
@@ -706,11 +710,14 @@ const fnv1a64 = (text: string): string => {
   return hash.toString(16).padStart(16, "0");
 };
 
-/** One tool mention in a rendered stance — tagged or inline. */
+/** One tool mention in a rendered stance — tagged, inline, or a def. */
 export interface CompiledToolRef {
   readonly term: Tool<any, any[]>;
   /** Inline (closure) implementation — bypasses context resolution. */
   readonly impl?: (params: any) => Effect.Effect<any, any, any>;
+  /** A static {@link ToolDef} — its INIT builds the handler once per
+   *  interpret (cached by the resolvers), under the charter context. */
+  readonly def?: ToolDef;
 }
 
 /**
@@ -794,6 +801,9 @@ export interface SessionOps {
   ) => Effect.Effect<A, E>;
   /** The session's TURN, produced by its charter init. */
   readonly turn: () => Turn | TurnFn;
+  /** The static charter's per-tick HOOK, when declared
+   *  (`SessionShape.tick`) — run after the stance renders. */
+  readonly turnHook?: () => Effect.Effect<void, any, any> | undefined;
   /** Samplings performed so far. */
   readonly tick: () => number;
   /** Reset the say buffer — each turn ATTEMPT starts clean. */
@@ -894,6 +904,16 @@ export const makeResolvers = (
     if (compiled.impl !== undefined) return compiled.impl;
     const cached = handlerCache.get(name);
     if (cached !== undefined) return cached;
+    if (compiled.def !== undefined) {
+      // a STATIC def: its INIT builds the handler — once per
+      // interpret, under the charter's captured context
+      const handler = yield* Effect.provide(
+        compiled.def.init,
+        context,
+      ) as Effect.Effect<(params: any) => Effect.Effect<any, any, any>>;
+      handlerCache.set(name, handler);
+      return handler;
+    }
     const service = Context.getOption(context, compiled.term as any);
     if (Option.isNone(service)) {
       return yield* Effect.die(
@@ -1004,6 +1024,12 @@ export const renderStance = Effect.fn(function* (
         } else if (isToolImpl(ref)) {
           const name = ref.tool["~alchemy/Name"];
           tools.set(name, { term: ref.tool, impl: ref.impl });
+          buffer += `\`${name}\``;
+        } else if (isToolDef(ref)) {
+          // a STATIC tool definition — granted by mention; its INIT
+          // runs once per interpret (the resolvers cache it)
+          const name = ref.tool["~alchemy/Name"];
+          if (!tools.has(name)) tools.set(name, { term: ref.tool, def: ref });
           buffer += `\`${name}\``;
         } else if (isTool(ref)) {
           const name = ref["~alchemy/Name"];
@@ -1378,10 +1404,38 @@ export const compileTick = Effect.fn(function* (
   });
   ops.setLastEnvelopeHash(envelopeHash);
 
+  // the static charter's per-tick HOOK: side effects and
+  // `AI.selectModel` — a selection overrides this sampling's model
+  let hookModel: LanguageModel.LanguageModel | undefined;
+  const hook = ops.turnHook?.();
+  if (hook !== undefined) {
+    let selected: ModelLayer | undefined;
+    yield* ops.provide(
+      hook.pipe(
+        Effect.provideService(TickModel, {
+          select: (layer) => {
+            selected = layer;
+          },
+        }),
+      ),
+    );
+    if (selected !== undefined) {
+      hookModel = yield* Effect.scoped(
+        Effect.map(Layer.build(selected), (built) =>
+          Context.get(built, LanguageModel.LanguageModel),
+        ),
+      );
+    }
+  }
+
   return {
     system,
     toolkit,
-    ...(result.model === undefined ? {} : { model: result.model }),
+    ...(hookModel !== undefined
+      ? { model: hookModel }
+      : result.model === undefined
+        ? {}
+        : { model: result.model }),
   };
 });
 
@@ -1723,6 +1777,13 @@ export const buildToolkit = (
 export interface SessionShape {
   readonly turn: Turn | TurnFn;
   readonly api?: Record<string, (...args: ReadonlyArray<unknown>) => unknown>;
+  /**
+   * The static charter's optional per-tick HOOK (the `turn` key of a
+   * `Head.make`…`({ turn, …methods })` record): side effects and
+   * `AI.selectModel` only — it returns void and can never contribute
+   * prose. Runs after the stance renders, before the sampling.
+   */
+  readonly tick?: Effect.Effect<void, any, any>;
 }
 
 /**
@@ -1785,8 +1846,13 @@ const shapeOf = (
   if (turn !== undefined) return Effect.succeed({ turn });
   if (typeof result === "object" && result !== null && "turn" in result) {
     // `{ turn, ...methods }`: the loop under the reserved key, the API
-    // beside it
-    const { turn: declared, ...methods } = result as Record<string, unknown>;
+    // beside it. A STATIC charter additionally carries its per-tick
+    // hook under the internal key (Agent.make's template form).
+    const {
+      turn: declared,
+      ["~alchemy/tick"]: hook,
+      ...methods
+    } = result as Record<string, unknown>;
     const sessionTurn = turnOf(declared);
     if (sessionTurn === undefined) {
       return Effect.die(
@@ -1802,7 +1868,13 @@ const shapeOf = (
       }
       api[name] = method as (...args: ReadonlyArray<unknown>) => unknown;
     }
-    return Effect.succeed({ turn: sessionTurn, api });
+    return Effect.succeed({
+      turn: sessionTurn,
+      api,
+      ...(Effect.isEffect(hook)
+        ? { tick: hook as Effect.Effect<void, any, any> }
+        : {}),
+    });
   }
   return Effect.die(
     `${driver}: the charter of '${term}' returned neither prose, a turn effect, a turn function, nor a \`{ turn, ...methods }\` object`,
@@ -1943,6 +2015,8 @@ interface EngineSession {
   /** The session's API: the keys beside `turn` on its constructor's
    *  result, reached through `Actor.call`. */
   api?: Record<string, (...args: ReadonlyArray<unknown>) => unknown>;
+  /** The static charter's per-tick hook (`SessionShape.tick`). */
+  tickHook?: Effect.Effect<void, any, any>;
   /** The model the last tick's stance was provided — what a spawn
    *  worker inherits. RAM only; every tick sets it again. */
   model?: LanguageModel.LanguageModel;
@@ -2280,6 +2354,7 @@ export const makeSessionEngine = (
     context,
     provide: provideSession(s),
     turn: () => s.turn!,
+    turnHook: () => s.tickHook,
     tick: () => s.tick,
     clearNotes: () => {
       s.pendingNotes.length = 0;
@@ -2418,6 +2493,7 @@ export const makeSessionEngine = (
       // frame (Thread, the store) the engine runs it in
       s.turn = shape.turn;
       s.api = shape.api;
+      s.tickHook = shape.tick;
       sessions.set(sessionKey, s);
     }
     return s;
