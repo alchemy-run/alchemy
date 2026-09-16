@@ -7,6 +7,7 @@ import { PostMessage } from "./chat/PostMessage.ts";
 import { Transcript } from "./chat/Transcript.ts";
 import { ChannelsApi } from "./chat/ChannelsApi.ts";
 import { IssuesApi } from "./forge/IssuesApi.ts";
+import { PullsApi } from "./forge/PullsApi.ts";
 import { SeedApi } from "./forge/SeedApi.ts";
 import { SyncApi } from "./forge/Sync.ts";
 import { StatusApi } from "./github/StatusApi.ts";
@@ -39,6 +40,7 @@ export const Api = Effect.gen(function* () {
     yield* SeedApi,
     yield* SyncApi,
     yield* IssuesApi,
+    yield* PullsApi,
     yield* StatusApi,
     yield* OrgApi,
   );

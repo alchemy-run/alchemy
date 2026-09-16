@@ -9,18 +9,21 @@
  * (and, soon, from the agents' own forge pushes).
  */
 import { MarkdownText } from "@/components/chat";
+import { FileDiffCard, splitPatchFiles } from "@/components/code";
 import {
   addIssueComment,
   createIssue,
   fetchComments,
   fetchIssue,
   fetchIssues,
+  fetchPullDiff,
   fetchRepos,
   patchIssue,
   type ForgeComment,
   type ForgeIssue,
   type SeedStatus,
 } from "@/lib/forge";
+import { parsePatchFiles } from "@pierre/diffs";
 import { showWork, type WorkPlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
@@ -32,7 +35,7 @@ import {
   GitPullRequest,
   MessageSquare,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const PROSE =
   "text-[14px] leading-relaxed [&_p]:my-2.5 [&_p:first-child]:mt-0 " +
@@ -75,6 +78,74 @@ const StateBadge = ({ issue }: { issue: ForgeIssue }) => {
   );
 };
 
+/** The pull's FILES CHANGED — @pierre/diffs end to end: the unified
+ *  diff parsed (`parsePatchFiles`) and each file rendered by
+ *  `FileDiffCard` (Shiki, word-level inline highlights, hunk
+ *  separators). */
+const PullFiles = ({ repo, number }: { repo: string; number: number }) => {
+  const [diff, setDiff] = useState<
+    { ok: boolean; text: string } | undefined
+  >();
+  useEffect(() => {
+    let alive = true;
+    fetchPullDiff(repo, number)
+      .then((body) => {
+        if (alive) setDiff(body);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [repo, number]);
+
+  const parsed = useMemo(() => {
+    if (diff === undefined || !diff.ok) return [];
+    try {
+      const files = parsePatchFiles(diff.text).flatMap(
+        (patch) => patch.files,
+      );
+      const raw = splitPatchFiles(diff.text);
+      return files.map((file, index) => ({
+        file,
+        fallback: raw[index] ?? diff.text,
+      }));
+    } catch {
+      return [];
+    }
+  }, [diff]);
+
+  if (diff === undefined) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        loading the diff…
+      </div>
+    );
+  }
+  if (!diff.ok) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        no diff to show — this pull has no local source yet
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {parsed.map((entry, index) => (
+        <FileDiffCard
+          key={index}
+          file={entry.file}
+          fallback={entry.fallback}
+        />
+      ))}
+      {parsed.length === 0 && (
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap p-2 font-mono text-[11px]">
+          {diff.text}
+        </pre>
+      )}
+    </div>
+  );
+};
+
 const ItemView = ({
   kind,
   repo,
@@ -88,6 +159,10 @@ const ItemView = ({
   const [comments, setComments] = useState<ReadonlyArray<ForgeComment>>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  /** The pull's sections: the talk, or the change itself. */
+  const [section, setSection] = useState<"conversation" | "files">(
+    "conversation",
+  );
 
   const reload = () => {
     fetchIssue(repo, number).then(setIssue).catch(() => {});
@@ -95,6 +170,7 @@ const ItemView = ({
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(reload, [repo, number]);
+  useEffect(() => setSection("conversation"), [repo, number]);
 
   if (issue === undefined) {
     return (
@@ -150,9 +226,37 @@ const ItemView = ({
             </span>
           )}
         </div>
+        {pull !== undefined && (
+          <nav
+            aria-label="pull sections"
+            className="mt-2 flex items-center gap-1 pl-8"
+          >
+            {(["conversation", "files"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-current={section === option ? "page" : undefined}
+                onClick={() => setSection(option)}
+                className={cn(
+                  "cursor-pointer rounded-md px-2 py-0.5 text-xs capitalize",
+                  section === option
+                    ? "bg-accent font-semibold"
+                    : "text-muted-foreground hover:bg-accent/60",
+                )}
+              >
+                {option === "files" ? "Files changed" : "Conversation"}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        {pull !== undefined && section === "files" ? (
+          <div className="w-full max-w-5xl">
+            <PullFiles repo={repo} number={number} />
+          </div>
+        ) : (
         <div className="w-full max-w-2xl">
           <article className={cn("pb-4", PROSE)}>
             <MarkdownText text={issue.body ?? "*no description*"} />
@@ -198,6 +302,7 @@ const ItemView = ({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

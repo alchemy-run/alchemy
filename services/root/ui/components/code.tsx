@@ -204,6 +204,42 @@ export const CodeCard = memo(
 );
 CodeCard.displayName = "CodeCard";
 
+/**
+ * One FULL FILE — the code browser's view: line numbers, sideways
+ * scroll, Shiki by real file name. The browser draws its own
+ * breadcrumb header, so the renderer's is off.
+ */
+export const FileCard = memo(
+  ({ path, contents }: { path: string; contents: string }) => {
+    const base = useBaseOptions();
+    const file = useMemo(
+      // the name carries the extension — how Shiki picks the grammar
+      () => ({ name: path.split("/").pop() ?? path, contents }),
+      [path, contents],
+    );
+    const options = useMemo(
+      () => ({
+        ...base,
+        disableFileHeader: true,
+        overflow: "scroll" as const,
+      }),
+      [base],
+    );
+    return (
+      <CodeBoundary fallback={contents}>
+        <div className={cn(CARD, "group/code relative")}>
+          <File file={file} options={options} />
+          <CopyButton
+            text={contents}
+            className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/code:opacity-100 focus-visible:opacity-100 data-[copied]:opacity-100"
+          />
+        </div>
+      </CodeBoundary>
+    );
+  },
+);
+FileCard.displayName = "FileCard";
+
 /** A rendering error must never blank the thread — fall back to a
  *  plain <pre> of the raw text. */
 class CodeBoundary extends Component<

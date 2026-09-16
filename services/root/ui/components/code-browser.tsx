@@ -5,6 +5,7 @@
  * the tree at the path, or the file — plus the recent history under
  * the root. Everything reads the embedded git server's REST plane.
  */
+import { FileCard } from "@/components/code";
 import {
   fetchBranches,
   fetchFile,
@@ -196,10 +197,17 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {file !== undefined ? (
-            /* one file, plainly — the document is the view */
-            <pre className="overflow-x-auto p-4 font-mono text-xs leading-relaxed">
-              {file.length > 200_000 ? `${file.slice(0, 200_000)}\n… (truncated)` : file}
-            </pre>
+            /* one file — @pierre/diffs' renderer: Shiki, line numbers */
+            <div className="p-4">
+              <FileCard
+                path={path}
+                contents={
+                  file.length > 200_000
+                    ? `${file.slice(0, 200_000)}\n… (truncated)`
+                    : file
+                }
+              />
+            </div>
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col p-4">
               <div className="divide-y divide-border/40 rounded-md border border-border/60">

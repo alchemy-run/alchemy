@@ -172,6 +172,18 @@ export const addIssueComment = (
     },
   ).then((response) => response.json() as Promise<ForgeComment>);
 
+/** A pull's unified diff (text) — 501 when no source serves it yet. */
+export const fetchPullDiff = (
+  repo: string,
+  number: number,
+): Promise<{ ok: boolean; text: string }> =>
+  fetch(
+    `/api/forge/repos/org/${encodeURIComponent(repo)}/pulls/${number}/diff`,
+  ).then(async (response) => ({
+    ok: response.ok,
+    text: await response.text(),
+  }));
+
 export const patchIssue = (
   repo: string,
   number: number,

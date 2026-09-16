@@ -27,7 +27,7 @@ import { Issues, type CommentRow, type IssueRow } from "./Issues.ts";
 import { SEEDS } from "./Seed.ts";
 
 /** GitHub source ↔ forge identity, derived from the seed list. */
-const MIRRORS = SEEDS.map((seed) => ({
+export const MIRRORS = SEEDS.map((seed) => ({
   forge: `${seed.owner}/${seed.name}`,
   github: new URL(seed.url).pathname.replace(/^\//, "").replace(/\.git$/, ""),
 }));
