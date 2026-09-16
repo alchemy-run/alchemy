@@ -1,5 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { attributed } from "../BindingAttribution.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { In, Out, Thing } from "./Thing.ts";
 import type { Services } from "./Fragment.ts";
@@ -331,6 +333,21 @@ const makeTool = (
     ...(meta !== undefined ? { source: makeSource(meta, "Tool", name) } : {}),
   }) as any;
 };
+
+/**
+ * A class tool's physics Layer, ATTRIBUTED — `Layer.effect(Tag, init)`
+ * with the init run under a `Tool:<name>` attribution frame, so the
+ * bindings it acquires are stamped to this tool in the permission
+ * graph. Plain `Layer.effect` still works, just unattributed.
+ */
+export const toolLayer = <I, S, E, R>(
+  tool: Context.Service<I, S> & { readonly "~alchemy/Name": string },
+  init: Effect.Effect<S, E, R>,
+): Layer.Layer<I, E, R> =>
+  Layer.effect(
+    tool,
+    attributed({ kind: "Tool", name: tool["~alchemy/Name"] })(init),
+  );
 
 /**
  * A spliced ERROR class — `Data.TaggedError` and `Schema.TaggedError`

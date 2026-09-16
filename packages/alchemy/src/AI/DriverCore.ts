@@ -17,6 +17,7 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import * as Layer from "effect/Layer";
+import { attributed } from "../BindingAttribution.ts";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { TickModel, type ModelLayer } from "./Model.ts";
@@ -894,23 +895,31 @@ export const makeResolvers = (
   driver: string,
   term: string,
   context: Context.Context<never>,
+  defHandlers?: ReadonlyMap<
+    string,
+    (params: any) => Effect.Effect<any, any, any>
+  >,
 ) => {
+  // handlers `construct` built EAGERLY (the constant stance's defs —
+  // their inits already ran at Layer build, attributed) seed the cache
   const handlerCache = new Map<
     string,
     (params: any) => Effect.Effect<any, any, any>
-  >();
+  >(defHandlers);
   const resolveHandler = Effect.fn(function* (compiled: CompiledToolRef) {
     const name = compiled.term["~alchemy/Name"];
     if (compiled.impl !== undefined) return compiled.impl;
     const cached = handlerCache.get(name);
     if (cached !== undefined) return cached;
     if (compiled.def !== undefined) {
-      // a STATIC def: its INIT builds the handler — once per
-      // interpret, under the charter's captured context
-      const handler = yield* Effect.provide(
-        compiled.def.init,
-        context,
-      ) as Effect.Effect<(params: any) => Effect.Effect<any, any, any>>;
+      // a def a DYNAMIC turn spliced this tick: its INIT builds the
+      // handler once per interpret, under the charter's captured
+      // context — attributed like the eager path
+      const handler = yield* (
+        Effect.provide(compiled.def.init, context) as Effect.Effect<
+          (params: any) => Effect.Effect<any, any, any>
+        >
+      ).pipe(attributed({ kind: "Agent", name: term }, { kind: "Tool", name }));
       handlerCache.set(name, handler);
       return handler;
     }
@@ -1784,6 +1793,18 @@ export interface SessionShape {
    * prose. Runs after the stance renders, before the sampling.
    */
   readonly tick?: Effect.Effect<void, any, any>;
+  /**
+   * Handlers for the constant stance's {@link ToolDef} splices, built
+   * EAGERLY by {@link construct} — the defs' inits run where the Layer
+   * builds (plan time in the deploy process, once per isolate at
+   * runtime), so the bindings they acquire register on the host at
+   * plan phase, attributed. The resolvers seed their cache from this
+   * map; only a def a DYNAMIC turn splices per tick resolves lazily.
+   */
+  readonly defHandlers?: ReadonlyMap<
+    string,
+    (params: any) => Effect.Effect<any, any, any>
+  >;
 }
 
 /**
@@ -1810,6 +1831,9 @@ export const construct = (
       )
     : Effect.flatMap(
         (charter as Effect.Effect<unknown, unknown, any>).pipe(
+          // the charter runs under the agent's attribution frame, so
+          // any binding it acquires is stamped `Agent:<term>`
+          attributed({ kind: "Agent", name: term }),
           // failure OR defect (a `Service not found` for AI.Thread is a
           // defect): name the scope so the build error says where
           Effect.catchCause((cause) =>
@@ -1823,8 +1847,78 @@ export const construct = (
                 ),
           ),
         ),
-        (result) => shapeOf(driver, term, result),
+        (result) =>
+          Effect.flatMap(shapeOf(driver, term, result), (shape) =>
+            initToolDefs(driver, term, result, shape),
+          ),
       );
+
+/**
+ * Run the constant stance's {@link ToolDef} inits — EAGERLY, in the
+ * Layer build `construct` runs in, so the bindings they acquire
+ * register on the host Worker/Function at PLAN phase, stamped
+ * `[Agent:<term>, Tool:<name>]`. The resolved handlers ride the shape
+ * (`defHandlers`); the resolvers serve them without re-running inits.
+ * Defs spliced by a DYNAMIC turn Effect are invisible here and resolve
+ * lazily (attributed the same way) on first call.
+ */
+const initToolDefs = (
+  driver: string,
+  term: string,
+  result: unknown,
+  shape: SessionShape,
+): Effect.Effect<SessionShape, never, any> =>
+  Effect.gen(function* () {
+    const stance = isFragment(result)
+      ? result
+      : typeof result === "object" &&
+          result !== null &&
+          isFragment((result as { turn?: unknown }).turn)
+        ? ((result as { turn: unknown }).turn as Fragment)
+        : undefined;
+    if (stance === undefined) return shape;
+    const defs = collectToolDefs(stance);
+    if (defs.length === 0) return shape;
+    const defHandlers = new Map<
+      string,
+      (params: any) => Effect.Effect<any, any, any>
+    >();
+    for (const def of defs) {
+      const name = def.tool["~alchemy/Name"];
+      if (defHandlers.has(name)) continue;
+      const handler = (yield* (
+        def.init as Effect.Effect<unknown, unknown, any>
+      ).pipe(
+        attributed({ kind: "Tool", name }),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause as Cause.Cause<never>)
+            : Effect.die(
+                new Error(
+                  `${driver}: the init of tool '${name}' of '${term}' failed — ${describeCrash(cause).encoded.message}`,
+                  { cause: Cause.squash(cause) },
+                ),
+              ),
+        ),
+      )) as (params: any) => Effect.Effect<any, any, any>;
+      defHandlers.set(name, handler);
+    }
+    return { ...shape, defHandlers };
+  }).pipe(attributed({ kind: "Agent", name: term }));
+
+/** Every {@link ToolDef} reachable from a fragment's splices,
+ *  recursing through nested fragments. */
+const collectToolDefs = (fragment: Fragment): ToolDef[] => {
+  const defs: ToolDef[] = [];
+  const walk = (refs: ReadonlyArray<unknown>) => {
+    for (const ref of refs) {
+      if (isToolDef(ref)) defs.push(ref);
+      else if (isFragment(ref)) walk(ref.refs);
+    }
+  };
+  walk(fragment.refs);
+  return defs;
+};
 
 /** Normalize a charter's result (or its `turn`) into the turn the loop runs. */
 const turnOf = (value: unknown): Turn | TurnFn | undefined =>
@@ -2186,7 +2280,7 @@ export const makeSessionEngine = (
   const malformedBudget = options.malformedBudget ?? 3;
 
   const sessions = new Map<string, EngineSession>();
-  const resolvers = makeResolvers(driver, term, context);
+  const resolvers = makeResolvers(driver, term, context, shape.defHandlers);
   const observer = Context.getOption(context, Events);
   const ambientStore = Context.getOption(context, PersistentRef.Store);
   // Minted keys are PROCESS-UNIQUE, not just engine-unique: session

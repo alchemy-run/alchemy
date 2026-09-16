@@ -14,6 +14,12 @@ import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
+export {
+  Attribution,
+  attributed,
+  type AttributionFrame,
+} from "./BindingAttribution.ts";
+
 export interface ServiceLike {
   kind: "Service";
 }

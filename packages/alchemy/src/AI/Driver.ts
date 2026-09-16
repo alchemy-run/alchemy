@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
+import { attributed } from "../BindingAttribution.ts";
 import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor, Agent, AgentService, Stub, StubVerbs } from "./Agent.ts";
@@ -438,7 +439,12 @@ export const layer: {
                   : Effect.succeed(found);
               },
             };
-          }) as any,
+          }).pipe(
+            attributed({
+              kind: "Group",
+              name: term["~alchemy/Name"] as string,
+            }),
+          ) as any,
         ),
         // the org chart as static data on the Layer (Teaching)
         { template: charterOrTemplate as TemplateStringsArray, refs },
@@ -469,11 +475,20 @@ export const layer: {
                   );
                 }
                 tools[name] = Effect.isEffect(service.value)
-                  ? yield* service.value as Effect.Effect<any>
+                  ? // a tool physics Layer that unwraps here (runtime
+                    // setup) binds under the skill's attribution
+                    yield* (service.value as Effect.Effect<any>).pipe(
+                      attributed({ kind: "Tool", name }),
+                    )
                   : service.value;
               }
               return { template, refs, tools } satisfies SkillService;
-            }) as any,
+            }).pipe(
+              attributed({
+                kind: "Skill",
+                name: term["~alchemy/Name"] as string,
+              }),
+            ) as any,
           ),
           // the teaching as static data on the Layer (Teaching)
           { template: charterOrTemplate as TemplateStringsArray, refs },

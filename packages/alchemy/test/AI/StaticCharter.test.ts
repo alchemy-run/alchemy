@@ -20,6 +20,7 @@
  *   Layer must be provided the model implementation).
  */
 import * as AI from "@/AI/index.ts";
+import * as Binding from "@/Binding.ts";
 import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
@@ -189,6 +190,53 @@ describe("static charters", () => {
       }).pipe(
         Effect.provide(
           ClerkLive.pipe(
+            Layer.provide(InMemoryDriver.pipe(Layer.provide(model.layer))),
+          ),
+        ),
+        Effect.provide(RuntimeContext.phantom),
+      );
+    },
+  );
+
+  it.effect(
+    "a ToolDef's INIT runs at Layer build under the org's attribution path",
+    () => {
+      // what a `Cloudflare.R2.ReadWriteBucket(bucket)`-style binding
+      // acquisition observes inside the init: the ambient path names
+      // the acquiring agent and tool — the permission edge
+      let observed: ReadonlyArray<Binding.AttributionFrame> | undefined;
+      let builtBeforeDispatch = false;
+      const probe = AI.Tool("probe")`
+        Probe the ambient attribution. Answers ${AI.out(value)}.`(
+        Effect.gen(function* () {
+          observed = yield* Binding.Attribution;
+          builtBeforeDispatch = true;
+          return Effect.fn(function* () {
+            return { value: "ok" };
+          });
+        }),
+      );
+
+      class Warden extends AI.Agent<Warden>()("Warden") {}
+      const WardenLive = Warden.make`
+        You are the WARDEN. ${probe} inspects.`;
+
+      const model = Model.make([
+        () => [Model.toolCall("probe", {}), Model.finish("tool-calls")],
+        () => [Model.text("done"), Model.finish()],
+      ]);
+      return Effect.gen(function* () {
+        // the init already ran — at Layer build, NOT at first dispatch
+        expect(builtBeforeDispatch).toBe(true);
+        expect(observed).toEqual([
+          { kind: "Agent", name: "Warden" },
+          { kind: "Tool", name: "probe" },
+        ]);
+        const warden = yield* Warden;
+        expect(yield* warden.dispatch("inspect")).toBe("done");
+      }).pipe(
+        Effect.provide(
+          WardenLive.pipe(
             Layer.provide(InMemoryDriver.pipe(Layer.provide(model.layer))),
           ),
         ),
