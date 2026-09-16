@@ -235,10 +235,17 @@ export const DBParameterGroupProvider = () =>
             const group = yield* readGroup(output.dbParameterGroupName);
             if (!group) return { action: "update", stables: [] } as const;
             const desired = news.parameters ?? {};
-            const observed = toManagedParameterRecord(
-              yield* readParameters(output.dbParameterGroupName),
-              desired,
+            const parameters = yield* readParameters(
+              output.dbParameterGroupName,
+            ).pipe(
+              Effect.catchTag("DBParameterGroupNotFoundFault", () =>
+                Effect.succeed(undefined),
+              ),
             );
+            if (parameters === undefined) {
+              return { action: "update", stables: [] } as const;
+            }
+            const observed = toManagedParameterRecord(parameters, desired);
             const desiredTags = {
               ...news.tags,
               ...(yield* createInternalTags(id)),
@@ -446,10 +453,8 @@ export const DBParameterGroupProvider = () =>
             }),
             Effect.retry({
               while: (error) => error._tag === "DBParameterGroupNotSettled",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(10),
-              ]),
+              schedule: Schedule.spaced("5 seconds"),
+              times: 8,
             }),
           );
           yield* session.note(dbParameterGroupArn ?? name);
