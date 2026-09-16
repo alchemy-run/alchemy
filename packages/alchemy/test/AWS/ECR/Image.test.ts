@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Image } from "@/AWS/ECR/Image.ts";
+import { Image, type ImageProps } from "@/AWS/ECR/Image.ts";
 import { Repository } from "@/AWS/ECR/Repository.ts";
 import * as Test from "@/Test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -84,6 +84,22 @@ test.provider(
         described.imageDetails?.[0]?.imagePushedAt,
       );
 
+      const deleted = yield* ecr.batchDeleteImage({
+        repositoryName: moved.repositoryName,
+        imageIds: [{ imageTag: moved.imageTag }],
+      });
+      expect(deleted.failures ?? []).toEqual([]);
+      yield* assertImageDeleted(moved.repositoryName, moved.imageTag);
+      expect(
+        (yield* stack.plan(program(relocated))).resources.Image?.action,
+      ).toBe("update");
+      const repaired = yield* stack.deploy(program(relocated));
+      expect(repaired.imageTag).toBe(first.imageTag);
+      expect(repaired.digest).toBe(first.digest);
+      expect(
+        (yield* stack.plan(program(relocated))).resources.Image?.action,
+      ).toBe("noop");
+
       // Changed bytes at the relocated path must still schedule a rebuild.
       yield* fs.writeFileString(
         path.join(relocated, "hello.txt"),
@@ -136,13 +152,135 @@ test.provider(
       });
       expect(described.imageDetails?.[0]?.imageDigest).toBe(image.digest);
 
+      const ownershipPlan = yield* stack.plan(
+        Image("OwnedImage", {
+          context: fixtureDir,
+          repositoryUri: image.repositoryUri,
+        }),
+      );
+      expect(ownershipPlan.resources.OwnedImage?.action).toBe("update");
+
+      yield* ecr.deleteRepository({
+        repositoryName: image.repositoryName,
+        force: true,
+      });
+      yield* assertRepositoryDeleted(image.repositoryName);
+      const original = Image("OwnedImage", { context: fixtureDir });
+      expect((yield* stack.plan(original)).resources.OwnedImage?.action).toBe(
+        "update",
+      );
+      const restored = yield* stack.deploy(original);
+      expect(restored.repositoryUri).toBe(image.repositoryUri);
+      expect(restored.imageTag).toBe(image.imageTag);
+      expect(restored.ownsRepository).toBe(true);
+      expect(
+        (yield* ecr.describeImages({
+          repositoryName: restored.repositoryName,
+          imageIds: [{ imageTag: restored.imageTag }],
+        })).imageDetails?.[0]?.imageDigest,
+      ).toBe(restored.digest);
+
       yield* stack.destroy();
 
       // Destroying an owning Image force-deletes its repository.
       yield* assertRepositoryDeleted(image.repositoryName);
     }),
-  { timeout: 240_000 },
+  { timeout: 120_000 },
 );
+
+test.provider(
+  "build arguments, platform, and repository changes still update the image",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const path = yield* Path.Path;
+      const program = (
+        options: Pick<ImageProps, "buildArgs" | "platform" | "dockerfile">,
+        alternate = false,
+      ) =>
+        Effect.gen(function* () {
+          const primary = yield* Repository("Primary", {});
+          const secondary = yield* Repository("Secondary", {});
+          return yield* Image("ConfiguredImage", {
+            context: fixtureDir,
+            repositoryUri: alternate
+              ? secondary.repositoryUri
+              : primary.repositoryUri,
+            ...options,
+          });
+        });
+      const firstOptions = { buildArgs: { BUILD_LABEL: "first" } };
+      const first = yield* stack.deploy(program(firstOptions));
+      expect(
+        (yield* stack.plan(
+          program({
+            ...firstOptions,
+            dockerfile: path.join(fixtureDir, "Dockerfile"),
+            platform: "linux/amd64",
+          }),
+        )).resources.ConfiguredImage?.action,
+      ).toBe("noop");
+
+      const secondOptions = { buildArgs: { BUILD_LABEL: "second" } };
+      expect(
+        (yield* stack.plan(program(secondOptions))).resources.ConfiguredImage
+          ?.action,
+      ).toBe("update");
+      const second = yield* stack.deploy(program(secondOptions));
+      expect(second.imageTag).not.toBe(first.imageTag);
+      expect(second.digest).not.toBe(first.digest);
+
+      const armOptions = { ...secondOptions, platform: "linux/arm64" };
+      expect(
+        (yield* stack.plan(program(armOptions))).resources.ConfiguredImage
+          ?.action,
+      ).toBe("update");
+      const arm = yield* stack.deploy(program(armOptions));
+      expect(arm.imageTag).not.toBe(second.imageTag);
+      expect(arm.digest).not.toBe(second.digest);
+
+      expect(
+        (yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage
+          ?.action,
+      ).toBe("update");
+      const moved = yield* stack.deploy(program(armOptions, true));
+      expect(moved.repositoryUri).not.toBe(arm.repositoryUri);
+      expect(moved.imageTag).toBe(arm.imageTag);
+      expect(moved.ownsRepository).toBe(false);
+      expect(
+        (yield* ecr.describeImages({
+          repositoryName: moved.repositoryName,
+          imageIds: [{ imageTag: moved.imageTag }],
+        })).imageDetails?.[0]?.imageDigest,
+      ).toBe(moved.digest);
+      expect(
+        (yield* stack.plan(program(armOptions, true))).resources.ConfiguredImage
+          ?.action,
+      ).toBe("noop");
+
+      yield* stack.destroy();
+      yield* assertRepositoryDeleted(first.repositoryName);
+      yield* assertRepositoryDeleted(moved.repositoryName);
+    }),
+  { timeout: 120_000 },
+);
+
+class ImageStillExists extends Data.TaggedError("ImageStillExists") {}
+
+const assertImageDeleted = Effect.fn(function* (
+  repositoryName: string,
+  imageTag: string,
+) {
+  yield* ecr.describeImages({ repositoryName, imageIds: [{ imageTag }] }).pipe(
+    Effect.flatMap(() => Effect.fail(new ImageStillExists())),
+    Effect.retry({
+      while: (error) => error._tag === "ImageStillExists",
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+    Effect.catchTag("ImageNotFoundException", () => Effect.void),
+  );
+});
 
 class RepositoryStillExists extends Data.TaggedError("RepositoryStillExists") {}
 

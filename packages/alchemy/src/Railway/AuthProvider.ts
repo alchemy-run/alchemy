@@ -152,7 +152,7 @@ export const RailwayAuth = AuthProviderLayer<
       });
 
       const withAnonymous = <A, E>(
-        effect: Effect.Effect<A, E, railway.RailwayOpContext>,
+        effect: Effect.Effect<A, E, railway.GraphQLRequirements>,
       ) => provideAnonymousRailway(effect, apiBaseUrl);
 
       const code = yield* withAnonymous(railway.createLoginSession({})).pipe(

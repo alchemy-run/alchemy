@@ -1,5 +1,7 @@
 import { createMiniflareFromRolldown } from "../../../../cloudflare-test-tools/src/miniflare/miniflare.ts";
 import { assert, describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import { toPosixPath } from "../utils.ts";
 import cloudflare from "../plugin.ts";
 import { buildFixture } from "./utils/build-fixture.ts";
 
@@ -71,7 +73,7 @@ describe("nodejs_compat", () => {
     );
 
     expect(transformed).toContain(
-      'import "@cloudflare/unenv-preset/polyfill/performance";',
+      `import "${toPosixPath(fileURLToPath(import.meta.resolve("@cloudflare/unenv-preset/polyfill/performance")))}";`,
     );
     expect(transformed).toContain('import "\0distilled:inject:process";');
   });
