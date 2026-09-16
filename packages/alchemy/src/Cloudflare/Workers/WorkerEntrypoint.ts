@@ -55,15 +55,12 @@ export interface WorkerEntrypointBinding<
  * an entry module as an entrypoint — is bound with `WorkerEntrypoint`,
  * which selects the class by name and can deliver `ctx.props` to it.
  *
+ * ### Defining the Target Entrypoint
+ * Export a class extending Cloudflare's native `WorkerEntrypoint` from
+ * the target Worker's module. This `Api` class defines the RPC methods
+ * that callers can invoke through a named service binding.
  *
- * ### Binding a Named Entrypoint
- * The target Worker exports a `WorkerEntrypoint` class alongside its
- * default handler; the consumer selects it by name. Pass its instance
- * type (`Api`, not `typeof Api`) to get Cloudflare's native `Service<Api>`
- * RPC client. Without a type argument, the binding is a bare `Fetcher`;
- * the entrypoint name alone cannot identify the class's type.
- *
- * **Example:** Bind and call a named entrypoint
+ * **Example:** Export the Api class
  * ```typescript
  * // target/src/worker.ts
  * import { WorkerEntrypoint } from "cloudflare:workers";
@@ -74,14 +71,29 @@ export interface WorkerEntrypointBinding<
  *   }
  * }
  *
- * export default { async fetch() { return new Response("ok"); } };
+ * export default {
+ *   async fetch() {
+ *     return new Response("ok");
+ *   },
+ * };
  * ```
  *
+ * ### Binding a Named Entrypoint
+ * Import the exported `Api` class as a type and select its named export
+ * with `"Api"`. Pass its instance type (`Api`, not `typeof Api`) to get
+ * Cloudflare's native `Service<Api>` RPC client. Without a type argument,
+ * the binding is a bare `Fetcher`; the entrypoint name alone cannot
+ * identify the class's type.
+ *
+ * **Example:** Bind and call the exported Api
  * ```typescript
  * // alchemy.run.ts
+ * import * as Cloudflare from "alchemy/Cloudflare";
  * import type { Api } from "./target/src/worker.ts";
  *
- * const target = yield* Cloudflare.Worker("Target", { main: "./target/src/worker.ts" });
+ * const target = yield* Cloudflare.Worker("Target", {
+ *   main: "./target/src/worker.ts",
+ * });
  *
  * const caller = yield* Cloudflare.Worker("Caller", {
  *   main: "./caller/src/worker.ts",

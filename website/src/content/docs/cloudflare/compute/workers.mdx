@@ -379,14 +379,43 @@ drift from the infrastructure that produced it.
 [Python Workers](/cloudflare/compute/python-workers) are async Workers
 whose `main` is a `.py` file.
 
-Binding another Worker on `env` targets its default entrypoint. A
-Worker can export additional
-[`WorkerEntrypoint` classes](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/),
-and `Cloudflare.WorkerEntrypoint` binds one by name. Pass the instance
-type (`Api`, not `typeof Api`) to expose its RPC methods through `InferEnv`:
+### Named entrypoints
+
+Binding another Worker on `env` targets its default entrypoint. To expose a
+named RPC entrypoint, export a class extending Cloudflare's native
+[`WorkerEntrypoint`](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/)
+from the target Worker's module:
 
 ```typescript
+// src/target.ts
+import { WorkerEntrypoint } from "cloudflare:workers";
+
+export class Api extends WorkerEntrypoint {
+  async greet(name: string): Promise<string> {
+    return `hello ${name}`;
+  }
+}
+
+export default {
+  async fetch() {
+    return new Response("ok");
+  },
+};
+```
+
+Import that `Api` class as a type in your infrastructure code.
+`Cloudflare.WorkerEntrypoint<Api>(target, "Api")` binds the named `Api`
+export on the target Worker. The type argument is the class's instance
+type (`Api`, not `typeof Api`):
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 import type { Api } from "./src/target.ts";
+
+const target = yield* Cloudflare.Worker("Target", {
+  main: "./src/target.ts",
+});
 
 const caller = yield* Cloudflare.Worker("Caller", {
   main: "./src/caller.ts",
