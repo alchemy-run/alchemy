@@ -50,6 +50,7 @@ import {
   type SkillService,
   type Teaching,
 } from "./Skill.ts";
+import { SkillGate } from "./SkillGate.ts";
 import { isSource, renderSource } from "./Source.ts";
 import { isMessage, mintMessageId, type Message } from "./Message.ts";
 import {
@@ -896,6 +897,22 @@ export const applyCompactionPlan = Effect.fn(function* (
 });
 
 /**
+ * May `agent` activate `skill` right now? Consults the optional
+ * {@link SkillGate} from the charter's captured context — no gate
+ * means allow-all. See SkillGate.ts.
+ */
+export const skillAllowed = (
+  context: Context.Context<never>,
+  agent: string,
+  skill: string,
+): Effect.Effect<boolean> => {
+  const gate = Context.getOption(context, SkillGate);
+  return Option.isNone(gate)
+    ? Effect.succeed(true)
+    : gate.value.enabled(agent, skill);
+};
+
+/**
  * Capability resolution from the charter's captured context, memoized
  * per interpret — the term is the name; the SERVICE is the physics.
  */
@@ -1369,6 +1386,15 @@ export const compileTick = Effect.fn(function* (
     if (skillTerm === undefined) {
       // model-visible: the stance no longer mentions it
       return `no skill named '${params.skill}' is available right now`;
+    }
+    // the GATE: per-agent runtime config over the static grant — a
+    // refusal is model-visible, never a crash (see SkillGate.ts)
+    if (!(yield* skillAllowed(ops.context, ops.term, params.skill))) {
+      return (
+        `REFUSED: the skill '${params.skill}' is currently DISABLED ` +
+        `for ${ops.term} — the humans switched it off. Proceed ` +
+        `without it, or ask them to re-enable it.`
+      );
     }
     const resolved = yield* resolvers.resolveSkill(skillTerm);
     yield* ops.setSkill(params.skill, true);
@@ -2677,11 +2703,13 @@ export const makeSessionEngine = (
       handlers[name] = (input) => provideSession(worker)(resolved(input));
     }
     // handed skills arrive PRE-ACTIVATED: prose joins the worker's
-    // instructions, tools join its (fixed) toolkit
+    // instructions, tools join its (fixed) toolkit — the same gate
+    // as the `skill` intrinsic filters the handoff
     const handed: Array<{ name: string } & ResolvedSkill> = [];
     for (const name of params.skills ?? []) {
       const skillTerm = stance.skills.get(name);
       if (skillTerm === undefined) continue;
+      if (!(yield* skillAllowed(context, term, name))) continue;
       const resolved = yield* resolvers.resolveSkill(skillTerm);
       handed.push({ name, ...resolved });
       for (const [toolName, fn] of Object.entries(resolved.handlers)) {

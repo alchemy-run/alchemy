@@ -31,6 +31,7 @@ import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { HeadLive } from "./Head.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
 import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
+import { SkillGateD1 } from "./platform/SkillGateD1.ts";
 import { AwsEmulationGeneral } from "./process/AwsEmulation.ts";
 import { CloudflareEmulationGeneral } from "./process/CloudflareEmulation.ts";
 import { DistillationGeneral } from "./process/Distillation.ts";
@@ -219,9 +220,14 @@ const Company = Layer.mergeAll(
   Layer.provideMerge(PostsLive),
   Layer.provideMerge(CheckoutsRouter),
   Layer.provideMerge(OrgRegistry),
+  // the runtime switch over skill activation (the profile UI's
+  // toggles) — consulted by the driver's activation doors
+  Layer.provideMerge(SkillGateD1),
   Layer.provideMerge(DriverCloudflare),
   Layer.provideMerge(GitHubWorker),
-  Layer.provide(Cloudflare.D1.QueryDatabaseBinding),
+  // MERGED (not just provided): the Api's own routes (OrgApi's skill
+  // config) resolve the D1 door from the Company too
+  Layer.provideMerge(Cloudflare.D1.QueryDatabaseBinding),
   Layer.orDie,
 );
 

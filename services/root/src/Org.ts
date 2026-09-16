@@ -84,7 +84,8 @@ export interface OrgAgent {
   /** The charter, rendered — the same prose the model reads. */
   readonly charter: string;
   readonly tools: ReadonlyArray<OrgTool>;
-  readonly skills: ReadonlyArray<string>;
+  /** The granted skills with their runtime switch (the gate's state). */
+  readonly skills: ReadonlyArray<{ name: string; enabled: boolean }>;
   readonly groups: ReadonlyArray<string>;
 }
 
@@ -180,9 +181,11 @@ const toolEntry = (
 };
 
 /** Build the graph — the static structure plus the attributed
- *  acquisitions recorded by the host's Layer builds. */
+ *  acquisitions recorded by the host's Layer builds and the stored
+ *  skill switch-offs (`agent/skill` keys). */
 export const buildOrgGraph = (
   acquisitions: ReadonlyArray<Binding.Acquisition>,
+  disabled: ReadonlySet<string> = new Set(),
 ): OrgGraph => {
   /** The acquisitions attributed to one tool (under one agent). */
   const permissionsOf = (
@@ -241,7 +244,10 @@ export const buildOrgGraph = (
       model: entry.model,
       charter: AI.render(entry.live.template, [...entry.live.refs]),
       tools,
-      skills: [...grantedSkills],
+      skills: [...grantedSkills].map((skill) => ({
+        name: skill,
+        enabled: !disabled.has(`${name}/${skill}`),
+      })),
       groups: groups
         .filter((group) => group.members.includes(name))
         .map((group) => group.name),

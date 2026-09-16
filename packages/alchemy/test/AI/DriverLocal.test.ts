@@ -1125,6 +1125,51 @@ Hand the research to the researcher with ${task}.`((p, thread) => ({
   );
 
   it.effect(
+    "the skill gate: a disabled skill's activation is refused, model-visibly",
+    () => {
+      const model = Model.make([
+        // call 0: the model tries to activate the gated skill
+        () => [
+          Model.toolCall("skill", { action: "activate", skill: "Archives" }),
+          Model.finish("tool-calls"),
+        ],
+        // call 1: refused — it answers without the skill
+        () => [Model.text("The archives are closed."), Model.finish()],
+      ]);
+      const search = recordingSearch();
+      const gate = Layer.succeed(AI.SkillGate, {
+        enabled: (agent, skill) =>
+          Effect.succeed(!(agent === "Scholar" && skill === "Archives")),
+      });
+      return Effect.gen(function* () {
+        const scholar = yield* interpret(Scholar, ScholarCharter);
+        const answer = yield* scholar.dispatch("When did Rome fall?");
+        expect(answer).toBe("The archives are closed.");
+        expect(model.calls).toHaveLength(2);
+        // the refusal is a MODEL-VISIBLE tool result, and the skill's
+        // tools never arrived
+        expect(Model.promptText(model.calls[1]!)).toContain("DISABLED");
+        expect(model.calls[1]!.tools.map((tool) => tool.name)).toEqual([
+          "spawn",
+          "skill",
+        ]);
+        expect(search.queries).toEqual([]);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          testLayer(
+            model,
+            Layer.mergeAll(
+              ArchivesLive.pipe(Layer.provide(search.layer)),
+              gate,
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect(
     "the skill graph: activating a parent exposes its referenced skills",
     () => {
       const model = Model.make([
