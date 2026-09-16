@@ -4285,6 +4285,15 @@ export const GitRepoLive = GitRepo.make(
           const result = outcome.success;
           const objects = storeFor(meta.repoId);
           const pushId = yield* ulid();
+          // Imports use the same staging lifecycle as pushes: finalize
+          // requires an active row, and GC needs it to reap abandoned data.
+          yield* sql.run(
+            `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
+            pushId,
+            Date.now(),
+          );
+          yield* upsertJob("gc", null);
+          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
           let graph: Array<{
             oid: string;
             tree: string;
@@ -4343,13 +4352,20 @@ export const GitRepoLive = GitRepo.make(
             newOid: ref.oid,
             ref: ref.name,
           }));
-          yield* finalizeRefTxn({
+          const results = yield* finalizeRefTxn({
             commands,
             atomic: false,
             unconditional: true,
             pushId,
             graph,
           });
+          const rejected = results.find((ref) => !ref.ok);
+          if (rejected !== undefined) {
+            return yield* new StoreError({
+              reason: `import ref ${rejected.ref}: ${rejected.reason}`,
+            });
+          }
+          yield* flipPush(pushId);
           if (result.defaultBranch !== null) {
             yield* setConfig("default_branch", result.defaultBranch);
           }
