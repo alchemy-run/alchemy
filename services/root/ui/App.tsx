@@ -787,10 +787,14 @@ export const App = () => {
           </aside>
         )}
 
-        {/* WHO is here — humans and agents, discord's member list */}
-        {members && thread === undefined && panes.length === 0 && (
-          <MembersPanel channel={channel.name} />
-        )}
+        {/* WHO is here — humans and agents, discord's member list.
+            A room's furniture: profiles and DMs are about ONE agent,
+            so the panel stays out of them. */}
+        {members &&
+          thread === undefined &&
+          panes.length === 0 &&
+          agent === undefined &&
+          !channel.dm && <MembersPanel channel={channel.name} />}
       </div>
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>
