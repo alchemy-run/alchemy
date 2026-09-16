@@ -9,6 +9,7 @@ import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
 import { Issue, IssueProvider } from "./Issue.ts";
+import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
@@ -48,6 +49,7 @@ export const providers = (options?: ProvidersOptions) =>
       Label,
       Milestone,
       Issue,
+      PullRequest,
       Repository,
       Secret,
       Variable,
@@ -61,6 +63,7 @@ export const providers = (options?: ProvidersOptions) =>
         LabelProvider(),
         MilestoneProvider(),
         IssueProvider(),
+        PullRequestProvider(),
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
