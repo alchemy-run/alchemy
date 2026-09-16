@@ -31,7 +31,6 @@ import {
   closePane,
   overlayFromLocation,
   panesFromLocation,
-  showAgent,
   showChannel,
   showOverlay,
   threadFromLocation,
@@ -47,6 +46,9 @@ import { useRef, Fragment, useEffect, useState, type PointerEvent as ReactPointe
 interface Channel {
   readonly name: string;
   readonly chat: string;
+  /** A DM — the human's private line to one agent; opened from the
+   *  rail's agent rows, never listed under CHANNELS. */
+  readonly dm?: boolean;
 }
 
 /** The code-declared channels, until /api/channels answers. */
@@ -56,6 +58,10 @@ const FALLBACK: ReadonlyArray<Channel> = [
     name: "engineering",
     chat: "Manager:root::manager",
   },
+  { name: "head", chat: "Head:root", dm: true },
+  { name: "manager", chat: "Manager:root::manager", dm: true },
+  { name: "engineer", chat: "Engineer:root::engineer", dm: true },
+  { name: "reviewer", chat: "Reviewer:root::reviewer", dm: true },
 ];
 
 const OverlayShell = ({
@@ -501,7 +507,7 @@ export const App = () => {
             </button>
           </div>
           <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
-            {channels.map((entry) => (
+            {channels.filter((entry) => !entry.dm).map((entry) => (
               <div key={entry.name} className="flex flex-col gap-0.5">
                 <button
                   type="button"
@@ -521,8 +527,10 @@ export const App = () => {
                 </button>
               </div>
             ))}
-            {/* the AGENTS — the org's roster, each a profile page:
-                the mirror of its charter (`/a/:name`) */}
+            {/* the AGENTS — the roster as DMs: clicking one opens
+                the human's private line to that agent (its DM
+                channel). Profiles live on the RIGHT sidebar's
+                member rows (`/a/:name`). */}
             {roster.length > 0 && (
               <div className="flex flex-col gap-0.5 pt-3">
                 <div className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -532,13 +540,12 @@ export const App = () => {
                   <button
                     key={entry.name}
                     type="button"
-                    onClick={() => showAgent(entry.name)}
-                    aria-label={`open ${entry.slug}'s profile`}
+                    onClick={() => pick(entry.slug)}
+                    aria-label={`open the DM with ${entry.slug}`}
                     title={entry.model}
                     className={cn(
                       "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
-                      agent !== undefined &&
-                        agent.name.toLowerCase() === entry.name.toLowerCase()
+                      agent === undefined && channel.name === entry.slug
                         ? "bg-accent font-medium"
                         : "text-muted-foreground hover:bg-accent/60",
                     )}

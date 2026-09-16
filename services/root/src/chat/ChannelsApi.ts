@@ -8,7 +8,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { MANAGER_ADDRESS } from "../engineering/Triage.ts";
 import { inWorker } from "../platform/Database.ts";
-import { nameOfKey, ROOT } from "../Lineage.ts";
+import { lineage, nameOfKey, ROOT } from "../Lineage.ts";
 import { mentionsOf } from "./Ask.ts";
 import { Posts } from "./Posts.ts";
 
@@ -42,6 +42,18 @@ export const ChannelsApi = Effect.gen(function* () {
       name: "engineering",
       chat: `${MANAGER_ADDRESS.term}:${MANAGER_ADDRESS.key}`,
     },
+    // DMs — the human's private line to ONE agent. The left rail's
+    // agent rows open these; the resident answers, no @mention
+    // needed. Same machinery as a channel: a DM is a channel whose
+    // room is one agent.
+    { name: "head", chat: `Head:${ROOT}`, dm: true },
+    {
+      name: "manager",
+      chat: `${MANAGER_ADDRESS.term}:${MANAGER_ADDRESS.key}`,
+      dm: true,
+    },
+    { name: "engineer", chat: `Engineer:${lineage("engineer")}`, dm: true },
+    { name: "reviewer", chat: `Reviewer:${lineage("reviewer")}`, dm: true },
   ];
 
   /** The channel agent's session FOR one message — every response is

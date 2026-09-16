@@ -14,16 +14,10 @@ import {
   fetchOrg,
   invalidateOrg,
   setAgentSkill,
-  type OrgAgent,
   type OrgGraph,
   type OrgTool,
 } from "@/lib/org";
-import {
-  showAgent,
-  showChannel,
-  showOverlay,
-  type AgentTab,
-} from "@/lib/routes";
+import { showAgent, type AgentTab } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -31,22 +25,20 @@ import {
   ChevronRight,
   Cpu,
   FileCode2,
-  MessageSquare,
   ScrollText,
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-/** Where "Message" goes: channel agents open their channel; the
- *  others open their standing session's working pane. */
-const message = (agent: OrgAgent): void => {
-  if (agent.name === "Head") return showChannel("root");
-  if (agent.name === "Manager") return showChannel("engineering");
-  showOverlay({
-    kind: "agent",
-    id: `${agent.name}:root::${agent.slug}`,
-  });
-};
+/**
+ * DOCUMENT prose — the Notion feel: a centered column, larger type,
+ * generous line height, paragraphs and lists spaced like a page.
+ * Read-only, but it should read like a doc, not a chat bubble.
+ */
+const DOC =
+  "mx-auto w-full max-w-2xl text-[15.5px] leading-[1.75] text-foreground/90 " +
+  "[&_p]:my-3.5 [&_p:first-child]:mt-0 [&_ul]:my-3 [&_ol]:my-3 [&_li]:my-1 " +
+  "[&_pre]:my-4 [&_blockquote]:my-4 [&_h1]:mt-8 [&_h2]:mt-7 [&_h3]:mt-6";
 
 const Pill = ({
   children,
@@ -98,17 +90,21 @@ const SelectableCard = ({
   );
 };
 
-const ToolCard = ({ tool }: { tool: OrgTool }) => (
-  <div className="flex h-full flex-col gap-1.5 rounded-lg border border-border/70 bg-muted/10 p-3">
-    <div className="flex flex-wrap items-center gap-2">
-      <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="font-mono text-xs font-semibold">{tool.name}</span>
-      <Pill tone="muted">{tool.kind === "static" ? "tool" : "contract"}</Pill>
-    </div>
-    <div className="text-[12px] leading-relaxed text-muted-foreground">
+/** One tool as a document SECTION — a heading, the prose, a quiet
+ *  meta line. No box: the Tools tab reads like one long page. */
+const ToolSection = ({ tool }: { tool: OrgTool }) => (
+  <section className="py-6">
+    <h3 className="flex flex-wrap items-center gap-2 font-mono text-[17px] font-semibold tracking-tight">
+      <Wrench className="size-4 shrink-0 text-muted-foreground/70" />
+      {tool.name}
+      <span className="rounded-full border border-border/60 px-1.5 py-px font-sans text-[10px] font-normal text-muted-foreground">
+        {tool.kind === "static" ? "tool" : "contract"}
+      </span>
+    </h3>
+    <div className="mt-2.5 text-[15.5px] leading-[1.75] text-foreground/85">
       <MarkdownText text={tool.description} />
     </div>
-    <div className="flex flex-wrap gap-1">
+    <div className="mt-3.5 flex flex-wrap gap-1.5">
       {tool.params.map((param) => (
         <Pill key={`in-${param}`} tone="muted" title="a parameter">
           {param}
@@ -125,7 +121,7 @@ const ToolCard = ({ tool }: { tool: OrgTool }) => (
         </Pill>
       ))}
     </div>
-  </div>
+  </section>
 );
 
 const SkillCard = ({
@@ -294,14 +290,6 @@ export const AgentProfile = ({
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => message(agent)}
-              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1 text-xs hover:bg-accent"
-            >
-              <MessageSquare className="size-3.5" />
-              Message
-            </button>
           </div>
 
           {/* the tabs — the tab is the path (`/a/:name/:tab/:item`) */}
@@ -338,12 +326,13 @@ export const AgentProfile = ({
             ))}
           </nav>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
             {tab === "charter" && (
-              /* the charter — the same prose the model reads */
-              <div className="rounded-lg border border-border/70 bg-muted/10 p-3 text-[13px]">
+              /* the charter — the same prose the model reads, laid
+                 out as a DOCUMENT */
+              <article className={DOC}>
                 <MarkdownText text={agent.charter} />
-              </div>
+              </article>
             )}
 
             {tab === "skills" &&
@@ -397,14 +386,14 @@ export const AgentProfile = ({
               ))}
 
             {tab === "tools" && (
-              /* tools — the agent's granted tool surface */
-              <div className="grid content-start gap-2 md:grid-cols-2">
+              /* tools — one document, a section per tool */
+              <article className="mx-auto w-full max-w-2xl divide-y divide-border/40">
                 {agent.tools.map((tool) => (
                   <SelectableCard key={tool.name} selected={item === tool.name}>
-                    <ToolCard tool={tool} />
+                    <ToolSection tool={tool} />
                   </SelectableCard>
                 ))}
-              </div>
+              </article>
             )}
           </div>
         </div>
