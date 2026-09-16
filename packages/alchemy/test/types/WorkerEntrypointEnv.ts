@@ -1,40 +1,68 @@
 import * as Cloudflare from "@/Cloudflare";
+import type { Rpc } from "@/Rpc.ts";
 import { WorkerEntrypoint } from "cloudflare:workers";
-
-// ── `Cloudflare.WorkerEntrypoint` env inference guards ─────────────────────
-//
-// The entrypoint name is a runtime string, so nothing links it to the target
-// module's exports. The class is supplied as a type argument instead; without
-// it the entry stays a bare `Fetcher` (fetch + connect only).
+import type * as Effect from "effect/Effect";
 
 declare class Api extends WorkerEntrypoint<unknown, Record<string, unknown>> {
   greet(name: string): Promise<string>;
-  /** Non-promise returns are promisified by the RPC stub type. */
   count(): number;
 }
 
 declare const target: Cloudflare.Worker;
+declare const effectTarget: Cloudflare.Worker &
+  Rpc<{ defaultOnly(): Effect.Effect<string> }>;
 
 export const Worker = Cloudflare.Worker("EntrypointEnvTypeProbe", {
   script: "export default {}",
   env: {
-    API: Cloudflare.WorkerEntrypoint<typeof Api>(target, "Api"),
+    API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
+    OPTIONS: Cloudflare.WorkerEntrypoint<Api>(target, {
+      entrypoint: "Api",
+      props: { tenant: "acme" },
+    }),
     UNTYPED: Cloudflare.WorkerEntrypoint(target, "Api"),
+    DEFAULT: Cloudflare.WorkerEntrypoint(target),
+    NAMED_ON_EFFECT: Cloudflare.WorkerEntrypoint(effectTarget, "Api"),
+    DIRECT_EFFECT: effectTarget,
   },
 });
 
 type Env = Cloudflare.InferEnv<typeof Worker>;
 declare const env: Env;
 
-// The named entrypoint's RPC methods are typed.
 export const _greeting: Promise<string> = env.API.greet("alice");
 export const _count: Promise<number> = env.API.count();
-// ...and it is still a service stub.
+export const _options: Promise<string> = env.OPTIONS.greet("alice");
 export const _fetched: Promise<Response> = env.API.fetch("https://example.com");
+export const _connected: Socket = env.API.connect("example.com:443");
+export const _directEffect: Promise<string | Cloudflare.RpcErrorEnvelope> =
+  env.DIRECT_EFFECT.defaultOnly();
 
-// Without the type argument the entry is a plain `Fetcher`.
+// @ts-expect-error RPC promisifies synchronous methods.
+export const _syncCount: number = env.API.count();
+// @ts-expect-error Arguments are checked against the entrypoint.
+env.API.greet(123);
+// @ts-expect-error Unknown methods are not exposed.
+env.API.missing();
+// @ts-expect-error The entrypoint's protected context is not exposed.
+env.API.ctx;
+// @ts-expect-error The entrypoint's protected environment is not exposed.
+env.API.env;
+
 export const _untyped: Promise<Response> = env.UNTYPED.fetch(
   "https://example.com",
 );
-// @ts-expect-error - no entrypoint type argument, so no RPC methods
+export const _default: Promise<Response> = env.DEFAULT.fetch(
+  "https://example.com",
+);
+// @ts-expect-error Untyped bindings expose only the Fetcher interface.
 env.UNTYPED.greet("alice");
+// @ts-expect-error A named entrypoint does not inherit the default entrypoint's methods.
+env.NAMED_ON_EFFECT.defaultOnly();
+
+// @ts-expect-error Use the entrypoint instance type, not its constructor.
+Cloudflare.WorkerEntrypoint<typeof Api>(target, "Api");
+// @ts-expect-error Plain method bags are not native Worker entrypoints.
+Cloudflare.WorkerEntrypoint<{ count(): number }>(target, "Api");
+// @ts-expect-error Effect-native Workers use their existing direct binding types.
+Cloudflare.WorkerEntrypoint<typeof effectTarget>(target, "Api");

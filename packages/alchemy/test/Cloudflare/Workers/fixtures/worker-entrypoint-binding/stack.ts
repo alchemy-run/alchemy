@@ -13,6 +13,19 @@ const callerMain = pathe.resolve(
   "entrypoint-caller-worker.ts",
 );
 
+export const Caller = (target: Cloudflare.Worker) =>
+  Cloudflare.Worker("EntrypointCaller", {
+    main: callerMain,
+    env: {
+      API: Cloudflare.WorkerEntrypoint<Api>(target, {
+        entrypoint: "Api",
+        props: { tenant: "acme" },
+      }),
+    },
+  });
+
+export type CallerEnv = Cloudflare.InferEnv<ReturnType<typeof Caller>>;
+
 /**
  * Stack with two plain Workers:
  *
@@ -32,15 +45,7 @@ export default Alchemy.Stack(
       main: targetMain,
     });
 
-    const caller = yield* Cloudflare.Worker("EntrypointCaller", {
-      main: callerMain,
-      env: {
-        API: Cloudflare.WorkerEntrypoint<typeof Api>(target, {
-          entrypoint: "Api",
-          props: { tenant: "acme" },
-        }),
-      },
-    });
+    const caller = yield* Caller(target);
 
     return {
       targetUrl: target.url.as<string>(),

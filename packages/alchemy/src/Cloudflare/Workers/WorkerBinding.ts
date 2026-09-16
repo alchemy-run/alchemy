@@ -196,7 +196,7 @@ export type WorkerBindingResource =
   | VectorizeIndex
   | Secret
   | Worker
-  | WorkerEntrypointBinding<any, any>
+  | WorkerEntrypointBinding<any>
   | WorkerLoader
   | VersionMetadataBinding
   // The Worker's own URL (`Worker.URL`).
