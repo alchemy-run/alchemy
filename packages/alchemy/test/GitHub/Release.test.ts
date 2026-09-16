@@ -7,72 +7,15 @@ import { destroy } from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
-const fixtures = ["update", "draft", "prerelease", "list", "replace"].map(
-  (name) => `alchemy-effect-pr-1577-release-${name}`,
-);
+if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
+  throw new Error(`Unsafe GITHUB_TEST_OWNER: ${owner}`);
+}
 
-const providers = Layer.effect(
-  GitHubCredentials,
-  Effect.gen(function* () {
-    if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
-      return yield* Effect.fail(
-        new Error(`Unsafe GITHUB_TEST_OWNER: ${owner}`),
-      );
-    }
-    const credentials = yield* yield* GitHubCredentials;
-    return Effect.succeed({
-      ...credentials,
-      baseUrl: undefined,
-      octokit: () => {
-        const octokit = credentials.octokit({ baseUrl: undefined });
-        octokit.hook.before("request", (options) => {
-          const endpoint = octokit.request.endpoint(options);
-          const url = new URL(endpoint.url);
-          if (url.hostname !== "api.github.com") {
-            throw new Error(`Unexpected GitHub test host: ${url.hostname}`);
-          }
-          if (url.pathname === "/user/repos" && options.method === "GET") {
-            options.url = `/orgs/${owner}/repos`;
-          }
-          if (options.method !== "GET" && options.method !== "HEAD") {
-            const [, scope, requestOwner, repo] = url.pathname.split("/");
-            const fixtureMutation =
-              scope === "repos" &&
-              requestOwner === owner &&
-              fixtures.includes(repo!);
-            const fixtureCreation =
-              scope === "orgs" &&
-              requestOwner === owner &&
-              repo === "repos" &&
-              options.method === "POST" &&
-              typeof options.name === "string" &&
-              fixtures.includes(options.name);
-            if (!fixtureMutation && !fixtureCreation) {
-              throw new Error(
-                `Unsafe GitHub test mutation: ${options.method} ${url.pathname}`,
-              );
-            }
-            if (
-              options.method === "DELETE" &&
-              url.pathname.split("/").length === 4
-            ) {
-              throw new Error("Release tests retain repository fixtures");
-            }
-          }
-        });
-        return octokit;
-      },
-    });
-  }),
-).pipe(
-  Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" })),
-  Layer.orDie,
-);
-
-const { test } = Test.make({ providers });
+const { test } = Test.make({
+  providers: GitHub.providers({ baseUrl: "github.com" }),
+});
 
 // Repositories are retained because the test token lacks delete_repo scope.
 const repository = (name: string) =>
@@ -263,8 +206,44 @@ test.provider(
           body: "For list test",
         }),
       );
+      const name = "alchemy-effect-pr-1577-release-list";
+      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Release);
-      const all = yield* provider.list();
+      // list() enumerates /user/repos; confine it to this suite's fixture.
+      const all = yield* provider.list().pipe(
+        Effect.provideService(
+          GitHubCredentials,
+          Effect.succeed({
+            ...credentials,
+            octokit: (override) => {
+              const octokit = credentials.octokit(override);
+              octokit.hook.before("request", (options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === "/user/repos") {
+                  url.pathname = `/orgs/${owner}/repos`;
+                  options.url = url.toString();
+                }
+                if (
+                  url.origin !== "https://api.github.com" ||
+                  (url.pathname !== `/orgs/${owner}/repos` &&
+                    url.pathname !== `/repos/${owner}/${name}/releases`)
+                ) {
+                  throw new Error(`Unsafe Release list request: ${url}`);
+                }
+              });
+              octokit.hook.after("request", (response, options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === `/orgs/${owner}/repos`) {
+                  response.data = (
+                    response.data as Array<{ name: string }>
+                  ).filter((repo) => repo.name === name);
+                }
+              });
+              return octokit;
+            },
+          }),
+        ),
+      );
       expect(
         all.every((item) =>
           item.htmlUrl.startsWith(`https://github.com/${owner}/`),
