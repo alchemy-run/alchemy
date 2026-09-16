@@ -7,6 +7,7 @@ import {
   BranchProtection,
   BranchProtectionProvider,
 } from "./BranchProtection.ts";
+import { Collaborator, CollaboratorProvider } from "./Collaborator.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
@@ -52,6 +53,7 @@ export const providers = (options?: ProvidersOptions) =>
     Providers,
     Provider.collection([
       BranchProtection,
+      Collaborator,
       Comment,
       Environment,
       Label,
@@ -70,6 +72,7 @@ export const providers = (options?: ProvidersOptions) =>
     Layer.provide(
       Layer.mergeAll(
         BranchProtectionProvider(),
+        CollaboratorProvider(),
         CommentProvider(),
         EnvironmentProvider(),
         LabelProvider(),
