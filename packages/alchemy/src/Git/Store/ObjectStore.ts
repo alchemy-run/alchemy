@@ -242,6 +242,15 @@ export interface ObjectStore extends ObjectSource {
     objects: ReadonlyArray<StagedObject>,
   ) => Effect.Effect<void, StoreError>;
   /** A live object's type and content for thin-delta resolution, or `undefined`. */
+  /** Read only live objects or objects staged by this push, with a caller-selected size cap. */
+  readonly readPrepared: (
+    pushId: string,
+    oid: Oid,
+    maxBytes: number,
+  ) => Effect.Effect<
+    { readonly type: ObjectType; readonly content: Uint8Array } | undefined,
+    StoreError
+  >;
   readonly readBase: (
     oid: Oid,
   ) => Effect.Effect<
@@ -357,15 +366,22 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   const zlibToStore = (error: Zlib.ZlibError): StoreError =>
     new StoreError({ reason: error.reason });
 
-  const readRow = (oid: Oid): Effect.Effect<ZDataRow | undefined, StoreError> =>
+  const readRow = (
+    oid: Oid,
+    pushId: string | null = null,
+  ): Effect.Effect<ZDataRow | undefined, StoreError> =>
     sql.first<ZDataRow>(
       `SELECT oid, location, zdata, r2_key, pack_id, pack_offset, zsize
-         FROM objects WHERE oid = ? AND ${LIVE_OBJECTS}`,
+         FROM objects WHERE oid = ? AND (${LIVE_OBJECTS} OR staged_push = ?)`,
       oid,
+      pushId,
     );
 
-  const requireRow = Effect.fn(function* (oid: Oid) {
-    const row = yield* readRow(oid);
+  const requireRow = Effect.fn(function* (
+    oid: Oid,
+    pushId: string | null = null,
+  ) {
+    const row = yield* readRow(oid, pushId);
     if (row === undefined) {
       return yield* Effect.fail(
         new StoreError({ reason: `object not found: ${oid}` }),
@@ -484,8 +500,11 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   });
 
   /** Reads the stored compressed bytes fully into memory. */
-  const readZBytes = Effect.fn(function* (oid: Oid) {
-    const row = yield* requireRow(oid);
+  const readZBytes = Effect.fn(function* (
+    oid: Oid,
+    pushId: string | null = null,
+  ) {
+    const row = yield* requireRow(oid, pushId);
     switch (row.location) {
       case "row": {
         if (row.zdata === null) {
@@ -1009,6 +1028,28 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         { prefix: [pushId], suffix: [pushId] },
       );
     }),
+    readPrepared: (pushId, oid, maxBytes) =>
+      Effect.gen(function* () {
+        if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
+          return yield* new StoreError({ reason: "invalid object size limit" });
+        const row = yield* sql.first<ObjectMetaRow>(
+          `SELECT oid, type, size, zsize, location FROM objects WHERE oid = ? AND (${LIVE_OBJECTS} OR staged_push = ?)`,
+          oid,
+          pushId,
+        );
+        if (row === undefined) return undefined;
+        const meta = yield* metaFromRow(row);
+        if (meta.size > maxBytes)
+          return yield* new StoreError({
+            reason: `object exceeds ${maxBytes} byte read limit`,
+          });
+        const zdata = yield* readZBytes(oid, pushId);
+        const content = yield* Zlib.inflate(zdata).pipe(
+          Effect.mapError(zlibToStore),
+        );
+        return { type: meta.type, content };
+      }),
+
     readBase: (oid) =>
       self
         .getMeta(oid)

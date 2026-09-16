@@ -1,65 +1,189 @@
-import * as GitHub from "@/GitHub"
-import * as Test from "@/Test/Alchemy"
-import { expect } from "alchemy-test"
-import * as Effect from "effect/Effect"
-import { MinimumLogLevel } from "effect/References"
+import * as GitHub from "@/GitHub";
+import { GitHubCredentials } from "@/GitHub/Credentials.ts";
+import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import { destroy } from "@/RemovalPolicy";
+import * as Test from "@/Test/Alchemy";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: GitHub.providers(),
-})
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
+if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
+  throw new Error(`Unsafe GITHUB_TEST_OWNER: ${owner}`);
+}
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-)
+const { test } = Test.make({
+  providers: GitHub.providers({ baseUrl: "github.com" }),
+});
 
-const testRepoOwner = process.env.GITHUB_TEST_OWNER || "agustif"
-const testRepoName = process.env.GITHUB_TEST_REPO || "alchemy"
+const repository = (id: string, name: string) =>
+  GitHub.Repository(id, {
+    owner,
+    name,
+    description: "Alchemy PR 1568 Issue integration fixture (retained)",
+    visibility: "private",
+    hasIssues: true,
+    autoInit: true,
+  });
 
-test(
-  "create and update issue",
+const repoName = (repo: GitHub.Repository) =>
+  Output.map(repo.fullName, (fullName) => fullName.split("/")[1]!);
+
+const getIssue = (repo: string, issueNumber: number) =>
   Effect.gen(function* () {
-    const stack = yield* deploy(
-      yield* Test.Stack(
-        "IssueTestStack",
-        Effect.gen(function* () {
-          const issue = yield* GitHub.Issue("test-issue", {
-            owner: testRepoOwner,
-            repository: testRepoName,
-            title: "Test Issue from Alchemy",
-            body: "This is a test issue created by Alchemy.",
-            labels: ["test", "alchemy"],
-          })
-          return { issueNumber: issue.issueNumber, htmlUrl: issue.htmlUrl }
+    const octokit = yield* Octokit;
+    const { data } = yield* Effect.tryPromise(() =>
+      octokit.rest.issues.get({ owner, repo, issue_number: issueNumber }),
+    );
+    return data;
+  });
+
+test.provider(
+  "create closed, update, list, and close an issue on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = "alchemy-pr-1568-issue-lifecycle";
+      const deployIssue = (
+        props: Omit<GitHub.IssueProps, "owner" | "repository">,
+      ) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            // Repository deletion needs delete_repo; reuse this retained fixture.
+            const repo = yield* repository("Repo", name);
+            return yield* GitHub.Issue("Issue", {
+              owner,
+              repository: repoName(repo),
+              ...props,
+            }).pipe(destroy());
+          }),
+        );
+
+      const created = yield* deployIssue({
+        title: "PR 1568: initially closed",
+        body: "\n    Initial body\n    Second line\n",
+        labels: ["bug"],
+        state: "closed",
+      });
+      expect(created.issueNumber).toBeGreaterThan(0);
+      expect(created.nodeId).toBeTruthy();
+      expect(created.htmlUrl).toBe(
+        `https://github.com/${owner}/${name}/issues/${created.issueNumber}`,
+      );
+      expect(created.state).toBe("closed");
+      const initial = yield* getIssue(name, created.issueNumber);
+      expect(initial.state).toBe("closed");
+      expect(initial.body).toBe("Initial body\nSecond line");
+      expect(
+        initial.labels.map((label) =>
+          typeof label === "string" ? label : label.name,
+        ),
+      ).toEqual(["bug"]);
+
+      const updated = yield* deployIssue({ title: "PR 1568: reopened" });
+      expect(updated.issueNumber).toBe(created.issueNumber);
+      expect(updated.nodeId).toBe(created.nodeId);
+      expect(updated.state).toBe("open");
+      const fetched = yield* getIssue(name, updated.issueNumber);
+      expect(fetched.title).toBe("PR 1568: reopened");
+      expect(fetched.body ?? "").toBe("");
+      expect(fetched.labels).toEqual([]);
+      expect(fetched.assignees).toEqual([]);
+      expect(fetched.milestone).toBeNull();
+
+      const credentials = yield* yield* GitHubCredentials;
+      const provider = yield* Provider.findProvider(GitHub.Issue);
+      const listed = yield* provider.list().pipe(
+        Effect.provideService(
+          GitHubCredentials,
+          Effect.succeed({
+            ...credentials,
+            octokit: (override) => {
+              const octokit = credentials.octokit(override);
+              octokit.hook.before("request", (options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === "/user/repos") {
+                  url.pathname = `/orgs/${owner}/repos`;
+                  options.url = url.toString();
+                }
+                if (
+                  url.origin !== "https://api.github.com" ||
+                  (url.pathname !== `/orgs/${owner}/repos` &&
+                    url.pathname !== `/repos/${owner}/${name}/issues`)
+                ) {
+                  throw new Error(`Unsafe Issue list request: ${url}`);
+                }
+              });
+              octokit.hook.after("request", (response, options) => {
+                const url = new URL(options.url, "https://api.github.com");
+                if (url.pathname === `/orgs/${owner}/repos`) {
+                  response.data = (
+                    response.data as Array<{ name: string }>
+                  ).filter((repo) => repo.name === name);
+                }
+              });
+              return octokit;
+            },
+          }),
+        ),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+          until: (issues) =>
+            issues.some((issue) => issue.nodeId === created.nodeId),
         }),
-      ),
-    )
+      );
+      expect(listed.map((issue) => issue.nodeId)).toContain(created.nodeId);
 
-    expect(stack.issueNumber).toBeGreaterThan(0)
-    expect(stack.htmlUrl).toContain("github.com")
+      yield* stack.destroy();
+      expect((yield* getIssue(name, created.issueNumber)).state).toBe("closed");
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);
 
-    // Update the issue
-    const updated = yield* deploy(
-      yield* Test.Stack(
-        "IssueTestStack",
-        Effect.gen(function* () {
-          const issue = yield* GitHub.Issue("test-issue", {
-            owner: testRepoOwner,
-            repository: testRepoName,
-            title: "Updated Test Issue from Alchemy",
-            body: "This issue has been updated.",
-            labels: ["test", "alchemy", "updated"],
-            state: "closed",
-          })
-          return { issueNumber: issue.issueNumber, state: issue.state }
-        }),
-      ),
-    )
+test.provider(
+  "repository changes replace the issue and close the old generation",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const firstName = "alchemy-pr-1568-issue-replace-a";
+      const secondName = "alchemy-pr-1568-issue-replace-b";
+      const deployIssue = (target: "first" | "second") =>
+        stack.deploy(
+          Effect.gen(function* () {
+            // Keep both dependencies across replacement; retain the fixture repos.
+            const first = yield* repository("FirstRepo", firstName);
+            const second = yield* repository("SecondRepo", secondName);
+            return yield* GitHub.Issue("Issue", {
+              owner,
+              repository: repoName(target === "first" ? first : second),
+              title: "PR 1568: repository replacement",
+            }).pipe(destroy());
+          }),
+        );
 
-    expect(updated.issueNumber).toBe(stack.issueNumber)
-    expect(updated.state).toBe("closed")
+      const created = yield* deployIssue("first");
+      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe(
+        "open",
+      );
+      const replaced = yield* deployIssue("second");
+      expect(replaced.nodeId).not.toBe(created.nodeId);
+      expect(replaced.htmlUrl).toContain(`/${secondName}/issues/`);
+      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe(
+        "closed",
+      );
+      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe(
+        "open",
+      );
 
-    yield* destroy("IssueTestStack")
-  }).pipe(logLevel),
-  { timeout: 180_000 },
-)
+      yield* stack.destroy();
+      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe(
+        "closed",
+      );
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);

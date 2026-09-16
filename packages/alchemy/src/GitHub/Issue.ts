@@ -1,26 +1,26 @@
-import * as Effect from "effect/Effect"
-import { isResolved } from "../Diff.ts"
-import * as Provider from "../Provider.ts"
-import { Resource } from "../Resource.ts"
-import { dedent } from "../Util/dedent.ts"
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts"
-import type * as GitHub from "./Providers.ts"
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { dedent } from "../Util/dedent.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface IssueProps {
   /**
    * Repository owner (user or organization).
    */
-  owner: string
+  owner: string;
 
   /**
    * Repository name.
    */
-  repository: string
+  repository: string;
 
   /**
    * Issue title.
    */
-  title: string
+  title: string;
 
   /**
    * Issue body (supports GitHub Markdown).
@@ -30,31 +30,31 @@ export interface IssueProps {
    * `Output<string>` at the call site via `Output.interpolate` to embed
    * resource attributes that are not yet resolved.
    */
-  body?: string
+  body?: string;
 
   /**
    * State of the issue. Use "open" to reopen a closed issue or "closed" to
    * close an open issue.
    * @default "open"
    */
-  state?: "open" | "closed"
+  state?: "open" | "closed";
 
   /**
    * Labels to attach to the issue. The provided list fully replaces any
    * existing labels.
    */
-  labels?: string[]
+  labels?: string[];
 
   /**
    * Assignees (user logins) to assign to the issue. The provided list fully
    * replaces existing assignees.
    */
-  assignees?: string[]
+  assignees?: string[];
 
   /**
    * Milestone number to assign to the issue. Use `null` to remove milestone.
    */
-  milestone?: number | null
+  milestone?: number | null;
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -63,7 +63,7 @@ export interface IssueProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string
+  baseUrl?: string;
 }
 
 export interface Issue extends Resource<
@@ -73,32 +73,32 @@ export interface Issue extends Resource<
     /**
      * The numeric ID of the issue in GitHub.
      */
-    issueNumber: number
+    issueNumber: number;
 
     /**
      * GraphQL node ID of the issue.
      */
-    nodeId: string
+    nodeId: string;
 
     /**
      * URL to view the issue in a browser.
      */
-    htmlUrl: string
+    htmlUrl: string;
 
     /**
      * State of the issue (open or closed).
      */
-    state: "open" | "closed"
+    state: "open" | "closed";
 
     /**
      * ISO-8601 timestamp of when the issue was created.
      */
-    createdAt: string
+    createdAt: string;
 
     /**
      * ISO-8601 timestamp of the last update.
      */
-    updatedAt: string
+    updatedAt: string;
   },
   never,
   GitHub.Providers
@@ -110,7 +110,8 @@ export interface Issue extends Resource<
  * `Issue` manages the lifecycle of a single issue in a repository. Issues are
  * created on the first deploy and updated in place on subsequent deploys when
  * properties change. By default, issues are retained on destruction to preserve
- * discussion history — set `destroy()` to opt in to deletion.
+ * discussion history. Pipe the resource through `destroy()` to close the issue
+ * on destruction instead; its discussion remains on GitHub.
  *
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
@@ -189,7 +190,7 @@ export interface Issue extends Resource<
  */
 export const Issue = Resource<Issue>("GitHub.Issue", {
   defaultRemovalPolicy: "retain",
-})
+});
 
 export const IssueProvider = () =>
   Provider.succeed(Issue, {
@@ -200,84 +201,96 @@ export const IssueProvider = () =>
     // a fresh issue is created on the new repository, and the old one is
     // retained by default (matching the resource's `retain` removal policy).
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return
-      if (olds === undefined) return
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
-        return { action: "replace" }
+        return { action: "replace" };
       }
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = yield* octokitFor(news.baseUrl)
-      const body = news.body ? dedent(news.body) : undefined
+      const octokit = yield* octokitFor(news.baseUrl);
+      const body = news.body ? dedent(news.body) : "";
+      const state = news.state ?? "open";
+      const labels = news.labels ?? [];
+      const assignees = news.assignees ?? [];
+      const milestone = news.milestone ?? null;
 
-      // Observe — GitHub assigns `issue_number` server-side. Probe for live
-      // state via the cached number; a 404 (deleted out-of-band, or never
-      // created) collapses to "no observed issue" so we converge by creating
-      // a fresh one.
-      const observedNumber = output?.issueNumber
-        ? yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                const { data } = await octokit.rest.issues.get({
+      let data =
+        output?.issueNumber !== undefined
+          ? yield* Effect.tryPromise({
+              try: () =>
+                octokit.rest.issues.get({
                   owner: news.owner,
                   repo: news.repository,
                   issue_number: output.issueNumber,
-                })
-                return data.number
-              } catch (error: any) {
-                if (error.status === 404) return undefined
-                throw error
-              }
-            },
-            catch: (e) => e as Error,
-          })
-        : undefined
+                }),
+              catch: (error) => error as Error & { status?: number },
+            }).pipe(
+              Effect.map((response) => response.data),
+              Effect.catchIf(
+                (error) => error.status === 404,
+                () => Effect.succeed(undefined),
+              ),
+            )
+          : undefined;
 
-      // Ensure — when no live issue exists, POST creates one.
-      if (observedNumber === undefined) {
-        const { data } = yield* Effect.tryPromise(() =>
+      if (data === undefined) {
+        const created = yield* Effect.tryPromise(() =>
           octokit.rest.issues.create({
             owner: news.owner,
             repo: news.repository,
             title: news.title,
             body,
-            labels: news.labels,
-            assignees: news.assignees,
-            milestone:
-              news.milestone === null ? undefined : news.milestone,
+            labels,
+            assignees,
+            milestone: milestone ?? undefined,
           }),
-        )
-        return {
-          issueNumber: data.number,
-          nodeId: data.node_id,
-          htmlUrl: data.html_url,
-          state: data.state as "open" | "closed",
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        }
+        );
+        data = created.data;
       }
 
-      // Sync — PATCH the existing issue with the desired properties. GitHub's
-      // update is idempotent, so we always issue the call rather than diffing.
-      const { data } = yield* Effect.tryPromise(() =>
-        octokit.rest.issues.update({
-          owner: news.owner,
-          repo: news.repository,
-          issue_number: observedNumber,
-          title: news.title,
-          body,
-          state: news.state,
-          labels: news.labels,
-          assignees: news.assignees,
-          milestone:
-            news.milestone === null ? null : news.milestone,
-        }),
-      )
+      const sameNames = (observed: string[], desired: string[]) =>
+        JSON.stringify(observed.map((name) => name.toLowerCase()).sort()) ===
+        JSON.stringify(desired.map((name) => name.toLowerCase()).sort());
+
+      // Creation always opens an issue; sync also applies the desired initial state.
+      if (
+        data.title !== news.title ||
+        (data.body ?? "") !== body ||
+        data.state !== state ||
+        !sameNames(
+          data.labels.map((label) =>
+            typeof label === "string" ? label : (label.name ?? ""),
+          ),
+          labels,
+        ) ||
+        !sameNames(
+          (data.assignees ?? []).map((assignee) => assignee.login),
+          assignees,
+        ) ||
+        (data.milestone?.number ?? null) !== milestone
+      ) {
+        const issueNumber = data.number;
+        const updated = yield* Effect.tryPromise(() =>
+          octokit.rest.issues.update({
+            owner: news.owner,
+            repo: news.repository,
+            issue_number: issueNumber,
+            title: news.title,
+            body,
+            state,
+            labels,
+            assignees,
+            milestone,
+          }),
+        );
+        data = updated.data;
+      }
       return {
         issueNumber: data.number,
         nodeId: data.node_id,
@@ -285,12 +298,12 @@ export const IssueProvider = () =>
         state: data.state as "open" | "closed",
         createdAt: data.created_at,
         updatedAt: data.updated_at,
-      }
+      };
     }),
 
     // Enumerate every issue across the repositories the token can see.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit
+      const octokit = yield* Octokit;
 
       const repos = yield* Effect.tryPromise({
         try: () =>
@@ -298,7 +311,7 @@ export const IssueProvider = () =>
             per_page: 100,
           }),
         catch: (e) => e as Error,
-      })
+      });
 
       const perRepo = yield* Effect.forEach(
         repos,
@@ -314,7 +327,7 @@ export const IssueProvider = () =>
                     state: "all",
                     per_page: 100,
                   },
-                )
+                );
                 // Filter out pull requests (they appear in issues API)
                 return issues
                   .filter((issue) => !issue.pull_request)
@@ -325,44 +338,42 @@ export const IssueProvider = () =>
                     state: issue.state as "open" | "closed",
                     createdAt: issue.created_at,
                     updatedAt: issue.updated_at,
-                  }))
+                  }));
               } catch (error: any) {
                 if (error.status === 403 || error.status === 404) {
-                  return []
+                  return [];
                 }
-                throw error
+                throw error;
               }
             },
             catch: (e) => e as Error,
           }),
         { concurrency: 10 },
-      )
+      );
 
-      return perRepo.flat()
+      return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl)
+      const octokit = yield* octokitFor(olds.baseUrl);
 
-      // GitHub API does not support deleting issues directly. Issues are
-      // retained on GitHub by default unless the resource opted in to
-      // deletion via destroy(). In that case, we close the issue as the
-      // closest equivalent to deletion.
+      // Opted-in destruction closes the issue without deleting its discussion.
       if (output?.issueNumber !== undefined) {
-        yield* Effect.tryPromise(async () => {
-          try {
-            await octokit.rest.issues.update({
+        yield* Effect.tryPromise({
+          try: () =>
+            octokit.rest.issues.update({
               owner: olds.owner,
               repo: olds.repository,
               issue_number: output.issueNumber,
               state: "closed",
-            })
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error
-            }
-          }
-        })
+            }),
+          catch: (error) => error as Error & { status?: number },
+        }).pipe(
+          Effect.catchIf(
+            (error) => error.status === 404,
+            () => Effect.void,
+          ),
+        );
       }
     }),
-  })
+  });

@@ -4,8 +4,9 @@ description: A Binding connects a Resource to a Worker or Lambda. One line decla
 ---
 
 A **Binding** connects a [Resource](/infrastructure-as-code/resource)
-to a Worker, Lambda Function, Container, or Server. You yield the resource and
-get back a typed client:
+to a Worker, Lambda Function, Container, or Server — any
+[Runtime](/infrastructure-as-effects/runtime). Inside the Runtime's
+constructor, you yield the resource and get back a typed client:
 
 ```typescript
 import * as AWS from "alchemy/AWS";
