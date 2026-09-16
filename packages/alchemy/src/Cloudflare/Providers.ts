@@ -17,6 +17,7 @@ import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
 import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
 import * as McpPortal from "./Access/McpPortal.ts";
+import * as McpServer from "./Access/McpServer.ts";
 import * as AccessOrg from "./Access/Organization.ts";
 import * as AccessPol from "./Access/Policy.ts";
 import * as AccessSvcToken from "./Access/ServiceToken.ts";
@@ -286,6 +287,7 @@ export const providers = () =>
       MagicTransit.MagicStaticRoute,
       ManagedTransforms.ManagedTransforms,
       McpPortal.McpPortal,
+      McpServer.McpServer,
       MtlsCertificate.MtlsCertificate,
       NetworkInterconnects.NetworkInterconnectSettings,
       Organization.Organization,
@@ -537,6 +539,7 @@ export const providers = () =>
           MagicTransit.MagicStaticRouteProvider(),
           ManagedTransforms.ManagedTransformsProvider(),
           McpPortal.McpPortalProvider(),
+          McpServer.McpServerProvider(),
           MtlsCertificate.MtlsCertificateProvider(),
           NetworkInterconnects.NetworkInterconnectSettingsProvider(),
           Organization.OrganizationProvider(),
