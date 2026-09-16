@@ -1,38 +1,38 @@
-import * as Effect from "effect/Effect"
-import { isResolved } from "../Diff.ts"
-import * as Provider from "../Provider.ts"
-import { Resource } from "../Resource.ts"
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts"
-import type * as GitHub from "./Providers.ts"
+import * as Effect from "effect/Effect";
+import { deepEqual, isResolved } from "../Diff.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import type * as GitHub from "./Providers.ts";
 
 export interface RulesetProps {
   /**
    * Repository owner — a user or organization login.
    */
-  owner: string
+  owner: string;
 
   /**
    * Repository name.
    */
-  repository: string
+  repository: string;
 
   /**
    * Ruleset name. The name is displayed in the GitHub UI and can be updated.
    */
-  name: string
+  name: string;
 
   /**
    * The enforcement level of the ruleset. Can be `disabled`, `active`, or
    * `evaluate` (log-only mode).
    * @default "active"
    */
-  enforcement?: "disabled" | "active" | "evaluate"
+  enforcement?: "disabled" | "active" | "evaluate";
 
   /**
-   * Conditions that determine which refs are targeted by the ruleset.
-   * Omit to apply to all refs.
+   * Whether the ruleset targets branches or tags.
+   * @default "branch"
    */
-  target?: "branch" | "tag"
+  target?: "branch" | "tag";
 
   /**
    * Conditions for targeting refs. When omitted, applies to all refs of the
@@ -43,38 +43,36 @@ export interface RulesetProps {
      * Ref patterns to include (e.g. `["refs/heads/main", "refs/heads/release/*"]`).
      * Supports glob patterns.
      */
-    include?: string[]
+    include?: string[];
 
     /**
      * Ref patterns to exclude (e.g. `["refs/heads/dev/*"]`).
      * Supports glob patterns.
      */
-    exclude?: string[]
-  }
+    exclude?: string[];
+  };
 
   /**
-   * Whether the ruleset should apply to admins. When true, admins cannot
-   * bypass the rules.
-   * @default false
+   * Actors allowed to bypass the ruleset. Omit to allow no bypasses.
    */
   bypassActors?: Array<{
     /**
      * The type of actor that can bypass the ruleset.
      */
-    actorType: "RepositoryRole" | "Team" | "Integration" | "OrganizationAdmin"
+    actorType: "RepositoryRole" | "Team" | "Integration" | "OrganizationAdmin";
 
     /**
      * The ID of the actor (role ID, team ID, or integration ID).
-     * Use 1 for RepositoryRole.maintain, 2 for write, 4 for admin, 5 for bypass.
+     * RepositoryRole IDs are 2 for write, 4 for maintain, and 5 for admin.
      */
-    actorId?: number
+    actorId?: number;
 
     /**
-     * Whether the bypass applies to the actor.
+     * Whether the actor can always bypass or only through pull requests.
      * @default "always"
      */
-    bypassMode?: "always" | "pull_request"
-  }>
+    bypassMode?: "always" | "pull_request";
+  }>;
 
   /**
    * Rules to enforce on the targeted refs.
@@ -92,25 +90,25 @@ export interface RulesetProps {
         /**
          * The status check context name.
          */
-        context: string
+        context: string;
 
         /**
          * Optional integration ID.
          */
-        integrationId?: number
-      }>
+        integrationId?: number;
+      }>;
 
       /**
        * Whether to require branches to be up to date before merging.
        * @default false
        */
-      strictRequiredStatusChecksPolicy?: boolean
-    }
+      strictRequiredStatusChecksPolicy?: boolean;
+    };
 
     /**
      * Require commits to be signed.
      */
-    requiredSignatures?: boolean
+    requiredSignatures?: boolean;
 
     /**
      * Require pull request before merging.
@@ -119,54 +117,54 @@ export interface RulesetProps {
       /**
        * Number of required approving reviews.
        */
-      requiredApprovingReviewCount?: number
+      requiredApprovingReviewCount?: number;
 
       /**
        * Dismiss stale reviews when new commits are pushed.
        */
-      dismissStaleReviewsOnPush?: boolean
+      dismissStaleReviewsOnPush?: boolean;
 
       /**
        * Require review from code owners.
        */
-      requireCodeOwnerReview?: boolean
+      requireCodeOwnerReview?: boolean;
 
       /**
        * Require approval of the most recent reviewable push.
        */
-      requireLastPushApproval?: boolean
+      requireLastPushApproval?: boolean;
 
       /**
        * Required review thread resolution.
        */
-      requiredReviewThreadResolution?: boolean
-    }
+      requiredReviewThreadResolution?: boolean;
+    };
 
     /**
      * Prevent creation of matching refs.
      */
-    creation?: boolean
+    creation?: boolean;
 
     /**
      * Prevent updates to matching refs.
      */
-    update?: boolean
+    update?: boolean;
 
     /**
      * Prevent deletion of matching refs.
      */
-    deletion?: boolean
+    deletion?: boolean;
 
     /**
      * Require linear history.
      */
-    requiredLinearHistory?: boolean
+    requiredLinearHistory?: boolean;
 
     /**
      * Prevent force pushes.
      */
-    nonFastForward?: boolean
-  }
+    nonFastForward?: boolean;
+  };
 
   /**
    * Override the GitHub host or API base URL for this resource only (e.g.
@@ -175,7 +173,7 @@ export interface RulesetProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string
+  baseUrl?: string;
 }
 
 export interface Ruleset extends Resource<
@@ -185,27 +183,27 @@ export interface Ruleset extends Resource<
     /**
      * Numeric GitHub ruleset ID.
      */
-    rulesetId: number
+    rulesetId: number;
 
     /**
-     * GraphQL node ID of the ruleset.
+     * GraphQL node ID of the ruleset, when returned by GitHub.
      */
-    nodeId: string
+    nodeId: string | undefined;
 
     /**
      * The ruleset name.
      */
-    name: string
+    name: string;
 
     /**
      * ISO-8601 timestamp of when the ruleset was created.
      */
-    createdAt: string
+    createdAt: string | undefined;
 
     /**
      * ISO-8601 timestamp of the last update.
      */
-    updatedAt: string
+    updatedAt: string | undefined;
   },
   never,
   GitHub.Providers
@@ -225,7 +223,8 @@ export interface Ruleset extends Resource<
  *
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
- * `repo` scope (and `admin:repo` for deletion when opted in via `destroy()`).
+ * `repo` scope, or repository Administration write permission for a
+ * fine-grained token. Ruleset deletion does not require `delete_repo`.
  *
  * ### Creating a Ruleset
  * **Example:** Protect Main Branch
@@ -314,161 +313,168 @@ export interface Ruleset extends Resource<
  */
 export const Ruleset = Resource<Ruleset>("GitHub.Ruleset", {
   defaultRemovalPolicy: "retain",
-})
+});
 
 export const RulesetProvider = () =>
   Provider.succeed(Ruleset, {
     stables: ["rulesetId", "nodeId"],
 
     diff: Effect.fn(function* ({ news, olds }) {
-      if (!isResolved(news)) return
-      if (olds === undefined) return
+      if (!isResolved(news)) return;
+      if (olds === undefined) return;
       if (
         news.owner !== olds.owner ||
         news.repository !== olds.repository ||
         (yield* gitHubBaseUrlChanged(olds, news))
       ) {
-        return { action: "replace" }
+        return { action: "replace" };
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, olds, output }) {
-      const octokit = yield* octokitFor(news.baseUrl)
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const octokit = yield* octokitFor(news.baseUrl);
 
-      // Observe — read the existing ruleset by ID if we have one
-      let observed: any = undefined
-      if (output?.rulesetId !== undefined) {
-        observed = yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.rest.repos.getRepoRuleset({
-                owner: news.owner,
-                repo: news.repository,
-                ruleset_id: output.rulesetId,
-              })
-              return data
-            } catch (error: any) {
-              if (error.status === 404) return undefined
-              throw error
-            }
-          },
-          catch: (e) => e as Error,
-        })
-      }
+      let observed =
+        output === undefined
+          ? undefined
+          : yield* getRuleset(news, output.rulesetId);
 
-      // Build the rules payload
-      const rules: any[] = []
+      const rules: NonNullable<
+        NonNullable<
+          Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]
+        >["rules"]
+      > = [];
 
       if (news.rules?.creation) {
-        rules.push({ type: "creation" })
+        rules.push({ type: "creation" });
       }
-      if (news.rules?.update !== undefined && !news.rules.update) {
-        rules.push({ type: "update", parameters: { update_allows_fetch_and_merge: false } })
+      if (news.rules?.update) {
+        rules.push({
+          type: "update",
+          parameters: { update_allows_fetch_and_merge: false },
+        });
       }
       if (news.rules?.deletion) {
-        rules.push({ type: "deletion" })
+        rules.push({ type: "deletion" });
       }
       if (news.rules?.nonFastForward) {
-        rules.push({ type: "non_fast_forward" })
+        rules.push({ type: "non_fast_forward" });
       }
       if (news.rules?.requiredLinearHistory) {
-        rules.push({ type: "required_linear_history" })
+        rules.push({ type: "required_linear_history" });
       }
       if (news.rules?.requiredSignatures) {
-        rules.push({ type: "required_signatures" })
+        rules.push({ type: "required_signatures" });
       }
       if (news.rules?.pullRequest) {
         rules.push({
           type: "pull_request",
           parameters: {
-            required_approving_review_count: news.rules.pullRequest.requiredApprovingReviewCount,
-            dismiss_stale_reviews_on_push: news.rules.pullRequest.dismissStaleReviewsOnPush,
-            require_code_owner_review: news.rules.pullRequest.requireCodeOwnerReview,
-            require_last_push_approval: news.rules.pullRequest.requireLastPushApproval,
-            required_review_thread_resolution: news.rules.pullRequest.requiredReviewThreadResolution,
+            required_approving_review_count:
+              news.rules.pullRequest.requiredApprovingReviewCount ?? 0,
+            dismiss_stale_reviews_on_push:
+              news.rules.pullRequest.dismissStaleReviewsOnPush ?? false,
+            require_code_owner_review:
+              news.rules.pullRequest.requireCodeOwnerReview ?? false,
+            require_last_push_approval:
+              news.rules.pullRequest.requireLastPushApproval ?? false,
+            required_review_thread_resolution:
+              news.rules.pullRequest.requiredReviewThreadResolution ?? false,
           },
-        })
+        });
       }
       if (news.rules?.requiredStatusChecks) {
         rules.push({
           type: "required_status_checks",
           parameters: {
-            required_status_checks: news.rules.requiredStatusChecks.checks.map((check) => ({
-              context: check.context,
-              integration_id: check.integrationId,
-            })),
-            strict_required_status_checks_policy: news.rules.requiredStatusChecks.strictRequiredStatusChecksPolicy,
+            required_status_checks: news.rules.requiredStatusChecks.checks.map(
+              (check) => ({
+                context: check.context,
+                integration_id: check.integrationId,
+              }),
+            ),
+            strict_required_status_checks_policy:
+              news.rules.requiredStatusChecks
+                .strictRequiredStatusChecksPolicy ?? false,
           },
-        })
+        });
       }
 
-      // Build the conditions payload
-      let conditions: any = undefined
-      if (news.conditions) {
-        conditions = {
-          ref_name: {
-            include: news.conditions.include ?? [],
-            exclude: news.conditions.exclude ?? [],
-          },
-        }
-      }
+      const conditions = {
+        ref_name: {
+          include: news.conditions?.include ?? ["~ALL"],
+          exclude: news.conditions?.exclude ?? [],
+        },
+      };
 
       // Build the bypass actors payload
       const bypassActors = news.bypassActors?.map((actor) => ({
         actor_type: actor.actorType,
         actor_id: actor.actorId,
         bypass_mode: actor.bypassMode ?? "always",
-      }))
+      }));
 
-      // Ensure — create or update the ruleset
+      const desired = {
+        name: news.name,
+        target: news.target ?? "branch",
+        enforcement: news.enforcement ?? "active",
+        bypass_actors: bypassActors ?? [],
+        conditions,
+        rules,
+      } satisfies Omit<
+        NonNullable<Parameters<typeof octokit.rest.repos.createRepoRuleset>[0]>,
+        "owner" | "repo"
+      >;
+
       if (observed === undefined) {
         observed = yield* Effect.tryPromise({
-          try: async () => {
-            const { data } = await octokit.rest.repos.createRepoRuleset({
+          try: () =>
+            octokit.rest.repos.createRepoRuleset({
               owner: news.owner,
               repo: news.repository,
-              name: news.name,
-              target: news.target ?? "branch",
-              enforcement: news.enforcement ?? "active",
-              bypass_actors: bypassActors ?? [],
-              conditions,
-              rules,
-            } as any)
-            return data
-          },
+              ...desired,
+            }),
           catch: (e) => e as Error,
-        })
-      } else {
-        observed = yield* Effect.tryPromise({
-          try: async () => {
-            const { data } = await octokit.rest.repos.updateRepoRuleset({
-              owner: news.owner,
-              repo: news.repository,
-              ruleset_id: output.rulesetId,
-              name: news.name,
-              target: news.target ?? "branch",
-              enforcement: news.enforcement ?? "active",
-              bypass_actors: bypassActors ?? [],
-              conditions,
-              rules,
-            } as any)
-            return data
-          },
-          catch: (e) => e as Error,
-        })
+        }).pipe(Effect.map(({ data }) => data));
       }
 
-      return {
-        rulesetId: observed.id,
-        nodeId: observed.node_id,
-        name: observed.name,
-        createdAt: observed.created_at ?? new Date().toISOString(),
-        updatedAt: observed.updated_at ?? new Date().toISOString(),
+      if (
+        !deepEqual(
+          {
+            name: observed.name,
+            target: observed.target,
+            enforcement: observed.enforcement,
+            bypass_actors: observed.bypass_actors ?? [],
+            conditions: observed.conditions,
+            rules: observed.rules ?? [],
+          },
+          desired,
+        )
+      ) {
+        const rulesetId = observed.id;
+        observed = yield* Effect.tryPromise({
+          try: () =>
+            octokit.rest.repos.updateRepoRuleset({
+              owner: news.owner,
+              repo: news.repository,
+              ruleset_id: rulesetId,
+              ...desired,
+            }),
+          catch: (e) => e as Error,
+        }).pipe(Effect.map(({ data }) => data));
       }
+
+      return attrsOf(observed);
+    }),
+
+    read: Effect.fn(function* ({ olds, output }) {
+      if (output === undefined) return undefined;
+      const observed = yield* getRuleset(olds, output.rulesetId);
+      return observed === undefined ? undefined : attrsOf(observed);
     }),
 
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit
+      const octokit = yield* Octokit;
 
       const repos = yield* Effect.tryPromise({
         try: () =>
@@ -476,64 +482,87 @@ export const RulesetProvider = () =>
             per_page: 100,
           }),
         catch: (e) => e as Error,
-      })
+      });
 
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
           Effect.tryPromise({
-            try: async () => {
-              try {
-                const rulesets = await octokit.paginate(
-                  octokit.rest.repos.getRepoRulesets,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                )
-                return rulesets.map((ruleset: any) => ({
-                  rulesetId: ruleset.id,
-                  nodeId: ruleset.node_id,
-                  name: ruleset.name,
-                  createdAt: ruleset.created_at ?? new Date().toISOString(),
-                  updatedAt: ruleset.updated_at ?? new Date().toISOString(),
-                }))
-              } catch (error: any) {
-                if (error.status === 403 || error.status === 404) {
-                  return []
-                }
-                throw error
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+            try: () =>
+              octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+                owner: repo.owner.login,
+                repo: repo.name,
+                includes_parents: false,
+                per_page: 100,
+              }),
+            catch: (e) => e as Error & { status?: number },
+          }).pipe(
+            Effect.map((rulesets) => rulesets.map(attrsOf)),
+            Effect.catchIf(
+              (error) => error.status === 403 || error.status === 404,
+              () => Effect.succeed([]),
+            ),
+          ),
         { concurrency: 10 },
-      )
+      );
 
-      return perRepo.flat()
+      return perRepo.flat();
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      if (output?.rulesetId === undefined) return
+      if (output?.rulesetId === undefined) return;
 
-      const octokit = yield* octokitFor(olds.baseUrl)
+      const octokit = yield* octokitFor(olds.baseUrl);
 
       yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.deleteRepoRuleset({
-              owner: olds.owner,
-              repo: olds.repository,
-              ruleset_id: output.rulesetId,
-            })
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      })
+        try: () =>
+          octokit.rest.repos.deleteRepoRuleset({
+            owner: olds.owner,
+            repo: olds.repository,
+            ruleset_id: output.rulesetId,
+          }),
+        catch: (e) => e as Error & { status?: number },
+      }).pipe(
+        Effect.catchIf(
+          (error) => error.status === 404,
+          () => Effect.void,
+        ),
+      );
     }),
-  })
+  });
+
+const getRuleset = Effect.fn(function* (
+  props: Pick<RulesetProps, "owner" | "repository" | "baseUrl">,
+  rulesetId: number,
+) {
+  const octokit = yield* octokitFor(props.baseUrl);
+  return yield* Effect.tryPromise({
+    try: () =>
+      octokit.rest.repos.getRepoRuleset({
+        owner: props.owner,
+        repo: props.repository,
+        ruleset_id: rulesetId,
+      }),
+    catch: (e) => e as Error & { status?: number },
+  }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.catchIf(
+      (error) => error.status === 404,
+      () => Effect.succeed(undefined),
+    ),
+  );
+});
+
+const attrsOf = (ruleset: {
+  id: number;
+  node_id?: string;
+  name: string;
+  created_at?: string;
+  updated_at?: string;
+}) => ({
+  rulesetId: ruleset.id,
+  nodeId: ruleset.node_id,
+  name: ruleset.name,
+  createdAt: ruleset.created_at,
+  updatedAt: ruleset.updated_at,
+});
