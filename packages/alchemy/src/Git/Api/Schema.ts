@@ -6,8 +6,8 @@
  * `../Api.ts`.
  *
  * The groups carry no middleware and no auth errors of their own: the
- * `HttpApi` you mount them in decides who may call them, and `Git.Hooks`
- * which refs may move.
+ * `HttpApi` you mount them in decides who may call them, and application handlers
+ * decide which refs may move.
  */
 import * as Schema from "effect/Schema";
 // Pulls in the `httpApiStatus` annotation augmentation used by the error
@@ -80,9 +80,9 @@ export class ReadOnlyRepo extends Schema.TaggedError<ReadOnlyRepo>()(
   { httpApiStatus: 403 },
 ) {}
 
-/** 403 — a pre-receive hook refused the ref update. */
-export class HookRejected extends Schema.TaggedError<HookRejected>()(
-  "HookRejected",
+/** 403 — application policy refused a proposed ref update. */
+export class PushDenied extends Schema.TaggedError<PushDenied>()(
+  "PushDenied",
   { ref: Schema.String, reason: Schema.String },
   { httpApiStatus: 403 },
 ) {}
