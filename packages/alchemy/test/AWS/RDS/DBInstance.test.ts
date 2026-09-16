@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
-import { DBCluster, DBInstance } from "@/AWS/RDS";
+import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
 import * as Drift from "@/Drift";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
@@ -335,6 +335,260 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         }),
       );
       expect(gone).toBe(true);
+    }),
+);
+
+type StorageProps = Pick<
+  DBInstanceProps,
+  | "allocatedStorage"
+  | "storageType"
+  | "iops"
+  | "storageThroughput"
+  | "maxAllocatedStorage"
+>;
+
+type StorageState = readonly [
+  allocatedStorage: number,
+  storageType: string,
+  iops: number,
+  storageThroughput: number,
+];
+
+const storageProgram = (props: StorageProps) =>
+  Effect.gen(function* () {
+    const network = yield* Network("StorageNet", { cidrBlock: "10.44.0.0/16" });
+    const subnetGroup = yield* DBSubnetGroup("StorageSubnetGroup", {
+      description: "alchemy coupled storage lifecycle",
+      subnetIds: network.privateSubnetIds,
+    });
+    return yield* DBInstance("StorageInstance", {
+      engine: "postgres",
+      dbInstanceClass: "db.t3.micro",
+      masterUsername: "alchemy",
+      masterUserPassword: Redacted.make("StorageCouplingPass123"),
+      dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+      backupRetentionPeriod: "0 days",
+      deletionProtection: false,
+      skipFinalSnapshot: true,
+      publiclyAccessible: false,
+      ...props,
+    });
+  });
+
+const assertStorageState = Effect.fn(function* (
+  identifier: string,
+  expected: StorageState,
+  maximum = 0,
+) {
+  const observed = (yield* rds.describeDBInstances({
+    DBInstanceIdentifier: identifier,
+  })).DBInstances?.[0];
+  expect([
+    observed?.AllocatedStorage,
+    observed?.StorageType,
+    observed?.Iops ?? 0,
+    observed?.StorageThroughput ?? 0,
+  ]).toEqual(expected);
+  if (maximum === 0) {
+    expect([0, expected[0]]).toContain(observed?.MaxAllocatedStorage ?? 0);
+  } else {
+    expect(observed?.MaxAllocatedStorage).toBe(maximum);
+  }
+  expect(observed?.PendingModifiedValues?.AllocatedStorage).toBeUndefined();
+  expect(observed?.PendingModifiedValues?.StorageType).toBeUndefined();
+  expect(observed?.PendingModifiedValues?.Iops).toBeUndefined();
+  expect(observed?.PendingModifiedValues?.StorageThroughput).toBeUndefined();
+});
+
+const assertInstanceGone = Effect.fn(function* (identifier: string) {
+  const gone = yield* rds
+    .describeDBInstances({ DBInstanceIdentifier: identifier })
+    .pipe(
+      Effect.as(false),
+      Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(true)),
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        times: 8,
+        until: (gone) => gone,
+      }),
+    );
+  expect(gone).toBe(true);
+});
+
+interface StorageCase {
+  name: string;
+  initial: StorageProps;
+  desired: StorageProps;
+  before: StorageState;
+  after: StorageState;
+  equivalent?: StorageProps;
+}
+
+// Each database receives at most one storage modification; optimization can take hours.
+const storageCases: StorageCase[] = [
+  {
+    name: "small gp3 defaults and resize",
+    initial: {},
+    desired: {
+      allocatedStorage: 25,
+      storageType: "gp3",
+      iops: 3000,
+      storageThroughput: 125,
+    },
+    before: [20, "gp3", 3000, 125],
+    after: [25, "gp3", 3000, 125],
+    equivalent: {},
+  },
+  {
+    name: "gp3 resize retains provisioned performance",
+    initial: { allocatedStorage: 400 },
+    desired: { allocatedStorage: 500 },
+    before: [400, "gp3", 12000, 500],
+    after: [500, "gp3", 12000, 500],
+  },
+  {
+    name: "gp3 IOPS update includes allocation",
+    initial: { allocatedStorage: 400 },
+    desired: { allocatedStorage: 400, iops: 16000 },
+    before: [400, "gp3", 12000, 500],
+    after: [400, "gp3", 16000, 500],
+  },
+  {
+    name: "gp3 throughput update includes IOPS",
+    initial: { allocatedStorage: 400 },
+    desired: { allocatedStorage: 400, storageThroughput: 750 },
+    before: [400, "gp3", 12000, 500],
+    after: [400, "gp3", 12000, 750],
+  },
+  {
+    name: "gp3 performance removal restores defaults",
+    initial: { allocatedStorage: 400, iops: 16000, storageThroughput: 750 },
+    desired: { allocatedStorage: 400 },
+    before: [400, "gp3", 16000, 750],
+    after: [400, "gp3", 12000, 500],
+  },
+  {
+    name: "storage type removal restores gp3",
+    initial: { allocatedStorage: 25, storageType: "gp2" },
+    desired: {},
+    before: [25, "gp2", 0, 0],
+    after: [25, "gp3", 3000, 125],
+  },
+  ...(["io1", "io2"] as const).flatMap((storageType): StorageCase[] => [
+    {
+      name: `${storageType} resize includes unchanged IOPS`,
+      initial: { storageType },
+      desired: { storageType, allocatedStorage: 120 },
+      before: [100, storageType, 1000, 0],
+      after: [120, storageType, 1000, 0],
+    },
+    {
+      name: `${storageType} performance and autoscaling removal are atomic`,
+      initial: { storageType, iops: 3000, maxAllocatedStorage: 6000 },
+      desired: { storageType },
+      before: [100, storageType, 3000, 0],
+      after: [100, storageType, 1000, 0],
+      equivalent: { storageType, maxAllocatedStorage: 0 },
+    },
+  ]),
+];
+
+for (const scenario of storageCases) {
+  test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+    `storage coupling: ${scenario.name}`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const created = yield* stack.deploy(storageProgram(scenario.initial));
+        yield* assertStorageState(
+          created.dbInstanceIdentifier,
+          scenario.before,
+          scenario.initial.maxAllocatedStorage,
+        );
+        const updated = yield* stack.deploy(storageProgram(scenario.desired));
+        expect(updated.dbInstanceArn).toBe(created.dbInstanceArn);
+        yield* assertStorageState(
+          updated.dbInstanceIdentifier,
+          scenario.after,
+          scenario.desired.maxAllocatedStorage,
+        );
+        const finalProps = scenario.equivalent ?? scenario.desired;
+        if (scenario.equivalent) {
+          const equivalent = yield* stack.deploy(storageProgram(finalProps));
+          expect(equivalent.dbInstanceArn).toBe(created.dbInstanceArn);
+          yield* assertStorageState(
+            equivalent.dbInstanceIdentifier,
+            scenario.after,
+            finalProps.maxAllocatedStorage,
+          );
+        }
+        expect(
+          (yield* stack.plan(storageProgram(finalProps))).resources
+            .StorageInstance,
+        ).toMatchObject({ action: "noop" });
+        yield* stack.destroy();
+        yield* assertInstanceGone(created.dbInstanceIdentifier);
+      }),
+  );
+}
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "storage coupling: plans correction for external storage drift",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const desired = storageProgram({});
+      const created = yield* stack.deploy(desired);
+      yield* assertStorageState(created.dbInstanceIdentifier, [
+        20,
+        "gp3",
+        3000,
+        125,
+      ]);
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+        StorageType: "gp2",
+        ApplyImmediately: true,
+      });
+      yield* rds
+        .describeDBInstances({
+          DBInstanceIdentifier: created.dbInstanceIdentifier,
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (response) => {
+              const instance = response.DBInstances?.[0];
+              return (
+                instance?.StorageType === "gp2" &&
+                (instance.Iops ?? 0) === 0 &&
+                (instance.StorageThroughput ?? 0) === 0 &&
+                instance.PendingModifiedValues?.StorageType === undefined
+              );
+            },
+          }),
+        );
+      yield* assertStorageState(created.dbInstanceIdentifier, [
+        20,
+        "gp2",
+        0,
+        0,
+      ]);
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.StorageInstance?.action).toBe("drifted");
+      expect(
+        (yield* stack.plan(desired)).resources.StorageInstance,
+      ).toMatchObject({ action: "update" });
+      // A second storage modification must wait for AWS's optimization cooldown.
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
 );
 

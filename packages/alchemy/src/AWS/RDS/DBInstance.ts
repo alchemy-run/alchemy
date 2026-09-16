@@ -45,8 +45,10 @@ export interface DBInstanceProps {
   dbName?: string;
   /**
    * Minimum allocated storage in GiB (standalone instances). RDS cannot
-   * shrink storage; increases made by storage autoscaling are preserved.
-   * @default undefined
+   * shrink storage; omission/removal retains any larger existing allocation.
+   * Defaults to 100 GiB for io1/io2, 40 GiB for other RDS Custom storage,
+   * and 20 GiB otherwise. In-place increases request at least 10% growth.
+   * Cluster members inherit storage from their cluster.
    */
   allocatedStorage?: number;
   /**
@@ -59,15 +61,28 @@ export interface DBInstanceProps {
    */
   maxAllocatedStorage?: number;
   /**
-   * Storage type: `gp2` | `gp3` | `io1` | `io2` | `standard`. In-place modify.
+   * Storage type: `gp2` | `gp3` | `io1` | `io2` | `standard`. Omission/removal
+   * selects gp3, including for existing instances. Magnetic (`standard`)
+   * storage is accepted only for existing instances; Db2 does not support gp2.
+   * AWS engine, instance-class, and regional restrictions still apply.
+   * Cluster members inherit storage from their cluster.
+   * @default "gp3"
    */
   storageType?: string;
   /**
-   * Provisioned IOPS (io1/io2/gp3). In-place modify (rate-limited by AWS).
+   * Provisioned IOPS (io1/io2/gp3). Omission/removal selects a deterministic
+   * baseline, not the observed setting: gp3 uses 3000 IOPS, or 12000 for
+   * striped storage; io1/io2 use at least 1000. Allocation, autoscaling,
+   * engine, and declared throughput can raise that baseline.
+   * Small non-SQL Server gp3 volumes have fixed performance. AWS rate-limits
+   * changes and may require a storage-optimization cooldown.
    */
   iops?: number;
   /**
-   * Storage throughput in MiBps (gp3). In-place modify.
+   * Storage throughput in MiBps (gp3 only). Omission/removal selects 125,
+   * or 500 for striped storage. MySQL/MariaDB IOPS can raise the baseline.
+   * gp3 is striped at 200 GiB for Oracle and 400 GiB for other engines,
+   * except SQL Server, which does not use the striped baseline.
    */
   storageThroughput?: number;
   /**
@@ -455,6 +470,53 @@ export interface DBInstance extends Resource<
  * });
  * ```
  *
+ * ### Storage Defaults
+ * Omitted storage settings describe desired defaults, including on existing
+ * instances: gp3 storage, a minimum allocation of 20 GiB, and the engine's
+ * baseline performance. RDS Custom defaults to 40 GiB; io1/io2 default to
+ * 100 GiB and at least 1000 IOPS. Only allocated capacity is a floor because
+ * RDS cannot shrink a database. Storage type and performance are reconciled
+ * even when the program is unchanged and the cloud settings have drifted.
+ *
+ * **Example:** PostgreSQL with default storage and autoscaling disabled
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ * });
+ * ```
+ *
+ * This starts with 20 GiB of gp3 storage, 3000 IOPS, and 125 MiBps. For small
+ * non-SQL Server gp3 volumes, these performance values are fixed and Alchemy
+ * omits the unsupported performance fields from AWS requests.
+ *
+ * ### Resetting Storage Performance
+ * Removing performance settings restores the baseline for the desired
+ * storage type, effective allocation, engine, and autoscaling limit. AWS
+ * requires coupled storage fields together on modifications; Alchemy sends
+ * the resolved allocation, type, supported performance fields, and ceiling
+ * in the same request. Existing database contents are retained.
+ *
+ * **Example:** Restore the PostgreSQL gp3 baseline at 400 GiB
+ * ```diff lang="typescript"
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   allocatedStorage: 400,
+ * - iops: 16000,
+ * - storageThroughput: 750,
+ * });
+ * ```
+ *
+ * At this allocation PostgreSQL uses striped gp3 storage, so removal requests
+ * 12000 IOPS and 500 MiBps. Removing `storageType: "gp2"` instead selects gp3
+ * without shrinking the allocation. Changes remain subject to AWS's storage
+ * optimization cooldown; redeploying cannot bypass that restriction.
+ *
  * ### Storage Autoscaling
  * `allocatedStorage` is a minimum, not a shrink target. RDS can increase the
  * allocation but cannot reduce it in place. `maxAllocatedStorage` controls
@@ -639,6 +701,171 @@ const logExportDelta = (
 class InvalidDBInstanceStorage extends Data.TaggedError(
   "InvalidDBInstanceStorage",
 )<{ message: string }> {}
+
+type StorageRequest = Required<
+  Pick<rds.CreateDBInstanceMessage, "AllocatedStorage" | "StorageType">
+> &
+  Pick<rds.CreateDBInstanceMessage, "Iops" | "StorageThroughput">;
+
+interface DesiredStorage {
+  request: StorageRequest;
+  iops: number;
+  throughput: number;
+}
+
+const resolveStorage = Effect.fn(function* (
+  props: DBInstanceProps,
+  allocatedFloor = 0,
+) {
+  if (props.dbClusterIdentifier || props.engine.startsWith("aurora")) {
+    if (
+      props.allocatedStorage !== undefined ||
+      props.storageType !== undefined ||
+      props.iops !== undefined ||
+      props.storageThroughput !== undefined
+    ) {
+      return yield* new InvalidDBInstanceStorage({
+        message: "Configure cluster-owned storage on DBCluster, not DBInstance",
+      });
+    }
+    return undefined;
+  }
+  const sqlServer = props.engine.includes("sqlserver-");
+  const oracle = props.engine.includes("oracle-");
+  const storageType = props.storageType ?? "gp3";
+  const provisioned = storageType === "io1" || storageType === "io2";
+  if (
+    !["standard", "gp2", "gp3", "io1", "io2"].includes(storageType) ||
+    (storageType === "standard" && allocatedFloor === 0) ||
+    (storageType === "gp2" && props.engine.startsWith("db2-"))
+  ) {
+    return yield* new InvalidDBInstanceStorage({
+      message: `Storage type '${storageType}' is not supported for '${props.engine}'`,
+    });
+  }
+  const custom = props.engine.startsWith("custom-");
+  const minimum = custom
+    ? 40
+    : sqlServer
+      ? 20
+      : provisioned
+        ? 100
+        : storageType === "standard"
+          ? 5
+          : 20;
+  const requested =
+    props.allocatedStorage ?? (provisioned ? 100 : custom ? 40 : 20);
+  if (!Number.isInteger(requested) || requested <= 0) {
+    return yield* new InvalidDBInstanceStorage({
+      message: "allocatedStorage must be a positive integer",
+    });
+  }
+  // An in-place increase must be at least ten percent of the current allocation.
+  const allocation =
+    requested > allocatedFloor && allocatedFloor > 0
+      ? Math.max(requested, Math.ceil((allocatedFloor * 11) / 10))
+      : Math.max(requested, allocatedFloor);
+  if (allocation < minimum) {
+    return yield* new InvalidDBInstanceStorage({
+      message: `Effective allocated storage must be at least ${minimum} GiB for ${storageType}`,
+    });
+  }
+  const ratioCapacity = Math.max(allocation, props.maxAllocatedStorage ?? 0);
+  if (storageType !== "gp3") {
+    if (
+      props.storageThroughput !== undefined ||
+      (!provisioned && props.iops !== undefined)
+    ) {
+      return yield* new InvalidDBInstanceStorage({
+        message: `${storageType} does not support the declared IOPS/throughput settings`,
+      });
+    }
+    const minimumIops = provisioned
+      ? Math.max(
+          1000,
+          Math.ceil(
+            ratioCapacity * (sqlServer && storageType === "io1" ? 1 : 0.5),
+          ),
+        )
+      : 0;
+    const iops = props.iops ?? minimumIops;
+    const maximumIops = allocation * (storageType === "io1" ? 50 : 1000);
+    if (
+      provisioned &&
+      (!Number.isInteger(iops) || iops < minimumIops || iops > maximumIops)
+    ) {
+      return yield* new InvalidDBInstanceStorage({
+        message: `The allocation and autoscaling limit require ${storageType} IOPS between ${minimumIops} and ${maximumIops}`,
+      });
+    }
+    return {
+      request: {
+        AllocatedStorage: allocation,
+        StorageType: storageType,
+        Iops: provisioned ? iops : undefined,
+      },
+      iops,
+      throughput: 0,
+    } satisfies DesiredStorage;
+  }
+  const striped = !sqlServer && allocation >= (oracle ? 200 : 400);
+  const configurable = sqlServer || striped;
+  const baselineIops = striped ? 12000 : 3000;
+  const baselineThroughput = striped ? 500 : 125;
+  const minimumIops = Math.max(
+    baselineIops,
+    sqlServer ? Math.ceil(ratioCapacity * 0.5) : 0,
+    (props.storageThroughput ?? baselineThroughput) * 4,
+  );
+  const iops = props.iops ?? minimumIops;
+  const minimumThroughput = Math.max(
+    baselineThroughput,
+    ["mysql", "mariadb"].includes(props.engine) ? Math.ceil(iops / 64) : 0,
+  );
+  const throughput = props.storageThroughput ?? minimumThroughput;
+  if (
+    !Number.isInteger(iops) ||
+    iops < minimumIops ||
+    !Number.isInteger(throughput) ||
+    throughput < minimumThroughput ||
+    throughput > iops * 0.25 ||
+    (!configurable &&
+      (iops !== baselineIops || throughput !== baselineThroughput))
+  ) {
+    return yield* new InvalidDBInstanceStorage({
+      message: configurable
+        ? `gp3 requires at least ${minimumIops} IOPS and ${minimumThroughput} MiBps, with throughput <= IOPS / 4`
+        : `Small ${props.engine} gp3 storage has fixed 3000 IOPS and 125 MiBps`,
+    });
+  }
+  return {
+    request: {
+      AllocatedStorage: allocation,
+      StorageType: storageType,
+      Iops: configurable ? iops : undefined,
+      StorageThroughput: configurable ? throughput : undefined,
+    },
+    iops,
+    throughput,
+  } satisfies DesiredStorage;
+});
+
+const hasPendingStorage = (instance: rds.DBInstance) =>
+  instance.PendingModifiedValues?.AllocatedStorage !== undefined ||
+  instance.PendingModifiedValues?.StorageType !== undefined ||
+  instance.PendingModifiedValues?.Iops !== undefined ||
+  instance.PendingModifiedValues?.StorageThroughput !== undefined;
+
+const storageConverged = (
+  observed: rds.DBInstance,
+  desired: DesiredStorage | undefined,
+): boolean =>
+  desired === undefined ||
+  ((observed.AllocatedStorage ?? 0) >= desired.request.AllocatedStorage &&
+    observed.StorageType === desired.request.StorageType &&
+    (observed.Iops ?? 0) === desired.iops &&
+    (observed.StorageThroughput ?? 0) === desired.throughput &&
+    !hasPendingStorage(observed));
 
 const toStorageConfiguration = Effect.fn(function* (props: DBInstanceProps) {
   const supportsAutoscaling =
@@ -843,8 +1070,12 @@ export const DBInstanceProvider = () =>
             if (!instance?.DBInstanceArn) {
               return { action: "update", stables: [] } as const;
             }
+            const desiredStorage = yield* resolveStorage(
+              news,
+              instance.AllocatedStorage,
+            );
             if (
-              !allocationConverged(storage, instance) ||
+              !storageConverged(instance, desiredStorage) ||
               !autoscalingConverged(storage, instance)
             ) {
               return { action: "update" } as const;
@@ -906,6 +1137,10 @@ export const DBInstanceProvider = () =>
           const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
+          let desiredStorage = yield* resolveStorage(
+            news,
+            observed?.AllocatedStorage,
+          );
 
           // Ensure — create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
@@ -918,12 +1153,9 @@ export const DBInstanceProvider = () =>
                 Engine: news.engine,
                 EngineVersion: news.engineVersion,
                 DBName: news.dbName,
-                AllocatedStorage: storage.allocatedStorage,
+                ...desiredStorage?.request,
                 // Omission at creation leaves autoscaling disabled.
                 MaxAllocatedStorage: storage.maxAllocatedStorage || undefined,
-                StorageType: news.storageType,
-                Iops: news.iops,
-                StorageThroughput: news.storageThroughput,
                 MasterUsername: news.masterUsername,
                 MasterUserPassword: news.masterUserPassword,
                 ManageMasterUserPassword: news.manageMasterUserPassword,
@@ -979,6 +1211,16 @@ export const DBInstanceProvider = () =>
             // Wait for the instance to settle before any modify so the call
             // doesn't hit `InvalidDBInstanceStateFault`.
             observed = yield* waitForInstance(identifier);
+            if (hasPendingStorage(observed)) {
+              observed = yield* waitForStorage(
+                identifier,
+                (instance) => !hasPendingStorage(instance),
+              );
+            }
+            desiredStorage = yield* resolveStorage(
+              news,
+              observed.AllocatedStorage,
+            );
 
             // syncCoreSettings — single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
@@ -1001,22 +1243,14 @@ export const DBInstanceProvider = () =>
             };
             setIf("DBInstanceClass", news.dbInstanceClass, observed.DBInstanceClass); // prettier-ignore
             setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
-            // Keep allocation increases coupled to declared storage/IOPS changes.
-            if (
-              storage.allocatedStorage !== undefined &&
-              (observed.AllocatedStorage === undefined ||
-                storage.allocatedStorage > observed.AllocatedStorage)
-            ) {
-              core.AllocatedStorage = storage.allocatedStorage;
+            if (desiredStorage && !storageConverged(observed, desiredStorage)) {
+              Object.assign(core, desiredStorage.request);
               core.MaxAllocatedStorage =
                 storage.maxAllocatedStorage === 0
-                  ? storage.allocatedStorage
+                  ? desiredStorage.request.AllocatedStorage
                   : storage.maxAllocatedStorage;
               coreDirty = true;
             }
-            setIf("StorageType", news.storageType, observed.StorageType);
-            setIf("Iops", news.iops, observed.Iops);
-            setIf("StorageThroughput", news.storageThroughput, observed.StorageThroughput); // prettier-ignore
             setIf("MultiAZ", news.multiAZ, observed.MultiAZ);
             setIf("BackupRetentionPeriod", backupRetentionDays, observed.BackupRetentionPeriod); // prettier-ignore
             setIf("PreferredBackupWindow", news.preferredBackupWindow, observed.PreferredBackupWindow); // prettier-ignore
@@ -1076,7 +1310,7 @@ export const DBInstanceProvider = () =>
               observed = yield* waitForInstance(identifier);
               if (core.AllocatedStorage !== undefined) {
                 observed = yield* waitForStorage(identifier, (instance) =>
-                  allocationConverged(storage, instance),
+                  storageConverged(instance, desiredStorage),
                 );
               }
             }
@@ -1097,25 +1331,29 @@ export const DBInstanceProvider = () =>
             }
           }
 
-          // RDS cannot shrink storage, including allocation added by autoscaling.
-          if (
-            storage.allocatedStorage !== undefined &&
-            (observed.AllocatedStorage === undefined ||
-              storage.allocatedStorage > observed.AllocatedStorage)
-          ) {
+          if (hasPendingStorage(observed)) {
+            observed = yield* waitForStorage(
+              identifier,
+              (instance) => !hasPendingStorage(instance),
+            );
+          }
+          desiredStorage = yield* resolveStorage(
+            news,
+            observed.AllocatedStorage,
+          );
+          if (desiredStorage && !storageConverged(observed, desiredStorage)) {
             yield* rds.modifyDBInstance({
               DBInstanceIdentifier: identifier,
-              AllocatedStorage: storage.allocatedStorage,
-              Iops: news.iops,
+              ...desiredStorage.request,
               MaxAllocatedStorage:
                 storage.maxAllocatedStorage === 0
-                  ? storage.allocatedStorage
+                  ? desiredStorage.request.AllocatedStorage
                   : storage.maxAllocatedStorage,
               ApplyImmediately: true,
             });
             observed = yield* waitForInstance(identifier);
             observed = yield* waitForStorage(identifier, (instance) =>
-              allocationConverged(storage, instance),
+              storageConverged(instance, desiredStorage),
             );
           }
           if (!autoscalingConverged(storage, observed)) {
