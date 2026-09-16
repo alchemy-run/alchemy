@@ -1101,9 +1101,17 @@ export const LiveContainerProvider = () =>
 
           const hasDurableObjects =
             (yield* getDurableObjects(newBindings)) !== undefined;
+          const hasUnresolvedAttachment =
+            !hasDurableObjects &&
+            newBindings.some(
+              (binding) => binding.data.durableObjects !== undefined,
+            );
           const hadDurableObjects =
             (yield* getDurableObjects(oldBindings)) !== undefined;
-          if (hasDurableObjects !== hadDurableObjects) {
+          if (
+            !hasUnresolvedAttachment &&
+            hasDurableObjects !== hadDurableObjects
+          ) {
             return { action: "replace" } as const;
           }
 
@@ -1273,7 +1281,10 @@ export const LiveContainerProvider = () =>
               ? output.durableObjects
               : undefined;
           const durableObjectsForRecovery =
-            durableObjects ?? recordedDurableObjects;
+            durableObjects ??
+            (hasUnresolvedAttachment && recordedDurableObjects?.namespaceId
+              ? recordedDurableObjects
+              : undefined);
           if (
             hasUnresolvedAttachment &&
             durableObjectsForRecovery === undefined
@@ -1295,12 +1306,10 @@ export const LiveContainerProvider = () =>
           // The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
-          // An unresolved (undefined) desired attachment must never trigger
-          // the delete/recreate below — the live attachment is authoritative
-          // until a real namespace id disagrees.
+          // An unresolved declaration is not an intentional removal.
           if (
             existing &&
-            durableObjects &&
+            !hasUnresolvedAttachment &&
             !deepEqual(existing.durableObjects, durableObjects)
           ) {
             if (durableObjects) {
