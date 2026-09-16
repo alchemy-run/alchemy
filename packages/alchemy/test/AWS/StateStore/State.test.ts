@@ -138,9 +138,7 @@ test.provider(
         defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
       ).toBeUndefined();
       expect(defaults.BucketKeyEnabled ?? false).toBe(false);
-      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "SSE-C",
-      ]);
+      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       yield* stack.destroy();
       const absent = yield* s3
         .getBucketLocation({ Bucket: bucket.bucketName })
@@ -212,7 +210,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
           after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
         ).toBeUndefined();
         expect(after.BucketKeyEnabled ?? false).toBe(false);
-        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["SSE-C"]);
+        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
         yield* stack.destroy();
         const absent = yield* s3
           .getBucketLocation({ Bucket: bucket.bucketName })
@@ -324,7 +322,7 @@ test.provider(
             ),
           ).toBe(true);
           expect(yield* initialize([...types, ...types])).toEqual([]);
-          if (types.length) expect(yield* initialize(undefined)).toEqual([]);
+          if (!types.length) expect(yield* initialize(undefined)).toEqual([]);
           expect(yield* probeWrite).toBe(true);
         }).pipe(
           Effect.ensuring(
@@ -360,9 +358,13 @@ test.provider(
       expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
         "NONE",
       ]);
-      expect(yield* initialize(undefined)).toEqual([]);
+      expect(yield* initialize(["SSE-C"])).toEqual([]);
       expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
         "SSE-C",
+      ]);
+      expect(yield* initialize(undefined)).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
       ]);
       yield* stack.destroy();
       const absent = yield* s3

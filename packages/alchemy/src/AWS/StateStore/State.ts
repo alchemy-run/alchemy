@@ -59,11 +59,11 @@ export interface S3StateOptions {
   prefix?: string;
   /**
    * Default encryption enforced on every fresh state-service initialization.
-   * Omission restores AES256, no KMS key, bucket keys disabled, and SSE-C
-   * blocked. Use `blockedEncryptionTypes: []` to allow customer-provided keys.
-   * Existing encrypted state objects are not rewritten.
+   * Omission restores AES256, no KMS key, bucket keys disabled, and no blocked
+   * encryption types. Set `blockedEncryptionTypes: ["SSE-C"]` to block
+   * customer-provided keys. Existing encrypted state objects are not rewritten.
    *
-   * @default `{ sseAlgorithm: "AES256", bucketKeyEnabled: false, blockedEncryptionTypes: ["SSE-C"] }`
+   * @default `{ sseAlgorithm: "AES256", bucketKeyEnabled: false, blockedEncryptionTypes: [] }`
    */
   encryption?: BucketEncryption;
 }
@@ -140,10 +140,11 @@ type S3Deps = Credentials | HttpClient | Region;
  * });
  * ```
  *
- * Omitted `blockedEncryptionTypes` blocks SSE-C, including after removing an
- * explicit setting. Set it to `[]` to allow SSE-C writes via AWS's `NONE` value.
- * Omitting `encryption` restores AES256, no KMS key, disabled bucket keys, and
- * the SSE-C block. This secures new writes without rewriting existing objects.
+ * Omitted `blockedEncryptionTypes` is equivalent to `[]`: no encryption types
+ * are blocked, so SSE-C writes are permitted via AWS's `NONE` value. Removing
+ * an explicit block clears it. Omitting `encryption` restores AES256, no KMS
+ * key, disabled bucket keys, and no encryption restrictions. Existing objects
+ * are not rewritten.
  *
  * @resource
  */

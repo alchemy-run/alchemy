@@ -49,10 +49,10 @@ export interface BucketEncryption {
   /**
    * Encryption types to block for new object writes. Currently supports SSE-C
    * (server-side encryption with customer-provided keys).
-   * Defaults to `["SSE-C"]`, blocking writes with customer-provided keys.
-   * Set to `[]` to allow SSE-C; this sends AWS's `NONE` value.
-   * Removing this property restores the SSE-C block.
-   * @default ["SSE-C"]
+   * Omitted or `[]` blocks no encryption types and permits SSE-C, sending
+   * AWS's `NONE` value. Set to `["SSE-C"]` to block customer-provided keys.
+   * Removing this property clears previously configured restrictions.
+   * @default []
    */
   blockedEncryptionTypes?: "SSE-C"[];
 }
@@ -161,8 +161,8 @@ export interface BucketProps {
   mfaDelete?: "Enabled" | "Disabled";
   /**
    * Default server-side encryption for new objects. Omission restores AES256,
-   * no KMS key, bucket keys disabled, and SSE-C blocked. Existing objects are
-   * not re-encrypted. External configuration changes are repaired on deploy.
+   * no KMS key, bucket keys disabled, and no encryption types blocked.
+   * Existing objects are not re-encrypted. External changes are repaired on deploy.
    */
   encryption?: BucketEncryption;
   /**
@@ -362,10 +362,10 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * SSE-C is blocked by default, including when `encryption` is omitted or
- * `blockedEncryptionTypes` is removed. Omitting `encryption` also restores
- * AES256 with no KMS key and bucket keys disabled. Redeploying unchanged inputs
- * repairs external encryption drift.
+ * Omitted `blockedEncryptionTypes` is equivalent to `[]`: no encryption types
+ * are blocked, so SSE-C writes are permitted. Removing the property clears any
+ * previous block. Omitting `encryption` also restores AES256 with no KMS key
+ * and bucket keys disabled. Redeploying unchanged inputs repairs external drift.
  *
  * **Example:** Allow SSE-C writes
  * ```typescript

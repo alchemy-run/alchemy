@@ -440,9 +440,7 @@ test.provider(
         defaults.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
       ).toBeUndefined();
       expect(defaults.BucketKeyEnabled ?? false).toBe(false);
-      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "SSE-C",
-      ]);
+      expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
       expect(
         (yield* stack.plan(defaultsProgram)).resources.KmsIdentityBucket
           ?.action,
@@ -470,7 +468,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
           (yield* S3.getBucketEncryption({ Bucket: bucket.bucketName }))
             .ServerSideEncryptionConfiguration?.Rules[0]?.BlockedEncryptionTypes
             ?.EncryptionType,
-        ).toEqual(["SSE-C"]);
+        ).toEqual(["NONE"]);
         yield* S3.putBucketEncryption({
           Bucket: bucket.bucketName,
           ServerSideEncryptionConfiguration: {
@@ -504,7 +502,7 @@ for (const blocked of ["SSE-C", "NONE"] as const) {
           after.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
         ).toBeUndefined();
         expect(after.BucketKeyEnabled ?? false).toBe(false);
-        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["SSE-C"]);
+        expect(after.BlockedEncryptionTypes?.EncryptionType).toEqual(["NONE"]);
         expect(
           (yield* stack.plan(desired)).resources.EncryptionBlocksBucket?.action,
         ).toBe("noop");
@@ -595,6 +593,9 @@ test.provider(
           ).toBe(true);
           // Tags force reconcile while equivalent restrictions must skip the denied PUT.
           yield* stack.deploy(program([...types, ...types], "unchanged", deny));
+          if (!types.length) {
+            yield* stack.deploy(program(undefined, "omitted", deny));
+          }
           expect(yield* probeWrite).toBe(true);
           expect(
             (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
@@ -618,7 +619,7 @@ test.provider(
         yield* stack.deploy(program(undefined, "default"));
         expect(
           (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(["SSE-C"]);
+        ).toEqual(["NONE"]);
       }
       const desired = program([], "repair");
       yield* stack.deploy(desired);
@@ -1054,7 +1055,7 @@ test.provider(
         ).toBeUndefined();
         expect(defaults.BucketKeyEnabled ?? false).toBe(false);
         expect(defaults.BlockedEncryptionTypes?.EncryptionType).toEqual([
-          "SSE-C",
+          "NONE",
         ]);
 
         yield* stack.destroy();

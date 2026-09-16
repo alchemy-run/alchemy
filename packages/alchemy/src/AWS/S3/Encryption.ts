@@ -13,7 +13,7 @@ export const desiredEncryptionRule = (
   encryption?: BucketEncryption,
 ): s3.ServerSideEncryptionRule => {
   const algorithm = encryption?.sseAlgorithm ?? "AES256";
-  const blocked = encryption?.blockedEncryptionTypes ?? ["SSE-C"];
+  const blocked = encryption?.blockedEncryptionTypes ?? [];
   return {
     ApplyServerSideEncryptionByDefault: {
       SSEAlgorithm: algorithm,
