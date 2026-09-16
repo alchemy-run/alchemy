@@ -18,5 +18,6 @@ export * from "./TeamAccess.ts";
 export * from "./Variable.ts";
 export * from "./Variables.ts";
 export * from "./Webhook.ts";
+export * from "./WikiPage.ts";
 export * from "./Milestone.ts";
 export * from "./Issue.ts";

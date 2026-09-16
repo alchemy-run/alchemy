@@ -22,6 +22,7 @@ import { Secret, SecretProvider } from "./Secret.ts";
 import { TeamAccess, TeamAccessProvider } from "./TeamAccess.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
+import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
 export { GitHubCredentials } from "./Credentials.ts";
 
@@ -67,6 +68,7 @@ export const providers = (options?: ProvidersOptions) =>
       TeamAccess,
       Variable,
       Webhook,
+      WikiPage,
     ]),
   ).pipe(
     Layer.provide(
@@ -86,6 +88,7 @@ export const providers = (options?: ProvidersOptions) =>
         TeamAccessProvider(),
         VariableProvider(),
         WebhookProvider(),
+        WikiPageProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
