@@ -8,11 +8,10 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import { exec } from "alchemy/Util/exec";
+import { sha256 } from "alchemy/Util/sha256";
 import { packTar, unpackTar, type TarHeader } from "modern-tar";
-import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
   GroupName,
@@ -257,29 +256,14 @@ export class GitError extends Data.TaggedError("GitError")<{
   }
 }
 
-/** Run a command to completion and collect its exit code and both outputs. */
-const output = Effect.fn("output")(function* (command: ChildProcess.Command) {
-  const spawner = yield* ChildProcessSpawner;
-  const handle = yield* spawner.spawn(command);
-  const [exitCode, stdout, stderr] = yield* Effect.all(
-    [
-      handle.exitCode,
-      Stream.mkString(Stream.decodeText(handle.stdout)),
-      Stream.mkString(Stream.decodeText(handle.stderr)),
-    ],
-    { concurrency: 3 },
-  );
-  return { exitCode, stdout, stderr };
-}, Effect.scoped);
-
 /** Run `git` in `cwd` and return trimmed stdout. */
 export const git = Effect.fn("git")(function* (
   cwd: string,
   args: ReadonlyArray<string>,
 ) {
-  const { exitCode, stdout, stderr } = yield* output(
+  const { exitCode, stdout, stderr } = yield* exec(
     ChildProcess.make("git", [...args], { cwd, shell: false }),
-  );
+  ).pipe(Effect.scoped);
   if (exitCode !== 0) {
     return yield* new GitError({ args, cwd, exitCode, stderr });
   }
@@ -381,7 +365,7 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
   const path = yield* Path.Path;
   const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "pkg-pack-" });
 
-  const { exitCode, stdout, stderr } = yield* output(
+  const { exitCode, stdout, stderr } = yield* exec(
     ChildProcess.make("pnpm", ["pack", "--json", "--pack-destination", tmp], {
       cwd: options.absDir,
       shell: false,
@@ -408,29 +392,24 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
   )) {
     let data = entry.data ?? new Uint8Array();
     if (entry.header.name === "package/package.json") {
-      const result = yield* rewriteDependencies(
-        new TextDecoder().decode(data),
-        options.links,
-      ).pipe(
+      const text = yield* Effect.sync(() => new TextDecoder().decode(data));
+      const result = yield* rewriteDependencies(text, options.links).pipe(
         Effect.mapError(
           (e) => new PackError({ dir: options.absDir, message: String(e) }),
         ),
       );
       rewrites = result.rewrites;
-      data = new TextEncoder().encode(result.text);
+      data = yield* Effect.sync(() => new TextEncoder().encode(result.text));
     }
     normalized.push({ header: normalize(entry.header, data.byteLength), data });
   }
 
   const tar = yield* Effect.promise(() => packTar(normalized));
   const bytes = yield* Effect.sync(() => gzipSync(tar, { level: 9 }));
-  const sha256 = yield* Effect.sync(() =>
-    createHash("sha256").update(bytes).digest("hex"),
-  );
   yield* fs.writeFile(path.join(options.outDir, options.file), bytes);
   return {
     file: options.file,
-    sha256,
+    sha256: yield* sha256(bytes),
     size: bytes.byteLength,
     rewrites,
   } satisfies PackedTarball;
@@ -473,9 +452,13 @@ export interface PackOptions {
   readonly out: string;
 }
 
-/** Artifact-safe tarball file name for a package. */
-const tarballFile = (name: string) =>
-  `${name.replace(/^@/, "").replace(/\//g, "-")}.tgz`;
+/**
+ * Tarball file name for a package: `@` dropped and the scope separator
+ * replaced by `+`, a character package names cannot contain, so `@a/b-c`
+ * and `@a-b/c` get distinct files.
+ */
+export const tarballFile = (name: string) =>
+  `${name.replace(/^@/, "").replace("/", "+")}.tgz`;
 
 /**
  * Pack every discovered package into `out` with a manifest describing each
@@ -525,7 +508,19 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   }
   const levels = yield* dependencyLevels(dependencies);
 
+  // The output directory is replaced wholesale, so it has to be a proper
+  // subdirectory of the workspace: `--out .` would otherwise delete it.
   const outDir = path.resolve(options.cwd, options.out);
+  const relative = path.relative(options.cwd, outDir);
+  if (
+    relative === "" ||
+    relative.startsWith("..") ||
+    path.isAbsolute(relative)
+  ) {
+    return yield* new WorkspaceError({
+      message: `--out must be a subdirectory of ${options.cwd}, got ${outDir}`,
+    });
+  }
   yield* fs.remove(outDir, { recursive: true, force: true });
   yield* fs.makeDirectory(outDir, { recursive: true });
 
@@ -596,11 +591,7 @@ export const pack = Effect.fn("pack")(function* (options: PackOptions) {
   // upload is what proves to the registry that this run vouched for it.
   // Only a JavaScript action receives the runtime token needed to upload,
   // so the CLI cannot do it itself.
-  const artifact = manifestArtifactName(
-    yield* Effect.sync(() =>
-      createHash("sha256").update(manifestText).digest("hex"),
-    ),
-  );
+  const artifact = manifestArtifactName(yield* sha256(manifestText));
   const stepOutput = yield* Config.option(Config.String("GITHUB_OUTPUT"));
   if (Option.isSome(stepOutput)) {
     yield* fs.writeFileString(stepOutput.value, `artifact-name=${artifact}\n`, {

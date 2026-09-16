@@ -2,12 +2,12 @@
 
 Preview packages for pull requests. A Cloudflare Worker registry that verifies every publication against the GitHub Actions run that produced it, plus the `pkg` CLI that packs workspace packages and publishes them from CI.
 
-Install URLs look like `https://pkg.ing/<name>/<tag>`, where `<tag>` is a commit SHA, a short SHA, `branch:<name>`, or `pr:<number>`:
+Install URLs look like `https://pkg.alchemy.run/<name>/<tag>`, where `<tag>` is a commit SHA, a short SHA, `branch:<name>`, or `pr:<number>`:
 
 ```sh
-pnpm install https://pkg.ing/alchemy/pr:1516
-pnpm install https://pkg.ing/alchemy/branch:main
-pnpm install https://pkg.ing/alchemy/163c051
+pnpm install https://pkg.alchemy.run/alchemy/pr:1516
+pnpm install https://pkg.alchemy.run/alchemy/branch:main
+pnpm install https://pkg.alchemy.run/alchemy/163c051
 ```
 
 ## How a publication flows
@@ -17,7 +17,8 @@ Every publication is a GitHub Actions **run**. The registry never trusts what a 
 1. One workflow runs on `push` and `pull_request`, builds the workspace, runs `pkg pack`, uploads the manifest as an artifact with `actions/upload-artifact`, and runs `pkg publish`. It needs no permissions and no secrets, so fork pull requests run it exactly like everything else.
 2. `pkg pack` prints the artifact name, `pkg-manifest-<sha256 of the manifest>`, as the `artifact-name` step output for the upload. Only the job's runtime token can add artifacts to the run, and the runner exposes that token to actions alone, which is why the upload is its own step. The artifact is GitHub's record that this run vouched for exactly these package hashes.
 3. Requests name the run they come from (repository, run id, attempt) and nothing else. The registry fetches the run through the App, requires it to be in progress, lists its artifacts, and refuses any manifest whose hash is not vouched for. Someone naming another run can only ever get that run's own manifest accepted, which changes nothing.
-4. One idempotent publish either answers with the tarballs it lacks, which the CLI uploads before publishing again, or points the tags, posts a "Preview packages" check run on the commit, and for pull requests updates the sticky comment.
+4. One idempotent publish either answers with the tarballs it lacks, which the CLI uploads before publishing again, or points the tags, posts a "Preview packages" check run on the commit, and for pull requests updates the sticky comment. The manifest's `head` has to be the run's head commit, so a `pull_request` job must check out `github.event.pull_request.head.sha` rather than the merge commit.
+5. A run from a fork gets only the `pr:<number>` tag. Commit and branch tags are shared by every publisher, and a fork can run any commit, including one the repository already published, so it may not write them.
 
 ## The `pkg` CLI
 
@@ -26,16 +27,16 @@ pkg pack \
   --group 'alchemy=./packages/alchemy' \
   --group '@alchemy.run[Collapsed]=./packages/{better-auth,pkg}' \
   --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/*' \
-  --registry https://pkg.ing \
+  --registry https://pkg.alchemy.run \
   --out .pkg
 
-pkg publish --dir .pkg --registry https://pkg.ing
+pkg publish --dir .pkg --registry https://pkg.alchemy.run
 ```
 
 | Flag         | Command         | Default                                     |
 | ------------ | --------------- | ------------------------------------------- |
 | `--group`    | `pack`          | required, repeatable                        |
-| `--registry` | `pack`, `publish` | `PKG_REGISTRY` env var, then `https://pkg.ing` |
+| `--registry` | `pack`, `publish` | `PKG_REGISTRY` env var, then `https://pkg.alchemy.run` |
 | `--out`      | `pack`          | `.pkg`                                      |
 | `--dir`      | `publish`       | `.pkg`                                      |
 
@@ -59,7 +60,7 @@ The registry is one call in a Stack. It declares the Worker, the R2 bucket, the 
 import { PkgRegistry } from "@alchemy.run/pkg/Registry";
 
 const registry = yield* PkgRegistry("Pkg", {
-  worker: { domain: "pkg.ing" },
+  worker: { domain: "pkg.alchemy.run" },
   github: {
     appId: Config.String("GH_APP_ID"),
     privateKey: Config.Redacted("GH_APP_PRIVATE_KEY"),
@@ -82,7 +83,7 @@ const registry = yield* PkgRegistry("Pkg", {
 | `policy.repos`          | required                 | Repositories allowed to publish, as `owner/name`                                         |
 | `policy.ttl`            | one week                 | How long a publication lives                                                             |
 | `policy.maxPackageSize` | unlimited                | Upper bound on a single tarball                                                          |
-| `aliases`               | `{}`                     | Hostname to package scope, so `pkg.distilled.cloud/core@<sha>` serves `@distilled.cloud/core` |
+| `aliases`               | `{}`                     | Hostname to package scope, so `pkg.distilled.cloud/core/<sha>` serves `@distilled.cloud/core` |
 | `cron`                  | `0 * * * *`              | Schedule of the expiry sweep                                                             |
 
 The package ships the Worker's bundle entry, so no separate entry file is needed. The options are encoded into a `PKG_SETTINGS` json binding at deploy time and decoded back inside the isolate, and the App credentials are bound as `PKG_GITHUB_APP_ID` and `PKG_GITHUB_APP_PRIVATE_KEY` and read lazily on the first GitHub call. The App needs `checks: write`, `pull_requests: write`, and `actions: read` on every repository in `policy.repos`.

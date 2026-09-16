@@ -45,7 +45,7 @@ export const Settings = Schema.Struct({
   policy: Policy,
   /**
    * Hostname to package scope. Requests on an aliased host resolve an
-   * unscoped name under that scope, so `pkg.distilled.cloud/core@<sha>`
+   * unscoped name under that scope, so `pkg.distilled.cloud/core/<sha>`
    * serves `@distilled.cloud/core`.
    */
   aliases: Schema.Record(Schema.String, Schema.String),

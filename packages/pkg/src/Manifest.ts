@@ -62,10 +62,9 @@ export const Manifest = Schema.Struct({
   /** Registry origin the tarball dependencies were rewritten against. */
   registry: Schema.String,
   /**
-   * HEAD commit of the root repository at pack time. Dependency URLs inside
-   * the tarballs point at this commit for every packed package, including
-   * packages inside submodules, because the registry tags everything a run
-   * publishes with that run's head commit.
+   * HEAD commit of the root repository at pack time. The registry requires
+   * it to be the head of the run that publishes, since that is the commit
+   * every tag names.
    */
   head: Schema.String,
   packages: Schema.Array(ManifestPackage),

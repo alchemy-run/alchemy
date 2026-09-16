@@ -30,40 +30,45 @@ export const sweep = Effect.gen(function* () {
   const due = yield* Tags.dueLinked(now + Duration.toMillis(SWEEP_LOOKAHEAD));
 
   // One lookup per pull request across every due row. `undefined` means the
-  // pull request is still open; a failed lookup leaves the row alone.
-  const closedAt = new Map(
-    yield* Effect.forEach(
-      new Set(due.flatMap((row) => row.linked_prs)),
-      (ref) => {
-        const [repo, number] = ref.split("#");
-        return github.getPullRequest(repo!, Number(number)).pipe(
-          Effect.map(
-            (pr) =>
-              [
-                ref,
-                pr.state === "open"
-                  ? undefined
-                  : Date.parse(pr.merged_at ?? pr.closed_at ?? "") || now,
-              ] as const,
-          ),
-          Effect.catch((e) =>
-            Effect.logWarning(
-              `pull request ${ref} lookup failed: ${GitHub.describe(e)}`,
-            ).pipe(Effect.as(undefined)),
-          ),
-        );
-      },
-      { concurrency: 4 },
-    ).pipe(Effect.map((entries) => entries.filter((e) => e !== undefined))),
+  // pull request is still open; a failed lookup is recorded as such.
+  const lookups = yield* Effect.forEach(
+    new Set(due.flatMap((row) => row.linked_prs)),
+    (ref) => {
+      const [repo, number] = ref.split("#");
+      return github.getPullRequest(repo!, Number(number)).pipe(
+        Effect.map((pr) =>
+          pr.state === "open"
+            ? undefined
+            : Date.parse(pr.merged_at ?? pr.closed_at ?? "") || now,
+        ),
+        Effect.map((closedAt) => [ref, { closedAt }] as const),
+        Effect.catch((e) =>
+          Effect.logWarning(
+            `pull request ${ref} lookup failed: ${GitHub.describe(e)}`,
+          ).pipe(Effect.as([ref, undefined] as const)),
+        ),
+      );
+    },
+    { concurrency: 4 },
   );
+  const results = new Map(lookups);
   const extended = yield* Effect.forEach(due, (row) => {
-    const refs = row.linked_prs.filter((ref) => closedAt.has(ref));
-    // Open pull requests dominate; otherwise the latest close wins.
-    const anchor = refs.some((ref) => closedAt.get(ref) === undefined)
-      ? now
-      : Math.max(...refs.map((ref) => closedAt.get(ref)!));
-    const expiresAt = anchor + ttl;
-    return refs.length === 0 || expiresAt === row.expires_at
+    const known = row.linked_prs.flatMap((ref) => {
+      const result = results.get(ref);
+      return result === undefined ? [] : [result.closedAt];
+    });
+    // Open pull requests dominate; otherwise the latest close wins. A row
+    // whose pull requests could not all be checked is kept past the next
+    // sweep rather than left to expire: it is re-checked, never deleted,
+    // on GitHub's bad day.
+    const closes = known.filter((closedAt) => closedAt !== undefined);
+    const expiresAt =
+      closes.length < known.length
+        ? now + ttl
+        : known.length < row.linked_prs.length
+          ? Math.max(row.expires_at, now + Duration.toMillis(SWEEP_LOOKAHEAD))
+          : Math.max(...closes) + ttl;
+    return expiresAt === row.expires_at
       ? Effect.succeed(false)
       : Tags.setExpiry(row.package, row.tag, expiresAt).pipe(Effect.as(true));
   }).pipe(Effect.map((changed) => changed.filter(Boolean).length));

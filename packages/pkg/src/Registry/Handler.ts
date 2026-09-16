@@ -1,5 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as SQL from "alchemy/SQL/D1";
+import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -72,22 +73,32 @@ const origin = Effect.map(
 );
 
 /**
- * Tags every package in a publication receives, all derived from the run:
- * its head commit, the short commit, `pr:N` for pull requests, and
- * `branch:<name>` for pushes and same-repo pull requests.
+ * A run from a fork: its head commit belongs to another repository, so its
+ * workflow file, and therefore everything it packs, is the fork's.
  */
-const tagsFor = (run: Run): string[] => {
-  const tags = [run.headSha, run.headSha.slice(0, SHORT)];
-  if (run.pr !== null) {
-    tags.push(`pr:${run.pr}`);
-    if (run.headRepo === run.repo && run.headBranch) {
-      tags.push(`branch:${run.headBranch}`);
-    }
-  } else if (run.headBranch) {
-    tags.push(`branch:${run.headBranch}`);
+const isFork = (run: Run) => run.headRepo !== run.repo;
+
+/**
+ * Tags every package in a publication receives, all derived from the run.
+ * Runs on the repository's own commits get the head commit, the short
+ * commit, `branch:<name>`, and `pr:N` for pull requests. A fork's run gets
+ * only `pr:N`: commit tags are shared by every publisher, and a fork can
+ * run any commit it likes, including one already published from the
+ * repository, so letting it write them would let it repoint them.
+ */
+export const tagsFor = (run: Run): string[] => {
+  if (isFork(run)) {
+    return run.pr === null ? [] : [`pr:${run.pr}`];
   }
+  const tags = [run.headSha, run.headSha.slice(0, SHORT)];
+  if (run.pr !== null) tags.push(`pr:${run.pr}`);
+  if (run.headBranch) tags.push(`branch:${run.headBranch}`);
   return tags;
 };
+
+/** The tag install commands are written against. */
+export const installTag = (run: Run) =>
+  isFork(run) ? `pr:${run.pr}` : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
   new Upstream({ message: GitHub.describe(e) });
@@ -124,24 +135,34 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
       message: `unsupported event ${data.event}`,
     });
   }
+  const headRepo = data.head_repository?.full_name ?? data.repository.full_name;
   let pr: number | null = null;
   if (data.event === "pull_request") {
+    // The pull request whose head is this run's head, from the repository
+    // the run's head lives in. The same commit can head several pull
+    // requests, including one opened from a fork against a commit the
+    // repository already published; matching the head repository keeps a
+    // run's publication on its own pull request.
     const pulls = yield* github
-      .pullRequestsForCommit(ref.repo, data.head_sha)
+      .pullRequestsForCommit(ref.repo, headRepo, data.head_sha)
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
       return yield* new BadRequest({
-        message: `no pull request has head ${data.head_sha}`,
+        message: `no pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
     pr = first.number;
+  } else if (headRepo !== ref.repo) {
+    return yield* new BadRequest({
+      message: `push run ${ref.runId} is for ${headRepo}, not ${ref.repo}`,
+    });
   }
   return {
     ...ref,
     headSha: data.head_sha,
     headBranch: data.head_branch,
-    headRepo: data.head_repository?.full_name ?? data.repository.full_name,
+    headRepo,
     pr,
   } satisfies Run;
 });
@@ -157,9 +178,9 @@ const requireVouched = Effect.fn("requireVouched")(function* (
   manifestText: string,
 ) {
   const github = yield* GitHub.GitHubApp;
-  const expected = manifestArtifactName(yield* GitHub.sha256Hex(manifestText));
+  const expected = manifestArtifactName(yield* sha256(manifestText));
   const artifacts = yield* github
-    .listRunArtifacts(run.repo, run.runId)
+    .listRunArtifacts(run.repo, run.runId, expected)
     .pipe(Effect.mapError(upstream));
   if (!artifacts.some((a) => a.name === expected && !a.expired)) {
     return yield* new Forbidden({
@@ -185,6 +206,15 @@ const publish = Effect.fn("publish")(function* (
       (e) => new BadRequest({ message: `invalid manifest: ${String(e)}` }),
     ),
   );
+  // The run vouched for the manifest, but the tags come from the run's
+  // head, so the packed checkout has to be that commit: a `pull_request`
+  // job that packs the synthetic merge commit would otherwise publish bytes
+  // built from a commit that exists nowhere under the commit's name.
+  if (manifest.head !== run.headSha) {
+    return yield* new BadRequest({
+      message: `manifest was packed at ${manifest.head}, but the run's head is ${run.headSha}`,
+    });
+  }
   const packages = manifest.packages;
   const maxSize = policy.maxPackageSize;
   const tooLarge =
@@ -217,6 +247,7 @@ const publish = Effect.fn("publish")(function* (
   const expiresAt = now + Duration.toMillis(policy.ttl);
   const prs = run.pr !== null ? [`${run.repo}#${run.pr}`] : [];
   const tags = tagsFor(run);
+  const tag = installTag(run);
   const published = yield* Effect.forEach(
     packages,
     Effect.fn(function* (pkg: ManifestPackage) {
@@ -235,10 +266,11 @@ const publish = Effect.fn("publish")(function* (
       return {
         name: pkg.name,
         group: pkg.group,
-        url: `${base}/${pkg.name}/${run.headSha.slice(0, SHORT)}`,
+        url: `${base}/${pkg.name}/${tag}`,
         tags,
       };
     }),
+    { concurrency: 4 },
   );
 
   // A check on the commit itself, so the install lines are visible on
@@ -248,7 +280,7 @@ const publish = Effect.fn("publish")(function* (
       headSha: run.headSha,
       name: CHECK_NAME,
       title: `${packages.length} package(s) published`,
-      summary: GitHub.renderInstalls(base, run, packages, manifest.groups),
+      summary: GitHub.renderInstalls(published, manifest.groups),
       detailsUrl: base,
     })
     .pipe(
@@ -259,7 +291,7 @@ const publish = Effect.fn("publish")(function* (
       ),
     );
   if (run.pr !== null) {
-    const body = GitHub.renderComment(base, run, packages, manifest.groups, {
+    const body = GitHub.renderComment(published, manifest.groups, {
       publishedAt: now,
       expiresAt,
     });
@@ -322,14 +354,20 @@ const uploadTarball = Effect.fn("uploadTarball")(function* (
  * two segments; the tag is everything after the name and may itself contain
  * `/` and `:`.
  */
-const parseInstallPath = (
+export const parseInstallPath = (
   pathname: string,
   scope: string | undefined,
 ):
   | { kind: "tag"; name: string; tag: string }
   | { kind: "tarball"; name: string; sha256: string }
   | undefined => {
-  const path = decodeURIComponent(pathname.replace(/^\/+/, ""));
+  let path: string;
+  try {
+    path = decodeURIComponent(pathname.replace(/^\/+/, ""));
+  } catch {
+    // Malformed percent-encoding is a path nothing can be published under.
+    return undefined;
+  }
   const tarball = path.match(
     /^(@[^/]+\/[^/@]+|[^/@]+)\/-\/([a-f0-9]{64})\.tgz$/,
   );

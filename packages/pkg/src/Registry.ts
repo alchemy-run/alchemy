@@ -51,7 +51,7 @@ export interface RegistryOptions {
   };
   /**
    * Hostname to package scope. Requests on an aliased host resolve an
-   * unscoped name under that scope, so `pkg.distilled.cloud/core@<sha>`
+   * unscoped name under that scope, so `pkg.distilled.cloud/core/<sha>`
    * serves `@distilled.cloud/core`.
    */
   readonly aliases?: Readonly<Record<string, string>>;
@@ -145,7 +145,7 @@ export default RegistryLive.pipe(Layer.provide(RegistryConfigFromEnv));
  *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
  *   Effect.gen(function* () {
  *     const registry = yield* PkgRegistry("Pkg", {
- *       worker: { domain: "pkg.ing" },
+ *       worker: { domain: "pkg.alchemy.run" },
  *       github: {
  *         appId: Config.String("GH_APP_ID"),
  *         privateKey: Config.Redacted("GH_APP_PRIVATE_KEY"),

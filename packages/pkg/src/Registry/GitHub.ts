@@ -35,10 +35,6 @@ export class AppNotInstalled extends Data.TaggedError("AppNotInstalled")<{
   }
 }
 
-/** Lowercase hex SHA-256 of a string. */
-export const sha256Hex = (text: string) =>
-  Effect.sync(() => crypto.createHash("sha256").update(text).digest("hex"));
-
 /** Import an RSA private key PEM (PKCS#1 or PKCS#8) for RS256 signing. */
 export const importPrivateKey = (pem: string) =>
   Effect.try({
@@ -65,32 +61,27 @@ export const signJwt = (
     catch: (cause) => new CryptoError({ message: `signing failed: ${cause}` }),
   });
 
-const SHORT = 7;
-
 /**
- * Install commands per package, grouped and pinned to the run's short
- * commit. A group marked `collapsed` renders as a closed `<details>` block
- * so a long list of secondary packages stays out of the way.
+ * Install commands per package, grouped. A group marked `collapsed`
+ * renders as a closed `<details>` block so a long list of secondary
+ * packages stays out of the way.
  */
 export const renderInstalls = (
-  origin: string,
-  run: { readonly headSha: string },
-  packages: ReadonlyArray<{ name: string; group: string }>,
+  packages: ReadonlyArray<{ name: string; group: string; url: string }>,
   groups: ReadonlyArray<{ name: string; collapsed: boolean }>,
 ) => {
   const collapsed = new Set(
     groups.filter((g) => g.collapsed).map((g) => g.name),
   );
-  const short = run.headSha.slice(0, SHORT);
   // One code block per package so each command has its own copy button, in
   // the order the manifest lists them, which is the order they were given
   // to `pkg pack`. Blank lines around the markdown inside `<details>` are
   // what make GitHub render it.
   return Object.entries(Arr.groupBy(packages, (pkg) => pkg.group))
     .flatMap(([group, members]) => {
-      const installs = members.flatMap(({ name }) => [
+      const installs = members.flatMap(({ url }) => [
         "```sh",
-        `pnpm install ${origin}/${name}/${short}`,
+        `pnpm install ${url}`,
         "```",
         "",
       ]);
@@ -123,9 +114,7 @@ const relativeTime = (millis: number) => {
 };
 
 export const renderComment = (
-  origin: string,
-  run: { readonly headSha: string },
-  packages: ReadonlyArray<{ name: string; group: string }>,
+  packages: ReadonlyArray<{ name: string; group: string; url: string }>,
   groups: ReadonlyArray<{ name: string; collapsed: boolean }>,
   times: { readonly publishedAt: number; readonly expiresAt: number },
 ) =>
@@ -134,7 +123,7 @@ export const renderComment = (
     "",
     "Install the packages built from this commit:",
     "",
-    renderInstalls(origin, run, packages, groups),
+    renderInstalls(packages, groups),
     `Published ${relativeTime(times.publishedAt)}. Expires ${relativeTime(times.expiresAt)}, extended while this pull request is open.`,
   ].join("\n");
 
@@ -238,19 +227,26 @@ const make = Effect.gen(function* () {
         Actions.getWorkflowRun({ ...split(repo), run_id: runId }),
       ),
 
-    /** Artifacts uploaded to a run so far, including by jobs still in progress. */
-    listRunArtifacts: (repo: string, runId: number) =>
+    /**
+     * Artifacts named `name` uploaded to a run so far, including by jobs
+     * still in progress.
+     */
+    listRunArtifacts: (repo: string, runId: number, name: string) =>
       asInstallation(
         repo,
         Actions.listWorkflowRunArtifacts({
           ...split(repo),
           run_id: runId,
+          name,
           per_page: 100,
         }),
       ).pipe(Effect.map((page) => page.artifacts)),
 
-    /** Pull requests in `repo` whose head is `sha`. */
-    pullRequestsForCommit: (repo: string, sha: string) =>
+    /**
+     * Pull requests against `repo` whose head is `sha` in `headRepo`, the
+     * repository the commit was pushed to.
+     */
+    pullRequestsForCommit: (repo: string, headRepo: string, sha: string) =>
       asInstallation(
         repo,
         Repos.listPullRequestsAssociatedWithCommit({
@@ -261,7 +257,10 @@ const make = Effect.gen(function* () {
       ).pipe(
         Effect.map((pulls) =>
           pulls.filter(
-            (pr) => pr.head.sha === sha && pr.base.repo.full_name === repo,
+            (pr) =>
+              pr.head.sha === sha &&
+              pr.head.repo?.full_name === headRepo &&
+              pr.base.repo.full_name === repo,
           ),
         ),
       ),

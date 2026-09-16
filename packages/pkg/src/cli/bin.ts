@@ -25,10 +25,10 @@ const groupFlag = Flag.String("group").pipe(
 
 const registryFlag = Flag.String("registry").pipe(
   Flag.withDescription(
-    "Registry origin used for install URLs. Falls back to PKG_REGISTRY, then https://pkg.ing",
+    "Registry origin used for install URLs. Falls back to PKG_REGISTRY, then https://pkg.alchemy.run",
   ),
   Flag.withFallbackConfig(Config.String("PKG_REGISTRY")),
-  Flag.withDefault("https://pkg.ing"),
+  Flag.withDefault("https://pkg.alchemy.run"),
 );
 
 const outFlag = Flag.String("out").pipe(
@@ -73,7 +73,9 @@ export const publishCommand = Command.make(
   Command.withDescription(
     "Publish a pkg pack directory from the current GitHub Actions job, after its manifest artifact has been uploaded",
   ),
-  Command.withExamples([{ command: "pkg publish --registry https://pkg.ing" }]),
+  Command.withExamples([
+    { command: "pkg publish --registry https://pkg.alchemy.run" },
+  ]),
 );
 
 export const root = Command.make("pkg", {}, () =>

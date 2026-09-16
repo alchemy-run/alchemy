@@ -39,7 +39,8 @@ export const get = Effect.fn("Tags.get")(function* (pkg: string, tag: string) {
 
 /**
  * Point `tag` at `sha256`, keeping the row alive for at least `expiresAt`
- * and remembering every pull request that produced it.
+ * and remembering every pull request that produced it. One statement, so
+ * concurrent publications of a shared tag merge rather than overwrite.
  */
 export const upsert = Effect.fn("Tags.upsert")(function* (input: {
   readonly package: string;
@@ -49,18 +50,20 @@ export const upsert = Effect.fn("Tags.upsert")(function* (input: {
   readonly prs: ReadonlyArray<string>;
 }) {
   const sql = yield* SqlClient.SqlClient;
-  const existing = yield* get(input.package, input.tag);
-  const expiresAt = Math.max(existing?.expires_at ?? 0, input.expiresAt);
-  const prs = yield* Schema.encodeEffect(LinkedPrs)([
-    ...new Set([...(existing?.linked_prs ?? []), ...input.prs]),
-  ]);
+  const prs = yield* Schema.encodeEffect(LinkedPrs)(input.prs);
   yield* sql`
     INSERT INTO tags (package, tag, sha256, expires_at, linked_prs)
-    VALUES (${input.package}, ${input.tag}, ${input.sha256}, ${expiresAt}, ${prs})
+    VALUES (${input.package}, ${input.tag}, ${input.sha256}, ${input.expiresAt}, ${prs})
     ON CONFLICT (package, tag) DO UPDATE SET
       sha256 = excluded.sha256,
-      expires_at = excluded.expires_at,
-      linked_prs = excluded.linked_prs
+      expires_at = max(tags.expires_at, excluded.expires_at),
+      linked_prs = (
+        SELECT json_group_array(value) FROM (
+          SELECT value FROM json_each(tags.linked_prs)
+          UNION
+          SELECT value FROM json_each(excluded.linked_prs)
+        )
+      )
   `;
 });
 

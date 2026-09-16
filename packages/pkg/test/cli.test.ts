@@ -12,12 +12,80 @@ import { GroupName, PackageName, type Manifest } from "../src/Manifest.ts";
 import { manifestArtifactName, tarballUrl } from "../src/Protocol.ts";
 import { Policy } from "../src/Registry.ts";
 import {
+  installTag,
+  parseInstallPath,
+  tagsFor,
+} from "../src/Registry/Handler.ts";
+import {
   dependencyLevels,
   expandBraces,
   Group,
   rewriteDependencies,
+  tarballFile,
 } from "../src/cli/pack.ts";
 import { publish } from "../src/cli/publish.ts";
+
+describe("registry", () => {
+  const run = {
+    repo: "alchemy-run/alchemy",
+    runId: 1,
+    attempt: 1,
+    headSha: "abcdef0123456789abcdef0123456789abcdef01",
+    headBranch: "feat/x",
+    headRepo: "alchemy-run/alchemy",
+    pr: 7,
+  };
+
+  test("runs on the repository's own commits get every tag", () => {
+    expect(tagsFor(run)).toEqual([
+      run.headSha,
+      "abcdef0",
+      "pr:7",
+      "branch:feat/x",
+    ]);
+    expect(tagsFor({ ...run, pr: null, headBranch: "main" })).toEqual([
+      run.headSha,
+      "abcdef0",
+      "branch:main",
+    ]);
+    expect(installTag(run)).toBe("abcdef0");
+  });
+
+  test("runs from forks get only their pull request tag", () => {
+    const fork = { ...run, headRepo: "someone/alchemy" };
+    expect(tagsFor(fork)).toEqual(["pr:7"]);
+    expect(installTag(fork)).toBe("pr:7");
+    expect(tagsFor({ ...fork, pr: null })).toEqual([]);
+  });
+
+  test("install paths", () => {
+    expect(parseInstallPath("/alchemy/pr:7", undefined)).toEqual({
+      kind: "tag",
+      name: "alchemy",
+      tag: "pr:7",
+    });
+    expect(
+      parseInstallPath("/@alchemy.run/pkg/branch:feat/x", undefined),
+    ).toEqual({ kind: "tag", name: "@alchemy.run/pkg", tag: "branch:feat/x" });
+    expect(parseInstallPath("/core/abc1234", "@distilled.cloud")).toEqual({
+      kind: "tag",
+      name: "@distilled.cloud/core",
+      tag: "abc1234",
+    });
+    expect(
+      parseInstallPath(`/alchemy/-/${"a".repeat(64)}.tgz`, undefined),
+    ).toEqual({ kind: "tarball", name: "alchemy", sha256: "a".repeat(64) });
+    for (const path of ["/", "/alchemy", "/alchemy/", "/alchemy/%E0%A4%A"]) {
+      expect(parseInstallPath(path, undefined)).toBeUndefined();
+    }
+  });
+
+  test("tarball file names never collide", () => {
+    expect(tarballFile("alchemy")).toBe("alchemy.tgz");
+    expect(tarballFile("@a/b-c")).toBe("a+b-c.tgz");
+    expect(tarballFile("@a-b/c")).toBe("a-b+c.tgz");
+  });
+});
 
 describe("Policy", () => {
   const policy = {
