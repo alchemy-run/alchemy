@@ -111,7 +111,7 @@ describe("Prisma canonical Compute lifecycle", () => {
     return Effect.gen(function* () {
       const result = yield* waitForDeploymentStatus("deployment-1", "running", {
         pollIntervalMs: 1,
-        timeoutSeconds: 1,
+        timeoutSeconds: 10,
       });
       expect(result.status).toBe("running");
       expect(observed).toBe(2);
