@@ -32,8 +32,11 @@ const sessionAuthorizationPolicy = {
 };
 
 /** Deterministic names shared with the test for out-of-band verification. */
-export const BINDINGS_APP_NAME = "alchemy-test-emrs-bind";
-export const BINDINGS_ROLE_NAME = "alchemy-test-emrs-bind-role";
+const stageSuffix = process.env.ALCHEMY_TEST_STAGE
+  ? `-${process.env.ALCHEMY_TEST_STAGE}`
+  : "";
+export const BINDINGS_APP_NAME = `alchemy-test-emrs-bind${stageSuffix}`;
+export const BINDINGS_ROLE_NAME = `alchemy-test-emrs-bind-role${stageSuffix}`;
 
 export class EmrServerlessTestFunction extends Lambda.Function<Lambda.Function>()(
   "EmrServerlessTestFunction",
@@ -275,6 +278,7 @@ export default EmrServerlessTestFunction.make(
           return yield* HttpServerResponse.json({
             jobRunId: jobRun.jobRunId,
             state: jobRun.state,
+            stateDetails: jobRun.stateDetails,
           });
         }
 
