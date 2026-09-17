@@ -115,7 +115,11 @@ const patchRow = <A extends Record<string, any>>(
     });
   });
 
-describe("ContainerApplication", () => {
+// Every test owns a name-namespaced scratch stack, so they can run
+// concurrently. The `exclusive: true` builder tests below still take the
+// whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
+// themselves.
+describe.concurrent("ContainerApplication", () => {
   test.provider(
     "recovers an interrupted generated create and reconciles observed drift",
     (stack) =>
