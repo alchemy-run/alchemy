@@ -5340,6 +5340,9 @@ importers:
       magic-string:
         specifier: 'catalog:'
         version: 0.30.21
+      mime:
+        specifier: 'catalog:'
+        version: 4.1.0
       sharp:
         specifier: 'catalog:'
         version: 0.35.4(@types/node@26.2.0)
@@ -5392,9 +5395,6 @@ importers:
       itty-time:
         specifier: 'catalog:'
         version: 2.0.2
-      mime:
-        specifier: 'catalog:'
-        version: 4.1.0
       mysql2:
         specifier: 3.24.2
         version: 3.24.2(@types/node@26.2.0)
