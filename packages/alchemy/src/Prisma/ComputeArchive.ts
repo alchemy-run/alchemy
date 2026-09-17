@@ -44,6 +44,10 @@ export interface ComputeArchiveOptions {
    */
   ignorePrefix?: string;
   /**
+   * Artifact-relative files that must remain present after exclusions.
+   */
+  requiredFiles?: readonly string[];
+  /**
    * Maximum uncompressed bytes accepted across all archived files. Values
    * above the provider's 256 MiB hard ceiling are rejected.
    *
@@ -145,6 +149,7 @@ const createComputeArchiveFile = Effect.fn(function* (
     entrypoint,
     ignore = [],
     ignorePrefix,
+    requiredFiles = [],
     maxUncompressedBytes = MAX_UNCOMPRESSED_BYTES,
     maxFileBytes = MAX_FILE_BYTES,
     maxEntries = MAX_ENTRIES,
@@ -212,6 +217,15 @@ const createComputeArchiveFile = Effect.fn(function* (
         `Entrypoint not found in compute artifact: ${normalizedEntrypoint}`,
       ),
     );
+  }
+
+  for (const file of requiredFiles) {
+    const normalized = yield* normalizeEntrypoint(file);
+    if (!isArchivedRegularFile(entries, `bundle/${normalized}`)) {
+      return yield* Effect.fail(
+        new Error(`Required file not found in compute artifact: ${normalized}`),
+      );
+    }
   }
 
   const manifest = new TextEncoder().encode(

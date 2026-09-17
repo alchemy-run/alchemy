@@ -5,10 +5,16 @@ import {
 } from "@/Prisma/ComputeBuild";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import { PlatformServices } from "@/Util/PlatformServices";
+import { findAvailablePort } from "@/Util/Node";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { gunzipSync } from "node:zlib";
 
 const inspectBuildEnvironmentCommand = [
@@ -693,96 +699,70 @@ describe("Prisma Compute auto-build", () => {
       }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("auto-detects a Vite static SPA", () =>
+  it.live("auto-detects a Vite static SPA", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-prisma-auto-vite-",
-      });
-      const binDir = path.join(root, "node_modules", ".bin");
-      const viteBin = path.join(binDir, "vite");
-      yield* fs.makeDirectory(binDir, { recursive: true });
-      yield* fs.writeFileString(
-        path.join(root, "package.json"),
-        JSON.stringify({ devDependencies: { vite: "0.0.0-test" } }),
-      );
-      yield* fs.writeFileString(
-        viteBin,
-        [
-          "#!/bin/sh",
-          "set -eu",
-          "mkdir -p dist/assets",
-          "printf '<h1>Vite SPA</h1>' > dist/index.html",
-          "printf 'console.log(1)' > dist/assets/app.js",
-          "",
-        ].join("\n"),
-      );
-      yield* fs.chmod(viteBin, 0o755);
-
+      const { root } = yield* copyStaticBuildFixture;
       const artifact = yield* runComputeAutoBuild({ appPath: root });
+      yield* Effect.addFinalizer(() => artifact.cleanup);
+      const index = yield* fs.readFileString(
+        path.join(root, "dist/index.html"),
+      );
 
       expect(artifact.entrypoint).toBe("server.mjs");
       expect(artifact.defaultPort).toBe(8080);
       expect(artifact.archiveIgnorePrefix).toBe("public");
+      expect(artifact.requiredFiles).toEqual(["public/index.html"]);
+      expect(index).toContain("<h1>app shell</h1>");
+      expect(index).toContain("/assets/app.js");
       expect(
         yield* fs.readFileString(
           path.join(artifact.directory, "public", "index.html"),
         ),
-      ).toBe("<h1>Vite SPA</h1>");
+      ).toBe(index);
 
       yield* withStaticSiteServer(artifact.directory, (origin) =>
         Effect.gen(function* () {
-          const response = yield* request(`${origin}/dashboard`);
+          const response = yield* HttpClient.get(`${origin}/dashboard`);
           expect(response.status).toBe(200);
-          expect(yield* responseText(response)).toBe("<h1>Vite SPA</h1>");
+          expect(yield* response.text).toBe(index);
         }),
       );
 
       yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("detects TanStack Start before the Vite fallback", () =>
+  it.live("detects TanStack Start before the Vite fallback", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-prisma-auto-tanstack-start-",
-      });
-      const binDir = path.join(root, "node_modules", ".bin");
-      const viteBin = path.join(binDir, "vite");
-      yield* fs.makeDirectory(binDir, { recursive: true });
+      const { root } = yield* copyStaticBuildFixture;
+      // Declaring Start without its plugins must not silently deploy a SPA.
       yield* fs.writeFileString(
         path.join(root, "package.json"),
         JSON.stringify({
-          dependencies: { "@tanstack/react-start": "0.0.0-test" },
-          devDependencies: { vite: "0.0.0-test" },
+          type: "module",
+          dependencies: { "@tanstack/react-start": "*" },
+          devDependencies: { vite: "*" },
         }),
       );
-      yield* fs.writeFileString(
-        viteBin,
-        [
-          "#!/bin/sh",
-          "set -eu",
-          "mkdir -p .output/server",
-          "printf 'console.log(\"start\")' > .output/server/index.mjs",
-          "",
-        ].join("\n"),
+
+      const error = yield* runComputeAutoBuild({ appPath: root }).pipe(
+        Effect.flip,
       );
-      yield* fs.chmod(viteBin, 0o755);
 
-      const artifact = yield* runComputeAutoBuild({ appPath: root });
-
-      expect(artifact.entrypoint).toBe("server/index.mjs");
-      expect(artifact.defaultPort).toBe(3000);
+      expect((error as Error).message).toContain(
+        "TanStack Start build did not produce a Nitro node server entrypoint at .output/server/index.mjs",
+      );
       expect(
-        yield* fs.readFileString(
-          path.join(artifact.directory, "server", "index.mjs"),
-        ),
-      ).toContain('console.log("start")');
-
-      yield* artifact.cleanup;
+        yield* fs.readFileString(path.join(root, "dist/index.html")),
+      ).toContain("/assets/app.js");
+      expect(
+        yield* fs.exists(path.join(root, ".output/server/index.mjs")),
+      ).toBe(false);
     }).pipe(Effect.provide(PlatformServices)),
   );
 
@@ -930,11 +910,11 @@ describe("Prisma Compute auto-build", () => {
 });
 
 describe("Prisma Compute static-site build", () => {
-  it.effect("packages a prebuilt index without running a command", () =>
+  it.live("packages a prebuilt index without running a command", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
+      const root = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-prisma-static-index-",
       });
       yield* fs.writeFileString(path.join(root, "index.html"), "hello static");
@@ -943,12 +923,13 @@ describe("Prisma Compute static-site build", () => {
         appPath: root,
         outdir: ".",
       });
+      yield* Effect.addFinalizer(() => artifact.cleanup);
 
       yield* withStaticSiteServer(artifact.directory, (origin) =>
         Effect.gen(function* () {
-          const response = yield* request(`${origin}/`);
+          const response = yield* HttpClient.get(`${origin}/`);
           expect(response.status).toBe(200);
-          expect(yield* responseText(response)).toBe("hello static");
+          expect(yield* response.text).toBe("hello static");
         }),
       );
 
@@ -956,128 +937,223 @@ describe("Prisma Compute static-site build", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("packages and serves static files with SPA fallback", () =>
+  it.live("packages and serves static files with SPA fallback", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-prisma-static-site-",
-      });
-      yield* fs.writeFileString(
-        path.join(root, "build.mjs"),
-        [
-          'import { mkdir } from "node:fs/promises";',
-          'await mkdir("dist/assets", { recursive: true });',
-          'await mkdir("dist/docs", { recursive: true });',
-          'await Bun.write("dist/index.html", "<h1>app shell</h1>");',
-          'await Bun.write("dist/assets/app.js", "console.log(\'asset\')");',
-          'await Bun.write("dist/docs/index.html", "<h1>docs</h1>");',
-          'await Bun.write("dist/docs #1.html", "encoded asset");',
-          "",
-        ].join("\n"),
-      );
-
+      const { root, command } = yield* copyStaticBuildFixture;
       const artifact = yield* runComputeStaticBuild({
         appPath: root,
-        command: `${JSON.stringify(process.execPath)} build.mjs`,
+        command,
         outdir: "dist",
         spa: true,
       });
+      yield* Effect.addFinalizer(() => artifact.cleanup);
+      const index = yield* fs.readFileString(
+        path.join(root, "dist/index.html"),
+      );
+      const script = yield* fs.readFileString(
+        path.join(root, "dist/assets/app.js"),
+      );
+      const scriptStat = yield* fs.stat(path.join(root, "dist/assets/app.js"));
+      const stylesheet = yield* fs.readFileString(
+        path.join(root, "dist/assets/index.css"),
+      );
+      const docs = yield* fs.readFileString(
+        path.join(root, "dist/docs/index.html"),
+      );
 
+      expect(artifact.requiredFiles).toEqual(["public/index.html"]);
       expect(artifact.entrypoint).toBe("server.mjs");
       expect(artifact.defaultPort).toBe(8080);
+      expect(index).toContain("<h1>app shell</h1>");
+      expect(script).toMatch(/console\.log\(["'`]asset["'`]\)/);
       expect(
         yield* fs.readFileString(
           path.join(artifact.directory, "public", "index.html"),
         ),
-      ).toBe("<h1>app shell</h1>");
+      ).toBe(index);
       expect(yield* fs.exists(path.join(root, "server.mjs"))).toBe(false);
 
-      yield* withStaticSiteServer(artifact.directory, (origin) =>
-        Effect.gen(function* () {
-          const rootResponse = yield* request(`${origin}/`);
-          expect(rootResponse.status).toBe(200);
-          expect(yield* responseText(rootResponse)).toBe("<h1>app shell</h1>");
-
-          const assetResponse = yield* request(`${origin}/assets/app.js`);
-          expect(assetResponse.status).toBe(200);
-          expect(assetResponse.headers.get("content-type")).toContain(
-            "javascript",
-          );
-          expect(yield* responseText(assetResponse)).toBe(
-            "console.log('asset')",
-          );
-
-          const directoryResponse = yield* request(`${origin}/docs/`);
-          expect(directoryResponse.status).toBe(200);
-          expect(yield* responseText(directoryResponse)).toBe("<h1>docs</h1>");
-
-          const encodedResponse = yield* request(`${origin}/docs%20%231.html`);
-          expect(encodedResponse.status).toBe(200);
-          expect(yield* responseText(encodedResponse)).toBe("encoded asset");
-
-          const fallbackResponse = yield* request(
-            `${origin}/dashboard/settings`,
-          );
-          expect(fallbackResponse.status).toBe(200);
-          expect(yield* responseText(fallbackResponse)).toBe(
-            "<h1>app shell</h1>",
-          );
-
-          const headResponse = yield* request(`${origin}/assets/app.js`, {
-            method: "HEAD",
-          });
-          expect(headResponse.status).toBe(200);
-          expect(headResponse.headers.get("content-length")).toBe("20");
-          expect(yield* responseText(headResponse)).toBe("");
-
-          const postResponse = yield* request(`${origin}/`, {
-            method: "POST",
-          });
-          expect(postResponse.status).toBe(405);
-          expect(postResponse.headers.get("allow")).toBe("GET, HEAD");
-
-          const traversalResponse = yield* request(`${origin}/..%2Fsecret`);
-          expect(traversalResponse.status).toBe(400);
-        }),
+      const archive = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        ignore: ["assets/*.map", "*.mjs"],
+        ignorePrefix: artifact.archiveIgnorePrefix,
+        requiredFiles: artifact.requiredFiles,
+      });
+      const excludedIndexError = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        ignore: ["index.html"],
+        ignorePrefix: artifact.archiveIgnorePrefix,
+        requiredFiles: artifact.requiredFiles,
+      }).pipe(Effect.flip);
+      expect(excludedIndexError.message).toContain(
+        "Required file not found in compute artifact: public/index.html",
       );
+      const extracted = yield* extractStaticArchive(archive);
+      expect(yield* fs.exists(path.join(extracted, "server.mjs"))).toBe(true);
+      expect(
+        yield* fs.exists(path.join(extracted, "public/assets/app.mjs")),
+      ).toBe(true);
+      expect(
+        yield* fs.exists(path.join(extracted, "public/assets/app.js.map")),
+      ).toBe(false);
+
+      for (const directory of [artifact.directory, extracted]) {
+        yield* withStaticSiteServer(directory, (origin) =>
+          Effect.gen(function* () {
+            const rootResponse = yield* HttpClient.get(`${origin}/`);
+            expect(rootResponse.status).toBe(200);
+            expect(rootResponse.headers["content-type"]).toContain("text/html");
+            expect(yield* rootResponse.text).toBe(index);
+
+            const assetResponse = yield* HttpClient.get(
+              `${origin}/assets/app.js`,
+            );
+            expect(assetResponse.status).toBe(200);
+            expect(assetResponse.headers["content-type"]).toContain(
+              "javascript",
+            );
+            expect(yield* assetResponse.text).toBe(script);
+
+            const cssResponse = yield* HttpClient.get(
+              `${origin}/assets/index.css`,
+            );
+            expect(cssResponse.status).toBe(200);
+            expect(cssResponse.headers["content-type"]).toContain("text/css");
+            expect(yield* cssResponse.text).toBe(stylesheet);
+
+            const directoryResponse = yield* HttpClient.get(`${origin}/docs/`);
+            expect(directoryResponse.status).toBe(200);
+            expect(yield* directoryResponse.text).toBe(docs);
+            yield* assertDirectoryRedirects(origin);
+
+            const directoryHead = yield* HttpClient.head(`${origin}/docs/`);
+            expect(directoryHead.status).toBe(200);
+            expect(directoryHead.headers["content-type"]).toContain(
+              "text/html",
+            );
+            expect(yield* directoryHead.text).toBe("");
+
+            const encodedResponse = yield* HttpClient.get(
+              `${origin}/docs%20%231.html`,
+            );
+            expect(encodedResponse.status).toBe(200);
+            expect(yield* encodedResponse.text).toBe("encoded asset\n");
+
+            const fallbackResponse = yield* HttpClient.get(
+              `${origin}/dashboard/settings`,
+            );
+            expect(fallbackResponse.status).toBe(200);
+            expect(yield* fallbackResponse.text).toBe(index);
+
+            const fallbackHead = yield* HttpClient.head(
+              `${origin}/dashboard/settings`,
+            );
+            expect(fallbackHead.status).toBe(200);
+            expect(yield* fallbackHead.text).toBe("");
+
+            const headResponse = yield* HttpClient.head(
+              `${origin}/assets/app.js`,
+            );
+            expect(headResponse.status).toBe(200);
+            expect(headResponse.headers["content-length"]).toBe(
+              String(scriptStat.size),
+            );
+            expect(headResponse.headers["content-type"]).toBe(
+              assetResponse.headers["content-type"],
+            );
+            expect(yield* headResponse.text).toBe("");
+
+            const postResponse = yield* HttpClient.post(`${origin}/`);
+            expect(postResponse.status).toBe(405);
+            expect(postResponse.headers["allow"]).toBe("GET, HEAD");
+            expect(yield* postResponse.text).toBe("Method Not Allowed");
+
+            for (const invalidPath of [
+              "/..%2Fsecret",
+              "/%2e%2e%2fsecret",
+              "/%00",
+              "/%E0%A4%A",
+              "/%ZZ",
+            ]) {
+              const invalidResponse = yield* HttpClient.get(
+                `${origin}${invalidPath}`,
+              );
+              expect(invalidResponse.status).toBe(400);
+              expect(yield* invalidResponse.text).toBe("Bad Request");
+            }
+          }),
+        );
+      }
 
       yield* artifact.cleanup;
       expect(yield* fs.exists(artifact.directory)).toBe(false);
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("serves a custom root page without enabling SPA fallback", () =>
+  it.live("serves a custom root page without enabling SPA fallback", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const root = yield* fs.makeTempDirectory({
-        prefix: "alchemy-prisma-static-site-no-spa-",
-      });
-      yield* fs.makeDirectory(path.join(root, "dist"));
-      yield* fs.writeFileString(
-        path.join(root, "dist", "home.html"),
-        "static home",
-      );
-
+      const { root, command } = yield* copyStaticBuildFixture;
       const artifact = yield* runComputeStaticBuild({
         appPath: root,
-        command: "true",
+        command,
         outdir: "dist",
         indexPage: "home.html",
       });
-
-      yield* withStaticSiteServer(artifact.directory, (origin) =>
-        Effect.gen(function* () {
-          const rootResponse = yield* request(`${origin}/`);
-          expect(rootResponse.status).toBe(200);
-          expect(yield* responseText(rootResponse)).toBe("static home");
-
-          const missingResponse = yield* request(`${origin}/missing`);
-          expect(missingResponse.status).toBe(404);
-          expect(yield* responseText(missingResponse)).toBe("Not Found");
-        }),
+      yield* Effect.addFinalizer(() => artifact.cleanup);
+      const docs = yield* fs.readFileString(
+        path.join(root, "dist/docs/index.html"),
       );
+      expect(artifact.requiredFiles).toEqual(["public/home.html"]);
+      const archive = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        requiredFiles: artifact.requiredFiles,
+      });
+      const excludedIndexError = yield* createComputeArchive({
+        directory: artifact.directory,
+        entrypoint: artifact.entrypoint,
+        ignore: ["home.html"],
+        ignorePrefix: artifact.archiveIgnorePrefix,
+        requiredFiles: artifact.requiredFiles,
+      }).pipe(Effect.flip);
+      expect(excludedIndexError.message).toContain(
+        "Required file not found in compute artifact: public/home.html",
+      );
+      const extracted = yield* extractStaticArchive(archive);
+
+      for (const directory of [artifact.directory, extracted]) {
+        yield* withStaticSiteServer(directory, (origin) =>
+          Effect.gen(function* () {
+            const rootResponse = yield* HttpClient.get(`${origin}/`);
+            expect(rootResponse.status).toBe(200);
+            expect(yield* rootResponse.text).toBe("static home\n");
+
+            const rootHead = yield* HttpClient.head(`${origin}/`);
+            expect(rootHead.status).toBe(200);
+            expect(rootHead.headers["content-length"]).toBe("12");
+            expect(yield* rootHead.text).toBe("");
+
+            const directoryResponse = yield* HttpClient.get(`${origin}/docs/`);
+            expect(directoryResponse.status).toBe(200);
+            expect(yield* directoryResponse.text).toBe(docs);
+            yield* assertDirectoryRedirects(origin);
+
+            const missingResponse = yield* HttpClient.get(`${origin}/missing`);
+            expect(missingResponse.status).toBe(404);
+            expect(yield* missingResponse.text).toBe("Not Found");
+
+            const missingHead = yield* HttpClient.head(`${origin}/missing`);
+            expect(missingHead.status).toBe(404);
+            expect(yield* missingHead.text).toBe("");
+          }),
+        );
+      }
 
       yield* artifact.cleanup;
     }).pipe(Effect.provide(PlatformServices)),
@@ -1116,9 +1192,10 @@ describe("Prisma Compute static-site build", () => {
         entrypoint: artifact.entrypoint,
         ignore: ["assets/*.map", "*.mjs"],
         ignorePrefix: artifact.archiveIgnorePrefix,
+        requiredFiles: artifact.requiredFiles,
       }).pipe(Effect.ensuring(artifact.cleanup));
-      const tarText = new TextDecoder().decode(
-        yield* Effect.sync(() => gunzipSync(archive)),
+      const tarText = yield* Effect.sync(() =>
+        new TextDecoder().decode(gunzipSync(archive)),
       );
 
       expect(tarText).toContain("bundle/server.mjs");
@@ -1186,56 +1263,116 @@ describe("Prisma Compute static-site build", () => {
   );
 });
 
+const assertDirectoryRedirects = Effect.fn(function* (origin: string) {
+  const query = "?from=%2Fclient%2Froute&next=%2F%2Fevil.example";
+  for (const pathname of ["/docs", "//docs", "/%2Fdocs"]) {
+    for (const method of ["GET", "HEAD"] as const) {
+      const url = `${origin}${pathname}${query}`;
+      const response = yield* (
+        method === "GET" ? HttpClient.get(url) : HttpClient.head(url)
+      ).pipe(
+        Effect.provideService(FetchHttpClient.RequestInit, {
+          redirect: "manual",
+        }),
+      );
+      expect(response.status).toBe(301);
+      const location = response.headers["location"];
+      expect(location).toBe(
+        pathname === "/%2Fdocs" ? `/%2Fdocs/${query}` : `/docs/${query}`,
+      );
+      const target = yield* Effect.sync(() => new URL(location!, origin));
+      expect(target.origin).toBe(origin);
+      expect(target.search).toBe(query);
+      expect(decodeURIComponent(target.pathname).replace(/^\/+/, "/")).toBe(
+        "/docs/",
+      );
+      expect(yield* response.text).toBe("");
+
+      const assetUrl = yield* Effect.sync(
+        () => new URL("./style.css", target).href,
+      );
+      const asset = yield* HttpClient.get(assetUrl);
+      expect(asset.status).toBe(200);
+      expect(asset.headers["content-type"]).toContain("text/css");
+      expect(yield* asset.text).toContain(".directory-marker");
+    }
+  }
+});
+
+const copyStaticBuildFixture = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const fixture = yield* path.fromFileUrl(
+    new URL("./fixtures/compute-static-build/", import.meta.url),
+  );
+  const nodeModules = yield* path.fromFileUrl(
+    new URL("../../node_modules/", import.meta.url),
+  );
+  const root = yield* fs.makeTempDirectoryScoped({
+    prefix: "alchemy-prisma-static-build-",
+  });
+  yield* fs.copy(fixture, root);
+  yield* fs.symlink(nodeModules, path.join(root, "node_modules"));
+  const executable = yield* Effect.sync(() => process.execPath);
+  return {
+    root,
+    command: `${JSON.stringify(executable)} ${JSON.stringify(path.join(nodeModules, "vite/bin/vite.js"))} build`,
+  };
+});
+
+const extractStaticArchive = Effect.fn(function* (archive: Uint8Array) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner;
+  const root = yield* fs.makeTempDirectoryScoped({
+    prefix: "alchemy-prisma-static-archive-",
+  });
+  const archivePath = path.join(root, "bundle.tar.gz");
+  yield* fs.writeFile(archivePath, archive);
+  const handle = yield* spawner.spawn(
+    ChildProcess.make("tar", ["-xzf", archivePath, "-C", root], {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "inherit",
+    }),
+  );
+  expect(yield* handle.exitCode).toBe(0);
+  return path.join(root, "bundle");
+});
+
 const withStaticSiteServer = <A, E, R>(
   directory: string,
   use: (origin: string) => Effect.Effect<A, E, R>,
 ) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const listener = Bun.listen({
-        hostname: "127.0.0.1",
-        port: 0,
-        socket: { data() {} },
-      });
-      const port = listener.port;
-      listener.stop(true);
-      return {
-        origin: `http://127.0.0.1:${port}`,
-        process: Bun.spawn([process.execPath, "server.mjs"], {
+  Effect.scoped(
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner;
+      const port = yield* findAvailablePort();
+      const executable = yield* Effect.sync(() => process.execPath);
+      yield* spawner.spawn(
+        ChildProcess.make(executable, ["server.mjs"], {
           cwd: directory,
-          env: { ...process.env, PORT: String(port) },
-          stdout: "pipe",
-          stderr: "pipe",
+          env: { PORT: String(port) },
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "inherit",
+          killSignal: "SIGKILL",
         }),
-      };
+      );
+      const origin = `http://127.0.0.1:${port}`;
+      yield* HttpClient.head(`${origin}/`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.void
+            : Effect.fail(
+                new Error(
+                  `Static server readiness returned ${response.status}`,
+                ),
+              ),
+        ),
+        Effect.timeout("1 second"),
+        Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 10 }),
+      );
+      return yield* use(origin);
     }),
-    ({ origin }) => use(origin),
-    ({ process }) =>
-      Effect.tryPromise(async () => {
-        process.kill();
-        await process.exited;
-      }).pipe(Effect.ignore),
-  );
-
-const request = (url: string, init?: RequestInit) =>
-  Effect.tryPromise({
-    try: async () => {
-      let error: unknown;
-      for (let attempt = 0; attempt < 100; attempt++) {
-        try {
-          return await fetch(url, init);
-        } catch (cause) {
-          error = cause;
-          await Bun.sleep(20);
-        }
-      }
-      throw error;
-    },
-    catch: (cause) => cause,
-  });
-
-const responseText = (response: Response) =>
-  Effect.tryPromise({
-    try: () => response.text(),
-    catch: (cause) => cause,
-  });
+  ).pipe(Effect.provide(FetchHttpClient.layer));

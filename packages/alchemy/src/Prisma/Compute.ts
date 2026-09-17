@@ -347,7 +347,8 @@ export interface ComputeProps extends PlatformProps {
    * build patterns are relative to the configured output directory; other
    * patterns are artifact-relative. `*` and `**` wildcards are supported;
    * absolute paths, parent segments, and negated patterns are rejected.
-   * `.env*`, `.git`, and `.alchemy` are always excluded.
+   * `.env*`, `.git`, and `.alchemy` are always excluded. Static index pages
+   * must remain present after exclusions.
    */
   archiveIgnore?: readonly string[];
   /**
@@ -1721,6 +1722,7 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       entrypoint: artifact.entrypoint,
       ignore: props.archiveIgnore,
       ignorePrefix: artifact.archiveIgnorePrefix,
+      requiredFiles: artifact.requiredFiles,
       output: "file",
     }).pipe(Effect.ensuring(artifact.cleanup));
     port = props.port ?? artifact.defaultPort ?? 8080;
@@ -1753,6 +1755,7 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
       entrypoint: artifact.entrypoint,
       ignore: props.archiveIgnore,
       ignorePrefix: artifact.archiveIgnorePrefix,
+      requiredFiles: artifact.requiredFiles,
       output: "file",
     }).pipe(Effect.ensuring(artifact.cleanup));
     port = props.port ?? artifact.defaultPort ?? 8080;

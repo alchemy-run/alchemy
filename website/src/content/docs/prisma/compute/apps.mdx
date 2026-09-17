@@ -74,7 +74,12 @@ const site = yield* Prisma.Compute("web", {
 
 Set `spa: true` for client-side routers so unmatched paths serve
 `index.html`. Leave it disabled for static sites that should return `404` for
-missing files.
+missing files. Directory indexes redirect to a trailing-slash URL so relative
+asset links resolve correctly.
+
+For static builds, `archiveIgnore` patterns are relative to `outdir`. The
+configured index page must remain in the archive; excluding it rejects the
+deployment.
 
 ## Effect-native apps
 

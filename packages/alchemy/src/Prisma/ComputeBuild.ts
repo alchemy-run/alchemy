@@ -94,6 +94,10 @@ export interface ComputeBuildArtifact {
    */
   archiveIgnorePrefix?: string;
   /**
+   * Artifact-relative files that must remain present after archiving.
+   */
+  requiredFiles?: readonly string[];
+  /**
    * Removes temporary build output.
    */
   cleanup: Effect.Effect<void, never, FileSystem.FileSystem>;
@@ -629,7 +633,7 @@ export const runComputeStaticBuild = Effect.fn(function* (
         yield* accountStagingEntry(
           budget,
           serverPath,
-          new TextEncoder().encode(source).byteLength,
+          yield* Effect.sync(() => new TextEncoder().encode(source).byteLength),
         );
         yield* fs.writeFileString(serverPath, source);
         return {
@@ -637,6 +641,7 @@ export const runComputeStaticBuild = Effect.fn(function* (
           entrypoint,
           defaultPort: 8080,
           archiveIgnorePrefix: "public",
+          requiredFiles: [`public/${indexPage}`],
           cleanup: temp.cleanup,
         };
       }),
@@ -695,7 +700,8 @@ const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
     "      });",
     "    }",
     "",
-    "    const pathname = new URL(request.url).pathname;",
+    "    const url = new URL(request.url);",
+    "    const pathname = url.pathname;",
     "    const target = resolvePublicPath(pathname);",
     '    if (target === undefined) return new Response("Bad Request", { status: 400 });',
     "",
@@ -704,7 +710,13 @@ const staticSiteServerSource = (options: { indexPage: string; spa: boolean }) =>
     '    const directoryUrl = target.href.endsWith("/") ? target : new URL(`${target.href}/`);',
     '    const directoryIndexPage = pathname === "/" ? indexPage : "index.html";',
     "    const directoryIndex = await responseForFile(new URL(encodePath(directoryIndexPage), directoryUrl), method);",
-    "    if (directoryIndex) return directoryIndex;",
+    "    if (directoryIndex) {",
+    '      if (!pathname.endsWith("/")) {',
+    '        const location = `${pathname.replace(/^\\/+/, "/")}/${url.search}`;',
+    "        return new Response(null, { status: 301, headers: { location } });",
+    "      }",
+    "      return directoryIndex;",
+    "    }",
     "",
     "    if (spa) {",
     "      const fallback = await responseForFile(new URL(encodePath(indexPage), publicRoot), method);",
