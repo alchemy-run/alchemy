@@ -1,6 +1,7 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Git from "alchemy/Git";
+import * as TypeSafe from "alchemy/TypeSafe";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -223,6 +224,7 @@ const Company = Layer.mergeAll(
   ColleaguesLive,
   SandboxSession,
   PublishTokenLive,
+  TypeSafe.SystemOneHttp,
 ).pipe(
   Layer.provideMerge(TriageLive),
   // the forge's issues store — the mirror the Sync routes fill and

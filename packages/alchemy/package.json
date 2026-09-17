@@ -236,6 +236,12 @@
       "worker": "./src/Git/index.ts",
       "import": "./lib/Git/index.js"
     },
+    "./TypeSafe": {
+      "types": "./lib/TypeSafe/index.d.ts",
+      "bun": "./src/TypeSafe/index.ts",
+      "worker": "./src/TypeSafe/index.ts",
+      "import": "./lib/TypeSafe/index.js"
+    },
     "./Workspace": {
       "types": "./lib/Workspace/index.d.ts",
       "bun": "./src/Workspace/index.ts",
@@ -484,6 +490,7 @@
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
+    "@distilled.cloud/typesafe-ai": "workspace:*",
     "@effect/ai-anthropic": "catalog:",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",

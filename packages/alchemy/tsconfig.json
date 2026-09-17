@@ -48,6 +48,9 @@
       "path": "../../submodules/distilled/packages/planetscale/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/typesafe-ai/tsconfig.json"
+    },
+    {
       "path": "../../submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
