@@ -24,6 +24,9 @@
   "references": [
     {
       "path": "../../packages/alchemy/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/typesafe-ai/tsconfig.json"
     }
   ]
 }

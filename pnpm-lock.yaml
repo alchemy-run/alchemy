@@ -5664,6 +5664,9 @@ importers:
       '@ai-sdk/react':
         specifier: ^3.0.0
         version: 3.0.286(react@19.3.0)(zod@4.4.3)
+      '@distilled.cloud/typesafe-ai':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/typesafe-ai
       '@effect/ai-anthropic':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)
