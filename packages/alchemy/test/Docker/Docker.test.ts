@@ -2,6 +2,8 @@ import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Redacted from "effect/Redacted";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -51,6 +53,59 @@ describe("Docker.materialize", (it) => {
 });
 
 describe("Docker.image", (it) => {
+  for (const [name, auth] of [
+    [
+      "invalid JSON",
+      '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL"}},',
+    ],
+    [
+      "invalid base64",
+      '{"auths":{"source.invalid":{"auth":"AUTH_SECRET_SENTINEL!"}}}',
+    ],
+    [
+      "missing credential separator",
+      '{"auths":{"source.invalid":{"auth":"QVVUSF9TRUNSRVRfU0VOVElORUw="}}}',
+    ],
+  ]) {
+    it.effect(`rejects ${name} without exposing registry credentials`, () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const context = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-invalid-auth-",
+        });
+        yield* docker.materialize({
+          context,
+          dockerfile: "FROM scratch\n",
+          files: [],
+        });
+        const result = yield* docker.image
+          .build(
+            { context, tag: "registry.invalid/invalid-auth:latest" },
+            undefined,
+            {
+              server: "registry.invalid",
+              username: "publisher",
+              password: Redacted.make("DESTINATION_SECRET_SENTINEL"),
+            },
+          )
+          .pipe(Effect.flip);
+        expect(result.reason._tag).toBe("InvalidData");
+        expect(result.reason.description).toContain("DOCKER_AUTH_CONFIG");
+        const serialized = yield* Effect.sync(() => JSON.stringify(result));
+        expect(serialized).not.toContain("AUTH_SECRET_SENTINEL");
+        expect(serialized).not.toContain("QVVUSF9TRUNSRVRfU0VOVElORUw=");
+        expect(serialized).not.toContain("DESTINATION_SECRET_SENTINEL");
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({ DOCKER_AUTH_CONFIG: auth }),
+          ),
+        ),
+      ),
+    );
+  }
+
   it.effect("builds a minimal image with content Dockerfile", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

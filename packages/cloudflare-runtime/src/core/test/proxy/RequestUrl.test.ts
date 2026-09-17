@@ -4,7 +4,7 @@ import * as WorkerProxy from "../../proxy/WorkerProxy.ts";
 import {
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
-} from "../../proxy/ProxyHeaders.shared.ts";
+} from "../../globals/ProxyHeaders.shared.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
 layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
@@ -14,14 +14,13 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
       Effect.gen(function* () {
         const proxy = yield* WorkerProxy.WorkerProxy;
         const instance = yield* proxy.serve();
-        const otherInstance = yield* proxy.serve();
-        expect(instance.proxySharedSecret).not.toBe(
-          otherInstance.proxySharedSecret,
-        );
+        // A server that fronts workerd itself (the vite plugin) signs its
+        // forwarded requests with a secret of its own; the relay sends none.
+        const proxySharedSecret = "test-proxy-secret";
         for (const name of ["first", "replacement"]) {
           const worker = yield* startTestWorker({
             name,
-            proxySharedSecret: instance.proxySharedSecret,
+            proxySharedSecret,
             compatibilityDate: "2026-03-10",
             compatibilityFlags: [],
             bindings: [],
@@ -43,14 +42,14 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
           const url = new URL(instance.url);
           url.pathname = "//callback/%2F";
           url.search = "?return=%2Fhome&x=1&x=2";
+          // Moving the relay to the replacement resets connections pinned
+          // to the previous worker (see WorkerProxy.test.ts), so no
+          // keep-alive connection may carry over between rounds.
           const result = yield* Effect.promise(() =>
             fetch(url, {
               method: "POST",
               body: "hello",
-              headers: {
-                [HEADER_ORIGINAL_URL]: "https://forged.example/",
-                [HEADER_PROXY_SHARED_SECRET]: "forged",
-              },
+              headers: { connection: "close" },
             }).then((res) => res.json()),
           );
           expect(result).toEqual({
@@ -60,6 +59,19 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
             original: null,
             secret: null,
           });
+          // The proxy is a transparent relay, not a trusted proxy: it signs
+          // nothing and strips nothing, so a client forging the trusted
+          // headers through it is rejected exactly like a direct request.
+          const forgedViaProxy = yield* Effect.promise(() =>
+            fetch(url, {
+              headers: {
+                connection: "close",
+                [HEADER_ORIGINAL_URL]: "https://forged.example/",
+                [HEADER_PROXY_SHARED_SECRET]: "forged",
+              },
+            }),
+          );
+          expect(forgedViaProxy.status).toBe(400);
 
           const direct = yield* worker.fetchJson("/direct", {
             headers: { [HEADER_ORIGINAL_URL]: "https://forged.example/" },
@@ -72,7 +84,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
           const trusted = yield* worker.fetchJson("/callback", {
             headers: {
               [HEADER_ORIGINAL_URL]: "https://public.example:8443/callback?x=1",
-              [HEADER_PROXY_SHARED_SECRET]: instance.proxySharedSecret,
+              [HEADER_PROXY_SHARED_SECRET]: proxySharedSecret,
             },
           });
           expect(trusted).toMatchObject({
@@ -88,12 +100,6 @@ layer(localRuntimeLayer, { excludeTestServices: true })((it) => {
             },
           });
           expect(forged.status).toBe(400);
-          const otherProxy = yield* worker.fetch("/direct", {
-            headers: {
-              [HEADER_PROXY_SHARED_SECRET]: otherInstance.proxySharedSecret,
-            },
-          });
-          expect(otherProxy.status).toBe(400);
         }
       }),
   );
