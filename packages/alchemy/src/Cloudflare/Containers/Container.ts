@@ -328,6 +328,18 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
+ * **Example:** Reuse builds across stages
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ *   imageName: "web",
+ * }) {}
+ * ```
+ *
+ * Applications in the same account reuse a published image when their build
+ * inputs match. Changed inputs build with the shared inline layer cache.
+ * Pin base images and downloaded dependencies when using this option.
+ *
  * **Example:** Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's

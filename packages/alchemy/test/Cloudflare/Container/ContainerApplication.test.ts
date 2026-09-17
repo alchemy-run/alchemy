@@ -660,7 +660,7 @@ describe.concurrent("ContainerApplication", () => {
         ).toHaveLength(3);
         // Each distinct publication can make at most six export attempts.
         expect(history.length).toBeLessThanOrEqual(18);
-        expect(first.first.hash?.image).toBe(first.other.hash?.image);
+        expect(first.first.hash?.image).not.toBe(first.other.hash?.image);
         expect(first.first.configuration.image).toBe(
           first.second.configuration.image,
         );

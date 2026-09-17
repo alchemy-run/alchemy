@@ -193,6 +193,16 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   registryId?: string;
   /**
+   * Registry repository name shared across applications and stages in the
+   * same account. Matching published builds are reused by digest; changed
+   * inputs build with an inline layer cache stored at `:buildcache`.
+   *
+   * Only local builds are cached. Pin base images and other downloaded build
+   * inputs when opting in: changes outside the build context cannot invalidate
+   * its content hash. Defaults to the application name without shared caching.
+   */
+  imageName?: string;
+  /**
    * Environment variables passed to the container runtime.
    */
   env?: Record<string, any>;
