@@ -27,6 +27,7 @@ import * as Output from "./Output.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import { StackContext } from "./StackContext.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -142,7 +143,7 @@ export const Stack: Context.ServiceClass<
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
 } = Object.assign(
   taggedFunction(
-    Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
+    StackContext,
     <A, Req>(
       stackName?: string,
       options?: StackProps<NoInfer<Req>>,

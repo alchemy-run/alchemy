@@ -1,5 +1,6 @@
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
+import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -59,18 +60,17 @@ test.provider.skipIf(!runCleanup)(
   "live cleans up an existing Prisma Compute project/App from configured credentials",
   () =>
     Effect.gen(function* () {
-      const client = yield* Prisma.PrismaClient;
       const projectId = process.env.PRISMA_CLEANUP_PROJECT_ID!.trim();
       const appId = process.env.PRISMA_CLEANUP_APP_ID?.trim() || undefined;
       const deploymentId =
         process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
       if (deploymentId) {
-        yield* Prisma.destroyDeployment(client, deploymentId, {
+        yield* Prisma.destroyDeployment(deploymentId, {
           timeoutSeconds: 240,
         });
       }
-      yield* Prisma.destroyProjectApps(client, projectId, {
+      yield* Prisma.destroyProjectApps(projectId, {
         timeoutSeconds: 240,
       });
 
@@ -284,6 +284,20 @@ test.provider.skipIf(!runLive)(
 
         const text = yield* fetchText(`${output.app.url}/`);
         expect(text).toBe("rollback target");
+
+        yield* stack.destroy();
+        const projectGone = yield* getProject({
+          id: output.project.projectId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        );
+        const appGone = yield* getService({ serviceId: appId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        );
+        expect(projectGone).toBe(true);
+        expect(appGone).toBe(true);
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {

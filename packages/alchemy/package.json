@@ -298,6 +298,7 @@
       "import": "./lib/Prisma/Deployment.js"
     },
     "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Credentials": null,
     "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
@@ -462,6 +463,7 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
     "@distilled.cloud/stripe": "workspace:*",
     "@effect/sql-d1": "catalog:",
