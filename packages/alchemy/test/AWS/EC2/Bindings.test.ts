@@ -16,7 +16,11 @@ import Ec2BindingsFunctionLive, {
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(testOptions, "Ec2Bindings");
+const sharedStack = Core.scratchStack(
+  testOptions,
+  "Ec2Bindings",
+  "test/AWS/EC2/Bindings.test.ts",
+);
 
 const readinessPolicy = Schedule.max([
   Schedule.fixed("2 seconds"),
@@ -118,6 +122,7 @@ describe("EC2 runtime bindings", () => {
     (_stack) =>
       Effect.gen(function* () {
         const body = yield* callRoute("GET", "/describe");
+        expect(body.tag).toBe("Success");
         expect(body.ok).toBe(true);
         expect(body.state).toBeTruthy();
       }),
@@ -129,6 +134,7 @@ describe("EC2 runtime bindings", () => {
     (_stack) =>
       Effect.gen(function* () {
         const body = yield* callRoute("GET", "/status");
+        expect(body.tag).toBe("Success");
         expect(body.ok).toBe(true);
         expect(body.count).toBeGreaterThanOrEqual(1);
       }),

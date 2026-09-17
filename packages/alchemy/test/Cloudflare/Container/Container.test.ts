@@ -28,14 +28,16 @@ import RemoteStack from "./fixtures/remote/stack.ts";
 describe.concurrent.each([
   {
     dev: true,
-    stage: "test-local",
+    stage: process.env.ALCHEMY_TEST_STAGE
+      ? `${process.env.ALCHEMY_TEST_STAGE}-local`
+      : "test-local",
     // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
     // when a saturated machine keeps the local container answering 500s.
     timeout: 300_000,
   },
   {
     dev: false,
-    stage: "test-live",
+    stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live",
     timeout: 300_000,
   },
 ])("Container (dev: $dev)", ({ dev, stage, timeout }) => {
@@ -336,7 +338,7 @@ describe.concurrent.each([
 });
 
 describe.sequential("container attachment recovery (live)", () => {
-  const stage = "test-live";
+  const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
   const providers = Cloudflare.providers();
   const services = Layer.effectContext(
     AttachmentStack.pipe(Effect.map((stack) => stack.services)),
@@ -650,6 +652,26 @@ describe.sequential("container attachment recovery (live)", () => {
         expect(
           remaining.some((app) => app.id === first.app.applicationId),
         ).toBe(false);
+        // Reconcile observes by id first; list deletion can propagate earlier.
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: first.app.accountId,
+          applicationId: first.app.applicationId,
+        }).pipe(
+          Effect.tap((app) =>
+            Effect.logInfo(
+              `Deleted container application ${app.id} is absent from list but still readable by id`,
+            ),
+          ),
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
         for (const missing of [undefined, {}]) {
           yield* corruptProjection(missing);
           const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
