@@ -44,6 +44,10 @@ import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
 });
+const { test: registryCacheTest } = Test.make({
+  // Each deployment must consult the registry, not a previous provider's map.
+  providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -734,6 +738,139 @@ describe.concurrent("ContainerApplication", () => {
           expect(deleted).toBeUndefined();
         }
       }).pipe(withBuilder("alchemy-publication-cache"), logLevel),
+    { timeout: 120_000, exclusive: true },
+  );
+
+  // Publication reuse was confined to a provider instance in:
+  // https://github.com/alchemy-run/alchemy/commit/275361dfe8358684439e42120298723305175d39
+  registryCacheTest.provider(
+    "reuses registry images across fresh providers and invalidates changed build inputs",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-registry-cache-",
+        });
+        const context = path.join(root, "context");
+        const imageName = `alchemy-registry-cache-${stack.stage.toLowerCase()}`;
+        yield* fs.makeDirectory(context);
+        yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-first");
+        yield* fs.writeFileString(
+          path.join(context, ".gitignore"),
+          "payload\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, ".dockerignore"),
+          "ignored\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "ignored"),
+          "ignored-first",
+        );
+        // Fresh payload bytes force a cold source tag even after a prior run.
+        yield* fs.writeFileString(path.join(context, "payload"), root);
+        yield* fs.writeFileString(
+          path.join(context, "Dockerfile"),
+          'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
+        );
+        const deploy = (id: string, repository = imageName) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return {
+                app: yield* Cloudflare.Container(id, {
+                  context,
+                  imageName: repository,
+                }).Application,
+              };
+            }),
+          );
+
+        const first = yield* deploy("First");
+        const history = yield* buildHistory;
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(1);
+        expect(first.app.configuration.image).toContain(
+          `/${imageName}@sha256:`,
+        );
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
+        const username = credentials.username ?? credentials.user;
+        assert(username);
+        const http = yield* HttpClient.HttpClient;
+        const cached = yield* http.execute(
+          HttpClientRequest.head(
+            `https://registry.cloudflare.com/v2/${first.app.accountId}/${imageName}/manifests/buildcache`,
+          ).pipe(
+            HttpClientRequest.basicAuth(username, credentials.password),
+            HttpClientRequest.setHeader(
+              "Accept",
+              "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+            ),
+          ),
+        );
+        expect(cached.status).toBe(200);
+        expect(cached.headers["docker-content-digest"]).toBe(
+          first.app.hash?.digest,
+        );
+
+        yield* stack.destroy();
+        yield* fs.writeFileString(
+          path.join(root, "bun.lock"),
+          "outside-second",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "ignored"),
+          "ignored-second",
+        );
+        const second = yield* deploy("Second");
+        expect(yield* buildHistory).toEqual(history);
+        expect(second.app.applicationId).not.toBe(first.app.applicationId);
+        expect(second.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
+
+        // Git ignores this file, but Docker copies it into the image.
+        yield* fs.writeFileString(
+          path.join(context, "payload"),
+          `${root}-changed`,
+        );
+        const changed = yield* deploy("Second");
+        expect(changed.app.hash?.digest).not.toBe(second.app.hash?.digest);
+        expect(
+          (yield* buildHistory).filter((build) => build.status === "Completed"),
+        ).toHaveLength(2);
+
+        const moved = yield* deploy("Second", `${imageName}-other`);
+        expect(moved.app.configuration.image).toContain(
+          `/${imageName}-other@sha256:`,
+        );
+        expect(
+          (yield* buildHistory).filter((build) => build.status === "Completed"),
+        ).toHaveLength(3);
+        yield* stack.destroy();
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: moved.app.accountId,
+          applicationId: moved.app.applicationId,
+        }).pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
+      }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
     { timeout: 120_000, exclusive: true },
   );
 
