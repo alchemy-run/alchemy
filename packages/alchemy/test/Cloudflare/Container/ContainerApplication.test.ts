@@ -34,7 +34,11 @@ import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts"
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import { buildHistory, withBuilder } from "./fixtures/buildx.ts";
+import {
+  buildHistory,
+  supportsRegistryExport,
+  withBuilder,
+} from "./fixtures/buildx.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
@@ -791,7 +795,15 @@ describe("ContainerApplication", () => {
                 Effect.succeed(undefined),
               ),
             );
-          expect(local).toBeUndefined();
+          // Buildx 0.26+ exports from BuildKit straight to the registry, so
+          // the image never enters the local store. Older plugins `--load`
+          // it and `docker push` from there.
+          const exported = yield* supportsRegistryExport;
+          if (exported) {
+            expect(local).toBeUndefined();
+          } else {
+            expect(local).toBeDefined();
+          }
           expect(deployed.app.hash?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 
           const { accountId, applicationId } = deployed.app;
@@ -816,7 +828,7 @@ describe("ContainerApplication", () => {
               HttpClientRequest.basicAuth(username, credentials.password),
               HttpClientRequest.setHeader(
                 "Accept",
-                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
+                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
               ),
             ),
           );
@@ -824,32 +836,49 @@ describe("ContainerApplication", () => {
           expect(manifest.headers["docker-content-digest"]).toBe(
             deployed.app.hash!.digest,
           );
-          const index = yield* manifest.json.pipe(
-            Effect.flatMap(
-              Schema.decodeUnknownEffect(
-                Schema.Struct({
-                  mediaType: Schema.String,
-                  manifests: Schema.Array(
-                    Schema.Struct({
-                      platform: Schema.Struct({
-                        os: Schema.String,
-                        architecture: Schema.String,
+          if (exported) {
+            // BuildKit's registry exporter publishes an OCI index (with
+            // attestations) carrying the requested platform.
+            const index = yield* manifest.json.pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({
+                    mediaType: Schema.String,
+                    manifests: Schema.Array(
+                      Schema.Struct({
+                        platform: Schema.Struct({
+                          os: Schema.String,
+                          architecture: Schema.String,
+                        }),
                       }),
-                    }),
-                  ),
-                }),
+                    ),
+                  }),
+                ),
               ),
-            ),
-          );
-          expect(index.mediaType).toBe(
-            "application/vnd.oci.image.index.v1+json",
-          );
-          expect(
-            index.manifests.some(
-              ({ platform }) =>
-                platform.os === "linux" && platform.architecture === "amd64",
-            ),
-          ).toBe(true);
+            );
+            expect(index.mediaType).toBe(
+              "application/vnd.oci.image.index.v1+json",
+            );
+            expect(
+              index.manifests.some(
+                ({ platform }) =>
+                  platform.os === "linux" && platform.architecture === "amd64",
+              ),
+            ).toBe(true);
+          } else {
+            // `docker push --platform` ships the single platform variant.
+            const single = yield* manifest.json.pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({ mediaType: Schema.String }),
+                ),
+              ),
+            );
+            expect([
+              "application/vnd.oci.image.manifest.v1+json",
+              "application/vnd.docker.distribution.manifest.v2+json",
+            ]).toContain(single.mediaType);
+          }
           const observed = yield* Containers.getContainerApplication({
             accountId,
             applicationId,
