@@ -19,6 +19,7 @@ import {
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
 import { fromDurableObjectStorage } from "./DurableObjectStorage.ts";
+import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 import {
   CallbackError,
   type Callback,
@@ -78,6 +79,7 @@ const makeAlarmCallback = <Payload, E, R>(
   Effect.gen(function* () {
     const context = (yield* Effect.context<Exclude<R, Scope.Scope>>()).pipe(
       Context.omit(
+        ActiveStorageTransactions,
         DurableObjectState,
         RuntimeContext,
         Scope.Scope,
@@ -305,6 +307,7 @@ export const dispatchAlarmCallbacks = (
         }),
       );
       if (!claimed) continue;
+      yield* storage.sync();
       const result = yield* Effect.gen(function* () {
         if (!callback) {
           return yield* Effect.fail(

@@ -114,8 +114,11 @@ export type CallbackFactory = <Payload, E, R>(
  * jobs are pending. Payloads must be JSON values compatible with pending jobs
  * from earlier deployments; TypeScript types do not perform runtime decoding.
  * Cloudflare commits scheduling alongside SQLite, KV, and native alarm writes
- * inside the same Durable Object's storage transaction. Other implementations
- * must document their own transaction integration.
+ * inside the same Durable Object's storage transaction. Automatic recovery from
+ * instance termination relies on Cloudflare's native alarm retries. Calling
+ * `state.abort` with `{ retryAlarm: false }` removes that recovery guarantee:
+ * pending jobs remain stored, but may need an explicitly rearmed native alarm.
+ * Other implementations must document their own transaction integration.
  */
 export const makeCallback = <Payload, E, R>(
   name: string,

@@ -1,13 +1,16 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type {
+  ExplicitRollbackResult,
   RegistrationResult,
   RollbackResult,
+  SiblingTransactionResult,
   Snapshot,
 } from "./fixtures/alarm-callback/object.ts";
 import Stack from "./fixtures/alarm-callback/stack.ts";
@@ -122,8 +125,16 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* json<Snapshot>(`${output.url}/readiness/snapshot`);
-      yield* json(`${output.url}/readiness/legacy`);
+      yield* Effect.all([
+        json<Snapshot>(`${output.url}/readiness/snapshot`),
+        json(`${output.url}/readiness/legacy`),
+      ]).pipe(
+        Effect.retry({
+          while: Cause.isTimeoutError,
+          schedule: Schedule.spaced("1 second"),
+          times: 3,
+        }),
+      );
       expect(output.url.startsWith("http://localhost:")).toBe(dev);
       return output;
     }),
@@ -239,6 +250,89 @@ describe.concurrent.each([
     { timeout: 90_000 },
   );
 
+  test(
+    "delivers a callback registered during transactional initialization",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const base = `${url}/transactional-registration`;
+      const initial = yield* json<Snapshot>(
+        `${base}/transactional-registration`,
+        "POST",
+      );
+      expect(initial.pendingJobs).toHaveLength(1);
+      expect(initial.pendingJobs[0]?.callback).toBe("transactional-init");
+      expect(initial.alarm).not.toBeNull();
+      const result = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
+      expect(result.id).toBe(initial.id);
+      expect(result.application).toBe("registered-in-transaction");
+      expect(result.deliveries).toEqual([
+        {
+          callback: "transactional-init",
+          value: "registered-in-transaction",
+          application: "registered-in-transaction",
+          boots: result.boots,
+        },
+      ]);
+      expect(result.pendingJobs).toEqual([]);
+      expect(result.alarm).toBeNull();
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "rejects a pre-existing sibling fiber write during another fiber's transaction",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const result = yield* json<SiblingTransactionResult>(
+        `${url}/sibling-transaction/sibling-transaction`,
+        "POST",
+      );
+      expect(result.failure).toBe("sibling-rollback");
+      expect(result.siblingAcknowledged).toBe(false);
+      expect(result.siblingFailure?.tag).toBe("DurableObjectStorageError");
+      expect(result.siblingValue).toBeNull();
+      assertRollback(result.snapshot);
+      expect(result.snapshot.pendingJobs).toEqual([]);
+      expect(result.snapshot.alarm).toBeNull();
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "explicit rollback rejects later storage writes and callback scheduling while repeated rollback succeeds",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const base = `${url}/rollback-explicit`;
+      const result = yield* json<ExplicitRollbackResult>(
+        `${base}/rollback-explicit`,
+        "POST",
+      );
+      expect(result.repeatedRollbackSucceeded).toBe(true);
+      expect(result.operations.map(({ operation }) => operation)).toEqual([
+        "put",
+        "sql",
+        "schedule",
+      ]);
+      for (const operation of result.operations) {
+        expect(operation.acknowledged).toBe(false);
+        expect(operation.failure?.tag).toBe("DurableObjectStorageError");
+        if (operation.operation !== "schedule") {
+          expect(operation.failure?.wrappedBy).toBeNull();
+        }
+      }
+      assertRollback(result.snapshot);
+      expect(result.snapshot.deliveries).toEqual([]);
+      expect(result.snapshot.pendingJobs).toEqual([]);
+      expect(result.snapshot.alarm).toBeNull();
+      const persisted = yield* json<Snapshot>(`${base}/snapshot`);
+      assertRollback(persisted);
+      expect(persisted.deliveries).toEqual([]);
+      expect(persisted.pendingJobs).toEqual([]);
+      expect(persisted.alarm).toBeNull();
+    }),
+    { timeout: 90_000 },
+  );
+
   for (const [kind, failure] of [
     ["typed", "typed-value"],
     ["defect", "defect"],
@@ -341,7 +435,7 @@ describe.concurrent.each([
   );
 
   test(
-    "recovers a callback after the handler aborts with native alarm retries disabled",
+    "recovers a callback after the handler aborts with native alarm retries enabled",
     Effect.gen(function* () {
       const { url } = yield* stack;
       yield* json(`${url}/recovery/recovery`, "POST");
@@ -362,6 +456,34 @@ describe.concurrent.each([
         expect(attempt.recovery!).toBeGreaterThan(attempt.now);
       }
       expect(result.alarm).toBeNull();
+    }),
+    { timeout: 90_000 },
+  );
+
+  test(
+    "retains an aborted callback with native retries disabled and recovers after an explicit wake",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const base = `${url}/recovery-no-retry`;
+      yield* json(`${base}/recovery-no-retry`, "POST");
+      const retained = yield* poll<Snapshot>(
+        `${base}/snapshot`,
+        (snapshot) => snapshot.attempts.length > 0,
+      );
+      expect(retained.attempts[0]!.recovery).not.toBeNull();
+      if (retained.deliveries.length === 0) {
+        expect(retained.pendingJobs).toHaveLength(1);
+        expect(retained.pendingJobs[0]!.callback).toBe("crash");
+        expect(retained.pendingJobs[0]!.id).toBe("recovery");
+        yield* json(`${base}/wake`, "POST");
+      }
+      const recovered = yield* poll<Snapshot>(`${base}/snapshot`, drained(1));
+      expect(deliveries(recovered)).toEqual(["crash:recovered"]);
+      expect(recovered.pendingJobs).toEqual([]);
+      expect(recovered.attempts).toHaveLength(2);
+      expect(recovered.attempts[1]!.boots).toBeGreaterThan(
+        recovered.attempts[0]!.boots,
+      );
     }),
     { timeout: 90_000 },
   );

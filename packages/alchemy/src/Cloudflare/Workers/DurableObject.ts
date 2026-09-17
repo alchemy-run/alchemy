@@ -870,6 +870,10 @@ export class DurableObjectScope extends Context.Service<
  * job; `onArchive.cancel(id)` cancels it. Retain handlers for old callback names
  * while their jobs are pending. Each native alarm processes up to 100 due jobs;
  * direct `setAlarm`/`deleteAlarm` calls bypass the scheduler's coordination.
+ * Leave native alarm retries enabled when aborting an instance. Passing
+ * `{ retryAlarm: false }` removes the automatic-recovery guarantee: Cloudflare
+ * can suppress a replacement wake even after its timestamp is persisted. Jobs
+ * remain stored, but may need an explicitly rearmed native alarm.
  *
  * The scheduler migrates its original unversioned SQLite schema to version 1
  * atomically, preserving existing events. Old events still use the explicit

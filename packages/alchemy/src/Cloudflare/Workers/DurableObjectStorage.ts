@@ -7,6 +7,10 @@ import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import {
+  ActiveStorageTransactions,
+  type ActiveStorageTransaction,
+} from "./DurableObjectTransactionContext.ts";
 
 /** A native transaction failure or invalid use of a transaction's owner. */
 export class DurableObjectStorageError extends Data.TaggedError(
@@ -17,28 +21,29 @@ export class DurableObjectStorageError extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-interface ActiveStorageTransaction {
-  readonly transaction: cf.DurableObjectTransaction;
-  owner: Fiber.Fiber<unknown, unknown> | undefined;
-  active: boolean;
-}
+// Pre-existing sibling fibers do not inherit the transaction's context.
+const activeStorageTransactions = new WeakMap<
+  cf.DurableObjectStorage,
+  ActiveStorageTransaction
+>();
 
-const ActiveStorageTransactions = Context.Reference<
-  ReadonlyMap<cf.DurableObjectStorage, ActiveStorageTransaction>
->("alchemy/Cloudflare/ActiveStorageTransactions", {
-  defaultValue: () => new Map(),
-});
-
-const checkTransactionOwner = (transaction: ActiveStorageTransaction) =>
+const checkTransactionOwner = (
+  transaction: ActiveStorageTransaction,
+  allowRolledBack = false,
+) =>
   Effect.withFiber((fiber) =>
-    transaction.active && transaction.owner === fiber
+    transaction.active &&
+    transaction.owner === fiber &&
+    (allowRolledBack || !transaction.rolledBack)
       ? Effect.void
       : Effect.fail(
           new DurableObjectStorageError({
             operation: "transaction",
-            message: transaction.active
-              ? "A storage transaction cannot be used by another fiber"
-              : "The storage transaction callback has already finished",
+            message: !transaction.active
+              ? "The storage transaction callback has already finished"
+              : transaction.owner !== fiber
+                ? "A storage transaction cannot be used by another fiber"
+                : "The storage transaction has been rolled back",
           }),
         ),
   );
@@ -60,7 +65,8 @@ function withStorageTransaction<A, E, R>(
 ): Effect.Effect<A, E | DurableObjectStorageError, R> {
   return Effect.gen(function* () {
     const transactions = yield* ActiveStorageTransactions;
-    const existing = transactions.get(storage);
+    const existing =
+      transactions.get(storage) ?? activeStorageTransactions.get(storage);
     const evaluate = (transaction: ActiveStorageTransaction) =>
       Effect.suspend(() =>
         typeof body === "function"
@@ -68,6 +74,17 @@ function withStorageTransaction<A, E, R>(
               makeDurableObjectTransaction(
                 transaction.transaction,
                 checkTransactionOwner(transaction).pipe(Effect.orDie),
+                checkTransactionOwner(transaction, true).pipe(
+                  Effect.andThen(() =>
+                    Effect.sync(() => {
+                      if (!transaction.rolledBack) {
+                        transaction.transaction.rollback();
+                        transaction.rolledBack = true;
+                      }
+                    }),
+                  ),
+                  Effect.orDie,
+                ),
               ),
             )
           : body,
@@ -88,6 +105,15 @@ function withStorageTransaction<A, E, R>(
         let callbackFiber: Fiber.Fiber<A, E> | undefined;
         let native: Promise<A> | undefined;
         let failure: Exit.Failure<A, E> | undefined;
+        let currentTransaction: ActiveStorageTransaction | undefined;
+        const release = () => {
+          if (currentTransaction !== undefined) {
+            currentTransaction.active = false;
+            if (activeStorageTransactions.get(storage) === currentTransaction) {
+              activeStorageTransactions.delete(storage);
+            }
+          }
+        };
 
         yield* Effect.addFinalizer(
           Effect.fn(function* () {
@@ -110,7 +136,8 @@ function withStorageTransaction<A, E, R>(
 
         return yield* Effect.callback<A, E | DurableObjectStorageError>(
           (resume) => {
-            const reject = (cause: unknown) =>
+            const reject = (cause: unknown) => {
+              release();
               resume(
                 failure !== undefined && cause === failure
                   ? Effect.failCause(failure.cause)
@@ -122,6 +149,7 @@ function withStorageTransaction<A, E, R>(
                       }),
                     ),
               );
+            };
 
             try {
               native = storage.transaction((txn) => {
@@ -135,7 +163,10 @@ function withStorageTransaction<A, E, R>(
                   transaction: txn,
                   owner: undefined,
                   active: true,
+                  rolledBack: false,
                 };
+                currentTransaction = transaction;
+                activeStorageTransactions.set(storage, transaction);
                 const callbackContext = Context.add(
                   context,
                   ActiveStorageTransactions,
@@ -161,7 +192,10 @@ function withStorageTransaction<A, E, R>(
                   });
                 });
               });
-              native.then((value) => resume(Effect.succeed(value)), reject);
+              native.then((value) => {
+                release();
+                resume(Effect.succeed(value));
+              }, reject);
             } catch (cause) {
               reject(cause);
             }
@@ -374,6 +408,10 @@ export const fromDurableObjectTransaction = (
 const makeDurableObjectTransaction = (
   txn: cf.DurableObjectTransaction,
   checkOwner: Effect.Effect<void>,
+  rollback = Effect.andThen(
+    checkOwner,
+    Effect.sync(() => txn.rollback()),
+  ),
 ): DurableObjectTransaction => {
   const use = <A>(effect: Effect.Effect<A>) =>
     Effect.andThen(checkOwner, effect);
@@ -407,7 +445,7 @@ const makeDurableObjectTransaction = (
       options?: cf.DurableObjectPutOptions,
     ) =>
       use(Effect.promise(() => txn.delete(keyOrKeys as any, options)))) as any,
-    rollback: () => use(Effect.sync(() => txn.rollback())),
+    rollback: () => rollback,
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
       use(Effect.promise(() => txn.getAlarm(options))),
     setAlarm: (
@@ -423,7 +461,9 @@ export const fromDurableObjectStorage = (
   storage: cf.DurableObjectStorage,
 ): DurableObjectStorage => {
   const checkOwner = Effect.withFiber((fiber) => {
-    const transaction = fiber.getRef(ActiveStorageTransactions).get(storage);
+    const transaction =
+      fiber.getRef(ActiveStorageTransactions).get(storage) ??
+      activeStorageTransactions.get(storage);
     return transaction === undefined
       ? Effect.void
       : checkTransactionOwner(transaction).pipe(Effect.orDie);

@@ -71,6 +71,18 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             return yield* HttpServerResponse.json(yield* object.timing());
           case "atomic":
             return yield* HttpServerResponse.json(yield* object.atomic());
+          case "transactional-registration":
+            return yield* HttpServerResponse.json(
+              yield* object.transactionalRegistration(),
+            );
+          case "sibling-transaction":
+            return yield* HttpServerResponse.json(
+              yield* object.siblingTransaction(),
+            );
+          case "rollback-explicit":
+            return yield* HttpServerResponse.json(
+              yield* object.rollbackExplicit(),
+            );
           case "rollback-typed":
             return yield* HttpServerResponse.json(
               yield* object.rollbackTyped(),
@@ -91,6 +103,12 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
             break;
           case "recovery":
             yield* object.recovery();
+            break;
+          case "recovery-no-retry":
+            yield* object.recovery(false);
+            break;
+          case "wake":
+            yield* object.wake();
             break;
           case "reset":
             return yield* HttpServerResponse.json(
