@@ -49,6 +49,19 @@ export const withBuilder =
       );
     });
 
+/**
+ * Whether the installed Buildx can export straight to a registry
+ * (`buildx build --push` authenticating via DOCKER_AUTH_CONFIG, 0.26+).
+ * Older plugins make the provider `--load` the image and `docker push` it.
+ */
+export const supportsRegistryExport = Effect.gen(function* () {
+  const docker = yield* Docker;
+  const version = yield* docker.run(["buildx", "version"]);
+  const match = /buildx v(\d+)\.(\d+)\./.exec(version.stdout);
+  if (!match) return false;
+  return Number(match[1]) >= 1 || Number(match[2]) >= 26;
+});
+
 const decodeBuild = Schema.Struct({
   ref: Schema.String,
   status: Schema.String,
