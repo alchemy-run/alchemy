@@ -65,27 +65,23 @@ export const TableSinkFunctionLive = TableSinkFunction.make(
           };
 
           const entries: AWS.DynamoDB.TableSinkEntry[] = [
-            ...(body.puts ?? []).map(
-              (sk): AWS.DynamoDB.TableSinkEntry => ({
-                PutRequest: {
-                  Item: {
-                    pk: { S: body.pk },
-                    sk: { S: sk },
-                    data: { S: `payload-${sk}` },
-                  },
+            ...(body.puts ?? []).map((sk): AWS.DynamoDB.TableSinkEntry => ({
+              PutRequest: {
+                Item: {
+                  pk: { S: body.pk },
+                  sk: { S: sk },
+                  data: { S: `payload-${sk}` },
                 },
-              }),
-            ),
-            ...(body.deletes ?? []).map(
-              (sk): AWS.DynamoDB.TableSinkEntry => ({
-                DeleteRequest: {
-                  Key: {
-                    pk: { S: body.pk },
-                    sk: { S: sk },
-                  },
+              },
+            })),
+            ...(body.deletes ?? []).map((sk): AWS.DynamoDB.TableSinkEntry => ({
+              DeleteRequest: {
+                Key: {
+                  pk: { S: body.pk },
+                  sk: { S: sk },
                 },
-              }),
-            ),
+              },
+            })),
           ];
 
           // The sink is request-scoped: drain fully before responding.

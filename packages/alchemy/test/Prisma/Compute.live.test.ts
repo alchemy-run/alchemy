@@ -1,5 +1,6 @@
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
+import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -14,8 +15,6 @@ const { test } = Test.make({ providers: Prisma.providers() });
 
 const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
 const hasLiveCredentials =
-  !!process.env.PRISMA_SERVICE_TOKEN?.trim() ||
-  !!process.env.PRISMA_API_TOKEN?.trim() ||
   process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
 const runLive = wantsLive && hasLiveCredentials;
 const wantsCleanup =
@@ -35,7 +34,7 @@ if (wantsLive && !hasLiveCredentials) {
       new Error(
         [
           "Live Prisma Compute smoke requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy login --configure` and select `Service Token`,",
+          "Run `alchemy profile edit --re-configure Prisma` and select `Service Token`,",
           "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
         ].join(" "),
       ),
@@ -50,7 +49,7 @@ if (wantsCleanup && !hasLiveCredentials) {
       new Error(
         [
           "Live Prisma Compute cleanup requested but no credentials are configured.",
-          "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy login --configure` and select `Service Token`.",
+          "Run `alchemy profile edit --re-configure Prisma` and select `Service Token`.",
         ].join(" "),
       ),
     ),
@@ -61,18 +60,17 @@ test.provider.skipIf(!runCleanup)(
   "live cleans up an existing Prisma Compute project/App from configured credentials",
   () =>
     Effect.gen(function* () {
-      const client = yield* Prisma.PrismaClient;
       const projectId = process.env.PRISMA_CLEANUP_PROJECT_ID!.trim();
       const appId = process.env.PRISMA_CLEANUP_APP_ID?.trim() || undefined;
       const deploymentId =
         process.env.PRISMA_CLEANUP_DEPLOYMENT_ID?.trim() || undefined;
 
       if (deploymentId) {
-        yield* Prisma.destroyDeployment(client, deploymentId, {
+        yield* Prisma.destroyDeployment(deploymentId, {
           timeoutSeconds: 240,
         });
       }
-      yield* Prisma.destroyProjectApps(client, projectId, {
+      yield* Prisma.destroyProjectApps(projectId, {
         timeoutSeconds: 240,
       });
 
@@ -178,7 +176,7 @@ test.provider.skipIf(!runLive)(
                     deployed
                       ? [
                           "Retry cleanup after the platform fix with:",
-                          "PRISMA_SERVICE_TOKEN=... \\",
+                          "ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE=true \\",
                           `PRISMA_CLEANUP_PROJECT_ID=${deployed.projectId} \\`,
                           `PRISMA_CLEANUP_APP_ID=${deployed.appId} \\`,
                           `PRISMA_CLEANUP_DEPLOYMENT_ID=${deployed.deploymentId} \\`,
@@ -372,6 +370,20 @@ test.provider.skipIf(!runLive)(
 
         const text = yield* fetchText(`${output.app.url}/`);
         expect(text).toBe("rollback target");
+
+        yield* stack.destroy();
+        const projectGone = yield* getProject({
+          id: output.project.projectId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        );
+        const appGone = yield* getService({ serviceId: appId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        );
+        expect(projectGone).toBe(true);
+        expect(appGone).toBe(true);
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {

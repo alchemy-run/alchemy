@@ -80,11 +80,8 @@ export type ZoneTransferIncoming = Resource<
  * must be created with `type: "secondary"`. The configuration is a
  * per-zone singleton: `zoneId` is the identity (replacement on change),
  * everything else is mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Configuring incoming transfers
- * @example Transfer a secondary zone in from a primary
+ * ### Configuring incoming transfers
+ * **Example:** Transfer a secondary zone in from a primary
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -99,6 +96,10 @@ export type ZoneTransferIncoming = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/setup/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferIncoming = Resource<ZoneTransferIncoming>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferIncoming"],

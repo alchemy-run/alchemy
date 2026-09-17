@@ -26,6 +26,7 @@ import * as Runtime from "../Runtime.ts";
 import * as RuntimeServices from "../RuntimeServices.ts";
 import type { BindingHooks } from "../RuntimeWorker.ts";
 import * as Workerd from "../workerd/Workerd.ts";
+import { PlatformServices } from "../../Platform.ts";
 import type {
   PlatformProxyInstance,
   PlatformProxyOptions,
@@ -63,19 +64,6 @@ export interface PlatformProxy<
   readonly dispose: () => Promise<void>;
 }
 
-const importPlatformServices = Effect.promise(async () => {
-  if ("Bun" in globalThis) {
-    try {
-      const BunServices = await import("@effect/platform-bun/BunServices");
-      return BunServices.layer;
-    } catch {
-      // fall through to NodeServices
-    }
-  }
-  const NodeServices = await import("@effect/platform-node/NodeServices");
-  return NodeServices.layer;
-});
-
 const makeLayer = (persist: GetPlatformProxyOptions["persist"]) =>
   Runtime.RuntimeLive.pipe(
     Layer.provideMerge(RuntimeServices.layerLocalBindings()),
@@ -93,13 +81,7 @@ const makeLayer = (persist: GetPlatformProxyOptions["persist"]) =>
     Layer.provideMerge(Paths.PathsLive),
     Layer.provideMerge(Docker.DockerLive),
     Layer.provide(Workerd.WorkerdLive),
-    Layer.provideMerge(
-      Layer.unwrap(
-        Effect.map(importPlatformServices, (platform) =>
-          Layer.mergeAll(platform, FetchHttpClient.layer),
-        ),
-      ),
-    ),
+    Layer.provideMerge(Layer.mergeAll(PlatformServices, FetchHttpClient.layer)),
   );
 
 /**

@@ -16,12 +16,10 @@ export const makeInlineScriptSource = (script: string): SourceProvider => {
   const bundle = Effect.sync(() =>
     crypto.createHash("sha256").update(script).digest("hex"),
   ).pipe(
-    Effect.map(
-      (hash): Bundle.BundleOutput => ({
-        files: [{ path: "main.js", content: script, hash }],
-        hash,
-      }),
-    ),
+    Effect.map((hash): Bundle.BundleOutput => ({
+      files: [{ path: "main.js", content: script, hash }],
+      hash,
+    })),
   );
   return bundleSource({
     build: () => bundle,

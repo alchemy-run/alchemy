@@ -328,10 +328,10 @@ describe.concurrent("SvelteKit dev", () => {
               rootDir,
               dev: { port: 0 },
               memo: { include: ["src/**", "package.json"] },
-              // Same props as the live SPA test — in dev the adapter's
+              // Same props as the live SPA test — in dev the build-time
               // fallback generation never runs (no build); kit's dev
               // server serves the shell for `ssr = false` routes itself.
-              adapter: { notFoundHandling: "single-page-application" },
+              assets: { notFoundHandling: "single-page-application" },
               env: {
                 TEST_BINDING: bindingMarker,
               },

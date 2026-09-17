@@ -13,7 +13,6 @@ const { getWhenReady } = Test;
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Waku build, so give the hook more headroom
@@ -46,7 +45,7 @@ test(
     const html = yield* res.text;
     // The `GREETING` env value from alchemy.run.ts, read via `getEnv` in the
     // dynamic RSC page — proves the Worker rendered it at request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from Waku on Cloudflare!");
     expect(html).toContain(
       "This page is rendered by the Worker on every request.",
     );

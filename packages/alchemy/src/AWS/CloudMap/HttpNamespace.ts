@@ -66,9 +66,8 @@ export interface HttpNamespace extends Resource<
  *
  * Namespace creation and deletion are asynchronous — the provider polls the
  * Cloud Map operations API (bounded) until they complete.
- * @resource
- * @section Creating Namespaces
- * @example HTTP Namespace
+ * ### Creating Namespaces
+ * **Example:** HTTP Namespace
  * ```typescript
  * import * as AWS from "alchemy/AWS";
  *
@@ -77,13 +76,15 @@ export interface HttpNamespace extends Resource<
  * });
  * ```
  *
- * @section Registering Services
- * @example API-only Service
+ * ### Registering Services
+ * **Example:** API-only Service
  * ```typescript
  * const service = yield* AWS.CloudMap.Service("Backend", {
  *   namespaceId: namespace.namespaceId,
  * });
  * ```
+ *
+ * @resource
  */
 export const HttpNamespace = Resource<HttpNamespace>(
   "AWS.CloudMap.HttpNamespace",

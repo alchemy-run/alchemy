@@ -29,6 +29,7 @@ import {
   Vpc,
 } from "@/AWS/EC2";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -91,6 +92,11 @@ export default Ec2BindingsFunction.make(
   {
     main: import.meta.url,
     functionUrl: true,
+    // The AWS defaults (128 MB / 3s) are too tight for the EC2 client:
+    // cold routes time out at 3s (502 from the function URL) with memory
+    // pegged against the 128 MB floor.
+    timeout: Duration.seconds(30),
+    memorySize: 512,
   },
   Effect.gen(function* () {
     const { instance, group, volume } = yield* BindingsFleet;

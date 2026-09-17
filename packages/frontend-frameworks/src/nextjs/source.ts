@@ -632,13 +632,11 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           message: "The OpenNext build produced no server modules",
         });
       }
-      const files = output.serverModules.map(
-        (file): SourceBundleFile => ({
-          path: file.name,
-          content: file.content,
-          hash: file.hash,
-        }),
-      );
+      const files = output.serverModules.map((file): SourceBundleFile => ({
+        path: file.name,
+        content: file.content,
+        hash: file.hash,
+      }));
       const bundleHash = yield* sha256Hex(
         stableStringify(files.map(({ path, hash }) => ({ path, hash }))),
       );

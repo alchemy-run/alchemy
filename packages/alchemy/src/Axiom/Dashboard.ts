@@ -48,11 +48,10 @@ export type Dashboard = Resource<
  * - The chart payload is strict: only `id`, `name`, `type`, `query`. Extra
  *   keys (e.g. `dataset`, `description`) trigger
  *   `Unrecognized keys: "<name>"`.
- * @resource
  * @see https://axiom.co/docs/query-data/dashboards
  *
- * @section Creating a Dashboard
- * @example Minimal empty dashboard
+ * ### Creating a Dashboard
+ * **Example:** Minimal empty dashboard
  * ```typescript
  * yield* Axiom.Dashboard("ops", {
  *   dashboard: {
@@ -69,7 +68,7 @@ export type Dashboard = Resource<
  * });
  * ```
  *
- * @example One-chart dashboard
+ * **Example:** One-chart dashboard
  * ```typescript
  * import type { Chart, LayoutCell } from "alchemy/Axiom";
  *
@@ -98,7 +97,7 @@ export type Dashboard = Resource<
  * });
  * ```
  *
- * @example Compare to last 24h
+ * **Example:** Compare to last 24h
  * ```typescript
  * yield* Axiom.Dashboard("compare", {
  *   dashboard: {
@@ -114,6 +113,8 @@ export type Dashboard = Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const Dashboard = Resource<Dashboard>("Axiom.Dashboard");
 

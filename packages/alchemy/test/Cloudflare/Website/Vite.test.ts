@@ -845,7 +845,7 @@ if (el) {
         yield* waitForWorkerToBeDeleted(site.workerName, accountId);
       }).pipe(logLevel),
     // Container image pull + push + rollout comfortably exceeds the plain
-    // Vite deploy budget (mirrors AsyncContainer.test.ts).
+    // Vite deploy budget (mirrors Container.test.ts).
     { timeout: 600_000 },
   );
 
@@ -1173,7 +1173,10 @@ if (el) {
           ],
           { concurrency: "unbounded" },
         );
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     { timeout: 120_000 },
   );
 
@@ -1227,7 +1230,10 @@ if (el) {
           timeout: "30 seconds",
           label: "spa dev module asset",
         });
-      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
+        logLevel,
+      ),
     { timeout: 180_000 },
   );
 
@@ -1279,7 +1285,9 @@ if (el) {
           const deploy = (bucketId: string, marker: string) =>
             stack.deploy(
               Effect.gen(function* () {
-                const bucket = yield* Cloudflare.R2.Bucket(bucketId);
+                const bucket = yield* Cloudflare.R2.Bucket(bucketId, {
+                  forceDestroy: true,
+                });
                 const worker = yield* Cloudflare.Website.Vite(
                   "TanStackDevBindings",
                   {
@@ -1452,7 +1460,7 @@ const fetchJsonReady = <T>(url: string) =>
 // Retry a container-backed route until it answers 200 with a body containing
 // `expected` — the container's first request rides through image provisioning
 // and instance cold start, which comfortably outlasts fetchJsonReady's budget
-// (mirrors AsyncContainer.test.ts's readiness poll).
+// (mirrors Container.test.ts's readiness poll).
 const fetchContainerReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);

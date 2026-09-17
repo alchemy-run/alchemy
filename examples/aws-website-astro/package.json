@@ -10,14 +10,15 @@
     "test": "bun test"
   },
   "dependencies": {
-    "astro": "catalog:frameworks"
+    "astro": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@distilled.cloud/aws": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "alchemy": "workspace:*",
+    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"

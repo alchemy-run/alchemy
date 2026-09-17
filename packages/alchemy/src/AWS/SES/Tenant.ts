@@ -85,16 +85,15 @@ export interface Tenant extends Resource<
  * Associate resources with a tenant using `SES.TenantResourceAssociation`.
  * Deleting the tenant removes its resource associations but leaves the
  * underlying resources in place.
- * @resource
- * @section Creating Tenants
- * @example Basic Tenant
+ * ### Creating Tenants
+ * **Example:** Basic Tenant
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
  * const tenant = yield* SES.Tenant("CustomerA", {});
  * ```
  *
- * @example Tenant with a Scoped Suppression List
+ * **Example:** Tenant with a Scoped Suppression List
  * ```typescript
  * // SES requires the reasons and the scope together, so they travel as one
  * // prop rather than two independently-optional ones.
@@ -103,15 +102,15 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
- * @example Tenant with Tags
+ * **Example:** Tenant with Tags
  * ```typescript
  * const tenant = yield* SES.Tenant("CustomerA", {
  *   tags: { Customer: "acme", CostCenter: "growth" },
  * });
  * ```
  *
- * @section Associating Resources
- * @example Give the Tenant an Identity, Config Set, and Template
+ * ### Associating Resources
+ * **Example:** Give the Tenant an Identity, Config Set, and Template
  * ```typescript
  * const tenant = yield* SES.Tenant("CustomerA", {});
  * const identity = yield* SES.EmailIdentity("Sender", {
@@ -130,8 +129,8 @@ export interface Tenant extends Resource<
  * });
  * ```
  *
- * @section Tenant Suppression Lists
- * @example Read and Write the Tenant's Own Suppression List
+ * ### Tenant Suppression Lists
+ * **Example:** Read and Write the Tenant's Own Suppression List
  * ```typescript
  * // With scope "TENANT" the list is separate from the account's.
  * const tenant = yield* SES.Tenant("CustomerA", {
@@ -152,6 +151,8 @@ export interface Tenant extends Resource<
  *   TenantName: yield* tenant.tenantName,
  * });
  * ```
+ *
+ * @resource
  */
 export const Tenant = Resource<Tenant>("AWS.SES.Tenant");
 

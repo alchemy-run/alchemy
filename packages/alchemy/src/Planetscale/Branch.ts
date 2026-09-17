@@ -17,7 +17,16 @@ import {
   waitForPendingPostgresChanges,
 } from "./Postgres/PostgresClusterSize.ts";
 import {
-  DEFAULT_MIGRATIONS_TABLE,
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationRun,
+  type MigrationsInput,
+  type NormalizedMigrationsInput,
+  type StampedMigrationsState,
+} from "../SQL/Migrations/index.ts";
+import {
   PlanetscaleConflict,
   isKnownError,
   waitForBranchReady,
@@ -57,17 +66,12 @@ export interface BaseBranchProps {
   region?: { slug: string };
 
   /**
-   * Directory containing `.sql` migration files. Files are sorted by numeric
-   * prefix (for example `0001_init.sql`) and applied in order against this
-   * branch.
+   * SQL migrations to apply against this branch. Accepts a directory path,
+   * a `Drizzle.Schema` resource, or `{ dir, table? }`. Bookkeeping lives
+   * in Alchemy's `__alchemy_migrations` table; drizzle/prisma history is
+   * converted one-way on first deploy.
    */
-  migrationsDir?: string;
-
-  /**
-   * Name of the table used to track applied migrations.
-   * @default "__alchemy_migrations"
-   */
-  migrationsTable?: string;
+  migrations?: MigrationsInput;
 
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file is
@@ -157,9 +161,9 @@ const createBranchName = (id: string, name: string | undefined) =>
 export interface BranchMigrationRunners {
   runMigrations: (
     target: { organization: string; database: string; branch: string },
-    migrationsDir: string,
-    migrationsTable: string,
-  ) => Effect.Effect<Record<string, string>, any, any>;
+    input: NormalizedMigrationsInput,
+    stamped: StampedMigrationsState,
+  ) => Effect.Effect<MigrationRun, any, any>;
   runImports: (
     target: { organization: string; database: string; branch: string },
     importFiles: string[],
@@ -324,17 +328,8 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         }
       }
 
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -626,17 +621,14 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         branch: updated.name,
       };
 
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
         ? yield* opts.runners.runMigrations(
             migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
+            migrationsInput,
+            stampedOf(output),
           )
-        : (output?.migrationsHashes ?? {});
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* opts.runners.runImports(
             migrationTarget,
@@ -656,9 +648,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
         updatedAt: updated.updated_at,
         htmlUrl: updated.html_url,
         region: { slug: updated.region.slug },
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         desiredReplicas: news.replicas ?? output?.desiredReplicas,
         hasReplicas: updated.has_replicas,

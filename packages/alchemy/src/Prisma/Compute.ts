@@ -26,18 +26,30 @@ import type { InputProps } from "../Input.ts";
 import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
-import { Self } from "../Self.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
-  PrismaApiError,
-  PrismaClient,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
+  type GetServicesResponse,
+  type GetEnvironmentVariablesResponse,
+  type GetProjectBranchesResponse,
+  deleteEnvironmentVariable,
+  getServices,
+  getService,
+  getBranch,
+  getEnvironmentVariables,
+  getProjectBranches,
+  updateService,
+  updateEnvironmentVariable,
+  createService,
+  createServiceDeployment,
+  createServiceRollback,
+  createEnvironmentVariable,
+} from "@distilled.cloud/prisma/management";
 import {
   runBuildCommand,
   runComputeAutoBuild,
@@ -48,7 +60,6 @@ import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
   destroyApp,
   destroyDeployment,
-  isConflict,
   toDeploymentUrl,
   waitForDeploymentStatus,
 } from "./ComputeLifecycle.ts";
@@ -75,17 +86,14 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
+import type { PrismaRegionId } from "./Types.ts";
 import type {
-  App as ApiApp,
-  Deployment as ApiDeployment,
-  EnvironmentVariable as ApiEnvironmentVariable,
-  PrismaRegionId,
-} from "./Types.ts";
+  ObservedApp,
+  ObservedDeployment,
+  ObservedEnvironmentVariable,
+} from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import { readUploadArtifact, uploadArtifact } from "./Deployment.ts";
-
-type ObservedDeployment = Omit<ApiDeployment, "createdAt"> & {
-  createdAt?: string;
-};
 
 const ComputeTypeId = "Prisma.Compute" as const;
 type ComputeTypeId = typeof ComputeTypeId;
@@ -620,8 +628,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * to another actor. Use a durable, locked state backend and inspect the App's
  * deployment history after an interrupted create.
  *
- * @section Deploying an App
- * @example Deploy a directory with an entrypoint
+ * ### Deploying an App
+ * **Example:** Deploy a directory with an entrypoint
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -631,7 +639,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Deploy an Effect-native HTTP app
+ * **Example:** Deploy an Effect-native HTTP app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -649,17 +657,14 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the app doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `bundle.extra.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: "./src/app.ts",
@@ -669,18 +674,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: "./src/app.ts",
@@ -688,8 +682,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * }
  * ```
  *
- * @section Runtime Bindings
- * @example Bind a Prisma Connection
+ * ### Runtime Bindings
+ * **Example:** Bind a Prisma Connection
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
@@ -712,7 +706,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * );
  * ```
  *
- * @example Build before upload and replace old versions
+ * **Example:** Build before upload and replace old versions
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -732,7 +726,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Auto-build a framework app
+ * **Example:** Auto-build a framework app
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -742,7 +736,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Deploy a static site
+ * **Example:** Deploy a static site
  * ```typescript
  * const web = yield* Prisma.Compute("web", {
  *   project,
@@ -754,7 +748,7 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @example Deploy a prebuilt tar.gz artifact
+ * **Example:** Deploy a prebuilt tar.gz artifact
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -763,8 +757,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @section Deployment Health
- * @example Require application readiness before promotion
+ * ### Deployment Health
+ * **Example:** Require application readiness before promotion
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project,
@@ -778,8 +772,8 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  * });
  * ```
  *
- * @section Local Development
- * @example Run locally during alchemy dev
+ * ### Local Development
+ * **Example:** Run locally during alchemy dev
  * ```typescript
  * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
@@ -841,7 +835,11 @@ export const Compute: Platform<
       env,
       set: (bindingId: string, output: Output.Output) =>
         Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Prisma env keys are validated to the uppercase POSIX shape
+          // ([A-Z_][A-Z0-9_]*), so the storage key is uppercased here. The
+          // runtime `get` receives the key this returns, so both halves
+          // agree without a second mapping.
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
           env[key] = output.pipe(
             Output.map((value) =>
               Redacted.isRedacted(value)
@@ -919,27 +917,78 @@ const projectConsistencySchedule = Schedule.max([
   Schedule.recurs(6),
 ]);
 
-const isAppProvisioningNotFound = (error: unknown): boolean =>
-  error instanceof PrismaApiError &&
-  error.status === 404 &&
-  (error.path.startsWith("/v1/projects/") ||
-    error.path === "/v1/apps" ||
-    error.path.startsWith("/v1/apps/"));
+// Only project/branch/app reads and the app create flow through the
+// provisioning-consistency retries, so a NotFound there is exactly the
+// post-create lag the schedule exists to absorb.
+// The retried effects mix distilled's tagged operation errors with plain
+// `Error` failures of their own (an unresolvable branch, a foreign App), so
+// narrow before reading the tag.
+const isAppProvisioningNotFound = (error: Error | { readonly _tag: string }) =>
+  "_tag" in error && error._tag === "NotFound";
+
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listBranches = (projectId: string, gitName?: string) =>
+  Effect.gen(function* () {
+    const branches: GetProjectBranchesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getProjectBranches({
+        projectId,
+        limit: 100,
+        ...(gitName === undefined ? {} : { gitName }),
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      branches.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getProjectBranches: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return branches;
+  });
+
+const listApps = (projectId: string) =>
+  Effect.gen(function* () {
+    const apps: GetServicesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getServices(
+        cursor === undefined
+          ? { projectId, limit: 100 }
+          : { projectId, limit: 100, cursor },
+      );
+      apps.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getServices: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return apps;
+  });
 
 const desiredComputeBranchId = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   props: Pick<ComputeProps, "branchId" | "branchGitName">,
 ) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return { resolved: true as const, id: props.branchId };
   }
-  const branches = yield* client.listBranches(
-    projectId,
-    props.branchGitName === undefined
-      ? { limit: 100 }
-      : { gitName: props.branchGitName, limit: 100 },
-  );
+  const branches = yield* listBranches(projectId, props.branchGitName);
   const matchingBranches =
     props.branchGitName === undefined
       ? branches.filter((branch) => branch.isDefault)
@@ -963,17 +1012,15 @@ const createAppName = (id: string, appName: string | undefined) =>
   appName === undefined ? createPhysicalName({ id }) : Effect.succeed(appName);
 
 const findApp = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   appName: string,
   props: Pick<ComputeProps, "branchId" | "branchGitName">,
 ) {
-  const candidates = (yield* client.listApps({
-    projectId,
-    limit: 100,
-  })).filter((app) => app.name === appName);
+  const candidates = (yield* listApps(projectId)).filter(
+    (app) => app.name === appName,
+  );
   if (candidates.length === 0) return undefined;
-  const branch = yield* desiredComputeBranchId(client, projectId, props);
+  const branch = yield* desiredComputeBranchId(projectId, props);
   if (!branch.resolved) return undefined;
   const matches = candidates.filter((app) => app.branchId === branch.id);
   if (matches.length > 1) {
@@ -987,18 +1034,21 @@ const findApp = Effect.fn(function* (
 });
 
 const createApp = (
-  client: PrismaManagementClient,
   projectId: string,
   props: ComputeProps & { appName: string },
   branchId: string,
 ) =>
-  client.createApp({
+  createService({
     projectId,
     displayName: props.appName,
-    regionId: props.regionId,
     branchId,
-    branchGitName: undefined,
-  });
+    ...(props.regionId === undefined ? {} : { regionId: props.regionId }),
+  }).pipe(
+    // A replayed create would make a second App; the retry policy cannot
+    // see the request, so opt out explicitly.
+    Retry.none,
+    Effect.map((response) => response.data),
+  );
 
 const plainEnv = (
   env: Record<
@@ -1539,79 +1589,22 @@ const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
       input: realMain,
       cwd,
       platform: "node",
+      // Prisma Compute runs the bundle on bun.
+      resolve: {
+        conditionNames: [...Bundle.BUN_CONDITION_NAMES],
+        ...props.bundle?.input?.resolve,
+      },
       plugins: [
         props.bundle?.input?.plugins,
         virtualEntryPlugin(
           (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer } from "alchemy/Runtime";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import { MinimumLogLevel } from "effect/References";
-
+import { bootstrap } from "alchemy/Runtime/Bootstrap/Prisma";
 ${importEntrypoint} from ${JSON.stringify(importPath)};
 
-process.env.PORT ??= ${JSON.stringify(String(defaultPort))};
-
-const tag = Context.Service("${Self.key}");
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.mergeAll(
-  Layer.succeed(Stack, {
-    name: ${JSON.stringify(stack.name)},
-    stage: ${JSON.stringify(stack.stage)},
-    bindings: {},
-    resources: {},
-  }),
-  Layer.succeed(Stage, ${JSON.stringify(stack.stage)}),
-);
-
-const program = tag.pipe(
-  Effect.flatMap((app) => app.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.default),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromEnv(),
-          ),
-        ),
-      ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        ),
-      ),
-    ),
-  ),
-  Effect.scoped,
-);
-
-console.log("Prisma Compute bootstrap starting...");
-await Effect.runPromise(program).catch((error) => {
-  console.error("Prisma Compute bootstrap failed:", error);
-  process.exit(1);
-});
+await bootstrap(entrypoint, ${JSON.stringify({
+            port: defaultPort,
+            stack: { name: stack.name, stage: stack.stage },
+          })});
 `,
         ),
       ],
@@ -1817,27 +1810,27 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
 });
 
 const findExistingApp = Effect.fn(function* (
-  client: PrismaManagementClient,
   output: Compute["Attributes"] | undefined,
 ) {
   const appId =
     output?.appId && !isPrismaDevId(output.appId) ? output.appId : undefined;
   return appId
-    ? yield* client
-        .getApp(appId)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+    ? yield* getService({ serviceId: appId }).pipe(
+        Effect.map((response) => response.data),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      )
     : undefined;
 });
 
 const ensureApp = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   props: ComputeProps & { appName: string },
   output: Compute["Attributes"] | undefined,
-  observedApp?: ApiApp,
+  observedApp?: ObservedApp,
 ) {
-  let app = observedApp ?? (yield* findExistingApp(client, output));
-  const branch = yield* desiredComputeBranchId(client, projectId, props);
+  let app: ObservedApp | undefined =
+    observedApp ?? (yield* findExistingApp(output));
+  const branch = yield* desiredComputeBranchId(projectId, props);
   if (!branch.resolved) {
     return yield* Effect.fail(
       new Error(
@@ -1850,10 +1843,10 @@ const ensureApp = Effect.fn(function* (
 
   let createdApp = false;
   if (!app) {
-    const result = yield* createApp(client, projectId, props, branch.id).pipe(
+    const result = yield* createApp(projectId, props, branch.id).pipe(
       Effect.map((app) => ({ app, created: true })),
-      Effect.catchIf(isConflict, (conflict) =>
-        findApp(client, projectId, props.appName, props).pipe(
+      Effect.catchTag("Conflict", (conflict) =>
+        findApp(projectId, props.appName, props).pipe(
           Effect.flatMap((app) =>
             app && output?.appId !== undefined && app.id === output.appId
               ? Effect.succeed({ app, created: false })
@@ -1877,11 +1870,11 @@ const ensureApp = Effect.fn(function* (
     props.regionId ?? output?.regionId ?? app.region.id,
   );
   if (app.name !== props.appName || app.branchId !== branch.id) {
-    app = yield* client.updateApp(app.id, {
+    app = yield* updateService({
+      serviceId: app.id,
       displayName: props.appName,
       branchId: branch.id,
-      branchGitName: undefined,
-    });
+    }).pipe(Effect.map((response) => response.data));
   }
 
   return { app, created: createdApp };
@@ -1889,7 +1882,7 @@ const ensureApp = Effect.fn(function* (
 
 const ensureSkipCodeUploadCanFork = (
   props: ComputeProps,
-  app: ApiApp | undefined,
+  app: ObservedApp | undefined,
 ) =>
   Effect.gen(function* () {
     if (!(props.skipCodeUpload ?? false)) return;
@@ -1902,25 +1895,42 @@ const ensureSkipCodeUploadCanFork = (
   });
 
 const findEnvironmentVariable = (
-  client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
   key: string,
   branchId?: string | null,
 ) =>
-  client
-    .listEnvironmentVariables({
-      projectId,
-      class: cls,
-      key,
-      ...(branchId ? { branchId } : {}),
-      limit: 100,
-    })
-    .pipe(
-      Effect.map((variables: ApiEnvironmentVariable[]) =>
-        variables.find((variable) => variable.branchId === (branchId ?? null)),
-      ),
+  Effect.gen(function* () {
+    // Distilled emits the cursor-paginated list operations as plain ops, so
+    // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+    const variables: GetEnvironmentVariablesResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getEnvironmentVariables({
+        projectId,
+        class: cls,
+        key,
+        limit: 100,
+        ...(branchId ? { branchId } : {}),
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      variables.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getEnvironmentVariables: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return variables.find(
+      (variable) => variable.branchId === (branchId ?? null),
     );
+  });
 
 const systemManagedEnvironmentVariableError = (key: string) =>
   new Error(
@@ -1928,7 +1938,7 @@ const systemManagedEnvironmentVariableError = (key: string) =>
   );
 
 const ensureUserManagedEnvironmentVariable = (
-  variable: ApiEnvironmentVariable,
+  variable: ObservedEnvironmentVariable,
 ) =>
   Effect.gen(function* () {
     if (variable.isManagedBySystem) {
@@ -1962,8 +1972,7 @@ const sameEnvironmentScope = (
 ) => left.class === right.class && left.branchId === right.branchId;
 
 const resolveComputeEnvironmentScope = Effect.fn(function* (
-  client: PrismaManagementClient,
-  app: ApiApp,
+  app: ObservedApp,
   props: ComputeProps,
 ) {
   if (!app.branchId) {
@@ -1974,7 +1983,9 @@ const resolveComputeEnvironmentScope = Effect.fn(function* (
     );
   }
 
-  const branch = yield* client.getBranch(app.branchId);
+  const branch = yield* getBranch({
+    branchId: app.branchId,
+  }).pipe(Effect.map((response) => response.data));
   const inferredClass = branch.role;
   if (props.envClass !== undefined && props.envClass !== inferredClass) {
     return yield* Effect.fail(
@@ -1993,11 +2004,10 @@ const resolveComputeEnvironmentScope = Effect.fn(function* (
 interface ComputeEnvironmentPlan {
   key: string;
   value: string | null;
-  variable: ApiEnvironmentVariable | undefined;
+  variable: ObservedEnvironmentVariable | undefined;
 }
 
 const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
-  client: PrismaManagementClient,
   createdIds: ReadonlyArray<{ key: string; id: string }>,
   originalError: unknown,
 ) {
@@ -2007,9 +2017,9 @@ const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
   const cleanupErrors: unknown[] = [];
   for (const created of [...createdIds].reverse()) {
     const result = yield* Effect.result(
-      client
-        .deleteEnvironmentVariable(created.id)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void)),
+      deleteEnvironmentVariable({ envVarId: created.id }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      ),
     );
     if (Result.isFailure(result)) {
       cleanupErrors.push(result.failure);
@@ -2027,7 +2037,6 @@ const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
 });
 
 const syncComputeEnvironmentInternal = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
   env: Record<
@@ -2053,7 +2062,6 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
       yield* validateComputeEnvironmentWrite(key, value);
     }
     const variable = yield* findEnvironmentVariable(
-      client,
       projectId,
       cls,
       key,
@@ -2074,16 +2082,24 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     for (const { key, value, variable } of plans) {
       if (value === null) continue;
       if (variable) {
-        yield* client.updateEnvironmentVariable(variable.id, { value });
+        yield* updateEnvironmentVariable({
+          envVarId: variable.id,
+          value,
+        });
         nextOwnedIds[key] = variable.id;
       } else {
-        const created = yield* client.createEnvironmentVariable({
+        const created = yield* createEnvironmentVariable({
           projectId,
           ...(branchId ? { branchId } : {}),
           class: cls,
           key,
           value,
-        });
+        }).pipe(
+          // A replayed create would make a second variable; the retry policy
+          // cannot see the request, so opt out explicitly.
+          Retry.none,
+          Effect.map((response) => response.data),
+        );
         createdIds.push({ key, id: created.id });
         nextOwnedIds[key] = created.id;
       }
@@ -2092,9 +2108,9 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     // Apply explicit deletions only after all ownership checks and upserts.
     for (const { key, value, variable } of plans) {
       if (value !== null || !variable) continue;
-      yield* client
-        .deleteEnvironmentVariable(variable.id)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+      yield* deleteEnvironmentVariable({
+        envVarId: variable.id,
+      }).pipe(Effect.catchTag("NotFound", () => Effect.void));
       deleted.push(key);
     }
     return { synced, deleted, ownedIds: nextOwnedIds, createdIds };
@@ -2102,13 +2118,12 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
 
   return yield* apply.pipe(
     Effect.catch((error) =>
-      rollbackCreatedEnvironmentVariables(client, createdIds, error),
+      rollbackCreatedEnvironmentVariables(createdIds, error),
     ),
   );
 });
 
 export const syncComputeEnvironment = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
   env: Record<
@@ -2119,7 +2134,6 @@ export const syncComputeEnvironment = Effect.fn(function* (
   ownedIds: Readonly<Record<string, string>> = {},
 ) {
   const result = yield* syncComputeEnvironmentInternal(
-    client,
     projectId,
     cls,
     env,
@@ -2134,7 +2148,6 @@ export const syncComputeEnvironment = Effect.fn(function* (
 });
 
 const destroyComputeEnvironment = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   scope: ComputeEnvironmentScope,
   ownedIds: Readonly<Record<string, string>> = {},
@@ -2142,24 +2155,22 @@ const destroyComputeEnvironment = Effect.fn(function* (
   const deleted: string[] = [];
   for (const [key, ownedId] of Object.entries(ownedIds)) {
     const variable = yield* findEnvironmentVariable(
-      client,
       projectId,
       scope.class,
       key,
       scope.branchId,
-    ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (!variable) continue;
     if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* client
-      .deleteEnvironmentVariable(variable.id)
-      .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+    yield* deleteEnvironmentVariable({
+      envVarId: variable.id,
+    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     deleted.push(key);
   }
   return { deleted };
 });
 
 const cleanupRemovedComputeEnvironment = Effect.fn(function* (
-  client: PrismaManagementClient,
   projectId: string,
   oldScope: ComputeEnvironmentScope,
   oldOwnedIds: Readonly<Record<string, string>>,
@@ -2173,7 +2184,6 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
   for (const [key, ownedId] of Object.entries(oldOwnedIds)) {
     if (sameEnvironmentScope(oldScope, newScope) && key in newValues) continue;
     const variable = yield* findEnvironmentVariable(
-      client,
       projectId,
       oldScope.class,
       key,
@@ -2181,9 +2191,9 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
     );
     if (!variable) continue;
     if (variable.id !== ownedId || variable.isManagedBySystem) continue;
-    yield* client
-      .deleteEnvironmentVariable(variable.id)
-      .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+    yield* deleteEnvironmentVariable({
+      envVarId: variable.id,
+    }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     deleted.push(key);
   }
   return { deleted };
@@ -2245,11 +2255,10 @@ const activeBindingEnv = (
       >,
     );
 
-export const ComputeProvider = () =>
+const ProviderLive = () =>
   Provider.effect(
     Compute,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["appId"],
         // Compute is a composite over App + Deployment. AppProvider owns nuke
@@ -2294,16 +2303,14 @@ export const ComputeProvider = () =>
               ? output.appId
               : undefined;
           const app = appId
-            ? yield* client
-                .getApp(appId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getService({ serviceId: appId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
                   ? yield* findApp(
-                      client,
                       projectId,
                       yield* createAppName(id, olds.appName),
                       olds,
@@ -2312,15 +2319,14 @@ export const ComputeProvider = () =>
               });
           if (!app) return undefined;
           const readDeployment = (id: string) =>
-            observeDeployment(client, id).pipe(
-              Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            observeDeployment(id).pipe(
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             );
           const outputDeployment = output?.deploymentId
             ? yield* readDeployment(output.deploymentId)
             : undefined;
           if (outputDeployment) {
             yield* ensureDeploymentMembership(
-              client,
               app.id,
               outputDeployment,
               app.latestDeploymentId,
@@ -2389,7 +2395,7 @@ export const ComputeProvider = () =>
             );
           const observedApp = effectiveNews.skipCodeUpload
             ? yield* releaseArtifactOnFailure(
-                findExistingApp(client, output).pipe(
+                findExistingApp(output).pipe(
                   Effect.retry({
                     while: isAppProvisioningNotFound,
                     schedule: projectConsistencySchedule,
@@ -2401,13 +2407,7 @@ export const ComputeProvider = () =>
             ensureSkipCodeUploadCanFork(effectiveNews, observedApp),
           );
           const ensuredApp = yield* releaseArtifactOnFailure(
-            ensureApp(
-              client,
-              projectId,
-              effectiveNews,
-              output,
-              observedApp,
-            ).pipe(
+            ensureApp(projectId, effectiveNews, output, observedApp).pipe(
               Effect.retry({
                 while: isAppProvisioningNotFound,
                 schedule: projectConsistencySchedule,
@@ -2418,13 +2418,13 @@ export const ComputeProvider = () =>
           let preserveCreatedAppOnFailure = false;
           const cleanupCreatedAppOnFailure = (error: unknown) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
-              ? destroyApp(client, app.id).pipe(
+              ? destroyApp(app.id).pipe(
                   Effect.catch((cleanupError) =>
                     Effect.fail(
                       aggregateCleanupFailure(
                         "App",
                         app.id,
-                        `/v1/apps/${app.id}`,
+                        `/v1/services/${app.id}`,
                         error,
                         cleanupError,
                       ),
@@ -2442,7 +2442,7 @@ export const ComputeProvider = () =>
 
           return yield* Effect.gen(function* () {
             const currentEnvironmentScope =
-              yield* resolveComputeEnvironmentScope(client, app, effectiveNews);
+              yield* resolveComputeEnvironmentScope(app, effectiveNews);
             const deploymentHash = yield* sha256Object({
               artifact: artifact.hash,
               branchId: app.branchId,
@@ -2456,8 +2456,8 @@ export const ComputeProvider = () =>
                 | undefined,
             );
             const persistedDeployment = output?.deploymentId
-              ? yield* observeDeployment(client, output.deploymentId).pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              ? yield* observeDeployment(output.deploymentId).pipe(
+                  Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
                 )
               : undefined;
             const terminalFailedDeploymentId =
@@ -2470,11 +2470,8 @@ export const ComputeProvider = () =>
               deploymentId: string,
               action: "stop" | "destroy",
             ) {
-              const observed = yield* observeDeployment(
-                client,
-                deploymentId,
-              ).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              const observed = yield* observeDeployment(deploymentId).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
               if (!observed) {
                 return (action === "destroy" ? "destroyed" : "stopped") as
@@ -2482,25 +2479,23 @@ export const ComputeProvider = () =>
                   | "stopped";
               }
               yield* ensureDeploymentMembership(
-                client,
                 app.id,
                 observed,
                 app.latestDeploymentId,
               );
               if (action === "destroy") {
-                yield* destroyDeployment(client, deploymentId, effectiveNews);
+                yield* destroyDeployment(deploymentId, effectiveNews);
                 return "destroyed" as const;
               }
-              yield* stopDeploymentIdempotent(client, deploymentId).pipe(
-                Effect.catchIf(isNotFound, () => Effect.void),
+              yield* stopDeploymentIdempotent(deploymentId).pipe(
+                Effect.catchTag("NotFound", () => Effect.void),
               );
               yield* waitForDeploymentStatus(
-                client,
                 deploymentId,
                 "stopped",
                 effectiveNews,
               ).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
               );
               return "stopped" as const;
             });
@@ -2538,13 +2533,14 @@ export const ComputeProvider = () =>
             ) {
               const persistedDeploymentId = output.deploymentId;
               const displacedDeploymentId = app.latestDeploymentId;
-              const rollback = yield* client
-                .rollbackApp(app.id, {
-                  deploymentId: persistedDeploymentId,
-                })
-                .pipe(Effect.result);
+              const rollback = yield* createServiceRollback({
+                serviceId: app.id,
+                deploymentId: persistedDeploymentId,
+              }).pipe(
+                Effect.map((response) => response.data),
+                Effect.result,
+              );
               const observedAfterRollback = yield* waitForAppDeploymentTarget(
-                client,
                 app.id,
                 persistedDeploymentId,
                 effectiveNews,
@@ -2559,14 +2555,13 @@ export const ComputeProvider = () =>
                         ? [observedAfterRollback.failure]
                         : []),
                     ],
-                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/apps/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
+                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
                   ),
                 );
               }
 
               app = observedAfterRollback.success;
               yield* destroyDeployment(
-                client,
                 displacedDeploymentId,
                 effectiveNews,
               ).pipe(
@@ -2621,7 +2616,6 @@ export const ComputeProvider = () =>
             const previousEnvironmentVariableIds =
               output?.environmentVariableIds ?? {};
             const environmentResult = yield* syncComputeEnvironmentInternal(
-              client,
               projectId,
               currentEnvironmentScope.class,
               effectiveNews.env,
@@ -2640,7 +2634,6 @@ export const ComputeProvider = () =>
             // captured into the new runtime. Any failure here happens before
             // deployment creation and rolls back newly-created variables.
             yield* cleanupRemovedComputeEnvironment(
-              client,
               projectId,
               previousEnvironmentScope,
               previousEnvironmentVariableIds,
@@ -2663,7 +2656,6 @@ export const ComputeProvider = () =>
                 terminalFailedDeploymentId !== undefined)
             ) {
               yield* ensureDeploymentMembership(
-                client,
                 app.id,
                 persistedDeployment,
                 app.latestDeploymentId,
@@ -2678,11 +2670,7 @@ export const ComputeProvider = () =>
               error: unknown,
             ) =>
               createdDeploymentId === failedDeploymentId
-                ? destroyDeployment(
-                    client,
-                    failedDeploymentId,
-                    effectiveNews,
-                  ).pipe(
+                ? destroyDeployment(failedDeploymentId, effectiveNews).pipe(
                     Effect.catch((cleanupError) =>
                       Effect.fail(
                         aggregateCleanupFailure(
@@ -2699,10 +2687,18 @@ export const ComputeProvider = () =>
                 : Effect.fail(error);
 
             if (!deployment) {
-              const created = yield* client.createAppDeployment(app.id, {
+              const created = yield* createServiceDeployment({
+                serviceId: app.id,
                 portMapping: { http: artifact.port },
-                skipCodeUpload: effectiveNews.skipCodeUpload,
-              });
+                ...(effectiveNews.skipCodeUpload === undefined
+                  ? {}
+                  : { skipCodeUpload: effectiveNews.skipCodeUpload }),
+              }).pipe(
+                // A replayed create would make a second deployment; the retry
+                // policy cannot see the request, so opt out explicitly.
+                Retry.none,
+                Effect.map((response) => response.data),
+              );
               createdDeploymentId = created.id;
               if (artifact.file !== undefined && !created.uploadUrl) {
                 return yield* cleanupCreatedDeploymentOnFailure(
@@ -2723,12 +2719,10 @@ export const ComputeProvider = () =>
                   ),
                 );
               }
-              deployment = yield* observeDeployment(client, created.id).pipe(
-                Effect.catchIf(isNotFound, () =>
+              deployment = yield* observeDeployment(created.id).pipe(
+                Effect.catchTag("NotFound", () =>
                   Effect.succeed({
                     id: created.id,
-                    type: "deployment" as const,
-                    url: created.url,
                     foundryVersionId: created.foundryVersionId,
                     status: "new",
                     previewDomain: null,
@@ -2768,13 +2762,9 @@ export const ComputeProvider = () =>
                   currentDeployment.status !== "running" &&
                   currentDeployment.status !== "provisioning"
                 ) {
-                  yield* startDeploymentIdempotent(
-                    client,
-                    currentDeployment.id,
-                  );
+                  yield* startDeploymentIdempotent(currentDeployment.id);
                 }
                 const running = yield* waitForDeploymentStatus(
-                  client,
                   currentDeployment.id,
                   "running",
                   effectiveNews,
@@ -2803,7 +2793,6 @@ export const ComputeProvider = () =>
               // Promotion also repairs endpoint/custom-domain routing drift.
               preserveCreatedAppOnFailure = true;
               const promotedApp = yield* promoteAppObserved(
-                client,
                 app.id,
                 deployment.id,
                 effectiveNews,
@@ -2825,13 +2814,14 @@ export const ComputeProvider = () =>
               if (Result.isSuccess(readiness)) {
                 readinessStatus = "ready";
               } else if (rollbackDeploymentId) {
-                const rollback = yield* client
-                  .rollbackApp(app.id, {
-                    deploymentId: rollbackDeploymentId,
-                  })
-                  .pipe(Effect.result);
+                const rollback = yield* createServiceRollback({
+                  serviceId: app.id,
+                  deploymentId: rollbackDeploymentId,
+                }).pipe(
+                  Effect.map((response) => response.data),
+                  Effect.result,
+                );
                 const observedAfterRollback = yield* waitForAppDeploymentTarget(
-                  client,
                   app.id,
                   rollbackDeploymentId,
                   effectiveNews,
@@ -2855,7 +2845,7 @@ export const ComputeProvider = () =>
                       ...(Result.isFailure(rollback) ? [rollback.failure] : []),
                       observedAfterRollback.failure,
                     ],
-                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/apps/${app.id}/rollback before making any new cloud changes.`,
+                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
                   ),
                 );
               } else {
@@ -2940,7 +2930,6 @@ export const ComputeProvider = () =>
               deploymentConverged
                 ? Effect.fail(error)
                 : rollbackCreatedEnvironmentVariables(
-                    client,
                     createdEnvironmentVariableIds,
                     error,
                   ),
@@ -2955,7 +2944,6 @@ export const ComputeProvider = () =>
             return;
           }
           yield* destroyComputeEnvironment(
-            client,
             output.projectId,
             environmentScope(
               olds?.envClass ?? output.environmentClass ?? "production",
@@ -2963,11 +2951,11 @@ export const ComputeProvider = () =>
             ),
             output.environmentVariableIds,
           );
-          yield* destroyApp(client, output.appId);
+          yield* destroyApp(output.appId);
         }),
         tail: ({ output }) =>
           output.deploymentId
-            ? tailDeploymentLogs(client, output.deploymentId)
+            ? tailDeploymentLogs(output.deploymentId)
             : Stream.empty,
       };
     }),
@@ -3033,3 +3021,9 @@ export const ComputeDevProvider = () =>
       };
     }),
   );
+
+export const ComputeProvider = () =>
+  ProviderLayer.dual(Compute, {
+    local: () => ComputeDevProvider(),
+    live: () => ProviderLive(),
+  });

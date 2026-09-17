@@ -17,9 +17,8 @@ export interface GetTraceSummariesRequest
  * X-Ray trace reads are account-scoped: IAM does not support resource-level
  * permissions for `xray:GetTraceSummaries`, so the binding grants the action
  * on `*`.
- * @binding
- * @section Reading Trace Summaries
- * @example Find recent traces from a Handler
+ * ### Reading Trace Summaries
+ * **Example:** Find recent traces from a Handler
  * ```typescript
  * import * as XRay from "alchemy/AWS/XRay";
  *
@@ -48,6 +47,8 @@ export interface GetTraceSummariesRequest
  *   }).pipe(Effect.provide(XRay.GetTraceSummariesHttp)),
  * );
  * ```
+ *
+ * @binding
  */
 export interface GetTraceSummaries extends Binding.Service<
   GetTraceSummaries,

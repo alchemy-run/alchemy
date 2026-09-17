@@ -48,7 +48,7 @@ export default {
     }
     if (url.pathname === "/migrations") {
       const rows = await env.DB.prepare(
-        "SELECT id, name FROM d1_migrations ORDER BY id",
+        "SELECT id, name FROM __alchemy_migrations ORDER BY id",
       ).all<{ id: string; name: string }>();
       return Response.json({ migrations: rows.results });
     }

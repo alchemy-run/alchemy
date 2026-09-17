@@ -7,11 +7,16 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hashImports, hashMigrations } from "../../SQL/SqlFile.ts";
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+} from "../../SQL/Migrations/index.ts";
 import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  DEFAULT_MIGRATIONS_TABLE,
   PlanetscaleConflict,
   waitForBranchReady,
   waitForDatabaseReady,
@@ -119,15 +124,15 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * A MySQL PlanetScale database (powered by Vitess). For PostgreSQL use
  * {@link PostgresDatabase} instead.
  *
- * @section Creating a MySQL Database
- * @example Basic MySQL database
+ * ### Creating a MySQL Database
+ * **Example:** Basic MySQL database
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
  * });
  * ```
  *
- * @example MySQL with Vitess migration tooling
+ * **Example:** MySQL with Vitess migration tooling
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -138,8 +143,8 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations and seed files
+ * ### Migrations and seed data
+ * **Example:** Apply migrations and seed files
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -148,8 +153,8 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Adoption
- * @example Adopting an existing database
+ * ### Adoption
+ * **Example:** Adopting an existing database
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
  *
@@ -213,17 +218,8 @@ export const MySQLDatabaseProvider = () =>
       ) {
         return { action: "update", stables } as const;
       }
-      if (news.migrationsDir) {
-        const newHashes = yield* hashMigrations(news.migrationsDir);
-        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-          return { action: "update", stables } as const;
-        }
-        if (
-          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-        ) {
-          return { action: "update", stables } as const;
-        }
+      if (yield* diffMigrations({ news, output })) {
+        return { action: "update", stables } as const;
       }
       if (news.importFiles?.length) {
         const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
@@ -285,9 +281,12 @@ export const MySQLDatabaseProvider = () =>
                 updatedAt: data.updated_at,
                 htmlUrl: data.html_url,
                 region: { slug: data.region.slug },
-                migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
+                migrationsDir:
+                  output?.migrationsDir ??
+                  (olds && migrationsInputOf(olds))?.dir,
                 migrationsTable:
-                  output?.migrationsTable ?? olds?.migrationsTable,
+                  output?.migrationsTable ??
+                  (olds && migrationsInputOf(olds))?.table,
                 migrationsHashes: output?.migrationsHashes ?? {},
                 importHashes: output?.importHashes ?? {},
                 clusterSize: output?.clusterSize ?? "",
@@ -425,20 +424,17 @@ export const MySQLDatabaseProvider = () =>
         database: updated.name,
         branch,
       };
-      if (news.migrationsDir || news.importFiles?.length) {
+      const migrationsInput = migrationsInputOf(news);
+      if (migrationsInput || news.importFiles?.length) {
         yield* waitForBranchReady(organization, updated.name, branch, session);
       }
-      const migrationsTable =
-        news.migrationsTable ??
-        output?.migrationsTable ??
-        DEFAULT_MIGRATIONS_TABLE;
-      const migrationsHashes = news.migrationsDir
+      const migrations = migrationsInput
         ? yield* runMySQLMigrations(
             migrationTarget,
-            news.migrationsDir,
-            migrationsTable,
+            migrationsInput,
+            stampedOf(output),
           )
-        : (output?.migrationsHashes ?? {});
+        : undefined;
       const importHashes = news.importFiles?.length
         ? yield* runMySQLImports(
             migrationTarget,
@@ -461,9 +457,7 @@ export const MySQLDatabaseProvider = () =>
         region: { slug: updated.region.slug },
         clusterSize,
         replicas: keyspace.replicas,
-        migrationsDir: news.migrationsDir,
-        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-        migrationsHashes,
+        ...migrationsAttrs({ input: migrationsInput, run: migrations, output }),
         importHashes,
         requireApprovalForDeploy: updated.require_approval_for_deploy ?? false,
         restrictBranchRegion: updated.restrict_branch_region ?? false,

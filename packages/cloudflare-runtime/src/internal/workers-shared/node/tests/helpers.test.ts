@@ -4,15 +4,24 @@ import { mkdtempSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { describe, it } from "vitest";
 import { createAssetsIgnoreFunction, getContentType } from "../helpers.ts";
 
 describe("assets", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "wrangler-tests"));
+  const platform = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+  const makeAssetsIgnore = createAssetsIgnoreFunction(tmpDir).pipe(
+    Effect.provide(platform),
+  );
 
   describe(".assetsignore", () => {
     it("should ignore metafiles by default", async ({ expect }) => {
-      const { assetsIgnoreFunction } = await createAssetsIgnoreFunction(tmpDir);
+      const { assetsIgnoreFunction } =
+        await Effect.runPromise(makeAssetsIgnore);
 
       expect(assetsIgnoreFunction(".assetsignore")).toBeTruthy();
       expect(assetsIgnoreFunction("_redirects")).toBeTruthy();
@@ -29,7 +38,8 @@ describe("assets", () => {
         join(tmpDir, "./.assetsignore"),
         "!.assetsignore\n!_redirects\n!_headers",
       );
-      const { assetsIgnoreFunction } = await createAssetsIgnoreFunction(tmpDir);
+      const { assetsIgnoreFunction } =
+        await Effect.runPromise(makeAssetsIgnore);
 
       expect(assetsIgnoreFunction(".assetsignore")).toBeFalsy();
       expect(assetsIgnoreFunction("_redirects")).toBeFalsy();
@@ -41,7 +51,8 @@ describe("assets", () => {
         join(tmpDir, "./.assetsignore"),
         "logo.png\nchild/**/*.svg\n!child/nope.svg\n/*.js",
       );
-      const { assetsIgnoreFunction } = await createAssetsIgnoreFunction(tmpDir);
+      const { assetsIgnoreFunction } =
+        await Effect.runPromise(makeAssetsIgnore);
 
       expect(assetsIgnoreFunction("abc")).toBeFalsy();
       expect(assetsIgnoreFunction("logo.png")).toBeTruthy();

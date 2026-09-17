@@ -57,9 +57,8 @@ export interface ReceiptFilter extends Resource<
  *
  * Filters are immutable: there is no update API, so any change to the name or
  * the IP rule replaces the filter.
- * @resource
- * @section Creating Filters
- * @example Block a CIDR Range
+ * ### Creating Filters
+ * **Example:** Block a CIDR Range
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -68,12 +67,14 @@ export interface ReceiptFilter extends Resource<
  * });
  * ```
  *
- * @example Allow a Single Address
+ * **Example:** Allow a Single Address
  * ```typescript
  * const filter = yield* SES.ReceiptFilter("AllowPartner", {
  *   ipFilter: { policy: "Allow", cidr: "192.0.2.10" },
  * });
  * ```
+ *
+ * @resource
  */
 export const ReceiptFilter = Resource<ReceiptFilter>("AWS.SES.ReceiptFilter");
 

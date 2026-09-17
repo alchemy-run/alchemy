@@ -53,10 +53,9 @@ export interface Context extends Resource<
  * default one. Changing the endpoint updates the context in place; renaming
  * it, or clearing a previously-set endpoint, replaces it.
  *
- * @resource
  *
- * @section Creating Contexts
- * @example Remote engine over SSH
+ * ### Creating Contexts
+ * **Example:** Remote engine over SSH
  * ```typescript
  * const vps = yield* Docker.Context("vps", {
  *   docker: "host=ssh://deploy@example.com",
@@ -64,8 +63,8 @@ export interface Context extends Resource<
  * });
  * ```
  *
- * @section Using a Context
- * @example Deploy resources through the context
+ * ### Using a Context
+ * **Example:** Deploy resources through the context
  * ```typescript
  * const vps = yield* Docker.Context("vps", {
  *   docker: "host=ssh://deploy@example.com",
@@ -81,7 +80,7 @@ export interface Context extends Resource<
  * });
  * ```
  *
- * @example Local development vs production
+ * **Example:** Local development vs production
  * ```typescript
  * const dev = yield* Alchemy.ALCHEMY_DEV;
  * const context = yield* Docker.Context("target", {
@@ -89,6 +88,8 @@ export interface Context extends Resource<
  *   docker: dev ? undefined : "host=ssh://deploy@example.com",
  * });
  * ```
+ *
+ * @resource
  */
 export const Context = Resource<Context>("Docker.Context");
 
