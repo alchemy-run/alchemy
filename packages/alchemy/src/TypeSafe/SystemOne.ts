@@ -1,5 +1,6 @@
 import type * as Effect from "effect/Effect";
 import type {
+  Answers,
   QueryOptions,
   QueryResult,
   QuestionSchema,
@@ -15,10 +16,16 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  */
 export type Questions = Record<string, QuestionSchema<any>>;
 
-/** A judgment: the decoded `value` plus the raw calibrated answers. */
-export type Judgment<Q extends Questions> = QueryResult<{
-  readonly [K in keyof Q]: Q[K]["Type"];
-}>;
+/**
+ * A judgment: `value` decoded into the questions' own types, and
+ * `answers` carrying each question's calibration — a choice's
+ * `confidence` and `probabilities`, a noul's `noul`, a score's `score`
+ * — already narrowed to the kind of question that produced it.
+ */
+export type Judgment<Q extends Questions> = QueryResult<
+  { readonly [K in keyof Q]: Q[K]["Type"] },
+  Answers<Q>
+>;
 
 export type JudgmentError = SystemOneError | TypesafeAiParseError;
 
@@ -70,8 +77,8 @@ export type JudgmentError = SystemOneError | TypesafeAiParseError;
  *   { team: TypeSafe.Choice("Who owns `issue`?", { infra: "…", app: "…" }) },
  *   { state: { issue } },
  * );
- * const answer = TypeSafe.asChoice(verdict.answers.team);
- * if (answer === undefined || answer.confidence < 0.8) {
+ * // `team` was asked as a Choice, so its answer IS a choice answer
+ * if ((verdict.answers.team?.confidence ?? 0) < 0.8) {
  *   return yield* humanTriage(issue);
  * }
  * ```

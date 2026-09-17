@@ -4,11 +4,7 @@
  *
  * `bun scripts/gate-probe.ts`
  */
-import {
-  asChoice,
-  CredentialsFromEnv,
-  query,
-} from "@distilled.cloud/typesafe-ai";
+import { CredentialsFromEnv, query } from "@distilled.cloud/typesafe-ai";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { questionsFor, type Respondent } from "../src/chat/Gate.ts";
@@ -39,9 +35,8 @@ const probe = Effect.fn(function* (message: string) {
   const verdict = yield* query(questionsFor(members), {
     state: { channel: CHANNEL, message, roster: members },
   });
-  const disposition = asChoice(verdict.answers.disposition);
   console.log(
-    `${verdict.value.disposition.padEnd(7)} ${String(disposition?.confidence.toFixed(2)).padEnd(5)} → ${verdict.value.respondent.padEnd(9)} ${message.slice(0, 64)}`,
+    `${verdict.value.disposition.padEnd(7)} ${String(verdict.answers.disposition?.confidence.toFixed(2)).padEnd(5)} → ${verdict.value.respondent.padEnd(9)} ${message.slice(0, 64)}`,
   );
 });
 

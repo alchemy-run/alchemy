@@ -149,7 +149,10 @@ export const judge = Effect.fn("root/Gate.judge")(function* (
   // message could go to, and asking would invite the wrong answer.
   const [only] = state.roster;
   if (only !== undefined && state.roster.length === 1) {
-    const verdict = yield* query({ disposition: dispositionQuestion }, { state }).pipe(
+    const verdict = yield* query(
+      { disposition: dispositionQuestion },
+      { state },
+    ).pipe(
       Effect.catchCause((cause) =>
         Effect.as(
           Effect.logWarning("gate: judgment unavailable", cause),
@@ -158,8 +161,7 @@ export const judge = Effect.fn("root/Gate.judge")(function* (
       ),
     );
     if (verdict === undefined) return undefined;
-    const answer = TypeSafe.asChoice(verdict.answers.disposition);
-    const confidence = answer?.confidence ?? 0;
+    const confidence = verdict.answers.disposition?.confidence ?? 0;
     return {
       disposition:
         confidence >= CONFIDENT ? verdict.value.disposition : "inline",
@@ -178,8 +180,7 @@ export const judge = Effect.fn("root/Gate.judge")(function* (
   );
   if (verdict === undefined) return undefined;
 
-  const answer = TypeSafe.asChoice(verdict.answers.disposition);
-  const confidence = answer?.confidence ?? 0;
+  const confidence = verdict.answers.disposition?.confidence ?? 0;
   const sure = confidence >= CONFIDENT;
   const disposition: Disposition = sure ? verdict.value.disposition : "inline";
 

@@ -1,6 +1,5 @@
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import * as TypeSafe from "@/TypeSafe";
-import { asChoice } from "@distilled.cloud/typesafe-ai";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -41,8 +40,10 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)("TypeSafe.SystemOne", () => {
         expect(verdict.value.disposition).toBe("thread");
         expect(verdict.value.urgent).toBe(true);
 
-        const disposition = asChoice(verdict.answers.disposition);
-        if (disposition === undefined) throw new Error("expected a choice");
+        // asked as a Choice, so the answer is a choice answer — no
+        // narrowing, no cast
+        const disposition = verdict.answers.disposition;
+        if (disposition === undefined) throw new Error("expected an answer");
         expect(disposition.confidence).toBeGreaterThan(0.5);
         const total = Object.values(disposition.probabilities).reduce(
           (sum: number, value) => sum + (value ?? 0),
