@@ -6,7 +6,7 @@ import {
   getService,
   createServicePromote,
   createServiceRollback,
-} from "@distilled.cloud/prisma-postgres/management";
+} from "@distilled.cloud/prisma/management";
 import type { ObservedApp } from "./Observed.ts";
 import type { PromoteAppResult } from "../Types.ts";
 

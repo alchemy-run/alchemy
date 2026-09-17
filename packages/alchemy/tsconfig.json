@@ -66,7 +66,7 @@
       "path": "../../submodules/distilled/packages/stripe/tsconfig.json"
     },
     {
-      "path": "../../submodules/distilled/packages/prisma-postgres/tsconfig.json"
+      "path": "../../submodules/distilled/packages/prisma/tsconfig.json"
     },
     {
       "path": "../cloudflare-runtime/tsconfig.json"

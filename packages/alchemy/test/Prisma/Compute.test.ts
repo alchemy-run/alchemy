@@ -33,7 +33,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
-import { fromApiToken } from "@distilled.cloud/prisma-postgres";
+import { fromApiToken } from "@distilled.cloud/prisma";
 import { Credentials } from "@/Prisma/Credentials";
 import {
   type Captured,

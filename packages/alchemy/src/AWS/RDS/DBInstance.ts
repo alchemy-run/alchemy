@@ -621,7 +621,7 @@ export interface DBInstance extends Resource<
  *   dbInstanceClass: "db.t3.micro",
  *   masterUsername: "admin",
  *   manageMasterUserPassword: true,
- * - port: 5433,
+ * -  port: 5433,
  * });
  * ```
  *

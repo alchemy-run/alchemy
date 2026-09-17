@@ -7,8 +7,8 @@ import {
   updateProject,
   createProject,
   createProjectDatabase,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";

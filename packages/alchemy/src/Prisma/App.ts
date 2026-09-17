@@ -19,8 +19,8 @@ import {
   getProjectBranches,
   updateService,
   createService,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./Internal/AppIdentity.ts";
 import type { Project } from "./Project.ts";

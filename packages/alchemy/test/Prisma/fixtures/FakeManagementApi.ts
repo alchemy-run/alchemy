@@ -1,5 +1,5 @@
 import { PrismaApiError } from "@/Prisma/Client";
-import { Credentials, fromApiToken } from "@distilled.cloud/prisma-postgres";
+import { Credentials, fromApiToken } from "@distilled.cloud/prisma";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";

@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
-} from "@distilled.cloud/prisma-postgres/management";
+} from "@distilled.cloud/prisma/management";
 import { PrismaPaginationError } from "./Pagination.ts";
 
 /** Prove that a deployment belongs to an App before mutating or deleting it. */
