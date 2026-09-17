@@ -68,12 +68,24 @@ export type FunctionTypeId = typeof FunctionTypeId;
 
 class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
   functionName: string;
-}> {}
+  state?: string;
+  stateReason?: string;
+  lastUpdateStatus?: string;
+  lastUpdateStatusReason?: string;
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
+  }
+}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
-}> {}
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
+  }
+}
 
 export class HandlerContext extends Context.Service<
   HandlerContext,
@@ -1386,6 +1398,7 @@ export const FunctionProvider = () =>
       const waitForFunctionUpdate = Effect.fn(function* (
         functionName: string,
         session: { note: (note: string) => Effect.Effect<void> },
+        vpc: boolean,
       ) {
         return yield* Effect.gen(function* () {
           const configuration = (yield* Lambda.getFunction({
@@ -1409,7 +1422,13 @@ export const FunctionProvider = () =>
           ) {
             return;
           }
-          return yield* new FunctionUpdatePending({ functionName });
+          return yield* new FunctionUpdatePending({
+            functionName,
+            state: configuration?.State,
+            stateReason: configuration?.StateReason,
+            lastUpdateStatus: configuration?.LastUpdateStatus,
+            lastUpdateStatusReason: configuration?.LastUpdateStatusReason,
+          });
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionUpdatePending",
@@ -1420,7 +1439,8 @@ export const FunctionProvider = () =>
                 ),
               ),
             ),
-            times: 30,
+            // New VPC attachments can spend several minutes provisioning Hyperplane ENIs.
+            times: vpc ? 150 : 30,
           }),
         );
       });
@@ -2459,7 +2479,11 @@ export const FunctionProvider = () =>
             session,
           });
 
-          yield* waitForFunctionUpdate(functionName, session);
+          yield* waitForFunctionUpdate(
+            functionName,
+            session,
+            vpc !== undefined,
+          );
 
           const previousImage = output?.code.image;
           const nextImage =
