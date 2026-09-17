@@ -10,7 +10,7 @@ import * as Stream from "effect/Stream";
 import type WebSocket from "ws";
 import type { RawData } from "ws";
 import type { LogLine } from "../Provider.ts";
-import type { Config as CredentialsConfig } from "@distilled.cloud/prisma-postgres";
+import type { Config as CredentialsConfig } from "@distilled.cloud/prisma";
 import { Credentials } from "./Credentials.ts";
 import { getDeploymentLogsRequest } from "./Internal/LogsClient.ts";
 import type { DeploymentLogsQuery } from "./Types.ts";

@@ -17,8 +17,8 @@ import {
   deleteBucketKey,
   getBucketKeys,
   createBucketKey,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import { physicalInstanceName } from "./Internal/EnvName.ts";
 import type { Providers } from "./Providers.ts";
 import {

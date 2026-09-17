@@ -1,5 +1,5 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import { Credentials } from "@distilled.cloud/prisma-postgres";
+import { Credentials } from "@distilled.cloud/prisma";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,7 +7,7 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { ProfileStore } from "../Auth/Profile.ts";
 import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
 
-export { Credentials } from "@distilled.cloud/prisma-postgres";
+export { Credentials } from "@distilled.cloud/prisma";
 
 const toConfigError = (cause: unknown) =>
   new ConfigError({

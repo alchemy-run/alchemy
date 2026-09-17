@@ -19,7 +19,7 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+import { Retry } from "@distilled.cloud/prisma";
 import * as Credentials from "./Credentials.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";

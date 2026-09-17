@@ -32,7 +32,7 @@ import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
 import { Stack } from "../Stack.ts";
 import { sha256Object } from "../Util/sha256.ts";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetServicesResponse,
   type GetEnvironmentVariablesResponse,
@@ -49,7 +49,7 @@ import {
   createServiceDeployment,
   createServiceRollback,
   createEnvironmentVariable,
-} from "@distilled.cloud/prisma-postgres/management";
+} from "@distilled.cloud/prisma/management";
 import {
   runBuildCommand,
   runComputeAutoBuild,

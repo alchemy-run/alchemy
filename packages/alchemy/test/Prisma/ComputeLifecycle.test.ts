@@ -9,7 +9,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { Retry, fromApiToken } from "@distilled.cloud/prisma-postgres";
+import { Retry, fromApiToken } from "@distilled.cloud/prisma";
 import {
   type Captured,
   data,

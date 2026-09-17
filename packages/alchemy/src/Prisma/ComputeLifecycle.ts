@@ -9,7 +9,7 @@ import {
   deleteDeployment,
   deleteProject,
   getServices,
-} from "@distilled.cloud/prisma-postgres/management";
+} from "@distilled.cloud/prisma/management";
 import { stopDeploymentIdempotent } from "./Internal/DeploymentActions.ts";
 import { observeDeployment } from "./Internal/DeploymentObserve.ts";
 import type { ObservedDeployment } from "./Internal/Observed.ts";

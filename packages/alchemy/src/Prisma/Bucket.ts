@@ -16,8 +16,8 @@ import {
   getBuckets,
   getBucket,
   createBucket,
-} from "@distilled.cloud/prisma-postgres/management";
-import { Retry } from "@distilled.cloud/prisma-postgres";
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {

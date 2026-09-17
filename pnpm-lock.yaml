@@ -4410,9 +4410,9 @@ importers:
       '@distilled.cloud/planetscale':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/planetscale
-      '@distilled.cloud/prisma-postgres':
+      '@distilled.cloud/prisma':
         specifier: workspace:*
-        version: link:../../submodules/distilled/packages/prisma-postgres
+        version: link:../../submodules/distilled/packages/prisma
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
@@ -6770,7 +6770,7 @@ importers:
         specifier: 'catalog:'
         version: 26.2.0
 
-  submodules/distilled/packages/prisma-postgres:
+  submodules/distilled/packages/prisma:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*

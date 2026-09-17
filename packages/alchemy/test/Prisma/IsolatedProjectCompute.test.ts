@@ -1,9 +1,6 @@
 import * as Prisma from "@/Prisma";
 import * as Test from "@/Test/Alchemy";
-import {
-  getProject,
-  getService,
-} from "@distilled.cloud/prisma-postgres/management";
+import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
