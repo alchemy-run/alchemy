@@ -202,7 +202,26 @@ if (entry === jsEntry && !existsSync(jsEntry)) {
 // Set for the CLI's React renderer. Children inherit it exactly as they did
 // from the spawned child's env; the user's own dev servers get it stripped
 // again (see Cloudflare/Workers/ViteChild.ts).
-process.env.NODE_ENV = "production";
+//
+// Not when this very process is the one that will transpile the CLI's own
+// .tsx — a published install invoked as `bun --bun alchemy`, which becomes
+// the CLI below rather than exec'ing a fresh bun. Bun fixes its JSX transform
+// from the environment at startup, so assigning here leaves it emitting
+// `jsxDEV` while React's module-level check already answers "production", and
+// React defines `jsxDEV` in its development build only: the first render dies
+// with `jsxDEV is not a function`. It is the same disagreement the
+// `--tsconfig-override` below exists to prevent in a checkout, and in-process
+// there is no equivalent lever, so the variable stays as bun found it.
+//
+// The other paths are unaffected. Every bun child starts with it already set,
+// so its transform matches. Node published runs the built `lib/` and the Oxc
+// loader skips `node_modules` outright, so no .tsx of alchemy's is transpiled
+// there at all.
+const transpilesOwnTsxInProcess =
+  typeof globalThis.Bun !== "undefined" && !isDev;
+if (!transpilesOwnTsxInProcess) {
+  process.env.NODE_ENV = "production";
+}
 
 // The launcher IS the right runtime in two cases, and then simply becomes
 // the CLI instead of paying for a second process that only relays signals:
