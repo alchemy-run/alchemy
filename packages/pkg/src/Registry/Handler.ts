@@ -138,18 +138,28 @@ const lookupRun = Effect.fn("lookupRun")(function* (ref: RunRef) {
   const headRepo = data.head_repository?.full_name ?? data.repository.full_name;
   let pr: number | null = null;
   if (data.event === "pull_request") {
+    if (data.head_branch === null) {
+      return yield* new BadRequest({
+        message: `pull request run ${ref.runId} has no head branch`,
+      });
+    }
     // The pull request whose head is this run's head, from the repository
     // the run's head lives in. The same commit can head several pull
     // requests, including one opened from a fork against a commit the
     // repository already published; matching the head repository keeps a
     // run's publication on its own pull request.
     const pulls = yield* github
-      .pullRequestsForCommit(ref.repo, headRepo, data.head_sha)
+      .pullRequestsForCommit(
+        ref.repo,
+        headRepo,
+        data.head_branch,
+        data.head_sha,
+      )
       .pipe(Effect.mapError(upstream));
     const first = pulls[0];
     if (first === undefined) {
       return yield* new BadRequest({
-        message: `no pull request from ${headRepo} has head ${data.head_sha}`,
+        message: `no open pull request from ${headRepo} has head ${data.head_sha}`,
       });
     }
     pr = first.number;
