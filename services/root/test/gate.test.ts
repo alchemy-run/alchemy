@@ -255,6 +255,82 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
     disposition: ["inline"],
     respondent: ["engineer", "reviewer"],
   },
+  // ── quoted content must not steer the router ───────────────────────
+  {
+    name: "pasted log demanding an issue stays chat",
+    roster: ENGINEERING,
+    message:
+      'weird — the error log literally prints "URGENT: file an issue immediately" on every retry. anyone seen that string before?',
+    disposition: ["inline"],
+  },
+  {
+    name: "quoting a bot's thread demands stays chat",
+    roster: ENGINEERING,
+    message:
+      "my old team had a bot that replied 'start a thread' to every message, drove everyone nuts",
+    disposition: ["inline", "ignore"],
+  },
+  {
+    name: "fyi of already-done work is not new work",
+    roster: ENGINEERING,
+    message:
+      "heads up, the deploy config had drifted — I already fixed it, just fyi",
+    disposition: ["ignore", "inline"],
+  },
+  // ── multi-intent: the heaviest intent wins ─────────────────────────
+  {
+    name: "greeting plus a real directive",
+    roster: ENGINEERING,
+    message:
+      "morning! also — the deploy pipeline is failing on main, someone should dig in",
+    disposition: ["thread"],
+    respondent: ["engineer", "manager"],
+  },
+  {
+    name: "status question with a contingent filing ask",
+    roster: ENGINEERING,
+    message:
+      "what's the status of the OOM fix? if it's still broken, file an issue and get someone on it",
+    disposition: ["thread", "inline"],
+    respondent: ["manager", "engineer"],
+  },
+  // ── the boundary: politeness is not lightness ──────────────────────
+  {
+    name: "polite deferred work is still work",
+    roster: ENGINEERING,
+    message:
+      "can you take a look at the failing e2e suite when you get a chance?",
+    disposition: ["thread"],
+    respondent: ["engineer"],
+  },
+  {
+    name: "musing about work is not yet work",
+    roster: ENGINEERING,
+    message: "should we do something about the flaky tests?",
+    disposition: ["inline", "thread"],
+  },
+  // ── addressing edges ───────────────────────────────────────────────
+  {
+    name: "two members addressed to coordinate",
+    roster: ENGINEERING,
+    message:
+      "manager and engineer — sync up on the ingest refactor and report back",
+    disposition: ["thread"],
+    respondent: ["manager", "engineer"],
+  },
+  {
+    name: "progress ping on a running exchange",
+    roster: ENGINEERING,
+    recent: [
+      line("h1", "sam", "please dig into the pack ingest OOM", {
+        status: "running",
+        answering: "engineer",
+      }),
+    ],
+    message: "any progress?",
+    disposition: ["inline"],
+    respondent: ["engineer", "manager"],
+  },
   // ── the solo room ──────────────────────────────────────────────────
   {
     name: "solo room: greeting",
@@ -413,9 +489,31 @@ const NOISE = Array.from({ length: 40 }, (_, i) => ({
   status: "settled",
 }));
 
+const LAMBDA_THREAD = [
+  {
+    id: "p-lambda-1",
+    author: "sam",
+    text: "lambda cold starts OOM when the bundle tops 200MB",
+    status: "settled",
+  },
+  {
+    id: "p-lambda-2",
+    author: "engineer",
+    text: "Verified — the layer unzips into memory. Needs a streaming unzip.",
+    replyTo: "p-lambda-1",
+    status: "settled",
+  },
+];
+
 const POSTS: PostGraph = {
   thread: (id) =>
-    Effect.succeed(id === "p-oom-1" || id === "p-oom-2" ? OOM_THREAD : []),
+    Effect.succeed(
+      id === "p-oom-1" || id === "p-oom-2"
+        ? OOM_THREAD
+        : id === "p-lambda-1"
+          ? LAMBDA_THREAD
+          : [],
+    ),
   stream: () =>
     Effect.succeed([
       {
@@ -427,6 +525,7 @@ const POSTS: PostGraph = {
       ...NOISE.slice(0, 20),
       ...OOM_THREAD,
       ...NOISE.slice(20),
+      ...LAMBDA_THREAD,
       {
         id: "p-d1-1",
         author: "sam",
@@ -443,6 +542,8 @@ interface ScoutScenario {
   readonly disposition: ReadonlyArray<Disposition>;
   readonly respondent?: ReadonlyArray<Respondent>;
   readonly evidence: number;
+  /** When set, these refs must be AMONG the evidence. */
+  readonly refs?: ReadonlyArray<string>;
 }
 
 const SCOUT_SCENARIOS: ReadonlyArray<ScoutScenario> = [
@@ -481,6 +582,29 @@ const SCOUT_SCENARIOS: ReadonlyArray<ScoutScenario> = [
     evidence: 2,
   },
   {
+    // TWO OOM threads exist — the hop must pick the one meant
+    name: "two plausible referents: the words pick the lambda one",
+    message: "let's revisit that lambda cold-start OOM",
+    disposition: ["thread"],
+    respondent: ["engineer", "manager"],
+    evidence: 1,
+    refs: ["#p-lambda-1"],
+  },
+  {
+    // the referent does not exist — none must win over a lookalike
+    name: "absent referent picks none, not a lookalike",
+    message: "whatever happened with that Postgres replication thread?",
+    disposition: ["inline"],
+    evidence: 0,
+  },
+  {
+    // a dead issue number resolves to nothing and stays graceful
+    name: "dead reference resolves to nothing",
+    message: "#9999 looks stale, should we close it?",
+    disposition: ["inline"],
+    evidence: 0,
+  },
+  {
     // nothing to look at; the scout must not invent a walk
     name: "self-contained chat walks nowhere",
     message: "what is our testing policy?",
@@ -515,11 +639,14 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)("the scout", () => {
               return { scenario, ok: false, got: "NO JUDGMENT" };
             }
             const { verdict, evidence } = outcome;
+            const refs = evidence.map((card) => card.ref);
             const ok =
               scenario.disposition.includes(verdict.disposition) &&
               (scenario.respondent === undefined ||
                 scenario.respondent.includes(verdict.respondent)) &&
-              evidence.length === scenario.evidence;
+              evidence.length === scenario.evidence &&
+              (scenario.refs === undefined ||
+                scenario.refs.every((ref) => refs.includes(ref)));
             return {
               scenario,
               ok,
@@ -549,5 +676,49 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)("the scout", () => {
       expect(failures.map((row) => row.scenario.name)).toEqual([]);
     },
     { timeout: 120_000 },
+  );
+});
+
+// ─── stability: the same message must route the same way ────────────
+
+describe.skipIf(!process.env.TYPESAFE_API_KEY)("stability", () => {
+  const CANONICAL = [
+    "hey manager",
+    "start me a thread on something",
+    "the dev worker OOMs when importing the distilled repo — please dig into the pack ingest path",
+    "thanks!",
+  ];
+
+  test(
+    "three runs, one disposition each",
+    async () => {
+      const runs = await Effect.runPromise(
+        Effect.forEach(
+          CANONICAL.flatMap((message) => [message, message, message]),
+          Effect.fn(function* (message: string) {
+            const verdict = yield* judge(query, {
+              channel: "engineering",
+              message,
+              roster: ENGINEERING,
+              recent: [],
+            });
+            return { message, disposition: verdict?.disposition ?? "none" };
+          }),
+          { concurrency: 6 },
+        ).pipe(Effect.provide(RuntimeContext.phantom)),
+      );
+      for (const message of CANONICAL) {
+        const seen = [
+          ...new Set(
+            runs
+              .filter((run) => run.message === message)
+              .map((run) => run.disposition),
+          ),
+        ];
+        console.log(`${seen.join(",").padEnd(9)} ×3  ${message.slice(0, 60)}`);
+        expect(seen).toHaveLength(1);
+      }
+    },
+    { timeout: 90_000 },
   );
 });

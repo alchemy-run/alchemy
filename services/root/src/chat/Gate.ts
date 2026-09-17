@@ -88,7 +88,7 @@ const dispositionQuestion = TypeSafe.Choice(
       examples: ["ok", "thanks!", "👍", "nice", "sounds good"],
     },
     thread: {
-      what: "Strictly: acting on `message` requires WORK — reading the repository, running commands, changing code, investigating, coordinating several people, filing and tracking something — work that happens after the reply, not in it. The work is what counts, whether the human does the asking politely or tersely",
+      what: "Strictly: acting on `message` requires WORK — reading the repository, running commands, changing code, investigating, coordinating several people, filing and tracking something, or PICKING PARKED WORK BACK UP ('let's revisit…', 'pick that back up') — work that happens after the reply, not in it. The work is what counts, whether the human does the asking politely or tersely",
       notFor:
         "Anything a knowledgeable person answers off the top of their head, however technical the subject",
       examples: [
