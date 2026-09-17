@@ -363,6 +363,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Configure routing health checks
  * The generated service includes a TCP check on `port`. To customize
  * it, provide `services` and configure each service's `checks` property.
+ * After each replica is `started`, reconcile waits until those checks
+ * are passing before updating the next replica.
  *
  * **Example:** HTTP readiness check
  * ```typescript

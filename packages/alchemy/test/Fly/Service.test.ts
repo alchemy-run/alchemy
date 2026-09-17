@@ -56,9 +56,9 @@ const waitForPassingServiceCheck = (appName: string, machineId: string) =>
           : undefined;
       }),
       Effect.repeat({
-        schedule: Schedule.spaced("5 seconds"),
+        schedule: Schedule.spaced("1 second"),
         until: (check) => check !== undefined,
-        times: 10,
+        times: 3,
       }),
     );
 
@@ -190,7 +190,7 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider(
@@ -236,5 +236,5 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

@@ -35,12 +35,27 @@ import {
 
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
+const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
+const CHECK_POLL = Schedule.spaced("2 seconds");
+const CHECK_WAIT = "2 minutes";
 
 export class ReplicaNotCreated extends Data.TaggedError(
   "Fly.ReplicaNotCreated",
 )<{
   name: string;
   appName: string;
+}> {}
+
+export class ReplicaChecksNotPassing extends Data.TaggedError(
+  "Fly.ReplicaChecksNotPassing",
+)<{
+  appName: string;
+  machineId: string;
+  checks: ReadonlyArray<{
+    name: string | undefined;
+    status: string | undefined;
+    output: string | undefined;
+  }>;
 }> {}
 
 export interface Replica {
@@ -237,6 +252,80 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.timeout("50 seconds"),
     );
 
+const configuredServiceChecks = (machine: FlyMachine) =>
+  (machine.config?.services ?? []).flatMap((service) => service.checks ?? []);
+
+const liveServiceChecks = (machine: FlyMachine) =>
+  (machine.checks ?? []).filter((check) =>
+    (check.name ?? "").startsWith(SERVICE_CHECK_NAME_PREFIX),
+  );
+
+const allServiceChecksPassing = (machine: FlyMachine) => {
+  const checks = liveServiceChecks(machine);
+  return (
+    checks.length > 0 && checks.every((check) => check.status === "passing")
+  );
+};
+
+const TRANSIENT_GET_TAGS = [
+  "TooManyRequests",
+  "InternalServerError",
+  "BadGateway",
+  "ServiceUnavailable",
+  "GatewayTimeout",
+] as const;
+
+/**
+ * After the Machine is started, wait until Fly reports every service
+ * check as passing. No configured checks is a no-op. Empty live
+ * `servicecheck-*` results keep polling — they are not success.
+ * `warning` / `unknown` during grace keep polling.
+ */
+export const waitHealthy = Effect.fn(function* (
+  appName: string,
+  machine: FlyMachine,
+) {
+  const machineId = machine.id;
+  if (
+    machineId === undefined ||
+    configuredServiceChecks(machine).length === 0
+  ) {
+    return machine;
+  }
+  yield* getMachineById(appName, machineId).pipe(
+    Effect.map(
+      (current) => current !== undefined && allServiceChecksPassing(current),
+    ),
+    // 429/5xx/504 on Get must not abort the wait. Forbidden still fails.
+    Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
+    Effect.repeat({
+      schedule: CHECK_POLL,
+      until: (passing) => passing,
+    }),
+    Effect.timeoutOrElse({
+      duration: CHECK_WAIT,
+      orElse: () =>
+        getMachineById(appName, machineId).pipe(
+          Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(undefined)),
+          Effect.flatMap((current) =>
+            Effect.fail(
+              new ReplicaChecksNotPassing({
+                appName,
+                machineId,
+                checks: liveServiceChecks(current ?? machine).map((check) => ({
+                  name: check.name,
+                  status: check.status,
+                  output: check.output,
+                })),
+              }),
+            ),
+          ),
+        ),
+    }),
+  );
+  return (yield* getMachineById(appName, machineId)) ?? machine;
+});
+
 export const waitDestroyed = (appName: string, machineId: string) =>
   machines
     .waitMachine({
@@ -272,7 +361,10 @@ export const ensureStarted = Effect.fn(function* (
       .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
   }
   yield* waitStarted(appName, machineId);
-  return (yield* getMachineById(appName, machineId)) ?? machine;
+  const started = (yield* getMachineById(appName, machineId)) ?? machine;
+  const observed =
+    configuredServiceChecks(started).length > 0 ? started : machine;
+  return yield* waitHealthy(appName, observed);
 });
 
 export const deleteMachine = Effect.fn(function* (

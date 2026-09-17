@@ -105,7 +105,7 @@ test.provider(
                     gracePeriod: "6s",
                     method: "HEAD",
                     path: "/",
-                    protocol: "https",
+                    protocol: "http",
                     headers: [
                       {
                         name: "X-Alchemy-Check",
@@ -151,7 +151,7 @@ test.provider(
       expect(check?.grace_period).toEqual("6s");
       expect(check?.method).toEqual("HEAD");
       expect(check?.path).toEqual("/");
-      expect(check?.protocol).toEqual("https");
+      expect(check?.protocol).toEqual("http");
       expect(check?.headers?.[0]?.name).toEqual("X-Alchemy-Check");
       expect(check?.headers?.[0]?.values).toEqual(["ready", "routing"]);
       expect(check?.tls_server_name).toEqual("example.com");
@@ -162,7 +162,7 @@ test.provider(
       const gone = yield* waitUntilGone(created.appName, created.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test.provider(
@@ -260,4 +260,75 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider(
+  "count 2 waits for passing checks on each replica",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Fly.App("CheckSite");
+          return yield* Fly.Machine("CheckWeb", {
+            app,
+            region: "iad",
+            image: "nginx:alpine",
+            guest: { cpus: 1, memoryMb: 256 },
+            count: 2,
+            services: [
+              {
+                protocol: "tcp",
+                internalPort: 80,
+                ports: [{ port: 80, handlers: ["http"] }],
+                checks: [
+                  {
+                    type: "http",
+                    port: 80,
+                    method: "GET",
+                    path: "/",
+                    protocol: "http",
+                    interval: "10s",
+                    timeout: "2s",
+                    gracePeriod: "5s",
+                  },
+                ],
+              },
+            ],
+          });
+        }),
+      );
+
+      expect(deployed.count).toEqual(2);
+      expect(deployed.machineIds).toHaveLength(2);
+      expect(deployed.replicas).toHaveLength(2);
+      expect(deployed.state).toEqual("started");
+      expect(deployed.replicas[0]?.state).toEqual("started");
+      expect(deployed.replicas[1]?.state).toEqual("started");
+
+      for (const machineId of deployed.machineIds) {
+        const live = yield* machines.getMachine({
+          app_name: deployed.appName,
+          machine_id: machineId,
+        });
+        expect(live.state).toEqual("started");
+        const serviceChecks =
+          live.checks?.filter((check) =>
+            check.name?.startsWith("servicecheck-"),
+          ) ?? [];
+        expect(serviceChecks.length).toBeGreaterThan(0);
+        expect(
+          serviceChecks.every((check) => check.status === "passing"),
+        ).toEqual(true);
+      }
+
+      yield* stack.destroy();
+
+      for (const machineId of deployed.machineIds) {
+        const gone = yield* waitUntilGone(deployed.appName, machineId);
+        expect(gone).toEqual("gone");
+      }
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

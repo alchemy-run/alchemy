@@ -446,7 +446,9 @@ export type Machine = Resource<
  *
  * ### Service health checks
  * Add HTTP or TCP `checks` to a service. Fly uses their results to
- * determine whether the service is ready to receive traffic.
+ * determine whether the service is ready to receive traffic. After a
+ * Machine is `started`, reconcile waits until those checks are passing
+ * before updating the next replica.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -626,7 +628,8 @@ export type Machine = Resource<
  * ### Skip launch
  * `skipLaunch: true` creates or updates the config without starting
  * the Machine. Default is `false`. Reconcile otherwise waits until
- * the Machine is `started`.
+ * the Machine is `started`, and until service checks are passing when
+ * the Machine has them.
  *
  * **Example:** Config only
  * ```typescript
