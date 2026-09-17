@@ -11,7 +11,7 @@ import {
 } from "@distilled.cloud/typesafe-ai";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { questions } from "../src/chat/Gate.ts";
+import { questionsFor, type Respondent } from "../src/chat/Gate.ts";
 
 const MESSAGES = [
   "can the head guy say hi back",
@@ -27,13 +27,17 @@ const MESSAGES = [
   "review #1594 and tell me if the storage math is right",
 ];
 
+/** The rooms, as ChannelsApi declares them. */
+const ROOMS: Record<string, ReadonlyArray<Respondent>> = {
+  root: ["head"],
+  engineering: ["manager", "engineer", "reviewer"],
+};
+const CHANNEL = process.argv[2] ?? "engineering";
+const members = ROOMS[CHANNEL]!;
+
 const probe = Effect.fn(function* (message: string) {
-  const verdict = yield* query(questions, {
-    state: {
-      channel: "root",
-      message,
-      roster: ["head", "manager", "engineer", "reviewer"],
-    },
+  const verdict = yield* query(questionsFor(members), {
+    state: { channel: CHANNEL, message, roster: members },
   });
   const disposition = asChoice(verdict.answers.disposition);
   console.log(
