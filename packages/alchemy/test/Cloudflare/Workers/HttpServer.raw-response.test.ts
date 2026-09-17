@@ -1,22 +1,16 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
 import * as Test from "@/Test/Alchemy";
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Cookies from "effect/unstable/http/Cookies";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import RawResponseWorker from "./fixtures/raw-response/worker.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Socket from "effect/unstable/socket/Socket";
+import RawResponseWorker from "./fixtures/raw-response/worker.ts";
 
-/**
- * In-process pin of the Raw web `Response` contract: a handler that answers
- * with a native `Response` gets the same status and headers on GET and HEAD,
- * including what a pre-response handler set after the handler returned. A
- * native response nothing mutated, and an upgrade response, are handed to
- * the client as the object they are.
- */
 type PreResponse = (
   response: HttpServerResponse.HttpServerResponse,
 ) => HttpServerResponse.HttpServerResponse;
@@ -31,7 +25,7 @@ const handler = (
         Effect.succeed(preResponse(response)),
       );
     }
-    return respond();
+    return yield* Effect.sync(respond);
   });
 
 // `makeRequestEffect` is typed `as any` at its return; pin R to `never`.
@@ -40,21 +34,17 @@ const handle = (
   respond: () => HttpServerResponse.HttpServerResponse,
   preResponse?: PreResponse,
 ): Effect.Effect<Response> =>
-  makeRequestEffect<never>(
-    new Request("https://worker.test/raw", { method }) as any,
-    handler(respond, preResponse),
+  Effect.flatMap(
+    Effect.sync(() => new Request("https://worker.test/response", { method })),
+    (request) =>
+      makeRequestEffect<never>(request as any, handler(respond, preResponse)),
   );
-
-const setCookieHeaders = (response: Response) =>
-  [...response.headers]
-    .filter(([name]) => name === "set-cookie")
-    .map(([, value]) => value);
 
 for (const dev of [false, true]) {
   const { test } = Test.make({ providers: Cloudflare.providers(), dev });
 
   test.provider(
-    `raw responses over HTTP (${dev ? "local" : "live"})`,
+    `web responses over HTTP (${dev ? "local" : "live"})`,
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -75,9 +65,12 @@ for (const dev of [false, true]) {
           "/status",
           "/native",
           "/constructed-header",
+          "/explicit-status",
           "/cookie",
           "/stream",
           "/no-content",
+          "/reset-content",
+          "/not-modified",
         ]) {
           for (const method of ["GET", "HEAD"] as const) {
             const url = `${worker.url!}${path}`;
@@ -97,7 +90,18 @@ for (const dev of [false, true]) {
               }),
             );
             const mutated = path === "/status" || path === "/stream";
-            const status = path === "/no-content" ? 204 : mutated ? 418 : 202;
+            const status =
+              path === "/no-content"
+                ? 204
+                : path === "/reset-content"
+                  ? 205
+                  : path === "/not-modified"
+                    ? 304
+                    : path === "/explicit-status"
+                      ? 201
+                      : mutated
+                        ? 418
+                        : 202;
             expect(response.status).toBe(status);
             expect(response.headers["x-native"]).toBe(
               mutated
@@ -119,37 +123,80 @@ for (const dev of [false, true]) {
                 : { a: "1", b: "2" },
             );
             expect(body).toBe(
-              method === "HEAD" || status === 204
+              method === "HEAD" || [204, 205, 304].includes(status)
                 ? ""
                 : path === "/stream"
                   ? "raw-response:streamed"
                   : "raw-response:body",
             );
+            const finalized = yield* client
+              .get(
+                `${worker.url!}/finalized?entry=${encodeURIComponent(`${method}:${path}`)}`,
+              )
+              .pipe(
+                Effect.flatMap((response) => response.text),
+                Effect.repeat({
+                  schedule: Schedule.spaced("1 second"),
+                  times: 8,
+                  until: (body) => body === "true",
+                }),
+              );
+            expect({ request: `${method} ${path}`, finalized }).toEqual({
+              request: `${method} ${path}`,
+              finalized: "true",
+            });
           }
         }
+
+        yield* Effect.gen(function* () {
+          const socket = yield* Socket.makeWebSocket(
+            `${worker.url!.replace(/^http/, "ws")}/websocket`,
+          );
+          const reader = yield* socket.reader;
+          const writer = yield* socket.writer;
+          yield* writer.write("response-upgrade");
+          expect(yield* reader.pull).toEqual(["response-upgrade"]);
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(Socket.layerWebSocketConstructorGlobal),
+        );
         yield* stack.destroy();
       }),
   );
 }
 
-describe("a Raw web Response answers with the Effect-level status and headers", () => {
-  it.effect(
-    "GET and HEAD agree on a status set by a pre-response handler",
-    () =>
-      Effect.gen(function* () {
-        const respond = () =>
-          HttpServerResponse.raw(new Response("onetwo", { status: 202 }));
-        const setTeapot: PreResponse = (response) =>
-          HttpServerResponse.setStatus(response, 418);
+describe("fromWeb responses use Effect status, headers and cookies", () => {
+  it.effect("GET and HEAD agree on a pre-response status", () =>
+    Effect.gen(function* () {
+      const respond = () =>
+        HttpServerResponse.fromWeb(new Response("onetwo", { status: 202 }));
+      const setTeapot: PreResponse = (response) =>
+        HttpServerResponse.setStatus(response, 418);
 
-        const get = yield* handle("GET", respond, setTeapot);
-        expect(get.status).toBe(418);
-        expect(yield* Effect.promise(() => get.text())).toBe("onetwo");
+      const get = yield* handle("GET", respond, setTeapot);
+      expect(get.status).toBe(418);
+      expect(yield* Effect.promise(() => get.text())).toBe("onetwo");
 
-        const head = yield* handle("HEAD", respond, setTeapot);
-        expect(head.status).toBe(418);
-        expect(head.body).toBeNull();
-      }),
+      const head = yield* handle("HEAD", respond, setTeapot);
+      expect(head.status).toBe(418);
+      expect(head.body).toBeNull();
+    }),
+  );
+
+  it.effect("preserves a status set before the handler returns", () =>
+    Effect.gen(function* () {
+      for (const method of ["GET", "HEAD"] as const) {
+        const response = yield* handle(method, () =>
+          HttpServerResponse.fromWeb(
+            new Response("body", { status: 202 }),
+          ).pipe(HttpServerResponse.setStatus(201)),
+        );
+        expect(response.status).toBe(201);
+        expect(yield* Effect.promise(() => response.text())).toBe(
+          method === "HEAD" ? "" : "body",
+        );
+      }
+    }),
   );
 
   it.effect("a pre-response handler sees the native status and headers", () =>
@@ -158,7 +205,7 @@ describe("a Raw web Response answers with the Effect-level status and headers", 
       const response = yield* handle(
         "GET",
         () =>
-          HttpServerResponse.raw(
+          HttpServerResponse.fromWeb(
             new Response("body", {
               status: 202,
               headers: { "x-native": "yes" },
@@ -171,13 +218,14 @@ describe("a Raw web Response answers with the Effect-level status and headers", 
       );
       expect(seen).toEqual([[202, "yes"]]);
       expect(response.status).toBe(202);
+      yield* Effect.promise(() => response.text());
     }),
   );
 
-  it.effect("HEAD answers with the native status when nothing was set", () =>
+  it.effect("HEAD preserves native status and headers", () =>
     Effect.gen(function* () {
       const response = yield* handle("HEAD", () =>
-        HttpServerResponse.raw(
+        HttpServerResponse.fromWeb(
           new Response("body", { status: 202, headers: { "x-native": "yes" } }),
         ),
       );
@@ -187,137 +235,130 @@ describe("a Raw web Response answers with the Effect-level status and headers", 
     }),
   );
 
-  it.effect("keeps both native Set-Cookie headers after the merge", () =>
+  it.effect("keeps native cookies alongside Effect cookies", () =>
     Effect.gen(function* () {
       const response = yield* handle(
         "GET",
         () =>
-          HttpServerResponse.raw(
+          HttpServerResponse.fromWeb(
             new Response("body", {
-              status: 200,
               headers: [
                 ["set-cookie", "a=1"],
                 ["set-cookie", "b=2"],
               ],
             }),
           ),
-        (response) => HttpServerResponse.setHeader(response, "x-added", "1"),
-      );
-      expect(response.headers.get("x-added")).toBe("1");
-      expect(setCookieHeaders(response)).toEqual(["a=1", "b=2"]);
-    }),
-  );
-
-  it.effect("appends Effect-level cookies next to the native ones", () =>
-    Effect.gen(function* () {
-      const response = yield* handle(
-        "GET",
-        () =>
-          HttpServerResponse.raw(
-            new Response("body", { headers: { "set-cookie": "a=1" } }),
-          ),
         (response) =>
-          HttpServerResponse.setCookieUnsafe(response, "session", "abc", {
-            path: "/",
-          }),
+          HttpServerResponse.setCookieUnsafe(response, "session", "abc"),
       );
-      expect(setCookieHeaders(response)).toEqual([
+      expect(response.headers.getSetCookie()).toEqual([
         "a=1",
-        "session=abc; Path=/",
+        "b=2",
+        "session=abc",
       ]);
+      yield* Effect.promise(() => response.text());
     }),
   );
 
-  it.effect("an Effect header overrides a native header of the same name", () =>
-    Effect.gen(function* () {
-      const native = () =>
-        new Response("body", {
-          headers: { "x-a": "native", "x-keep": "native" },
-        });
-
-      const constructed = yield* handle("GET", () =>
-        HttpServerResponse.raw(native(), { headers: { "X-A": "constructed" } }),
-      );
-      expect(constructed.headers.get("x-a")).toBe("constructed");
-      expect(constructed.headers.get("x-keep")).toBe("native");
-
-      const mutated = yield* handle(
-        "GET",
-        () => HttpServerResponse.raw(native()),
-        (response) => HttpServerResponse.setHeader(response, "X-A", "later"),
-      );
-      expect(mutated.headers.get("x-a")).toBe("later");
-      expect(mutated.headers.get("x-keep")).toBe("native");
-    }),
-  );
-
-  it.effect("drops a native header a pre-response handler removed", () =>
+  it.effect("Effect headers override native headers", () =>
     Effect.gen(function* () {
       const response = yield* handle(
         "GET",
         () =>
-          HttpServerResponse.raw(
+          HttpServerResponse.fromWeb(
+            new Response("body", {
+              headers: { "x-a": "native", "x-keep": "native" },
+            }),
+          ).pipe(HttpServerResponse.setHeader("x-a", "constructed")),
+        (response) => HttpServerResponse.setHeader(response, "x-a", "later"),
+      );
+      expect(response.headers.get("x-a")).toBe("later");
+      expect(response.headers.get("x-keep")).toBe("native");
+      yield* Effect.promise(() => response.text());
+    }),
+  );
+
+  it.effect("removes a native header through Effect", () =>
+    Effect.gen(function* () {
+      const response = yield* handle(
+        "GET",
+        () =>
+          HttpServerResponse.fromWeb(
             new Response("body", { headers: { "x-a": "native" } }),
           ),
         (response) => HttpServerResponse.removeHeader(response, "x-a"),
       );
       expect(response.headers.has("x-a")).toBe(false);
+      yield* Effect.promise(() => response.text());
     }),
   );
 
-  it.effect("returns the native Response untouched without a mutation", () =>
+  for (const [method, status] of [
+    ["GET", 200],
+    ["HEAD", 200],
+    ["GET", 204],
+    ["GET", 205],
+    ["GET", 304],
+  ] as const) {
+    it.effect(`closes the request scope for ${method} ${status}`, () =>
+      Effect.gen(function* () {
+        let finalized = false;
+        const request = yield* Effect.sync(
+          () => new Request("https://worker.test/scope", { method }),
+        );
+        const handled: Effect.Effect<Response> = makeRequestEffect<never>(
+          request as any,
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                finalized = true;
+              }),
+            );
+            return yield* Effect.sync(() =>
+              HttpServerResponse.fromWeb(new Response("body")).pipe(
+                HttpServerResponse.setStatus(status),
+              ),
+            );
+          }),
+        );
+        const response = yield* handled;
+        const omitted = method === "HEAD" || status !== 200;
+        if (omitted) {
+          expect(response.body).toBeNull();
+          expect(finalized).toBe(true);
+        } else {
+          expect(finalized).toBe(false);
+          expect(yield* Effect.promise(() => response.text())).toBe("body");
+          expect(finalized).toBe(true);
+        }
+      }),
+    );
+  }
+});
+
+describe("raw native response passthrough", () => {
+  it.effect("keeps the native Response identity on GET", () =>
     Effect.gen(function* () {
-      const native = new Response("body", {
-        status: 202,
-        headers: [
-          ["set-cookie", "a=1"],
-          ["set-cookie", "b=2"],
-          ["x-native", "yes"],
-        ],
-      });
-      const response = yield* handle(
-        "GET",
-        () => HttpServerResponse.raw(native),
-        (response) => response,
+      const native = yield* Effect.sync(
+        () => new Response("body", { status: 202 }),
+      );
+      const response = yield* handle("GET", () =>
+        HttpServerResponse.raw(native),
       );
       expect(response).toBe(native);
+      expect(yield* Effect.promise(() => response.text())).toBe("body");
     }),
   );
 
-  it.effect("returns a 101 upgrade Response untouched", () =>
+  it.effect("keeps a 101 upgrade Response untouched", () =>
     Effect.gen(function* () {
-      const native = new Response(null, { status: 101 });
-      const response = yield* handle(
-        "GET",
-        () => HttpServerResponse.raw(native),
-        (response) => HttpServerResponse.setHeader(response, "x-added", "1"),
+      const native = yield* Effect.sync(
+        () => new Response(null, { status: 101 }),
+      );
+      const response = yield* handle("GET", () =>
+        HttpServerResponse.raw(native),
       );
       expect(response).toBe(native);
-    }),
-  );
-
-  it.effect("does not read a streamed native body it rebuilds over", () =>
-    Effect.gen(function* () {
-      let pulls = 0;
-      const stream = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          pulls++;
-          controller.enqueue(new TextEncoder().encode("streamed"));
-          controller.close();
-        },
-      });
-      const response = yield* handle(
-        "GET",
-        () => HttpServerResponse.raw(new Response(stream, { status: 202 })),
-        (response) => HttpServerResponse.setStatus(response, 418),
-      );
-      expect(response.status).toBe(418);
-      // The same stream object, untouched: the client pulls the first chunk.
-      expect(response.body).toBe(stream);
-      expect(pulls).toBe(0);
-      expect(stream.locked).toBe(false);
-      expect(yield* Effect.promise(() => response.text())).toBe("streamed");
-      expect(pulls).toBe(1);
     }),
   );
 });
