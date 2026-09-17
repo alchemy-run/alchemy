@@ -18,6 +18,7 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
@@ -529,7 +530,9 @@ export const LiveContainerProvider = () =>
         props: AnyContainerApplicationProps,
         build: ImageBuild,
         imageRef: string,
-        session?: { note: (message: string) => Effect.Effect<void> },
+        // The full session, not just `note`: `Docker.image.build` streams the
+        // builder's output through it as `kind: "output"` notes.
+        session?: ScopedPlanStatusSession,
       ) {
         const platform = publicationPlatform;
 
@@ -602,7 +605,7 @@ export const LiveContainerProvider = () =>
                 platform,
                 file: build.dockerfile,
               },
-              undefined,
+              session,
               credentials,
             )
             .pipe(retryPublication);
@@ -642,7 +645,7 @@ export const LiveContainerProvider = () =>
                 context: contextDir,
                 platform,
               },
-              undefined,
+              session,
               credentials,
             )
             .pipe(retryPublication);
@@ -669,7 +672,7 @@ export const LiveContainerProvider = () =>
         imageRef: string,
         imageHash: string,
         previousImageRef: string | undefined,
-        session?: { note: (message: string) => Effect.Effect<void> },
+        session?: ScopedPlanStatusSession,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const key = JSON.stringify([
@@ -771,7 +774,7 @@ export const LiveContainerProvider = () =>
               namespaceId: string;
             }
           | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -914,7 +917,7 @@ export const LiveContainerProvider = () =>
         // turns out to be gone. Threaded through so the update→create fallback
         // below preserves the binding.
         durableObjects: { namespaceId: string } | undefined;
-        session: { note: (message: string) => Effect.Effect<void> };
+        session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
 
