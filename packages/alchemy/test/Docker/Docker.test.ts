@@ -1,6 +1,8 @@
 import { Docker, DockerLive } from "@/Docker";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, layer } from "alchemy-test";
+import { assert, expect, layer } from "alchemy-test";
+import { PlatformError, SystemError } from "effect/PlatformError";
+import { classifyDockerRegistryError } from "@/Docker/RegistryError.ts";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Redacted from "effect/Redacted";
@@ -52,7 +54,116 @@ describe("Docker.materialize", (it) => {
   );
 });
 
+describe("Docker registry errors", (it) => {
+  for (const [description, tag] of [
+    [
+      "ERROR: failed to build: failed to solve: failed to push registry.example/image:latest: unknown: blob unknown to registry",
+      "DockerRegistryBlobUnknown",
+    ],
+    [
+      "#7 ERROR: failed to push: unknown: blob unknown to registry\n------\nERROR: failed to build: failed to solve: failed to push registry.example/image:latest: unknown: blob unknown to registry\n\nView build details: docker-desktop://dashboard/build/builder/node/build-id\n",
+      "DockerRegistryBlobUnknown",
+    ],
+    [
+      "Command exited with code 1: blob unknown to registry",
+      "DockerRegistryBlobUnknown",
+    ],
+    [
+      "ERROR: unexpected status from HEAD request to https://registry.example/v2/image/blobs/sha256:abc: 503 Service Unavailable",
+      "DockerRegistryUnavailable",
+    ],
+    ["ERROR: failed to push: 502 Bad Gateway", "DockerRegistryUnavailable"],
+    ["ERROR: unexpected status: 401 Unauthorized", "PlatformError"],
+    ["ERROR: unexpected status: 403 Forbidden", "PlatformError"],
+    ["ERROR: unexpected status: 400 Bad Request", "PlatformError"],
+    ["ERROR: failed to solve: process exited with code 1", "PlatformError"],
+    [
+      "ERROR: unexpected status from HEAD request to https://registry.example/v2/500/blobs/sha256:abc: 403 Forbidden",
+      "PlatformError",
+    ],
+    [
+      'ERROR: failed to solve: process "/bin/sh -c echo 503 Service Unavailable && exit 1" did not complete successfully: exit code: 1',
+      "PlatformError",
+    ],
+    [
+      "#7 RUN echo 'blob unknown to registry'\nERROR: process exited with code 1",
+      "PlatformError",
+    ],
+    [
+      "#7 RUN echo '503 Service Unavailable'\nERROR: process exited with code 1",
+      "PlatformError",
+    ],
+  ] as const) {
+    it.effect(`classifies ${description}`, () =>
+      Effect.sync(() => {
+        const error = new PlatformError(
+          new SystemError({
+            _tag: "Unknown",
+            module: "Docker",
+            method: "buildx.build",
+            description,
+          }),
+        );
+        const classified = classifyDockerRegistryError(error);
+        expect(classified._tag).toBe(tag);
+        if (classified._tag === "PlatformError") {
+          expect(classified).toBe(error);
+        } else {
+          expect(classified.cause).toBe(error);
+          expect(classified.message).toBe(error.message);
+        }
+      }),
+    );
+  }
+});
+
 describe("Docker.image", (it) => {
+  it.effect(
+    "validates installed Buildx before preparing registry exports",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const version = yield* docker.run(["buildx", "version"]);
+        const [major, minor] = version.stdout
+          .split(" ")[1]!
+          .slice(1)
+          .split(".")
+          .map(Number);
+        expect(Number.isInteger(major)).toBe(true);
+        expect(Number.isInteger(minor)).toBe(true);
+        const supported = major! >= 1 || minor! >= 26;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-buildx-version-",
+        });
+        const result = yield* docker.image
+          .build(
+            {
+              context: path.join(root, "missing-context"),
+              tag: "registry.invalid/buildx-version:latest",
+            },
+            undefined,
+            {
+              server: "registry.invalid",
+              username: "publisher",
+              password: Redacted.make("DESTINATION_SECRET_SENTINEL"),
+            },
+          )
+          .pipe(Effect.flip);
+        assert(result._tag === "PlatformError");
+        if (supported) {
+          expect(result.reason.description).toContain("missing-context");
+          expect(result.reason._tag).not.toBe("InvalidData");
+        } else {
+          expect(result.reason._tag).toBe("InvalidData");
+          expect(result.reason.description).toContain("Buildx 0.26.0 or newer");
+          expect(result.reason.description).toContain("DOCKER_AUTH_CONFIG");
+        }
+        expect(String(result)).not.toContain("DESTINATION_SECRET_SENTINEL");
+      }),
+  );
+
   for (const [name, auth] of [
     [
       "invalid JSON",
@@ -90,6 +201,7 @@ describe("Docker.image", (it) => {
             },
           )
           .pipe(Effect.flip);
+        assert(result._tag === "PlatformError");
         expect(result.reason._tag).toBe("InvalidData");
         expect(result.reason.description).toContain("DOCKER_AUTH_CONFIG");
         const serialized = yield* Effect.sync(() => JSON.stringify(result));
