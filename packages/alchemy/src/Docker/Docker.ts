@@ -634,17 +634,14 @@ export const DockerLive = Layer.effect(
       const version = yield* run(["buildx", "version"]).pipe(
         Effect.mapError(unsupported),
       );
-      const [, major, , minor] = yield* Schema.decodeUnknownEffect(
-        Schema.TemplateLiteralParser([
-          "github.com/docker/buildx v",
-          Schema.NumberFromString,
-          ".",
-          Schema.NumberFromString,
-          ".",
-          Schema.NumberFromString,
-          Schema.String,
-        ]),
-      )(version.stdout).pipe(Effect.mapError(unsupported));
+      // Numeric template captures can consume version separators as decimals.
+      const match =
+        /^github\.com\/docker\/buildx v(\d+)\.(\d+)\.\d+(?:[-+][^\s]+)?(?:\s.*)?$/.exec(
+          version.stdout,
+        );
+      if (!match) return yield* unsupported();
+      const major = Number(match[1]);
+      const minor = Number(match[2]);
       // Buildx 0.26 is the first release embedding Docker CLI 28.3's
       // DOCKER_AUTH_CONFIG credential store. Older plugins ignore it.
       if (major < 1 && minor < 26) return yield* unsupported();

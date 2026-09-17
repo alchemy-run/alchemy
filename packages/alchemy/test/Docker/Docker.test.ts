@@ -53,6 +53,51 @@ describe("Docker.materialize", (it) => {
 });
 
 describe("Docker.image", (it) => {
+  it.effect(
+    "validates installed Buildx before preparing registry exports",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const version = yield* docker.run(["buildx", "version"]);
+        const [major, minor] = version.stdout
+          .split(" ")[1]!
+          .slice(1)
+          .split(".")
+          .map(Number);
+        expect(Number.isInteger(major)).toBe(true);
+        expect(Number.isInteger(minor)).toBe(true);
+        const supported = major! >= 1 || minor! >= 26;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-buildx-version-",
+        });
+        const result = yield* docker.image
+          .build(
+            {
+              context: path.join(root, "missing-context"),
+              tag: "registry.invalid/buildx-version:latest",
+            },
+            undefined,
+            {
+              server: "registry.invalid",
+              username: "publisher",
+              password: Redacted.make("DESTINATION_SECRET_SENTINEL"),
+            },
+          )
+          .pipe(Effect.flip);
+        if (supported) {
+          expect(result.reason.description).toContain("missing-context");
+          expect(result.reason._tag).not.toBe("InvalidData");
+        } else {
+          expect(result.reason._tag).toBe("InvalidData");
+          expect(result.reason.description).toContain("Buildx 0.26.0 or newer");
+          expect(result.reason.description).toContain("DOCKER_AUTH_CONFIG");
+        }
+        expect(String(result)).not.toContain("DESTINATION_SECRET_SENTINEL");
+      }),
+  );
+
   for (const [name, auth] of [
     [
       "invalid JSON",
