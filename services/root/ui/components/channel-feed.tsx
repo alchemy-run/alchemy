@@ -25,13 +25,20 @@ import {
   ThreadCard,
   MessageContext,
   threadsOf,
+  Typing,
   type Post,
 } from "@/components/post-thread";
 import { formatAt, MarkdownText } from "@/components/chat";
 import { interruptChat } from "@/lib/channel";
 import { cn } from "@/lib/utils";
 import { showChannel, showOverlay } from "@/lib/routes";
-import { ChevronDown, ChevronRight, FolderTree, Loader2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderTree,
+  Loader2,
+  X,
+} from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const isLive = (post: Post): boolean => post.status === "running";
@@ -337,16 +344,15 @@ export const ThreadView = ({
     log.scrollTop = placeRef.current;
   }, [active]);
 
-  const thread = posts === undefined
-    ? undefined
-    : (threadsOf(posts).find((candidate) =>
-        candidate.posts.some((post) => post.id === id),
-      ) ?? null);
+  const thread =
+    posts === undefined
+      ? undefined
+      : (threadsOf(posts).find((candidate) =>
+          candidate.posts.some((post) => post.id === id),
+        ) ?? null);
 
   const live =
-    thread !== undefined &&
-    thread !== null &&
-    thread.posts.some(isLive);
+    thread !== undefined && thread !== null && thread.posts.some(isLive);
 
   useEffect(() => {
     const log = logRef.current;
@@ -371,9 +377,7 @@ export const ThreadView = ({
       event.preventDefault();
       pinnedRef.current = false;
       const row = () =>
-        logRef.current?.querySelector(
-          `[data-post-id="${CSS.escape(target)}"]`,
-        );
+        logRef.current?.querySelector(`[data-post-id="${CSS.escape(target)}"]`);
       const scroll = () =>
         row()?.scrollIntoView({ behavior: "smooth", block: "center" });
       // FLASH immediately — the wash outlives the smooth scroll, so
@@ -420,7 +424,9 @@ export const ThreadView = ({
         </span>
         <button
           type="button"
-          onClick={() => (onClose !== undefined ? onClose() : showChannel(channel))}
+          onClick={() =>
+            onClose !== undefined ? onClose() : showChannel(channel)
+          }
           aria-label="close the thread"
           className="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent"
         >
@@ -451,7 +457,10 @@ export const ThreadView = ({
         ) : (
           <MessageContext.Provider value={{ id: thread.root.id }}>
             {/* the root — who started it, then its full text */}
-            <div data-post-id={thread.root.id} className="min-w-0 border-b border-border/60 pb-3">
+            <div
+              data-post-id={thread.root.id}
+              className="min-w-0 border-b border-border/60 pb-3"
+            >
               <div className="flex items-center gap-2">
                 <AuthorAvatar name={thread.root.author} />
                 <span className="font-mono text-[12px] font-semibold">
@@ -461,7 +470,7 @@ export const ThreadView = ({
                   {formatAt(thread.root.at)}
                 </span>
                 {thread.root.status === "running" && replies.length === 0 && (
-                  <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
+                  <Typing name={thread.root.answering} />
                 )}
                 {thread.root.status === "failed" && (
                   <span className="shrink-0 text-[11px] text-destructive">

@@ -122,17 +122,8 @@ export const ChannelsApi = Effect.gen(function* () {
       );
     }
 
-    // the message IS a post, `running` until the exchange resolves —
-    // that status is the ONE pending indicator (no placeholder rows)
     const minted = yield* Clock.currentTimeMillis;
     const postId = `p-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    yield* posts.post({
-      id: postId,
-      ...(replyTo !== undefined ? { replyTo } : {}),
-      channel: channel.name,
-      author: HUMAN,
-      text,
-    });
 
     // THE GATE (Gate.ts): a message on a channel is judged before
     // anyone wakes up — is it worth nothing, a reply in the stream, or
@@ -152,8 +143,17 @@ export const ChannelsApi = Effect.gen(function* () {
             roster: ROSTER,
           });
 
+    // an ignored message still LANDS — it is part of the conversation,
+    // it just settles on arrival with nobody dispatched
     if (judged?.disposition === "ignore") {
-      yield* posts.settle(postId, "settled");
+      yield* posts.post({
+        id: postId,
+        ...(replyTo !== undefined ? { replyTo } : {}),
+        channel: channel.name,
+        author: HUMAN,
+        text,
+        status: "settled",
+      });
       return yield* HttpServerResponse.json(
         { post: postId, disposition: "ignore" },
         { status: 202 },
@@ -168,6 +168,19 @@ export const ChannelsApi = Effect.gen(function* () {
         channel.chat,
     )!;
     const agent = nameOfKey(target.key);
+
+    // the message IS a post, `running` until the exchange resolves —
+    // that status is the ONE pending indicator (no placeholder rows),
+    // and `answering` names who it waits on, so the channel reads
+    // "engineer is typing…" rather than showing an anonymous spinner
+    yield* posts.post({
+      id: postId,
+      ...(replyTo !== undefined ? { replyTo } : {}),
+      channel: channel.name,
+      author: HUMAN,
+      text,
+      answering: agent,
+    });
 
     // dispatch rides the post's id (idempotent delivery; the agent's
     // `Thread.invocations` sees the post it is answering). Only what

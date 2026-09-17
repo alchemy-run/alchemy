@@ -35,6 +35,7 @@ const TABLES = [
     kind TEXT NOT NULL DEFAULT 'message',
     text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
+    answering TEXT,
     at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS posts_reply ON posts (reply_to)`,
@@ -77,6 +78,7 @@ interface PostRow extends Record<string, Cloudflare.SqlStorageValue> {
   kind: string;
   text: string;
   status: string;
+  answering: string | null;
   at: number;
 }
 
@@ -105,6 +107,9 @@ const toPost = (row: PostRow): Post => ({
   kind: row.kind === "ask" ? "ask" : "message",
   text: row.text,
   status: row.status as Post["status"],
+  ...(row.answering === null || row.answering === undefined
+    ? {}
+    : { answering: row.answering }),
   at: row.at,
 });
 
@@ -118,6 +123,7 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     readonly kind?: Post["kind"];
     readonly text: string;
     readonly status?: Post["status"];
+    readonly answering?: string;
   }) => Effect.Effect<void, never, RuntimeContext>;
   readonly postSettle: (
     id: string,
@@ -207,14 +213,12 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
         initiator: row.initiator,
         members: JSON.parse(row.members) as ReadonlyArray<string>,
         open: row.open === 1,
-        utterances: utterances.map(
-          (utterance): CallUtterance => ({
-            seq: utterance.seq,
-            author: utterance.author,
-            text: utterance.text,
-            at: utterance.at,
-          }),
-        ),
+        utterances: utterances.map((utterance): CallUtterance => ({
+          seq: utterance.seq,
+          author: utterance.author,
+          text: utterance.text,
+          at: utterance.at,
+        })),
         createdAt: row.created_at,
       } satisfies CallView;
     });
@@ -272,6 +276,9 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
       if (!columns.some((column) => column.name === "reply_to")) {
         yield* sql.exec("ALTER TABLE posts ADD COLUMN reply_to TEXT");
       }
+      if (!columns.some((column) => column.name === "answering")) {
+        yield* sql.exec("ALTER TABLE posts ADD COLUMN answering TEXT");
+      }
 
       return {
         fetch: Effect.gen(function* () {
@@ -298,8 +305,8 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
             `INSERT OR IGNORE INTO posts
-              (id, reply_to, channel, author, kind, text, status, at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+              (id, reply_to, channel, author, kind, text, status, answering, at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
               .trim()
               .replaceAll(/\s+/g, " "),
             input.id,
@@ -309,6 +316,7 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
             input.kind ?? "message",
             input.text,
             input.status ?? "running",
+            input.answering ?? null,
             at,
           );
         }),
@@ -415,7 +423,7 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
 
         postList: Effect.fn(function* (options) {
           // newest LIMIT rows, then oldest-first for reading order
-          const rows = yield* (yield* (options?.channel === undefined
+          const rows = yield* (yield* options?.channel === undefined
             ? sql.exec<PostRow>(
                 "SELECT * FROM posts ORDER BY at DESC, id DESC LIMIT ?",
                 options?.limit ?? 200,
@@ -424,7 +432,7 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
                 "SELECT * FROM posts WHERE channel = ? ORDER BY at DESC, id DESC LIMIT ?",
                 options.channel,
                 options.limit ?? 200,
-              ))).toArray();
+              )).toArray();
           return rows.reverse().map(toPost);
         }),
 
@@ -478,14 +486,12 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
             member,
             top[0]?.top ?? from,
           );
-          return rows.map(
-            (row): CallUtterance => ({
-              seq: row.seq,
-              author: row.author,
-              text: row.text,
-              at: row.at,
-            }),
-          );
+          return rows.map((row): CallUtterance => ({
+            seq: row.seq,
+            author: row.author,
+            text: row.text,
+            at: row.at,
+          }));
         }),
       } satisfies ChatRpc;
     });

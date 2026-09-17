@@ -38,6 +38,12 @@ export interface Post {
    * (the text of the failing reply carries why).
    */
   readonly status: "running" | "settled" | "failed";
+  /**
+   * While `running`, WHO the message is waiting on — the agent the gate
+   * routed it to. The UI names them ("engineer is typing…") instead of
+   * showing a bare spinner.
+   */
+  readonly answering?: string;
   readonly at: number;
 }
 
@@ -54,6 +60,8 @@ export class Posts extends Context.Service<
       readonly kind?: Post["kind"];
       readonly text: string;
       readonly status?: Post["status"];
+      /** The agent this message is waiting on, while it runs. */
+      readonly answering?: string;
     }) => Effect.Effect<void>;
     /** Move a post's status once its replies land (or break). */
     readonly settle: (

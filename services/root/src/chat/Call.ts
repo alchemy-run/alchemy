@@ -104,9 +104,7 @@ export const CallToolLive = Layer.effect(
       members: ReadonlyArray<string>;
       topic: string;
     }) {
-      const me = Option.getOrUndefined(
-        yield* Effect.serviceOption(AI.Thread),
-      );
+      const me = Option.getOrUndefined(yield* Effect.serviceOption(AI.Thread));
       if (me === undefined) {
         return yield* Effect.die("call outside a session frame");
       }

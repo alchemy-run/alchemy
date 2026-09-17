@@ -113,9 +113,7 @@ export class Colleagues extends Context.Service<
  *  isolate), so the session is read from the ambient frame at CALL
  *  time; its absence is a wiring defect, never a model-visible error. */
 const currentThread = Effect.gen(function* () {
-  const thread = Option.getOrUndefined(
-    yield* Effect.serviceOption(AI.Thread),
-  );
+  const thread = Option.getOrUndefined(yield* Effect.serviceOption(AI.Thread));
   return thread === undefined
     ? yield* Effect.die("ask/tell outside a session frame")
     : thread;
@@ -218,8 +216,7 @@ export const AskLive = Layer.effect(
       // the reference chain BEHIND this ask — structural (no header
       // to parse, nothing to go stale); its first link is the THREAD
       // this exchange lives in
-      const above =
-        parent === undefined ? [] : yield* posts.ancestors(parent);
+      const above = parent === undefined ? [] : yield* posts.ancestors(parent);
       const behind = above.map((ancestor) => ancestor.author);
       const chain = behind.includes(myName) ? behind : [...behind, myName];
 

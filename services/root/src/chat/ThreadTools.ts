@@ -56,9 +56,7 @@ export class EmptyPost extends Data.TaggedError("EmptyPost") {
 
 /** The calling session's frame — author identity rides the key. */
 const currentThread = Effect.gen(function* () {
-  const thread = Option.getOrUndefined(
-    yield* Effect.serviceOption(AI.Thread),
-  );
+  const thread = Option.getOrUndefined(yield* Effect.serviceOption(AI.Thread));
   return thread === undefined
     ? yield* Effect.die("post/threads outside a session frame")
     : thread;
@@ -112,9 +110,10 @@ export const threads = AI.Tool("threads")`
             id: entry.id,
             author: entry.author,
             at: entry.at,
-            text: entry.text.length > 300
-              ? `${entry.text.slice(0, 300)}…`
-              : entry.text,
+            text:
+              entry.text.length > 300
+                ? `${entry.text.slice(0, 300)}…`
+                : entry.text,
           })),
       };
     });

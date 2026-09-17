@@ -58,6 +58,8 @@ export interface Post {
   readonly kind: "message" | "ask";
   readonly text: string;
   readonly status: "running" | "settled" | "failed";
+  /** While running, the agent this message is waiting on. */
+  readonly answering?: string;
   readonly at: number;
 }
 
@@ -147,8 +149,6 @@ export const Mention = ({ name }: { name: string }) => {
     </button>
   );
 };
-
-
 
 /** Ask every thread to reveal `id` — the block containing it expands
  *  and scrolls it into view. Unclaimed reveals retry briefly, so a
@@ -250,6 +250,32 @@ export const PostRef = ({ id }: { id: string }) => {
   );
 };
 
+/**
+ * Who a running message is waiting on. The gate routes each message to
+ * whoever is closest to it, so the answer can come from someone other
+ * than the channel's usual voice — naming them is the difference
+ * between "something is happening" and "the engineer picked this up".
+ * Falls back to a bare spinner for messages written before routing.
+ */
+export const Typing = ({ name }: { readonly name?: string }) =>
+  name === undefined ? (
+    <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
+  ) : (
+    <span className="flex shrink-0 items-center gap-1 text-[11px] text-primary/80">
+      <span className="font-medium">{name}</span>
+      <span>is typing</span>
+      <span className="inline-flex items-end gap-[2px] pb-[2px]">
+        {[0, 160, 320].map((delay) => (
+          <span
+            key={delay}
+            className="size-[3px] animate-bounce rounded-full bg-current"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </span>
+    </span>
+  );
+
 /** One message of the stream. */
 export const PostRow = ({
   post,
@@ -268,32 +294,35 @@ export const PostRow = ({
   refHidden?: boolean;
 }) => (
   <MessageContext.Provider
-    value={{ id: post.id, ...(post.replyTo !== undefined ? { replyTo: post.replyTo } : {}) }}
+    value={{
+      id: post.id,
+      ...(post.replyTo !== undefined ? { replyTo: post.replyTo } : {}),
+    }}
   >
-  <div data-post-id={post.id} className="min-w-0">
-    {reference !== undefined && !refHidden && <ReplyRef target={reference} />}
-    {header && (
-      <div className="flex items-center gap-2">
-        <AuthorAvatar name={post.author} />
-        <Name name={post.author} />
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
-          {formatAt(post.at)}
-        </span>
-        {post.status === "running" && (
-          <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
-        )}
-        {post.status === "failed" && (
-          <span className="shrink-0 text-[11px] text-destructive">failed</span>
-        )}
-      </div>
-    )}
-    {post.text.length > 0 && (
-      <div className={cn("min-w-0 text-[13px]", header && "ml-8")}>
-        <MarkdownText text={post.text} />
-      </div>
-    )}
-    <Working post={post} parent={reference} />
-  </div>
+    <div data-post-id={post.id} className="min-w-0">
+      {reference !== undefined && !refHidden && <ReplyRef target={reference} />}
+      {header && (
+        <div className="flex items-center gap-2">
+          <AuthorAvatar name={post.author} />
+          <Name name={post.author} />
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+            {formatAt(post.at)}
+          </span>
+          {post.status === "running" && <Typing name={post.answering} />}
+          {post.status === "failed" && (
+            <span className="shrink-0 text-[11px] text-destructive">
+              failed
+            </span>
+          )}
+        </div>
+      )}
+      {post.text.length > 0 && (
+        <div className={cn("min-w-0 text-[13px]", header && "ml-8")}>
+          <MarkdownText text={post.text} />
+        </div>
+      )}
+      <Working post={post} parent={reference} />
+    </div>
   </MessageContext.Provider>
 );
 
@@ -444,7 +473,7 @@ const Working = ({
                   ? output.name
                   : typeof (part.input as { name?: unknown } | undefined)
                         ?.name === "string"
-                    ? ((part.input as { name: string }).name)
+                    ? (part.input as { name: string }).name
                     : undefined;
               if (made !== undefined) created.add(made);
               continue;
@@ -587,7 +616,9 @@ export const PostList = ({
             <PostRow
               post={post}
               reference={reference}
-              refHidden={reference !== undefined && reference.id === suppressRef}
+              refHidden={
+                reference !== undefined && reference.id === suppressRef
+              }
             />
           </div>
         );
@@ -610,7 +641,9 @@ export interface Thread {
  * thread. Threads are ordered by their root; posts inside stay in
  * stream order.
  */
-export const threadsOf = (posts: ReadonlyArray<Post>): ReadonlyArray<Thread> => {
+export const threadsOf = (
+  posts: ReadonlyArray<Post>,
+): ReadonlyArray<Thread> => {
   const byId = new Map(posts.map((post) => [post.id, post] as const));
   const rootOf = (post: Post): Post => {
     let current = post;
@@ -647,8 +680,7 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
   const replies = thread.posts.filter((post) => post.id !== thread.root.id);
   const live = thread.posts.some((post) => post.status === "running");
   const last = replies[replies.length - 1];
-  const open = () =>
-    showThread(thread.root.channel ?? "root", thread.root.id);
+  const open = () => showThread(thread.root.channel ?? "root", thread.root.id);
   return (
     <MessageContext.Provider value={{ id: thread.root.id }}>
       <div className="relative min-w-0">
@@ -659,7 +691,7 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
             {formatAt(thread.root.at)}
           </span>
           {thread.root.status === "running" && replies.length === 0 && (
-            <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
+            <Typing name={thread.root.answering} />
           )}
           {thread.root.status === "failed" && (
             <span className="shrink-0 text-[11px] text-destructive">
@@ -766,10 +798,7 @@ export const PostThread = ({
   }
   return (
     <div className="min-w-0">
-      <PostRow
-        post={thread.post}
-        header={thread.post.author !== speaker}
-      />
+      <PostRow post={thread.post} header={thread.post.author !== speaker} />
       {thread.replies.map((reply) => (
         <div key={reply.id} className="mt-3 min-w-0">
           <PostRow post={reply} />
