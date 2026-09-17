@@ -17,6 +17,7 @@ import * as Prompt from "effect/unstable/ai/Prompt";
 import * as AiTool from "effect/unstable/ai/Tool";
 import * as Toolkit from "effect/unstable/ai/Toolkit";
 import * as Layer from "effect/Layer";
+import { framed } from "../CapabilityGraph.ts";
 import * as PersistentRef from "../PersistentRef.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
 import { TickModel, type ModelLayer } from "./Model.ts";
@@ -945,7 +946,7 @@ export const makeResolvers = (
       // handler once per interpret, under the charter's captured
       // context — like the eager path
       const handler = yield* Effect.provide(
-        compiled.def.init,
+        framed("Tool", name)(compiled.def.init),
         context,
       ) as Effect.Effect<(params: any) => Effect.Effect<any, any, any>>;
       handlerCache.set(name, handler);
@@ -1866,25 +1867,33 @@ export const construct = (
           `${driver}: the charter of '${term}' is a function — a charter is ONE Effect, run at plan time. Read \`AI.Thread\` inside turns, tools and methods; declare per-session state with \`PersistentRef.of\`.`,
         ),
       )
-    : Effect.flatMap(
-        (charter as Effect.Effect<unknown, unknown, any>).pipe(
-          // failure OR defect (a `Service not found` for AI.Thread is a
-          // defect): name the scope so the build error says where
-          Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause as Cause.Cause<never>)
-              : Effect.die(
-                  new Error(
-                    `${driver}: the charter of '${term}' failed — ${describeCrash(cause).encoded.message}`,
-                    { cause: Cause.squash(cause) },
+    : // the AGENT's frame in the capability graph: every lookup and
+      // acquisition the charter (and its tools' inits, children
+      // frames) performs is the agent's reach (CapabilityGraph.ts)
+      framed(
+        "Agent",
+        term,
+      )(
+        Effect.flatMap(
+          (charter as Effect.Effect<unknown, unknown, any>).pipe(
+            // failure OR defect (a `Service not found` for AI.Thread is a
+            // defect): name the scope so the build error says where
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.failCause(cause as Cause.Cause<never>)
+                : Effect.die(
+                    new Error(
+                      `${driver}: the charter of '${term}' failed — ${describeCrash(cause).encoded.message}`,
+                      { cause: Cause.squash(cause) },
+                    ),
                   ),
-                ),
+            ),
           ),
+          (result) =>
+            Effect.flatMap(shapeOf(driver, term, result), (shape) =>
+              initToolDefs(driver, term, result, shape),
+            ),
         ),
-        (result) =>
-          Effect.flatMap(shapeOf(driver, term, result), (shape) =>
-            initToolDefs(driver, term, result, shape),
-          ),
       );
 
 /**
@@ -1919,9 +1928,12 @@ const initToolDefs = (
     for (const def of defs) {
       const name = def.tool["~alchemy/Name"];
       if (defHandlers.has(name)) continue;
-      const handler = (yield* (
-        def.init as Effect.Effect<unknown, unknown, any>
-      ).pipe(
+      // the TOOL's frame — a child of the agent's — so the graph
+      // answers "what does this tool reach" on its own
+      const handler = (yield* framed(
+        "Tool",
+        name,
+      )(def.init as Effect.Effect<unknown, unknown, any>).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.failCause(cause as Cause.Cause<never>)

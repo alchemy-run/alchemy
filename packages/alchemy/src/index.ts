@@ -13,6 +13,15 @@ export {
   type ServiceLike as BindingServiceLike,
   type ServiceShape as BindingServiceShape,
 } from "./Binding.ts";
+export {
+  CapabilityGraph,
+  CurrentFrame as CapabilityFrame,
+  framed,
+  type Acquisition,
+  type CapabilityGraphShape,
+  type Frame as CapabilityFrameShape,
+  type Permission,
+} from "./CapabilityGraph.ts";
 export * from "./Destroy.ts";
 export * from "./Diff.ts";
 export * from "./Input.ts";

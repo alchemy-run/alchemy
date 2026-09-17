@@ -4,6 +4,16 @@
  * Worker from its own Layer builds.
  */
 
+/** One capability a node can reach: the binding (`Cloudflare.R2.
+ *  BucketReadWrite`), its target resources (`Cloudflare.R2.Bucket(jobs)`),
+ *  and the chain of services it was reached through (empty when the
+ *  node acquired it directly). */
+export interface OrgPermission {
+  readonly binding: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly via: ReadonlyArray<string>;
+}
+
 export interface OrgTool {
   readonly name: string;
   readonly description: string;
@@ -11,6 +21,7 @@ export interface OrgTool {
   readonly params: ReadonlyArray<string>;
   readonly outputs: ReadonlyArray<string>;
   readonly errors: ReadonlyArray<string>;
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgSkillGrant {
@@ -29,6 +40,9 @@ export interface OrgAgent {
   readonly tools: ReadonlyArray<OrgTool>;
   readonly skills: ReadonlyArray<OrgSkillGrant>;
   readonly groups: ReadonlyArray<string>;
+  /** Everything the agent can reach — its charter's, its tools' and
+   *  its skills' permissions, merged. */
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgSkill {
@@ -36,7 +50,13 @@ export interface OrgSkill {
   readonly source: string | undefined;
   readonly teaching: string;
   readonly tools: ReadonlyArray<string>;
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
+
+/** A service key's short name — the last path segment
+ *  (`root/JobService` → `JobService`, `alchemy/AI/Tool/bash` → `bash`). */
+export const shortKey = (key: string): string =>
+  key.slice(key.lastIndexOf("/") + 1);
 
 export interface OrgGroup {
   readonly name: string;

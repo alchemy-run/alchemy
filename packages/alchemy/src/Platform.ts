@@ -14,6 +14,12 @@ import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  CapabilityGraph,
+  makeCapabilityGraph,
+  observeLayerBuilds,
+  observeLookups,
+} from "./CapabilityGraph.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
@@ -542,7 +548,19 @@ export const Platform = <
          * self-evict when their last observing scope closes, so a
          * per-class map is safe across deploys in one session.
          */
-        const memoMap = Layer.makeMemoMapUnsafe();
+        /**
+         * The capability graph of this instance — who reaches which
+         * cloud capability (CapabilityGraph.ts). Every memoized Layer
+         * built through the memo map (declared `layers`, and every
+         * `Effect.provide` inside init, which forks the map) gets a
+         * frame; every service lookup init performs is attributed to
+         * the frame current on its fiber; every `Binding.Service`
+         * acquisition lands on that frame as a permission row. The
+         * same build runs at plan and at isolate boot, so the graph a
+         * deployed host serves (`yield* CapabilityGraph`) is its own.
+         */
+        const graph = makeCapabilityGraph();
+        const memoMap = observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph);
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -558,6 +576,9 @@ export const Platform = <
               Effect.context<never>(),
             ]),
             Effect.fn(function* ([props, runtimeContext, outerServices]) {
+              // a fresh build (a second deploy in one session) starts
+              // from an empty graph — frames are per build
+              yield* Effect.sync(() => graph.reset());
               // The init effect (`impl`) is evaluated inside an
               // `Effect.provide(...)` region below, whose implementation
               // (`scopedWith`) would otherwise shadow the ambient `Scope`
@@ -592,9 +613,11 @@ export const Platform = <
               const layersContext =
                 layers === undefined
                   ? Context.empty()
-                  : yield* Layer.buildWithMemoMap(layers, memoMap, buildScope);
+                  : yield* observeLookups(graph)(
+                      Layer.buildWithMemoMap(layers, memoMap, buildScope),
+                    );
 
-              yield* impl.pipe(
+              yield* observeLookups(graph)(impl).pipe(
                 Effect.flatMap((impl) => {
                   if (!impl) return Effect.void;
                   const shape = impl as Record<string, unknown>;
@@ -689,6 +712,9 @@ export const Platform = <
                         Layer.succeed(Platform.Platform, runtimeContext),
                         Layer.succeed(PlatformContext, runtimeContext),
                         Layer.succeed(RuntimeContext, runtimeContext),
+                        // this instance's capability graph — readable
+                        // by init and by the routes it serves
+                        Layer.succeed(CapabilityGraph, graph),
                         // the Output-free `set` for modules kept out of the
                         // engine's import graph — see RuntimeLiteral
                         Layer.succeed(RuntimeLiteral, (key, value) =>

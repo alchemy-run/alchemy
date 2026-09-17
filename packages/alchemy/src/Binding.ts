@@ -10,9 +10,43 @@ import {
   isResource,
   type ResourceLike,
 } from "./Resource.ts";
+import { recordAcquisition } from "./CapabilityGraph.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";
+
+/** The identity one bind argument contributes to an acquisition row —
+ *  a live Resource's, or a deferred constructor's static one. */
+const acquisitionTarget = (arg: unknown): string | undefined => {
+  if (isResource(arg)) return `${arg.Type}(${arg.LogicalId})`;
+  const meta = deferredResourceMeta(arg);
+  return meta === undefined ? undefined : `${meta.Type}(${meta.LogicalId})`;
+};
+
+/** The targets of one acquisition: read from the ORIGINAL args first
+ *  (a deferred constructor keeps its static identity), else from the
+ *  resolved values (a Stack resolves them to instances); arrays of
+ *  resources contribute each member. */
+const acquisitionTargets = (
+  args: ReadonlyArray<unknown>,
+  resolved: ReadonlyArray<unknown>,
+): ReadonlyArray<string> => {
+  const targets: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const candidates = [args[index], resolved[index]];
+    for (const candidate of candidates) {
+      const values = Array.isArray(candidate) ? candidate : [candidate];
+      const found = values
+        .map(acquisitionTarget)
+        .filter((target): target is string => target !== undefined);
+      if (found.length > 0) {
+        targets.push(...found);
+        break;
+      }
+    }
+  }
+  return targets;
+};
 
 export interface ServiceLike {
   kind: "Service";
@@ -146,6 +180,14 @@ export const Service = <
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
       Effect.all(args.map(resolveArg), { concurrency: "unbounded" }).pipe(
+        // the permission row: this capability, over these targets,
+        // acquired by whichever frame is current (CapabilityGraph.ts)
+        Effect.tap((resolved) =>
+          recordAcquisition({
+            binding: id,
+            targets: acquisitionTargets(args, resolved),
+          }),
+        ),
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target

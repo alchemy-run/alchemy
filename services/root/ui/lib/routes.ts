@@ -122,8 +122,10 @@ export const channelFromLocation = (): string | undefined => {
 };
 
 /** The profile's TABS — the charter is the page; skills and tools
- *  are its two indexes. */
-export type AgentTab = "charter" | "skills" | "tools";
+ *  are its two indexes; permissions is what all of it can reach. */
+export type AgentTab = "charter" | "skills" | "tools" | "permissions";
+
+const TABS: ReadonlySet<string> = new Set(["skills", "tools", "permissions"]);
 
 export interface AgentPlace {
   readonly name: string;
@@ -149,7 +151,9 @@ export const agentFromLocation = (): AgentPlace | undefined => {
   const parts = segments();
   if (parts[0] !== "a" || parts[1] === undefined) return undefined;
   const tab =
-    parts[2] === "skills" || parts[2] === "tools" ? parts[2] : "charter";
+    parts[2] !== undefined && TABS.has(parts[2])
+      ? (parts[2] as AgentTab)
+      : "charter";
   return {
     name: decodeURIComponent(parts[1]),
     tab,

@@ -14,7 +14,9 @@ import {
   fetchOrg,
   invalidateOrg,
   setAgentSkill,
+  shortKey,
   type OrgGraph,
+  type OrgPermission,
   type OrgTool,
 } from "@/lib/org";
 import { showAgent, showChannel, type AgentTab } from "@/lib/routes";
@@ -25,6 +27,7 @@ import {
   ChevronRight,
   Cpu,
   FileCode2,
+  KeyRound,
   MessageCircle,
   ScrollText,
   Wrench,
@@ -64,6 +67,69 @@ const Pill = ({
     {children}
   </span>
 );
+
+/**
+ * One PERMISSION row — the capability (binding), the resources it is
+ * over, and how it was reached: directly, or `via` a chain of
+ * services the node looked up (a tool's `yield* JobService` reaching
+ * the bucket JobService bound).
+ */
+const PermissionRow = ({ permission }: { permission: OrgPermission }) => (
+  <li className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5">
+    <KeyRound className="size-3 shrink-0 translate-y-px text-muted-foreground/70" />
+    <span className="font-mono text-[12.5px] font-medium">
+      {permission.binding}
+    </span>
+    {permission.targets.map((target) => (
+      <Pill key={target} tone="green" title="the target resource">
+        {target}
+      </Pill>
+    ))}
+    {permission.via.length > 0 && (
+      <span
+        className="font-mono text-[10.5px] text-muted-foreground"
+        title={permission.via.join(" → ")}
+      >
+        via {permission.via.map(shortKey).join(" › ")}
+      </span>
+    )}
+  </li>
+);
+
+/** A node's permissions as a LIST — or one quiet line when it reaches
+ *  nothing. `compact` is the card-embedded form (skills, tools). */
+const Permissions = ({
+  permissions,
+  compact = false,
+}: {
+  permissions: ReadonlyArray<OrgPermission>;
+  compact?: boolean;
+}) =>
+  permissions.length === 0 ? (
+    <div
+      className={cn(
+        "text-muted-foreground",
+        compact ? "mt-3 text-[11px]" : "py-10 text-center text-sm",
+      )}
+    >
+      reaches no cloud capability
+    </div>
+  ) : (
+    <ul
+      aria-label="permissions"
+      className={cn(
+        "divide-y divide-border/40",
+        compact && "mt-3 border-t border-border/40",
+      )}
+    >
+      {permissions.map((permission) => (
+        <PermissionRow
+          key={`${permission.binding}|${permission.targets.join(",")}`}
+          permission={permission}
+        />
+      ))}
+    </ul>
+  );
 
 /**
  * One COLLAPSED row of a document list — Notion's toggle block: a
@@ -181,6 +247,7 @@ const TABS: ReadonlyArray<{ id: AgentTab; icon: typeof ScrollText }> = [
   { id: "charter", icon: ScrollText },
   { id: "skills", icon: Blocks },
   { id: "tools", icon: Wrench },
+  { id: "permissions", icon: KeyRound },
 ];
 
 export const AgentProfile = ({
@@ -327,6 +394,11 @@ export const AgentProfile = ({
                     {agent.tools.length}
                   </span>
                 )}
+                {id === "permissions" && agent.permissions.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {agent.permissions.length}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -335,130 +407,156 @@ export const AgentProfile = ({
             /* the DM feed — it owns its scroll and composer */
             <div className="flex min-h-0 flex-1 flex-col">{chat}</div>
           ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
-            {tab === "charter" && (
-              /* the charter — the same prose the model reads, laid
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+              {tab === "charter" && (
+                /* the charter — the same prose the model reads, laid
                  out as a DOCUMENT */
-              <article className={DOC}>
-                <MarkdownText text={agent.charter} />
-              </article>
-            )}
+                <article className={DOC}>
+                  <MarkdownText text={agent.charter} />
+                </article>
+              )}
 
-            {tab === "skills" &&
-              (agent.skills.length === 0 ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">
-                  no skills granted to this agent
-                </div>
-              ) : (
-                /* skills — a document LIST: collapsed rows, the
+              {tab === "skills" &&
+                (agent.skills.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-muted-foreground">
+                    no skills granted to this agent
+                  </div>
+                ) : (
+                  /* skills — a document LIST: collapsed rows, the
                    teaching on expand; the switch rides the header */
-                <article className="w-full max-w-2xl divide-y divide-border/40">
-                  {agent.skills.map((grant) => (
-                    <DocRow
-                      key={grant.name}
-                      selected={item === grant.name}
-                      icon={Blocks}
-                      name={grant.name}
-                      extras={
-                        <>
-                          {!grant.enabled && (
-                            <span className="shrink-0 text-[10px] text-muted-foreground">
-                              off — activation refused
-                            </span>
-                          )}
-                          <SkillSwitch
-                            agent={agent.name}
-                            name={grant.name}
-                            enabled={grant.enabled}
-                            onFlip={(enabled) =>
-                              setOrg((current) =>
-                                current === undefined
-                                  ? current
-                                  : {
-                                      ...current,
-                                      agents: current.agents.map((candidate) =>
-                                        candidate.name === agent.name
-                                          ? {
-                                              ...candidate,
-                                              skills: candidate.skills.map(
-                                                (entry) =>
-                                                  entry.name === grant.name
-                                                    ? { ...entry, enabled }
-                                                    : entry,
-                                              ),
-                                            }
-                                          : candidate,
-                                      ),
-                                    },
-                              )
+                  <article className="w-full max-w-2xl divide-y divide-border/40">
+                    {agent.skills.map((grant) => (
+                      <DocRow
+                        key={grant.name}
+                        selected={item === grant.name}
+                        icon={Blocks}
+                        name={grant.name}
+                        extras={
+                          <>
+                            {!grant.enabled && (
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                off — activation refused
+                              </span>
+                            )}
+                            <SkillSwitch
+                              agent={agent.name}
+                              name={grant.name}
+                              enabled={grant.enabled}
+                              onFlip={(enabled) =>
+                                setOrg((current) =>
+                                  current === undefined
+                                    ? current
+                                    : {
+                                        ...current,
+                                        agents: current.agents.map(
+                                          (candidate) =>
+                                            candidate.name === agent.name
+                                              ? {
+                                                  ...candidate,
+                                                  skills: candidate.skills.map(
+                                                    (entry) =>
+                                                      entry.name === grant.name
+                                                        ? { ...entry, enabled }
+                                                        : entry,
+                                                  ),
+                                                }
+                                              : candidate,
+                                        ),
+                                      },
+                                )
+                              }
+                            />
+                          </>
+                        }
+                      >
+                        <div className={PROSE}>
+                          <MarkdownText
+                            text={
+                              org?.skills.find(
+                                (skill) => skill.name === grant.name,
+                              )?.teaching ?? ""
                             }
                           />
-                        </>
+                        </div>
+                        {/* what the skill's tools reach */}
+                        <Permissions
+                          compact
+                          permissions={
+                            org?.skills.find(
+                              (skill) => skill.name === grant.name,
+                            )?.permissions ?? []
+                          }
+                        />
+                      </DocRow>
+                    ))}
+                  </article>
+                ))}
+
+              {tab === "tools" && (
+                /* tools — a document LIST: collapsed rows, the prose
+                 and schema pills on expand */
+                <article className="w-full max-w-2xl divide-y divide-border/40">
+                  {agent.tools.map((tool) => (
+                    <DocRow
+                      key={tool.name}
+                      selected={item === tool.name}
+                      icon={Wrench}
+                      name={tool.name}
+                      extras={
+                        <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[10px] text-muted-foreground">
+                          {tool.kind === "static" ? "tool" : "contract"}
+                        </span>
                       }
                     >
                       <div className={PROSE}>
-                        <MarkdownText
-                          text={
-                            org?.skills.find(
-                              (skill) => skill.name === grant.name,
-                            )?.teaching ?? ""
-                          }
-                        />
+                        <MarkdownText text={tool.description} />
                       </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {tool.params.map((param) => (
+                          <Pill
+                            key={`in-${param}`}
+                            tone="muted"
+                            title="a parameter"
+                          >
+                            {param}
+                          </Pill>
+                        ))}
+                        {tool.outputs.map((output) => (
+                          <Pill
+                            key={`out-${output}`}
+                            tone="amber"
+                            title="an answer field"
+                          >
+                            → {output}
+                          </Pill>
+                        ))}
+                        {tool.errors.map((error) => (
+                          <Pill
+                            key={`err-${error}`}
+                            tone="red"
+                            title="a declared failure"
+                          >
+                            {error}
+                          </Pill>
+                        ))}
+                      </div>
+                      {/* what the tool reaches — its init's acquisitions,
+                        and those of every service it looked up */}
+                      <Permissions compact permissions={tool.permissions} />
                     </DocRow>
                   ))}
                 </article>
-              ))}
+              )}
 
-            {tab === "tools" && (
-              /* tools — a document LIST: collapsed rows, the prose
-                 and schema pills on expand */
-              <article className="w-full max-w-2xl divide-y divide-border/40">
-                {agent.tools.map((tool) => (
-                  <DocRow
-                    key={tool.name}
-                    selected={item === tool.name}
-                    icon={Wrench}
-                    name={tool.name}
-                    extras={
-                      <span className="shrink-0 rounded-full border border-border/60 px-1.5 py-px text-[10px] text-muted-foreground">
-                        {tool.kind === "static" ? "tool" : "contract"}
-                      </span>
-                    }
-                  >
-                    <div className={PROSE}>
-                      <MarkdownText text={tool.description} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {tool.params.map((param) => (
-                        <Pill key={`in-${param}`} tone="muted" title="a parameter">
-                          {param}
-                        </Pill>
-                      ))}
-                      {tool.outputs.map((output) => (
-                        <Pill
-                          key={`out-${output}`}
-                          tone="amber"
-                          title="an answer field"
-                        >
-                          → {output}
-                        </Pill>
-                      ))}
-                      {tool.errors.map((error) => (
-                        <Pill
-                          key={`err-${error}`}
-                          tone="red"
-                          title="a declared failure"
-                        >
-                          {error}
-                        </Pill>
-                      ))}
-                    </div>
-                  </DocRow>
-                ))}
-              </article>
-            )}
-          </div>
+              {tab === "permissions" && (
+                /* permissions — everything the agent can reach: its
+                 charter's own acquisitions and every granted tool's
+                 and skill's, one row per capability × target */
+                <article className="w-full max-w-2xl">
+                  <Permissions permissions={agent.permissions} />
+                </article>
+              )}
+            </div>
           )}
         </div>
       )}

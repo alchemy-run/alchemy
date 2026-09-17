@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
+import { framed } from "../CapabilityGraph.ts";
 import type * as PersistentRef from "../PersistentRef.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Actor, Agent, AgentService, Stub, StubVerbs } from "./Agent.ts";
@@ -379,79 +380,85 @@ export const layer: {
     ? Object.assign(
         Layer.effect(
           term as any,
-          Effect.gen(function* () {
-            const template = charterOrTemplate as TemplateStringsArray;
-            const context = yield* Effect.context<never>();
-            const groupName = term["~alchemy/Name"] as string;
-            const members: Array<{ name: string; slug: string }> = [];
-            const actors = new Map<string, unknown>();
-            for (const ref of refs) {
-              if (isSource(ref)) {
-                yield* bindSource(ref);
-                continue;
+          // the GROUP's frame in the capability graph (CapabilityGraph.ts)
+          framed(
+            "Group",
+            term["~alchemy/Name"] as string,
+          )(
+            Effect.gen(function* () {
+              const template = charterOrTemplate as TemplateStringsArray;
+              const context = yield* Effect.context<never>();
+              const groupName = term["~alchemy/Name"] as string;
+              const members: Array<{ name: string; slug: string }> = [];
+              const actors = new Map<string, unknown>();
+              for (const ref of refs) {
+                if (isSource(ref)) {
+                  yield* bindSource(ref);
+                  continue;
+                }
+                if (!isAgent(ref)) continue;
+                const name = (ref as { "~alchemy/Name": string })[
+                  "~alchemy/Name"
+                ];
+                const service = Context.getOption(context, ref as any);
+                if (Option.isNone(service)) {
+                  return yield* Effect.die(
+                    `AI.layer: no implementation provided for member '${name}' of group '${groupName}'`,
+                  );
+                }
+                const slug = memberSlug(name);
+                members.push({ name, slug });
+                actors.set(name.toLowerCase(), service.value);
+                actors.set(slug, service.value);
               }
-              if (!isAgent(ref)) continue;
-              const name = (ref as { "~alchemy/Name": string })[
-                "~alchemy/Name"
-              ];
-              const service = Context.getOption(context, ref as any);
-              if (Option.isNone(service)) {
+              const roster = members.map((member) => member.slug);
+              // the org, DERIVED: the build that assembles the group
+              // registers its chart (OrgRegistry.ts)
+              const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
+              if (Option.isSome(orgRegistry)) {
+                orgRegistry.value.register({
+                  kind: "Group",
+                  name: groupName,
+                  source: (term as { source?: { path?: string } }).source?.path,
+                  template,
+                  refs,
+                });
+              }
+              const head = members[0];
+              if (head === undefined) {
                 return yield* Effect.die(
-                  `AI.layer: no implementation provided for member '${name}' of group '${groupName}'`,
+                  `AI.layer: group '${groupName}' declares no member agents`,
                 );
               }
-              const slug = memberSlug(name);
-              members.push({ name, slug });
-              actors.set(name.toLowerCase(), service.value);
-              actors.set(slug, service.value);
-            }
-            const roster = members.map((member) => member.slug);
-            // the org, DERIVED: the build that assembles the group
-            // registers its chart (OrgRegistry.ts)
-            const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
-            if (Option.isSome(orgRegistry)) {
-              orgRegistry.value.register({
-                kind: "Group",
-                name: groupName,
-                source: (term as { source?: { path?: string } }).source?.path,
+              // the chart renders member NAMES as inert prose — splicing
+              // a team into a stance must not register its members as
+              // delegates (no intrinsic dispatch; teams talk through the
+              // org's own conversation tools)
+              const teaching = yield* fragment(
                 template,
-                refs,
-              });
-            }
-            const head = members[0];
-            if (head === undefined) {
-              return yield* Effect.die(
-                `AI.layer: group '${groupName}' declares no member agents`,
+                ...refs.map((ref) =>
+                  isAgent(ref)
+                    ? memberSlug(
+                        (ref as { "~alchemy/Name": string })["~alchemy/Name"],
+                      )
+                    : ref,
+                ),
               );
-            }
-            // the chart renders member NAMES as inert prose — splicing
-            // a team into a stance must not register its members as
-            // delegates (no intrinsic dispatch; teams talk through the
-            // org's own conversation tools)
-            const teaching = yield* fragment(
-              template,
-              ...refs.map((ref) =>
-                isAgent(ref)
-                  ? memberSlug(
-                      (ref as { "~alchemy/Name": string })["~alchemy/Name"],
-                    )
-                  : ref,
-              ),
-            );
-            return {
-              ...teaching,
-              members,
-              head,
-              resolve: (member: string) => {
-                const found = actors.get(member.trim().toLowerCase());
-                return found === undefined
-                  ? Effect.fail(
-                      new MemberUnknown({ group: groupName, member, roster }),
-                    )
-                  : Effect.succeed(found);
-              },
-            };
-          }) as any,
+              return {
+                ...teaching,
+                members,
+                head,
+                resolve: (member: string) => {
+                  const found = actors.get(member.trim().toLowerCase());
+                  return found === undefined
+                    ? Effect.fail(
+                        new MemberUnknown({ group: groupName, member, roster }),
+                      )
+                    : Effect.succeed(found);
+                },
+              };
+            }),
+          ) as any,
         ),
         // the org chart as static data on the Layer (Teaching)
         {
@@ -464,46 +471,54 @@ export const layer: {
       ? Object.assign(
           Layer.effect(
             term as any,
-            Effect.gen(function* () {
-              const template = charterOrTemplate as TemplateStringsArray;
-              const context = yield* Effect.context<never>();
-              const tools: SkillService["tools"] = {};
-              for (const ref of refs) {
-                if (isSource(ref)) {
-                  // resolve the file's path where it is true (plan) and bind
-                  // it for where it is not (the bundled runtime) — Source.ts
-                  yield* bindSource(ref);
-                  continue;
+            // the SKILL's frame in the capability graph: the tools it
+            // resolves are its reach (CapabilityGraph.ts)
+            framed(
+              "Skill",
+              term["~alchemy/Name"] as string,
+            )(
+              Effect.gen(function* () {
+                const template = charterOrTemplate as TemplateStringsArray;
+                const context = yield* Effect.context<never>();
+                const tools: SkillService["tools"] = {};
+                for (const ref of refs) {
+                  if (isSource(ref)) {
+                    // resolve the file's path where it is true (plan) and bind
+                    // it for where it is not (the bundled runtime) — Source.ts
+                    yield* bindSource(ref);
+                    continue;
+                  }
+                  if (!isTool(ref)) continue;
+                  const name = (ref as { "~alchemy/Name": string })[
+                    "~alchemy/Name"
+                  ];
+                  const service = Context.getOption(context, ref as any);
+                  if (Option.isNone(service)) {
+                    return yield* Effect.die(
+                      `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
+                    );
+                  }
+                  tools[name] = Effect.isEffect(service.value)
+                    ? // a tool physics Layer that unwraps here (runtime setup)
+                      yield* service.value as Effect.Effect<any>
+                    : service.value;
                 }
-                if (!isTool(ref)) continue;
-                const name = (ref as { "~alchemy/Name": string })[
-                  "~alchemy/Name"
-                ];
-                const service = Context.getOption(context, ref as any);
-                if (Option.isNone(service)) {
-                  return yield* Effect.die(
-                    `AI.layer: no implementation provided for tool '${name}' of skill '${term["~alchemy/Name"]}'`,
-                  );
+                // the org, DERIVED: the build that assembles the skill
+                // registers its teaching (OrgRegistry.ts)
+                const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
+                if (Option.isSome(orgRegistry)) {
+                  orgRegistry.value.register({
+                    kind: "Skill",
+                    name: term["~alchemy/Name"] as string,
+                    source: (term as { source?: { path?: string } }).source
+                      ?.path,
+                    template,
+                    refs,
+                  });
                 }
-                tools[name] = Effect.isEffect(service.value)
-                  ? // a tool physics Layer that unwraps here (runtime setup)
-                    yield* service.value as Effect.Effect<any>
-                  : service.value;
-              }
-              // the org, DERIVED: the build that assembles the skill
-              // registers its teaching (OrgRegistry.ts)
-              const orgRegistry = yield* Effect.serviceOption(OrgRegistry);
-              if (Option.isSome(orgRegistry)) {
-                orgRegistry.value.register({
-                  kind: "Skill",
-                  name: term["~alchemy/Name"] as string,
-                  source: (term as { source?: { path?: string } }).source?.path,
-                  template,
-                  refs,
-                });
-              }
-              return { template, refs, tools } satisfies SkillService;
-            }) as any,
+                return { template, refs, tools } satisfies SkillService;
+              }),
+            ) as any,
           ),
           // the teaching as static data on the Layer (Teaching)
           {

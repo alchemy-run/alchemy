@@ -1,3 +1,4 @@
+import { CapabilityGraph, type Permission } from "alchemy";
 import * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -14,12 +15,23 @@ import * as Option from "effect/Option";
  * is exactly the org deployed — a hand-kept table would drift; this
  * one cannot.
  *
- * Deliberately NO per-tool permission table: a tool's reach is not
- * statically knowable — it may depend on a `Context.Service` whose
- * Layer (with its own bindings and resources) is provided to the
- * AGENT, outside the tool's own init, so any attribution of bindings
- * to tools would be partial and misleading.
+ * PERMISSIONS are derived the same way, from the ambient
+ * `Alchemy.CapabilityGraph` the platform records while those Layers
+ * build: every `Binding.Service` acquisition, attributed to the
+ * Agent / Skill / Tool whose init performed it — INCLUDING reach
+ * through a `Context.Service` provided to the agent outside the
+ * tool's own init (a tool's `yield* JobService` reaches the bucket
+ * `JobServiceLive` bound; the row says so, `via` the service).
  */
+
+/** One capability an org node can reach: the binding, its target
+ *  resources, and the chain of services it was reached through
+ *  (empty when acquired directly). */
+export interface OrgPermission {
+  readonly binding: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly via: ReadonlyArray<string>;
+}
 
 export interface OrgTool {
   readonly name: string;
@@ -31,6 +43,9 @@ export interface OrgTool {
   readonly params: ReadonlyArray<string>;
   readonly outputs: ReadonlyArray<string>;
   readonly errors: ReadonlyArray<string>;
+  /** What the tool can reach: its init's acquisitions (a ToolDef) or
+   *  its physics Layer's (a class tool), transitively. */
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgSkill {
@@ -39,6 +54,8 @@ export interface OrgSkill {
   /** The teaching, rendered — the same text the model reads. */
   readonly teaching: string;
   readonly tools: ReadonlyArray<string>;
+  /** What the skill can reach: its tools' physics, transitively. */
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgAgent {
@@ -54,6 +71,9 @@ export interface OrgAgent {
   /** The granted skills with their runtime switch (the gate's state). */
   readonly skills: ReadonlyArray<{ name: string; enabled: boolean }>;
   readonly groups: ReadonlyArray<string>;
+  /** Everything the agent can reach: the charter's own acquisitions,
+   *  plus every granted tool's and skill's. */
+  readonly permissions: ReadonlyArray<OrgPermission>;
 }
 
 export interface OrgGroup {
@@ -73,10 +93,12 @@ export interface OrgGraph {
 const nameOf = (term: unknown): string =>
   (term as { "~alchemy/Name": string })["~alchemy/Name"];
 
+/** A class tool's Context key — the tag its physics Layer provides. */
+const toolKey = (term: unknown): string =>
+  (term as unknown as { key: string }).key;
+
 /** The registry's model key (`root/Haiku`) as the UI's `{ id, label }`. */
-const modelOf = (
-  key: string | undefined,
-): OrgAgent["model"] =>
+const modelOf = (key: string | undefined): OrgAgent["model"] =>
   key === undefined
     ? undefined
     : { id: key, label: key.slice(key.lastIndexOf("/") + 1) };
@@ -131,10 +153,59 @@ const renderMarked = (
   return out.trim();
 };
 
+/** The permission oracle — the recorded graph's two queries. */
+export interface Permissions {
+  readonly ofFrame: (
+    kind: "Agent" | "Skill" | "Group" | "Tool",
+    name: string,
+  ) => ReadonlyArray<Permission>;
+  readonly ofService: (key: string) => ReadonlyArray<Permission>;
+}
+
+/** No graph recorded (a build outside a platform): nothing reaches. */
+export const noPermissions: Permissions = {
+  ofFrame: () => [],
+  ofService: () => [],
+};
+
+const permissionKey = (permission: OrgPermission): string =>
+  `${permission.binding}|${permission.targets.join(",")}`;
+
+/** Merge permission lists — one row per (binding, targets), the
+ *  SHORTEST chain kept; sorted direct-first, then by binding. */
+const mergePermissions = (
+  ...lists: ReadonlyArray<ReadonlyArray<OrgPermission>>
+): ReadonlyArray<OrgPermission> => {
+  const out = new Map<string, OrgPermission>();
+  for (const list of lists) {
+    for (const permission of list) {
+      const key = permissionKey(permission);
+      const existing = out.get(key);
+      if (
+        existing === undefined ||
+        existing.via.length > permission.via.length
+      ) {
+        out.set(key, {
+          binding: permission.binding,
+          targets: permission.targets,
+          via: permission.via,
+        });
+      }
+    }
+  }
+  return [...out.values()].sort(
+    (a, b) =>
+      a.via.length - b.via.length ||
+      a.binding.localeCompare(b.binding) ||
+      a.targets.join().localeCompare(b.targets.join()),
+  );
+};
+
 /** One tool term's projection: prose, schema summary, declared errors. */
 const toolEntry = (
   term: AI.Tool<string, any[]>,
   kind: OrgTool["kind"],
+  permissions: Permissions,
 ): OrgTool => {
   const params: string[] = [];
   const outputs: string[] = [];
@@ -152,14 +223,22 @@ const toolEntry = (
     params,
     outputs,
     errors,
+    // a ToolDef's init ran under the tool's own frame; a class tool's
+    // reach is whatever its physics Layer acquired
+    permissions: mergePermissions(
+      kind === "static"
+        ? permissions.ofFrame("Tool", nameOf(term))
+        : permissions.ofService(toolKey(term)),
+    ),
   };
 };
 
-/** Build the graph from the registered declarations and the stored
- *  skill switch-offs (`agent/skill`). */
+/** Build the graph from the registered declarations, the stored
+ *  skill switch-offs (`agent/skill`), and the recorded permissions. */
 export const buildOrgGraph = (
   nodes: ReadonlyArray<AI.OrgNode>,
   disabled: ReadonlySet<string> = new Set(),
+  permissions: Permissions = noPermissions,
 ): OrgGraph => {
   const groups: OrgGroup[] = nodes
     .filter((node) => node.kind === "Group")
@@ -179,6 +258,15 @@ export const buildOrgGraph = (
       teaching: renderMarked(node.template, node.refs),
       // a teaching may mention a tool several times — one grant
       tools: [...new Set(node.refs.filter(AI.isTool).map(nameOf))],
+      // the skill's build resolved its tools — their physics is its
+      // reach; the class tools' own rows cover a build that resolved
+      // them lazily
+      permissions: mergePermissions(
+        permissions.ofFrame("Skill", node.name),
+        ...node.refs
+          .filter(AI.isTool)
+          .map((tool) => permissions.ofService(toolKey(tool))),
+      ),
     }));
 
   const agents: OrgAgent[] = nodes
@@ -189,20 +277,20 @@ export const buildOrgGraph = (
       const tools: OrgTool[] = [];
       const seen = new Set<string>();
       const grantedSkills = new Set<string>();
-      const grant = (
-        term: AI.Tool<string, any[]>,
-        kind: OrgTool["kind"],
-      ) => {
+      const grant = (term: AI.Tool<string, any[]>, kind: OrgTool["kind"]) => {
         const toolName = nameOf(term);
         if (seen.has(toolName)) return;
         seen.add(toolName);
-        tools.push(toolEntry(term, kind));
+        tools.push(toolEntry(term, kind, permissions));
       };
       for (const ref of node.refs) {
         if (AI.isToolDef(ref)) grant(ref.tool, "static");
         else if (AI.isTool(ref)) grant(ref, "class");
         else if (AI.isSkill(ref)) grantedSkills.add(nameOf(ref));
       }
+      const skillPermissions = skills
+        .filter((skill) => grantedSkills.has(skill.name))
+        .map((skill) => skill.permissions);
       return {
         name,
         slug: AI.memberSlug(name),
@@ -217,16 +305,41 @@ export const buildOrgGraph = (
         groups: groups
           .filter((group) => group.members.includes(name))
           .map((group) => group.name),
+        // the agent's frame rolls up its charter and eager ToolDef
+        // inits; class tools and skills resolve LAZILY (first call /
+        // activation), so their rows are added from the grants
+        permissions: mergePermissions(
+          permissions.ofFrame("Agent", name),
+          ...tools.map((tool) => tool.permissions),
+          ...skillPermissions,
+        ),
       };
     });
 
   return { groups, agents, skills };
 };
 
-/** The graph over the ambient registry (empty without one). */
+/** The ambient capability graph as the permission oracle (nothing
+ *  reaches without one). */
+export const orgPermissions: Effect.Effect<Permissions> = Effect.map(
+  Effect.serviceOption(CapabilityGraph),
+  (graph) =>
+    Option.isSome(graph)
+      ? {
+          ofFrame: graph.value.ofFrame,
+          ofService: graph.value.ofService,
+        }
+      : noPermissions,
+);
+
+/** The graph over the ambient registry and capability graph (empty
+ *  without them). */
 export const orgGraph: Effect.Effect<OrgGraph> = Effect.gen(function* () {
   const structure = yield* Effect.serviceOption(AI.OrgRegistry);
+  const permissions = yield* orgPermissions;
   return buildOrgGraph(
     Option.isSome(structure) ? structure.value.list() : [],
+    new Set(),
+    permissions,
   );
 });

@@ -5,7 +5,7 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { buildOrgGraph } from "./Org.ts";
+import { buildOrgGraph, orgPermissions } from "./Org.ts";
 import { skillConfig } from "./platform/SkillGateD1.ts";
 
 /**
@@ -20,17 +20,18 @@ import { skillConfig } from "./platform/SkillGateD1.ts";
  *   activation; running sessions with the skill already active keep
  *   it until they deactivate).
  *
- * The registry handle is captured at build; its ROWS are read per
- * request — the agents' Layer builds (which register the org nodes)
- * and this route's build race inside one Worker init, and a snapshot
- * taken here would lose whichever side finished later.
+ * The registry and capability-graph handles are captured at build;
+ * their ROWS are read per request — the agents' Layer builds (which
+ * register the org nodes and record the permissions) and this route's
+ * build race inside one Worker init, and a snapshot taken here would
+ * lose whichever side finished later.
  */
 export const OrgApi = Effect.gen(function* () {
   const structure = yield* Effect.serviceOption(AI.OrgRegistry);
+  const permissions = yield* orgPermissions;
   const config = yield* skillConfig;
 
-  const nodes = () =>
-    Option.isSome(structure) ? structure.value.list() : [];
+  const nodes = () => (Option.isSome(structure) ? structure.value.list() : []);
 
   const graph = HttpRouter.add(
     "GET",
@@ -40,7 +41,7 @@ export const OrgApi = Effect.gen(function* () {
         .disabled()
         .pipe(Effect.catchCause(() => Effect.succeed(new Set<string>())));
       return yield* HttpServerResponse.json(
-        buildOrgGraph(nodes(), disabled),
+        buildOrgGraph(nodes(), disabled, permissions),
       );
     }),
   );
