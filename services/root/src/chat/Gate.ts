@@ -101,18 +101,27 @@ const dispositionQuestion = TypeSafe.Choice(
   },
 );
 
-const explicitThreadQuestion = TypeSafe.Noul(
-  "Does `message` ITSELF explicitly ask for a thread to be started, " +
-    "work to be filed or tracked, or an issue to be opened? Only the " +
-    "words of `message` count ('start a thread', 'file this', 'open an " +
-    "issue', 'track this', \"let's track it\") — or a direct agreement " +
-    "('yes, do that') to such an ask made in the LAST entry of `recent` " +
-    "and still unserved (`recent[].status` shows 'settled' once an " +
-    "exchange was answered, and replies under a post mean it was acted " +
-    "on). An old, served ask counts for nothing, and a greeting or new " +
-    "topic never inherits one. A message that merely NEEDS work is not " +
-    "an explicit ask.",
-);
+const explicitThreadQuestion = TypeSafe.Noul({
+  what:
+    "`message` ITSELF explicitly asks for a thread to be started, work " +
+    "to be filed or tracked, or an issue to be opened ('start a " +
+    "thread', 'file this', 'open an issue', 'track this') — OR the " +
+    "LAST entry of `recent` is a still-unserved ask or offer of " +
+    'exactly that, and `message` accepts it: after "Want me to file ' +
+    "an issue and take it?\", the messages 'yes please', 'do it', 'go " +
+    "ahead' ALL count as the explicit ask",
+  notFor:
+    "A message that merely NEEDS work without asking for it to be " +
+    "filed; a decline ('nah, not worth it'); a cancellation; an old " +
+    "ask that was already served (`recent[].status` 'settled', or " +
+    "replies under it); a greeting or new topic — neither inherits an " +
+    "old ask",
+  examples: [
+    "start me a thread on something",
+    "file an issue for the OOM and start on it",
+    "yes please (after: 'Want me to file an issue and take it?')",
+  ],
+});
 
 /**
  * Whether routing needs a LOOK at something the message points to —

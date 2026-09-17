@@ -331,6 +331,109 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
     disposition: ["inline"],
     respondent: ["engineer", "manager"],
   },
+  // ── offers, agreements and declines ────────────────────────────────
+  {
+    name: "agreeing to an agent's filing offer",
+    roster: ENGINEERING,
+    recent: [
+      line("i1", "sam", "the pack ingest OOM is back"),
+      line(
+        "i2",
+        "engineer",
+        "Confirmed, same buffering path. Want me to file an issue and take it?",
+        { status: "running" },
+      ),
+    ],
+    message: "yes please",
+    disposition: ["thread"],
+    respondent: ["engineer", "manager"],
+  },
+  {
+    name: "declining an agent's filing offer",
+    roster: ENGINEERING,
+    recent: [
+      line("j1", "sam", "the pack ingest OOM is back"),
+      line(
+        "j2",
+        "engineer",
+        "Confirmed, same buffering path. Want me to file an issue and take it?",
+        { status: "running" },
+      ),
+    ],
+    message: "nah, not worth it — I'll live with it",
+    disposition: ["ignore", "inline"],
+  },
+  {
+    name: "cancelling an ask mid-flight",
+    roster: ENGINEERING,
+    recent: [
+      line("k1", "sam", "file an issue for the flaky e2e suite"),
+      line("k2", "manager", "On it — drafting the issue now.", {
+        status: "running",
+      }),
+    ],
+    message: "actually cancel that, don't file anything",
+    disposition: ["inline", "ignore"],
+  },
+  // ── adversarial sequences: history that must not leak ─────────────
+  {
+    name: "topic change after joke thread-asks",
+    roster: ENGINEERING,
+    recent: [
+      line("l1", "sam", "start a thread! no wait, start TWO threads haha"),
+      line("l2", "manager", "Very funny. Nothing filed."),
+      line("l3", "sam", "ok ok. threads for everyone, someday"),
+      line("l4", "manager", "Someday."),
+    ],
+    message: "so anyway — what port is the UI on?",
+    disposition: ["inline"],
+    respondent: ["engineer", "manager"],
+  },
+  {
+    name: "urgent then false alarm",
+    roster: ENGINEERING,
+    message:
+      "URGENT: prod is down!! …jk, false alarm, I was on the wrong stage. all good",
+    disposition: ["ignore", "inline"],
+  },
+  {
+    name: "rhetorical groan about a red build",
+    roster: ENGINEERING,
+    message: "great, the build is red again 🙄",
+    disposition: ["inline", "thread"],
+  },
+  // ── long pastes: content dwarfs the ask ────────────────────────────
+  {
+    name: "big stack trace with a question",
+    roster: ENGINEERING,
+    message:
+      "just hit this in dev — is it known?\n\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\n",
+    disposition: ["inline", "thread"],
+    respondent: ["engineer"],
+  },
+  {
+    name: "big stack trace with a directive",
+    roster: ENGINEERING,
+    message:
+      "this is breaking everyone, fix it:\n\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\nTypeError: Cannot read properties of undefined (reading 'ingest')\\n    at PackIngest.stream (src/Git/PackIngest.ts:214:18)\\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\\n",
+    disposition: ["thread"],
+    respondent: ["engineer"],
+  },
+  // ── third person is not addressing ─────────────────────────────────
+  {
+    name: "third-person mention of a member",
+    roster: ENGINEERING,
+    message: "the manager already knows about the drift thing, just fyi",
+    disposition: ["ignore", "inline"],
+  },
+  {
+    name: "delegation through the manager",
+    roster: ENGINEERING,
+    message:
+      "manager, have the reviewer double-check the storage math in #1594 once it reopens",
+    disposition: ["thread", "inline"],
+    respondent: ["manager"],
+  },
   // ── the solo room ──────────────────────────────────────────────────
   {
     name: "solo room: greeting",
@@ -603,6 +706,22 @@ const SCOUT_SCENARIOS: ReadonlyArray<ScoutScenario> = [
     message: "#9999 looks stale, should we close it?",
     disposition: ["inline"],
     evidence: 0,
+  },
+  {
+    // asking ABOUT a thread is a lookup plus a chat answer
+    name: "asking about a thread's conclusion stays chat, with the card",
+    message: "did that lambda cold-start investigation ever conclude?",
+    disposition: ["inline"],
+    evidence: 1,
+    refs: ["#p-lambda-1"],
+  },
+  {
+    // a reference attached to an fyi is chat, evidence and all
+    name: "reference plus fyi stays light",
+    message: "saw #1651 got filed — not urgent for me, just fyi",
+    disposition: ["ignore", "inline"],
+    evidence: 1,
+    refs: ["org/alchemy#1651"],
   },
   {
     // nothing to look at; the scout must not invent a walk
