@@ -1,5 +1,6 @@
 import * as AI from "alchemy/AI";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as TypeSafe from "alchemy/TypeSafe";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,6 +11,7 @@ import { MANAGER_ADDRESS } from "../engineering/Triage.ts";
 import { inWorker } from "../platform/Database.ts";
 import { lineage, nameOfKey, ROOT } from "../Lineage.ts";
 import { mentionsOf } from "./Ask.ts";
+import { judge } from "./Gate.ts";
 import { Posts } from "./Posts.ts";
 
 /**
@@ -72,6 +74,19 @@ export const ChannelsApi = Effect.gen(function* () {
   /** The human's identity, until auth exists (mirrors the UI). */
   const HUMAN = "sam";
 
+  /** The gate's reflex judgment, resolved once (see Gate.ts). */
+  const query = yield* TypeSafe.SystemOne;
+
+  /** Who a judged respondent IS — the DM rows are their addresses. */
+  const addressOf = (name: string) =>
+    channels.find(
+      (candidate) => candidate.dm === true && candidate.name === name,
+    )?.chat;
+
+  const ROSTER = channels
+    .filter((candidate) => candidate.dm === true)
+    .map((candidate) => candidate.name);
+
   const send = Effect.gen(function* () {
     const params = yield* HttpRouter.params;
     const channel = channels.find(
@@ -83,8 +98,6 @@ export const ChannelsApi = Effect.gen(function* () {
         { status: 404 },
       );
     }
-    const target = parse(channel.chat)!;
-    const agent = nameOfKey(target.key);
     const request = yield* HttpServerRequest;
     const body = (yield* request.json.pipe(
       Effect.catch(() => Effect.succeed({})),
@@ -121,6 +134,41 @@ export const ChannelsApi = Effect.gen(function* () {
       text,
     });
 
+    // THE GATE (Gate.ts): a message on a channel is judged before
+    // anyone wakes up — is it worth nothing, a reply in the stream, or
+    // a thread, and who answers? A DM is already addressed to someone,
+    // a reply is already in its thread, and an @mention is the human
+    // routing by hand; all three skip the judgment. So does a verdict
+    // the gate isn't sure of — then the resident answers in a thread,
+    // exactly as before.
+    const judged =
+      channel.dm === true ||
+      replyTo !== undefined ||
+      mentionsOf(text).length > 0
+        ? undefined
+        : yield* judge(query, {
+            channel: channel.name,
+            message: text,
+            roster: ROSTER,
+          });
+
+    if (judged?.disposition === "ignore") {
+      yield* posts.settle(postId, "settled");
+      return yield* HttpServerResponse.json(
+        { post: postId, disposition: "ignore" },
+        { status: 202 },
+      );
+    }
+
+    // an INLINE answer is a message in the channel, not a thread under
+    // the human's message: it lands as its own post with no `replyTo`
+    const inline = judged?.disposition === "inline";
+    const target = parse(
+      (judged !== undefined ? addressOf(judged.respondent) : undefined) ??
+        channel.chat,
+    )!;
+    const agent = nameOfKey(target.key);
+
     // dispatch rides the post's id (idempotent delivery; the agent's
     // `Thread.invocations` sees the post it is answering). Only what
     // the agent SAID becomes a reply post: a text answer lands as the
@@ -144,7 +192,7 @@ export const ChannelsApi = Effect.gen(function* () {
               return Effect.andThen(
                 posts.post({
                   id: `${postId}-${agent}`,
-                  replyTo: postId,
+                  ...(inline ? {} : { replyTo: postId }),
                   channel: channel.name,
                   author: agent,
                   text: clip(answer),
@@ -183,17 +231,13 @@ export const ChannelsApi = Effect.gen(function* () {
         );
       }
       const cut = (term: string, key: string) =>
-        Effect.andThen(
-          sessions.interrupt(term, key),
-          sessions.stop(term, key),
-        );
+        Effect.andThen(sessions.interrupt(term, key), sessions.stop(term, key));
       // a CHANNEL's stop cuts everything in flight — every running
       // message runs in its OWN invocation session, so walk the
       // channel's running posts: the humans' (the channel agent's
       // sessions) and the asks' (the mentioned workers' sessions)
       const channelHere = channels.find(
-        (candidate) =>
-          candidate.chat === `${session.term}:${session.key}`,
+        (candidate) => candidate.chat === `${session.term}:${session.key}`,
       );
       if (verb === "stop" && channelHere !== undefined) {
         const stream = yield* posts.list({ channel: channelHere.name });
