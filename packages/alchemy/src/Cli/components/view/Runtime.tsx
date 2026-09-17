@@ -458,7 +458,7 @@ export const makeRuntime = (
         exitOnCtrlC: false,
         interactive: capabilities.input,
         alternateScreen: alternateScreen,
-        colorProfile: capabilities.colors ? "truecolor" : "none",
+        colorProfile: capabilities.colors ? undefined : "none",
         ...(captureDirectStdio
           ? {
               patchConsole: "stdio" as const,

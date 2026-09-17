@@ -16,7 +16,7 @@ import {
   makeDurableObjectCallbackFactory,
 } from "./AlarmCallback.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { buildEventTelemetry } from "../../Telemetry.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import type {
   DurableObjectExport,
   DurableObjectShape,

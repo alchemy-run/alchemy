@@ -17,7 +17,6 @@ import {
   SESSION_ENV_PARAM,
 } from "./RpcServerEnvironment.ts";
 import type { RpcSpawnPayload } from "./RpcSpawner.ts";
-import { moduleExtension } from "../Util/Node.ts";
 
 export class RpcProviderProxy extends Context.Service<
   RpcProviderProxy,
@@ -37,15 +36,12 @@ export class RpcProviderProxy extends Context.Service<
 export const SPAWNER_URL_ENV_KEY = "ALCHEMY_RPC_SPAWNER_URL" as const;
 
 /**
- * The one sidecar entry every RPC-backed provider is served from
- * (`Local/Sidecar.ts`). `import.meta.url` carries the on-disk extension —
- * `.ts` from `src/` under Bun or the dev loader, `.js` from `lib/` — which
- * is what the spawner needs to start it.
+ * The one sidecar entry every RPC-backed provider is served from.
+ * Resolve through package exports so this also works when the proxy is
+ * bundled into `bin/exec.js`. The active export conditions select `src/`
+ * under Bun or the dev loader and `lib/` in a published Node install.
  */
-export const SIDECAR_ENTRY_URL = import.meta.resolve(
-  `./Sidecar${moduleExtension(import.meta.url)}`,
-  import.meta.url,
-);
+export const SIDECAR_ENTRY_URL = import.meta.resolve("alchemy/Local/Sidecar");
 
 const make = Effect.fn(function* (spawnerUrl: string) {
   const client = yield* HttpClient.HttpClient;

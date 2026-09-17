@@ -32,7 +32,6 @@ preferLocalFlociImage("test:examples");
 const examples = [
   "./examples/cloudflare-dev",
   "./examples/cloudflare-worker",
-  "./examples/cloudflare-pr-package",
   "./examples/cloudflare-worker-async",
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",

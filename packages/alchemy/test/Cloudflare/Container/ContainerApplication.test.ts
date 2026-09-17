@@ -34,7 +34,11 @@ import { ContainerPlatform } from "@/Cloudflare/Containers/ContainerPlatform.ts"
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
-import { buildHistory, withBuilder } from "./fixtures/buildx.ts";
+import {
+  buildHistory,
+  supportsRegistryExport,
+  withBuilder,
+} from "./fixtures/buildx.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
@@ -111,7 +115,282 @@ const patchRow = <A extends Record<string, any>>(
     });
   });
 
-describe("ContainerApplication", () => {
+// Every test owns a name-namespaced scratch stack, so they can run
+// concurrently. The `exclusive: true` builder tests below still take the
+// whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
+// themselves.
+describe.concurrent("ContainerApplication", () => {
+  test.provider(
+    "recovers an interrupted generated create and reconciles observed drift",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        yield* Containers.updateContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+          maxInstances: 4,
+        });
+        const observed = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        expect(observed.maxInstances).toBe(4);
+        const interrupted = {
+          ...row,
+          status: "creating" as const,
+          attr: undefined,
+        };
+        yield* Effect.gen(function* () {
+          yield* state.set({ ...key, value: interrupted });
+          const plan = yield* stack.plan(applications());
+          expect(plan.resources.CachedIdentity).toMatchObject({
+            action: "create",
+            state: {
+              instanceId: row.instanceId,
+              attr: {
+                applicationId: first.owned.applicationId,
+                applicationName: first.owned.applicationName,
+                accountId: first.owned.accountId,
+                maxInstances: 4,
+              },
+            },
+          });
+          expect(plan.resources.OtherIdentity.action).toBe("noop");
+          expect(yield* state.get(key)).toEqual(interrupted);
+
+          const renamed = yield* stack.plan(
+            applications(
+              2,
+              `renamed-${first.owned.applicationName.slice(-24)}`,
+            ),
+          );
+          expect(renamed.resources.CachedIdentity.action).toBe("replace");
+          expect(yield* state.get(key)).toEqual(interrupted);
+          expect(
+            yield* Containers.getContainerApplication({
+              accountId: first.owned.accountId,
+              applicationId: first.owned.applicationId,
+            }),
+          ).toEqual(observed);
+
+          yield* state.set({
+            ...key,
+            value: { ...interrupted, providerMode: "local" },
+          });
+          const switched = yield* stack.plan(applications());
+          expect(switched.resources.CachedIdentity.action).toBe("replace");
+          expect(switched.resources.CachedIdentity.state?.attr).toBeUndefined();
+          yield* state.set({
+            ...key,
+            value: {
+              ...interrupted,
+              instanceId: "00000000000000000000000000000000",
+            },
+          });
+          const unrelated = yield* stack.plan(applications());
+          expect(unrelated.resources.CachedIdentity.action).toBe("create");
+          expect(
+            unrelated.resources.CachedIdentity.state?.attr,
+          ).toBeUndefined();
+
+          yield* state.delete(key);
+          const fresh = yield* stack.plan(applications());
+          expect(fresh.resources.CachedIdentity.action).toBe("create");
+          expect(fresh.resources.CachedIdentity.state).toBeUndefined();
+          expect(yield* state.get(key)).toBeUndefined();
+
+          yield* state.set({ ...key, value: interrupted });
+          const recovered = yield* stack.deploy(applications(5));
+          expect(recovered.owned.applicationId).toBe(first.owned.applicationId);
+          expect(recovered.other.applicationId).toBe(first.other.applicationId);
+          expect(yield* state.get(key)).toMatchObject({
+            status: "created",
+            instanceId: row.instanceId,
+            attr: { applicationId: first.owned.applicationId, maxInstances: 5 },
+          });
+          const live = yield* Containers.getContainerApplication({
+            accountId: first.owned.accountId,
+            applicationId: first.owned.applicationId,
+          });
+          expect(live.maxInstances).toBe(5);
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const restored = yield* yield* State;
+                yield* restored.set({ ...key, value: row });
+                expect(yield* restored.get(key)).toEqual(row);
+              }).pipe(Effect.provide(Layer.fresh(stack.state)));
+              yield* stack.destroy();
+            }).pipe(Effect.orDie),
+          ),
+        );
+        for (const app of [first.owned, first.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "keeps explicit names unowned even when they match a generated identity",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const program = applications(2, first.owned.applicationName);
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        const observed = yield* Containers.getContainerApplication({
+          accountId: first.owned.accountId,
+          applicationId: first.owned.applicationId,
+        });
+        yield* Effect.gen(function* () {
+          const interrupted = {
+            ...row,
+            props: { ...row.props, name: first.owned.applicationName },
+            status: "creating" as const,
+            attr: undefined,
+          };
+          yield* state.set({ ...key, value: interrupted });
+          const recovery = yield* stack
+            .plan(program)
+            .pipe(
+              Effect.catchTag("OwnedBySomeoneElse", () =>
+                Effect.succeed("unowned"),
+              ),
+            );
+          expect(recovery).toBe("unowned");
+          expect(yield* state.get(key)).toEqual(interrupted);
+          yield* state.delete(key);
+          const discovery = yield* stack
+            .plan(program)
+            .pipe(
+              Effect.catchTag("OwnedBySomeoneElse", () =>
+                Effect.succeed("unowned"),
+              ),
+            );
+          expect(discovery).toBe("unowned");
+          expect(yield* state.get(key)).toBeUndefined();
+          expect(
+            yield* Containers.getContainerApplication({
+              accountId: first.owned.accountId,
+              applicationId: first.owned.applicationId,
+            }),
+          ).toEqual(observed);
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              yield* Effect.gen(function* () {
+                const restored = yield* yield* State;
+                yield* restored.set({ ...key, value: row });
+                expect(yield* restored.get(key)).toEqual(row);
+              }).pipe(Effect.provide(Layer.fresh(stack.state)));
+              yield* stack.destroy();
+            }).pipe(Effect.orDie),
+          ),
+        );
+        for (const app of [first.owned, first.other]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  test.provider(
+    "destroys an interrupted generated create without resuming it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const first = yield* stack.deploy(applications());
+        const state = yield* yield* State;
+        const key = {
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "CachedIdentity",
+        };
+        const row = yield* state.get(key);
+        assert(row?.status === "created" || row?.status === "updated");
+        yield* Effect.gen(function* () {
+          yield* state.set({
+            ...key,
+            value: { ...row, status: "creating", attr: undefined },
+          });
+          yield* stack.destroy();
+          for (const app of [first.owned, first.other]) {
+            const deleted = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            }).pipe(
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (app) => app === undefined,
+                times: 8,
+              }),
+            );
+            expect(deleted).toBeUndefined();
+          }
+          expect(yield* state.get(key)).toBeUndefined();
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              const restored = yield* yield* State;
+              yield* restored.set({ ...key, value: row });
+              expect(yield* restored.get(key)).toEqual(row);
+            }).pipe(Effect.provide(Layer.fresh(stack.state)), Effect.orDie),
+          ),
+        );
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
   test.provider(
     "compares each legacy application's previous digest independently",
     (stack) =>
@@ -282,10 +561,18 @@ describe("ContainerApplication", () => {
               (fiber) => Fiber.interrupt(fiber),
             );
           }
+          const failedBuilds = yield* buildHistory;
+          expect(
+            failedBuilds.filter((build) => build.status === "Completed"),
+          ).toHaveLength(0);
           const recovered = yield* stack.deploy(program());
-          const expectedBuilds = failure === "failed" ? 1 : 2;
           const recoveredBuilds = yield* buildHistory;
-          expect(recoveredBuilds).toHaveLength(expectedBuilds);
+          expect(
+            recoveredBuilds.length - failedBuilds.length,
+          ).toBeGreaterThanOrEqual(1);
+          expect(
+            recoveredBuilds.length - failedBuilds.length,
+          ).toBeLessThanOrEqual(6);
           expect(
             recoveredBuilds.filter((build) => build.status === "Completed"),
           ).toHaveLength(1);
@@ -300,7 +587,7 @@ describe("ContainerApplication", () => {
           expect(shared.second.configuration.image).toBe(
             shared.first.configuration.image,
           );
-          expect(yield* buildHistory).toHaveLength(expectedBuilds);
+          expect(yield* buildHistory).toEqual(recoveredBuilds);
           for (const app of [shared.first, shared.second]) {
             const observed = yield* Containers.getContainerApplication({
               accountId: app.accountId,
@@ -368,10 +655,11 @@ describe("ContainerApplication", () => {
         const program = publicationApplications(contexts);
         const first = yield* stack.deploy(program);
         const history = yield* buildHistory;
-        expect(history).toHaveLength(3);
-        expect(history.every((build) => build.status === "Completed")).toBe(
-          true,
-        );
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(3);
+        // Each distinct publication can make at most six export attempts.
+        expect(history.length).toBeLessThanOrEqual(18);
         expect(first.first.hash?.image).toBe(first.other.hash?.image);
         expect(first.first.configuration.image).toBe(
           first.second.configuration.image,
@@ -402,14 +690,20 @@ describe("ContainerApplication", () => {
         expect(unchanged.first.configuration.image).toBe(
           first.first.configuration.image,
         );
-        expect(yield* buildHistory).toHaveLength(3);
+        expect(yield* buildHistory).toEqual(history);
 
         yield* fs.writeFileString(
           path.join(contexts.shared, "input.txt"),
           "second",
         );
         const updated = yield* stack.deploy(program);
-        expect(yield* buildHistory).toHaveLength(4);
+        const updateHistory = (yield* buildHistory).filter(
+          (build) => !history.some((previous) => previous.ref === build.ref),
+        );
+        expect(
+          updateHistory.filter((build) => build.status === "Completed"),
+        ).toHaveLength(1);
+        expect(updateHistory.length).toBeLessThanOrEqual(6);
         expect(updated.first.applicationId).toBe(first.first.applicationId);
         expect(updated.second.applicationId).toBe(first.second.applicationId);
         expect(updated.first.configuration.image).toBe(
@@ -505,7 +799,15 @@ describe("ContainerApplication", () => {
                 Effect.succeed(undefined),
               ),
             );
-          expect(local).toBeUndefined();
+          // Buildx 0.26+ exports from BuildKit straight to the registry, so
+          // the image never enters the local store. Older plugins `--load`
+          // it and `docker push` from there.
+          const exported = yield* supportsRegistryExport;
+          if (exported) {
+            expect(local).toBeUndefined();
+          } else {
+            expect(local).toBeDefined();
+          }
           expect(deployed.app.hash?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 
           const { accountId, applicationId } = deployed.app;
@@ -530,7 +832,7 @@ describe("ContainerApplication", () => {
               HttpClientRequest.basicAuth(username, credentials.password),
               HttpClientRequest.setHeader(
                 "Accept",
-                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json",
+                "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
               ),
             ),
           );
@@ -538,32 +840,49 @@ describe("ContainerApplication", () => {
           expect(manifest.headers["docker-content-digest"]).toBe(
             deployed.app.hash!.digest,
           );
-          const index = yield* manifest.json.pipe(
-            Effect.flatMap(
-              Schema.decodeUnknownEffect(
-                Schema.Struct({
-                  mediaType: Schema.String,
-                  manifests: Schema.Array(
-                    Schema.Struct({
-                      platform: Schema.Struct({
-                        os: Schema.String,
-                        architecture: Schema.String,
+          if (exported) {
+            // BuildKit's registry exporter publishes an OCI index (with
+            // attestations) carrying the requested platform.
+            const index = yield* manifest.json.pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({
+                    mediaType: Schema.String,
+                    manifests: Schema.Array(
+                      Schema.Struct({
+                        platform: Schema.Struct({
+                          os: Schema.String,
+                          architecture: Schema.String,
+                        }),
                       }),
-                    }),
-                  ),
-                }),
+                    ),
+                  }),
+                ),
               ),
-            ),
-          );
-          expect(index.mediaType).toBe(
-            "application/vnd.oci.image.index.v1+json",
-          );
-          expect(
-            index.manifests.some(
-              ({ platform }) =>
-                platform.os === "linux" && platform.architecture === "amd64",
-            ),
-          ).toBe(true);
+            );
+            expect(index.mediaType).toBe(
+              "application/vnd.oci.image.index.v1+json",
+            );
+            expect(
+              index.manifests.some(
+                ({ platform }) =>
+                  platform.os === "linux" && platform.architecture === "amd64",
+              ),
+            ).toBe(true);
+          } else {
+            // `docker push --platform` ships the single platform variant.
+            const single = yield* manifest.json.pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({ mediaType: Schema.String }),
+                ),
+              ),
+            );
+            expect([
+              "application/vnd.oci.image.manifest.v1+json",
+              "application/vnd.docker.distribution.manifest.v2+json",
+            ]).toContain(single.mediaType);
+          }
           const observed = yield* Containers.getContainerApplication({
             accountId,
             applicationId,
@@ -1073,14 +1392,36 @@ describe("ContainerApplication", () => {
           accountId,
           applicationId: first.app.applicationId,
         });
-        yield* Containers.listContainerApplications({ accountId }).pipe(
+        const deleted = yield* Effect.gen(function* () {
+          const app = yield* Containers.getContainerApplication({
+            accountId,
+            applicationId: first.app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          const apps = yield* Containers.listContainerApplications({
+            accountId,
+          });
+          const absentFromList = apps.every(
+            (app) => app.id !== first.app.applicationId,
+          );
+          if (app !== undefined && absentFromList) {
+            yield* Effect.logInfo(
+              "Deleted container is absent from list but still readable by ID",
+              { applicationId: first.app.applicationId },
+            );
+          }
+          return app === undefined && absentFromList;
+        }).pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("3 seconds"),
-            until: (apps) =>
-              apps.every((app) => app.id !== first.app.applicationId),
-            times: 30,
+            schedule: Schedule.spaced("2 seconds"),
+            until: (deleted) => deleted,
+            times: 8,
           }),
         );
+        expect(deleted).toBe(true);
         const detached = yield* Containers.createContainerApplication({
           accountId,
           name: first.app.applicationName,
@@ -1091,7 +1432,20 @@ describe("ContainerApplication", () => {
           affinities: first.app.affinities,
           configuration: first.app.configuration,
         });
+        expect(detached.id).not.toBe(first.app.applicationId);
         expect(detached.durableObjects ?? undefined).toBeUndefined();
+        const observed = yield* Containers.getContainerApplication({
+          accountId,
+          applicationId: detached.id,
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "ContainerApplicationNotFound",
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(observed.name).toBe(first.app.applicationName);
+        expect(observed.durableObjects ?? undefined).toBeUndefined();
 
         // Stale the persisted source hash so the re-create must rebuild.
         yield* patchRow<typeof first.app>("RemoteContainer", (attr) => ({
@@ -1100,12 +1454,26 @@ describe("ContainerApplication", () => {
         }));
 
         const second = yield* scratch.deploy(program);
+        yield* Effect.logInfo("Container reattachment identities", {
+          original: first.app.applicationId,
+          detached: detached.id,
+          recovered: second.app.applicationId,
+        });
+        expect(second.app.applicationId).not.toBe(first.app.applicationId);
         expect(second.app.applicationId).not.toBe(detached.id);
         expect(second.app.durableObjects?.namespaceId).toBe(namespaceId);
         expect(second.app.configuration.image).toBe(digestRef);
         expect(second.app.hash?.digest).toBe(first.app.hash?.digest);
         expect(second.app.hash?.image).not.toBe("0000000000000000");
-        expect(yield* live(accountId, second.app.applicationId)).toMatchObject({
+        expect(
+          yield* live(accountId, second.app.applicationId).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "ContainerApplicationNotFound",
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          ),
+        ).toMatchObject({
           image: digestRef,
           durableObjects: { namespaceId },
         });

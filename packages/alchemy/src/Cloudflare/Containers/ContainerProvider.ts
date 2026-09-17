@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
@@ -39,6 +38,7 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
+import { retryContainerPublication } from "./ContainerPublication.ts";
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -543,25 +543,6 @@ export const LiveContainerProvider = () =>
         }
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
-        // Registry blob HEAD probes can transiently fail during publication.
-        // Retry both BuildKit exports and Engine pushes with the same bound.
-        const retryPublication = <A, R>(
-          publication: Effect.Effect<A, PlatformError, R>,
-        ) =>
-          Effect.retry(publication, {
-            while: (error) => {
-              const message = String(error).toLowerCase();
-              return (
-                message.includes("500") ||
-                message.includes("internal server error") ||
-                message.includes("unexpected status")
-              );
-            },
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(5),
-            ]),
-          });
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -584,7 +565,7 @@ export const LiveContainerProvider = () =>
           // may also hold a host-architecture variant under this tag.
           yield* docker.image
             .push(imageRef, credentials, platform)
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -605,7 +586,7 @@ export const LiveContainerProvider = () =>
               undefined,
               credentials,
             )
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -645,7 +626,7 @@ export const LiveContainerProvider = () =>
               undefined,
               credentials,
             )
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather
@@ -1045,8 +1026,10 @@ export const LiveContainerProvider = () =>
       const getDurableObjects = (
         bindings: ResourceBinding<ContainerApplication["Binding"]>[],
       ) => {
+        // A stale Worker namespace map can resolve a binding to an object
+        // without an id. It does not request removing the live attachment.
         const dos = bindings.flatMap((b) =>
-          b.data.durableObjects ? [b.data.durableObjects] : [],
+          b.data.durableObjects?.namespaceId ? [b.data.durableObjects] : [],
         );
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
@@ -1099,9 +1082,17 @@ export const LiveContainerProvider = () =>
 
           const hasDurableObjects =
             (yield* getDurableObjects(newBindings)) !== undefined;
+          const hasUnresolvedAttachment =
+            !hasDurableObjects &&
+            newBindings.some(
+              (binding) => binding.data.durableObjects !== undefined,
+            );
           const hadDurableObjects =
             (yield* getDurableObjects(oldBindings)) !== undefined;
-          if (hasDurableObjects !== hadDurableObjects) {
+          if (
+            !hasUnresolvedAttachment &&
+            hasDurableObjects !== hadDurableObjects
+          ) {
             return { action: "replace" } as const;
           }
 
@@ -1222,13 +1213,13 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container reconcile: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
+          const hasUnresolvedAttachment =
+            durableObjects === undefined &&
+            bindings.some(
+              (binding) => binding.data.durableObjects !== undefined,
+            );
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId, bindings);
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
 
           // Observe — re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as
@@ -1263,12 +1254,45 @@ export const LiveContainerProvider = () =>
             }
           }
 
+          // Only use cached attachment data after confirming the application
+          // is missing. An observed live attachment outranks stale state.
+          const recordedDurableObjects = existing
+            ? existing.durableObjects
+            : output?.accountId === accountId && isLiveId(output.applicationId)
+              ? output.durableObjects
+              : undefined;
+          const durableObjectsForRecovery =
+            durableObjects ??
+            (hasUnresolvedAttachment && recordedDurableObjects?.namespaceId
+              ? recordedDurableObjects
+              : undefined);
+          if (
+            hasUnresolvedAttachment &&
+            durableObjectsForRecovery === undefined
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
+              ),
+            );
+          }
+          const { build, imageRef, imageHash, dev } = yield* computeImage(
+            id,
+            news,
+            env,
+          );
+
           // Special case: precreate produced an application without the
-          // durable object attachment, but the real reconcile now has one
-          // (or vice versa). The DO attachment is immutable, so we delete
+          // durable object attachment, but the real reconcile now has one.
+          // The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
-          if (existing && !deepEqual(existing.durableObjects, durableObjects)) {
+          // An unresolved declaration is not an intentional removal.
+          if (
+            existing &&
+            !hasUnresolvedAttachment &&
+            !deepEqual(existing.durableObjects, durableObjects)
+          ) {
             if (durableObjects) {
               const owner = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
@@ -1378,7 +1402,9 @@ export const LiveContainerProvider = () =>
               news,
               bindings,
               existing,
-              durableObjects,
+              // Keep the live attachment through the ghost-recreate fallback
+              // when the desired value is unresolved.
+              durableObjects: durableObjectsForRecovery,
               session,
             });
           }
@@ -1412,7 +1438,7 @@ export const LiveContainerProvider = () =>
             bindings,
             name,
             configuration,
-            durableObjects,
+            durableObjects: durableObjectsForRecovery,
             session,
           });
           return {
@@ -1493,11 +1519,9 @@ export const LiveContainerProvider = () =>
           const name = yield* createApplicationName(id, olds?.name);
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
-          // Cloudflare container applications carry no ownership signal that
-          // we can read back from the API, so a name match is not proof of
-          // ownership. Brand it `Unowned` so the engine surfaces
-          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
-          return Unowned(attrs);
+          // Generated names identify this instance by its random suffix.
+          // Explicit names alone do not establish ownership.
+          return olds?.name === undefined ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {
