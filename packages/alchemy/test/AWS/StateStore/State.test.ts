@@ -9,6 +9,7 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { createHash } from "node:crypto";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -234,15 +235,26 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const bucket = yield* stack.deploy(
-        AWS.S3.Bucket("ManagedStateEncryptionBlocks", {}),
+      const { bucket, blockedBucket } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* AWS.S3.Bucket(
+            "ManagedStateEncryptionBlocks",
+            {},
+          );
+          const blockedBucket = yield* AWS.S3.Bucket(
+            "BlockedNoOpStateBucket",
+            {},
+          );
+          return { bucket, blockedBucket };
+        }),
       );
       const initialize = (
         blockedEncryptionTypes: AWS.S3.BucketEncryption["blockedEncryptionTypes"],
+        bucketName = bucket.bucketName,
       ) =>
         Effect.gen(function* () {
           const state = yield* makeS3State({
-            bucketName: bucket.bucketName,
+            bucketName,
             prefix: "pr1588-managed",
             encryption: { sseAlgorithm: "AES256", blockedEncryptionTypes },
           });
@@ -267,11 +279,38 @@ test.provider(
         },
       });
       yield* block;
+      expect(yield* initialize([])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+      yield* block;
+      expect(yield* initialize([])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+      expect(yield* initialize(["SSE-C"])).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "SSE-C",
+      ]);
+      expect(yield* initialize(undefined)).toEqual([]);
+      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
+        "NONE",
+      ]);
+
+      // Keep each deny policy until bucket deletion; policy removal is eventually consistent.
       const settings: "SSE-C"[][] = [[], ["SSE-C"]];
       for (const types of settings) {
+        const target = types.length ? blockedBucket : bucket;
+        expect(yield* initialize(types, target.bucketName)).toEqual([]);
+        const rule = (yield* s3.getBucketEncryption({
+          Bucket: target.bucketName,
+        })).ServerSideEncryptionConfiguration!.Rules[0]!;
+        expect(rule.BlockedEncryptionTypes?.EncryptionType).toEqual(
+          types.length ? ["SSE-C"] : ["NONE"],
+        );
         const probeWrite = s3
           .putBucketEncryption({
-            Bucket: bucket.bucketName,
+            Bucket: target.bucketName,
             ServerSideEncryptionConfiguration: {
               Rules: [
                 {
@@ -292,93 +331,52 @@ test.provider(
               Effect.succeed(true),
             ),
           );
-        expect(yield* initialize(types)).toEqual([]);
-        const expected = types.length ? ["SSE-C"] : ["NONE"];
-        expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(expected);
-        yield* Effect.gen(function* () {
-          yield* s3.putBucketPolicy({
-            Bucket: bucket.bucketName,
-            Policy: JSON.stringify({
-              Version: "2012-10-17",
-              Statement: [
-                {
-                  Effect: "Deny",
-                  Principal: "*",
-                  Action: "s3:PutEncryptionConfiguration",
-                  Resource: bucket.bucketArn,
-                },
-              ],
-            }),
-          });
-          expect(
-            yield* probeWrite.pipe(
-              Effect.repeat({
-                until: Boolean,
-                schedule: Schedule.spaced("1 second"),
-                times: 8,
-              }),
-            ),
-          ).toBe(true);
-          expect(yield* initialize([...types, ...types])).toEqual([]);
-          if (!types.length) expect(yield* initialize(undefined)).toEqual([]);
-          expect(yield* probeWrite).toBe(true);
-        }).pipe(
-          Effect.ensuring(
-            s3
-              .deleteBucketPolicy({ Bucket: bucket.bucketName })
-              .pipe(Effect.orDie),
-          ),
-        );
-        let allowed = 0;
+        yield* s3.putBucketPolicy({
+          Bucket: target.bucketName,
+          Policy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Deny",
+                Principal: "*",
+                Action: "s3:PutEncryptionConfiguration",
+                Resource: target.bucketArn,
+              },
+            ],
+          }),
+        });
         expect(
           yield* probeWrite.pipe(
             Effect.repeat({
-              until: (denied) => {
-                allowed = denied ? 0 : allowed + 1;
-                return allowed >= 3;
-              },
+              until: Boolean,
               schedule: Schedule.spaced("1 second"),
               times: 8,
             }),
           ),
-        ).toBe(false);
-        expect(allowed).toBe(3);
+        ).toBe(true);
         expect(
-          (yield* readRule).BlockedEncryptionTypes?.EncryptionType,
-        ).toEqual(expected);
+          yield* initialize([...types, ...types], target.bucketName),
+        ).toEqual([]);
+        if (!types.length) {
+          expect(yield* initialize(undefined, target.bucketName)).toEqual([]);
+        }
+        expect(yield* probeWrite).toBe(true);
       }
-      expect(yield* initialize([])).toEqual([]);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
-      yield* block;
-      expect(yield* initialize([])).toEqual([]);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
-      expect(yield* initialize(["SSE-C"])).toEqual([]);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "SSE-C",
-      ]);
-      expect(yield* initialize(undefined)).toEqual([]);
-      expect((yield* readRule).BlockedEncryptionTypes?.EncryptionType).toEqual([
-        "NONE",
-      ]);
       yield* stack.destroy();
-      const absent = yield* s3
-        .getBucketLocation({ Bucket: bucket.bucketName })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
-          Effect.repeat({
-            until: Boolean,
-            schedule: Schedule.spaced("1 second"),
-            times: 8,
-          }),
-        );
-      expect(absent).toBe(true);
+      for (const target of [bucket, blockedBucket]) {
+        const absent = yield* s3
+          .getBucketLocation({ Bucket: target.bucketName })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("NoSuchBucket", () => Effect.succeed(true)),
+            Effect.repeat({
+              until: Boolean,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+        expect(absent).toBe(true);
+      }
     }),
   { timeout: 120_000 },
 );
@@ -412,9 +410,16 @@ const resource = (fqn: string, attr: Record<string, unknown>): ResourceState =>
 
 test.provider(
   "set/get/list/delete round-trips state through S3",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
-      const state = yield* makeS3State({ prefix: "test-state" });
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(
+        AWS.S3.Bucket("StateBucket", { forceDestroy: true }),
+      );
+      const state = yield* makeS3State({
+        bucketName: bucket.bucketName,
+        prefix: "test-state",
+      });
       const stage = "round-trip";
 
       // start from a clean slate (idempotent)
@@ -450,16 +455,23 @@ test.provider(
         yield* state.deleteStack({ stack: STACK, stage });
         expect(yield* state.list({ stack: STACK, stage })).toEqual([]);
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+      yield* stack.destroy();
     }),
   { timeout: 120_000 },
 );
 
 test.provider(
   "existing state buckets converge to secure defaults",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
       const { accountId, region } = yield* AWS.AWSEnvironment.current;
-      const bucketName = createStateBucketName(`security-${accountId}`, region);
+      const suffix = yield* Effect.sync(() =>
+        createHash("sha256").update(stack.stage).digest("hex").slice(0, 8),
+      );
+      const bucketName = createStateBucketName(
+        `security-${suffix}-${accountId}`,
+        region,
+      );
       const deleteBucket = s3.deleteBucket({ Bucket: bucketName }).pipe(
         Effect.catchTag("NoSuchBucket", () => Effect.void),
         Effect.orDie,
@@ -553,9 +565,16 @@ test.provider(
 
 test.provider(
   "stack outputs are stored separately from resources",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
-      const state = yield* makeS3State({ prefix: "test-state" });
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(
+        AWS.S3.Bucket("StateBucket", { forceDestroy: true }),
+      );
+      const state = yield* makeS3State({
+        bucketName: bucket.bucketName,
+        prefix: "test-state",
+      });
       const stage = "outputs";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -578,15 +597,23 @@ test.provider(
         yield* state.deleteStack({ stack: STACK, stage });
         expect(yield* state.getOutput({ stack: STACK, stage })).toBeUndefined();
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+      yield* stack.destroy();
     }),
   { timeout: 120_000 },
 );
 
 test.provider(
   "getReplacedResources returns only replaced resources",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
-      const state = yield* makeS3State({ prefix: "test-state" });
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(
+        AWS.S3.Bucket("StateBucket", { forceDestroy: true }),
+      );
+      const state = yield* makeS3State({
+        bucketName: bucket.bucketName,
+        prefix: "test-state",
+      });
       const stage = "replaced";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -617,6 +644,7 @@ test.provider(
         });
         expect(result.map((r) => r.fqn)).toEqual(["Replaced"]);
       }).pipe(Effect.ensuring(cleanStage(state, stage)));
+      yield* stack.destroy();
     }),
   { timeout: 120_000 },
 );

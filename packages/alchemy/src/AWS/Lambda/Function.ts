@@ -1416,7 +1416,7 @@ export const FunctionProvider = () =>
             schedule: Schedule.spaced("2 seconds").pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
-                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                  `Waiting for Lambda function update: ${functionName} (${attempt * 2}s)`,
                 ),
               ),
             ),
@@ -1527,12 +1527,8 @@ export const FunctionProvider = () =>
           return yield* prepareImageFunctionCode({ id, props, session });
         }
 
-        // Mock code for the pre-created stub. It responds 503 (rather than a
-        // bare 200) so that, during the brief window where the real code/config
-        // update is still `InProgress`, a Function URL hit serves an honest
-        // "not ready" signal. Downstream readiness probes already retry on
-        // non-200, so they wait for the real handler without blocking the
-        // provider.
+        // The precreated stub responds 503 until reconciliation installs the
+        // real handler and waits for its configuration to become active.
         const code = new TextEncoder().encode(
           `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
         );
@@ -2463,6 +2459,8 @@ export const FunctionProvider = () =>
             session,
           });
 
+          yield* waitForFunctionUpdate(functionName, session);
+
           const previousImage = output?.code.image;
           const nextImage =
             "image" in prepared.attributes
@@ -2472,10 +2470,8 @@ export const FunctionProvider = () =>
             previousImage?.ownsRepository === true &&
             previousImage.repositoryUri !== nextImage?.repositoryUri
           ) {
-            // The function has moved from an Alchemy-owned local image to a
-            // different source. Wait until Lambda has adopted the new digest
-            // before deleting the now-unreferenced managed repository.
-            yield* waitForFunctionUpdate(functionName, session);
+            // Lambda has adopted the new image; the previous managed
+            // repository is no longer referenced.
             yield* functionImage.deleteRepository(previousImage.repositoryName);
           }
 
