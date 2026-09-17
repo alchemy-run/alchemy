@@ -7,13 +7,13 @@
 The canary covers:
 
 - npm, pnpm, and Bun installations.
-- Direct Node and Bun execution, `bun --bun alchemy`, and `bunx --bun`.
+- Direct Node and Bun execution, `bun --bun alchemy`, and `bun x --bun` (the `bunx` equivalent).
 - npm scripts, `npm exec`, and `npx`; pnpm scripts, `pnpm exec`, and `pnpm alchemy`; Bun scripts, `bun run --bun`, and `bun alchemy`.
 - Unset and development `NODE_ENV`, plus caller `react-jsxdev` and Solid-style `preserve` configurations.
 - Real noninteractive progress, local-state deploy/destroy, and nonzero exit propagation.
 - Production environment, expected runtime, unchanged arguments and working directory, and resolved CLI/package paths inside the temporary install.
 
-The child environment removes inherited runtime hooks, module search paths, package-manager markers, and checkout executable paths. The pnpm fixture explicitly approves workerd's install script. The Bun install uses `--minimum-release-age=0` so freshly built releases can be exercised without changing global package-manager settings. Temporary projects and local state are removed when the test scope closes. No cloud credentials are needed.
+Each installer and CLI child receives a minimal environment and a fresh home directory with empty npm configuration. Cloud/registry credentials, user profiles, runtime hooks, module search paths, and checkout executable paths are not inherited. The deployed fixture also asserts that no credential environment variables are present. The pnpm fixture explicitly approves workerd's install script. The Bun install uses `--minimum-release-age=0` so freshly built releases can be exercised without changing global package-manager settings. Temporary projects, homes, and local state are removed when the test scope closes. No cloud or registry credentials are needed.
 
 ## Run locally
 

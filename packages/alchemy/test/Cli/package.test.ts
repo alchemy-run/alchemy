@@ -28,8 +28,8 @@ const invocations = (manager: Manager): ReadonlyArray<Invocation> => [
   { command: "bun", args: ["node_modules/alchemy/bin/cli.js"], runtime: "bun" },
   { command: "bun", args: ["--bun", "alchemy"], runtime: "bun" },
   {
-    command: "bunx",
-    args: ["--bun", "--no-install", "alchemy"],
+    command: "bun",
+    args: ["x", "--bun", "--no-install", "alchemy"],
     runtime: "bun",
   },
   ...packageCommands[manager],
@@ -61,6 +61,8 @@ const Probe = Schema.fromJsonString(
   Schema.Struct({
     runtime: Schema.String,
     nodeEnv: Schema.String,
+    home: Schema.String,
+    credentialVariables: Schema.Array(Schema.String),
     cwd: Schema.String,
     entry: Schema.String,
     alchemy: Schema.String,
@@ -120,17 +122,28 @@ const canary = (manager: Manager) =>
       path.join(project, "stack.run.ts"),
     );
     const inherited = yield* Effect.sync(() => process.env);
+    const home = path.join(projectRoot, "home");
+    yield* fs.makeDirectory(home);
+    for (const config of [".npmrc", "global.npmrc"]) {
+      yield* fs.writeFileString(path.join(home, config), "");
+    }
+    // Pass only runtime paths and temporary directories, never the caller's
+    // credentials, module hooks, registry configuration, or user profiles.
     const env = {
-      ...inherited,
       CI: "true",
-      NODE_ENV: undefined,
-      NODE_OPTIONS: undefined,
-      NODE_PATH: undefined,
-      BUN_OPTIONS: undefined,
+      HOME: home,
+      USERPROFILE: home,
+      XDG_CONFIG_HOME: path.join(home, ".config"),
+      npm_config_userconfig: path.join(home, ".npmrc"),
+      npm_config_globalconfig: path.join(home, "global.npmrc"),
+      TMPDIR: inherited.TMPDIR,
+      TMP: inherited.TMP,
+      TEMP: inherited.TEMP,
+      SystemRoot: inherited.SystemRoot,
+      COMSPEC: inherited.COMSPEC,
+      PATHEXT: inherited.PATHEXT,
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
-      npm_execpath: undefined,
-      npm_config_user_agent: undefined,
-      ALCHEMY_HOME: path.join(project, "home"),
+      ALCHEMY_HOME: path.join(home, ".alchemy"),
       PATH: inherited.PATH?.split(process.platform === "win32" ? ";" : ":")
         .filter((part) => !part.startsWith(checkout))
         .join(process.platform === "win32" ? ";" : ":"),
@@ -229,6 +242,8 @@ const canary = (manager: Manager) =>
         );
         expect(probe.runtime).toBe(invocation.runtime);
         expect(probe.nodeEnv).toBe("production");
+        expect(probe.home).toBe(home);
+        expect(probe.credentialVariables).toEqual([]);
         expect(probe.cwd).toBe(projectRoot);
         expect(probe.args).toEqual(args);
         const entry = yield* fs.realPath(probe.entry);
