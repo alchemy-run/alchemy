@@ -377,7 +377,7 @@ export const make = (
             selectEntry: (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
           }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
           const previewPort = yield* FrameworkCore.resolveViteDevPort(
-            vite.version,
+            project.bundler.version,
           );
           yield* Effect.tryPromise({
             try: async () => {
