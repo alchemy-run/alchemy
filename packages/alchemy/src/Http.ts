@@ -3,12 +3,14 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import {
   causeResponse,
+  ClientAbort,
   type HttpServerError,
 } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -72,20 +74,30 @@ export class HttpServer extends Context.Service<
 
 export const safeHttpEffect = <Req = never>(
   handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
+  options?: {
+    /**
+     * The request's abort signal. When it fires, the handler is interrupted
+     * as a client abort and the boundary below answers 499.
+     */
+    readonly signal?: AbortSignal | undefined;
+  },
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   never,
   Req | HttpServerRequest | Scope
 > =>
   Effect.catchCause(
-    handler.pipe(
-      // @ts-expect-error
-      Effect.flatMap((response) =>
-        HttpServerResponse.isHttpServerResponse(response)
-          ? Effect.succeed(response)
-          : response,
-      ),
-    ) as any as HttpEffect<Req>,
+    interruptOnClientAbort(
+      handler.pipe(
+        // @ts-expect-error
+        Effect.flatMap((response) =>
+          HttpServerResponse.isHttpServerResponse(response)
+            ? Effect.succeed(response)
+            : response,
+        ),
+      ) as any as HttpEffect<Req>,
+      options?.signal,
+    ),
     (cause) =>
       // `causeResponse` is effect's native failure boundary: Respondable
       // failures keep their intended response (e.g. RouteNotFound -> 404),
@@ -103,6 +115,45 @@ export const safeHttpEffect = <Req = never>(
         ),
       ),
   );
+
+/**
+ * Runs the handler in a child fiber that the request's abort signal
+ * interrupts, annotated as a client abort so `causeResponse` answers 499.
+ *
+ * The calling fiber is left alone on purpose: `HttpEffect.toHandled` runs
+ * the handler in an uninterruptible region, and an interrupt against that
+ * fiber would only fire once the region ends, ending the event with an
+ * interrupt exit instead of a response. Interrupting the child instead makes
+ * the abort an ordinary failure of the handler, which the boundary converts.
+ *
+ * A request that arrives aborted never starts its handler. The subscription
+ * ends when the handler settles: an abort after a streamed body started
+ * belongs to the body's cancellation, which closes the transferred scope.
+ */
+export const interruptOnClientAbort = <A, E, R>(
+  handler: Effect.Effect<A, E, R>,
+  signal: AbortSignal | undefined,
+): Effect.Effect<A, E, R> =>
+  signal === undefined
+    ? handler
+    : Effect.gen(function* () {
+        if (signal.aborted) return yield* clientAborted;
+        const fiber = yield* Effect.forkChild(handler, {
+          startImmediately: true,
+        });
+        const abort = () =>
+          fiber.interruptUnsafe(undefined, ClientAbort.annotation);
+        signal.addEventListener("abort", abort, { once: true });
+        return yield* Fiber.join(fiber).pipe(
+          Effect.ensuring(
+            Effect.sync(() => signal.removeEventListener("abort", abort)),
+          ),
+        );
+      });
+
+const clientAborted = Effect.failCause(
+  Cause.annotate(Cause.interrupt(), ClientAbort.annotation),
+);
 
 /**
  * No `ErrorReporter` is registered by default, so without a fallback a defect

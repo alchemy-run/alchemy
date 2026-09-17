@@ -26,7 +26,11 @@ export const makeRequestEffect = <Req = never>(
   webRequest: cf.Request,
   handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
 ) => {
-  const safeHandler = Http.safeHttpEffect(handler);
+  // The signal fires when the client goes away; the handler is then
+  // interrupted instead of running to completion for nobody.
+  const safeHandler = Http.safeHttpEffect(handler, {
+    signal: (webRequest as any as globalThis.Request).signal,
+  });
   return Effect.gen(function* () {
     const request = HttpServerRequest.fromWeb(
       webRequest as any as globalThis.Request,
