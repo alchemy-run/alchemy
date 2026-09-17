@@ -92,3 +92,12 @@ jobs:
 
       - name: Publish packages
         run: pnpm exec pkg publish
+
+      - name: Test packed CLI outside the checkout
+        env:
+          ALCHEMY_CLI_PACKAGE: ${{ github.workspace }}/.pkg/alchemy.tgz
+        run: |
+          test -f "$ALCHEMY_CLI_PACKAGE"
+          for manager in npm pnpm bun; do
+            ALCHEMY_CLI_PACKAGE_MANAGER="$manager" timeout 240 pnpm test test/Cli/package.test.ts --retry 0 --sequential
+          done
