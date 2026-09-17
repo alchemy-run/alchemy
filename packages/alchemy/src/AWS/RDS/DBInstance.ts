@@ -1,3 +1,4 @@
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
@@ -140,13 +141,23 @@ export interface DBInstanceProps {
    */
   dbSubnetGroupName?: string;
   /**
-   * Optional DB parameter group. In-place modify.
+   * DB parameter group. Omission/removal restores `default.<engine-family>`.
+   * The family follows the requested version, otherwise the existing engine
+   * version, otherwise the regional default for a new instance. Aurora uses
+   * its cluster's version. Pending-reboot associations are returned without
+   * automatically rebooting. Unsupported on RDS Custom; Db2 BYOL requires
+   * an explicit group with IBM licensing IDs.
    */
   dbParameterGroupName?: string;
   /**
-   * VPC security groups attached to the instance. In-place modify.
-   * Ignored for Aurora cluster members (`dbClusterIdentifier` set) — security
-   * groups are managed on the DB cluster instead.
+   * VPC security groups attached to the instance, compared as a set.
+   * Omission/removal restores the default group in the effective instance VPC:
+   * the declared subnet group's VPC, the existing instance VPC, or the regional
+   * default VPC for a new instance. An empty array is invalid.
+   * Resetting changes network access according to the default group's rules;
+   * it does not delete detached group resources. Ignored for cluster members,
+   * whose security groups are managed on DBCluster. Existing RDS Custom
+   * attachments cannot be changed through this provider.
    */
   vpcSecurityGroupIds?: string[];
   /**
@@ -304,6 +315,14 @@ export interface DBInstance extends Resource<
      * Parameter groups applied to the instance.
      */
     dbParameterGroupNames: string[];
+    /**
+     * Observed parameter-group apply statuses, including pending-reboot.
+     */
+    dbParameterGroupApplyStatuses: Record<string, string | undefined>;
+    /**
+     * Observed VPC security-group attachments, including cluster-owned groups.
+     */
+    vpcSecurityGroupIds: string[];
     /**
      * Allocated storage in GiB.
      */
@@ -611,6 +630,51 @@ export interface DBInstance extends Resource<
  * port, but an existing Custom instance that needs a listener change fails
  * explicitly instead of silently retaining the wrong port or replacing data.
  *
+ * ### Association Defaults
+ * Parameter and security-group associations are desired configuration.
+ * Omission selects a compatible engine default parameter group and the
+ * effective VPC's default security group, including during adoption.
+ * Existing database versions and VPC placement constrain those defaults;
+ * the currently attached groups are never used as fallback desired values.
+ *
+ * **Example:** Use default associations in a declared network
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ * });
+ * ```
+ *
+ * ### Resetting Associations
+ * Removing declarations restores defaults. Unchanged programs also repair
+ * external attachment drift. Reordering or duplicating security-group IDs
+ * does not resend the association request.
+ *
+ * **Example:** Restore the engine and VPC default groups
+ * ```diff lang="typescript"
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ * - dbParameterGroupName: customParameters.dbParameterGroupName,
+ * - vpcSecurityGroupIds: [applicationGroup.groupId],
+ * });
+ * ```
+ *
+ * The default security group's rules determine network access after reset.
+ * Detached group resources remain intact. Parameter changes can require a
+ * reboot; `dbParameterGroupApplyStatuses` reports `pending-reboot` without
+ * automatically restarting the database. Aurora instance parameter groups
+ * remain instance-managed, while security groups belong to its cluster.
+ * Multi-AZ DB cluster associations are cluster-managed. RDS Custom cannot
+ * manage parameter groups or modify existing security-group attachments;
+ * Db2 BYOL requires an explicit parameter group with IBM licensing IDs.
+ *
  * ### Monitoring & Logs
  * **Example:** Enhanced monitoring + log export
  * ```typescript
@@ -684,6 +748,16 @@ const toAttrs = ({
   dbParameterGroupNames: (instance.DBParameterGroups ?? []).flatMap((group) =>
     group.DBParameterGroupName ? [group.DBParameterGroupName] : [],
   ),
+  dbParameterGroupApplyStatuses: Object.fromEntries(
+    (instance.DBParameterGroups ?? []).flatMap((group) =>
+      group.DBParameterGroupName
+        ? [[group.DBParameterGroupName, group.ParameterApplyStatus]]
+        : [],
+    ),
+  ),
+  vpcSecurityGroupIds: (instance.VpcSecurityGroups ?? []).flatMap((group) =>
+    group.VpcSecurityGroupId ? [group.VpcSecurityGroupId] : [],
+  ),
   allocatedStorage: instance.AllocatedStorage,
   maxAllocatedStorage: instance.MaxAllocatedStorage,
   storageType: instance.StorageType,
@@ -739,6 +813,176 @@ const logExportDelta = (
     ...(DisableLogTypes.length > 0 ? { DisableLogTypes } : {}),
   };
 };
+
+const sameMembers = (
+  desired: readonly string[],
+  observed: readonly (string | undefined)[],
+) => {
+  const want = new Set(desired);
+  const have = new Set(observed);
+  return want.size === have.size && [...want].every((value) => have.has(value));
+};
+
+class InvalidDBInstanceAssociations extends Data.TaggedError(
+  "InvalidDBInstanceAssociations",
+)<{
+  message: string;
+}> {}
+
+const resolveAssociations = Effect.fn(function* (
+  props: DBInstanceProps,
+  observed?: rds.DBInstance,
+) {
+  const clusterIdentifier =
+    props.dbClusterIdentifier ?? observed?.DBClusterIdentifier;
+  const clusterOwned =
+    clusterIdentifier !== undefined || props.engine.startsWith("aurora");
+  const custom = props.engine.startsWith("custom-");
+  if (clusterOwned && !props.engine.startsWith("aurora")) {
+    if (props.dbParameterGroupName !== undefined) {
+      return yield* new InvalidDBInstanceAssociations({
+        message: "Multi-AZ DB cluster associations are managed on the cluster",
+      });
+    }
+    return { dbParameterGroupName: undefined, vpcSecurityGroupIds: undefined };
+  }
+  if (
+    props.engine.startsWith("db2-") &&
+    props.dbParameterGroupName === undefined &&
+    (props.licenseModel ??
+      observed?.LicenseModel ??
+      "bring-your-own-license") === "bring-your-own-license"
+  ) {
+    return yield* new InvalidDBInstanceAssociations({
+      message:
+        "Db2 BYOL requires an explicit parameter group with IBM licensing IDs",
+    });
+  }
+  let dbParameterGroupName = props.dbParameterGroupName;
+  if (custom && dbParameterGroupName !== undefined) {
+    return yield* new InvalidDBInstanceAssociations({
+      message: "RDS Custom does not support DB parameter-group associations",
+    });
+  }
+  if (!custom && dbParameterGroupName === undefined) {
+    let engineVersion = props.engineVersion ?? observed?.EngineVersion;
+    if (clusterIdentifier !== undefined) {
+      engineVersion = (yield* rds.describeDBClusters({
+        DBClusterIdentifier: clusterIdentifier,
+      })).DBClusters?.[0]?.EngineVersion;
+      if (!engineVersion) {
+        return yield* new InvalidDBInstanceAssociations({
+          message: "The DB cluster did not return an engine version",
+        });
+      }
+    }
+    const pages = yield* rds.describeDBEngineVersions
+      .pages({
+        Engine: props.engine,
+        EngineVersion: engineVersion,
+        DefaultOnly: engineVersion === undefined ? true : undefined,
+        IncludeAll: engineVersion !== undefined ? true : undefined,
+      })
+      .pipe(Stream.runCollect);
+    const families = new Set(
+      pages.flatMap((page) =>
+        (page.DBEngineVersions ?? []).map(
+          (version) => version.DBParameterGroupFamily,
+        ),
+      ),
+    );
+    const family = [...families][0];
+    if (families.size !== 1 || !family) {
+      return yield* new InvalidDBInstanceAssociations({
+        message:
+          "No unambiguous DB parameter group family; declare engineVersion or dbParameterGroupName",
+      });
+    }
+    dbParameterGroupName = `default.${family}`;
+  }
+  if (clusterOwned)
+    return { dbParameterGroupName, vpcSecurityGroupIds: undefined };
+  let vpcSecurityGroupIds = props.vpcSecurityGroupIds;
+  if (vpcSecurityGroupIds === undefined) {
+    const vpcId =
+      props.dbSubnetGroupName !== undefined
+        ? (yield* rds.describeDBSubnetGroups({
+            DBSubnetGroupName: props.dbSubnetGroupName,
+          })).DBSubnetGroups?.[0]?.VpcId
+        : (observed?.DBSubnetGroup?.VpcId ??
+          (yield* ec2.describeVpcs({
+            Filters: [{ Name: "is-default", Values: ["true"] }],
+          })).Vpcs?.[0]?.VpcId);
+    if (!vpcId) {
+      return yield* new InvalidDBInstanceAssociations({
+        message:
+          "No VPC found for the DB instance; declare dbSubnetGroupName or provide a default VPC",
+      });
+    }
+    const groups = yield* ec2.describeSecurityGroups({
+      Filters: [
+        { Name: "vpc-id", Values: [vpcId] },
+        { Name: "group-name", Values: ["default"] },
+      ],
+    });
+    vpcSecurityGroupIds = (groups.SecurityGroups ?? []).flatMap((group) =>
+      group.GroupId ? [group.GroupId] : [],
+    );
+    if (vpcSecurityGroupIds.length !== 1) {
+      return yield* new InvalidDBInstanceAssociations({
+        message: `Expected one default security group in VPC '${vpcId}'`,
+      });
+    }
+  }
+  if (vpcSecurityGroupIds.length === 0) {
+    return yield* new InvalidDBInstanceAssociations({
+      message:
+        "At least one VPC security group is required; omit vpcSecurityGroupIds to select the VPC default group",
+    });
+  }
+  return {
+    dbParameterGroupName,
+    vpcSecurityGroupIds: [...new Set(vpcSecurityGroupIds)],
+  };
+});
+
+type Associations = Effect.Success<ReturnType<typeof resolveAssociations>>;
+
+const parameterGroupMatches = (
+  desired: Associations,
+  instance: rds.DBInstance,
+) =>
+  desired.dbParameterGroupName === undefined ||
+  sameMembers(
+    [desired.dbParameterGroupName],
+    (instance.DBParameterGroups ?? []).map(
+      (group) => group.DBParameterGroupName,
+    ),
+  );
+
+const securityGroupsMatch = (desired: Associations, instance: rds.DBInstance) =>
+  desired.vpcSecurityGroupIds === undefined ||
+  sameMembers(
+    desired.vpcSecurityGroupIds,
+    (instance.VpcSecurityGroups ?? []).map((group) => group.VpcSecurityGroupId),
+  );
+
+const associationsConverged = (
+  desired: Associations,
+  instance: rds.DBInstance,
+) =>
+  parameterGroupMatches(desired, instance) &&
+  (desired.dbParameterGroupName === undefined ||
+    (instance.DBParameterGroups ?? []).every(
+      (group) =>
+        group.ParameterApplyStatus === "in-sync" ||
+        group.ParameterApplyStatus === "pending-reboot",
+    )) &&
+  securityGroupsMatch(desired, instance) &&
+  (desired.vpcSecurityGroupIds === undefined ||
+    (instance.VpcSecurityGroups ?? []).every(
+      (group) => group.Status === "active",
+    ));
 
 class InvalidDBInstancePort extends Data.TaggedError("InvalidDBInstancePort")<{
   message: string;
@@ -1079,6 +1323,49 @@ export const DBInstanceProvider = () =>
         );
       });
 
+      const waitForAssociations = Effect.fn(function* (
+        instanceId: string,
+        desired: Associations,
+      ) {
+        const instance = yield* readInstance(instanceId).pipe(
+          Effect.flatMap((instance) =>
+            instance?.DBParameterGroups?.some(
+              (group) => group.ParameterApplyStatus === "failed-to-apply",
+            )
+              ? Effect.fail(
+                  new InvalidDBInstanceAssociations({
+                    message: `DB instance '${instanceId}' parameter group failed to apply`,
+                  }),
+                )
+              : Effect.succeed(instance),
+          ),
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (instance) =>
+              instance !== undefined &&
+              (instance.DBInstanceStatus === "available" ||
+                instance.DBInstanceStatus === "storage-optimization") &&
+              associationsConverged(desired, instance),
+          }),
+        );
+        if (
+          !instance?.DBInstanceArn ||
+          !["available", "storage-optimization"].includes(
+            instance.DBInstanceStatus ?? "",
+          ) ||
+          !associationsConverged(desired, instance)
+        ) {
+          return yield* new InvalidDBInstanceAssociations({
+            message: `DB instance '${instanceId}' associations did not converge`,
+          });
+        }
+        return instance;
+      });
+
       const waitForPort = Effect.fn(function* (
         instanceId: string,
         port: number,
@@ -1195,6 +1482,7 @@ export const DBInstanceProvider = () =>
               return { action: "update", stables: [] } as const;
             }
             const port = yield* desiredInstancePort(news, instance);
+            const associations = yield* resolveAssociations(news, instance);
             const desiredStorage = yield* resolveStorage(
               news,
               instance.AllocatedStorage,
@@ -1202,7 +1490,8 @@ export const DBInstanceProvider = () =>
             if (
               !storageConverged(instance, desiredStorage) ||
               !autoscalingConverged(storage, instance) ||
-              !portConverged(instance, port)
+              !portConverged(instance, port) ||
+              !associationsConverged(associations, instance)
             ) {
               return { action: "update" } as const;
             }
@@ -1264,6 +1553,7 @@ export const DBInstanceProvider = () =>
           // Observe — fetch live instance state.
           let observed = yield* readInstance(identifier);
           let port = yield* desiredInstancePort(news, observed);
+          let associations = yield* resolveAssociations(news, observed);
           let desiredStorage = yield* resolveStorage(
             news,
             observed?.AllocatedStorage,
@@ -1271,8 +1561,9 @@ export const DBInstanceProvider = () =>
 
           // Ensure — create if missing. Tolerate
           // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
+          let created = false;
           if (!observed?.DBInstanceArn) {
-            yield* rds
+            created = yield* rds
               .createDBInstance({
                 DBInstanceIdentifier: identifier,
                 DBClusterIdentifier: news.dbClusterIdentifier,
@@ -1294,7 +1585,7 @@ export const DBInstanceProvider = () =>
                 PreferredBackupWindow: news.preferredBackupWindow,
                 PreferredMaintenanceWindow: news.preferredMaintenanceWindow,
                 DBSubnetGroupName: news.dbSubnetGroupName,
-                DBParameterGroupName: news.dbParameterGroupName,
+                DBParameterGroupName: associations.dbParameterGroupName,
                 OptionGroupName: news.optionGroupName,
                 LicenseModel: news.licenseModel,
                 StorageEncrypted: news.storageEncrypted,
@@ -1311,12 +1602,7 @@ export const DBInstanceProvider = () =>
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
                 DeletionProtection: news.deletionProtection,
                 NetworkType: news.networkType,
-                // Cluster members inherit VPC security groups from the DB
-                // cluster; passing them fails with InvalidParameterCombination
-                // ("Set vpc security group for the DB Cluster").
-                VpcSecurityGroupIds: news.dbClusterIdentifier
-                  ? undefined
-                  : news.vpcSecurityGroupIds,
+                VpcSecurityGroupIds: associations.vpcSecurityGroupIds,
                 PubliclyAccessible: news.publiclyAccessible,
                 PromotionTier: news.promotionTier,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
@@ -1327,14 +1613,15 @@ export const DBInstanceProvider = () =>
                 })),
               })
               .pipe(
-                Effect.catchTag(
-                  "DBInstanceAlreadyExistsFault",
-                  () => Effect.void,
+                Effect.as(true),
+                Effect.catchTag("DBInstanceAlreadyExistsFault", () =>
+                  Effect.succeed(false),
                 ),
               );
 
             observed = yield* waitForInstance(identifier);
-          } else {
+          }
+          if (!created) {
             // Wait for the instance to settle before any modify so the call
             // doesn't hit `InvalidDBInstanceStateFault`.
             observed = yield* waitForInstance(identifier);
@@ -1348,6 +1635,8 @@ export const DBInstanceProvider = () =>
               news,
               observed.AllocatedStorage,
             );
+
+            associations = yield* resolveAssociations(news, observed);
 
             // syncCoreSettings — single `modifyDBInstance` carrying scalar
             // in-place fields. Only emit a field when the desired value differs
@@ -1393,19 +1682,22 @@ export const DBInstanceProvider = () =>
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
             setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
             setIf("NetworkType", news.networkType, observed.NetworkType);
-            setIf("DBParameterGroupName", news.dbParameterGroupName, undefined);
+            if (!parameterGroupMatches(associations, observed)) {
+              core.DBParameterGroupName = associations.dbParameterGroupName;
+              coreDirty = true;
+            }
             setIf("PubliclyAccessible", news.publiclyAccessible, observed.PubliclyAccessible); // prettier-ignore
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
-            // Security groups on Aurora cluster members are managed by the DB
-            // cluster (ModifyDBCluster), so only sync them for standalone
-            // instances.
-            if (
-              news.vpcSecurityGroupIds !== undefined &&
-              news.dbClusterIdentifier === undefined
-            ) {
-              core.VpcSecurityGroupIds = news.vpcSecurityGroupIds;
+            if (!securityGroupsMatch(associations, observed)) {
+              if (news.engine.startsWith("custom-")) {
+                return yield* new InvalidDBInstanceAssociations({
+                  message:
+                    "Changing existing RDS Custom security-group associations through ModifyDBInstance is not supported",
+                });
+              }
+              core.VpcSecurityGroupIds = associations.vpcSecurityGroupIds;
               coreDirty = true;
             }
             if (news.allowMajorVersionUpgrade) {
@@ -1434,6 +1726,12 @@ export const DBInstanceProvider = () =>
             if (coreDirty) {
               yield* rds.modifyDBInstance(core);
               observed = yield* waitForInstance(identifier);
+              if (
+                core.DBParameterGroupName !== undefined ||
+                core.VpcSecurityGroupIds !== undefined
+              ) {
+                observed = yield* waitForAssociations(identifier, associations);
+              }
               if (core.AllocatedStorage !== undefined) {
                 observed = yield* waitForStorage(identifier, (instance) =>
                   storageConverged(instance, desiredStorage),
@@ -1524,6 +1822,37 @@ export const DBInstanceProvider = () =>
               });
             }
             observed = yield* waitForPort(identifier, port);
+          }
+
+          associations = yield* resolveAssociations(news, observed);
+          if (!associationsConverged(associations, observed)) {
+            const parameterChanged = !parameterGroupMatches(
+              associations,
+              observed,
+            );
+            const securityChanged = !securityGroupsMatch(
+              associations,
+              observed,
+            );
+            if (securityChanged && news.engine.startsWith("custom-")) {
+              return yield* new InvalidDBInstanceAssociations({
+                message:
+                  "Changing existing RDS Custom security-group associations through ModifyDBInstance is not supported",
+              });
+            }
+            if (parameterChanged || securityChanged) {
+              yield* rds.modifyDBInstance({
+                DBInstanceIdentifier: identifier,
+                DBParameterGroupName: parameterChanged
+                  ? associations.dbParameterGroupName
+                  : undefined,
+                VpcSecurityGroupIds: securityChanged
+                  ? associations.vpcSecurityGroupIds
+                  : undefined,
+                ApplyImmediately: true,
+              });
+            }
+            observed = yield* waitForAssociations(identifier, associations);
           }
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";

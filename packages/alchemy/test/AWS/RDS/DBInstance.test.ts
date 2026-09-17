@@ -1,4 +1,7 @@
 import * as AWS from "@/AWS";
+import * as ec2 from "@distilled.cloud/aws/ec2";
+import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
+import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
 import * as Drift from "@/Drift";
@@ -49,11 +52,20 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      const network = Effect.gen(function* () {
+        const net = yield* Network("ProbeNet", { cidrBlock: "10.47.0.0/16" });
+        return yield* DBSubnetGroup("ProbeSubnetGroup", {
+          description: "RDS serialization probe network",
+          subnetIds: net.privateSubnetIds,
+        });
+      });
       const badPassword = yield* Effect.result(
         stack.deploy(
           Effect.gen(function* () {
+            const subnetGroup = yield* network;
             return yield* DBInstance("AuditProbeInstance", {
               dbInstanceIdentifier: "alchemy-audit-probe-instance",
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
               engine: "postgres",
               dbInstanceClass: "db.t3.micro",
               allocatedStorage: 20,
@@ -73,8 +85,10 @@ test.provider(
       const badRetention = yield* Effect.result(
         stack.deploy(
           Effect.gen(function* () {
+            const subnetGroup = yield* network;
             return yield* DBInstance("AuditProbeInstance", {
               dbInstanceIdentifier: "alchemy-audit-probe-instance",
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
               engine: "postgres",
               dbInstanceClass: "db.t3.micro",
               allocatedStorage: 20,
@@ -90,6 +104,38 @@ test.provider(
       expect(Result.isFailure(badRetention)).toBe(true);
       expect(renderFailure(badRetention)).toContain("InvalidParameterValue");
       expect(renderFailure(badRetention)).toMatch(/retention/i);
+
+      const invalidFlags = yield* rds
+        .describeDBEngineVersions({
+          Engine: "postgres",
+          IncludeAll: true,
+          DefaultOnly: true,
+        })
+        .pipe(Effect.result);
+      expect(Result.isFailure(invalidFlags)).toBe(true);
+      if (Result.isFailure(invalidFlags)) {
+        expect(invalidFlags.failure._tag).toBe("InvalidParameterCombination");
+      }
+      const emptyGroups = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const subnetGroup = yield* network;
+            return yield* DBInstance("AuditProbeInstance", {
+              dbInstanceIdentifier: "alchemy-audit-probe-instance",
+              engine: "postgres",
+              dbInstanceClass: "db.t3.micro",
+              dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+              vpcSecurityGroupIds: [],
+              masterUsername: "alchemy",
+              masterUserPassword: Redacted.make("bad@pass word1"),
+            });
+          }),
+        )
+        .pipe(Effect.result);
+      expect(Result.isFailure(emptyGroups)).toBe(true);
+      expect(renderFailure(emptyGroups)).toContain(
+        "InvalidDBInstanceAssociations",
+      );
 
       yield* stack.destroy();
     }),
@@ -131,7 +177,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const { client, requests } = yield* observePortRequests;
+      const { client, requests } = yield* observeInstanceRequests;
       const program = (round: string) =>
         Effect.gen(function* () {
           const network = yield* Network("ListNet", {
@@ -141,8 +187,17 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
             description: "alchemy instance list lifecycle",
             subnetIds: network.privateSubnetIds,
           });
+          const clusterGroup = yield* SecurityGroup("ListClusterGroup", {
+            vpcId: network.vpcId,
+            description: "Aurora cluster group",
+          });
+          const ignoredInstanceGroup = yield* SecurityGroup(
+            "ListIgnoredInstanceGroup",
+            { vpcId: network.vpcId, description: "Ignored instance group" },
+          );
           const cluster = yield* DBCluster("ListCluster", {
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            vpcSecurityGroupIds: [clusterGroup.groupId],
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             port: 5434,
@@ -159,6 +214,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
             dbInstanceClass: "db.serverless",
             engine: "aurora-postgresql",
             port: 5435,
+            vpcSecurityGroupIds: [ignoredInstanceGroup.groupId],
             tags: { round },
           });
         });
@@ -171,6 +227,29 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
       expect(updated.endpointPort).toBe(5434);
       expect(requests.filter((request) => request.port !== null)).toEqual([]);
+      expect(
+        requests.filter((request) => request.securityGroups.length > 0),
+      ).toEqual([]);
+      const cluster = (yield* rds.describeDBClusters({
+        DBClusterIdentifier: instance.dbClusterIdentifier!,
+      })).DBClusters![0]!;
+      expect([...updated.vpcSecurityGroupIds].sort()).toEqual(
+        cluster
+          .VpcSecurityGroups!.map((group) => group.VpcSecurityGroupId!)
+          .sort(),
+      );
+      const family = (yield* rds.describeDBEngineVersions({
+        Engine: "aurora-postgresql",
+        EngineVersion: cluster.EngineVersion,
+      })).DBEngineVersions![0]!.DBParameterGroupFamily!;
+      expect(updated.dbParameterGroupNames).toEqual([`default.${family}`]);
+      expect(
+        requests.filter(
+          (request) =>
+            request.action === "ModifyDBInstance" &&
+            request.parameterGroup !== null,
+        ),
+      ).toEqual([]);
       expect(
         requests.some((request) => request.action === "CreateDBInstance"),
       ).toBe(true);
@@ -613,9 +692,14 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     }),
 );
 
-const observePortRequests = Effect.gen(function* () {
+const observeInstanceRequests = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
-  const requests: Array<{ action: string; port: string | null }> = [];
+  const requests: Array<{
+    action: string;
+    port: string | null;
+    parameterGroup: string | null;
+    securityGroups: string[];
+  }> = [];
   const observedClient = client.pipe(
     HttpClient.tapRequest((request) =>
       Effect.sync(() => {
@@ -631,6 +715,11 @@ const observePortRequests = Effect.gen(function* () {
         ) {
           requests.push({
             action,
+            parameterGroup: parameters.get("DBParameterGroupName"),
+            securityGroups: [...parameters.entries()]
+              .filter(([key]) => key.startsWith("VpcSecurityGroupIds."))
+              .map(([, value]) => value)
+              .sort(),
             port: parameters.get(
               action === "CreateDBInstance" ? "Port" : "DBPortNumber",
             ),
@@ -708,7 +797,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { client, requests } = yield* observePortRequests;
+      const { client, requests } = yield* observeInstanceRequests;
       const deploy = (port?: number, round?: string) =>
         stack
           .deploy(portProgram(port, round))
@@ -835,7 +924,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         DBPortNumber: 5433,
         ApplyImmediately: false,
       });
-      const { client, requests } = yield* observePortRequests;
+      const { client, requests } = yield* observeInstanceRequests;
       const settled = yield* stack
         .deploy(portProgram(5433))
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
@@ -856,6 +945,324 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       ).toMatchObject({ action: "noop" });
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
+    }),
+);
+
+const associationProgram = (
+  options: {
+    explicit?: boolean;
+    reverse?: boolean;
+    version?: string;
+    identifier?: string;
+    round?: string;
+    omitSubnet?: boolean;
+  } = {},
+) =>
+  Effect.gen(function* () {
+    const network = yield* Network("AssociationNet", {
+      cidrBlock: "10.46.0.0/16",
+    });
+    const subnetGroup = yield* DBSubnetGroup("AssociationSubnetGroup", {
+      description: "RDS association lifecycle",
+      subnetIds: network.privateSubnetIds,
+    });
+    const groupA = yield* SecurityGroup("AssociationGroupA", {
+      vpcId: network.vpcId,
+      description: "RDS association A",
+    });
+    const groupB = yield* SecurityGroup("AssociationGroupB", {
+      vpcId: network.vpcId,
+      description: "RDS association B",
+    });
+    const parameterGroup = yield* DBParameterGroup("AssociationParameters", {
+      family: "postgres16",
+      parameters: { max_connections: "120" },
+    });
+    const groups = options.reverse
+      ? [groupB.groupId, groupA.groupId, groupA.groupId]
+      : [groupA.groupId, groupB.groupId];
+    const instance = yield* DBInstance("AssociationInstance", {
+      dbInstanceIdentifier: options.identifier,
+      engine: "postgres",
+      engineVersion: options.version,
+      dbInstanceClass: "db.t3.micro",
+      masterUsername: "alchemy",
+      manageMasterUserPassword: true,
+      ...(options.omitSubnet
+        ? {}
+        : { dbSubnetGroupName: subnetGroup.dbSubnetGroupName }),
+      ...(options.explicit
+        ? {
+            dbParameterGroupName: parameterGroup.dbParameterGroupName,
+            vpcSecurityGroupIds: groups,
+          }
+        : {}),
+      backupRetentionPeriod: "0 days",
+      deletionProtection: false,
+      skipFinalSnapshot: true,
+      publiclyAccessible: false,
+      // Keep teardown ordered when adoption omits the subnet input.
+      tags: {
+        round: options.round ?? "associations",
+        subnetGroup: subnetGroup.dbSubnetGroupName,
+      },
+    });
+    return {
+      instance,
+      parameterGroupName: parameterGroup.dbParameterGroupName,
+      groupIds: [groupA.groupId, groupB.groupId],
+      vpcId: network.vpcId,
+    };
+  });
+
+const defaultGroupForVpc = Effect.fn(function* (vpcId: string) {
+  const groups = yield* ec2.describeSecurityGroups({
+    Filters: [
+      { Name: "vpc-id", Values: [vpcId] },
+      { Name: "group-name", Values: ["default"] },
+    ],
+  });
+  expect(groups.SecurityGroups).toHaveLength(1);
+  return groups.SecurityGroups![0]!.GroupId!;
+});
+
+const assertAssociations = Effect.fn(function* (
+  identifier: string,
+  parameterGroup: string,
+  securityGroups: string[],
+) {
+  const instance = (yield* rds.describeDBInstances({
+    DBInstanceIdentifier: identifier,
+  })).DBInstances?.[0];
+  expect(["available", "storage-optimization"]).toContain(
+    instance?.DBInstanceStatus,
+  );
+  expect(
+    instance?.DBParameterGroups?.map((group) => group.DBParameterGroupName),
+  ).toEqual([parameterGroup]);
+  expect(["in-sync", "pending-reboot"]).toContain(
+    instance?.DBParameterGroups?.[0]?.ParameterApplyStatus,
+  );
+  expect(
+    instance?.VpcSecurityGroups?.map(
+      (group) => group.VpcSecurityGroupId,
+    ).sort(),
+  ).toEqual([...securityGroups].sort());
+  expect(
+    instance?.VpcSecurityGroups?.every((group) => group.Status === "active"),
+  ).toBe(true);
+  return instance;
+});
+
+const injectAssociations = Effect.fn(function* (
+  identifier: string,
+  parameterGroup: string,
+  securityGroups: string[],
+) {
+  yield* rds.modifyDBInstance({
+    DBInstanceIdentifier: identifier,
+    DBParameterGroupName: parameterGroup,
+    VpcSecurityGroupIds: securityGroups,
+    ApplyImmediately: true,
+  });
+  yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
+    Effect.repeat({
+      schedule: Schedule.min([
+        Schedule.exponential("5 seconds"),
+        Schedule.spaced("1 minute"),
+      ]),
+      times: 10,
+      until: (response) => {
+        const db = response.DBInstances?.[0];
+        return (
+          db?.DBInstanceStatus === "available" &&
+          db.DBParameterGroups?.[0]?.DBParameterGroupName === parameterGroup &&
+          ["in-sync", "pending-reboot"].includes(
+            db.DBParameterGroups?.[0]?.ParameterApplyStatus ?? "",
+          ) &&
+          db.VpcSecurityGroups?.every((group) => group.Status === "active") ===
+            true &&
+          JSON.stringify(
+            db.VpcSecurityGroups.map(
+              (group) => group.VpcSecurityGroupId,
+            ).sort(),
+          ) === JSON.stringify([...securityGroups].sort())
+        );
+      },
+    }),
+  );
+  yield* assertAssociations(identifier, parameterGroup, securityGroups);
+});
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "associations: defaults, explicit attachments, and order-independent no-op writes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { client, requests } = yield* observeInstanceRequests;
+      const options = { version: "16.13" };
+      const deploy = (extra: Parameters<typeof associationProgram>[0] = {}) =>
+        stack
+          .deploy(associationProgram({ ...options, ...extra }))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      const defaultGroup = yield* defaultGroupForVpc(created.vpcId);
+      yield* assertAssociations(
+        created.instance.dbInstanceIdentifier,
+        "default.postgres16",
+        [defaultGroup],
+      );
+      expect(created.instance.vpcSecurityGroupIds).toEqual([defaultGroup]);
+      expect(
+        requests.filter((request) => request.action === "CreateDBInstance"),
+      ).toMatchObject([
+        {
+          parameterGroup: "default.postgres16",
+          securityGroups: [defaultGroup],
+        },
+      ]);
+
+      requests.length = 0;
+      const attached = yield* deploy({ explicit: true });
+      expect(attached.instance.dbInstanceArn).toBe(
+        created.instance.dbInstanceArn,
+      );
+      yield* assertAssociations(
+        created.instance.dbInstanceIdentifier,
+        created.parameterGroupName,
+        created.groupIds,
+      );
+      expect(
+        requests.filter(
+          (request) =>
+            request.action === "ModifyDBInstance" &&
+            (request.parameterGroup !== null ||
+              request.securityGroups.length > 0),
+        ),
+      ).toHaveLength(1);
+      expect(["in-sync", "pending-reboot"]).toContain(
+        attached.instance.dbParameterGroupApplyStatuses[
+          created.parameterGroupName
+        ],
+      );
+
+      requests.length = 0;
+      yield* deploy({ explicit: true, reverse: true, round: "reordered" });
+      expect(
+        requests.some((request) => request.action === "DescribeDBInstances"),
+      ).toBe(true);
+      expect(
+        requests.filter(
+          (request) =>
+            request.action === "ModifyDBInstance" &&
+            (request.parameterGroup !== null ||
+              request.securityGroups.length > 0),
+        ),
+      ).toEqual([]);
+      yield* assertAssociations(
+        created.instance.dbInstanceIdentifier,
+        created.parameterGroupName,
+        created.groupIds,
+      );
+      expect(
+        (yield* stack.plan(
+          associationProgram({
+            ...options,
+            explicit: true,
+            reverse: true,
+            round: "reordered",
+          }),
+        )).resources.AssociationInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.instance.dbInstanceIdentifier);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "associations: removal, older-engine defaults, drift, and nondefault-VPC adoption",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-association-defaults";
+      const program = (extra: Parameters<typeof associationProgram>[0] = {}) =>
+        associationProgram({ identifier, ...extra });
+      const created = yield* stack.deploy(
+        program({ version: "16.13", explicit: true }),
+      );
+      const defaultGroup = yield* defaultGroupForVpc(created.vpcId);
+      yield* assertAssociations(
+        identifier,
+        created.parameterGroupName,
+        created.groupIds,
+      );
+
+      const removed = yield* stack.deploy(program());
+      expect(removed.instance.dbInstanceArn).toBe(
+        created.instance.dbInstanceArn,
+      );
+      expect(removed.instance.engineVersion).toBe("16.13");
+      yield* assertAssociations(identifier, "default.postgres16", [
+        defaultGroup,
+      ]);
+      expect(
+        (yield* ec2.describeSecurityGroups({ GroupIds: created.groupIds }))
+          .SecurityGroups,
+      ).toHaveLength(2);
+      expect(
+        (yield* rds.describeDBParameterGroups({
+          DBParameterGroupName: created.parameterGroupName,
+        })).DBParameterGroups,
+      ).toHaveLength(1);
+
+      yield* injectAssociations(
+        identifier,
+        created.parameterGroupName,
+        created.groupIds,
+      );
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.AssociationInstance?.action).toBe("drifted");
+      expect(
+        (yield* stack.plan(program())).resources.AssociationInstance,
+      ).toMatchObject({ action: "update" });
+      yield* stack.deploy(program());
+      yield* assertAssociations(identifier, "default.postgres16", [
+        defaultGroup,
+      ]);
+      expect(
+        (yield* stack.plan(program())).resources.AssociationInstance,
+      ).toMatchObject({ action: "noop" });
+
+      yield* injectAssociations(
+        identifier,
+        created.parameterGroupName,
+        created.groupIds,
+      );
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "AssociationInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* stack.deploy(program({ omitSubnet: true }));
+      expect(adopted.instance.dbInstanceArn).toBe(
+        created.instance.dbInstanceArn,
+      );
+      expect(adopted.instance.engineVersion).toBe("16.13");
+      yield* assertAssociations(identifier, "default.postgres16", [
+        defaultGroup,
+      ]);
+      expect(
+        (yield* stack.plan(program({ omitSubnet: true }))).resources
+          .AssociationInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
     }),
 );
 
