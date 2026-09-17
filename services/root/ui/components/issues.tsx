@@ -21,10 +21,12 @@ import {
   fetchIssues,
   fetchPullDiff,
   fetchRepos,
+  fetchTimeline,
   patchIssue,
   type ForgeComment,
   type ForgeIssue,
   type SeedStatus,
+  type TimelineEvent as ForgeTimelineEvent,
 } from "@/lib/forge";
 import { showWork, type WorkPlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -35,11 +37,18 @@ import {
   ArrowLeft,
   CheckCircle2,
   CircleDot,
+  Eye,
+  FileDiff as FileDiffIcon,
   FolderGit2,
+  GitBranch,
+  GitCommitHorizontal,
   GitMerge,
   GitPullRequest,
+  Link as LinkIcon,
   MessageSquare,
-  FileDiff as FileDiffIcon,
+  Pencil,
+  Tag,
+  UserPlus,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -156,6 +165,363 @@ const TimelineComment = ({
     </div>
   </div>
 );
+
+/** A small EVENT on the timeline — GitHub's dividers: the icon in a
+ *  circle on the gutter line, one line of muted text. */
+const EventRow = ({
+  icon: Icon,
+  tone = "muted",
+  when,
+  children,
+}: {
+  icon: typeof GitMerge;
+  tone?: "muted" | "merged" | "closed" | "open";
+  when?: string;
+  children: React.ReactNode;
+}) => (
+  <div className="relative flex items-center gap-3 py-0.5">
+    <span
+      className={cn(
+        "z-[1] flex size-8 shrink-0 items-center justify-center rounded-full border",
+        tone === "merged" && "border-transparent bg-purple-600 text-white",
+        tone === "closed" && "border-transparent bg-red-700 text-white",
+        tone === "open" && "border-transparent bg-green-700 text-white",
+        tone === "muted" && "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      <Icon className="size-4" />
+    </span>
+    <span className="min-w-0 text-[13px] text-muted-foreground">
+      {children}
+      {when !== undefined && <> · {age(when)} ago</>}
+    </span>
+  </div>
+);
+
+/** A commit on the timeline — GitHub's compact row. */
+const CommitRow = ({
+  message,
+  sha,
+  when,
+}: {
+  message: string;
+  sha: string;
+  when?: string;
+}) => (
+  <div className="relative flex items-center gap-3 py-0.5">
+    <span className="z-[1] flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+      <GitCommitHorizontal className="size-4" />
+    </span>
+    <span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">
+      {message.split("\n")[0]}
+    </span>
+    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+      {sha.slice(0, 7)}
+      {when !== undefined && <> · {age(when)} ago</>}
+    </span>
+  </div>
+);
+
+/** One normalized thing to draw, in time order. */
+type TimelineItem =
+  | {
+      kind: "comment";
+      key: string;
+      at: number;
+      author: string;
+      when: string;
+      origin: "github" | "local";
+      body: string;
+    }
+  | {
+      kind: "review";
+      key: string;
+      at: number;
+      author: string;
+      when: string;
+      state: string;
+      body: string | null;
+    }
+  | {
+      kind: "commit";
+      key: string;
+      at: number;
+      message: string;
+      sha: string;
+      when?: string;
+    }
+  | {
+      kind: "event";
+      key: string;
+      at: number;
+      icon: typeof GitMerge;
+      tone: "muted" | "merged" | "closed" | "open";
+      when?: string;
+      text: React.ReactNode;
+    };
+
+const actorOf = (event: ForgeTimelineEvent): string =>
+  ((event.actor ?? event.user) as { login?: string } | undefined)?.login ??
+  "ghost";
+
+/** GitHub's timeline events + the org's own comments, one sequence.
+ *  GitHub-born comments come FROM the timeline (our mirror holds the
+ *  same rows); local comments (negative ids) only exist here. */
+const buildTimeline = (
+  events: ReadonlyArray<ForgeTimelineEvent>,
+  comments: ReadonlyArray<ForgeComment>,
+): ReadonlyArray<TimelineItem> => {
+  const items: Array<TimelineItem> = [];
+  events.forEach((event, index) => {
+    const key = `t-${index}`;
+    const when =
+      (event.created_at as string | undefined) ??
+      (event.submitted_at as string | undefined);
+    const at = when !== undefined ? Date.parse(when) : Number.NaN;
+    switch (event.event) {
+      case "commented": {
+        if (when === undefined) return;
+        items.push({
+          kind: "comment",
+          key,
+          at,
+          author: actorOf(event),
+          when,
+          origin: "github",
+          body: String(event.body ?? ""),
+        });
+        return;
+      }
+      case "reviewed": {
+        if (when === undefined) return;
+        items.push({
+          kind: "review",
+          key,
+          at,
+          author: actorOf(event),
+          when,
+          state: String(event.state ?? "commented"),
+          body:
+            typeof event.body === "string" && event.body.length > 0
+              ? event.body
+              : null,
+        });
+        return;
+      }
+      case "committed": {
+        const commit = event as {
+          sha?: string;
+          message?: string;
+          committer?: { date?: string };
+          author?: { date?: string };
+        };
+        const date = commit.committer?.date ?? commit.author?.date;
+        items.push({
+          kind: "commit",
+          key,
+          at: date !== undefined ? Date.parse(date) : Number.NaN,
+          message: commit.message ?? "",
+          sha: commit.sha ?? "",
+          when: date,
+        });
+        return;
+      }
+      case "merged":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: GitMerge,
+          tone: "merged",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> merged commit{" "}
+              <code className="font-mono text-xs">
+                {String(event.commit_id ?? "").slice(0, 7)}
+              </code>
+            </>
+          ),
+        });
+        return;
+      case "closed":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: CheckCircle2,
+          tone: "closed",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> closed this
+            </>
+          ),
+        });
+        return;
+      case "reopened":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: CircleDot,
+          tone: "open",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> reopened this
+            </>
+          ),
+        });
+        return;
+      case "labeled":
+      case "unlabeled":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: Tag,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b>{" "}
+              {event.event === "labeled" ? "added" : "removed"} the{" "}
+              <span className="rounded-full border border-border/60 px-1.5 text-xs">
+                {(event.label as { name?: string } | undefined)?.name}
+              </span>{" "}
+              label
+            </>
+          ),
+        });
+        return;
+      case "renamed": {
+        const rename = event.rename as
+          | { from?: string; to?: string }
+          | undefined;
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: Pencil,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> changed the
+              title to <i>{rename?.to}</i>
+            </>
+          ),
+        });
+        return;
+      }
+      case "cross-referenced": {
+        const source = event.source as
+          | { issue?: { number?: number; title?: string } }
+          | undefined;
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: LinkIcon,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> mentioned
+              this in #{source?.issue?.number}{" "}
+              <span className="text-foreground">{source?.issue?.title}</span>
+            </>
+          ),
+        });
+        return;
+      }
+      case "assigned":
+      case "review_requested":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: event.event === "assigned" ? UserPlus : Eye,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b>{" "}
+              {event.event === "assigned"
+                ? "assigned"
+                : "requested a review from"}{" "}
+              <b className="text-foreground">
+                {((event.assignee ??
+                  event.requested_reviewer) as { login?: string } | undefined)
+                  ?.login ?? "someone"}
+              </b>
+            </>
+          ),
+        });
+        return;
+      case "head_ref_force_pushed":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: GitCommitHorizontal,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> force-pushed
+              the head branch
+            </>
+          ),
+        });
+        return;
+      case "head_ref_deleted":
+        items.push({
+          kind: "event",
+          key,
+          at,
+          icon: GitBranch,
+          tone: "muted",
+          when,
+          text: (
+            <>
+              <b className="text-foreground">{actorOf(event)}</b> deleted the
+              head branch
+            </>
+          ),
+        });
+        return;
+      default:
+        return; // an event kind we don't draw yet
+    }
+  });
+
+  // the org's own comments (negative ids) exist only in our store
+  for (const comment of comments) {
+    if (comment.id >= 0 && events.length > 0) continue;
+    items.push({
+      kind: "comment",
+      key: `c-${comment.id}`,
+      at: Date.parse(comment.created_at),
+      author: comment.user.login,
+      when: comment.created_at,
+      origin: comment.id < 0 ? "local" : "github",
+      body: comment.body,
+    });
+  }
+
+  return items
+    .filter((item) => Number.isFinite(item.at))
+    .sort((left, right) => left.at - right.at);
+};
+
+const REVIEW_VERB: Record<string, string> = {
+  approved: "approved these changes",
+  changes_requested: "requested changes",
+  commented: "reviewed",
+  dismissed: "reviewed (dismissed)",
+};
 
 /* ── Files changed: pierre's tree beside pierre's diffs ──────────── */
 
@@ -291,10 +657,13 @@ const ItemView = ({
   const [diff, setDiff] = useState<
     { ok: boolean; text: string } | undefined
   >();
+  const [events, setEvents] = useState<ReadonlyArray<ForgeTimelineEvent>>([]);
+  const [composer, setComposer] = useState<"write" | "preview">("write");
 
   const reload = () => {
     fetchIssue(repo, number).then(setIssue).catch(() => {});
     fetchComments(repo, number).then(setComments).catch(() => {});
+    fetchTimeline(repo, number).then(setEvents).catch(() => {});
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(reload, [repo, number]);
@@ -320,6 +689,10 @@ const ItemView = ({
   const files = useMemo(
     () => (diff !== undefined && diff.ok ? parseDiff(diff.text) : []),
     [diff],
+  );
+  const timeline = useMemo(
+    () => buildTimeline(events, comments),
+    [events, comments],
   );
 
   if (issue === undefined) {
@@ -470,16 +843,80 @@ const ItemView = ({
               >
                 <MarkdownText text={issue.body ?? "*No description provided.*"} />
               </TimelineComment>
-              {comments.map((comment) => (
-                <TimelineComment
-                  key={comment.id}
-                  author={comment.user.login}
-                  when={comment.created_at}
-                  origin={comment.id < 0 ? "local" : "github"}
-                >
-                  <MarkdownText text={comment.body} />
-                </TimelineComment>
-              ))}
+              {timeline.map((item) =>
+                item.kind === "comment" ? (
+                  <TimelineComment
+                    key={item.key}
+                    author={item.author}
+                    when={item.when}
+                    origin={item.origin}
+                  >
+                    <MarkdownText text={item.body} />
+                  </TimelineComment>
+                ) : item.kind === "review" ? (
+                  item.body !== null ? (
+                    /* a review WITH prose — a comment card wearing
+                       the review's verdict in its header */
+                    <div key={item.key} className="relative flex gap-3">
+                      <div className="z-[1] shrink-0 pt-0.5">
+                        <Avatar
+                          name={item.author}
+                          kind={kindOf(item.author)}
+                          size={32}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 rounded-md border border-border">
+                        <div className="flex items-center gap-2 rounded-t-md border-b border-border/70 bg-muted/40 px-3 py-1.5 text-xs">
+                          <Eye
+                            className={cn(
+                              "size-3.5",
+                              item.state === "approved" && "text-moss",
+                              item.state === "changes_requested" &&
+                                "text-red-400",
+                            )}
+                          />
+                          <span className="font-semibold">{item.author}</span>
+                          <span className="text-muted-foreground">
+                            {REVIEW_VERB[item.state] ?? "reviewed"} ·{" "}
+                            {age(item.when)} ago
+                          </span>
+                        </div>
+                        <div className={cn("px-3.5 py-3", PROSE)}>
+                          <MarkdownText text={item.body} />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <EventRow
+                      key={item.key}
+                      icon={
+                        item.state === "approved" ? CheckCircle2 : Eye
+                      }
+                      tone={item.state === "approved" ? "open" : "muted"}
+                      when={item.when}
+                    >
+                      <b className="text-foreground">{item.author}</b>{" "}
+                      {REVIEW_VERB[item.state] ?? "reviewed"}
+                    </EventRow>
+                  )
+                ) : item.kind === "commit" ? (
+                  <CommitRow
+                    key={item.key}
+                    message={item.message}
+                    sha={item.sha}
+                    when={item.when}
+                  />
+                ) : (
+                  <EventRow
+                    key={item.key}
+                    icon={item.icon}
+                    tone={item.tone}
+                    when={item.when}
+                  >
+                    {item.text}
+                  </EventRow>
+                ),
+              )}
 
               {/* the comment box — avatar on the line, actions right */}
               <div className="relative flex gap-3 pt-2">
@@ -487,17 +924,49 @@ const ItemView = ({
                   <Avatar name={HUMAN.name} kind="human" size={32} />
                 </div>
                 <div className="min-w-0 flex-1 rounded-md border border-border">
-                  <div className="border-b border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-semibold">
-                    Add a comment
+                  {/* GitHub's composer header: Write | Preview */}
+                  <div className="flex items-center gap-1 border-b border-border/70 bg-muted/40 px-2 pt-1.5 text-xs">
+                    {(["write", "preview"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-current={composer === mode ? "page" : undefined}
+                        onClick={() => setComposer(mode)}
+                        className={cn(
+                          "cursor-pointer rounded-t-md border border-b-0 px-3 py-1.5 capitalize",
+                          composer === mode
+                            ? "border-border bg-background font-semibold"
+                            : "border-transparent text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {mode}
+                      </button>
+                    ))}
                   </div>
-                  <textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Leave a comment"
-                    rows={4}
-                    className="w-full resize-y bg-transparent px-3.5 py-2.5 text-sm outline-none"
-                  />
-                  <div className="flex items-center justify-end gap-2 border-t border-border/50 px-3 py-2">
+                  {composer === "write" ? (
+                    <textarea
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      placeholder="Add your comment here…"
+                      rows={4}
+                      className="w-full resize-y bg-transparent px-3.5 py-2.5 text-sm outline-none"
+                    />
+                  ) : (
+                    <div className={cn("min-h-24 px-3.5 py-2.5", PROSE)}>
+                      <MarkdownText
+                        text={
+                          draft.trim().length > 0
+                            ? draft
+                            : "*Nothing to preview*"
+                        }
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2 border-t border-border/50 px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      Markdown is supported
+                    </span>
+                    <span className="flex items-center gap-2">
                     <button
                       type="button"
                       disabled={busy}
@@ -524,6 +993,7 @@ const ItemView = ({
                     >
                       Comment
                     </button>
+                    </span>
                   </div>
                 </div>
               </div>

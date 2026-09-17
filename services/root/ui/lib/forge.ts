@@ -172,6 +172,26 @@ export const addIssueComment = (
     },
   ).then((response) => response.json() as Promise<ForgeComment>);
 
+/** One GitHub-shaped timeline event (`committed`, `reviewed`,
+ *  `commented`, `merged`, `closed`, `labeled`, …) — the renderer
+ *  keys on `event` and ignores kinds it doesn't know. */
+export interface TimelineEvent {
+  readonly event: string;
+  readonly [key: string]: unknown;
+}
+
+export const fetchTimeline = (
+  repo: string,
+  number: number,
+): Promise<ReadonlyArray<TimelineEvent>> =>
+  fetch(
+    `/api/forge/repos/org/${encodeURIComponent(repo)}/issues/${number}/timeline`,
+  ).then((response) =>
+    response.ok
+      ? (response.json() as Promise<TimelineEvent[]>)
+      : Promise.resolve([]),
+  );
+
 /** A pull's unified diff (text) — 501 when no source serves it yet. */
 export const fetchPullDiff = (
   repo: string,
