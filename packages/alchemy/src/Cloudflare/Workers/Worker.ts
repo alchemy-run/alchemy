@@ -674,6 +674,21 @@ export interface WorkerProps<
    * @see https://blog.cloudflare.com/workers-cache/
    */
   cache?: WorkerCache;
+  /**
+   * Cache overrides keyed by the exported Worker entrypoint name. Use
+   * `default` for the default export. Each entry uses the same cache options
+   * as {@link cache}; removing an entry restores the worker-wide default.
+   * Alchemy sends these as `type: "worker"` entries in upload metadata.
+   *
+   * Names are checked against the uploaded JavaScript bundle during planning.
+   * For external entries this checks export names, not class inheritance.
+   * Re-exported modules must be included in the bundle. Python entries cannot
+   * be inspected. Effect-native Workers currently generate only the default
+   * Worker entrypoint; this prop does not generate named entrypoint classes.
+   * Preview Workers and dispatch namespace Workers are not supported by the
+   * SDK's entrypoint metadata yet and reject nonempty `entrypoints`.
+   */
+  entrypoints?: Record<string, { cache?: WorkerCache }>;
   tags?: string[];
   /**
    * Path to the Worker's entry module. Bundled with rolldown before
@@ -2116,6 +2131,26 @@ export const isSelf = (value: unknown): value is Self =>
  *   },
  * }
  * ```
+ *
+ * **Example:** Cache named entrypoints behind an uncached gateway
+ * ```typescript
+ * const apiWorker = Cloudflare.Worker("worker", {
+ *   main: "./worker/index.ts",
+ *   cache: { enabled: false },
+ *   entrypoints: {
+ *     CachedPublishedRead: { cache: { enabled: true, crossVersionCache: false } },
+ *     CachedDocumentList: { cache: { enabled: true, crossVersionCache: false } },
+ *   },
+ * });
+ * ```
+ *
+ * The default gateway and any unlisted entrypoint use the worker-wide
+ * `cache` setting. Use `entrypoints.default` to override the default export
+ * explicitly. Removing an entry restores the worker-wide default. Cache
+ * changes plan an update; unchanged settings plan a noop. Unknown export
+ * names fail during planning. External JavaScript bundles are checked by
+ * export name, not by class inheritance; re-exported modules must be included
+ * in the uploaded bundle. This does not generate named Effect entrypoints.
  *
  * ### Background Work & Scopes
  * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect

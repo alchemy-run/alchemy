@@ -68,6 +68,10 @@ import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
 import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
 import { WorkerBundle } from "./Sources/Rolldown.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
+import {
+  validateWorkerEntrypoints,
+  workerEntrypointMetadata,
+} from "./WorkerEntrypointMetadata.ts";
 import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
@@ -1156,7 +1160,7 @@ const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
  * the bundle/vite/asset-content hashes, so a change to e.g. a compatibility
  * flag or observability config planned as a noop and silently never deployed.
  */
-const resolveWorkerMetadataHash = ({
+export const resolveWorkerMetadataHash = ({
   props,
   bindings,
   accountId,
@@ -1180,6 +1184,7 @@ const resolveWorkerMetadataHash = ({
     })),
     assets: workerAssetConfigForHash(props.assets),
     cache: props.cache,
+    entrypoints: props.entrypoints,
     limits: props.limits,
     logpush: props.logpush,
     observability: props.observability,
@@ -2554,6 +2559,9 @@ export const LiveWorkerProvider = () =>
             additionalWorkspaces: undefined,
           };
         }).pipe(
+          Effect.tap(({ bundle }) =>
+            validateWorkerEntrypoints(props, bundle?.files),
+          ),
           Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
             bundle: {
@@ -3044,6 +3052,7 @@ export const LiveWorkerProvider = () =>
               compatibilityDate: compatibility.date,
               compatibilityFlags: compatibility.flags,
               cacheOptions: news.cache ?? getCacheBinding(bindings),
+              exports: workerEntrypointMetadata(news.entrypoints),
               annotations:
                 alias !== undefined ||
                 version.message !== undefined ||
@@ -4043,6 +4052,9 @@ export const LiveWorkerProvider = () =>
           bindings: metadataBindings,
           bodyPart: undefined,
           cacheOptions: news.cache ?? getCacheBinding(bindings),
+          // DO and Workflow lifecycle stays on the existing migration path.
+          // DO lifecycle exports and migrations are mutually exclusive.
+          exports: workerEntrypointMetadata(news.entrypoints),
           compatibilityDate: compatibility.date,
           compatibilityFlags: compatibility.flags,
           containers:
@@ -4114,6 +4126,7 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: metadata.compatibilityDate,
                 compatibilityFlags: metadata.compatibilityFlags,
                 cacheOptions: metadata.cacheOptions,
+                exports: metadata.exports,
                 annotations:
                   news.version?.alias !== undefined ||
                   news.version?.message !== undefined ||
@@ -4782,6 +4795,16 @@ export const LiveWorkerProvider = () =>
           // forever (#874).
           const news = stripEffects(desired);
           if (!isResolved(news)) return undefined;
+          if (Object.keys(news.entrypoints ?? {}).length > 0) {
+            const workerName =
+              resolveVersionParentName(news.version) ??
+              news.name ??
+              output?.workerName ??
+              (yield* createWorkerName(id, undefined));
+            yield* prepareAssetsAndBundle(id, fqn, workerName, news, {
+              skipAssetsRead: true,
+            });
+          }
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
           }
@@ -5304,7 +5327,21 @@ export const LiveWorkerProvider = () =>
           } satisfies Worker["Attributes"];
         }),
         read: Effect.fn(
-          function* ({ id, output, olds }) {
+          function* ({ id, fqn, output, olds }) {
+            // New resources do not run diff. Validate during the initial
+            // plan-time read, before making any Cloudflare request.
+            if (
+              !output &&
+              olds &&
+              Object.keys(olds.entrypoints ?? {}).length > 0
+            ) {
+              const workerName =
+                resolveVersionParentName(olds.version) ??
+                (yield* createWorkerName(id, olds.name));
+              yield* prepareAssetsAndBundle(id, fqn, workerName, olds, {
+                skipAssetsRead: true,
+              });
+            }
             const { accountId } = yield* yield* CloudflareEnvironment;
             // Version workers don't own a script — their `workerName` is the
             // *parent's* script, so the normal read below would hydrate (and
