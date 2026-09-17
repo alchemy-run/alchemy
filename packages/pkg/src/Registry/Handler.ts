@@ -81,24 +81,26 @@ const isFork = (run: Run) => run.headRepo !== run.repo;
 /**
  * Tags every package in a publication receives, all derived from the run.
  * Runs on the repository's own commits get the head commit, the short
- * commit, `branch:<name>`, and `pr:N` for pull requests. A fork's run gets
- * only `pr:N`: commit tags are shared by every publisher, and a fork can
+ * commit, `branch:<name>`, and `pr:N` plus `pr:N:<short-sha>` for pull requests.
+ * A fork's run gets only `pr:N:<short-sha>`: commit tags are shared by every publisher, and a fork can
  * run any commit it likes, including one already published from the
  * repository, so letting it write them would let it repoint them.
  */
 export const tagsFor = (run: Run): string[] => {
   if (isFork(run)) {
-    return run.pr === null ? [] : [`pr:${run.pr}`];
+    return run.pr === null ? [] : [installTag(run)];
   }
   const tags = [run.headSha, run.headSha.slice(0, SHORT)];
-  if (run.pr !== null) tags.push(`pr:${run.pr}`);
+  if (run.pr !== null) tags.push(`pr:${run.pr}`, installTag(run));
   if (run.headBranch) tags.push(`branch:${run.headBranch}`);
   return tags;
 };
 
 /** The tag install commands are written against. */
 export const installTag = (run: Run) =>
-  isFork(run) ? `pr:${run.pr}` : run.headSha.slice(0, SHORT);
+  run.pr !== null
+    ? `pr:${run.pr}:${run.headSha.slice(0, SHORT)}`
+    : run.headSha.slice(0, SHORT);
 
 const upstream = (e: { readonly _tag: string; readonly message?: string }) =>
   new Upstream({ message: GitHub.describe(e) });
@@ -454,7 +456,7 @@ const install = Effect.gen(function* () {
 
 const banner = Effect.map(origin, (base) =>
   HttpServerResponse.text(
-    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N>\n`,
+    `Preview package registry. Install with: bun add ${base}/<package>/<commit|branch:name|pr:N|pr:N:short-sha>\n`,
   ),
 );
 
