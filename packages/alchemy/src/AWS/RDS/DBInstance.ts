@@ -661,8 +661,8 @@ export interface DBInstance extends Resource<
  *   masterUsername: "admin",
  *   manageMasterUserPassword: true,
  *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
- * - dbParameterGroupName: customParameters.dbParameterGroupName,
- * - vpcSecurityGroupIds: [applicationGroup.groupId],
+ * -  dbParameterGroupName: customParameters.dbParameterGroupName,
+ * -  vpcSecurityGroupIds: [applicationGroup.groupId],
  * });
  * ```
  *
