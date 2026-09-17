@@ -2,15 +2,27 @@ import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network.ts";
 import { Cluster } from "@/AWS/EKS/Cluster.ts";
 import { makeEksTransport } from "@/AWS/EKS/KubernetesAdapter.ts";
+import { InstanceId } from "@/InstanceId.ts";
 import * as Kubernetes from "@/Kubernetes";
+import type { ClusterAdapterService } from "@/Kubernetes/ClusterAdapter.ts";
+import { isDeploymentRolloutComplete } from "@/Kubernetes/Deployment.ts";
 import { readObject } from "@/Kubernetes/internal/client.ts";
+import {
+  resolveWorkloadImage,
+  workloadImageHash,
+} from "@/Kubernetes/internal/workload.ts";
 import * as Core from "@/Test/Core";
 import * as Provider from "@/Provider";
+import { Stack, type StackSpec } from "@/Stack.ts";
+import { Stage } from "@/Stage.ts";
 import * as Test from "@/Test/Alchemy";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { describe, expect } from "alchemy-test";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import EksHostApi from "./fixtures/deployment.ts";
@@ -19,6 +31,172 @@ const testOptions = {
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
+
+const unitStack: Omit<StackSpec, "output"> = {
+  name: "kubernetes-deployment-test",
+  stage: "test",
+  resources: {},
+  bindings: {},
+  actions: {},
+};
+
+const adapterLifecycleLayer = Layer.mergeAll(
+  NodeFileSystem.layer,
+  Path.layer,
+  Layer.succeed(Stack, unitStack),
+  Layer.succeed(Stage, unitStack.stage),
+  Layer.succeed(InstanceId, "0123456789abcdef0123456789abcdef"),
+);
+
+const provideAdapterLifecycle = <A, E>(
+  effect: Effect.Effect<
+    A,
+    E,
+    Stack | Stage | InstanceId | FileSystem.FileSystem | Path.Path
+  >,
+) => effect.pipe(Effect.provide(adapterLifecycleLayer));
+
+const checkImageStrategyTypeSurface = () => {
+  const cluster = undefined as unknown as Kubernetes.ClusterLike;
+  const imageProps: Kubernetes.ImageDeploymentProps = {
+    cluster,
+    image: "registry.example.test/cache:v1",
+    imageStrategy: "direct",
+  };
+  const bundledProps: Kubernetes.BundledDeploymentProps = {
+    cluster,
+    main: import.meta.url,
+    // @ts-expect-error direct delivery only applies to pre-built images
+    imageStrategy: "direct",
+  };
+  return { imageProps, bundledProps };
+};
+void checkImageStrategyTypeSurface;
+
+const makeRegistryAdapter = (calls: string[]): ClusterAdapterService => ({
+  kind: "Kubernetes.ClusterAdapter",
+  connect: () => Effect.die(new Error("not used")),
+  registry: {
+    resolve: () =>
+      Effect.sync(() => {
+        calls.push("resolve");
+        return {
+          imageUri: "managed.example.test/repository:latest",
+          codeHash: "managed-hash",
+          state: { kind: "aws-ecr", repositoryName: "repository" },
+        } as any;
+      }),
+    hash: () =>
+      Effect.sync(() => {
+        calls.push("hash");
+        return "managed-hash";
+      }),
+    delete: () => Effect.void,
+  },
+});
+
+const imageOptions = (adapter: ClusterAdapterService, source: any) => ({
+  adapter,
+  id: "ImageStrategyTest",
+  source,
+  platform: "linux/amd64",
+  bootstrap: () => "",
+  tags: {},
+  state: { kind: "aws-ecr", repositoryName: "previous-repository" },
+  session: { note: () => Effect.void },
+});
+
+describe("Kubernetes Deployment image strategy", () => {
+  it.effect("mirrors pre-built images by default", () =>
+    provideAdapterLifecycle(
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const resolved = yield* resolveWorkloadImage(
+          imageOptions(makeRegistryAdapter(calls), {
+            image: "registry.example.test/cache:v1",
+          }),
+        );
+        expect(calls).toEqual(["resolve"]);
+        expect(resolved.imageUri).toBe(
+          "managed.example.test/repository:latest",
+        );
+        expect(resolved.cleanupState).toBeUndefined();
+      }),
+    ),
+  );
+
+  it.effect(
+    "uses a pre-built image directly without invoking the registry",
+    () =>
+      provideAdapterLifecycle(
+        Effect.gen(function* () {
+          const calls: string[] = [];
+          const previous = {
+            kind: "aws-ecr",
+            repositoryName: "previous-repository",
+          };
+          const resolved = yield* resolveWorkloadImage({
+            ...imageOptions(makeRegistryAdapter(calls), {
+              image: "registry.example.test/cache@sha256:abc",
+            }),
+            imageStrategy: "direct",
+            state: previous,
+          });
+          expect(calls).toEqual([]);
+          expect(resolved.imageUri).toBe(
+            "registry.example.test/cache@sha256:abc",
+          );
+          expect(resolved.state).toBeUndefined();
+          expect(resolved.cleanupState).toEqual(previous);
+        }),
+      ),
+  );
+
+  it.effect("hashes direct images without invoking the managed registry", () =>
+    provideAdapterLifecycle(
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const hash = yield* workloadImageHash({
+          adapter: makeRegistryAdapter(calls),
+          source: {
+            image: "registry.example.test/cache:v2",
+          },
+          imageStrategy: "direct",
+          platform: "linux/amd64",
+          bootstrap: () => "",
+        });
+        expect(hash).toMatch(/^[a-f0-9]{16}$/);
+        expect(calls).toEqual([]);
+      }),
+    ),
+  );
+
+  it("recognizes only a fully completed Kubernetes rollout", () => {
+    const complete = {
+      metadata: { generation: 4 },
+      spec: { replicas: 2 },
+      status: {
+        observedGeneration: 4,
+        replicas: 2,
+        updatedReplicas: 2,
+        availableReplicas: 2,
+      },
+    };
+    expect(isDeploymentRolloutComplete(complete)).toBe(true);
+    expect(
+      isDeploymentRolloutComplete({
+        ...complete,
+        status: { ...complete.status, replicas: 3 },
+      }),
+    ).toBe(false);
+    expect(
+      isDeploymentRolloutComplete({
+        ...complete,
+        status: { ...complete.status, observedGeneration: 3 },
+      }),
+    ).toBe(false);
+  });
+});
 
 // Ungated probe: `Deployment` is a composite host (in-cluster
 // Deployment/Service plus adapter-owned cloud resources — ECR repo,
