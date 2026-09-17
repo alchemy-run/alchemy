@@ -1,9 +1,11 @@
 import * as EMRServerless from "@/AWS/EMRServerless";
 import * as IAM from "@/AWS/IAM";
 import * as Lambda from "@/AWS/Lambda";
+import type * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -16,6 +18,18 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // authorization AND the application id was injected from the binding.
 const FAKE_JOB_RUN_ID = "00abcdefabcdef01";
 const FAKE_SESSION_ID = "00abcdefabcdef01";
+
+// Session authorization can lag behind other EMR APIs on a fresh Lambda role.
+const sessionAuthorizationPolicy = {
+  while: (
+    error:
+      | emr.GetSessionEndpointError
+      | emr.StartSessionError
+      | emr.ListSessionsError,
+  ) => error._tag === "AccessDeniedException",
+  schedule: Schedule.spaced("3 seconds"),
+  times: 8,
+};
 
 /** Deterministic names shared with the test for out-of-band verification. */
 export const BINDINGS_APP_NAME = "alchemy-test-emrs-bind";
@@ -137,7 +151,9 @@ export default EmrServerlessTestFunction.make(
           });
         }
         if (request.method === "GET" && pathname === "/sessions") {
-          return yield* probe(listSessions());
+          return yield* probe(
+            listSessions().pipe(Effect.retry(sessionAuthorizationPolicy)),
+          );
         }
 
         // Typed not-found probes on nonexistent sub-resources.
@@ -162,7 +178,9 @@ export default EmrServerlessTestFunction.make(
         }
         if (request.method === "GET" && pathname === "/session-endpoint") {
           return yield* probe(
-            getSessionEndpoint({ sessionId: FAKE_SESSION_ID }),
+            getSessionEndpoint({ sessionId: FAKE_SESSION_ID }).pipe(
+              Effect.retry(sessionAuthorizationPolicy),
+            ),
           );
         }
         if (request.method === "POST" && pathname === "/session-terminate") {
@@ -188,7 +206,11 @@ export default EmrServerlessTestFunction.make(
               { status: 400 },
             );
           }
-          return yield* probe(startSession({ executionRoleArn: roleArn }));
+          return yield* probe(
+            startSession({ executionRoleArn: roleArn }).pipe(
+              Effect.retry(sessionAuthorizationPolicy),
+            ),
+          );
         }
 
         // Application control.

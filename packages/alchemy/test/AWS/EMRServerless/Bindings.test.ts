@@ -313,9 +313,9 @@ describe.sequential("EMRServerless Bindings", () => {
           const roleArn = `arn:aws:iam::${Account}:role/${BINDINGS_ROLE_NAME}`;
           const response = (yield* postJson(
             `/session-start?roleArn=${encodeURIComponent(roleArn)}`,
-          )) as { tag: string };
-          expect(response.tag).not.toBe("AccessDeniedException");
-          expect(response.tag).not.toBe("ok");
+          )) as { tag: string; detail: string };
+          expect(response.detail).not.toContain("not authorized");
+          expect(response.tag).toBe("ValidationException");
         }),
     );
   });
