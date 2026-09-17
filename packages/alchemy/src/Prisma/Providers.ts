@@ -6,8 +6,14 @@ import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import * as Command from "../Command/index.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
+import { Server, ServerProvider } from "../Website/Server.ts";
+import {
+  WebsiteArtifact,
+  WebsiteArtifactProvider,
+} from "./Website/Artifact.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
@@ -226,6 +232,8 @@ export const providers = () =>
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
+      Server,
+      WebsiteArtifact,
     ]),
   ).pipe(
     Layer.provideMerge(
@@ -242,6 +250,8 @@ export const providers = () =>
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
+        ServerProvider(),
+        WebsiteArtifactProvider(),
       ),
     ),
     // The management client layer is shared by every live variant. It is
@@ -249,6 +259,7 @@ export const providers = () =>
     // auth registers without resolving credentials, so `alchemy dev` never
     // needs a Prisma token.
     Layer.provideMerge(stackManagementApiLayer()),
+    Layer.provideMerge(Command.providers()),
     Layer.provide(FetchHttpClient.layer),
     Layer.orDie,
   );
