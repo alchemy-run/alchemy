@@ -1,11 +1,13 @@
 import { Docker } from "@/Docker/Docker.ts";
+import { Stage } from "@/Stage.ts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 export const withBuilder =
-  (name: string) =>
+  (prefix: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
+      const name = `${prefix}-${yield* Stage}`;
       const docker = yield* Docker;
       return yield* Effect.acquireUseRelease(
         docker.run([

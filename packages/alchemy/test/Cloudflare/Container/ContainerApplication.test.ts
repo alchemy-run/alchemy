@@ -553,10 +553,18 @@ describe("ContainerApplication", () => {
               (fiber) => Fiber.interrupt(fiber),
             );
           }
+          const failedBuilds = yield* buildHistory;
+          expect(
+            failedBuilds.filter((build) => build.status === "Completed"),
+          ).toHaveLength(0);
           const recovered = yield* stack.deploy(program());
-          const expectedBuilds = failure === "failed" ? 1 : 2;
           const recoveredBuilds = yield* buildHistory;
-          expect(recoveredBuilds).toHaveLength(expectedBuilds);
+          expect(
+            recoveredBuilds.length - failedBuilds.length,
+          ).toBeGreaterThanOrEqual(1);
+          expect(
+            recoveredBuilds.length - failedBuilds.length,
+          ).toBeLessThanOrEqual(6);
           expect(
             recoveredBuilds.filter((build) => build.status === "Completed"),
           ).toHaveLength(1);
@@ -571,7 +579,7 @@ describe("ContainerApplication", () => {
           expect(shared.second.configuration.image).toBe(
             shared.first.configuration.image,
           );
-          expect(yield* buildHistory).toHaveLength(expectedBuilds);
+          expect(yield* buildHistory).toEqual(recoveredBuilds);
           for (const app of [shared.first, shared.second]) {
             const observed = yield* Containers.getContainerApplication({
               accountId: app.accountId,
@@ -639,10 +647,11 @@ describe("ContainerApplication", () => {
         const program = publicationApplications(contexts);
         const first = yield* stack.deploy(program);
         const history = yield* buildHistory;
-        expect(history).toHaveLength(3);
-        expect(history.every((build) => build.status === "Completed")).toBe(
-          true,
-        );
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(3);
+        // Each distinct publication can make at most six export attempts.
+        expect(history.length).toBeLessThanOrEqual(18);
         expect(first.first.hash?.image).toBe(first.other.hash?.image);
         expect(first.first.configuration.image).toBe(
           first.second.configuration.image,
@@ -673,14 +682,20 @@ describe("ContainerApplication", () => {
         expect(unchanged.first.configuration.image).toBe(
           first.first.configuration.image,
         );
-        expect(yield* buildHistory).toHaveLength(3);
+        expect(yield* buildHistory).toEqual(history);
 
         yield* fs.writeFileString(
           path.join(contexts.shared, "input.txt"),
           "second",
         );
         const updated = yield* stack.deploy(program);
-        expect(yield* buildHistory).toHaveLength(4);
+        const updateHistory = (yield* buildHistory).filter(
+          (build) => !history.some((previous) => previous.ref === build.ref),
+        );
+        expect(
+          updateHistory.filter((build) => build.status === "Completed"),
+        ).toHaveLength(1);
+        expect(updateHistory.length).toBeLessThanOrEqual(6);
         expect(updated.first.applicationId).toBe(first.first.applicationId);
         expect(updated.second.applicationId).toBe(first.second.applicationId);
         expect(updated.first.configuration.image).toBe(
