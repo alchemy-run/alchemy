@@ -1,5 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Drift from "@/Drift.ts";
+import * as Deploy from "@/Deploy.ts";
+import * as Destroy from "@/Destroy.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
@@ -27,6 +29,7 @@ import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
+  sharedApplication,
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
@@ -871,6 +874,122 @@ describe.concurrent("ContainerApplication", () => {
         );
         expect(deleted).toBeUndefined();
       }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
+    { timeout: 120_000, exclusive: true },
+  );
+
+  test.provider(
+    "reuses shared registry images across stages without a builder and moves repositories with an unchanged digest",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-shared-publication-",
+        });
+        const context = path.join(root, "first");
+        const otherContext = path.join(root, "second");
+        for (const dir of [context, otherContext]) {
+          yield* fs.makeDirectory(dir);
+          yield* fs.writeFileString(path.join(dir, "payload.txt"), "first");
+          yield* fs.writeFileString(
+            path.join(dir, "Dockerfile"),
+            'FROM alpine:3.19\nCOPY payload.txt /payload.txt\nCMD ["sleep", "3600"]\n',
+          );
+        }
+        const initial = yield* stack.deploy(sharedApplication(context));
+        const imageName = initial.app.applicationName;
+        const shared = yield* stack.deploy(
+          sharedApplication(context, imageName),
+        );
+        expect(shared.app.applicationId).toBe(initial.app.applicationId);
+        const history = yield* buildHistory;
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(2);
+
+        const secondStage = {
+          stage: `${stack.stage}-shared`,
+          stack: Stack(
+            stack.name,
+            {
+              providers: Layer.fresh(Cloudflare.providers()),
+              state: stack.state,
+            },
+            sharedApplication(otherContext, imageName),
+          ),
+        };
+        yield* Destroy.destroy(secondStage);
+        const reused = yield* Effect.gen(function* () {
+          // A fresh provider and an unusable builder rule out process-local reuse.
+          const reused = yield* Effect.acquireUseRelease(
+            Effect.sync(() => {
+              const previous = process.env.BUILDX_BUILDER;
+              process.env.BUILDX_BUILDER =
+                "alchemy-shared-cache-must-not-build";
+              return previous;
+            }),
+            () => Deploy.deploy(secondStage),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.BUILDX_BUILDER;
+                else process.env.BUILDX_BUILDER = previous;
+              }),
+          );
+          expect(reused.app.applicationId).not.toBe(shared.app.applicationId);
+          expect(reused.app.hash?.image).toBe(shared.app.hash?.image);
+          expect(reused.app.configuration.image).toBe(
+            shared.app.configuration.image,
+          );
+          expect(yield* buildHistory).toEqual(history);
+          expect(
+            (yield* live(reused.app.accountId, reused.app.applicationId)).image,
+          ).toBe(shared.app.configuration.image);
+
+          const moved = yield* stack.deploy(
+            sharedApplication(context, `${imageName}-moved`),
+          );
+          expect(moved.app.applicationId).toBe(shared.app.applicationId);
+          expect(moved.app.hash?.digest).toBe(shared.app.hash?.digest);
+          expect(moved.app.configuration.image).toContain(
+            `/${imageName}-moved@sha256:`,
+          );
+          expect(
+            (yield* waitForImage(
+              moved.app.accountId,
+              moved.app.applicationId,
+              moved.app.configuration.image!,
+            )).image,
+          ).toBe(moved.app.configuration.image);
+          expect(
+            (yield* live(reused.app.accountId, reused.app.applicationId)).image,
+          ).toBe(shared.app.configuration.image);
+          return reused;
+        }).pipe(
+          Effect.ensuring(Destroy.destroy(secondStage).pipe(Effect.orDie)),
+        );
+        yield* stack.destroy();
+        for (const app of [shared.app, reused.app]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(
+        // Timestamped provenance would give identical image builds different digests.
+        withBuilder("alchemy-shared-registry-cache", { attestations: false }),
+        logLevel,
+      ),
     { timeout: 120_000, exclusive: true },
   );
 
