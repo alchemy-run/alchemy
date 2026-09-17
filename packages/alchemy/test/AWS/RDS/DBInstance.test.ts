@@ -2,6 +2,8 @@ import * as AWS from "@/AWS";
 import { Network } from "@/AWS/EC2/Network";
 import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
 import * as Drift from "@/Drift";
+import { State } from "@/State";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
@@ -129,7 +131,8 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const instance = yield* stack.deploy(
+      const { client, requests } = yield* observePortRequests;
+      const program = (round: string) =>
         Effect.gen(function* () {
           const network = yield* Network("ListNet", {
             cidrBlock: "10.43.0.0/16",
@@ -142,6 +145,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
             dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
             engine: "aurora-postgresql",
             engineMode: "provisioned",
+            port: 5434,
             serverlessV2ScalingConfiguration: {
               MinCapacity: 0.5,
               MaxCapacity: 1,
@@ -154,9 +158,26 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
             dbClusterIdentifier: cluster.dbClusterIdentifier,
             dbInstanceClass: "db.serverless",
             engine: "aurora-postgresql",
+            port: 5435,
+            tags: { round },
           });
-        }),
-      );
+        });
+      const instance = yield* stack
+        .deploy(program("created"))
+        .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      expect(instance.endpointPort).toBe(5434);
+      const updated = yield* stack
+        .deploy(program("updated"))
+        .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      expect(updated.endpointPort).toBe(5434);
+      expect(requests.filter((request) => request.port !== null)).toEqual([]);
+      expect(
+        requests.some((request) => request.action === "CreateDBInstance"),
+      ).toBe(true);
+      yield* assertPort(instance.dbInstanceIdentifier, 5434);
+      expect(
+        (yield* stack.plan(program("updated"))).resources.ListInstance,
+      ).toMatchObject({ action: "noop" });
 
       const provider = yield* Provider.findProvider(DBInstance);
       const all = yield* provider.list();
@@ -587,6 +608,252 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         (yield* stack.plan(desired)).resources.StorageInstance,
       ).toMatchObject({ action: "update" });
       // A second storage modification must wait for AWS's optimization cooldown.
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
+    }),
+);
+
+const observePortRequests = Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient;
+  const requests: Array<{ action: string; port: string | null }> = [];
+  const observedClient = client.pipe(
+    HttpClient.tapRequest((request) =>
+      Effect.sync(() => {
+        if (request.body._tag !== "Uint8Array") return;
+        const parameters = new URLSearchParams(
+          new TextDecoder().decode(request.body.body),
+        );
+        const action = parameters.get("Action");
+        if (
+          action === "CreateDBInstance" ||
+          action === "ModifyDBInstance" ||
+          action === "DescribeDBInstances"
+        ) {
+          requests.push({
+            action,
+            port: parameters.get(
+              action === "CreateDBInstance" ? "Port" : "DBPortNumber",
+            ),
+          });
+        }
+      }),
+    ),
+  );
+  return { client: observedClient, requests };
+});
+
+const portProgram = (port?: number, round = "ports", identifier?: string) =>
+  Effect.gen(function* () {
+    const network = yield* Network("PortNet", { cidrBlock: "10.45.0.0/16" });
+    const subnetGroup = yield* DBSubnetGroup("PortSubnetGroup", {
+      description: "alchemy listener port lifecycle",
+      subnetIds: network.privateSubnetIds,
+    });
+    return yield* DBInstance("PortInstance", {
+      dbInstanceIdentifier: identifier,
+      engine: "postgres",
+      dbInstanceClass: "db.t3.micro",
+      masterUsername: "alchemy",
+      manageMasterUserPassword: true,
+      dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+      backupRetentionPeriod: "0 days",
+      deletionProtection: false,
+      skipFinalSnapshot: true,
+      publiclyAccessible: false,
+      ...(port === undefined ? {} : { port }),
+      tags: { round },
+    });
+  });
+
+const assertPort = Effect.fn(function* (identifier: string, port: number) {
+  const instance = (yield* rds.describeDBInstances({
+    DBInstanceIdentifier: identifier,
+  })).DBInstances?.[0];
+  expect(instance?.Endpoint?.Port).toBe(port);
+  expect(instance?.PendingModifiedValues?.Port).toBeUndefined();
+  expect(["available", "storage-optimization"]).toContain(
+    instance?.DBInstanceStatus,
+  );
+  return instance;
+});
+
+const injectPort = Effect.fn(function* (identifier: string, port: number) {
+  yield* rds.modifyDBInstance({
+    DBInstanceIdentifier: identifier,
+    DBPortNumber: port,
+    ApplyImmediately: true,
+  });
+  yield* rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
+    Effect.repeat({
+      schedule: Schedule.min([
+        Schedule.exponential("5 seconds"),
+        Schedule.spaced("1 minute"),
+      ]),
+      times: 10,
+      until: (response) => {
+        const instance = response.DBInstances?.[0];
+        return (
+          instance?.DBInstanceStatus === "available" &&
+          instance.Endpoint?.Port === port &&
+          instance.PendingModifiedValues?.Port === undefined
+        );
+      },
+    }),
+  );
+  yield* assertPort(identifier, port);
+});
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "listener port: defaults, updates, removal, and no redundant writes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { client, requests } = yield* observePortRequests;
+      const deploy = (port?: number, round?: string) =>
+        stack
+          .deploy(portProgram(port, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const writes = () =>
+        requests
+          .filter(
+            (request) =>
+              request.action === "ModifyDBInstance" && request.port !== null,
+          )
+          .map((request) => request.port);
+      const created = yield* deploy();
+      expect(created.endpointPort).toBe(5432);
+      expect(
+        requests
+          .filter((request) => request.action === "CreateDBInstance")
+          .map((request) => request.port),
+      ).toEqual(["5432"]);
+      expect(
+        (yield* assertPort(created.dbInstanceIdentifier, 5432))?.DbInstancePort,
+      ).toBe(0);
+
+      requests.length = 0;
+      yield* deploy(5432, "same-port");
+      expect(
+        requests.some((request) => request.action === "DescribeDBInstances"),
+      ).toBe(true);
+      expect(writes()).toEqual([]);
+
+      requests.length = 0;
+      const changed = yield* deploy(5433);
+      expect(changed.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(changed.endpointPort).toBe(5433);
+      expect(writes()).toEqual(["5433"]);
+      yield* assertPort(created.dbInstanceIdentifier, 5433);
+
+      requests.length = 0;
+      yield* deploy(5433, "same-custom-port");
+      expect(writes()).toEqual([]);
+      yield* assertPort(created.dbInstanceIdentifier, 5433);
+
+      requests.length = 0;
+      const restored = yield* deploy();
+      expect(restored.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(restored.endpointPort).toBe(5432);
+      expect(writes()).toEqual(["5432"]);
+      yield* assertPort(created.dbInstanceIdentifier, 5432);
+      expect(
+        (yield* stack.plan(portProgram())).resources.PortInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "listener port: unchanged-input drift repair and adoption defaults",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-port-adoption";
+      const program = (port?: number) =>
+        portProgram(port, "adoption", identifier);
+      const created = yield* stack.deploy(program(5433));
+      yield* assertPort(identifier, 5433);
+      yield* injectPort(identifier, 5434);
+      expect(
+        (yield* stack.plan(program(5433))).resources.PortInstance,
+      ).toMatchObject({ action: "update" });
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.PortInstance?.action).toBe("drifted");
+      const repaired = yield* stack.deploy(program(5433));
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(repaired.endpointPort).toBe(5433);
+      yield* assertPort(identifier, 5433);
+      expect(
+        (yield* stack.plan(program(5433))).resources.PortInstance,
+      ).toMatchObject({ action: "noop" });
+
+      // Removing the saved row exercises discovery with no previous props or attributes.
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "PortInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* stack.deploy(program());
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(adopted.endpointPort).toBe(5432);
+      yield* assertPort(identifier, 5432);
+      expect(
+        (yield* stack.plan(program())).resources.PortInstance,
+      ).toMatchObject({ action: "noop" });
+
+      yield* injectPort(identifier, 5434);
+      expect(
+        (yield* stack.plan(program())).resources.PortInstance,
+      ).toMatchObject({ action: "update" });
+      const defaultRepaired = yield* stack.deploy(program());
+      expect(defaultRepaired.endpointPort).toBe(5432);
+      yield* assertPort(identifier, 5432);
+      expect(
+        (yield* stack.plan(program())).resources.PortInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "listener port: waits for an accepted change without resubmitting",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const created = yield* stack.deploy(portProgram());
+      yield* assertPort(created.dbInstanceIdentifier, 5432);
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: created.dbInstanceIdentifier,
+        DBPortNumber: 5433,
+        ApplyImmediately: false,
+      });
+      const { client, requests } = yield* observePortRequests;
+      const settled = yield* stack
+        .deploy(portProgram(5433))
+        .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      expect(settled.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(settled.endpointPort).toBe(5433);
+      expect(
+        requests.some((request) => request.action === "DescribeDBInstances"),
+      ).toBe(true);
+      expect(
+        requests.filter(
+          (request) =>
+            request.action === "ModifyDBInstance" && request.port !== null,
+        ),
+      ).toEqual([]);
+      yield* assertPort(created.dbInstanceIdentifier, 5433);
+      expect(
+        (yield* stack.plan(portProgram(5433))).resources.PortInstance,
+      ).toMatchObject({ action: "noop" });
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
