@@ -25,6 +25,7 @@ const selection = {
   idleTimeoutMinutes: true,
   networkIsolation: true,
   createdAt: true,
+  domains: { prefix: true, port: true, domain: true },
 } as const satisfies railway.Selection<"Sandbox">;
 type CreateSandboxResponse = railway.Result<"Sandbox!", typeof selection>;
 type SandboxResponse = railway.Result<"Sandbox!", typeof selection>;
@@ -79,8 +80,8 @@ export type SandboxIdentity = {
  * (build a recipe) and `name` (boot from a named checkpoint).
  */
 export interface SandboxTemplate {
-  /** Digest of the base image. */
-  baseImageDigest?: string;
+  /** Region in which to build the template. Checkpoints retain their captured region. */
+  region?: string;
   /**
    * Build a template by running these shell instructions on the base
    * image. Mutually exclusive with `name`.
@@ -96,6 +97,20 @@ export interface SandboxTemplate {
    * instructions. Values may contain Railway variable references.
    */
   variables?: Record<string, string>;
+}
+
+export interface SandboxDomain {
+  /** Port of the HTTP server listening on `0.0.0.0`, from 1 to 65535. */
+  port: number;
+  /** Unique domain prefix. Railway generates one when omitted. */
+  prefix?: string;
+}
+
+export interface SandboxResources {
+  /** Maximum vCPU allocation. Fractional values are supported. */
+  cpu?: number;
+  /** Maximum memory allocation in GB. Subject to the workspace plan limit. */
+  memoryGB?: number;
 }
 
 export interface SandboxProps {
@@ -122,6 +137,22 @@ export interface SandboxProps {
    * it replaces the Sandbox.
    */
   networkIsolation?: SandboxNetworkIsolation;
+  /**
+   * Public HTTPS routes, up to ten unique ports. Requires `networkIsolation:
+   * "PRIVATE"`. Changing or removing routes replaces the sandbox.
+   */
+  publicDomains?: SandboxDomain[];
+  /**
+   * VM allocation, bounded by the workspace plan. Omit for the plan default.
+   * Changing or removing it replaces the sandbox.
+   */
+  resources?: SandboxResources;
+  /**
+   * Running sandbox whose disk to fork. The source must be in this environment;
+   * the fork inherits its region, but not variables, routes or idle timeout.
+   * Mutually exclusive with `template`. Changing it replaces the sandbox.
+   */
+  sourceSandboxId?: string;
   /**
    * Template to boot from: build instructions, or a named checkpoint.
    * Changing it replaces the Sandbox.
@@ -155,6 +186,15 @@ export type Sandbox = Resource<
     networkIsolation: SandboxNetworkIsolation;
     /** RFC3339 creation timestamp. */
     createdAt: string;
+    /** Published HTTPS routes. Empty when no public domains were requested. */
+    domains: {
+      /** Domain prefix assigned by Railway. */
+      prefix: string;
+      /** HTTP server port. */
+      port: number;
+      /** Hostname served over HTTPS. */
+      domain: string;
+    }[];
   },
   never,
   Providers
@@ -181,12 +221,13 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
 /**
  * A Railway.Sandbox is an ephemeral Linux VM in an environment. Create
  * it, {@link execSandbox} commands, snapshot with checkpoints, and
- * destroy it when the task is done. Sandboxes are Priority Boarding.
+ * destroy it when the task is done. Sandboxes are available on every plan.
  *
  * Railway has no labels and sandboxes have no names. Identity is the
  * Railway sandbox id. There is no in-place update — changing
  * `environment`, `region`, `idleTimeoutMinutes`, `networkIsolation`,
- * `template`, or `variables` replaces the Sandbox.
+ * `template`, `variables`, `publicDomains`, `resources`, or `sourceSandboxId`
+ * replaces the Sandbox. Removing a previously configured option also replaces it.
  *
  * @see https://docs.railway.com/sandboxes
  * @see https://docs.railway.com/guides/code-execution-sandboxes
@@ -208,9 +249,11 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * :::
  *
  * ### Idle timeout
- * Railway auto-destroys a sandbox after it sits idle. Exec and SSH
- * reset the timer; processes inside do not. Hobby/Pro default is 30
- * minutes (max 120). Trial/Free default and max is 5.
+ * Railway auto-destroys a sandbox after it sits idle. Active exec sessions
+ * and SSH foreground work defer teardown; background processes alone do not.
+ * Hobby/Pro default is 30 minutes (max 120), with `0` disabling idle teardown.
+ * Trial/Free default and max is 5 minutes. A sandbox with idle teardown disabled
+ * remains billable until explicitly destroyed.
  *
  * **Example:** Short idle timeout
  * ```typescript
@@ -245,6 +288,32 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  *   template: { name: "after-deps" },
  * });
  * ```
+ *
+ * ### Publish HTTP ports
+ * **Example:** Private-network sandbox with an HTTPS route
+ * ```typescript
+ * const preview = yield* Railway.Sandbox("Preview", {
+ *   environment: site,
+ *   networkIsolation: "PRIVATE",
+ *   publicDomains: [{ port: 3000 }],
+ *   resources: { cpu: 1, memoryGB: 1 },
+ * });
+ * ```
+ * Start the HTTP server on `0.0.0.0:3000`. Published hostnames are available
+ * in `preview.domains`; creating a route does not start the server.
+ *
+ * ### Fork a sandbox
+ * **Example:** Independent copy of a running sandbox's disk
+ * ```typescript
+ * const fork = yield* Railway.Sandbox("Attempt", {
+ *   environment: site,
+ *   sourceSandboxId: box.sandboxId,
+ *   idleTimeoutMinutes: 5,
+ * });
+ * ```
+ * Files are copied, but running processes and memory are not. Keep the source
+ * declared while replacing a fork. For a reusable named disk snapshot, use
+ * `Railway.SandboxCheckpoint` and pass its `name` as `template.name`.
  *
  * ### Exec
  * Run a command after deploy with {@link execSandbox} or {@link Exec}.
@@ -336,9 +405,7 @@ const projectIdOf = (value: unknown): string | undefined => {
 };
 
 const isGone = (sandbox: CloudSandbox | undefined) =>
-  sandbox === undefined ||
-  sandbox.status === "DESTROYED" ||
-  sandbox.status === "DESTROYING";
+  sandbox === undefined || sandbox.status === "DESTROYED";
 
 const toAttrs = (
   sandbox: CloudSandbox,
@@ -352,12 +419,11 @@ const toAttrs = (
   idleTimeoutMinutes: sandbox.idleTimeoutMinutes ?? undefined,
   networkIsolation: sandbox.networkIsolation,
   createdAt: sandbox.createdAt,
+  domains: sandbox.domains,
 });
 
 const toTemplateInput = (template: SandboxTemplate): SandboxTemplateInput => ({
-  ...(template.baseImageDigest !== undefined
-    ? { baseImageDigest: template.baseImageDigest }
-    : {}),
+  ...(template.region !== undefined ? { region: template.region } : {}),
   ...(template.instructions !== undefined
     ? { instructions: [...template.instructions] }
     : {}),
@@ -376,12 +442,19 @@ const varsKey = (vars: Record<string, string> | undefined) => {
 const templateKey = (template: SandboxTemplate | undefined) => {
   if (template === undefined) return undefined;
   return JSON.stringify({
-    baseImageDigest: template.baseImageDigest ?? null,
+    region: template.region ?? null,
     instructions: template.instructions ?? null,
     name: template.name ?? null,
-    variables: template.variables ?? null,
+    variables: varsKey(template.variables) ?? null,
   });
 };
+
+const domainsKey = (domains: SandboxDomain[] | undefined) =>
+  JSON.stringify(
+    (domains ?? [])
+      .map(({ port, prefix }) => ({ port, prefix: prefix ?? null }))
+      .sort((a, b) => a.port - b.port),
+  );
 
 const getById = (environmentId: string, sandboxId: string) =>
   railway.sandbox({ environmentId, id: sandboxId }, selection).pipe(
@@ -454,9 +527,6 @@ const waitUntilRunning = (environmentId: string, sandboxId: string) =>
       times: 10,
       schedule: Schedule.spaced("3 seconds"),
     }),
-    Effect.catchTag("Railway.SandboxPending", () =>
-      getById(environmentId, sandboxId),
-    ),
   );
 
 const waitUntilGone = (environmentId: string, sandboxId: string) =>
@@ -686,26 +756,39 @@ export const SandboxProvider = () =>
       const environmentChanged =
         nextEnv !== undefined && nextEnv !== output.environmentId;
       const regionChanged =
-        news.region !== undefined && news.region !== output.region;
+        olds !== undefined
+          ? news.region !== olds.region
+          : news.region !== undefined && news.region !== output.region;
       const idleChanged =
-        news.idleTimeoutMinutes !== undefined &&
-        news.idleTimeoutMinutes !== output.idleTimeoutMinutes;
+        olds !== undefined
+          ? news.idleTimeoutMinutes !== olds.idleTimeoutMinutes
+          : news.idleTimeoutMinutes !== undefined &&
+            news.idleTimeoutMinutes !== output.idleTimeoutMinutes;
       const isolationChanged =
-        news.networkIsolation !== undefined &&
-        news.networkIsolation !== output.networkIsolation;
+        olds !== undefined
+          ? news.networkIsolation !== olds.networkIsolation
+          : news.networkIsolation !== undefined &&
+            news.networkIsolation !== output.networkIsolation;
       const templateChanged =
-        news.template !== undefined &&
         templateKey(news.template) !== templateKey(olds?.template);
       const variablesChanged =
-        news.variables !== undefined &&
         varsKey(news.variables) !== varsKey(olds?.variables);
+      const domainsChanged =
+        domainsKey(news.publicDomains) !== domainsKey(olds?.publicDomains);
+      const resourcesChanged =
+        news.resources?.cpu !== olds?.resources?.cpu ||
+        news.resources?.memoryGB !== olds?.resources?.memoryGB;
+      const sourceChanged = news.sourceSandboxId !== olds?.sourceSandboxId;
       if (
         environmentChanged ||
         regionChanged ||
         idleChanged ||
         isolationChanged ||
         templateChanged ||
-        variablesChanged
+        variablesChanged ||
+        domainsChanged ||
+        resourcesChanged ||
+        sourceChanged
       ) {
         return { action: "replace" as const };
       }
@@ -785,6 +868,15 @@ export const SandboxProvider = () =>
                 ? { networkIsolation: props.networkIsolation }
                 : {}),
               ...(props.region !== undefined ? { region: props.region } : {}),
+              ...(props.publicDomains !== undefined
+                ? { publicDomains: props.publicDomains }
+                : {}),
+              ...(props.resources !== undefined
+                ? { resources: props.resources }
+                : {}),
+              ...(props.sourceSandboxId !== undefined
+                ? { sourceSandboxId: props.sourceSandboxId }
+                : {}),
               ...(props.template !== undefined
                 ? { template: toTemplateInput(props.template) }
                 : {}),
@@ -799,10 +891,9 @@ export const SandboxProvider = () =>
           ? undefined
           : created.status === "RUNNING"
             ? created
-            : ((yield* waitUntilRunning(environmentId, created.id)) ?? created);
-      } else if (current.status === "CREATING") {
-        current =
-          (yield* waitUntilRunning(environmentId, current.id)) ?? current;
+            : yield* waitUntilRunning(environmentId, created.id);
+      } else if (current.status !== "RUNNING" && current.status !== "FAILED") {
+        current = yield* waitUntilRunning(environmentId, current.id);
       }
 
       if (current === undefined || isGone(current)) {

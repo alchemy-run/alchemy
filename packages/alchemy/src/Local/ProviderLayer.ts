@@ -16,7 +16,8 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
  *
  * - The `Provider(type)` service placed in context delegates to the
  *   variant for the run's default mode (`AlchemyContext.dev ? "local" :
- *   "live"`), so existing lookups keep working unchanged.
+ *   "live"`). `findProvider` resolves the concrete variant, including its
+ *   optional lifecycle methods and metadata.
  * - Both variants are exposed via {@link ProviderService.modes} as lazy,
  *   memoized builders. NEITHER is constructed at registration: a variant
  *   (and the mode-specific dependency layers composed inside its thunk) is
@@ -135,8 +136,8 @@ export const dual = <
       // `providerForMode` and reads optional-method presence (`read`,
       // `precreate`, `tail`, `logs`), `version`, `stables` and `nuke`
       // there. The registered service therefore only needs the required
-      // lifecycle methods — what structural provider checks and mode-less
-      // `findProvider` callers use — each forwarding to the default
+      // lifecycle methods for structural provider checks and direct
+      // registration access — each forwarding to the default
       // variant, built on first call.
       const variant = modes[defaultMode];
 

@@ -1,214 +1,82 @@
 /**
- * The stateless git-service Worker (DESIGN.md §2.1, §2.2, §5, §8).
+ * Git's HTTP handlers and native Effect route layers.
  *
- * The Worker is the front door for both planes:
+ * ApiLive registers the public REST, smart-HTTP, and GitHub routes on the
+ * application's HttpRouter. InternalApiLive registers internal hashing.
+ * ApiHandlersLive shares the registry, repository clients, and cache across groups.
+ * The application owns its API, authentication, HTTP server, and CORS policy.
  *
- * - `/api/v1/**` — the typed REST management plane (`GitApi` from
- *   `Api.ts`). Handlers resolve `owner/name → repoId` through the
- *   singleton Registry DO (with a 60 s in-isolate LRU cache) and call
- *   typed Repo-DO RPCs.
- * - `/:owner/:repo[.git]/**` — the git smart-HTTP wire endpoints
- *   (`info/refs`, `git-upload-pack`, `git-receive-pack`), routes on the
- *   same API, proxied untouched to the Repo DO's `fetch` (the protocol
- *   runs inside the DO, §2.1) or served from the head snapshot.
- *
- * The Worker holds no credentials and asks no auth questions: the
- * middleware of the API that mounts the routes decided who may call them
- * before the engine saw the request (DESIGN.md §8). `Git.Hooks`, when
- * provided, runs before refs move.
- *
- * ### Deploying
- * **Example:** Compose the Worker into a Stack
  * ```typescript
- * import * as Alchemy from "../index.ts";
- * import * as Cloudflare from "../Cloudflare/index.ts";
- * import * as Effect from "effect/Effect";
- * import GitWorker from "alchemy/Git/GitWorker";
- *
- * export default Alchemy.Stack(
- *   "GitService",
- *   { providers: Cloudflare.providers(), state: Cloudflare.state() },
- *   Effect.gen(function* () {
- *     const worker = yield* GitWorker;
- *     return { url: worker.url.as<string>() };
- *   }),
+ * const PublicRoutes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+ *   Layer.provide(Authentication.layer),
  * );
- * ```
- *
- * ### Using the deployed service
- * **Example:** Create a repo and push to it
- * ```sh
- * curl -X POST "$URL/api/v1/repos" \
- *   -H "Authorization: Bearer $GIT_SERVICE_SECRET" \
- *   -H "Content-Type: application/json" \
- *   -d '{"owner":"acme","name":"web"}'
- * # → { repo, remote, token: { token: "gs_..." } }
- *
- * git remote add origin "https://x:gs_...@<host>/acme/web.git"
- * git push origin main
+ * const Routes = Layer.mergeAll(PublicRoutes, Git.InternalApiLive).pipe(
+ *   Layer.provide(Git.ApiHandlersLive),
+ *   Layer.provide(Git.ReposDurableObject),
+ *   Layer.provide(Git.RegistryDurableObject),
+ *   Layer.provide(Git.HasherInline),
+ *   Layer.provide(Git.BlobStoreR2(GitObjects)),
+ *   Layer.provide(Http.Platform),
+ * );
+ * const fetch = yield* HttpRouter.toHttpEffect(Routes);
+ * return { fetch };
  * ```
  */
-import * as Cloudflare from "../Cloudflare/index.ts";
-import crypto from "node:crypto";
-import * as Config from "effect/Config";
+
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
-import * as Scope from "effect/Scope";
-import * as Headers from "effect/unstable/http/Headers";
+import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import type * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import * as Http from "../Http/index.ts";
-import {
-  CommitDiff,
-  CommitInfo,
-  Comparison,
-  DiffEntry,
-  GitApi,
-  HookRejected,
-  InternalApi,
-  // routes
-  Compare,
-  CompactRepo,
-  CreatePull,
-  CreateRepo,
-  DeleteRepo,
-  ForkRepo,
-  GetBlob,
-  GetBlobRaw,
-  GetCommit,
-  GetDiff,
-  GetFile,
-  GetLog,
-  GetPull,
-  GetRef,
-  GetRepo,
-  GetTree,
-  GitHubBranches,
-  GitHubCommit,
-  GitHubCommits,
-  GitHubContents,
-  GitHubCreatePull,
-  GitHubMergePull,
-  GitHubPull,
-  GitHubPullFiles,
-  GitHubPulls,
-  GitHubRepo,
-  GitHubUpdatePull,
-  GitHubUser,
-  HashPart,
-  ImportRepo,
-  InfoRefs,
-  ListPulls,
-  ListRefs,
-  ListRepos,
-  MergePull,
-  ReceivePack,
-  RemoveRef,
-  UpdatePull,
-  UpdateRef,
-  UpdateRepo,
-  UploadPack,
-  ImportFailed,
-  MergeResult,
-  ObjectStats,
-  ObjectTooLarge,
-  Pull,
-  PullDetail,
-  PushStats,
-  Ref,
-  Repo,
-  RepoAlreadyExists,
-  RepoCreated,
-  RepoNotFound,
-  RepoNotReady,
-  TreeEntry,
-  type Oid,
-} from "./Api.ts";
-import { Hooks, type HooksShape, type RefUpdate } from "./Hooks.ts";
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import { gitHubCompatRoutes } from "./GitHubCompat.ts";
-import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
-import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
-import { headKey } from "./Store/Keys.ts";
-import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
-import {
-  concatBytes,
-  parseCommit,
-  parseTree,
-  treeEntryKind,
-  utf8Decode,
-  ZERO_OID,
-  type ObjectType,
-} from "./Protocol/ObjectCodec.ts";
-import { ulid } from "./RegistryObject.ts";
-import { decodePktLines, errPkt, flushPkt, pktText } from "./Protocol/Pkt.ts";
-import * as Fiber from "effect/Fiber";
-import * as Option from "effect/Option";
-import * as Semaphore from "effect/Semaphore";
-import { Hasher } from "./Hasher/Hasher.ts";
-import { encodeStagedBatch } from "./PushWire.ts";
-import { feedBody, HEAD_BYTES } from "./Store/IncomingBody.ts";
-import { makeStreamingSource } from "./Store/StreamingSource.ts";
-import { sliceRandomAccess } from "./Store/PackSource.ts";
-import { incomingKey, wirePackId } from "./Store/Keys.ts";
-import { StoreError as StoreErrorClass } from "./Protocol/Store.ts";
+import crypto from "node:crypto";
+import * as Cloudflare from "../Cloudflare/index.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import {
-  progressMessage,
-  pumpPackBody,
-  sidebandFrames,
-  wrapSideband,
-} from "./Protocol/Sideband.ts";
+import { GitApi, InternalApi, RepoCreated } from "./Api.ts";
+import { BlobStore, type BlobStoreError } from "./BlobStore.ts";
+import { Engine, EngineLive } from "./Engine.ts";
+import { gitHubCompatRoutes } from "./GitHubCompat.ts";
 import {
   decodeBoundsRequest,
   encodeScanResult,
   frame,
+  Hasher,
   HASHER_BINDING,
   InternalSecret,
 } from "./Hasher/Hasher.ts";
 import { decodeDeltaBatch, encodeDeltaResults } from "./Hasher/Protocol.ts";
+import * as ReceivePackHttp from "./Http/ReceivePack.ts";
+import { bundleCovers, type BundleInfo } from "./Jobs/Bundle.ts";
+import { Operations } from "./Operations.ts";
+import { concatBytes, utf8Decode } from "./Protocol/ObjectCodec.ts";
 import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
-import type { StoreError } from "./Protocol/Store.ts";
+import { decodePktLines, flushPkt, pktText } from "./Protocol/Pkt.ts";
+import {
+  progressMessage,
+  pumpPackBody,
+  wrapSideband,
+} from "./Protocol/Sideband.ts";
+import { RegistryStore } from "./RegistryObject.ts";
 import {
   buildAdvertisement,
-  parseUploadPackRequest,
   BUNDLE_COUNT_HEADER,
   BUNDLE_HASH_HEADER,
   BUNDLE_KEY_HEADER,
   BUNDLE_SIDEBAND_HEADER,
   GitRepo,
   GitRepoLive,
+  isolatePushGate,
+  parseUploadPackRequest,
   RepoStore,
   WWW_AUTHENTICATE,
-  gunzipIfNeeded,
-  ingestPackFrom,
-  isolatePushGate,
-  MAX_PACK_BYTES,
-  parseReceivePackRequest,
-  PUSH_WAIT_TIMEOUT,
-  pushPermitsFor,
-  type IngestResult,
-  type IngestStore,
-  type CommitData,
-  type DiffEntryData,
-  type PullData,
-  type PullDetailData,
-  type RefData,
-  type RepoMetaData,
-  type RepoStub,
 } from "./RepoObject.ts";
-import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
+import { decodeHeadSnapshot } from "./Store/HeadSnapshot.ts";
+import { headKey } from "./Store/Keys.ts";
 
 /** A `Bearer` credential from the `Authorization` header (the hash route's internal secret). */
 const parseBearer = (
@@ -237,149 +105,6 @@ const timingSafeEqual = (a: string, b: string): Effect.Effect<boolean> =>
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** TTL of the in-isolate `owner/name → repoId` cache (DESIGN.md §2.1). */
-export const RESOLVE_CACHE_TTL_MS = 60_000;
-
-/** Max entries of the in-isolate resolve cache (insertion-order eviction). */
-export const RESOLVE_CACHE_MAX = 1024;
-
-/** Blobs above this size are 422 on the JSON endpoint (use `/raw`). */
-export const MAX_JSON_BLOB_BYTES = 1024 * 1024;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared layers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Types a route's handler against its route class. */
-const impl = <R extends HttpApiEndpoint.Constraint>(
-  _route: R,
-  handler: Http.Handler<R>,
-): Http.Handler<R> => handler;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Pure mapping helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-const asOid = (value: string): Oid => value as Oid;
-
-/** Maps the Repo DO's plain metadata onto the REST `Repo` schema class. */
-const toRepo = (meta: RepoMetaData): Repo =>
-  new Repo({
-    owner: meta.owner,
-    name: meta.name,
-    repoId: meta.repoId,
-    defaultBranch: meta.defaultBranch,
-    description: meta.description,
-    readOnly: meta.readOnly,
-    public: meta.public,
-    forkOf: meta.forkOf,
-    status: meta.status,
-    createdAt: meta.createdAt,
-    objects: new ObjectStats(meta.objects),
-    lastPush: meta.lastPush === null ? null : new PushStats(meta.lastPush),
-  });
-
-/** Maps a DO ref onto the REST `Ref` schema class. */
-const toRef = (ref: RefData): Ref =>
-  ref.peeled === undefined
-    ? new Ref({ name: ref.name, oid: asOid(ref.oid) })
-    : new Ref({
-        name: ref.name,
-        oid: asOid(ref.oid),
-        peeled: asOid(ref.peeled),
-      });
-
-/** Maps a DO diff entry onto the REST `DiffEntry` schema class. */
-const toDiffEntry = (entry: DiffEntryData): DiffEntry =>
-  new DiffEntry({
-    path: entry.path,
-    status: entry.status,
-    oldOid: entry.oldOid === undefined ? undefined : asOid(entry.oldOid),
-    newOid: entry.newOid === undefined ? undefined : asOid(entry.newOid),
-    oldMode: entry.oldMode,
-    newMode: entry.newMode,
-    oldSize: entry.oldSize,
-    newSize: entry.newSize,
-  });
-
-/** Maps a DO pull row onto the REST `Pull` schema class. */
-const toPull = (pull: PullData): Pull =>
-  new Pull({
-    number: pull.number,
-    title: pull.title,
-    body: pull.body,
-    baseRef: pull.baseRef,
-    headRef: pull.headRef,
-    state: pull.state,
-    createdAt: pull.createdAt,
-    updatedAt: pull.updatedAt,
-    mergedAt: pull.mergedAt,
-    mergeCommit: pull.mergeCommit === null ? null : asOid(pull.mergeCommit),
-  });
-
-/** Maps a DO pull detail onto the REST `PullDetail` schema class. */
-const toPullDetail = (pull: PullDetailData): PullDetail =>
-  new PullDetail({
-    number: pull.number,
-    title: pull.title,
-    body: pull.body,
-    baseRef: pull.baseRef,
-    headRef: pull.headRef,
-    state: pull.state,
-    createdAt: pull.createdAt,
-    updatedAt: pull.updatedAt,
-    mergedAt: pull.mergedAt,
-    mergeCommit: pull.mergeCommit === null ? null : asOid(pull.mergeCommit),
-    baseOid: pull.baseOid === null ? null : asOid(pull.baseOid),
-    headOid: pull.headOid === null ? null : asOid(pull.headOid),
-    mergeBase: pull.mergeBase === null ? null : asOid(pull.mergeBase),
-    aheadBy: pull.aheadBy,
-    behindBy: pull.behindBy,
-    mergeable: pull.mergeable,
-    mergeableReason: pull.mergeableReason,
-  });
-
-/** Maps a DO commit onto the REST `CommitInfo` schema class. */
-const toCommitInfo = (commit: CommitData): CommitInfo =>
-  new CommitInfo({
-    oid: asOid(commit.oid),
-    tree: asOid(commit.tree),
-    parents: commit.parents.map(asOid),
-    author: commit.author,
-    committer: commit.committer,
-    message: commit.message,
-  });
-
-/**
- * Registry-derived fallback `Repo` for list pages when a Repo DO cannot be
- * consulted (e.g. its config was never seeded because the create crashed
- * between the Registry insert and `initRepo`).
- */
-const registryFallbackRepo = (entry: RegistryEntry): Repo =>
-  new Repo({
-    owner: entry.owner,
-    name: entry.name,
-    repoId: entry.repoId,
-    defaultBranch: entry.defaultBranch,
-    description: entry.description,
-    readOnly: entry.readOnly,
-    public: entry.public,
-    forkOf: entry.forkOf,
-    status:
-      entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
-    createdAt: entry.createdAt,
-    // No DO to ask (unseeded or mid-purge) — report an empty store.
-    objects: new ObjectStats({
-      loose: 0,
-      resident: 0,
-      packed: 0,
-      r2: 0,
-      bytes: 0,
-    }),
-    lastPush: null,
-  });
-
-// ─────────────────────────────────────────────────────────────────────────────
 // The Worker
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -394,7 +119,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
  * the free plan's 10 ms budget (DESIGN.md §1).
  */
 /**
- * Worker options every `Git.Server` host needs: `nodejs_compat` (zlib +
+ * Worker options every Git host needs: `nodejs_compat` (zlib +
  * crypto in the codec layer) and a generous CPU ceiling for pack ingest.
  * Spread into your `Cloudflare.Worker` definition.
  */
@@ -420,12 +145,7 @@ const makeCore = Effect.gen(function* () {
   // The Worker-side view of the blob store (clone-bundle splice reads)
   // — the same BlobStore layer the Repo DO consumes.
   const workerBlobs = yield* BlobStore;
-  // git's pre-receive hook, if the graph provides one; accepts everything
-  // otherwise. Runs here in the Worker, inside the request.
-  const hooks: HooksShape = Option.getOrElse(
-    yield* Effect.serviceOption(Hooks),
-    () => ({ preReceive: () => Effect.succeed([]) }),
-  );
+  const engine = yield* Engine;
   const internalSecret = yield* InternalSecret;
   // The push pipeline's verifier (DESIGN §22.10): pack parts are inflated
   // and hashed by this service — fanned out across Worker invocations by
@@ -435,888 +155,34 @@ const makeCore = Effect.gen(function* () {
   /** Staging batches in flight to the Repo DO per push (DESIGN §22.10). */
   const STAGE_CONCURRENCY = 6;
 
-  // The registry block, whichever backend the assembly provided.
-  const registryStub = () => registry;
-
-  // ── owner/name → RegistryEntry, 60 s in-isolate LRU (DESIGN.md §2.1) ──
-  // A stale hit fails safe: the Repo DO stores its own (owner, name) and
-  // 404s mismatched requests, and cache entries are dropped on delete.
-  interface CacheSlot {
-    readonly entry: RegistryEntry;
-    readonly expires: number;
-  }
-  const resolveCache = new Map<string, CacheSlot>();
-
-  const cacheKey = (owner: string, repo: string) =>
-    `${owner.toLowerCase()}/${repo.toLowerCase()}`;
-
-  const dropCached = (owner: string, repo: string) =>
-    Effect.sync(() => {
-      resolveCache.delete(cacheKey(owner, repo));
-    });
-
-  const resolveCached = (owner: string, repo: string) =>
+  const operations = yield* Operations;
+  const {
+    resolveCached,
+    refs: refsRoutes,
+    objects: objectsRoutes,
+    pulls: pullsRoutes,
+  } = operations;
+  const remoteResult = <E, R>(effect: Effect.Effect<RepoCreated, E, R>) =>
     Effect.gen(function* () {
-      const key = cacheKey(owner, repo);
-      const now = yield* Effect.sync(() => Date.now());
-      const hit = resolveCache.get(key);
-      if (hit !== undefined && hit.expires > now) return hit.entry;
-      const entry = yield* registryStub().resolve(owner, repo);
-      // Rows mid-purge are transient (removed when the purge alarm
-      // finishes) — never cache them, or a 60 s stale hit would keep
-      // reporting "deleting" after the name has freed.
-      if (entry !== undefined && entry.deletedAt === null) {
-        yield* Effect.sync(() => {
-          if (resolveCache.size >= RESOLVE_CACHE_MAX) {
-            const oldest = resolveCache.keys().next().value;
-            if (oldest !== undefined) resolveCache.delete(oldest);
-          }
-          resolveCache.set(key, {
-            entry,
-            expires: now + RESOLVE_CACHE_TTL_MS,
-          });
-        });
-      }
-      return entry;
-    });
-
-  /**
-   * Resolve including rows whose async purge is still draining
-   * (`deletedAt` set) — only `repos.get` (report `status: "deleting"`)
-   * and `repos.delete` (idempotent 204) want those.
-   */
-  const resolveIncludingDeleting = (owner: string, repo: string) =>
-    resolveCached(owner, repo).pipe(
-      Effect.catchTag("StoreError", (error: StoreError) => Effect.die(error)),
-      Effect.flatMap((entry) =>
-        entry === undefined
-          ? Effect.fail(new RepoNotFound({ owner, repo }))
-          : Effect.succeed(entry),
-      ),
-    );
-
-  /**
-   * Resolve or fail with a typed 404. Rows mid-purge count as gone for
-   * every data-plane route (the name is reserved but the repo is dead).
-   * Storage failures are defects.
-   */
-  const resolveOrNotFound = (owner: string, repo: string) =>
-    resolveIncludingDeleting(owner, repo).pipe(
-      Effect.filterOrFail(
-        (entry) => entry.deletedAt === null,
-        () => new RepoNotFound({ owner, repo }),
-      ),
-    );
-
-  /**
-   * git's pre-receive hook over a REST ref write or a merge: the same
-   * question the push path asks, with the one update it would make.
-   */
-  const preReceive = (
-    stub: RepoStub,
-    params: { readonly owner: string; readonly repo: string },
-    updates: ReadonlyArray<RefUpdate>,
-  ) =>
-    Effect.gen(function* () {
-      const meta = yield* stub.readMeta().pipe(
-        Effect.catchTag("StoreError", (error) => Effect.die(error)),
-        Effect.catchTag("RepoNotFound", () =>
-          Effect.fail(new RepoNotFound(params)),
-        ),
-      );
-      const rejections = yield* hooks.preReceive({ repo: meta, updates });
-      const first = rejections[0];
-      if (first !== undefined) {
-        return yield* new HookRejected({
-          ref: first.ref,
-          reason: first.reason,
-        });
-      }
-    });
-
-  /** HTTPS clone URL for a repo, derived from the incoming Host header. */
-  const remoteUrl = (owner: string, name: string) =>
-    Effect.gen(function* () {
+      const result = yield* effect;
       const request = yield* HttpServerRequest.HttpServerRequest;
       const host = request.headers.host;
-      const proto = request.headers["x-forwarded-proto"] ?? "https";
-      return host === undefined
-        ? `/${owner}/${name}.git`
-        : `${proto}://${host}/${owner}/${name}.git`;
+      return new RepoCreated({
+        repo: result.repo,
+        remote:
+          host === undefined
+            ? result.remote
+            : `${request.headers["x-forwarded-proto"] ?? "https"}://${host}${result.remote}`,
+      });
     });
-
-  // ── REST handler groups ────────────────────────────────────────────────
-
-  /**
-   * Inserts the registry row, repairing an ORPHAN first: a row whose Repo
-   * DO was never seeded (a create that died between the registry insert
-   * and `initRepo`). An orphan poisons the name permanently — `GET` 404s
-   * because the DO has no config, while `POST` 409s because the row
-   * exists — so detect it (registry row present + DO reports
-   * `RepoNotFound`), drop the row, and insert again.
-   */
-  const insertRepoRow = (input: {
-    readonly owner: string;
-    readonly name: string;
-    readonly description?: string | undefined;
-    readonly public?: boolean | undefined;
-  }) =>
-    registryStub()
-      .createRepo(input)
-      .pipe(
-        Effect.catchTag("StoreError", (error) => Effect.die(error)),
-        Effect.catchTag("RepoAlreadyExists", (conflict) =>
-          Effect.gen(function* () {
-            const existing = yield* resolveCached(input.owner, input.name).pipe(
-              Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            );
-            if (existing === undefined) {
-              return yield* Effect.fail(conflict);
-            }
-            const orphaned = yield* repos
-              .getByName(existing.repoId)
-              .readMeta()
-              .pipe(
-                Effect.as(false),
-                Effect.catchTag("RepoNotFound", () => Effect.succeed(true)),
-                Effect.catchCause(() => Effect.succeed(false)),
-              );
-            if (!orphaned) {
-              return yield* Effect.fail(conflict);
-            }
-            yield* registryStub()
-              .removeRow(existing.repoId)
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
-            yield* dropCached(input.owner, input.name);
-            return yield* registryStub()
-              .createRepo(input)
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
-          }),
-        ),
-      );
-
   const reposRoutes = {
-    create: impl(CreateRepo, ({ payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* insertRepoRow({
-          owner: payload.owner,
-          name: payload.name,
-          description: payload.description,
-          public: payload.public,
-        });
-        const init = yield* repos
-          .getByName(entry.repoId)
-          .initRepo({
-            repoId: entry.repoId,
-            owner: entry.owner,
-            name: entry.name,
-            defaultBranch: payload.defaultBranch ?? "main",
-            description: payload.description ?? null,
-            readOnly: payload.readOnly ?? false,
-            public: payload.public ?? false,
-            forkOf: null,
-          })
-          .pipe(
-            // Seeding the DO failed (or died): drop the row we just
-            // inserted rather than leave an orphan behind.
-            Effect.onError(() =>
-              registryStub()
-                .removeRow(entry.repoId)
-                .pipe(
-                  Effect.ignore,
-                  Effect.andThen(dropCached(entry.owner, entry.name)),
-                ),
-            ),
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-          );
-        const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
-          repo: toRepo(init.meta),
-          remote,
-        });
-      }),
-    ),
-    get: impl(GetRepo, ({ params }) =>
-      Effect.gen(function* () {
-        // Includes rows mid-purge: GET keeps reporting
-        // status "deleting" until the purge alarm frees the name (only
-        // then a 404), so "poll GET until 404 then re-create" never
-        // races the purge.
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
-        if (entry.deletedAt !== null) {
-          return registryFallbackRepo(entry);
-        }
-        const meta = yield* repos
-          .getByName(entry.repoId)
-          .getRepoMeta()
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toRepo(meta);
-      }),
-    ),
-    update: impl(UpdateRepo, ({ params, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const meta = yield* repos
-          .getByName(entry.repoId)
-          .updateRepoMeta({
-            description: payload.description,
-            defaultBranch: payload.defaultBranch,
-            readOnly: payload.readOnly,
-            public: payload.public,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toRepo(meta);
-      }),
-    ),
-    list: impl(ListRepos, ({ query }) =>
-      Effect.gen(function* () {
-        // Everything the Registry holds; `public: true` narrows it. Who
-        // may list at all was decided in front of the route.
-        const page = yield* registryStub()
-          .list({
-            owner: query.owner,
-            cursor: query.cursor,
-            limit: query.limit,
-            publicOnly: query.public === true,
-          })
-          .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
-        // Rendered straight from the Registry's denormalised columns:
-        // listing must NOT wake one Durable Object per row (measured at
-        // ~30 ms per row — DESIGN.md §14.1 / §15 bottleneck 7). Live
-        // `objects` stats need the DO, so a listing reports zeros and
-        // callers who want them read the repo directly.
-        const items = page.items.map(registryFallbackRepo);
-        return {
-          items,
-          nextCursor: page.nextCursor,
-          hasMore: page.hasMore,
-        };
-      }),
-    ),
-    delete: impl(DeleteRepo, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
-        // Always (re-)arm the purge — even when the row is already
-        // soft-deleted. A second DELETE mid-drain is an idempotent 204,
-        // and re-arming is what recovers a purge whose alarm was lost
-        // (crash between markDeleted and the first alarm run).
-        yield* repos
-          .getByName(entry.repoId)
-          .startPurge()
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // The registry row exists but the DO holds no state — an
-            // orphan, or a purge that already wiped storage. There is
-            // nothing to purge, so free the name directly (never 404:
-            // the caller can see this repo, so DELETE must remove it).
-            Effect.catchTag("RepoNotFound", () =>
-              registryStub()
-                .removeRow(entry.repoId)
-                .pipe(
-                  Effect.catchTag("StoreError", (error) => Effect.die(error)),
-                ),
-            ),
-          );
-        yield* registryStub()
-          .markDeleted(entry.repoId)
-          .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
-        yield* dropCached(params.owner, params.repo);
-      }),
-    ),
-    fork: impl(ForkRepo, ({ params, payload }) =>
-      Effect.gen(function* () {
-        const source = yield* resolveOrNotFound(params.owner, params.repo);
-        const sourceMeta = yield* repos
-          .getByName(source.repoId)
-          .readMeta()
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        if (sourceMeta.status !== "ready") {
-          return yield* new RepoNotReady({ status: sourceMeta.status });
-        }
-        const entry = yield* registryStub()
-          .createRepo({
-            owner: payload.targetOwner,
-            name: payload.targetName,
-            description: sourceMeta.description ?? undefined,
-            forkOf: source.repoId,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // `fork` declares no ValidationError (reserved target
-            // owner) — surface it as the closest declared conflict.
-            Effect.catchTag("ValidationError", () =>
-              Effect.fail(
-                new RepoAlreadyExists({
-                  owner: payload.targetOwner,
-                  repo: payload.targetName,
-                }),
-              ),
-            ),
-          );
-        const init = yield* repos
-          .getByName(entry.repoId)
-          .startFork({
-            repoId: entry.repoId,
-            owner: entry.owner,
-            name: entry.name,
-            defaultBranch: sourceMeta.defaultBranch,
-            description: sourceMeta.description,
-            readOnly: false,
-            // Forks inherit the source's visibility.
-            public: sourceMeta.public,
-            forkOf: source.repoId,
-            parentRepoId: source.repoId,
-          })
-          .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
-        const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
-          repo: toRepo(init.meta),
-          remote,
-        });
-      }),
-    ),
-    compact: impl(CompactRepo, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        yield* repos
-          .getByName(entry.repoId)
-          .startCompact()
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-      }),
-    ),
-    import: impl(ImportRepo, ({ payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* registryStub()
-          .createRepo({
-            owner: payload.owner,
-            name: payload.name,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            // `import` declares no ValidationError — a reserved owner
-            // is an import that can never succeed.
-            Effect.catchTag("ValidationError", (error) =>
-              Effect.fail(new ImportFailed({ reason: error.message })),
-            ),
-          );
-        const init = yield* repos
-          .getByName(entry.repoId)
-          .startImport({
-            repoId: entry.repoId,
-            owner: entry.owner,
-            name: entry.name,
-            defaultBranch: "main",
-            description: null,
-            readOnly: false,
-            public: false,
-            forkOf: null,
-            source: {
-              url: payload.source.url,
-              ref: payload.source.ref,
-              depth: payload.source.depth,
-            },
-          })
-          .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
-        const remote = yield* remoteUrl(entry.owner, entry.name);
-        return new RepoCreated({
-          repo: toRepo(init.meta),
-          remote,
-        });
-      }),
-    ),
-  };
-
-  const refsRoutes = {
-    list: impl(ListRefs, ({ params, query }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const page = yield* repos
-          .getByName(entry.repoId)
-          .listRefs(query.prefix)
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return { head: page.head, refs: page.refs.map(toRef) };
-      }),
-    ),
-    get: impl(GetRef, ({ params, query }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const ref = yield* repos
-          .getByName(entry.repoId)
-          .getRef(query.name)
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toRef(ref);
-      }),
-    ),
-    update: impl(UpdateRef, ({ params, query, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const stub = repos.getByName(entry.repoId);
-        const current = yield* stub.getRef(query.name).pipe(
-          Effect.map((ref) => ref.oid),
-          Effect.catchTag("RefNotFound", () => Effect.succeed(ZERO_OID)),
-          Effect.catchTag("StoreError", (error) => Effect.die(error)),
-          Effect.catchTag("RepoNotFound", () =>
-            Effect.fail(new RepoNotFound(params)),
-          ),
-        );
-        yield* preReceive(stub, params, [
-          { ref: query.name, oldOid: current, newOid: payload.newOid },
-        ]);
-        const ref = yield* stub
-          .updateRef({
-            name: query.name,
-            newOid: payload.newOid,
-            expectedOid: payload.expectedOid,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toRef(ref);
-      }),
-    ),
-    remove: impl(RemoveRef, ({ params, query, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const stub = repos.getByName(entry.repoId);
-        const current = yield* stub.getRef(query.name).pipe(
-          Effect.map((ref) => ref.oid),
-          Effect.catchTag("StoreError", (error) => Effect.die(error)),
-          Effect.catchTag("RepoNotFound", () =>
-            Effect.fail(new RepoNotFound(params)),
-          ),
-        );
-        yield* preReceive(stub, params, [
-          { ref: query.name, oldOid: current, newOid: ZERO_OID },
-        ]);
-        yield* stub
-          .removeRef({
-            name: query.name,
-            expectedOid: payload.expectedOid,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-      }),
-    ),
-  };
-
-  const objectsRoutes = {
-    commit: impl(GetCommit, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const data = yield* repos
-          .getByName(entry.repoId)
-          .readObject({ oid: params.oid, expect: "commit" })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        // A stored commit that fails to parse is corrupt — a defect.
-        const parsed = yield* parseCommit(data.content).pipe(Effect.orDie);
-        return new CommitInfo({
-          oid: params.oid,
-          tree: asOid(parsed.tree),
-          parents: parsed.parents.map(asOid),
-          author: {
-            name: parsed.author.name,
-            email: parsed.author.email,
-            date: parsed.author.when,
-            tz: parsed.author.tz,
-          },
-          committer: {
-            name: parsed.committer.name,
-            email: parsed.committer.email,
-            date: parsed.committer.when,
-            tz: parsed.committer.tz,
-          },
-          message: parsed.message,
-        });
-      }),
-    ),
-    log: impl(GetLog, ({ params, query }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const page = yield* repos
-          .getByName(entry.repoId)
-          .readCommitLog({
-            ref: query.ref,
-            cursor: query.cursor,
-            limit: query.limit,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return {
-          items: page.items.map(toCommitInfo),
-          nextCursor: page.nextCursor,
-          hasMore: page.hasMore,
-        };
-      }),
-    ),
-    tree: impl(GetTree, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const data = yield* repos
-          .getByName(entry.repoId)
-          .readObject({ oid: params.oid, expect: "tree" })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        const entries = yield* parseTree(data.content).pipe(Effect.orDie);
-        return {
-          oid: params.oid,
-          entries: entries.map(
-            (item) =>
-              new TreeEntry({
-                mode: item.mode,
-                name: item.name,
-                oid: asOid(item.oid),
-                type: treeEntryKind(item.mode),
-              }),
-          ),
-        };
-      }),
-    ),
-    blob: impl(GetBlob, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const data = yield* repos
-          .getByName(entry.repoId)
-          .readObject({ oid: params.oid, expect: "blob" })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        if (data.size > MAX_JSON_BLOB_BYTES) {
-          return yield* new ObjectTooLarge({
-            oid: params.oid,
-            size: data.size,
-          });
-        }
-        return {
-          oid: params.oid,
-          size: data.size,
-          encoding: "base64" as const,
-          content: Encoding.encodeBase64(data.content),
-        };
-      }),
-    ),
-    diff: impl(GetDiff, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const data = yield* repos
-          .getByName(entry.repoId)
-          .readCommitDiff({ oid: params.oid })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return new CommitDiff({
-          oid: params.oid,
-          parent: data.parent === null ? null : asOid(data.parent),
-          files: data.files.map(toDiffEntry),
-          truncated: data.truncated,
-        });
-      }),
-    ),
-    compare: impl(Compare, ({ params, query }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const data = yield* repos
-          .getByName(entry.repoId)
-          .compareCommits({ base: query.base, head: query.head })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return new Comparison({
-          base: asOid(data.base),
-          head: asOid(data.head),
-          mergeBase: asOid(data.mergeBase),
-          aheadBy: data.aheadBy,
-          behindBy: data.behindBy,
-          commits: data.commits.map(toCommitInfo),
-          commitsTruncated: data.commitsTruncated,
-          files: data.files.map(toDiffEntry),
-          filesTruncated: data.filesTruncated,
-        });
-      }),
-    ),
-  };
-
-  const pullsRoutes = {
-    create: impl(CreatePull, ({ params, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const pull = yield* repos
-          .getByName(entry.repoId)
-          .createPull({
-            title: payload.title,
-            body: payload.body,
-            base: payload.base,
-            head: payload.head,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toPull(pull);
-      }),
-    ),
-    list: impl(ListPulls, ({ params, query }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const page = yield* repos
-          .getByName(entry.repoId)
-          .listPulls({
-            state: query.state,
-            cursor: query.cursor,
-            limit: query.limit,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return {
-          items: page.items.map(toPull),
-          nextCursor: page.nextCursor,
-          hasMore: page.hasMore,
-        };
-      }),
-    ),
-    get: impl(GetPull, ({ params }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const detail = yield* repos
-          .getByName(entry.repoId)
-          .getPull(params.number)
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toPullDetail(detail);
-      }),
-    ),
-    update: impl(UpdatePull, ({ params, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const pull = yield* repos
-          .getByName(entry.repoId)
-          .updatePull({
-            number: params.number,
-            title: payload.title,
-            body: payload.body,
-            state: payload.state,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return toPull(pull);
-      }),
-    ),
-    merge: impl(MergePull, ({ params, payload }) =>
-      Effect.gen(function* () {
-        const entry = yield* resolveOrNotFound(params.owner, params.repo);
-        const stub = repos.getByName(entry.repoId);
-        // The hook sees the base branch moving to the head tip. A merge
-        // commit's oid does not exist until the merge is written, so a
-        // hook that must see it decorates `RepoStore` instead.
-        const pull = yield* stub.getPull(params.number).pipe(
-          Effect.catchTag("StoreError", (error) => Effect.die(error)),
-          Effect.catchTag("RepoNotFound", () =>
-            Effect.fail(new RepoNotFound(params)),
-          ),
-        );
-        yield* preReceive(stub, params, [
-          {
-            ref: pull.baseRef,
-            oldOid: pull.baseOid ?? ZERO_OID,
-            newOid: pull.headOid ?? ZERO_OID,
-          },
-        ]);
-        const result = yield* stub
-          .mergePull({
-            number: params.number,
-            message: payload.message,
-            expectedHeadOid: payload.expectedHeadOid,
-          })
-          .pipe(
-            Effect.catchTag("StoreError", (error) => Effect.die(error)),
-            Effect.catchTag("RepoNotFound", () =>
-              Effect.fail(
-                new RepoNotFound({
-                  owner: params.owner,
-                  repo: params.repo,
-                }),
-              ),
-            ),
-          );
-        return new MergeResult({
-          method: result.method,
-          oid: asOid(result.oid),
-          pull: toPull(result.pull),
-        });
-      }),
-    ),
+    ...operations.repos,
+    create: (input: Parameters<typeof operations.repos.create>[0]) =>
+      remoteResult(operations.repos.create(input)),
+    fork: (input: Parameters<typeof operations.repos.fork>[0]) =>
+      remoteResult(operations.repos.fork(input)),
+    import: (input: Parameters<typeof operations.repos.import>[0]) =>
+      remoteResult(operations.repos.import(input)),
   };
 
   const wire401 = HttpServerResponse.empty({
@@ -1449,8 +315,7 @@ const makeCore = Effect.gen(function* () {
    * instead of one single-threaded object.
    *
    * `undefined` = not eligible; the caller forwards to the DO. Access
-   * was decided before the route ran, by the middleware of the API
-   * that mounts it — this changes WHERE the bytes come from, never who
+   * was decided before the route ran, by the middleware applied to its route layer — this changes WHERE the bytes come from, never who
    * gets them.
    */
   const headSnapshotFastPath = Effect.fn(function* (
@@ -1586,361 +451,37 @@ const makeCore = Effect.gen(function* () {
    * byte enters the Durable Object, so its memory, CPU and egress are
    * untouched by push size.
    */
-  const receivePackRoute = Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const params = yield* HttpRouter.params;
-    const owner = (params.owner ?? "").toLowerCase();
-    let repo = (params.repo ?? "").toLowerCase();
-    if (repo.endsWith(".git")) repo = repo.slice(0, -4);
-    const resolved = yield* Effect.result(resolveCached(owner, repo));
-    if (Result.isFailure(resolved)) return internalError;
-    const entry = resolved.success;
-    if (entry === undefined) return notFound;
-    const stub = repos.getByName(entry.repoId);
-    const resultType = "application/x-git-receive-pack-result";
-    const noCache = { "cache-control": "no-cache" } as const;
-    const reply = (bytes: Uint8Array) =>
-      HttpServerResponse.uint8Array(bytes, {
-        contentType: resultType,
-        headers: noCache,
+  const receivePackRoute = Effect.scoped(
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const params = yield* HttpRouter.params;
+      const repo = yield* engine.repositories.get({
+        owner: params.owner ?? "",
+        repo: params.repo ?? "",
       });
-    const asStoreError = (error: {
-      readonly _tag: string;
-      readonly reason?: string;
-    }) =>
-      error instanceof StoreErrorClass
-        ? error
-        : new StoreErrorClass({
-            reason: `${error._tag}${error.reason === undefined ? "" : `: ${error.reason}`}`,
-          });
-
-    // Declared before the receive so every exit path drops the spilled
-    // object through the single `ensuring` at the bottom — unless staged
-    // rows reference it as a wire pack, in which case it is repo data.
-    let parkedKey: string | undefined;
-    let resolvedKey: string | undefined;
-    let keepParked = false;
-    const receiveId = yield* ulid();
-    const feeder = makeStreamingSource();
-    // Staging batches in flight to the DO. Detached from the pump's
-    // fibers (a consumer's children would die with it); the route joins
-    // them before the commit and interrupts leftovers on any other exit.
-    const staging: Array<Fiber.Fiber<void, StoreErrorClass>> = [];
-    const isGzip = /\bgzip\b/i.test(request.headers["content-encoding"] ?? "");
-    const receiving = yield* Effect.forkChild(
-      Effect.result(
-        isGzip
-          ? Effect.gen(function* () {
-              // gzip bodies are small by git's own rules: collect, inflate,
-              // feed.
-              const raw = yield* Stream.runCollect(request.stream).pipe(
-                Effect.map((chunks) => concatBytes(Array.from(chunks))),
-                Effect.mapError(
-                  (error) =>
-                    new StoreErrorClass({
-                      reason: `incoming body read: ${String(error)}`,
-                    }),
-                ),
-              );
-              const decoded = yield* gunzipIfNeeded(
-                raw,
-                request.headers["content-encoding"],
-              ).pipe(
-                Effect.mapError(
-                  (error) => new StoreErrorClass({ reason: error.reason }),
-                ),
-              );
-              yield* feeder.push(decoded);
-              feeder.end();
-              return { total: decoded.length };
-            }).pipe(
-              Effect.tapError((error) => Effect.sync(() => feeder.fail(error))),
-            )
-          : Effect.flatMap(
-              HttpServerRequest.toWeb(request).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new StoreErrorClass({
-                      reason: `incoming body: ${String(error)}`,
-                    }),
-                ),
-              ),
-              (web) => feedBody(web.body, feeder),
-            ),
-      ),
-    );
-    return yield* Effect.gen(function* () {
-      // The pkt-line command section precedes the pack and is small.
-      const headResult = yield* Effect.result(
-        feeder.source.read(0, HEAD_BYTES),
-      );
-      if (Result.isFailure(headResult)) {
-        return reply(errPkt(headResult.failure.reason));
-      }
-      const body = headResult.success;
-      if (!isGzip && body[0] === 0x1f && body[1] === 0x8b) {
-        return reply(errPkt("gzip-encoded push without content-encoding"));
-      }
-      const parsedResult = yield* Effect.result(parseReceivePackRequest(body));
-      if (Result.isFailure(parsedResult)) {
-        return reply(errPkt(parsedResult.failure.reason));
-      }
-      const parsed = parsedResult.success;
-      if (parsed.probe) {
-        // git's empty-flush probe when the payload exceeds http.postBuffer:
-        // reply empty 200 so it retries with the body.
-        return HttpServerResponse.empty({
-          status: 200,
-          headers: { ...noCache, "content-type": resultType },
-        });
-      }
-      const sideband = parsed.capabilities.has("side-band-64k");
-      const wantReport =
-        parsed.capabilities.has("report-status") ||
-        parsed.capabilities.has("report-status-v2");
-      const respond = (
-        unpack: string,
-        results: ReadonlyArray<{
-          readonly ref: string;
-          readonly ok: boolean;
-          readonly reason?: string | undefined;
-        }>,
-      ) => {
-        if (!wantReport) {
-          return HttpServerResponse.empty({
-            status: 200,
-            headers: { ...noCache, "content-type": resultType },
-          });
-        }
-        const lines: Array<Uint8Array> = [pktText(`unpack ${unpack}`)];
-        for (const result of results) {
-          lines.push(
-            result.ok
-              ? pktText(`ok ${result.ref}`)
-              : pktText(`ng ${result.ref} ${result.reason ?? "failed"}`),
-          );
-        }
-        lines.push(flushPkt);
-        const report = concatBytes(lines);
-        return reply(
-          sideband
-            ? concatBytes([...sidebandFrames(1, report), flushPkt])
-            : report,
-        );
-      };
-      const allNg = (reason: string) =>
-        parsed.commands.map((cmd) => ({ ref: cmd.ref, ok: false, reason }));
-
-      // The pre-receive hook, with the parsed ref updates: a refusal is
-      // reported per ref and nothing moves.
-      const meta = yield* stub.readMeta().pipe(
-        Effect.catchTag("StoreError", (error) => Effect.die(error)),
-        Effect.catchTag("RepoNotFound", () => Effect.succeed(undefined)),
-      );
-      if (meta === undefined) return notFound;
-      const rejections = yield* hooks.preReceive({
-        repo: meta,
-        updates: parsed.commands,
-      });
-      if (rejections.length > 0) {
-        return respond(
-          "ok",
-          parsed.commands.map((cmd) => ({
-            ref: cmd.ref,
-            ok: false,
-            reason:
-              rejections.find((r) => r.ref === cmd.ref)?.reason ??
-              "rejected by hook",
-          })),
-        );
-      }
-
-      // Phase 1 in the DO: read-only check and the staging push row.
-      const routeStarted = Date.now();
-      const begun = yield* stub.beginPush({ commands: parsed.commands });
-      const beginMs = Date.now() - routeStarted;
-      if (begun._tag === "denied") return respond("ok", allNg(begun.reason));
-      const pushId = begun.pushId;
-
-      // Admission by ingest memory (DESIGN.md §2.1): small pushes run
-      // concurrently; only genuinely large bodies contend. ≤ 30 s, then 503.
-      const declared = Number.parseInt(
-        request.headers["content-length"] ?? "",
-        10,
-      );
-      const permits = pushPermitsFor(
-        Number.isNaN(declared) ? undefined : declared,
-      );
-      const permit = yield* Semaphore.take(pushGate, permits).pipe(
-        Effect.timeoutOption(PUSH_WAIT_TIMEOUT),
-      );
-      if (Option.isNone(permit)) {
-        return HttpServerResponse.empty({
-          status: 503,
-          headers: { "retry-after": "10" },
-        });
-      }
+      const push = yield* ReceivePackHttp.decode(request);
+      if (push._tag === "Probe") return ReceivePackHttp.probeResponse();
       return yield* Effect.gen(function* () {
-        const startedAt = yield* Effect.sync(() => performance.now());
-        const since = (from: number) =>
-          Effect.sync(() => performance.now() - from);
-        // The DO's store surface over RPC: rows go across as encoded
-        // batches; thin-delta bases come back cached per push.
-        const bases = new Map<
-          string,
-          | { readonly type: ObjectType; readonly content: Uint8Array }
-          | undefined
-        >();
-        // Staging batches go to the DO concurrently (bounded) so the round
-        // trips overlap the receive; `settle` joins them before the commit.
-        const stageGate = yield* Semaphore.make(STAGE_CONCURRENCY);
-        const store: IngestStore = {
-          insertStagedBatch: (id, objects) =>
-            Effect.gen(function* () {
-              // Encoded now (a copy), so the caller may release its buffers.
-              const encoded = encodeStagedBatch(objects);
-              const fiber = yield* Effect.forkDetach(
-                Semaphore.withPermits(
-                  stageGate,
-                  1,
-                )(
-                  stub
-                    .stagePush(id, encoded)
-                    .pipe(
-                      Effect.mapError(asStoreError),
-                      Effect.provide(RuntimeContext.phantom),
-                    ),
-                ),
-              );
-              staging.push(fiber);
-            }),
-          settle: Effect.gen(function* () {
-            for (const fiber of staging.splice(0)) yield* Fiber.join(fiber);
-          }),
-          readBase: (oid) =>
-            bases.has(oid)
-              ? Effect.succeed(bases.get(oid))
-              : stub.readPushBase(oid).pipe(
-                  Effect.mapError(asStoreError),
-                  Effect.tap((found) =>
-                    Effect.sync(() => {
-                      bases.set(oid, found);
-                    }),
-                  ),
-                  Effect.provide(RuntimeContext.phantom),
-                ),
-        };
-        // Is there a pack at all? A delete-only push ends right after the
-        // commands. This waits only for 12 bytes (or the end).
-        const probe = yield* feeder.source
-          .read(parsed.packStart, 12)
-          .pipe(Effect.result);
-        const hasPack = Result.isSuccess(probe) && probe.success.length === 12;
-        let ingest: IngestResult | undefined;
-        let ingestMs = 0;
-        if (hasPack) {
-          const source = sliceRandomAccess(feeder.source, parsed.packStart);
-          const ingestStarted = yield* Effect.sync(() => performance.now());
-          const outcome = yield* Effect.result(
-            ingestPackFrom(source, {
-              store,
-              pushId,
-              hasher,
-              spill: {
-                body: feeder.source,
-                feeder,
-                packStart: parsed.packStart,
-                blobs: workerBlobs,
-                key: incomingKey(entry.repoId, receiveId),
-                packId: wirePackId(receiveId),
-                repoId: entry.repoId,
-                threshold: MAX_PACK_BYTES,
-              },
-            }),
-          );
-          ingestMs = yield* since(ingestStarted);
-          if (Result.isFailure(outcome)) {
-            yield* Effect.logError("push ingest failed", outcome.failure);
-            return respond(outcome.failure.reason, allNg("unpacker error"));
-          }
-          ingest = outcome.success;
-        }
-        // The body has been fully consumed (the parser read through the
-        // trailer); wait for the spill to complete before the rows that
-        // reference it can be committed.
-        const received = yield* Fiber.join(receiving);
-        if (Result.isFailure(received)) {
-          return reply(errPkt(received.failure.reason));
-        }
-        parkedKey = ingest?.parkedKey;
-        resolvedKey = ingest?.resolvedKey;
-        const promoted = ingest?.promoted ?? 0;
-        const commitStarted = Date.now();
-        const committed = yield* stub.commitPush({
-          pushId,
-          commands: parsed.commands,
-          atomic: parsed.capabilities.has("atomic"),
-          commits: ingest?.commits ?? [],
-          referenced: ingest?.referenced ?? [],
-          referencedParents: ingest?.referencedParents ?? [],
-          promoted,
-          stats: {
-            objects: ingest?.objectCount ?? 0,
-            bytes: hasPack ? received.success.total - parsed.packStart : 0,
-            ingestMs,
-            stageMs: ingest?.stageMs ?? 0,
-            phases: {
-              ...ingest?.phases,
-              begin: beginMs,
-              ingestAt: commitStarted - routeStarted,
-            },
-          },
-        });
-        console.log(
-          `[push] begin=${beginMs}ms ingest=${Math.round(ingestMs)}ms commit=${Date.now() - commitStarted}ms total=${Date.now() - routeStarted}ms`,
+        const prepared = yield* engine.preparePush(repo, push.input);
+        return ReceivePackHttp.response(
+          push,
+          yield* engine.commitPush(prepared),
         );
-        if (
-          promoted > 0 &&
-          parkedKey !== undefined &&
-          committed.results.some((r) => r.ok)
-        ) {
-          keepParked = true;
-        }
-        void startedAt;
-        return respond(committed.unpack, committed.results);
-      }).pipe(Effect.ensuring(Semaphore.release(pushGate, permits)));
-    }).pipe(
-      Effect.catchTag("StoreError", (error) =>
-        Effect.as(
-          Effect.logError("push: storage failure", error),
-          reply(errPkt(error.reason)),
+      }).pipe(
+        Effect.catchTag("PushDenied", (error) =>
+          Effect.succeed(ReceivePackHttp.reject(push, error.reason)),
         ),
-      ),
-      Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
-      Effect.tapCause((cause) => Effect.logError("push: route failure", cause)),
-      // Single owner of the spilled body: whatever path exits, the parked
-      // object is dropped unless committed rows reference it.
-      Effect.ensuring(
-        Effect.andThen(
-          Effect.andThen(Fiber.interrupt(receiving), () =>
-            Fiber.interruptAll(staging.splice(0)),
-          ),
-          () => {
-            const keys = keepParked
-              ? []
-              : [parkedKey, ...(resolvedKey?.split(",") ?? [])].filter(
-                  (key): key is string => key !== undefined && key !== "",
-                );
-            return keys.length === 0
-              ? Effect.void
-              : workerBlobs
-                  .delete(keys)
-                  .pipe(Effect.provide(RuntimeContext.phantom), Effect.ignore);
-          },
-        ),
-      ),
-    );
-  });
+      );
+    }),
+  ).pipe(
+    Effect.catchTag("RepoNotFound", () => Effect.succeed(notFound)),
+    Effect.catchTag("StoreError", (error) =>
+      Effect.succeed(ReceivePackHttp.failure(error.reason)),
+    ),
+    Effect.catchTag(["WireProtocolError", "PackIngestError"], (error) =>
+      Effect.succeed(ReceivePackHttp.failure(error.reason)),
+    ),
+  );
 
   /** Auth + resolve for the raw REST reads; `undefined` = already replied. */
   const rawRestPrelude = (ownerRaw: string, repoRaw: string) =>
@@ -2160,282 +701,112 @@ const makeCore = Effect.gen(function* () {
   return {
     repos: reposRoutes,
     refs: refsRoutes,
-    objects: objectsRoutes,
-    pulls: pullsRoutes,
-    raw: {
-      blobRaw: impl(GetBlobRaw, () => blobRawRoute),
-      file: impl(GetFile, () => fileRoute),
+    objects: {
+      ...objectsRoutes,
+      blobRaw: () => blobRawRoute,
+      file: () => fileRoute,
     },
+    pulls: pullsRoutes,
     protocol: {
-      infoRefs: impl(InfoRefs, () => wireProxy),
-      uploadPack: impl(UploadPack, () => wireProxy),
-      receivePack: impl(ReceivePack, () => receivePackRoute),
-      hashPart: impl(HashPart, () => hashPartRoute),
+      infoRefs: () => wireProxy.pipe(Effect.orDie),
+      uploadPack: () => wireProxy.pipe(Effect.orDie),
+      receivePack: () => receivePackRoute.pipe(Effect.orDie),
     },
     github: githubRoutes,
+    internal: {
+      hashPart: () => hashPartRoute.pipe(Effect.orDie),
+    },
   };
 });
 
 /**
- * The engine's HTTP planes as pieces, built once per Worker and shared by
- * every route below (the resolve cache, the DO stubs, the push gate).
- * Internal: users compose the routes, never the core.
- */
-class Core extends Context.Service<Core, Effect.Success<typeof makeCore>>()(
-  "alchemy/Git/Core",
-) {}
-const CoreLive = Layer.effect(Core, makeCore);
-
-/** A route's default implementation: the core's handler for it. */
-const live = <
-  R extends HttpApiEndpoint.Constraint & Http.RouteStatics<any, any>,
->(
-  route: R,
-  pick: (core: Effect.Success<typeof makeCore>) => Http.Handler<R>,
-): Layer.Layer<R["~Route"], never, Layer.Services<typeof CoreLive>> =>
-  route
-    .make(Effect.map(Core, pick) as Effect.Effect<any, never, Core>)
-    .pipe(Layer.provide(CoreLive));
-
-// ── the default implementation of every route ────────────────────────────────
-// Each is `Route.make(...)` over the shared core, so any one of them can be
-// replaced by providing another Layer for the same route nearer the API.
-export const CreateRepoLive = live(CreateRepo, (core) => core.repos.create);
-export const GetRepoLive = live(GetRepo, (core) => core.repos.get);
-export const UpdateRepoLive = live(UpdateRepo, (core) => core.repos.update);
-export const ListReposLive = live(ListRepos, (core) => core.repos.list);
-export const DeleteRepoLive = live(DeleteRepo, (core) => core.repos.delete);
-export const ForkRepoLive = live(ForkRepo, (core) => core.repos.fork);
-export const ImportRepoLive = live(ImportRepo, (core) => core.repos.import);
-export const CompactRepoLive = live(CompactRepo, (core) => core.repos.compact);
-export const ListRefsLive = live(ListRefs, (core) => core.refs.list);
-export const GetRefLive = live(GetRef, (core) => core.refs.get);
-export const UpdateRefLive = live(UpdateRef, (core) => core.refs.update);
-export const RemoveRefLive = live(RemoveRef, (core) => core.refs.remove);
-export const GetCommitLive = live(GetCommit, (core) => core.objects.commit);
-export const GetLogLive = live(GetLog, (core) => core.objects.log);
-export const GetTreeLive = live(GetTree, (core) => core.objects.tree);
-export const GetBlobLive = live(GetBlob, (core) => core.objects.blob);
-export const GetDiffLive = live(GetDiff, (core) => core.objects.diff);
-export const CompareLive = live(Compare, (core) => core.objects.compare);
-export const GetBlobRawLive = live(GetBlobRaw, (core) => core.raw.blobRaw);
-export const GetFileLive = live(GetFile, (core) => core.raw.file);
-export const CreatePullLive = live(CreatePull, (core) => core.pulls.create);
-export const ListPullsLive = live(ListPulls, (core) => core.pulls.list);
-export const GetPullLive = live(GetPull, (core) => core.pulls.get);
-export const UpdatePullLive = live(UpdatePull, (core) => core.pulls.update);
-export const MergePullLive = live(MergePull, (core) => core.pulls.merge);
-export const InfoRefsLive = live(InfoRefs, (core) => core.protocol.infoRefs);
-export const UploadPackLive = live(
-  UploadPack,
-  (core) => core.protocol.uploadPack,
-);
-export const ReceivePackLive = live(
-  ReceivePack,
-  (core) => core.protocol.receivePack,
-);
-export const HashPartLive = live(HashPart, (core) => core.protocol.hashPart);
-export const GitHubUserLive = live(GitHubUser, (core) => core.github.user);
-export const GitHubRepoLive = live(GitHubRepo, (core) => core.github.repo);
-export const GitHubBranchesLive = live(
-  GitHubBranches,
-  (core) => core.github.branches,
-);
-export const GitHubCommitsLive = live(
-  GitHubCommits,
-  (core) => core.github.commits,
-);
-export const GitHubCommitLive = live(
-  GitHubCommit,
-  (core) => core.github.commit,
-);
-export const GitHubContentsLive = live(
-  GitHubContents,
-  (core) => core.github.contents,
-);
-export const GitHubPullsLive = live(GitHubPulls, (core) => core.github.pulls);
-export const GitHubCreatePullLive = live(
-  GitHubCreatePull,
-  (core) => core.github.createPull,
-);
-export const GitHubPullLive = live(GitHubPull, (core) => core.github.pull);
-export const GitHubUpdatePullLive = live(
-  GitHubUpdatePull,
-  (core) => core.github.updatePull,
-);
-export const GitHubMergePullLive = live(
-  GitHubMergePull,
-  (core) => core.github.mergePull,
-);
-export const GitHubPullFilesLive = live(
-  GitHubPullFiles,
-  (core) => core.github.pullFiles,
-);
-
-/**
- * The default implementation of every git route: provide it to
- * `Http.handlers(api)` for any API derived from {@link GitApi}. Requires
- * the storage blocks; the API's middleware is required by the routes
- * themselves, through `Http.handlers`. A Layer provided nearer than
- * `Handlers` overrides the route it implements.
+ * Reusable HTTP handlers for each Git API group. Resolve this service while
+ * building an `HttpApiBuilder.group`, then register its handlers with
+ * `handleAll`. Override individual handlers with ordinary object spread.
+ * The storage clients, resolve cache, and push gate are shared by all groups.
  *
  * ```typescript
- * Git.Server.layer(AppApi).pipe(
- *   Layer.provide([MeLive, GitHubUserBetterAuth]), // yours, and one override
- *   Layer.provide(Git.Handlers),
- *   Layer.provide(SessionLive), // the middleware AppApi declares
- * )
+ * const ReposLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
+ *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+ * );
  * ```
  */
-export const Handlers = Layer.mergeAll(
-  CreateRepoLive,
-  GetRepoLive,
-  UpdateRepoLive,
-  ListReposLive,
-  DeleteRepoLive,
-  ForkRepoLive,
-  ImportRepoLive,
-  CompactRepoLive,
-  ListRefsLive,
-  GetRefLive,
-  UpdateRefLive,
-  RemoveRefLive,
-  GetCommitLive,
-  GetLogLive,
-  GetTreeLive,
-  GetBlobLive,
-  GetDiffLive,
-  CompareLive,
-  GetBlobRawLive,
-  GetFileLive,
-  CreatePullLive,
-  ListPullsLive,
-  GetPullLive,
-  UpdatePullLive,
-  MergePullLive,
-  InfoRefsLive,
-  UploadPackLive,
-  ReceivePackLive,
-  HashPartLive,
-  GitHubUserLive,
-  GitHubRepoLive,
-  GitHubBranchesLive,
-  GitHubCommitsLive,
-  GitHubCommitLive,
-  GitHubContentsLive,
-  GitHubPullsLive,
-  GitHubCreatePullLive,
-  GitHubPullLive,
-  GitHubUpdatePullLive,
-  GitHubMergePullLive,
-  GitHubPullFilesLive,
+export class Handlers extends Context.Service<
+  Handlers,
+  Effect.Success<typeof makeCore>
+>()("alchemy/Git/Handlers") {}
+
+/**
+ * Builds reusable Git handlers from the storage and hasher services.
+ *
+ * ### Implementing a group
+ * **Example:** Repository handlers for an application API
+ * ```typescript
+ * const ReposLive = HttpApiBuilder.group(AppApi, "repos", (h) =>
+ *   Effect.map(Git.Handlers, (git) => h.handleAll(git.repos)),
+ * ).pipe(Layer.provide(Git.ApiHandlersLive));
+ * ```
+ */
+export const ApiHandlersLive = Layer.effect(Handlers, makeCore).pipe(
+  Layer.provideMerge(EngineLive),
 );
 
-/** What {@link Server} exposes: the composed HTTP handler for every plane. */
-export interface ServerShape {
-  readonly fetch: Effect.Effect<
-    HttpServerResponse.HttpServerResponse,
-    HttpServerError.HttpServerError,
-    Scope.Scope | HttpServerRequest.HttpServerRequest | RuntimeContext
-  >;
-}
+/**
+ * The internal hash group for {@link InternalApi}. {@link InternalApiLive}
+ * registers it with the application router, separately from public middleware.
+ */
+export const InternalLive = HttpApiBuilder.group(InternalApi, "internal", (h) =>
+  Effect.map(Handlers, (git) => h.handleAll(git.internal)),
+);
 
-const makeServer = <Id extends string, Groups extends HttpApiGroup.Constraint>(
-  api: HttpApi.HttpApi<Id, Groups>,
-) =>
-  Layer.mergeAll(
-    HttpApiBuilder.layer(api),
-    // The engine's own routes, outside whatever middleware `api` carries.
-    HttpApiBuilder.layer(InternalApi),
-  ).pipe(
-    Layer.provide([Http.handlers(api), Http.handlers(InternalApi)]),
-    Layer.provide(Http.Platform),
-    HttpRouter.toHttpEffect,
-    // Browser clients (e.g. the example SPA) call the REST plane
-    // cross-origin with a bearer token. Tokens are sent explicitly via
-    // `Authorization` (never cookies), so echoing any origin without
-    // credentials is safe. `toHttpEffect` yields the handler effect, so
-    // the middleware wraps via `Effect.map`.
-    Effect.map(
-      HttpMiddleware.cors({
-        allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allowedHeaders: ["Authorization", "Content-Type"],
-        maxAge: 86_400,
-      }),
-    ),
-    // The route effects' request-scoped needs are all served by the
-    // Worker's request (a scope, the request, the runtime): the deferred
-    // exclusions above cannot say so for a generic `api`.
-    Effect.map((fetch): ServerShape => ({
-      fetch: fetch as ServerShape["fetch"],
-    })),
-  );
+/** Native Effect group implementations. Merge an overriding group after these when needed. */
+export const GroupsLive = Layer.mergeAll(
+  HttpApiBuilder.group(GitApi, "repos", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.repos)),
+  ),
+  HttpApiBuilder.group(GitApi, "refs", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.refs)),
+  ),
+  HttpApiBuilder.group(GitApi, "objects", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.objects)),
+  ),
+  HttpApiBuilder.group(GitApi, "pulls", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.pulls)),
+  ),
+  HttpApiBuilder.group(GitApi, "protocol", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.protocol)),
+  ),
+  HttpApiBuilder.group(GitApi, "github", (h) =>
+    Effect.map(Handlers, (git) => h.handleAll(git.github)),
+  ),
+);
 
 /**
- * `Git.Server` — the top-level building block (RFC "Git Building
- * Blocks" §4): a `Context.Service` exposing the composed HTTP handler
- * for all three planes (git smart-HTTP wire, `/api/v1` REST, `/api/v3`
- * GitHub compat). The package ships no Worker — construct your own and
- * wire `fetch` in. `Server.layer(api)` serves an API derived from
- * {@link GitApi}: yours, with your middleware in front of every route
- * and your own routes beside them; {@link Handlers} implements the
- * engine's routes, and a Layer provided nearer than it overrides one.
- * {@link ServerLive} is the open default: `Git.Api`, `Handlers`, nothing
- * in front.
+ * Git's public routes as an ordinary HttpRouter layer. Merge this with your
+ * application's routes and provide your route middleware to the result.
+ * The application owns its API, HTTP server, platform, and CORS policy.
  *
- * ```ts
- * class AppApi extends Git.Api.middleware(Session) {}
- *
- * const GitLive = Git.Server.layer(AppApi).pipe(
- *   Layer.provide(Git.Handlers),
- *   Layer.provide(SessionLive),
- *   Layer.provide(Git.ReposDurableObject),
- *   Layer.provide(Git.RegistryDurableObject),
+ * ```typescript
+ * const Routes = Layer.mergeAll(AppApiLive, Git.ApiLive).pipe(
+ *   Layer.provide(Authentication.layer),
  * );
- *
- * export default class GitHost extends Cloudflare.Worker<GitHost>()(
- *   "git",
- *   { main: import.meta.url, ...Git.GIT_WORKER_OPTIONS },
- *   Effect.gen(function* () {
- *     const git = yield* Git.Server;
- *     return { fetch: git.fetch };
- *   }).pipe(Effect.provide(GitLive)),
- * ) {}
  * ```
- */
-export class Server extends Context.Service<Server, ServerShape>()(
-  "alchemy/Git/Server",
-) {
-  /**
-   * `Git.Server` over an API derived from {@link GitApi}. Requires an
-   * implementation of every route ({@link Handlers} for the engine's,
-   * yours for the rest), the API's middleware, and the storage blocks.
-   */
-  static readonly layer = <
-    Id extends string,
-    Groups extends HttpApiGroup.Constraint,
-  >(
-    api: HttpApi.HttpApi<Id, Groups>,
-  ) => Layer.effect(Server, makeServer(api));
-}
-
-/**
- * The default `Git.Server` assembly: {@link GitApi} with {@link Handlers}
- * and nothing in front of the routes. Provide {@link ReposDurableObject}
- * and {@link RegistryDurableObject} (or your own implementations of the
- * underlying namespaces) in the same layer graph.
- *
- * @layer
- * @provides Git.Server
- */
-export const ServerLive = Server.layer(GitApi).pipe(Layer.provide(Handlers));
-
-/**
- * Hosts the `GitRegistry` Durable Object (owner/name → repoId) and
- * provides its namespace service.
  *
  * @layer
  */
+export const ApiLive = HttpApiBuilder.layer(GitApi).pipe(
+  Layer.provide(GroupsLive),
+);
+
+/**
+ * The authenticated internal hashing route. Mount beside public routes,
+ * outside application authentication; the handler checks InternalSecret.
+ *
+ * @layer
+ */
+export const InternalApiLive = HttpApiBuilder.layer(InternalApi).pipe(
+  Layer.provide(InternalLive),
+);
 
 /**
  * Hosts the `GitRepo` Durable Object (refs, objects, pulls, the wire

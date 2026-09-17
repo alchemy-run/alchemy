@@ -298,6 +298,7 @@
       "import": "./lib/Prisma/Deployment.js"
     },
     "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Credentials": null,
     "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
@@ -324,6 +325,18 @@
       "bun": "./src/Planetscale/*/index.ts",
       "worker": "./src/Planetscale/*/index.ts",
       "import": "./lib/Planetscale/*/index.js"
+    },
+    "./Stripe": {
+      "types": "./lib/Stripe/index.d.ts",
+      "bun": "./src/Stripe/index.ts",
+      "worker": "./src/Stripe/index.ts",
+      "import": "./lib/Stripe/index.js"
+    },
+    "./Stripe/*": {
+      "types": "./lib/Stripe/*.d.ts",
+      "bun": "./src/Stripe/*.ts",
+      "worker": "./src/Stripe/*.ts",
+      "import": "./lib/Stripe/*.js"
     },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
@@ -450,7 +463,9 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/prisma-postgres": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
+    "@distilled.cloud/stripe": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
@@ -520,6 +535,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",

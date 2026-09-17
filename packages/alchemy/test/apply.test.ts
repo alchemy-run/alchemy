@@ -5484,7 +5484,7 @@ describe("stack output persistence", () => {
         }).pipe(stack.deploy);
         expect(result).toEqual({ url: "hello" });
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "hello" });
@@ -5505,7 +5505,7 @@ describe("stack output persistence", () => {
           return { url: A.string };
         }).pipe(stack.deploy);
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "v2" });

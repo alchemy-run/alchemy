@@ -137,12 +137,21 @@ test.provider.skipIf(!!process.env.FAST)(
             private: true,
             dependencies: {
               alchemy: "2.0.0-beta.67",
-              // beta.67's peers, pinned to the workspace's resolved
-              // versions (bun does not auto-install them for the src/
-              // resolution path the alchemy CLI runs under).
-              effect: "4.0.0-beta.102",
-              "@effect/platform-node": "4.0.0-beta.102",
-              "@effect/platform-bun": "4.0.0-beta.102",
+              // Match the beta.67 release lockfile, independently of the
+              // current workspace's Effect version.
+              effect: "4.0.0-beta.100",
+              "@effect/platform-node": "4.0.0-beta.100",
+              "@effect/platform-bun": "4.0.0-beta.100",
+            },
+            // Prerelease ranges otherwise pull newer adapters that import
+            // APIs absent from the legacy Effect runtime (e.g. ByteSize).
+            overrides: {
+              effect: "4.0.0-beta.100",
+              "@effect/platform-node": "4.0.0-beta.100",
+              "@effect/platform-bun": "4.0.0-beta.100",
+              "@effect/platform-node-shared": "4.0.0-beta.100",
+              "@effect/sql-d1": "4.0.0-beta.100",
+              "@effect/vitest": "4.0.0-beta.100",
             },
           },
           null,

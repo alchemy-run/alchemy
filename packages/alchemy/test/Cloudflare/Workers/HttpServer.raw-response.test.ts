@@ -1,4 +1,10 @@
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
+import * as Test from "@/Test/Alchemy";
+import * as Schedule from "effect/Schedule";
+import * as Cookies from "effect/unstable/http/Cookies";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import RawResponseWorker from "./fixtures/raw-response/worker.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
@@ -43,6 +49,88 @@ const setCookieHeaders = (response: Response) =>
   [...response.headers]
     .filter(([name]) => name === "set-cookie")
     .map(([, value]) => value);
+
+for (const dev of [false, true]) {
+  const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+
+  test.provider(
+    `raw responses over HTTP (${dev ? "local" : "live"})`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const worker = yield* stack.deploy(RawResponseWorker);
+        const client = yield* HttpClient.HttpClient;
+        const ready = yield* client.get(`${worker.url!}/ready`).pipe(
+          Effect.flatMap((response) => response.text),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+            until: (body) => body === "raw-response:ready",
+          }),
+        );
+        expect(ready).toBe("raw-response:ready");
+
+        for (const path of [
+          "/status",
+          "/native",
+          "/constructed-header",
+          "/cookie",
+          "/stream",
+          "/no-content",
+        ]) {
+          for (const method of ["GET", "HEAD"] as const) {
+            const url = `${worker.url!}${path}`;
+            // Routes can propagate after /ready starts serving.
+            const { response, body } = yield* Effect.gen(function* () {
+              const response = yield* method === "GET"
+                ? client.get(url)
+                : client.head(url);
+              return { response, body: yield* response.text };
+            }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+                until: ({ response }) =>
+                  response.status !== 404 ||
+                  response.headers["x-native"] !== undefined,
+              }),
+            );
+            const mutated = path === "/status" || path === "/stream";
+            const status = path === "/no-content" ? 204 : mutated ? 418 : 202;
+            expect(response.status).toBe(status);
+            expect(response.headers["x-native"]).toBe(
+              mutated
+                ? "effect"
+                : path === "/constructed-header"
+                  ? "constructed"
+                  : "native",
+            );
+            expect(response.headers["x-remove"]).toBe(
+              mutated ? undefined : "native",
+            );
+            if (mutated) {
+              expect(response.headers["x-observed-status"]).toBe("202");
+              expect(response.headers["x-observed-native"]).toBe("native");
+            }
+            expect(Cookies.toRecord(response.cookies)).toEqual(
+              path === "/cookie"
+                ? { a: "1", b: "2", session: "abc" }
+                : { a: "1", b: "2" },
+            );
+            expect(body).toBe(
+              method === "HEAD" || status === 204
+                ? ""
+                : path === "/stream"
+                  ? "raw-response:streamed"
+                  : "raw-response:body",
+            );
+          }
+        }
+        yield* stack.destroy();
+      }),
+  );
+}
 
 describe("a Raw web Response answers with the Effect-level status and headers", () => {
   it.effect(
