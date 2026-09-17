@@ -44,6 +44,9 @@ export interface Post {
    * showing a bare spinner.
    */
   readonly answering?: string;
+  /** How the gate routed it — the UI shows a thread shell for
+   *  `thread` the moment the message lands, agent typing inside. */
+  readonly mode?: "thread" | "inline";
   readonly at: number;
 }
 
@@ -62,7 +65,14 @@ export class Posts extends Context.Service<
       readonly status?: Post["status"];
       /** The agent this message is waiting on, while it runs. */
       readonly answering?: string;
+      readonly mode?: Post["mode"];
     }) => Effect.Effect<void>;
+    /** Stamp the routing outcome once the gate decides. */
+    readonly route: (
+      id: string,
+      answering: string,
+      mode: NonNullable<Post["mode"]>,
+    ) => Effect.Effect<void>;
     /** Move a post's status once its replies land (or break). */
     readonly settle: (
       id: string,

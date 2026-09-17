@@ -60,6 +60,8 @@ export interface Post {
   readonly status: "running" | "settled" | "failed";
   /** While running, the agent this message is waiting on. */
   readonly answering?: string;
+  /** How the gate routed it — `thread` opens a shell immediately. */
+  readonly mode?: "thread" | "inline";
   readonly at: number;
 }
 
@@ -259,7 +261,10 @@ export const PostRef = ({ id }: { id: string }) => {
  */
 export const Typing = ({ name }: { readonly name?: string }) =>
   name === undefined ? (
-    <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
+    <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground/80">
+      <Loader2 className="size-3 shrink-0 animate-spin" />
+      <span>routing</span>
+    </span>
   ) : (
     <span className="flex shrink-0 items-center gap-1 text-[11px] text-primary/80">
       <span className="font-medium">{name}</span>
@@ -690,9 +695,11 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
             {formatAt(thread.root.at)}
           </span>
-          {thread.root.status === "running" && replies.length === 0 && (
-            <Typing name={thread.root.answering} />
-          )}
+          {thread.root.status === "running" &&
+            replies.length === 0 &&
+            thread.root.mode !== "thread" && (
+              <Typing name={thread.root.answering} />
+            )}
           {thread.root.status === "failed" && (
             <span className="shrink-0 text-[11px] text-destructive">
               failed
@@ -704,7 +711,9 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
             <MarkdownText text={thread.root.text} />
           </div>
         )}
-        {replies.length > 0 && (
+        {(replies.length > 0 ||
+          (thread.root.mode === "thread" &&
+            thread.root.status === "running")) && (
           <div className="relative ml-8 mt-1.5 min-w-0">
             {/* the elbow — from under the root's avatar into the card */}
             <span
@@ -718,12 +727,19 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
               className="flex min-w-0 max-w-xl cursor-pointer flex-col gap-1 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-left hover:border-border hover:bg-muted/50"
             >
               <span className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
-                {replies.length} {replies.length === 1 ? "message" : "messages"}
+                {replies.length === 0
+                  ? "thread"
+                  : `${replies.length} ${replies.length === 1 ? "message" : "messages"}`}
                 <ChevronRight className="size-3 shrink-0" />
-                {live && (
+                {live && replies.length > 0 && (
                   <Loader2 className="size-3 shrink-0 animate-spin text-primary/70" />
                 )}
               </span>
+              {replies.length === 0 && (
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Typing name={thread.root.answering} />
+                </span>
+              )}
               {last !== undefined && (
                 <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Avatar

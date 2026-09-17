@@ -36,6 +36,7 @@ const TABLES = [
     text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
     answering TEXT,
+    mode TEXT,
     at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS posts_reply ON posts (reply_to)`,
@@ -79,6 +80,7 @@ interface PostRow extends Record<string, Cloudflare.SqlStorageValue> {
   text: string;
   status: string;
   answering: string | null;
+  mode: string | null;
   at: number;
 }
 
@@ -110,6 +112,9 @@ const toPost = (row: PostRow): Post => ({
   ...(row.answering === null || row.answering === undefined
     ? {}
     : { answering: row.answering }),
+  ...(row.mode === null || row.mode === undefined
+    ? {}
+    : { mode: row.mode as Post["mode"] }),
   at: row.at,
 });
 
@@ -124,10 +129,16 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     readonly text: string;
     readonly status?: Post["status"];
     readonly answering?: string;
+    readonly mode?: Post["mode"];
   }) => Effect.Effect<void, never, RuntimeContext>;
   readonly postSettle: (
     id: string,
     status: Post["status"],
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly postRoute: (
+    id: string,
+    answering: string,
+    mode: NonNullable<Post["mode"]>,
   ) => Effect.Effect<void, never, RuntimeContext>;
   readonly postGet: (
     id: string,
@@ -279,6 +290,9 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
       if (!columns.some((column) => column.name === "answering")) {
         yield* sql.exec("ALTER TABLE posts ADD COLUMN answering TEXT");
       }
+      if (!columns.some((column) => column.name === "mode")) {
+        yield* sql.exec("ALTER TABLE posts ADD COLUMN mode TEXT");
+      }
 
       return {
         fetch: Effect.gen(function* () {
@@ -305,8 +319,8 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
             `INSERT OR IGNORE INTO posts
-              (id, reply_to, channel, author, kind, text, status, answering, at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              (id, reply_to, channel, author, kind, text, status, answering, mode, at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
               .trim()
               .replaceAll(/\s+/g, " "),
             input.id,
@@ -317,6 +331,7 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
             input.text,
             input.status ?? "running",
             input.answering ?? null,
+            input.mode ?? null,
             at,
           );
         }),
@@ -325,6 +340,15 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           yield* sql.exec(
             "UPDATE posts SET status = ? WHERE id = ?",
             status,
+            id,
+          );
+        }),
+
+        postRoute: Effect.fn(function* (id, answering, mode) {
+          yield* sql.exec(
+            "UPDATE posts SET answering = ?, mode = ? WHERE id = ?",
+            answering,
+            mode,
             id,
           );
         }),
@@ -529,6 +553,8 @@ export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
       return Posts.of({
         post: (input) => inWorker(stub().postWrite(input)),
         settle: (id, status) => inWorker(stub().postSettle(id, status)),
+        route: (id, answering, mode) =>
+          inWorker(stub().postRoute(id, answering, mode)),
         get: (id) => inWorker(stub().postGet(id)),
         replies: (id) => inWorker(stub().postReplies(id)),
         ancestors: (id) => inWorker(stub().postAncestors(id)),

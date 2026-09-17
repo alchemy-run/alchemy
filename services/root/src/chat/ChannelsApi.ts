@@ -143,6 +143,18 @@ export const ChannelsApi = Effect.gen(function* () {
     const minted = yield* Clock.currentTimeMillis;
     const postId = `p-${minted.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
+    // the message lands BEFORE anything else — the human sees their
+    // post (and the routing indicator) instantly; the judgment, the
+    // graph walk and the dispatch all happen against a post that
+    // already exists
+    yield* posts.post({
+      id: postId,
+      ...(replyTo !== undefined ? { replyTo } : {}),
+      channel: channel.name,
+      author: HUMAN,
+      text,
+    });
+
     // THE GATE (Gate.ts) behind THE SCOUT (Scout.ts): a message on a
     // channel is judged before anyone wakes up — is it worth nothing,
     // a reply in the stream, or a thread, and who answers? When the
@@ -197,14 +209,7 @@ export const ChannelsApi = Effect.gen(function* () {
     // an ignored message still LANDS — it is part of the conversation,
     // it just settles on arrival with nobody dispatched
     if (judged?.disposition === "ignore") {
-      yield* posts.post({
-        id: postId,
-        ...(replyTo !== undefined ? { replyTo } : {}),
-        channel: channel.name,
-        author: HUMAN,
-        text,
-        status: "settled",
-      });
+      yield* posts.settle(postId, "settled");
       return yield* HttpServerResponse.json(
         { post: postId, disposition: "ignore" },
         { status: 202 },
@@ -220,18 +225,14 @@ export const ChannelsApi = Effect.gen(function* () {
     )!;
     const agent = nameOfKey(target.key);
 
-    // the message IS a post, `running` until the exchange resolves —
-    // that status is the ONE pending indicator (no placeholder rows),
-    // and `answering` names who it waits on, so the channel reads
-    // "engineer is typing…" rather than showing an anonymous spinner
-    yield* posts.post({
-      id: postId,
-      ...(replyTo !== undefined ? { replyTo } : {}),
-      channel: channel.name,
-      author: HUMAN,
-      text,
-      answering: agent,
-    });
+    // stamp the routing outcome: `answering` names who the exchange
+    // waits on ("engineer is typing…"), `mode` tells the UI whether to
+    // open a thread shell right away or keep the reply in the stream
+    yield* posts.route(
+      postId,
+      agent,
+      inline || channel.dm === true ? "inline" : "thread",
+    );
 
     // dispatch rides the post's id (idempotent delivery; the agent's
     // `Thread.invocations` sees the post it is answering). Only what
