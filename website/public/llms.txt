@@ -443,20 +443,16 @@ A git server you build in one file, use like any remote, and reshape one block a
 - [All on Cloudflare](https://alchemy.run/git/recipes/cloudflare) — A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
 - [Bytes in S3, hashing on Lambda](https://alchemy.run/git/recipes/cloudflare-aws) — Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 - [Bring your own store](https://alchemy.run/git/recipes/your-own-store) — Bytes have to live somewhere that is neither R2 nor S3. Implement the five operations of Git.BlobStore and provide it in place of the shipped Layers.
+
 ## Stripe
 
 Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.
 
-- [Stripe](https://alchemy.run/stripe) — Products, prices, coupons, customers, payment links, and webhooks as Stack resources — catalog and billing next to the Worker that serves them.
-- [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, and CI.
-- [Part 1: Your First Product](https://alchemy.run/stripe/tutorial/part-1) — Install Alchemy, create a Stack with a Stripe Product, and deploy it.
-- [Part 2: Price on a Worker](https://alchemy.run/stripe/tutorial/part-2) — Put the Product on a Cloudflare Worker, attach a recurring Price and a Coupon, and deploy.
-- [Part 3: Worker Bindings](https://alchemy.run/stripe/tutorial/part-3) — Retrieve the Product over HTTP and create Customers from the Worker.
-- [Part 4: Webhooks](https://alchemy.run/stripe/tutorial/part-4) — Handle customer.created on the Worker with consumeEvents.
-- [Sell from a Worker](https://alchemy.run/stripe/guides/sell-from-a-worker) — Read the catalog and create customers over HTTP from a Cloudflare Worker.
-- [Catalog](https://alchemy.run/stripe/guides/catalog) — Product, Price, Coupon, PromotionCode, and PaymentLink as one checkout catalog.
-- [Handle webhook events](https://alchemy.run/stripe/guides/webhooks) — WebhookEndpoint lifecycle plus consumeEvents — one Effect per Stripe delivery.
-- [Connect](https://alchemy.run/stripe/guides/connect) — Connected accounts, persons, and external accounts — implemented, live-gated on STRIPE_TEST_CONNECT.
+- [Stripe](https://alchemy.run/stripe) — Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
+- [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
+- [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
+- [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
+- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
 
 ## Docker
 
@@ -492,4 +488,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~941 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~950 KB) — only fetch it when you need to locate a specific resource's reference page.
