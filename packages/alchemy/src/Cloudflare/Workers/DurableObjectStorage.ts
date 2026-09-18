@@ -7,6 +7,7 @@ import * as Fiber from "effect/Fiber";
 import * as Scheduler from "effect/Scheduler";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { flushDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import {
   ActiveStorageTransactions,
   type ActiveStorageTransaction,
@@ -85,6 +86,7 @@ function withStorageTransaction<A, E, R>(
                   ),
                   Effect.orDie,
                 ),
+                flushDurableObjectAlarm(storage),
               ),
             )
           : body,
@@ -164,6 +166,8 @@ function withStorageTransaction<A, E, R>(
                   owner: undefined,
                   active: true,
                   rolledBack: false,
+                  alarmTablesEnsured: false,
+                  alarmDirty: false,
                 };
                 currentTransaction = transaction;
                 activeStorageTransactions.set(storage, transaction);
@@ -177,7 +181,10 @@ function withStorageTransaction<A, E, R>(
                   callbackFiber = Effect.runForkWith(callbackContext)(
                     Effect.withFiber((fiber) => {
                       transaction.owner = fiber;
-                      return evaluate(transaction).pipe(Effect.scoped);
+                      return evaluate(transaction).pipe(
+                        Effect.scoped,
+                        Effect.tap(() => flushDurableObjectAlarm(storage)),
+                      );
                     }),
                     { scheduler },
                   );
@@ -412,9 +419,12 @@ const makeDurableObjectTransaction = (
     checkOwner,
     Effect.sync(() => txn.rollback()),
   ),
+  flushAlarm: Effect.Effect<void> = Effect.void,
 ): DurableObjectTransaction => {
   const use = <A>(effect: Effect.Effect<A>) =>
     Effect.andThen(checkOwner, effect);
+  const useAlarm = <A>(effect: Effect.Effect<A>) =>
+    use(Effect.andThen(flushAlarm, effect));
 
   return {
     get: ((
@@ -447,13 +457,13 @@ const makeDurableObjectTransaction = (
       use(Effect.promise(() => txn.delete(keyOrKeys as any, options)))) as any,
     rollback: () => rollback,
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-      use(Effect.promise(() => txn.getAlarm(options))),
+      useAlarm(Effect.promise(() => txn.getAlarm(options))),
     setAlarm: (
       scheduledTime: number | Date,
       options?: cf.DurableObjectSetAlarmOptions,
-    ) => use(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
+    ) => useAlarm(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-      use(Effect.promise(() => txn.deleteAlarm(options))),
+      useAlarm(Effect.promise(() => txn.deleteAlarm(options))),
   };
 };
 
@@ -470,6 +480,8 @@ export const fromDurableObjectStorage = (
   });
   const use = <A>(effect: Effect.Effect<A>) =>
     Effect.andThen(checkOwner, effect);
+  const useAlarm = <A>(effect: Effect.Effect<A>) =>
+    use(Effect.andThen(flushDurableObjectAlarm(storage), effect));
 
   return {
     get: ((
@@ -514,13 +526,14 @@ export const fromDurableObjectStorage = (
         typeof body === "function" ? body(txn) : body,
       ),
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-      use(Effect.promise(() => storage.getAlarm(options))),
+      useAlarm(Effect.promise(() => storage.getAlarm(options))),
     setAlarm: (
       scheduledTime: number | Date,
       options?: cf.DurableObjectSetAlarmOptions,
-    ) => use(Effect.promise(() => storage.setAlarm(scheduledTime, options))),
+    ) =>
+      useAlarm(Effect.promise(() => storage.setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-      use(Effect.promise(() => storage.deleteAlarm(options))),
+      useAlarm(Effect.promise(() => storage.deleteAlarm(options))),
     sync: () => use(Effect.promise(() => storage.sync())),
     sql: fromSqlStorage(storage.sql, checkOwner),
     kv: storage.kv,
