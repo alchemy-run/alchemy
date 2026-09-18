@@ -29,9 +29,43 @@ import {
   GitCommitHorizontal,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const short = (oid: string): string => oid.slice(0, 7);
+
+/** VS Code-size expand chevrons — the built-ins render at full icon
+ *  size (svg width/height attributes); CSS in the shadow root wins
+ *  over presentation attributes. Injected post-mount because the
+ *  component reads its unsafe-css attribute only at construction,
+ *  before React has set it. */
+const TREE_CSS = `
+  [data-icon-name="file-tree-icon-chevron"] {
+    width: 11px;
+    height: 11px;
+    opacity: 0.75;
+  }
+`;
+
+const useVsCodeChevrons = (host: React.RefObject<HTMLDivElement | null>) => {
+  useEffect(() => {
+    const inject = () => {
+      const tree = host.current?.querySelector("file-tree-container");
+      const root = tree?.shadowRoot;
+      if (!root || root.querySelector("#vscode-chevrons")) return root != null;
+      const style = document.createElement("style");
+      style.id = "vscode-chevrons";
+      style.textContent = TREE_CSS;
+      root.append(style);
+      return true;
+    };
+    if (inject()) return;
+    // the custom element upgrades a beat after first paint
+    const timer = setInterval(() => {
+      if (inject()) clearInterval(timer);
+    }, 120);
+    return () => clearInterval(timer);
+  });
+};
 
 export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   const { repo, ref, path } = place;
@@ -107,6 +141,8 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   const crumbs = path.split("/").filter(Boolean);
   const tip = log[0];
   const treeStyles = useTreeStyles();
+  const treeHost = useRef<HTMLDivElement | null>(null);
+  useVsCodeChevrons(treeHost);
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -143,7 +179,10 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
             );
           })}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border/60">
+        <div
+          ref={treeHost}
+          className="min-h-0 flex-1 overflow-y-auto border-t border-border/60"
+        >
           {full === undefined ? (
             <div className="px-3 py-4 text-[12px] text-muted-foreground">
               loading the tree…
