@@ -35,10 +35,12 @@ test.skipIf(process.env.CELLD_ECS_FLEET_LIVE !== "1")(
     : "dedicated EC2 Celld publishes through private management and executes a fenced runsc container",
   Core.withProviders(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Destroying previous CelldEc2Live compute; persistent data is retained",
-      );
-      yield* stack.destroy();
+      if (cleanupOnly || process.env.CELLD_ECS_FLEET_RESUME !== "1") {
+        yield* Effect.logInfo(
+          "Destroying previous CelldEc2Live compute; persistent data is retained",
+        );
+        yield* stack.destroy();
+      }
       if (cleanupOnly) return;
       const vpcs = yield* ec2.describeVpcs({
         Filters: [{ Name: "is-default", Values: ["true"] }],
@@ -88,10 +90,20 @@ test.skipIf(process.env.CELLD_ECS_FLEET_LIVE !== "1")(
       yield* Effect.logInfo({ phase: "activated", ...deployed });
       const host = deployed.hostState!;
       expect(host.capabilities).toEqual({ containers: true, sandbox: true });
-      const services = yield* ecs.describeServices({
-        cluster: host.clusterArn,
-        services: [host.serviceName],
-      });
+      const services = yield* ecs
+        .describeServices({
+          cluster: host.clusterArn,
+          services: [host.serviceName],
+        })
+        .pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            times: 8,
+            until: (response) =>
+              response.services?.[0]?.runningCount === 1 &&
+              response.services[0].pendingCount === 0,
+          }),
+        );
       expect(services.services?.[0]?.desiredCount).toBe(1);
       expect(services.services?.[0]?.runningCount).toBe(1);
       const groups = yield* autoscaling.describeAutoScalingGroups({
@@ -157,6 +169,12 @@ test.skipIf(process.env.CELLD_ECS_FLEET_LIVE !== "1")(
       expect(report.stdout.toLowerCase()).toContain("gvisor");
       expect(report.stdout).toContain("FENCE_BLOCKED");
       expect(report.stdout).not.toContain("FENCE_OPEN");
+      if (process.env.NO_DESTROY) {
+        yield* Effect.logInfo(
+          "Retaining the verified EC2 probe for inspection",
+        );
+        return;
+      }
       yield* stack.destroy();
       yield* Effect.logInfo({
         phase: "destroyed",

@@ -8,6 +8,7 @@ export * as AdoptPolicy from "./AdoptPolicy.ts";
 export * from "./AI/index.ts";
 export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
+export * from "./Callback.ts";
 export {
   Service as BindingService,
   type ServiceLike as BindingServiceLike,

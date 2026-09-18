@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.78",
+  "version": "2.0.0-beta.79",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -263,6 +263,18 @@
       "worker": "./src/Fly/*.ts",
       "import": "./lib/Fly/*.js"
     },
+    "./ACME": {
+      "types": "./lib/ACME/index.d.ts",
+      "bun": "./src/ACME/index.ts",
+      "worker": "./src/ACME/index.ts",
+      "import": "./lib/ACME/index.js"
+    },
+    "./ACME/*": {
+      "types": "./lib/ACME/*.d.ts",
+      "bun": "./src/ACME/*.ts",
+      "worker": "./src/ACME/*.ts",
+      "import": "./lib/ACME/*.js"
+    },
     "./Railway": {
       "types": "./lib/Railway/index.d.ts",
       "bun": "./src/Railway/index.ts",
@@ -466,7 +478,8 @@
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
-    "@aws-sdk/credential-providers": "catalog:",
+    "@distilled.cloud/acme": "workspace:*",
+    "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/celld": "workspace:*",
@@ -487,7 +500,6 @@
     "@octokit/webhooks": "catalog:",
     "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "aws4fetch": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "libsodium-wrappers": "catalog:",
@@ -495,7 +507,6 @@
     "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:",
-    "undici": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {

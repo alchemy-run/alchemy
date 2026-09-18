@@ -587,6 +587,16 @@ export const makeFetchRpcStub = <Shape>(options: {
                 ),
               );
 
+            if (response.status < 200 || response.status >= 300) {
+              return yield* Effect.fail(
+                new RpcCallError({
+                  method: prop,
+                  cause: `HTTP ${response.status}`,
+                  status: response.status,
+                }),
+              );
+            }
+
             const headers = response.headers as Record<
               string,
               string | undefined

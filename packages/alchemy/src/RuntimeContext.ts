@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "./Http.ts";
+import type { CallbackFactory } from "./Callback.ts";
 import type { Output } from "./Output.ts";
 
 export interface BaseRuntimeContext {
@@ -28,6 +29,8 @@ export interface BaseRuntimeContext {
    * the impl's layers have built.
    */
   foldProps?(props: Record<string, unknown>): Record<string, unknown>;
+  /** Register a durable callback in the current host instance, when supported. */
+  makeCallback?: CallbackFactory;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },

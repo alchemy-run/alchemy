@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 export const withBuilder =
-  (prefix: string) =>
+  (prefix: string, options?: { attestations?: boolean }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const name = `${prefix}-${yield* Stage}`;
@@ -26,7 +26,9 @@ export const withBuilder =
                 attestations: process.env.BUILDX_NO_DEFAULT_ATTESTATIONS,
               };
               process.env.BUILDX_BUILDER = name;
-              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = "false";
+              process.env.BUILDX_NO_DEFAULT_ATTESTATIONS = String(
+                options?.attestations === false,
+              );
               return previous;
             }),
             () =>

@@ -33,9 +33,6 @@ catalogs:
     '@astrojs/underscore-redirects':
       specifier: 1.0.3
       version: 1.0.3
-    '@aws-sdk/credential-providers':
-      specifier: ^3.0.0
-      version: 3.1095.0
     '@aws-sdk/types':
       specifier: ^3.974.3
       version: 3.974.3
@@ -270,9 +267,6 @@ catalogs:
     astro:
       specifier: 7.3.1
       version: 7.3.1
-    aws4fetch:
-      specifier: ^1.0.20
-      version: 1.0.20
     better-auth:
       specifier: ^1.6.2
       version: 1.6.25
@@ -447,9 +441,6 @@ catalogs:
     typescript-api:
       specifier: npm:typescript@7.1.0-dev.20260905.1
       version: 7.1.0-dev.20260905.1
-    undici:
-      specifier: ^7.16.0
-      version: 7.29.0
     unenv:
       specifier: ^2.0.0-rc.24
       version: 2.0.0-rc.24
@@ -1518,7 +1509,7 @@ importers:
         version: link:../../packages/better-auth
       '@better-auth/api-key':
         specifier: 1.6.25
-        version: 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(better-auth@1.6.25(8186a587201998dcedd96cacfcb67dd2))(better-call@1.3.7(zod@4.4.3))
+        version: 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(better-auth@1.6.25(4a076b68344191d80e5e9153d389f353))(better-call@1.3.7(zod@4.4.3))
       '@pierre/diffs':
         specifier: ^1.3.5
         version: 1.4.2(@shikijs/themes@4.4.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -1527,7 +1518,7 @@ importers:
         version: link:../../packages/alchemy
       better-auth:
         specifier: 'catalog:'
-        version: 1.6.25(8186a587201998dcedd96cacfcb67dd2)
+        version: 1.6.25(4a076b68344191d80e5e9153d389f353)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -1934,7 +1925,7 @@ importers:
         version: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       vite-plugin-vue-devtools:
         specifier: 'catalog:'
-        version: 8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2))
+        version: 8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2))
       vue-tsc:
         specifier: 'catalog:'
         version: 3.3.9(typescript@7.0.2)
@@ -2377,7 +2368,7 @@ importers:
         version: link:../../packages/alchemy
       better-auth:
         specifier: 'catalog:'
-        version: 1.6.25(8186a587201998dcedd96cacfcb67dd2)
+        version: 1.6.25(4a076b68344191d80e5e9153d389f353)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -2401,7 +2392,7 @@ importers:
         version: link:../../packages/alchemy
       better-auth:
         specifier: 'catalog:'
-        version: 1.6.25(8186a587201998dcedd96cacfcb67dd2)
+        version: 1.6.25(4a076b68344191d80e5e9153d389f353)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -3706,7 +3697,7 @@ importers:
         version: 4.0.0-rc.115
       nitro:
         specifier: 'catalog:'
-        version: 3.0.260415-beta(d534980e2ffd67089bc16d86210c88b2)
+        version: 3.0.260415-beta(9039472fe2b52e3b275548331d32ee07)
       pg:
         specifier: 'catalog:'
         version: 8.23.0
@@ -4942,9 +4933,9 @@ importers:
       '@alchemy.run/sigil':
         specifier: 'catalog:'
         version: 0.0.0-alpha.11(@types/react@19.3.0)(react-devtools-core@7.0.1)
-      '@aws-sdk/credential-providers':
-        specifier: 'catalog:'
-        version: 3.1095.0
+      '@distilled.cloud/acme':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/acme
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -4981,6 +4972,9 @@ importers:
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
+      '@distilled.cloud/zerossl':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/zerossl
       '@effect/sql-d1':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)
@@ -5005,9 +4999,6 @@ importers:
       '@types/aws-lambda':
         specifier: 'catalog:'
         version: 8.10.162
-      aws4fetch:
-        specifier: 'catalog:'
-        version: 1.0.20
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
@@ -5035,9 +5026,6 @@ importers:
       tinyglobby:
         specifier: 'catalog:'
         version: 0.2.17
-      undici:
-        specifier: 'catalog:'
-        version: 7.29.0
       vite:
         specifier: 'catalog:'
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
@@ -5176,7 +5164,7 @@ importers:
         version: 5.2.1
       mongodb:
         specifier: 'catalog:'
-        version: 6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9)
+        version: 6.21.0(socks@2.8.9)
       mysql2:
         specifier: 3.24.2
         version: 3.24.2(@types/node@26.2.0)
@@ -5300,7 +5288,7 @@ importers:
         version: link:../alchemy-test
       better-auth:
         specifier: 'catalog:'
-        version: 1.6.25(8186a587201998dcedd96cacfcb67dd2)
+        version: 1.6.25(4a076b68344191d80e5e9153d389f353)
       drizzle-orm:
         specifier: 1.0.0-rc.5-ab785fc
         version: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3)
@@ -8300,10 +8288,6 @@ packages:
     resolution: {integrity: sha512-I88Iov89NVmjSmJLKSv7Cn9M2J+a2942OkA8nZCbz+sl4ZeY4zEOcoLOrbt1GRfQ8zEQKnjAJdXixA3J/p1fDQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-cognito-identity@3.972.67':
-    resolution: {integrity: sha512-0NKxn0U3I9qAxou30RlaezVnrhOzCYOkBqBethp8PmHJ7f1dep6AVMQVTrGUchB8bRjubi3MiVVql9+lyDOzBQ==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/credential-provider-env@3.972.68':
     resolution: {integrity: sha512-2a20A/IdNOwUvaDq91iqqS7BA0XlNMfW3iLGZGZLJv0EbUqhSxB0PIx4rQQqssvWj1uXImb3/UCCdHz/+1dOiA==}
     engines: {node: '>=20.0.0'}
@@ -8334,10 +8318,6 @@ packages:
 
   '@aws-sdk/credential-provider-web-identity@3.972.74':
     resolution: {integrity: sha512-0YfczxGXF3RjGj8z7QG/Ho2HnLGKDHfPSHiTs47UU1U/+mmwISDN+rvGKt2zh+3FX8NdT4xd95LGBGyhQw2dgQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-providers@3.1095.0':
-    resolution: {integrity: sha512-hcL4iILqep+AieTjJ+eYpBoThcirhlr0rzOqyDKSlFeV15qy8FnvwZFlNmVUFFwHnZjvQz5M9MsRe4XbC6eDfw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/dynamodb-codec@3.973.42':
@@ -21762,14 +21742,6 @@ snapshots:
       bowser: 2.14.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-cognito-identity@3.972.67':
-    dependencies:
-      '@aws-sdk/nested-clients': 3.997.42
-      '@aws-sdk/types': 3.974.3
-      '@smithy/core': 3.34.0
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
   '@aws-sdk/credential-provider-env@3.972.68':
     dependencies:
       '@aws-sdk/core': 3.977.7
@@ -21851,25 +21823,6 @@ snapshots:
       '@aws-sdk/nested-clients': 3.997.42
       '@aws-sdk/types': 3.974.3
       '@smithy/core': 3.34.0
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-providers@3.1095.0':
-    dependencies:
-      '@aws-sdk/core': 3.977.7
-      '@aws-sdk/credential-provider-cognito-identity': 3.972.67
-      '@aws-sdk/credential-provider-env': 3.972.68
-      '@aws-sdk/credential-provider-http': 3.972.70
-      '@aws-sdk/credential-provider-ini': 3.973.13
-      '@aws-sdk/credential-provider-login': 3.972.75
-      '@aws-sdk/credential-provider-node': 3.972.79
-      '@aws-sdk/credential-provider-process': 3.972.68
-      '@aws-sdk/credential-provider-sso': 3.973.12
-      '@aws-sdk/credential-provider-web-identity': 3.972.74
-      '@aws-sdk/nested-clients': 3.997.42
-      '@aws-sdk/types': 3.974.3
-      '@smithy/core': 3.34.0
-      '@smithy/credential-provider-imds': 4.5.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -22129,19 +22082,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-create-class-features-plugin@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/helper-replace-supers': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/traverse': 7.29.8(supports-color@10.2.2)
-      semver: 6.3.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-globals@7.29.7': {}
 
   '@babel/helper-member-expression-to-functions@7.29.7(supports-color@10.2.2)':
@@ -22195,15 +22135,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/traverse': 7.29.8(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-skip-transparent-expression-wrappers@7.29.7(supports-color@10.2.2)':
     dependencies:
       '@babel/traverse': 7.29.8(supports-color@10.2.2)
@@ -22242,36 +22173,20 @@ snapshots:
       '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
     transitivePeerDependencies:
       - supports-color
-    optional: true
-
-  '@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - supports-color
 
   '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
-    optional: true
 
-  '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-syntax-import-attributes@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-syntax-import-attributes@7.29.7(@babel/core@7.29.7)':
+  '@babel/plugin-syntax-import-meta@7.10.4(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-import-meta@7.10.4(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
@@ -22283,15 +22198,11 @@ snapshots:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
+    optional: true
 
   '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
@@ -22320,17 +22231,6 @@ snapshots:
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
       '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@10.2.2)
-      '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -22421,11 +22321,11 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
 
-  '@better-auth/api-key@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(better-auth@1.6.25(8186a587201998dcedd96cacfcb67dd2))(better-call@1.3.7(zod@4.4.3))':
+  '@better-auth/api-key@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(better-auth@1.6.25(4a076b68344191d80e5e9153d389f353))(better-call@1.3.7(zod@4.4.3))':
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
-      better-auth: 1.6.25(8186a587201998dcedd96cacfcb67dd2)
+      better-auth: 1.6.25(4a076b68344191d80e5e9153d389f353)
       better-call: 1.3.7(zod@4.4.3)
       zod: 4.4.3
 
@@ -22462,12 +22362,12 @@ snapshots:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
 
-  '@better-auth/mongo-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(mongodb@6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9))':
+  '@better-auth/mongo-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(mongodb@6.21.0(socks@2.8.9))':
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
       '@better-auth/utils': 0.4.2
     optionalDependencies:
-      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9)
+      mongodb: 6.21.0(socks@2.8.9)
 
   '@better-auth/prisma-adapter@1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)':
     dependencies:
@@ -29196,19 +29096,19 @@ snapshots:
 
   '@vue/babel-helper-vue-transform-on@2.0.1': {}
 
-  '@vue/babel-plugin-jsx@1.5.0(@babel/core@7.29.7)':
+  '@vue/babel-plugin-jsx@1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@babel/helper-module-imports': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
       '@babel/template': 7.29.7
       '@babel/traverse': 7.29.8(supports-color@10.2.2)
       '@babel/types': 7.29.8
       '@vue/babel-helper-vue-transform-on': 1.5.0
-      '@vue/babel-plugin-resolve-type': 1.5.0(@babel/core@7.29.7)
+      '@vue/babel-plugin-resolve-type': 1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
       '@vue/shared': 3.5.41
     optionalDependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -29228,10 +29128,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vue/babel-plugin-resolve-type@1.5.0(@babel/core@7.29.7)':
+  '@vue/babel-plugin-resolve-type@1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@babel/code-frame': 7.29.7
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/helper-module-imports': 7.29.7(supports-color@10.2.2)
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/parser': 7.29.8
@@ -30010,13 +29910,13 @@ snapshots:
 
   before-after-hook@4.0.0: {}
 
-  better-auth@1.6.25(8186a587201998dcedd96cacfcb67dd2):
+  better-auth@1.6.25(4a076b68344191d80e5e9153d389f353):
     dependencies:
       '@better-auth/core': 1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2)
       '@better-auth/drizzle-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))
       '@better-auth/kysely-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(kysely@0.29.5)
       '@better-auth/memory-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
-      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(mongodb@6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9))
+      '@better-auth/mongo-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(mongodb@6.21.0(socks@2.8.9))
       '@better-auth/prisma-adapter': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)
       '@better-auth/telemetry': 1.6.25(@better-auth/core@1.6.25(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@cloudflare/workers-types@5.20260901.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.8)(kysely@0.29.5)(nanostores@1.4.2))(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)
       '@better-auth/utils': 0.4.2
@@ -30035,7 +29935,7 @@ snapshots:
       better-sqlite3: 12.11.1
       drizzle-kit: 1.0.0-rc.5-ab785fc
       drizzle-orm: 1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3)
-      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9)
+      mongodb: 6.21.0(socks@2.8.9)
       mysql2: 3.24.2(@types/node@26.2.0)
       next: 16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.62.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       pg: 8.23.0
@@ -33312,13 +33212,12 @@ snapshots:
       '@types/whatwg-url': 11.0.5
       whatwg-url: 14.2.0
 
-  mongodb@6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9):
+  mongodb@6.21.0(socks@2.8.9):
     dependencies:
       '@mongodb-js/saslprep': 1.4.13
       bson: 6.10.4
       mongodb-connection-string-url: 3.0.2
     optionalDependencies:
-      '@aws-sdk/credential-providers': 3.1095.0
       socks: 2.8.9
 
   mri@1.2.0: {}
@@ -33434,7 +33333,7 @@ snapshots:
 
   nf3@0.3.23: {}
 
-  nitro@3.0.260415-beta(d534980e2ffd67089bc16d86210c88b2):
+  nitro@3.0.260415-beta(9039472fe2b52e3b275548331d32ee07):
     dependencies:
       consola: 3.4.2
       crossws: 0.4.10(srvx@0.11.22)
@@ -33449,7 +33348,7 @@ snapshots:
       rolldown: 1.2.5
       srvx: 0.11.22
       unenv: 2.0.0-rc.24
-      unstorage: 2.0.0-alpha.7(aws4fetch@1.0.20)(chokidar@5.0.0)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0)))(ioredis@5.11.1(supports-color@10.2.2))(lru-cache@11.5.2)(mongodb@6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9))(ofetch@2.0.0-alpha.3)
+      unstorage: 2.0.0-alpha.7(aws4fetch@1.0.20)(chokidar@5.0.0)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0)))(ioredis@5.11.1(supports-color@10.2.2))(lru-cache@11.5.2)(mongodb@6.21.0(socks@2.8.9))(ofetch@2.0.0-alpha.3)
     optionalDependencies:
       dotenv: 17.4.2
       giget: 3.3.1
@@ -37050,14 +36949,14 @@ snapshots:
       db0: 0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0))
       ioredis: 5.11.1(supports-color@10.2.2)
 
-  unstorage@2.0.0-alpha.7(aws4fetch@1.0.20)(chokidar@5.0.0)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0)))(ioredis@5.11.1(supports-color@10.2.2))(lru-cache@11.5.2)(mongodb@6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9))(ofetch@2.0.0-alpha.3):
+  unstorage@2.0.0-alpha.7(aws4fetch@1.0.20)(chokidar@5.0.0)(db0@0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0)))(ioredis@5.11.1(supports-color@10.2.2))(lru-cache@11.5.2)(mongodb@6.21.0(socks@2.8.9))(ofetch@2.0.0-alpha.3):
     optionalDependencies:
       aws4fetch: 1.0.20
       chokidar: 5.0.0
       db0: 0.3.4(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(better-sqlite3@12.11.1)(drizzle-orm@1.0.0-rc.5-ab785fc(@cloudflare/workers-types@5.20260901.1)(@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-mysql2@4.0.0-rc.115(@types/node@26.2.0)(effect@4.0.0-rc.115))(@effect/sql-pg@4.0.0-rc.115(effect@4.0.0-rc.115))(@effect/sql-sqlite-do@4.0.0-rc.115(effect@4.0.0-rc.115))(@electric-sql/pglite@0.3.15)(@libsql/client@0.17.4)(@neondatabase/serverless@1.1.0)(@types/pg@8.20.0)(arktype@2.2.3)(better-sqlite3@12.11.1)(bun-types@1.3.14)(effect@4.0.0-rc.115)(mysql2@3.24.2(@types/node@26.2.0))(pg@8.23.0)(valibot@1.2.0(typescript@7.0.2))(zod@4.4.3))(mysql2@3.24.2(@types/node@26.2.0))
       ioredis: 5.11.1(supports-color@10.2.2)
       lru-cache: 11.5.2
-      mongodb: 6.21.0(@aws-sdk/credential-providers@3.1095.0)(socks@2.8.9)
+      mongodb: 6.21.0(socks@2.8.9)
       ofetch: 2.0.0-alpha.3
 
   untun@0.2.2: {}
@@ -37344,7 +37243,7 @@ snapshots:
       - supports-color
     optional: true
 
-  vite-plugin-vue-devtools@8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2)):
+  vite-plugin-vue-devtools@8.2.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(vue@3.6.0-beta.17(typescript@7.0.2)):
     dependencies:
       '@vue/devtools-core': 8.2.1(vue@3.6.0-beta.17(typescript@7.0.2))
       '@vue/devtools-kit': 8.2.1
@@ -37352,20 +37251,20 @@ snapshots:
       sirv: 3.0.2
       vite: 8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
       vite-plugin-inspect: 11.4.1(@nuxt/kit@4.5.1(magic-string@1.2.3)(magicast@0.5.4)(oxc-parser@0.141.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.2.5)(rollup@4.62.4)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))(webpack@5.109.2(cssnano@8.0.5(postcss@8.5.26))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.26))))(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
-      vite-plugin-vue-inspector: 6.0.0(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
+      vite-plugin-vue-inspector: 6.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0))
       vue: 3.6.0-beta.17(typescript@7.0.2)
     transitivePeerDependencies:
       - '@nuxt/kit'
       - supports-color
 
-  vite-plugin-vue-inspector@6.0.0(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)):
+  vite-plugin-vue-inspector@6.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)):
     dependencies:
-      '@babel/core': 7.29.7
-      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-syntax-import-attributes': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-syntax-import-meta': 7.10.4(@babel/core@7.29.7)
-      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7)
-      '@vue/babel-plugin-jsx': 1.5.0(@babel/core@7.29.7)
+      '@babel/core': 7.29.7(supports-color@10.2.2)
+      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
+      '@babel/plugin-syntax-import-attributes': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
+      '@babel/plugin-syntax-import-meta': 7.10.4(@babel/core@7.29.7(supports-color@10.2.2))
+      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
+      '@vue/babel-plugin-jsx': 1.5.0(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2)
       '@vue/compiler-dom': 3.5.41
       kolorist: 1.8.0
       magic-string: 0.30.21

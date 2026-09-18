@@ -208,6 +208,8 @@ export type FleetClass = {
  *   graph generation, not cron delivery or completion of previously admitted work.
  * - Persistent data and ownership records are retained by default. Removing
  *   declarations is not authorization to erase data or transfer ownership.
+ * - Keep Durable Object class names stable. Class history does not migrate
+ *   stored data between renamed classes.
  * - Containers and Sandbox require EC2 capacity. Fargate rejects them. Changing
  *   or removing cached container specifications requires explicit retirement;
  *   an isolate reload alone is insufficient.

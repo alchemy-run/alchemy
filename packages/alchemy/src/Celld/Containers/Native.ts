@@ -147,7 +147,11 @@ export interface ContainerClient {
   setInactivityTimeout(
     durationMs: number,
   ): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** The request scope terminates an uncollected process on exit. */
+  /**
+   * The request scope terminates an uncollected process on exit. Native startup
+   * acknowledgement precedes Docker creation; await port readiness before the
+   * first exec. A failed exec is never automatically replayed.
+   */
   exec(
     command: [string, ...string[]],
     options?: ContainerExecOptions,

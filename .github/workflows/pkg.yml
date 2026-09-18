@@ -72,6 +72,22 @@ jobs:
       - name: Build packages
         run: pnpm build:pkg
 
+      - name: Pack CLI release artifacts
+        env:
+          ALCHEMY_CLI_PACKAGES: ${{ runner.temp }}/cli-packages
+        run: |
+          mkdir -p "$ALCHEMY_CLI_PACKAGES"
+          pnpm --filter-prod 'alchemy...' --recursive pack --pack-destination "$ALCHEMY_CLI_PACKAGES"
+
+      - name: Test packed CLI outside the checkout
+        env:
+          ALCHEMY_CLI_PACKAGES: ${{ runner.temp }}/cli-packages
+        run: |
+          test -d "$ALCHEMY_CLI_PACKAGES"
+          for manager in npm pnpm bun; do
+            ALCHEMY_CLI_PACKAGE_MANAGER="$manager" timeout 240 pnpm test test/Cli/package.test.ts --retry 0 --sequential
+          done
+
       # Keep the directory lists in sync with the `build:pkg` script.
       - name: Pack packages
         id: pack

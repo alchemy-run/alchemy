@@ -3,7 +3,10 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { fromDurableObjectState as fromNativeState } from "../../Workers/Workerd/DurableObjectState.ts";
-import type { DurableObjectStorage } from "./DurableObjectStorage.ts";
+import {
+  fromDurableObjectStorage,
+  type DurableObjectStorage,
+} from "./DurableObjectStorage.ts";
 import type { WebSocket } from "./WebSocket.ts";
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
@@ -65,4 +68,7 @@ export class DurableObjectState extends Context.Service<
 
 export const fromDurableObjectState = (
   state: cf.DurableObjectState,
-): DurableObjectStateService => fromNativeState(state);
+): DurableObjectStateService => ({
+  ...fromNativeState(state),
+  storage: fromDurableObjectStorage(state.storage),
+});

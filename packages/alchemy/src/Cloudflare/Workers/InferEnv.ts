@@ -50,9 +50,11 @@ export type InferEnv<W> =
     ? InferEnv<A>
     : W extends Worker<any>
       ? InferEnv<Exclude<W["Props"]["env"], undefined>>
-      : {
-          [k in keyof W]: GetBindingType<W[k]>;
-        };
+      : W extends { readonly "~alchemy/WorkerEnv": infer Env }
+        ? InferEnv<Env>
+        : {
+            [k in keyof W]: GetBindingType<W[k]>;
+          };
 
 export type GetBindingType<T> =
   // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).

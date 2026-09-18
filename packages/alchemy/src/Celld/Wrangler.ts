@@ -1,15 +1,8 @@
 /**
- * Wrangler-project generation for Celld fleet deploys.
- *
- * `celld deploy` consumes a wrangler.jsonc project and REJECTS unknown keys,
- * so {@link renderWranglerJson} emits only v0.5-supported deployment keys.
- *
- * Durable Object class migrations follow the wrangler convention: the config
- * carries the FULL migration history (each entry tagged `v1`, `v2`, …), and
- * the runtime applies whatever tags it hasn't seen. The history and the
- * resulting `logicalId → className` map are persisted on the Fleet's own
- * Attributes — the durable metadata store Cloudflare Workers had to fake
- * with script tags.
+ * Durable Object class bookkeeping and legacy configuration serialization.
+ * Worker attributes retain the class map and history. Native API publication
+ * uses DeploymentConfig directly; this module does not invoke a deployment CLI
+ * or migrate persisted object data between class names.
  *
  * @internal not exported from the Celld barrel.
  */
@@ -64,9 +57,9 @@ export const computeFleetMigrations = ({
   oldClasses = {},
   current,
 }: {
-  /** Persisted migration history from the Fleet's Attributes. */
+  /** Persisted class history from the Worker's attributes. */
   history?: readonly CelldMigration[];
-  /** Persisted `logicalId → className` map from the Fleet's Attributes. */
+  /** Persisted `logicalId → className` map from the Worker's attributes. */
   oldClasses?: Record<string, string>;
   /** The Durable Object bindings declared by this deploy. */
   current: readonly FleetDurableObjectBinding[];

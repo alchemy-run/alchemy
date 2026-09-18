@@ -18,7 +18,7 @@ import type { Self } from "../Self.ts";
 import type { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { WorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { deepEqual, isResolved, stripEffects } from "../Diff.ts";
 import type { DnsRecordProps, DnsService } from "../Dns.ts";
 import { safeHttpEffect, type HttpEffect } from "../Http.ts";
 import type { Input, InputProps } from "../Input.ts";
@@ -684,14 +684,9 @@ export const CelldWorkerProvider = () =>
   Provider.succeed(Worker, {
     read: ({ output }) => Effect.succeed(output),
 
-    // The Props don't capture the code itself, so the default
-    // prop-comparison misses pure code edits — compare the bundle hash
-    // against the persisted one. Everything else is prop-visible and
-    // handled by the default update logic. The fleet's connection
-    // material is stable across its updates, so `news` resolves fully
-    // whenever the fleet itself is not being replaced.
-    diff: Effect.fn(function* ({ id, news, output, newBindings }) {
-      if (output === undefined || !isResolved(news)) {
+    // Source changes are not prop-visible; compare the bundle and asset hashes.
+    diff: Effect.fn(function* ({ id, news: desired, output, newBindings }) {
+      if (output === undefined) {
         return;
       }
       // Image tags, Dockerfile contexts, and generated programs can change outside Worker props.
@@ -702,6 +697,10 @@ export const CelldWorkerProvider = () =>
       ) {
         return { action: "update" } as const;
       }
+      // Export constructors are runtime Effects, not unresolved deployment inputs.
+      // Keep their class metadata for the virtual entry, as persisted props do.
+      const news = stripEffects(desired);
+      if (!isResolved(news)) return;
       const bundle = yield* buildBundle(id, news);
       const assets = news.assets
         ? yield* readAssets(news.main, news.assets, {

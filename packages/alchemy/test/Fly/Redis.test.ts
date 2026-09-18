@@ -4,6 +4,7 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -81,6 +82,7 @@ test.provider(
       expect(created.name.length).toBeGreaterThan(0);
       expect(created.primaryRegion).toEqual("iad");
       expect(created.planName).toEqual(expect.any(String));
+      expect(Redacted.isRedacted(created.url)).toEqual(true);
 
       const fetched = yield* Fly.findRedisAddOn({
         id: created.redisId,
@@ -107,6 +109,7 @@ test.provider(
       expect(updated.redisId).toEqual(created.redisId);
       expect(updated.name).toEqual(created.name);
       expect(updated.eviction).toEqual(true);
+      expect(Redacted.isRedacted(updated.url)).toEqual(true);
 
       const refetched = yield* Fly.findRedisAddOn({
         id: updated.redisId,
@@ -254,10 +257,13 @@ test.provider(
               ? res.json
               : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
-          Effect.map((value) => value as { pong: boolean }),
+          Effect.map(
+            (value) => value as { pong: boolean; hasOutputUrl: boolean },
+          ),
         ),
       );
       expect(ping.pong).toEqual(true);
+      expect(ping.hasOutputUrl).toEqual(true);
 
       const written = yield* untilOk(
         HttpClient.get(`${deployed.api.url}/set`).pipe(

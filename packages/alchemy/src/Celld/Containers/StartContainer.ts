@@ -107,6 +107,9 @@ export const startContainer = <Self, Shape extends object, Req>(
 /**
  * Bind an image to the current Durable Object without starting I/O at init.
  * Port access and exec start lazily; monitor is explicitly request-scoped.
+ * Celld v0.5 reports running before Docker creation completes. Await
+ * `getTcpPort(port)` readiness before the first `exec`; exec itself is not
+ * retried. Portless images have no native startup-readiness signal.
  *
  * ### Attaching a Container
  * **Example:** Provide the class used by the Durable Object init
