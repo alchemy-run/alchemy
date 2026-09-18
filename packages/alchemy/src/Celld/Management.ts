@@ -15,6 +15,8 @@ import { deepEqual } from "../Diff.ts";
 import {
   APPLICATION_GRAPH_BINDING_PREFIX,
   APPLICATION_GRAPH_METADATA,
+  APPLICATION_OPERATOR_CLASSES,
+  APPLICATION_OPERATOR_FEATURES,
 } from "./ApplicationGraph.ts";
 import { canonicalJson } from "./Deployment/Objects.ts";
 import {
@@ -426,6 +428,7 @@ const PublicationReceipt = Schema.Struct({
 });
 const GraphMarker = Schema.Struct({
   schemaVersion: Schema.Literal(1),
+  operatorClasses: Schema.Array(Schema.String),
   revision: Schema.String,
   candidates: Schema.Array(
     Schema.Struct({ scriptName: Schema.String, key: Schema.String }),
@@ -536,6 +539,7 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
       ),
     ];
     if (
+      !deepEqual(marker.operatorClasses, APPLICATION_OPERATOR_CLASSES) ||
       marker.revision !== (yield* hashJson(marker.candidates)) ||
       marker.candidates.length !== ordered.length ||
       marker.candidates.some(
@@ -572,6 +576,7 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
           "Celld source candidate identity does not match its content.",
         );
       let expected = source;
+      let actual = ordered[index]!.manifest;
       if (index === 0) {
         const sourceMetadata = yield* decode(
           Schema.Record(Schema.String, Schema.Unknown),
@@ -593,8 +598,30 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
             "configuration",
             "Celld source candidate uses reserved Application graph metadata.",
           );
+        // Class and feature ordering is immaterial; duplicates or extra entries still fail.
+        actual = {
+          ...actual,
+          do_classes: [...actual.do_classes].sort(),
+          sqlite_classes: [...actual.sqlite_classes].sort(),
+          required_features: [...(actual.required_features ?? [])].sort(),
+        };
         expected = {
           ...source,
+          do_classes: [
+            ...new Set([...source.do_classes, ...APPLICATION_OPERATOR_CLASSES]),
+          ].sort(),
+          sqlite_classes: [
+            ...new Set([
+              ...source.sqlite_classes,
+              ...APPLICATION_OPERATOR_CLASSES,
+            ]),
+          ].sort(),
+          required_features: [
+            ...new Set([
+              ...(source.required_features ?? []),
+              ...APPLICATION_OPERATOR_FEATURES,
+            ]),
+          ].sort(),
           version: graph.root.pointer.version,
           raw_metadata: {
             ...sourceMetadata,
@@ -610,7 +637,7 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
           },
         };
       }
-      if (!deepEqual(expected, ordered[index]!.manifest))
+      if (!deepEqual(expected, actual))
         return yield* fail(
           "drift",
           "Celld graph differs from its source candidate manifests or native service bindings.",

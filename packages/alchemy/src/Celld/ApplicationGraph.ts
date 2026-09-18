@@ -12,6 +12,12 @@ import {
 
 export const APPLICATION_GRAPH_METADATA = "alchemy_application";
 export const APPLICATION_GRAPH_BINDING_PREFIX = "__ALCHEMY_APP_WORKER_";
+export const APPLICATION_OPERATOR_CLASSES = [
+  "__D1Database",
+  "__KvNamespace",
+  "__Queue",
+];
+export const APPLICATION_OPERATOR_FEATURES = ["d1-v1", "kv-v1", "queues-v1"];
 
 /** Bind secondary Worker and schedule revisions into the root's native content identity. */
 export const prepareApplicationGraph = (
@@ -86,15 +92,8 @@ export const prepareApplicationGraph = (
       }),
     );
     const builtin = (name: string) =>
-      ["__D1Database", "__KvNamespace", "__Queue"].includes(name) ||
+      APPLICATION_OPERATOR_CLASSES.includes(name) ||
       name.startsWith("__Workflow.");
-    const systemClasses: ("d1" | "kv" | "queues")[] = [];
-    if (root.manifest.do_classes.includes("__D1Database"))
-      systemClasses.push("d1");
-    if (root.manifest.do_classes.includes("__KvNamespace"))
-      systemClasses.push("kv");
-    if (root.manifest.do_classes.includes("__Queue"))
-      systemClasses.push("queues");
     const prepared = yield* prepareDeployment({
       scriptName: root.scriptName,
       mainModule: root.manifest.main_module,
@@ -103,6 +102,7 @@ export const prepareApplicationGraph = (
         ...metadata,
         [APPLICATION_GRAPH_METADATA]: {
           schemaVersion: 1,
+          operatorClasses: APPLICATION_OPERATOR_CLASSES,
           revision,
           candidates,
         },
@@ -125,7 +125,8 @@ export const prepareApplicationGraph = (
       containers: root.manifest.containers,
       fenceImage: root.manifest.fence_image,
       containerArtifacts: root.containerArtifacts,
-      systemClasses,
+      // Standalone resources outlive Worker bindings; only the root needs fallback operators.
+      systemClasses: ["d1", "kv", "queues"],
     });
     return { root: prepared, workers: ordered, revision };
   });

@@ -15,7 +15,7 @@ export class ContainerError extends Data.TaggedError("Celld.ContainerError")<{
 }> {}
 
 export interface ContainerStartupOptions {
-  /** Command replacing the image entrypoint. */
+  /** Command replacing the image CMD; an image ENTRYPOINT remains in effect. */
   entrypoint?: string[];
   /** Environment visible to the process. */
   env?: Record<string, string>;

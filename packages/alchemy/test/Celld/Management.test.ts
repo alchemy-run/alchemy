@@ -6,7 +6,10 @@ import {
   type ManagementGraph,
 } from "@/Celld/Management.ts";
 import type { Store, StoredObject } from "@/Celld/FleetStorage.ts";
-import { prepareApplicationGraph } from "@/Celld/ApplicationGraph.ts";
+import {
+  APPLICATION_OPERATOR_CLASSES,
+  prepareApplicationGraph,
+} from "@/Celld/ApplicationGraph.ts";
 import {
   prepareDeployment,
   APPLICATION_LOCK_KEY,
@@ -637,6 +640,11 @@ describe("Celld private management", () => {
           "candidate-content",
           "candidate-cron",
           "service-binding",
+          "operator-class-missing",
+          "operator-sqlite-missing",
+          "operator-feature-missing",
+          "operator-class-duplicate",
+          "extra-class",
         ] as const) {
           const memory = yield* lockedFixture();
           const requested = yield* Effect.sync(() => {
@@ -690,6 +698,11 @@ describe("Celld private management", () => {
                 "marker-entry",
                 "candidate-cron",
                 "service-binding",
+                "operator-class-missing",
+                "operator-sqlite-missing",
+                "operator-feature-missing",
+                "operator-class-duplicate",
+                "extra-class",
               ].includes(mode)
             ) {
               const candidates = [memory.sourceRoot, memory.sourceWorker].map(
@@ -702,6 +715,7 @@ describe("Celld private management", () => {
               const raw_metadata = {
                 alchemy_application: {
                   schemaVersion: mode === "marker" ? 2 : 1,
+                  operatorClasses: APPLICATION_OPERATOR_CLASSES,
                   revision:
                     mode === "marker-revision"
                       ? "0".repeat(64)
@@ -731,6 +745,31 @@ describe("Celld private management", () => {
                         : raw_metadata,
                     ...(mode === "candidate-cron"
                       ? { crons: ["0 * * * *"] }
+                      : {}),
+                    ...(mode === "operator-class-missing"
+                      ? { do_classes: [] }
+                      : {}),
+                    ...(mode === "operator-sqlite-missing"
+                      ? { sqlite_classes: [] }
+                      : {}),
+                    ...(mode === "operator-feature-missing"
+                      ? { required_features: ["cron-v1", "kv-v1", "queues-v1"] }
+                      : {}),
+                    ...(mode === "operator-class-duplicate"
+                      ? {
+                          do_classes: [
+                            ...APPLICATION_OPERATOR_CLASSES,
+                            "__D1Database",
+                          ],
+                        }
+                      : {}),
+                    ...(mode === "extra-class"
+                      ? {
+                          do_classes: [
+                            ...APPLICATION_OPERATOR_CLASSES,
+                            "Unstaged",
+                          ],
+                        }
                       : {}),
                   },
                 },

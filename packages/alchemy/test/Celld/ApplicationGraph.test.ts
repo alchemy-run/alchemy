@@ -23,6 +23,69 @@ const worker = (
   });
 
 describe("Celld Application graph identity", () => {
+  it.effect(
+    "retains operators on an unbound root without changing secondary Workers",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* worker("root");
+        const secondary = yield* worker("secondary");
+        const graph = yield* prepareApplicationGraph(root, [secondary]);
+        expect(root.manifest.do_classes).toEqual([]);
+        expect(graph.root.manifest.do_classes).toEqual([
+          "__D1Database",
+          "__KvNamespace",
+          "__Queue",
+        ]);
+        expect(graph.root.manifest.sqlite_classes).toEqual(
+          graph.root.manifest.do_classes,
+        );
+        expect(graph.root.manifest.required_features).toEqual([
+          "d1-v1",
+          "kv-v1",
+          "queues-v1",
+        ]);
+        expect(graph.workers).toEqual([secondary]);
+        expect(graph.workers[0]!.manifest.do_classes).toEqual([]);
+        expect(graph.root.manifest.raw_metadata).toEqual(
+          expect.objectContaining({
+            [APPLICATION_GRAPH_METADATA]: expect.objectContaining({
+              operatorClasses: graph.root.manifest.do_classes,
+            }),
+          }),
+        );
+        const legacy = yield* prepareDeployment({
+          scriptName: root.scriptName,
+          mainModule: "index.js",
+          modules: [
+            {
+              name: "index.js",
+              content: "export default {fetch(){return new Response('ok')}}",
+            },
+          ],
+          metadata: {
+            main_module: "index.js",
+            bindings: [
+              {
+                type: "service",
+                name: "__ALCHEMY_APP_WORKER_0",
+                service: secondary.scriptName,
+              },
+            ],
+            [APPLICATION_GRAPH_METADATA]: {
+              schemaVersion: 1,
+              revision: graph.revision,
+              candidates: [root, secondary].map((source) => ({
+                scriptName: source.scriptName,
+                key: source.candidate.key,
+              })),
+            },
+          },
+          doClasses: [],
+          sqliteClasses: [],
+        });
+        expect(graph.root.version).not.toBe(legacy.version);
+      }),
+  );
   it.effect("preserves explicitly installed native system classes", () =>
     Effect.gen(function* () {
       const root = yield* prepareDeployment({

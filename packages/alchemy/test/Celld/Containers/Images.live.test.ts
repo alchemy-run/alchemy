@@ -22,13 +22,76 @@ import { makeStore } from "../DeploymentStore.ts";
 const services = DockerLive.pipe(Layer.provideMerge(BunServices.layer));
 const decodeManifest = Schema.decodeEffect(
   Schema.fromJsonString(
-    Schema.Array(Schema.Struct({ RepoTags: Schema.Array(Schema.String) })),
+    Schema.Array(
+      Schema.Struct({
+        Config: Schema.String,
+        RepoTags: Schema.Array(Schema.String),
+      }),
+    ),
   ),
 );
 
 describe.skipIf(!process.env.CELLD_TEST_DOCKER)(
   "Celld local Docker image publication",
   () => {
+    it.effect(
+      "exports only the target architecture from a multi-platform image store",
+      () =>
+        Effect.gen(function* () {
+          const docker = yield* Docker;
+          const fs = yield* FileSystem.FileSystem;
+          const spawner = yield* ChildProcessSpawner;
+          const platforms = ["linux/amd64", "linux/arm64"] as const;
+          for (const platform of platforms) {
+            yield* docker.image.pull("alpine:3.20", platform);
+          }
+          for (const platform of platforms) {
+            const prepared = yield* prepareContainerImages({
+              declarations: [
+                { name: "Multi", className: "Tool", image: "alpine:3.20" },
+              ],
+              platform,
+              archiveDirectory: yield* fs.makeTempDirectoryScoped({
+                prefix: "celld-platform-",
+              }),
+            });
+            for (const artifact of prepared.images) {
+              const entries = yield* spawner
+                .string(
+                  ChildProcess.make("tar", [
+                    "-xOf",
+                    artifact.path,
+                    "manifest.json",
+                  ]),
+                )
+                .pipe(Effect.flatMap(decodeManifest));
+              expect(entries).toHaveLength(1);
+              const config = yield* spawner
+                .string(
+                  ChildProcess.make("tar", [
+                    "-xOf",
+                    artifact.path,
+                    entries[0].Config,
+                  ]),
+                )
+                .pipe(
+                  Effect.flatMap(
+                    Schema.decodeEffect(
+                      Schema.fromJsonString(
+                        Schema.Struct({
+                          architecture: Schema.String,
+                          os: Schema.String,
+                        }),
+                      ),
+                    ),
+                  ),
+                );
+              expect(`${config.os}/${config.architecture}`).toBe(platform);
+            }
+          }
+        }).pipe(Effect.scoped, Effect.provide(services)),
+      { timeout: 120_000 },
+    );
     it.effect(
       "builds and saves a tiny image plus the native fence with separate identity and archive checksums",
       () =>

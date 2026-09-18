@@ -6,7 +6,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { isScriptNotFound } from "./WorkerDeploymentResponse.ts";
+import {
+  isScriptNotFound,
+  isWorkersDevNotFound,
+} from "./WorkerDeploymentResponse.ts";
 import type {
   AlarmObservationResult,
   BatchResult,
@@ -39,7 +42,8 @@ const requestJson = <T>(url: string, method: "GET" | "POST") =>
       if (
         (method === "GET" &&
           (response.status === 404 || response.status >= 500)) ||
-        isScriptNotFound(response, body, fresh.href)
+        isScriptNotFound(response, body, fresh.href) ||
+        isWorkersDevNotFound(response, body, fresh.href)
       ) {
         return yield* Effect.fail(
           Object.assign(new Test.WorkerNotReady({ status: response.status }), {

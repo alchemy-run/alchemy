@@ -137,6 +137,8 @@ export interface ContainerClass<
  * An image declaration attached to a Celld SQLite Durable Object, not a cloud
  * container resource. The host must use EC2 capacity with a Docker-compatible
  * engine and the privileged Celld fence image. Fargate cannot run containers.
+ * The publishing Docker engine must support `image inspect --platform` and
+ * `image save --platform`; archives contain only the fleet's CPU architecture.
  * Disks are ephemeral across destroy, node restart, and object migration.
  * Snapshots, hard timeouts, and outbound interception are not supported; the
  * default OCI runtime is not a VM isolation boundary.

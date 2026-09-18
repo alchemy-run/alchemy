@@ -9,6 +9,25 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { reconcileApplication } from "@/Celld/Application.ts";
+import { ensureBootstrap, prepareBootstrap } from "@/Celld/Bootstrap.ts";
+import {
+  APPLICATION_LOCK_KEY,
+  prepareDeployment,
+  publishApplication,
+  readPublicationReceipt,
+  stageDeployment,
+} from "@/Celld/Deployment.ts";
+import { digest, encode } from "@/Celld/Deployment/Objects.ts";
+import {
+  discoverManagementNodes,
+  FleetManagement,
+  makeLocalFleetManagement,
+} from "@/Celld/Management.ts";
+import { ManagementBindings } from "@/Celld/ManagementBindings.ts";
+import { activationOwner } from "../fixtures/activation-live.ts";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { createHash } from "node:crypto";
@@ -409,11 +428,52 @@ live(
 );
 
 live(
-  "live v0.5 D1 resource retains database data and ownership without Application publication",
+  "live v0.5 bootstrap D1 survives a binding-free Application with data and ownership retained",
   () =>
     run(
       Effect.gen(function* () {
         const f = yield* fixture;
+        const bootstrapProps = {
+          bucket: connection.bucket,
+          runtimeVersion: "0.5.0",
+        };
+        yield* ensureBootstrap(f.store, bootstrapProps);
+        const bootstrap = yield* prepareBootstrap(bootstrapProps);
+        const previous = yield* readPublicationReceipt(f.store);
+        if (previous) expect(previous.owner).toEqual(activationOwner);
+        expect(yield* f.store.get(APPLICATION_LOCK_KEY)).toBeUndefined();
+        // Reuse the fixture owner and normal publisher; never reset native storage or the lock.
+        yield* publishApplication(
+          f.store,
+          {
+            rootPreparedDeployment: bootstrap,
+            workers: [],
+            owner: activationOwner,
+            transactionId: yield* digest(
+              yield* encode({
+                bootstrap: bootstrap.version,
+                priorRevision: previous?.revision ?? null,
+              }),
+            ),
+            priorRevision: previous?.revision,
+          },
+          () =>
+            Effect.gen(function* () {
+              expect(yield* f.store.get(APPLICATION_LOCK_KEY)).toBeDefined();
+              expect((yield* Node.reloadDeployment({})).ok).toBe(true);
+              const state = yield* Node.getNodeState({}).pipe(
+                Effect.repeat({
+                  until: (state) =>
+                    state.deployment?.version === bootstrap.version &&
+                    state.deployment.swapping === 0,
+                  schedule: Schedule.spaced("500 millis"),
+                  times: 8,
+                }),
+              );
+              expect(state.deployment?.version).toBe(bootstrap.version);
+              expect(state.deployment?.swapping).toBe(0);
+            }),
+        );
         const instanceId = "d1live0123456789abcdef012345678901";
         const layer = DatabaseProvider().pipe(
           Layer.provideMerge(
@@ -456,10 +516,164 @@ live(
               sql: "CREATE TABLE IF NOT EXISTS retained(id INTEGER PRIMARY KEY, value TEXT); INSERT OR REPLACE INTO retained VALUES (1, 'retained');",
             },
           });
+          const catalog = yield* readCatalog(
+            connection,
+            "d1",
+            output.databaseId,
+          );
+          expect(catalog?.owner).toEqual({
+            stack: "D1Live",
+            stage: "test",
+            fqn: "Db",
+            instanceId,
+          });
+          const readRetained = f.operator.executeD1Statements(connection, {
+            ...address,
+            statements: [{ sql: "SELECT value FROM retained WHERE id = 1;" }],
+          });
+          expect((yield* readRetained).result[0]?.rows).toEqual([["retained"]]);
+          const source = yield* prepareDeployment({
+            scriptName: "d1-unbound-application",
+            mainModule: "index.js",
+            modules: [
+              {
+                name: "index.js",
+                content:
+                  "export default { fetch() { return new Response('unbound'); } };",
+              },
+            ],
+            metadata: {
+              main_module: "index.js",
+              compatibility_date: "2026-09-01",
+              bindings: [],
+            },
+            doClasses: [],
+            sqliteClasses: [],
+          });
+          expect(source.manifest.do_classes).toEqual([]);
+          yield* stageDeployment(f.store, source);
+          const http = yield* HttpClient.HttpClient;
+          const nodes = yield* discoverManagementNodes(f.store, {
+            minimumNodes: 1,
+            maximumNodes: 1,
+          });
+          const native = http.pipe(
+            HttpClient.mapRequest((request) =>
+              request.url.startsWith(`${nodes[0]!.endpoint}/`)
+                ? HttpClientRequest.setUrl(
+                    request,
+                    request.url.replace(nodes[0]!.endpoint, endpoint!),
+                  )
+                : request,
+            ),
+          );
+          const management = makeLocalFleetManagement(
+            () => Effect.succeed(f.store),
+            native,
+            { minimumNodes: 1, maximumNodes: 1 },
+          );
+          const member = (deployment: typeof source) => ({
+            workerName: deployment.scriptName,
+            fleetId: connection.fleetId,
+            stagedManifestKey: deployment.candidate.key,
+            exposed: false,
+            url: connection.fleetUrl,
+          });
+          const publish = (workers: readonly ReturnType<typeof member>[]) =>
+            reconcileApplication(
+              { ...connection, entrypoint: member(source), workers },
+              activationOwner,
+            ).pipe(
+              Effect.provide(
+                Layer.mergeAll(
+                  ManagementBindings,
+                  Layer.succeed(FleetManagement, {
+                    ...management,
+                    activate: (connection, graph) =>
+                      Effect.gen(function* () {
+                        expect(
+                          yield* f.store
+                            .get(APPLICATION_LOCK_KEY)
+                            .pipe(Effect.orDie),
+                        ).toBeDefined();
+                        const evidence = yield* management.activate(
+                          connection,
+                          graph,
+                        );
+                        expect(evidence.assurance).toBe(
+                          "locked-graph-generation",
+                        );
+                        expect(
+                          yield* f.store
+                            .get(APPLICATION_LOCK_KEY)
+                            .pipe(Effect.orDie),
+                        ).toBeDefined();
+                        return evidence;
+                      }),
+                  }),
+                ),
+              ),
+            );
+          yield* publish([]);
+          expect(yield* f.store.get(APPLICATION_LOCK_KEY)).toBeUndefined();
+          expect((yield* readPublicationReceipt(f.store))?.owner).toEqual(
+            activationOwner,
+          );
+          expect((yield* readRetained).result[0]?.rows).toEqual([["retained"]]);
+          expect(
+            yield* readCatalog(connection, "d1", output.databaseId),
+          ).toEqual(catalog);
+          yield* f.operator.execD1(connection, {
+            ...address,
+            exec: {
+              sql: "INSERT OR REPLACE INTO retained VALUES (2, 'after-application');",
+            },
+          });
+          const secondary = yield* prepareDeployment({
+            scriptName: "d1-bound-secondary",
+            mainModule: "index.js",
+            modules: [
+              {
+                name: "index.js",
+                content:
+                  "export default { fetch() { return new Response('bound'); } };",
+              },
+            ],
+            metadata: {
+              main_module: "index.js",
+              compatibility_date: "2026-09-01",
+              bindings: [
+                { type: "d1", name: "DB", database_name: output.databaseId },
+              ],
+            },
+            doClasses: [],
+            sqliteClasses: [],
+          });
+          expect(secondary.manifest.do_classes).toEqual(["__D1Database"]);
+          yield* stageDeployment(f.store, secondary);
+          yield* publish([member(secondary)]);
+          expect((yield* readRetained).result[0]?.rows).toEqual([["retained"]]);
+          expect(yield* f.store.get(APPLICATION_LOCK_KEY)).toBeUndefined();
+          expect((yield* readPublicationReceipt(f.store))?.owner).toEqual(
+            activationOwner,
+          );
           yield* provider.delete({ ...input, olds: news, output });
           expect(
-            (yield* readCatalog(connection, "d1", output.databaseId))?.retained,
-          ).toBe(true);
+            yield* readCatalog(connection, "d1", output.databaseId),
+          ).toEqual({ ...catalog, retained: true });
+          expect(
+            (yield* f.operator.executeD1Statements(connection, {
+              ...address,
+              statements: [{ sql: "SELECT value FROM retained WHERE id = 2;" }],
+            })).result[0]?.rows,
+          ).toEqual([["after-application"]]);
+          yield* Effect.log({
+            bootstrapVersion: bootstrap.version,
+            applicationRoot: (yield* readPublicationReceipt(f.store))?.root,
+            databaseId: output.databaseId,
+            retainedOwner: catalog?.owner,
+            operatorReadWrite: "verified-after-unbound-application",
+          });
           expect(
             (yield* f.operator.executeD1Statements(connection, {
               ...address,
@@ -469,5 +683,5 @@ live(
         }).pipe(Effect.provide(layer));
       }),
     ),
-  { timeout: 120_000 },
+  { timeout: 120_000, exclusive: true },
 );
