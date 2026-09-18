@@ -36,7 +36,7 @@ const asPlain = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const redisUrlFromEnv = Config.redacted(REDIS_URL_ENV).pipe(
+const redisUrlFromEnv = Config.Redacted(REDIS_URL_ENV).pipe(
   Effect.map((value) => Redacted.value(value)),
 );
 

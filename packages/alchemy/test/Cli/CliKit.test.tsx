@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { PassThrough } from "node:stream";
 import { stripVTControlCharacters } from "node:util";
 import {

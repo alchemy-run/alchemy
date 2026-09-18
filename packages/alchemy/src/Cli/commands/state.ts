@@ -16,7 +16,7 @@ import { envFile, profile, yes } from "./flags.ts";
 import { confirmOrDecline } from "./confirm.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const backend = Flag.choice("backend", [
+const backend = Flag.Literals("backend", [
   "configured",
   "local",
   "cloudflare",
@@ -25,19 +25,19 @@ const backend = Flag.choice("backend", [
   Flag.withDescription("State backend (default: configured)"),
   Flag.withDefault("configured" as const),
 );
-const config = Flag.file("config").pipe(
+const config = Flag.File("config").pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),
   Flag.withDefault("alchemy.run.ts"),
 );
-const pathArgument = Argument.string("path").pipe(
+const pathArgument = Argument.String("path").pipe(
   Argument.withDescription("State path (stack/stage/namespace/resource)"),
   Argument.optional,
 );
-const requiredPathArgument = Argument.string("path").pipe(
+const requiredPathArgument = Argument.String("path").pipe(
   Argument.withDescription("State path (stack/stage/namespace/resource)"),
 );
-const recursive = Flag.boolean("recursive").pipe(
+const recursive = Flag.Boolean("recursive").pipe(
   Flag.withAlias("r"),
   Flag.withDescription("Operate recursively on directories"),
   Flag.withDefault(false),

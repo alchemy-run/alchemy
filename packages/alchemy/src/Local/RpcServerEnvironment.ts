@@ -82,7 +82,7 @@ export const RPC_SERVER_ENVIRONMENT_KEY =
 
 /** The spawn-time environment the parent baked into the child's process env. */
 export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> =
-  Config.string(RPC_SERVER_ENVIRONMENT_KEY).pipe(
+  Config.String(RPC_SERVER_ENVIRONMENT_KEY).pipe(
     Config.map((raw) => JSON.parse(raw) as RpcServerEnvironment),
   );
 
