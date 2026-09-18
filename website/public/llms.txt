@@ -46,7 +46,6 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 
 How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.
 
-- [Infrastructure as Effects](https://alchemy.run/infrastructure-as-effects) — One Effect program models both your runtime code and the infrastructure it runs on — Runtimes carry code, Bindings wire resources into them, Phases split deploy from runtime, Layers package it all behind typed services.
 - [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, Container, or Server declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
 - [Bindings](https://alchemy.run/infrastructure-as-effects/binding) — A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
 - [Layers](https://alchemy.run/infrastructure-as-effects/layers) — A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
@@ -211,6 +210,53 @@ A linear five-part walkthrough from zero to a tested, locally-developed, CI-depl
 - [Custom domains & routes](https://alchemy.run/cloudflare/networking/custom-domains) — Serve Workers from your own domain — create or adopt a Zone, attach custom domains, route hostname patterns, manage DNS records, and control the workers.dev subdomain.
 - [Expose private origins with Tunnel](https://alchemy.run/cloudflare/networking/tunnel) — Connect a private origin to Cloudflare's edge with a Tunnel, declare its ingress rules as a Configuration resource, and point DNS at it with a proxied CNAME.
 - [Domains & DNS](https://alchemy.run/cloudflare/networking/domains) — Manage Cloudflare zones, DNS records, DNSSEC, and zone settings as resources — and safely adopt the domains you already have.
+
+## Prisma — start here
+
+- [Prisma](https://alchemy.run/prisma) — Prisma Postgres and Prisma Compute — projects, databases, connections, and deployed apps as Stack resources, with a zero-config local database in dev.
+- [Setup](https://alchemy.run/prisma/setup) — Connect alchemy to Prisma — account, service tokens, and profiles.
+
+## Prisma — tutorial
+
+A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and a Vite frontend.
+
+- [Part 1: Your First Project](https://alchemy.run/prisma/tutorial/part-1) — Install Alchemy, configure Prisma credentials, and deploy your first Project.
+- [Part 2: An HTTP API](https://alchemy.run/prisma/tutorial/part-2) — Deploy an Effect-native Prisma Compute service and add an HTTP health endpoint.
+- [Part 3: Query Postgres](https://alchemy.run/prisma/tutorial/part-3) — Create Prisma Postgres, bind its connection to Compute, and query it with Effect SQL.
+- [Part 4: A Vite Frontend](https://alchemy.run/prisma/tutorial/part-4) — Connect a Vite frontend to your Prisma API, develop locally, and destroy the tutorial resources.
+
+## Prisma — Compute
+
+- [Apps](https://alchemy.run/prisma/compute/apps) — Prisma Compute apps as Stack resources — framework builds or Effect-native services, env wiring, custom domains, and a local dev command.
+- [Deployments](https://alchemy.run/prisma/compute/deployments) — The fail-closed Compute deployment lifecycle — health-checked promotion, rollback recovery, old-generation cleanup, and env-only redeploys.
+
+## Prisma — Data
+
+- [Branches](https://alchemy.run/prisma/data/branches) — Prisma branches group databases under git-style names — preview branches per stage, default-branch promotion, and database attachment.
+- [Buckets](https://alchemy.run/prisma/data/buckets) — Prisma Buckets provision S3-compatible object storage inside a project, and Bucket access keys mint the S3 credentials — access key, one-time secret, endpoint, and the provider-side bucket name.
+- [Connections](https://alchemy.run/prisma/data/connections) — Prisma Connections materialize database credentials — a conventional databaseUrl, direct and pooled connection strings, parsed origins for Hyperdrive, and the Connect runtime binding.
+- [Postgres](https://alchemy.run/prisma/data/postgres) — Prisma Postgres as Stack resources — projects, databases, branch attachment, and a zero-config local database under alchemy dev.
+
+## Prisma — Frontend
+
+- [Websites](https://alchemy.run/prisma/frontend/websites) — Deploy Vite, Astro, Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Prisma Compute.
+- [Vite](https://alchemy.run/prisma/frontend/vite) — Deploy a Vite SPA to Prisma Compute with Prisma.Website.Vite — static files served on Bun and Vite's native dev server locally.
+- [Static sites](https://alchemy.run/prisma/frontend/static-site) — Deploy any static build to Prisma Compute with Prisma.Website.StaticSite — a shell command, output directory, and Bun static-file server.
+- [React Router](https://alchemy.run/prisma/frontend/react-router) — Deploy React Router v7 framework apps to Prisma Compute with Prisma.Website.ReactRouter — SSR on Bun and native Vite dev locally.
+- [Foldkit](https://alchemy.run/prisma/frontend/foldkit) — Deploy Foldkit to Prisma Compute with Prisma.Website.Foldkit — a Vite SPA served on Bun, deep-link fallback, and native HMR locally.
+- [TanStack Start](https://alchemy.run/prisma/frontend/tanstack-start) — Deploy TanStack Start to Prisma Compute with Prisma.Website.TanStackStart — React or Solid SSR on Bun, with native Vite dev locally.
+- [Next.js](https://alchemy.run/prisma/frontend/nextjs) — Deploy Next.js to Prisma Compute with Prisma.Website.Nextjs — a normal Next server on Bun, not OpenNext, and next dev locally.
+- [Nuxt](https://alchemy.run/prisma/frontend/nuxt) — Deploy Nuxt to Prisma Compute with Prisma.Website.Nuxt — Nitro's Node target running on Bun and Nuxt's own dev server locally.
+- [Vocs](https://alchemy.run/prisma/frontend/vocs) — Deploy Vocs documentation to Prisma Compute with Prisma.Website.Vocs — static assets and Waku RSC on Bun, with Vocs dev locally.
+- [SolidStart](https://alchemy.run/prisma/frontend/solidstart) — Deploy SolidStart to Prisma Compute with Prisma.Website.SolidStart — Nitro's Node target on Bun and SolidStart's native Vite dev server locally.
+- [Astro](https://alchemy.run/prisma/frontend/astro) — Deploy Astro SSR or a fully static site to Prisma Compute with Prisma.Website.Astro, running on Bun with native Astro dev locally.
+- [SvelteKit](https://alchemy.run/prisma/frontend/sveltekit) — Deploy SvelteKit to Prisma Compute with Prisma.Website.SvelteKit — SSR and prerendered assets on Bun, with native Vite dev locally.
+- [Waku](https://alchemy.run/prisma/frontend/waku) — Deploy Waku to Prisma Compute with Prisma.Website.Waku — React Server Components and static pages on Bun, with Waku's native dev server locally.
+- [Octane](https://alchemy.run/prisma/frontend/octane) — Deploy OctaneJS to Prisma Compute with Prisma.Website.Octane — the Node target on Bun, SSR plus client assets, and native Vite dev locally.
+
+## Prisma — Guides
+
+- [Connect from Cloudflare Workers](https://alchemy.run/prisma/guides/cloudflare-workers) — Two ways to reach Prisma Postgres from a Worker — the Connect binding for credentials, or Hyperdrive in front of the direct origin for edge-pooled SQL.
 
 ## AWS — start here
 
@@ -422,28 +468,38 @@ Repos, secrets, variables, and repository event sources as Stack resources; the 
 
 A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.
 
-- [Git](https://alchemy.run/git) — A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API, assembled in one file.
-- [Getting Started](https://alchemy.run/git/getting-started) — Deploy a git host to Cloudflare and push your first repository, in one file. The tutorial then builds the same file from empty.
-- [Part 1: A git server in one file](https://alchemy.run/git/tutorial/part-1) — Build the git host from an empty file. Each line you add is one decision, and by the end you have deployed it.
-- [Part 2: Repositories](https://alchemy.run/git/tutorial/part-2) — Create a repository on your host, push to it, then let anyone read a public one. The REST plane and the shared secret, used before anything else depends on them.
-- [Part 3: Your own API](https://alchemy.run/git/tutorial/part-3) — Git.Server is designed to be embedded. Build your own API around it with Better Auth, add a route of your own, replace one of the engine's, and serve your application from the same origin.
-- [Part 4: Your own rules](https://alchemy.run/git/tutorial/part-4) — git's pre-receive hook as a service. Protect main, let a team share a repository, and answer from your own data. It never sees a credential.
+- [Git](https://alchemy.run/git) — A pluggable, embeddable, self-hostable git server on Cloudflare Workers, Durable Objects, and R2. Smart HTTP for any client, a typed REST plane with pull requests, and a GitHub-compatible API.
+- [Getting Started](https://alchemy.run/git/getting-started) — A complete quickstart for a Git host protected by a shared credential. Deploy it to Cloudflare, push a repository, and clone it back.
+- [Part 1: Push your first repository](https://alchemy.run/git/tutorial/part-1) — Deploy a Git host, push a commit, and clone it back. Add storage and hashing one layer at a time.
+- [Part 2: Control access](https://alchemy.run/git/tutorial/part-2) — Protect the existing Git host with one shared credential, then verify both accepted and rejected requests.
+- [Part 3: Publish a repository](https://alchemy.run/git/tutorial/part-3) — Allow anonymous clones of public repositories while preserving authenticated writes.
+- [Part 4: Give users their own credentials](https://alchemy.run/git/tutorial/part-4) — Replace the shared credential with Better Auth accounts and individual Git API keys.
 - [Cloning & pushing](https://alchemy.run/git/clone-and-push) — Standard git clients over smart HTTP. What the wire supports, where credentials go, and what to do when something hangs.
 - [Repositories](https://alchemy.run/git/repositories) — Create, fork, import, and manage repositories over the typed REST plane.
 - [Pull requests](https://alchemy.run/git/pull-requests) — Server-side merge base, tree diffs, and fast-forward or three-way merges, computed inside the repository.
 - [GitHub API compatibility](https://alchemy.run/git/github-api) — Point the gh CLI and Octokit at your host with the /api/v3 facade.
 - [Overview](https://alchemy.run/git/blocks) — One layer graph, provided once, builds the Worker and every Durable Object behind it. Each line is a decision with implementations you choose or write.
-- [Server](https://alchemy.run/git/blocks/server) — Every plane as one HttpApi of route classes. Groups you can pick, Handlers you can replace one at a time, Server.layer to serve it behind your middleware, and ServerLive as the open default.
-- [Repository](https://alchemy.run/git/blocks/repositories) — One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, wrap it to hook pushes and ref updates, or implement its shape over another store.
+- [HTTP routes](https://alchemy.run/git/blocks/server) — Compose Git route layers beside your application's Effect HTTP API, with your middleware and server.
+- [Repository](https://alchemy.run/git/blocks/repositories) — One Durable Object per repository, behind the Git.RepoStore service. Provide it, call it from your own routes, compose operations through Git.Engine, or implement its shape over another store.
 - [Registry](https://alchemy.run/git/blocks/registry) — The registry resolves owner/name to a repository and serves listings. Keep it in a Durable Object or move it to a D1 database.
 - [Blob Store](https://alchemy.run/git/blocks/blob-store) — Bulk, immutable, content-addressed bytes. R2 by default, S3 when data has to live in AWS, or any store that can do ranged reads and multipart writes.
 - [Hasher](https://alchemy.run/git/blocks/hasher) — Every object a push sends is inflated and hashed before a ref moves. That is CPU, and where it runs is a Layer, in the Worker, in dynamically loaded Workers, or on Lambda.
-- [Auth](https://alchemy.run/git/blocks/auth) — The engine holds no users, no credentials, and no policy. The middleware of the API that mounts the routes decides who may call them, and Git.Hooks decides which refs may move.
+- [Authentication and authorization](https://alchemy.run/git/blocks/auth) — Use native Effect HTTP middleware and ordinary application effects to authorize Git operations.
 - [Overview](https://alchemy.run/git/recipes) — Requirements pick lines. One table from what you need to the line that changes, the stack shape for one cloud or two, and complete files to copy.
 - [Scaling](https://alchemy.run/git/recipes/scaling) — Reads scale like a CDN and writes scale like git. The shape, the per-repository limits, the measured numbers, and a worked example of pushing something large and swapping the hasher.
 - [All on Cloudflare](https://alchemy.run/git/recipes/cloudflare) — A git host on one Cloudflare account. One Worker, one bucket, two Durable Object namespaces, and dynamically loaded Workers hashing large pushes.
 - [Bytes in S3, hashing on Lambda](https://alchemy.run/git/recipes/cloudflare-aws) — Compute on Cloudflare, bytes in S3, and large pushes hashed one Lambda per chunk. One stack carries both provider sets, and Alchemy mints the cross-cloud identity.
 - [Bring your own store](https://alchemy.run/git/recipes/your-own-store) — Bytes have to live somewhere that is neither R2 nor S3. Implement the five operations of Git.BlobStore and provide it in place of the shipped Layers.
+
+## Stripe
+
+Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.
+
+- [Stripe](https://alchemy.run/stripe) — Sell subscriptions and onboard merchants from a Cloudflare Worker — catalog, Checkout, the Billing Portal, Connect, and webhooks declared next to the code that uses them.
+- [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
+- [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
+- [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
+- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
 
 ## Docker
 
@@ -479,4 +535,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~917 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~958 KB) — only fetch it when you need to locate a specific resource's reference page.

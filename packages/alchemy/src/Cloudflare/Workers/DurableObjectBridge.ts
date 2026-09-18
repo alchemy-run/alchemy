@@ -1,10 +1,8 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 import * as Effect from "effect/Effect";
-import {
-  fromDurableObjectState,
-  type DurableObjectExport,
-} from "../../Workers/DurableObject.ts";
+import type { DurableObjectExport } from "../../Workers/DurableObject.ts";
+import { fromDurableObjectState } from "../../Workers/DurableObjectState.ts";
 import {
   makeDurableObjectInstance,
   type DurableObjectInstance,

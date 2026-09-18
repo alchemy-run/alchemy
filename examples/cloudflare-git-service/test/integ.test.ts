@@ -73,7 +73,19 @@ const call = (
       json,
       cookie: cookie || (options.cookie ?? ""),
     };
-  });
+  }).pipe(
+    // A fresh workers.dev rollout may answer before the request reaches the app.
+    // Retry only Cloudflare's own missing-route response, including for POSTs.
+    Effect.repeat({
+      while: (response) =>
+        typeof response.json === "string" &&
+        ((response.status === 404 &&
+          response.json.includes("<title>Page not found</title>")) ||
+          response.json.trim() === "error code: 1042"),
+      schedule: Schedule.spaced("2 seconds"),
+      times: 5,
+    }),
+  );
 
 /** Sign a user up (or in, when the account survived a NO_DESTROY run) and return the session cookie. */
 const signIn = Effect.fn(function* (

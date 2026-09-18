@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Railway from "@/Railway";
 import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";

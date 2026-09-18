@@ -1,5 +1,5 @@
 import { projectServices as fetchProjectServices } from "./GraphQL.ts";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

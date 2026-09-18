@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import type { ReactNode } from "react";
 import { statusPaint, type StatusVariant } from "../../../Util/Theme.ts";
 import { useCliEnvironment } from "./Environment.tsx";

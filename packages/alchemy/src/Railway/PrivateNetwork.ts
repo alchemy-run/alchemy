@@ -1,24 +1,19 @@
-import {
-  waitUntilDeleted,
-  projectServices as fetchProjectServices,
-} from "./GraphQL.ts";
-import type { PrivateNetworkEndpointSyncStatus } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import { projectServices as fetchProjectServices } from "./GraphQL.ts";
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { Unowned } from "../AdoptPolicy.ts";
+import * as Schema from "effect/Schema";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createRailwayName,
-  matchesAlchemyPhysicalName,
-  sanitizeRailwayName,
-} from "./Metadata.ts";
+import { sanitizeRailwayName } from "./Metadata.ts";
+import { withEnvironmentConfigLock } from "./transient.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
+
+type PrivateNetworkEndpointSyncStatus =
+  railway.Scalars["PrivateNetworkEndpointSyncStatus"];
 
 const selection = {
   createdAt: true,
@@ -42,29 +37,13 @@ const endpointSelection = {
   syncStatus: true,
   tags: true,
 } as const satisfies railway.Selection<"PrivateNetworkEndpoint">;
-type PrivateNetworkCreateOrGetResponse = railway.Result<
-  "PrivateNetwork!",
-  typeof selection
->;
 type PrivateNetworksResultItem = railway.Result<
   "PrivateNetwork!",
   typeof selection
 >;
-type PrivateNetworkEndpointCreateOrGetResponse = railway.Result<
-  "PrivateNetworkEndpoint!",
-  typeof endpointSelection
->;
-type PrivateNetworkEndpointResponse = railway.Result<
-  "PrivateNetworkEndpoint!",
-  typeof endpointSelection
->;
 type PrivateNetworkEndpointValue = railway.Result<
   "PrivateNetworkEndpoint!",
   typeof endpointSelection
->;
-type ProjectResponseServicesEdgesItemNode = railway.Result<
-  "Service!",
-  { id: true; name: true; deletedAt: true }
 >;
 
 /**
@@ -73,7 +52,73 @@ type ProjectResponseServicesEdgesItemNode = railway.Result<
  */
 type Ref<T> = T | Effect.Effect<T, never, Providers>;
 
-const ALCHEMY_TAG = "alchemy";
+const PLATFORM_NETWORK_NAME = "railway";
+
+const NetworkConfig = Schema.Struct({
+  privateNetworkDisabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  services: Schema.optional(
+    Schema.NullOr(
+      Schema.Record(
+        Schema.String,
+        Schema.NullOr(
+          Schema.Struct({
+            networking: Schema.optional(
+              Schema.NullOr(
+                Schema.Struct({
+                  privateNetworkEndpoint: Schema.optional(
+                    Schema.NullOr(Schema.String),
+                  ),
+                }),
+              ),
+            ),
+          }),
+        ),
+      ),
+    ),
+  ),
+});
+
+const readNetworkConfig = Effect.fn(function* (environmentId: string) {
+  const environment = yield* railway.environment(
+    { id: environmentId },
+    { config: { where: { decryptVariables: false } } },
+  );
+  return yield* Schema.decodeUnknownEffect(NetworkConfig)(environment.config);
+});
+
+export class PrivateNetworkConfigPending extends Data.TaggedError(
+  "Railway.PrivateNetworkConfigPending",
+)<{ environmentId: string; message: string }> {}
+
+const waitForNetworkConfig = (
+  environmentId: string,
+  ready: (config: typeof NetworkConfig.Type) => boolean,
+) =>
+  readNetworkConfig(environmentId).pipe(
+    Effect.flatMap((config) =>
+      ready(config)
+        ? Effect.void
+        : Effect.fail(
+            new PrivateNetworkConfigPending({
+              environmentId,
+              message: "Waiting for Railway private-network configuration",
+            }),
+          ),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "Railway.PrivateNetworkConfigPending",
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+
+export class PrivateNetworkNameUnsupported extends Data.TaggedError(
+  "Railway.PrivateNetworkNameUnsupported",
+)<{ name: string }> {
+  override get message() {
+    return `Railway manages one private network per environment. Custom network '${this.name}' is no longer supported; remove the legacy declaration and use PrivateNetwork without a name.`;
+  }
+}
 
 /**
  * Environment identity a private network lives in. Accepts a
@@ -87,15 +132,14 @@ export type PrivateNetworkEnvironment = {
 
 export interface PrivateNetworkProps {
   /**
-   * Environment the named network belongs to. Accepts a
-   * `Railway.Project` (primary environment), a `Railway.Environment`, or
-   * `{ environmentId, projectId }`. Changing it replaces the network.
+   * Environment whose platform-managed private network is enabled. Accepts a
+   * `Railway.Project`, `Railway.Environment`, or `{ environmentId, projectId }`.
+   * Changing it replaces the configuration resource.
    */
   environment: Ref<PrivateNetworkEnvironment>;
   /**
-   * Network name. Unique per environment. If omitted, a unique name is
-   * generated from the stack, stage and logical ID. Changing it replaces
-   * the network — Railway has no rename mutation.
+   * Only the platform name `railway` is supported. Custom names are rejected.
+   * @deprecated Omit this property; Railway names the environment's network.
    */
   name?: string;
 }
@@ -106,11 +150,13 @@ export type PrivateNetwork = Resource<
   {
     /** Railway public network id (string identity used by endpoint APIs). */
     publicId: string;
+    /** Private-networking setting to restore when this resource is removed. */
+    previousPrivateNetworkDisabled?: boolean;
     /** Numeric WireGuard network id, as a decimal string. */
     networkId: string;
     /** Physical network name (unique per environment). */
     name: string;
-    /** Network DNS suffix (typically `railway.internal`). */
+    /** Network DNS label reported by Railway. */
     dnsName: string;
     /** Parent Railway project id. */
     projectId: string;
@@ -148,22 +194,24 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
 );
 
 /**
- * A Railway.PrivateNetwork is a named private mesh in an environment.
- * Every environment already has the default `*.railway.internal` mesh —
- * this resource create-or-gets an additional named network (custom DNS)
- * and is the parent of {@link PrivateNetworkEndpoint}.
+ * Enable Railway's platform-managed private network for an environment.
+ * This resource manages the environment's networking setting, not a separately
+ * created network. Use one PrivateNetwork resource per environment.
  *
- * Railway has no per-network delete. Destroy is a no-op; the network is
- * removed when its Project/Environment is deleted. `create-or-get` is
- * idempotent for a given `(environment, name)`.
+ * Destroy restores the setting captured before reconciliation. A network that
+ * was already enabled stays enabled; one enabled by this resource is disabled.
+ * Platform network objects follow the environment's lifecycle.
  *
- * @see https://docs.railway.com/networking/private-networking
+ * :::caution[Named networks are no longer supported]
+ * Railway removed named-network creation. Remove legacy named-network
+ * declarations before adding this environment-managed resource. Custom names
+ * are rejected rather than silently mapped to the platform network.
+ * :::
  *
- * ### Create a named network
- * Pass a Project (or Environment). Alchemy generates a unique name.
- * `dnsName` is the network suffix endpoints hang off.
+ * ### Enable private networking
+ * Pass a Project or Environment. `dnsName` is Railway's network DNS label.
  *
- * **Example:** Generated name
+ * **Example:** Environment-managed network
  * ```typescript
  * const site = yield* Railway.Project("Site");
  * const net = yield* Railway.PrivateNetwork("Mesh", {
@@ -171,37 +219,15 @@ const PrivateNetworkResource = Resource<PrivateNetwork>(
  * });
  * ```
  *
- * ### A stable name
- * Pass `name` when you need a stable network name. Changing it later
- * replaces the resource — Railway cannot rename a network.
- *
- * **Example:** Explicit name
- * ```typescript
- * const net = yield* Railway.PrivateNetwork("Mesh", {
- *   environment: site,
- *   name: "backend",
- * });
- * ```
- *
- * :::caution[Changing `name` or `environment` replaces the network]
- * `privateNetworkCreateOrGet` is keyed by name. A new network is
- * ensured under the new name. Railway has no per-network delete, so the
- * previous name stays until the environment is deleted.
- * :::
- *
  * ### Endpoints
- * Attach a Service with a custom DNS name via
+ * Configure a deployed service's DNS prefix via
  * {@link PrivateNetworkEndpoint}.
  *
  * **Example:** Endpoint on the network
  * ```typescript
- * const api = yield* Railway.Service("Api", {
- *   project: site,
- *   image: "hashicorp/http-echo",
- * });
  * const endpoint = yield* Railway.PrivateNetworkEndpoint("ApiDns", {
  *   network: net,
- *   service: api,
+ *   service: { serviceId: "deployed-service-id" },
  *   name: "api",
  * });
  * ```
@@ -245,9 +271,7 @@ export class PrivateNetworkEnvironmentRequired extends Data.TaggedError(
   message: string;
 }> {}
 
-type CloudNetwork =
-  | PrivateNetworkCreateOrGetResponse
-  | PrivateNetworksResultItem;
+type CloudNetwork = PrivateNetworksResultItem;
 
 const environmentIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -290,16 +314,12 @@ const toNetworkAttrs = (
   createdAt: network.createdAt ?? undefined,
 });
 
-const resolveNetworkName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
-  Effect.gen(function* () {
-    if (name !== undefined) return sanitizeRailwayName(name);
-    if (existing !== undefined) return existing;
-    return yield* createRailwayName(id);
-  });
+const resolveNetworkName = Effect.fn(function* (name?: string) {
+  if (name !== undefined && name !== PLATFORM_NETWORK_NAME) {
+    return yield* new PrivateNetworkNameUnsupported({ name });
+  }
+  return PLATFORM_NETWORK_NAME;
+});
 
 const listNetworks = (environmentId: string) =>
   railway.privateNetworks({ environmentId }, selection).pipe(
@@ -316,33 +336,6 @@ const findNetwork = (
   listNetworks(environmentId).pipe(
     Effect.map((networks) => networks.find(match)),
   );
-
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
-  railway.environments
-    .items(
-      { projectId: project.projectId, first: 50 },
-      { id: true, deletedAt: true },
-    )
-    .pipe(
-      Stream.filter((env) => env.deletedAt == null),
-      Stream.map((env) => env.id),
-      Stream.runCollect,
-      Effect.map((ids) => {
-        const set = new Set(Array.from(ids));
-        if (project.environmentId.length > 0) {
-          set.add(project.environmentId);
-        }
-        return Array.from(set);
-      }),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed(
-          project.environmentId.length > 0 ? [project.environmentId] : [],
-        ),
-      ),
-    );
 
 const observeNetwork = Effect.fn(function* (input: {
   environmentId: string;
@@ -365,32 +358,56 @@ const observeNetwork = Effect.fn(function* (input: {
   return undefined;
 });
 
-const ensureNetwork = (input: {
-  environmentId: string;
-  projectId: string;
-  name: string;
-}) =>
-  railway
-    .privateNetworkCreateOrGet(
-      {
-        input: {
-          environmentId: input.environmentId,
-          projectId: input.projectId,
-          name: input.name,
-          tags: [ALCHEMY_TAG],
-        },
-      },
-      selection,
-    )
-    .pipe(
-      Effect.map((network) => (isGoneNetwork(network) ? undefined : network)),
-    );
+const ensureNetwork = Effect.fn(function* (environmentId: string) {
+  const previousPrivateNetworkDisabled = yield* withEnvironmentConfigLock(
+    environmentId,
+    Effect.gen(function* () {
+      const config = yield* readNetworkConfig(environmentId);
+      const network = yield* observeNetwork({
+        environmentId,
+        name: PLATFORM_NETWORK_NAME,
+      });
+      if (config.privateNetworkDisabled === true || network === undefined) {
+        yield* railway.environmentPatchCommit({
+          environmentId,
+          commitMessage: "Enable private networking",
+          patch: { privateNetworkDisabled: false },
+        });
+        yield* waitForNetworkConfig(
+          environmentId,
+          (observed) => observed.privateNetworkDisabled === false,
+        );
+      }
+      return config.privateNetworkDisabled === true;
+    }),
+  );
+  const network = yield* observeNetwork({
+    environmentId,
+    name: PLATFORM_NETWORK_NAME,
+  }).pipe(
+    Effect.flatMap((network) =>
+      network === undefined
+        ? Effect.fail(
+            new PrivateNetworkNotCreated({
+              name: PLATFORM_NETWORK_NAME,
+              environmentId,
+            }),
+          )
+        : Effect.succeed(network),
+    ),
+    Effect.retry({
+      while: (error) => error._tag === "Railway.PrivateNetworkNotCreated",
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+  return { network, previousPrivateNetworkDisabled };
+});
 
 export const PrivateNetworkProvider = () =>
   Provider.succeed(PrivateNetwork, {
-    stables: ["publicId", "networkId", "projectId", "environmentId"],
-    // Railway has no per-network delete; the mesh is torn down with the
-    // environment/project. Skip nuke so we don't loop on a no-op delete.
+    stables: ["projectId", "environmentId"],
+    // Platform-managed networking is released, never independently deleted.
     nuke: { skip: true, dependsOn: ["Railway.Project"] },
 
     diff: Effect.fn(function* ({ news, output }) {
@@ -399,20 +416,23 @@ export const PrivateNetworkProvider = () =>
       const environmentId = environmentIdOf(news.environment);
       const environmentChanged =
         environmentId !== undefined && environmentId !== output.environmentId;
-      const nameChanged =
-        news.name !== undefined &&
-        sanitizeRailwayName(news.name) !== output.name;
-      if (environmentChanged || nameChanged) {
+      if (environmentChanged) {
         return { action: "replace" as const };
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const environmentId =
         output?.environmentId ?? environmentIdOf(olds?.environment);
-      const name = yield* resolveNetworkName(id, olds?.name, output?.name);
+      const name = output?.name ?? olds?.name ?? PLATFORM_NETWORK_NAME;
       if (environmentId === undefined) return undefined;
+      const config = yield* readNetworkConfig(environmentId).pipe(
+        railway.catchTags("RailwayNotFound", () => Effect.succeed(undefined)),
+      );
+      if (config === undefined || config.privateNetworkDisabled === true) {
+        return undefined;
+      }
       const found = yield* observeNetwork({
         environmentId,
         publicId: output?.publicId,
@@ -423,8 +443,10 @@ export const PrivateNetworkProvider = () =>
         name,
         projectId: output?.projectId ?? projectIdOf(olds?.environment),
       });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+      return {
+        ...attrs,
+        previousPrivateNetworkDisabled: output?.previousPrivateNetworkDisabled,
+      };
     }),
 
     list: Effect.fn(function* () {
@@ -436,7 +458,7 @@ export const PrivateNetworkProvider = () =>
             listNetworks(environmentId).pipe(
               Effect.map((networks) =>
                 networks
-                  .filter((network) => matchesAlchemyPhysicalName(network.name))
+                  .filter((network) => network.name === PLATFORM_NETWORK_NAME)
                   .map((network) =>
                     toNetworkAttrs(network, {
                       projectId: project.projectId,
@@ -458,7 +480,7 @@ export const PrivateNetworkProvider = () =>
       return unique;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const props = news ?? ({} as PrivateNetworkProps);
       const environmentId =
         environmentIdOf(props.environment) ?? output?.environmentId;
@@ -469,39 +491,35 @@ export const PrivateNetworkProvider = () =>
             "PrivateNetwork requires an environment with environmentId and projectId (pass a Railway.Project or Railway.Environment)",
         });
       }
-      const name = yield* resolveNetworkName(id, props.name, output?.name);
-
-      let current = yield* observeNetwork({
-        environmentId,
-        publicId: output?.publicId,
-        name,
-      });
-
-      if (current === undefined) {
-        current = yield* ensureNetwork({
-          environmentId,
-          projectId,
-          name,
-        });
-        if (current === undefined) {
-          current = yield* observeNetwork({ environmentId, name });
-        }
-      }
-
-      if (current === undefined || isGoneNetwork(current)) {
-        return yield* new PrivateNetworkNotCreated({
-          name,
-          environmentId,
-        });
-      }
-
-      return toNetworkAttrs(current, { name, projectId });
+      const name = yield* resolveNetworkName(props.name ?? output?.name);
+      const current = yield* ensureNetwork(environmentId);
+      return {
+        ...toNetworkAttrs(current.network, { name, projectId }),
+        previousPrivateNetworkDisabled:
+          output?.previousPrivateNetworkDisabled ??
+          current.previousPrivateNetworkDisabled,
+      };
     }),
 
-    delete: Effect.fn(function* () {
-      // No per-network delete. `privateNetworksForEnvironmentDelete` would
-      // also tear down the default mesh. The network is removed with the
-      // parent Project / Environment.
+    delete: Effect.fn(function* ({ output }) {
+      // Legacy named-network state has no environment setting to restore.
+      if (output.previousPrivateNetworkDisabled !== true) return;
+      yield* withEnvironmentConfigLock(
+        output.environmentId,
+        Effect.gen(function* () {
+          const config = yield* readNetworkConfig(output.environmentId);
+          if (config.privateNetworkDisabled === true) return;
+          yield* railway.environmentPatchCommit({
+            environmentId: output.environmentId,
+            commitMessage: "Restore private networking setting",
+            patch: { privateNetworkDisabled: true },
+          });
+          yield* waitForNetworkConfig(
+            output.environmentId,
+            (observed) => observed.privateNetworkDisabled === true,
+          );
+        }),
+      ).pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
     }),
   });
 
@@ -527,8 +545,8 @@ export type PrivateNetworkEndpointService = {
 
 export interface PrivateNetworkEndpointProps {
   /**
-   * Parent named network. Accepts a `Railway.PrivateNetwork` or
-   * `{ publicId }`. Changing it replaces the endpoint.
+   * Platform-managed network. Accepts a `Railway.PrivateNetwork` or
+   * `{ publicId, environmentId }`. Changing it replaces the configuration resource.
    */
   network: Ref<PrivateNetworkEndpointNetwork>;
   /**
@@ -537,9 +555,8 @@ export interface PrivateNetworkEndpointProps {
    */
   service: Ref<PrivateNetworkEndpointService>;
   /**
-   * DNS prefix for this endpoint (the label before the network
-   * `dnsName`). Defaults to the Service name. Updates in place via
-   * `privateNetworkEndpointRename`.
+   * Service DNS prefix. Defaults to the service name.
+   * Updates the service's environment configuration without replacing its endpoint.
    */
   name?: string;
 }
@@ -550,7 +567,7 @@ export type PrivateNetworkEndpoint = Resource<
   {
     /** Railway public endpoint id. */
     publicId: string;
-    /** Observed DNS name (`{prefix}.{networkDns}`). */
+    /** Observed DNS prefix, not a fully qualified hostname. */
     dnsName: string;
     /** Pending DNS name while a rename is in flight, if any. */
     newDnsName: string | undefined;
@@ -558,6 +575,8 @@ export type PrivateNetworkEndpoint = Resource<
     privateIps: string[];
     /** Service instance the endpoint is bound to. */
     serviceInstanceId: string;
+    /** Previous DNS override to restore on removal; null restores the platform default. */
+    previousDnsPrefix?: string | null;
     /** Parent service id. */
     serviceId: string;
     /** Parent network public id. */
@@ -607,14 +626,18 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
 );
 
 /**
- * A Railway.PrivateNetworkEndpoint is a per-service DNS name on a
- * {@link PrivateNetwork}. Create-or-get is idempotent for a given
- * `(network, service)`. `name` is the DNS prefix and updates in place.
+ * Configure the DNS prefix of a service's platform-managed endpoint on a
+ * {@link PrivateNetwork}. The service must already have an instance in the
+ * environment. Use one endpoint configuration resource per service/environment.
  *
- * @see https://docs.railway.com/networking/private-networking
+ * Destroy restores the previous DNS override if the current override still
+ * matches this resource's value. Unrelated or externally changed settings are
+ * preserved. The platform endpoint itself follows the service's lifecycle.
+ * Legacy state without a captured DNS override cannot be restored: deletion
+ * fails explicitly while the endpoint exists, rather than silently forgetting it.
  *
- * ### Attach a service
- * Pass the network and the Service. Omit `name` to use the Service name
+ * ### Configure a service
+ * Pass the network and service. Omit `name` to use the service name
  * as the DNS prefix.
  *
  * **Example:** Default prefix
@@ -626,7 +649,7 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * ```
  *
  * ### Custom DNS name
- * `name` is the label other services use (`name.{network.dnsName}`).
+ * `name` sets the service's private DNS prefix.
  * Updating it renames in place.
  *
  * **Example:** Custom prefix
@@ -638,8 +661,10 @@ const PrivateNetworkEndpointResource = Resource<PrivateNetworkEndpoint>(
  * });
  * ```
  *
- * :::caution[Changing `network` or `service` replaces the endpoint]
- * The old endpoint is deleted. The new pair is create-or-got.
+ * :::caution[Changing the target replaces the configuration resource]
+ * Changing `network` or `service` restores the old target's prior DNS override
+ * and applies the desired prefix to the new target. It does not delete either
+ * platform-managed endpoint.
  * :::
  *
  * @resource
@@ -664,7 +689,22 @@ export class PrivateNetworkEndpointNotCreated extends Data.TaggedError(
 )<{
   privateNetworkId: string;
   serviceId: string;
-}> {}
+  expectedPrefix?: string;
+  observedPrefix?: string;
+  pendingPrefix?: string;
+}> {
+  override get message() {
+    return `Private endpoint for ${this.serviceId} is not ready: expected ${this.expectedPrefix ?? "an endpoint"}, observed ${this.observedPrefix ?? "missing"}, pending ${this.pendingPrefix ?? "none"}`;
+  }
+}
+
+export class PrivateNetworkEndpointRestoreUnavailable extends Data.TaggedError(
+  "Railway.PrivateNetworkEndpointRestoreUnavailable",
+)<{ serviceId: string; environmentId: string }> {
+  override get message() {
+    return "Cannot restore this endpoint: legacy state has no previous DNS configuration and Railway removed endpoint deletion. Remove its service instance or explicitly release the resource from Alchemy state.";
+  }
+}
 
 export class PrivateNetworkEndpointTargetMissing extends Data.TaggedError(
   "Railway.PrivateNetworkEndpointTargetMissing",
@@ -672,10 +712,7 @@ export class PrivateNetworkEndpointTargetMissing extends Data.TaggedError(
   message: string;
 }> {}
 
-type CloudEndpoint =
-  | PrivateNetworkEndpointValue
-  | PrivateNetworkEndpointCreateOrGetResponse
-  | PrivateNetworkEndpointResponse;
+type CloudEndpoint = PrivateNetworkEndpointValue;
 
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -762,29 +799,6 @@ const resolveServiceName = (serviceId: string, hint?: string) =>
         ),
       );
 
-const listProjectServices = (projectId: string) =>
-  fetchProjectServices(projectId, {
-    id: true,
-    name: true,
-    deletedAt: true,
-  }).pipe(
-    Effect.map((services) => services.filter((node) => node.deletedAt == null)),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
-    ),
-  );
-
-const waitUntilEndpointGone = (input: {
-  environmentId: string;
-  privateNetworkId: string;
-  serviceId: string;
-}) =>
-  waitUntilDeleted(
-    "PrivateNetworkEndpoint",
-    `${input.privateNetworkId}/${input.serviceId}`,
-    getEndpoint(input).pipe(Effect.map((endpoint) => endpoint === undefined)),
-  );
-
 export class PrivateNetworkEndpointNameUnavailable extends Data.TaggedError(
   "Railway.PrivateNetworkEndpointNameUnavailable",
 )<{
@@ -806,6 +820,9 @@ const waitUntilEndpointNamed = (input: {
           new PrivateNetworkEndpointNotCreated({
             privateNetworkId: input.privateNetworkId,
             serviceId: input.serviceId,
+            expectedPrefix: input.prefix,
+            observedPrefix: endpoint?.dnsName,
+            pendingPrefix: endpoint?.newDnsName ?? undefined,
           }),
         );
       }
@@ -828,6 +845,7 @@ export const PrivateNetworkEndpointProvider = () =>
       "serviceInstanceId",
     ],
     nuke: {
+      skip: true,
       dependsOn: [
         "Railway.PrivateNetwork",
         "Railway.Service",
@@ -871,21 +889,28 @@ export const PrivateNetworkEndpointProvider = () =>
         serviceId,
       });
       if (found === undefined) return undefined;
-      return toEndpointAttrs(found, {
-        serviceId,
-        privateNetworkId,
-        environmentId,
-        projectId: output?.projectId ?? projectIdOf(olds?.network),
-      });
+      return {
+        ...toEndpointAttrs(found, {
+          serviceId,
+          privateNetworkId,
+          environmentId,
+          projectId: output?.projectId ?? projectIdOf(olds?.network),
+        }),
+        previousDnsPrefix: output?.previousDnsPrefix,
+      };
     }),
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
       const rows = yield* Effect.forEach(projects, (project) =>
         Effect.gen(function* () {
-          const networks = yield* listNetworks(project.environmentId);
-          const owned = networks.filter((network) =>
-            matchesAlchemyPhysicalName(network.name),
+          const environmentIds = yield* projectEnvironmentIds(project);
+          const networks = (yield* Effect.forEach(
+            environmentIds,
+            listNetworks,
+          )).flat();
+          const owned = networks.filter(
+            (network) => network.name === PLATFORM_NETWORK_NAME,
           );
           const live = yield* fetchProjectServices(project.projectId, {
             id: true,
@@ -902,7 +927,7 @@ export const PrivateNetworkEndpointProvider = () =>
           const nested = yield* Effect.forEach(owned, (network) =>
             Effect.forEach(services, (service) =>
               getEndpoint({
-                environmentId: project.environmentId,
+                environmentId: network.environmentId,
                 privateNetworkId: network.publicId,
                 serviceId: service.id,
               }).pipe(
@@ -912,7 +937,7 @@ export const PrivateNetworkEndpointProvider = () =>
                     : toEndpointAttrs(endpoint, {
                         serviceId: service.id,
                         privateNetworkId: network.publicId,
-                        environmentId: project.environmentId,
+                        environmentId: network.environmentId,
                         projectId: project.projectId,
                       }),
                 ),
@@ -955,107 +980,144 @@ export const PrivateNetworkEndpointProvider = () =>
         serviceId,
         serviceNameOf(props.service),
       );
-      const desiredPrefix =
-        props.name !== undefined
-          ? sanitizeRailwayName(props.name)
-          : sanitizeRailwayName(serviceName);
+      const desiredOverride =
+        props.name === undefined ? null : sanitizeRailwayName(props.name);
+      const desiredPrefix = desiredOverride ?? sanitizeRailwayName(serviceName);
 
-      let current: CloudEndpoint | undefined = yield* getEndpoint({
+      const network = yield* observeNetwork({
         environmentId,
-        privateNetworkId,
-        serviceId,
+        publicId: privateNetworkId,
       });
+      if (network?.name !== PLATFORM_NETWORK_NAME) {
+        return yield* new PrivateNetworkEndpointTargetMissing({
+          message:
+            "PrivateNetworkEndpoint requires the platform-managed Railway network; legacy named networks are no longer supported",
+        });
+      }
 
-      if (current === undefined) {
-        const created = yield* railway
-          .privateNetworkEndpointCreateOrGet(
-            {
-              input: {
-                environmentId,
-                privateNetworkId,
-                serviceId,
-                serviceName: desiredPrefix,
-                tags: [ALCHEMY_TAG],
-              },
-            },
-            endpointSelection,
-          )
-          .pipe(
-            Effect.map((endpoint) =>
-              isGoneEndpoint(endpoint) ? undefined : endpoint,
-            ),
-          );
-        current =
-          created ??
-          (yield* getEndpoint({
+      const previousDnsPrefix = yield* withEnvironmentConfigLock(
+        environmentId,
+        Effect.gen(function* () {
+          const config = yield* readNetworkConfig(environmentId);
+          if (config.privateNetworkDisabled === true) {
+            return yield* new PrivateNetworkEndpointTargetMissing({
+              message:
+                "Enable private networking with PrivateNetwork before configuring an endpoint",
+            });
+          }
+          const configuredPrefix =
+            config.services?.[serviceId]?.networking?.privateNetworkEndpoint;
+          const current = yield* getEndpoint({
             environmentId,
             privateNetworkId,
             serviceId,
-          }));
-      }
-
-      if (current === undefined || isGoneEndpoint(current)) {
-        return yield* new PrivateNetworkEndpointNotCreated({
-          privateNetworkId,
-          serviceId,
-        });
-      }
-
-      if (dnsPrefix(current.dnsName) !== desiredPrefix) {
-        if (
-          current.newDnsName == null ||
-          dnsPrefix(current.newDnsName) !== desiredPrefix
-        ) {
-          const available = yield* railway.privateNetworkEndpointNameAvailable({
-            environmentId,
-            privateNetworkId,
-            prefix: desiredPrefix,
           });
-          if (!available) {
-            return yield* new PrivateNetworkEndpointNameUnavailable({
-              name: desiredPrefix,
-              privateNetworkId,
-              serviceId,
-            });
+          const hasDesiredName =
+            current !== undefined &&
+            dnsPrefix(current.dnsName) === desiredPrefix;
+          if ((configuredPrefix ?? null) === desiredOverride) {
+            return configuredPrefix ?? null;
           }
-          yield* railway.renamePrivateNetworkEndpoint({
-            dnsName: desiredPrefix,
-            id: current.publicId,
-            privateNetworkId,
+          if (
+            !hasDesiredName &&
+            dnsPrefix(current?.newDnsName ?? "") !== desiredPrefix
+          ) {
+            const available =
+              yield* railway.privateNetworkEndpointNameAvailable({
+                environmentId,
+                privateNetworkId,
+                prefix: desiredPrefix,
+              });
+            if (!available) {
+              return yield* new PrivateNetworkEndpointNameUnavailable({
+                name: desiredPrefix,
+                privateNetworkId,
+                serviceId,
+              });
+            }
+          }
+          yield* railway.environmentPatchCommit({
+            environmentId,
+            commitMessage: "Configure private networking DNS prefix",
+            patch: {
+              services: {
+                [serviceId]: {
+                  networking: { privateNetworkEndpoint: desiredOverride },
+                },
+              },
+            },
           });
-        }
-        current = yield* waitUntilEndpointNamed({
-          environmentId,
-          privateNetworkId,
-          serviceId,
-          prefix: desiredPrefix,
-        });
-      }
-
-      return toEndpointAttrs(current, {
-        serviceId,
-        privateNetworkId,
+          return configuredPrefix ?? null;
+        }),
+      );
+      const current = yield* waitUntilEndpointNamed({
         environmentId,
-        projectId,
+        privateNetworkId,
+        serviceId,
+        prefix: desiredPrefix,
       });
+
+      return {
+        ...toEndpointAttrs(current, {
+          serviceId,
+          privateNetworkId,
+          environmentId,
+          projectId,
+        }),
+        previousDnsPrefix:
+          output?.previousDnsPrefix !== undefined
+            ? output.previousDnsPrefix
+            : previousDnsPrefix,
+      };
     }),
 
-    delete: Effect.fn(function* ({ output }) {
-      const id = output.publicId;
-      if (id.length === 0) return;
-      yield* railway
-        .deletePrivateNetworkEndpoint({ id })
-        .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
-      if (
-        output.environmentId.length > 0 &&
-        output.privateNetworkId.length > 0 &&
-        output.serviceId.length > 0
-      ) {
-        yield* waitUntilEndpointGone({
+    delete: Effect.fn(function* ({ olds, output }) {
+      if (output.previousDnsPrefix === undefined) {
+        const endpoint = yield* getEndpoint({
           environmentId: output.environmentId,
           privateNetworkId: output.privateNetworkId,
           serviceId: output.serviceId,
         });
+        if (endpoint === undefined) return;
+        return yield* new PrivateNetworkEndpointRestoreUnavailable({
+          serviceId: output.serviceId,
+          environmentId: output.environmentId,
+        });
       }
+      const previousDnsPrefix = output.previousDnsPrefix;
+      const managedPrefix =
+        olds.name === undefined ? null : sanitizeRailwayName(olds.name);
+      yield* withEnvironmentConfigLock(
+        output.environmentId,
+        Effect.gen(function* () {
+          const config = yield* readNetworkConfig(output.environmentId);
+          const configuredPrefix =
+            config.services?.[output.serviceId]?.networking
+              ?.privateNetworkEndpoint;
+          if (
+            (configuredPrefix ?? null) !== managedPrefix ||
+            (configuredPrefix ?? null) === previousDnsPrefix
+          ) {
+            return;
+          }
+          yield* railway.environmentPatchCommit({
+            environmentId: output.environmentId,
+            commitMessage: "Restore private networking DNS prefix",
+            patch: {
+              services: {
+                [output.serviceId]: {
+                  networking: { privateNetworkEndpoint: previousDnsPrefix },
+                },
+              },
+            },
+          });
+          yield* waitForNetworkConfig(
+            output.environmentId,
+            (observed) =>
+              (observed.services?.[output.serviceId]?.networking
+                ?.privateNetworkEndpoint ?? null) === previousDnsPrefix,
+          );
+        }),
+      ).pipe(railway.catchTags("RailwayNotFound", () => Effect.void));
     }),
   });

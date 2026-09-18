@@ -1,7 +1,5 @@
 import { waitUntilDeleted, projectServices } from "./GraphQL.ts";
-import type { Builder, RestartPolicyType } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
-type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -40,6 +38,10 @@ import {
 } from "./local-context.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { Service } from "./Service.ts";
+
+type Builder = railway.Scalars["Builder"];
+type RestartPolicyType = railway.Scalars["RestartPolicyType"];
+type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
 
 const serviceSelection = {
   id: true,

@@ -1,9 +1,9 @@
-import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
+import * as railway from "@distilled.cloud/railway";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
@@ -13,7 +13,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import MySQLApi, { Db, Site } from "./fixtures/mysql-api.ts";
 
@@ -28,13 +27,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RailwayRetryPolicy,
-        CredentialsFromEnv,
-        FetchHttpClient.layer,
-      ),
-    ),
+    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
   );
 
 const firstOk = (rows: unknown): unknown => {

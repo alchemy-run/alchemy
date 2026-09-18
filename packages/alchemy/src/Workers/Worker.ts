@@ -31,7 +31,7 @@ import {
 import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
-import { Stack } from "../Stack.ts";
+import { StackContext } from "../StackContext.ts";
 
 /**
  * The runtime environment record the worker was deployed with — workerd's
@@ -135,7 +135,7 @@ export const getSharedBuild = (
       Effect.map((env) =>
         layer.pipe(
           Layer.provideMerge(
-            Layer.succeed(Stack, {
+            Layer.succeed(StackContext, {
               name: stack.name,
               stage: stack.stage,
               bindings: {},

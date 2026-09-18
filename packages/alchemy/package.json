@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.77",
+  "version": "2.0.0-beta.78",
   "description": "Infrastructure as Effects for TypeScript.",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
@@ -298,6 +298,7 @@
       "import": "./lib/Prisma/Deployment.js"
     },
     "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Credentials": null,
     "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
@@ -336,6 +337,18 @@
       "bun": "./src/Rivet/index.ts",
       "worker": "./src/Rivet/index.ts",
       "import": "./lib/Rivet/index.js"
+    },
+    "./Stripe": {
+      "types": "./lib/Stripe/index.d.ts",
+      "bun": "./src/Stripe/index.ts",
+      "worker": "./src/Stripe/index.ts",
+      "import": "./lib/Stripe/index.js"
+    },
+    "./Stripe/*": {
+      "types": "./lib/Stripe/*.d.ts",
+      "bun": "./src/Stripe/*.ts",
+      "worker": "./src/Stripe/*.ts",
+      "import": "./lib/Stripe/*.js"
     },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
@@ -462,7 +475,9 @@
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
+    "@distilled.cloud/prisma": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
+    "@distilled.cloud/stripe": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "@effect/sql-sqlite-do": "catalog:",
     "@effect/vitest": "catalog:",
@@ -477,9 +492,7 @@
     "libsodium-wrappers": "catalog:",
     "pathe": "catalog:",
     "picomatch": "catalog:",
-    "react": "catalog:",
     "rolldown": "catalog:",
-    "string-width": "catalog:",
     "tinyglobby": "catalog:",
     "undici": "catalog:",
     "yaml": "catalog:"
@@ -535,6 +548,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",

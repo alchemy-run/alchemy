@@ -254,6 +254,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     // proxy instead of a local broker — and that accepts-and-drops every
     // message, with `send()` never settling.
     queueConsumers: options.worker?.queueConsumers,
+    crons: options.worker?.crons,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

@@ -1,10 +1,10 @@
-import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
+import * as railway from "@distilled.cloud/railway";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Alchemy from "@/index.ts";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 import * as Test from "@/Test/Alchemy";
@@ -15,7 +15,6 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
@@ -31,13 +30,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RailwayRetryPolicy,
-        CredentialsFromEnv,
-        FetchHttpClient.layer,
-      ),
-    ),
+    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
   );
 
 const firstOk = (rows: unknown): unknown => {
@@ -127,6 +120,20 @@ class NotReady extends Data.TaggedError("NotReady")<{
       : `status ${this.status}: ${JSON.stringify(this.body)}`;
   }
 }
+
+// Deploy the database first, then extend the same stack with its clients.
+// Each setup phase gets its own bounded budget; a remote image build no
+// longer shares its deadline with database and volume provisioning.
+const DatabaseFixtureStack = Alchemy.Stack(
+  "RailwayPostgresFixture",
+  {
+    providers: Railway.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    return yield* Db;
+  }),
+);
 
 const FixtureStack = Alchemy.Stack(
   "RailwayPostgresFixture",
@@ -310,6 +317,7 @@ describe("ConnectPostgres runtime integrations", () => {
     providers: Railway.providers(),
   });
 
+  beforeAll(deploy(DatabaseFixtureStack), { timeout: 120_000 });
   const fixture = beforeAll(deploy(FixtureStack), {
     timeout: 120_000,
   });

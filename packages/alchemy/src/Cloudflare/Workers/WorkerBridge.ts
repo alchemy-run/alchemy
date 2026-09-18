@@ -19,14 +19,14 @@ import {
   type WorkerBuild,
 } from "../../Workers/Worker.ts";
 import { dispatchRpcMethod, processEvent } from "../../Workers/WorkerBridge.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironmentService.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import {
   ExportedHandlerMethods,
   WorkerExecutionContext,
   deferredExecutionContext,
   fromExecutionContext,
-} from "./Worker.ts";
+} from "./WorkerRuntime.ts";
 
 export { handleRpcExit, type WorkerBuild } from "../../Workers/Worker.ts";
 

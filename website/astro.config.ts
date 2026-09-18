@@ -34,6 +34,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
@@ -141,6 +142,7 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
@@ -240,10 +242,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
@@ -1073,6 +1071,17 @@ export default defineConfig({
             { label: "Overview", link: "/prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "prisma/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
@@ -1082,10 +1091,28 @@ export default defineConfig({
               ],
             },
             {
-              label: "Compute",
+              label: "Frontend",
               items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
+                { label: "Overview", link: "/prisma/frontend/websites" },
+                { label: "Astro", link: "/prisma/frontend/astro" },
+                { label: "Foldkit", link: "/prisma/frontend/foldkit" },
+                { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "Nuxt", link: "/prisma/frontend/nuxt" },
+                { label: "Octane", link: "/prisma/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/prisma/frontend/react-router",
+                },
+                { label: "SolidStart", link: "/prisma/frontend/solidstart" },
+                { label: "Static sites", link: "/prisma/frontend/static-site" },
+                { label: "SvelteKit", link: "/prisma/frontend/sveltekit" },
+                {
+                  label: "TanStack Start",
+                  link: "/prisma/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/prisma/frontend/vite" },
+                { label: "Vocs", link: "/prisma/frontend/vocs" },
+                { label: "Waku", link: "/prisma/frontend/waku" },
               ],
             },
             {
@@ -1098,6 +1125,31 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
+                },
+                {
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
+                  link: "/stripe/guides/webhooks",
+                },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
           ],
         },
         {
@@ -1154,20 +1206,28 @@ export default defineConfig({
               label: "Tutorial",
               items: [
                 {
-                  label: "Part 1: A git server in one file",
+                  label: "Part 1: Push your first repository",
                   link: "/git/tutorial/part-1",
                 },
                 {
-                  label: "Part 2: Repositories",
+                  label: "Part 2: Control access",
                   link: "/git/tutorial/part-2",
                 },
                 {
-                  label: "Part 3: Your own API",
+                  label: "Part 3: Publish a repository",
                   link: "/git/tutorial/part-3",
                 },
                 {
-                  label: "Part 4: Your own rules",
+                  label: "Part 4: Give users their own credentials",
                   link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
                 },
               ],
             },
@@ -1187,7 +1247,8 @@ export default defineConfig({
               label: "Building blocks",
               items: [
                 { label: "Overview", link: "/git/blocks" },
-                { label: "Server", link: "/git/blocks/server" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
                 { label: "Repository", link: "/git/blocks/repositories" },
                 { label: "Registry", link: "/git/blocks/registry" },
                 { label: "Blob Store", link: "/git/blocks/blob-store" },

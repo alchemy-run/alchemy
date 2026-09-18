@@ -4,8 +4,7 @@ import {
   projectServices as fetchProjectServices,
 } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
-import * as railway from "@distilled.cloud/railway/graphql";
-type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
+import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -54,6 +53,8 @@ import {
   type RailwayHostRuntimeContext,
 } from "./hosted.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
+
+type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
 
 const selection = {
   id: true,

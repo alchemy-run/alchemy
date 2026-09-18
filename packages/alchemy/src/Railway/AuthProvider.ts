@@ -1,4 +1,4 @@
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import { DEFAULT_API_BASE_URL } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
@@ -152,11 +152,7 @@ export const RailwayAuth = AuthProviderLayer<
       });
 
       const withAnonymous = <A, E>(
-        effect: Effect.Effect<
-          A,
-          E,
-          import("@distilled.cloud/railway").RailwayOpContext
-        >,
+        effect: Effect.Effect<A, E, railway.GraphQLRequirements>,
       ) => provideAnonymousRailway(effect, apiBaseUrl);
 
       const code = yield* withAnonymous(railway.createLoginSession({})).pipe(

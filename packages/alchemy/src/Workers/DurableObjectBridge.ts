@@ -21,12 +21,12 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { HttpEffect } from "../Http.ts";
 import { isScopeEjected } from "../Http.ts";
 import { rpcMethodOf, serveRpc } from "../Rpc.ts";
-import { buildEventTelemetry } from "../Telemetry.ts";
-import {
-  DurableObjectState,
-  type DurableObjectExport,
-  type DurableObjectShape,
+import { buildEventTelemetry } from "../TelemetryRuntime.ts";
+import type {
+  DurableObjectExport,
+  DurableObjectShape,
 } from "./DurableObject.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { toRpcEffect } from "./WorkerBridge.ts";
 

@@ -10,7 +10,7 @@ import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { initialCwd } from "../Util/Node.ts";
+import { initialCwd, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
 /**
@@ -327,6 +327,25 @@ export const ServerProviderLive = () =>
           ),
         );
 
+      const hashOutput = (props: ServerProps, distDir: string) =>
+        hashDirectory({
+          cwd: distDir,
+          memo: {
+            // Next.js serves from its project root, not a dedicated output directory.
+            exclude:
+              path.resolve(distDir) ===
+              path.resolve(initialCwd, props.root ?? ".")
+                ? [
+                    "**/node_modules/**",
+                    "**/.git/**",
+                    "**/.alchemy/**",
+                    ".next/cache/**",
+                  ]
+                : [],
+            lockfile: false,
+          },
+        });
+
       const makeOutput = Effect.fn(function* (
         props: ServerProps,
         built: FrameworkBuildOutputSlice,
@@ -359,10 +378,7 @@ export const ServerProviderLive = () =>
               : yield* Effect.all(
                   {
                     input: hashInput(props, root),
-                    output: hashDirectory({
-                      cwd: distDir,
-                      memo: { exclude: [], lockfile: false },
-                    }),
+                    output: hashOutput(props, distDir),
                   },
                   { concurrency: "unbounded" },
                 ),
@@ -384,10 +400,7 @@ export const ServerProviderLive = () =>
           if (output.distDir === undefined) return { action: "update" };
           const distDir = path.resolve(initialCwd, output.distDir);
           if (!(yield* fs.exists(distDir))) return { action: "update" };
-          const outHash = yield* hashDirectory({
-            cwd: distDir,
-            memo: { exclude: [], lockfile: false },
-          });
+          const outHash = yield* hashOutput(news, distDir);
           return {
             action: Equal.equals(outHash, output.hash.output)
               ? "noop"
@@ -496,7 +509,7 @@ export const ServerProviderLocal = () =>
   LocalProvider.make(
     Server,
     import.meta.resolve(
-      import.meta.url.endsWith(".ts") ? "./ServerLocal.ts" : "./ServerLocal.js",
+      `./ServerLocal${moduleExtension(import.meta.url)}`,
       import.meta.url,
     ),
     Effect.gen(function* () {

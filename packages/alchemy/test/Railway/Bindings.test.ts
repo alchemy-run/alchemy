@@ -1,12 +1,12 @@
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import { fromCredentials } from "@distilled.cloud/aws/Credentials";
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
-import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
 import * as Alchemy from "@/index.ts";
 import * as Railway from "@/Railway";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -15,7 +15,6 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import BucketApi, {
@@ -37,13 +36,7 @@ const logLevel = Effect.provideService(
 
 const distilled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        RailwayRetryPolicy,
-        CredentialsFromEnv,
-        FetchHttpClient.layer,
-      ),
-    ),
+    Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))),
   );
 
 class NotReady extends Data.TaggedError("NotReady")<{

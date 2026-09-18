@@ -5,16 +5,15 @@
  * Named so `matchesAlchemyPhysicalName` still lists it (service `list()`
  * walks owned projects) and `pnpm nuke` can reclaim it.
  */
-import { CredentialsFromEnv } from "@distilled.cloud/railway";
-import * as railway from "@distilled.cloud/railway/graphql";
+import * as railway from "@distilled.cloud/railway";
+import { RailwayAuth } from "@/Railway/AuthProvider.ts";
+import { fromAuthProvider } from "@/Railway/Credentials.ts";
 import { resolveWorkspace } from "@/Railway/Environment.ts";
 import { Environment } from "@/Railway/ProjectEnvironment.ts";
 import { createProject, type Project } from "@/Railway/Project.ts";
-import { RailwayRetryPolicy } from "@/Railway/RetryPolicy.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
 
 export { SUITE_PROJECT_NAME } from "./suiteProjectName.ts";
@@ -123,24 +122,13 @@ const acquire = Effect.gen(function* () {
       ),
     ),
   );
-}).pipe(
-  Effect.provide(
-    // The retry policy matters here: every Railway test file's beforeAll
-    // resolves the suite project at once, and that burst alone can trip
-    // Railway's rate limit — the SDK default gives up after ~20s.
-    Layer.mergeAll(
-      RailwayRetryPolicy,
-      CredentialsFromEnv,
-      FetchHttpClient.layer,
-    ),
-  ),
-);
+}).pipe(Effect.provide(fromAuthProvider().pipe(Layer.provide(RailwayAuth))));
 
 /**
  * Process-cached create-or-get. Yield it inside a test or pass the
  * Effect as `project:` (resource-valued props accept Effects).
  */
-export const suiteProject: Effect.Effect<Project> = Effect.runSync(
+export const suiteProject = Effect.runSync(
   Effect.cached(
     acquire.pipe(
       Effect.map((attrs) => attrs as unknown as Project),

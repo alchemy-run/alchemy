@@ -16,7 +16,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { isScopeEjected } from "../Http.ts";
-import { buildEventTelemetry } from "../Telemetry.ts";
+import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { Pin, WorkerBuild } from "./Worker.ts";
 
 export interface ProcessEventOptions<T> {

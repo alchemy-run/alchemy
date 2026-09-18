@@ -1,6 +1,6 @@
 # Railway GraphQL migration verification
 
-The providers use `@distilled.cloud/railway/graphql`. Every object operation
+The providers use `@distilled.cloud/railway`. Every object operation
 supplies its required projection. Shared selections describe resource
 attributes; reconcile selections add only fields needed for decisions.
 Nested connection helpers in `src/Railway/GraphQL.ts` paginate all results

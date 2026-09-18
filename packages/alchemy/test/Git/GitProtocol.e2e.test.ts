@@ -278,7 +278,9 @@ test(
     yield* fs.symlink("hello.txt", path.join(work, "link.txt"));
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c3: modes");
-    yield* mustGit(work, "push", "origin", "main");
+    // A fresh workers.dev rollout can still return its HTML 404 on
+    // receive-pack discovery after upload-pack (the empty clone) succeeds.
+    yield* retryGit(work, "push", "origin", "main");
     const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
 
     // REST agrees byte-for-byte with the CLI's view
@@ -328,7 +330,7 @@ test(
     yield* fs.writeFileString(path.join(a, "file.txt"), "v2\n");
     yield* mustGit(a, "add", "-A");
     yield* mustGit(a, "commit", "-m", "c2");
-    yield* mustGit(a, "push", "origin", "main");
+    yield* retryGit(a, "push", "origin", "main");
 
     // step 3: fresh clone, strict fsck, identical log
     yield* retryGit(tmp, "clone", remote, "b");

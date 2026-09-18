@@ -664,6 +664,8 @@ export interface MergePullInput {
   readonly message?: string | undefined;
   /** Race guard: fail RefConflict when the head tip moved since inspection. */
   readonly expectedHeadOid?: string | undefined;
+  /** Race guard for application inspection of the base branch. */
+  readonly expectedBaseOid?: string | undefined;
 }
 
 /** Result of {@link GitRepoShape.mergePull}. */
@@ -870,6 +872,25 @@ export interface GitRepoShape {
     pushId: string,
     batch: Uint8Array,
   ) => Effect.Effect<void, RepoNotFound | StoreError, RuntimeContext>;
+  /** Abort uncommitted staging; false means committed data must be retained. */
+  readonly abortPush: (
+    pushId: string,
+    packIds?: ReadonlyArray<string>,
+  ) => Effect.Effect<boolean, RepoNotFound | StoreError, RuntimeContext>;
+  /** Validate connectivity without moving refs. Commit repeats this check. */
+  readonly validatePush: (
+    input: CommitPushInput,
+  ) => Effect.Effect<void, RepoNotFound | StoreError, RuntimeContext>;
+  /** Read from this push's staging area and the live store only. */
+  readonly readPreparedObject: (
+    pushId: string,
+    oid: Oid,
+    maxBytes: number,
+  ) => Effect.Effect<
+    { readonly type: ObjectType; readonly content: Uint8Array } | undefined,
+    RepoNotFound | StoreError,
+    RuntimeContext
+  >;
   /** A live object for thin-delta base resolution, or `undefined`. */
   readonly readPushBase: (
     oid: Oid,
@@ -3334,6 +3355,20 @@ export const GitRepoLive = GitRepo.make(
       }): Effect.Effect<Array<RefResult>, StoreError, RuntimeContext> =>
         sql
           .transactionSync((raw) => {
+            if (options.pushId !== undefined) {
+              const push = raw
+                .exec<{ state: string }>(
+                  `SELECT state FROM pushes WHERE push_id = ?`,
+                  options.pushId,
+                )
+                .toArray()[0];
+              if (push?.state !== "staging")
+                return options.commands.map((command) => ({
+                  ref: command.ref,
+                  ok: false,
+                  reason: "push is no longer active",
+                }));
+            }
             const currentOf = (name: string): string => {
               const rows = raw
                 .exec<RefRow>(`SELECT name, oid FROM refs WHERE name = ?`, name)
@@ -4250,6 +4285,15 @@ export const GitRepoLive = GitRepo.make(
           const result = outcome.success;
           const objects = storeFor(meta.repoId);
           const pushId = yield* ulid();
+          // Imports use the same staging lifecycle as pushes: finalize
+          // requires an active row, and GC needs it to reap abandoned data.
+          yield* sql.run(
+            `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
+            pushId,
+            Date.now(),
+          );
+          yield* upsertJob("gc", null);
+          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
           let graph: Array<{
             oid: string;
             tree: string;
@@ -4308,13 +4352,20 @@ export const GitRepoLive = GitRepo.make(
             newOid: ref.oid,
             ref: ref.name,
           }));
-          yield* finalizeRefTxn({
+          const results = yield* finalizeRefTxn({
             commands,
             atomic: false,
             unconditional: true,
             pushId,
             graph,
           });
+          const rejected = results.find((ref) => !ref.ok);
+          if (rejected !== undefined) {
+            return yield* new StoreError({
+              reason: `import ref ${rejected.ref}: ${rejected.reason}`,
+            });
+          }
+          yield* flipPush(pushId);
           if (result.defaultBranch !== null) {
             yield* setConfig("default_branch", result.defaultBranch);
           }
@@ -4618,6 +4669,80 @@ export const GitRepoLive = GitRepo.make(
           );
         }),
 
+        abortPush: Effect.fn(function* (
+          pushId: string,
+          packIds: ReadonlyArray<string> = [],
+        ) {
+          yield* requireMeta;
+          return yield* sql.transactionSync((raw) => {
+            const push = raw
+              .exec<{ state: string }>(
+                `SELECT state FROM pushes WHERE push_id = ?`,
+                pushId,
+              )
+              .toArray()[0];
+            if (push?.state === "committed") return false;
+            raw.exec(`DELETE FROM objects WHERE staged_push = ?`, pushId);
+            raw.exec(
+              `DELETE FROM pushes WHERE push_id = ? AND state = 'staging'`,
+              pushId,
+            );
+            // Another concurrent push may have adopted staged rows. Retain any
+            // shared pack bytes even though this transaction has been aborted.
+            for (const packId of packIds) {
+              if (
+                raw
+                  .exec(
+                    `SELECT 1 FROM objects WHERE pack_id = ? LIMIT 1`,
+                    packId,
+                  )
+                  .toArray().length > 0
+              )
+                return false;
+            }
+            return true;
+          });
+        }),
+
+        validatePush: Effect.fn(function* (input: CommitPushInput) {
+          const meta = yield* requireMeta;
+          const referenced = new Set([
+            ...input.referenced,
+            ...input.referencedParents,
+          ]);
+          for (const command of input.commands)
+            if (command.newOid !== ZERO_OID) referenced.add(command.newOid);
+          const missing = yield* storeFor(meta.repoId).missingObjects(
+            Array.from(referenced),
+            input.pushId,
+          );
+          if (missing.length > 0)
+            return yield* new StoreError({
+              reason: `missing objects (${missing.length})`,
+            });
+        }),
+
+        readPreparedObject: Effect.fn(function* (
+          pushId: string,
+          oid: Oid,
+          maxBytes: number,
+        ) {
+          const meta = yield* requireMeta;
+          const push = yield* sql.first<{ state: string }>(
+            `SELECT state FROM pushes WHERE push_id = ?`,
+            pushId,
+          );
+          if (push?.state !== "staging")
+            return yield* new StoreError({
+              reason: "push is no longer active",
+            });
+          return yield* storeFor(meta.repoId).readPrepared(
+            pushId,
+            oid,
+            maxBytes,
+          );
+        }),
+
         readPushBase: Effect.fn(function* (oid: Oid) {
           const meta = yield* requireMeta;
           return yield* ingestStoreOf(storeFor(meta.repoId)).readBase(oid);
@@ -4635,6 +4760,8 @@ export const GitRepoLive = GitRepo.make(
               ok: false,
               reason,
             }));
+          if (meta.readOnly)
+            return { unpack: "ok", results: allNg("repository is read-only") };
           // Full connectivity check (§3.6 step 5) over the staged rows.
           const referenced = new Set<string>(input.referenced);
           for (const parent of input.referencedParents) referenced.add(parent);
@@ -5391,6 +5518,15 @@ export const GitRepoLive = GitRepo.make(
             return yield* new BranchMissing({ ref: row.head_ref });
           }
           const baseTip = baseRow.oid;
+          if (
+            input.expectedBaseOid !== undefined &&
+            input.expectedBaseOid !== baseTip
+          ) {
+            return yield* new RefConflict({
+              ref: row.base_ref,
+              currentOid: asOid(baseTip),
+            });
+          }
           const headTip = headRow.oid;
           if (
             input.expectedHeadOid !== undefined &&
