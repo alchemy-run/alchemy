@@ -32,6 +32,7 @@ const LIST_MAX_PAGES = 100;
 export type PriceInterval = "day" | "month" | "week" | "year";
 export type PriceUsageType = "licensed" | "metered";
 export type PriceType = "one_time" | "recurring";
+export type PriceTaxBehavior = "exclusive" | "inclusive" | "unspecified";
 
 export interface PriceRecurring {
   /**
@@ -103,6 +104,15 @@ export interface PriceProps {
    */
   lookupKey?: string;
   /**
+   * Whether the amount is inclusive or exclusive of tax. Required for
+   * automatic tax unless a default behavior is set in the Stripe Tax
+   * settings. Stripe accepts this update only while the price is still
+   * `unspecified`; once it is `inclusive` or `exclusive`, changing it
+   * replaces the price.
+   * @default "unspecified"
+   */
+  taxBehavior?: PriceTaxBehavior;
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`.
@@ -130,6 +140,8 @@ export type Price = Resource<
     nickname: string | undefined;
     /** Lookup key, if set. */
     lookupKey: string | undefined;
+    /** Whether the amount is inclusive or exclusive of tax. */
+    taxBehavior: PriceTaxBehavior;
     /** `one_time` or `recurring`. */
     type: PriceType;
     /** Recurring billing configuration, if this is a recurring price. */
@@ -149,8 +161,9 @@ export type Price = Resource<
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
  * product, and recurring interval are immutable (changing them replaces
  * the price). Nickname, metadata, lookup key, and `active` update in
- * place. Prices cannot be deleted; destroy deactivates them
- * (`active=false`).
+ * place. `taxBehavior` may be set once while it is still `unspecified`
+ * and replaces the price afterwards. Prices cannot be deleted; destroy
+ * deactivates them (`active=false`).
  *
  * @see https://docs.stripe.com/api/prices
  *
@@ -173,6 +186,17 @@ export type Price = Resource<
  *   unitAmount: 1500,
  *   recurring: { interval: "month" },
  *   nickname: "Pro monthly",
+ * });
+ * ```
+ *
+ * **Example:** Tax-exclusive price for automatic tax
+ * ```typescript
+ * const price = yield* Stripe.Price("pro-monthly-net", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1500,
+ *   recurring: { interval: "month" },
+ *   taxBehavior: "exclusive",
  * });
  * ```
  *
@@ -248,6 +272,7 @@ const toAttrs = (price: StripePrice) => ({
   active: price.active,
   nickname: price.nickname ?? undefined,
   lookupKey: price.lookup_key ?? undefined,
+  taxBehavior: (price.tax_behavior ?? "unspecified") as PriceTaxBehavior,
   type: price.type as PriceType,
   recurring: toRecurring(price.recurring),
   metadata: userMetadata(price.metadata),
@@ -369,6 +394,16 @@ const shouldReplace = (
     return true;
   }
   if (!recurringEqual(news.recurring, output.recurring)) return true;
+  // Stripe accepts `tax_behavior` only while it is still `unspecified`.
+  // Once it is `inclusive` or `exclusive` a different value needs a new
+  // price, so treat that transition as a replacement.
+  if (
+    news.taxBehavior !== undefined &&
+    news.taxBehavior !== output.taxBehavior &&
+    output.taxBehavior !== "unspecified"
+  ) {
+    return true;
+  }
   return false;
 };
 
@@ -461,6 +496,9 @@ export const PriceProvider = () =>
           ...(desiredLookupKey.length > 0
             ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
             : {}),
+          ...(news.taxBehavior !== undefined
+            ? { tax_behavior: news.taxBehavior }
+            : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-price-${instanceId}`,
@@ -481,11 +519,20 @@ export const PriceProvider = () =>
       const activeChanged = current.active !== desiredActive;
       const nicknameChanged = (current.nickname ?? "") !== desiredNickname;
       const lookupKeyChanged = (current.lookup_key ?? "") !== desiredLookupKey;
+      // Only the one-way `unspecified` transition is accepted here; any
+      // other change was already routed to a replacement by `shouldReplace`.
+      const currentTaxBehavior = (current.tax_behavior ??
+        "unspecified") as PriceTaxBehavior;
+      const taxBehaviorChanged =
+        news.taxBehavior !== undefined &&
+        news.taxBehavior !== currentTaxBehavior &&
+        currentTaxBehavior === "unspecified";
 
       if (
         !activeChanged &&
         !nicknameChanged &&
         !lookupKeyChanged &&
+        !taxBehaviorChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -498,6 +545,7 @@ export const PriceProvider = () =>
         ...(lookupKeyChanged
           ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
           : {}),
+        ...(taxBehaviorChanged ? { tax_behavior: news.taxBehavior } : {}),
         ...(metadataChanged
           ? {
               metadata: {
