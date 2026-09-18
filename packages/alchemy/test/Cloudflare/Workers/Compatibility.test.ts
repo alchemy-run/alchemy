@@ -7,6 +7,30 @@ import * as Output from "@/Output";
 import { describe, expect, test } from "alchemy-test";
 
 describe("getCompatibility", () => {
+  test("defaults both Effect and external workers to the new module registry", () => {
+    for (const isExternal of [false, true]) {
+      const { flags } = getCompatibility({ isExternal } as WorkerProps);
+      expect(flags).toContain("new_module_registry");
+    }
+  });
+
+  test("respects the legacy module registry opt-out", () => {
+    const { flags } = getCompatibility({
+      compatibility: { flags: ["legacy_module_registry"] },
+    } as WorkerProps);
+    expect(flags).toContain("legacy_module_registry");
+    expect(flags).not.toContain("new_module_registry");
+  });
+
+  test("does not duplicate an explicit new module registry flag", () => {
+    const { flags } = getCompatibility({
+      compatibility: { flags: ["new_module_registry"] },
+    } as WorkerProps);
+    expect(flags.filter((flag) => flag === "new_module_registry")).toHaveLength(
+      1,
+    );
+  });
+
   // Cloudflare enables both Node.js compatibility modes by date from
   // 2026-08-04, so Alchemy's newer default no longer emits a redundant flag.
   test("uses date-default Node.js compatibility for Effect-native workers", () => {
@@ -66,6 +90,7 @@ describe("getCompatibility", () => {
       main: "./src/entry.py",
     } as WorkerProps);
     expect(flags).toContain("python_workers");
+    expect(flags).not.toContain("new_module_registry");
     expect(flags).not.toContain("nodejs_compat");
   });
 
