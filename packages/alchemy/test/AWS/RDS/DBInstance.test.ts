@@ -7,12 +7,14 @@ import { DBCluster, DBInstance, type DBInstanceProps } from "@/AWS/RDS";
 import * as Drift from "@/Drift";
 import { State } from "@/State";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import * as rds from "@distilled.cloud/aws/rds";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -1260,6 +1262,143 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       expect(
         (yield* stack.plan(program({ omitSubnet: true }))).resources
           .AssociationInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "readiness: pending creation, blocked stop, and restart recovery",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const client = yield* HttpClient.HttpClient;
+      const observations: Array<{ action: string; statuses: string[] }> = [];
+      const observedClient = client.pipe(
+        HttpClient.transformResponse(
+          Effect.flatMap((response) =>
+            Effect.gen(function* () {
+              const body = response.request.body;
+              if (body._tag !== "Uint8Array") return response;
+              const action = yield* Effect.sync(() =>
+                new URLSearchParams(new TextDecoder().decode(body.body)).get(
+                  "Action",
+                ),
+              );
+              if (action !== "DescribeDBInstances") return response;
+              const bytes = yield* response.arrayBuffer;
+              return yield* Effect.sync(() => {
+                const text = new TextDecoder().decode(bytes);
+                observations.push({
+                  action,
+                  statuses: [
+                    ...text.matchAll(
+                      /<DBInstanceStatus>([^<]+)<\/DBInstanceStatus>/g,
+                    ),
+                  ].map((match) => match[1]!),
+                });
+                // Forward the real response bytes unchanged to the SDK parser.
+                return HttpClientResponse.fromWeb(
+                  response.request,
+                  new Response(bytes, {
+                    status: response.status,
+                    headers: response.headers,
+                  }),
+                );
+              });
+            }),
+          ),
+        ),
+      );
+      const program = Effect.gen(function* () {
+        const network = yield* Network("ReadinessNet", {
+          cidrBlock: "10.48.0.0/16",
+        });
+        const subnetGroup = yield* DBSubnetGroup("ReadinessSubnetGroup", {
+          description: "RDS readiness lifecycle",
+          subnetIds: network.privateSubnetIds,
+        });
+        return yield* DBInstance("ReadinessInstance", {
+          engine: "postgres",
+          dbInstanceClass: "db.t3.micro",
+          dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+          masterUsername: "alchemy",
+          manageMasterUserPassword: true,
+          backupRetentionPeriod: "0 days",
+          deletionProtection: false,
+          skipFinalSnapshot: true,
+          publiclyAccessible: false,
+        });
+      });
+      const deploy = stack
+        .deploy(program)
+        .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+      const created = yield* deploy;
+      const statuses = () =>
+        observations.flatMap((observation) => observation.statuses);
+      expect(statuses()).toContain("creating");
+      expect(statuses().at(-1)).toBe("available");
+      expect(created.status).toBe("available");
+      const identifier = created.dbInstanceIdentifier;
+      const describe = rds.describeDBInstances({
+        DBInstanceIdentifier: identifier,
+      });
+      const waitForStatus = (status: string) =>
+        describe.pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (response) =>
+              response.DBInstances?.[0]?.DBInstanceStatus === status,
+          }),
+        );
+      expect((yield* describe).DBInstances?.[0]?.DBInstanceStatus).toBe(
+        "available",
+      );
+
+      yield* rds.stopDBInstance({ DBInstanceIdentifier: identifier });
+      const stopped = yield* waitForStatus("stopped");
+      expect(stopped.DBInstances?.[0]?.DBInstanceStatus).toBe("stopped");
+      expect(
+        (yield* stack.plan(program)).resources.ReadinessInstance,
+      ).toMatchObject({ action: "update" });
+      const [elapsed, blocked] = yield* deploy.pipe(
+        Effect.result,
+        Effect.timed,
+      );
+      expect(Result.isFailure(blocked)).toBe(true);
+      expect(renderFailure(blocked)).toContain("DBInstanceReadinessBlocked");
+      expect(renderFailure(blocked)).toContain("stopped");
+      expect(Duration.toMillis(elapsed)).toBeLessThan(60_000);
+
+      yield* rds.startDBInstance({ DBInstanceIdentifier: identifier });
+      const starting = yield* describe.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          times: 8,
+          until: (response) =>
+            ["starting", "available"].includes(
+              response.DBInstances?.[0]?.DBInstanceStatus ?? "",
+            ),
+        }),
+      );
+      expect(["starting", "available"]).toContain(
+        starting.DBInstances?.[0]?.DBInstanceStatus,
+      );
+      observations.length = 0;
+      const started = yield* deploy;
+      expect(statuses().at(-1)).toBe("available");
+      expect(started.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(started.status).toBe("available");
+      expect((yield* describe).DBInstances?.[0]?.DBInstanceStatus).toBe(
+        "available",
+      );
+      expect(
+        (yield* stack.plan(program)).resources.ReadinessInstance,
       ).toMatchObject({ action: "noop" });
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);

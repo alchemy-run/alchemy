@@ -15,6 +15,9 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import ColdEffectWorker, {
+  COLD_EFFECT_WORKFLOW_NAME,
+} from "./fixtures/workflow-async/effect-worker.ts";
 import Stack from "./fixtures/workflow-async/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -670,3 +673,153 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+for (const dev of [false, true]) {
+  const { test: hostTest } = Test.make({
+    providers: Cloudflare.providers(),
+    dev,
+  });
+
+  hostTest.provider(
+    `binding-only host changes update dependent scriptName in the same deploy (dev: ${dev})`,
+    (scratch) =>
+      Effect.gen(function* () {
+        yield* scratch.destroy();
+        const workflowName = yield* physicalName(scratch);
+        const definition = (destination: "A" | "B") =>
+          Effect.gen(function* () {
+            const a = yield* Cloudflare.Worker("HostA", {
+              main: namedWorkflowMain,
+            });
+            const b = yield* Cloudflare.Worker("HostB", {
+              main: namedWorkflowMain,
+            });
+            const host = destination === "A" ? a : b;
+            const workflow = yield* WorkflowResource("MovedWorkflow", {
+              workflowName,
+              className: "MyWorkflow",
+              schedules: ["0 0 1 1 *"],
+            });
+            yield* workflow.bind`host`({ scriptName: host.workerName });
+            const consumer = yield* Cloudflare.Worker("HostConsumer", {
+              main: namedWorkflowMain,
+              env: { WORKFLOW_SCRIPT_NAME: workflow.scriptName },
+            });
+            return { host, workflow, consumer };
+          });
+        const client = yield* HttpClient.HttpClient;
+        const expectScript = (url: string, scriptName: string) =>
+          client.get(`${url}/workflow/script-name`).pipe(
+            Effect.flatMap((response) => response.text),
+            Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (name) => name === scriptName,
+              times: 8,
+            }),
+            Effect.tap((name) =>
+              Effect.sync(() => expect(name).toBe(scriptName)),
+            ),
+          );
+        const original = yield* scratch.deploy(definition("A"));
+        yield* expectScript(original.consumer.url!, original.host.workerName);
+        if (dev) {
+          expect(original.workflow.workflowId).toMatch(/^dev:/);
+          expect(original.consumer.url).toMatch(/^http:\/\/localhost:/);
+        }
+
+        const moved = yield* scratch.deploy(definition("B"));
+        expect(moved.host.workerName).not.toBe(original.host.workerName);
+        expect(moved.workflow.workflowId).toBe(original.workflow.workflowId);
+        expect(moved.workflow.scriptName).toBe(moved.host.workerName);
+        yield* expectScript(moved.consumer.url!, moved.host.workerName);
+        if (!dev) {
+          const observed = yield* workflows.getWorkflow({
+            accountId: moved.workflow.accountId,
+            workflowName,
+          });
+          expect(observed.id).toBe(original.workflow.workflowId);
+          expect(observed.scriptName).toBe(moved.host.workerName);
+          expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
+            "0 0 1 1 *",
+          ]);
+        }
+        yield* scratch.destroy();
+        if (!dev) {
+          yield* expectWorkflowGone(moved.workflow.accountId, workflowName);
+        }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+}
+
+for (const api of ["async", "Effect"]) {
+  test.provider(
+    `public ${api} Workflow cold adoption with a new destination Worker`,
+    (scratch) =>
+      Effect.gen(function* () {
+        yield* scratch.destroy();
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const workflowName =
+          api === "async"
+            ? yield* physicalName(scratch)
+            : COLD_EFFECT_WORKFLOW_NAME;
+        const source = Cloudflare.Worker("ColdAdoptionSource", {
+          main: namedWorkflowMain,
+        });
+        const seededHost = yield* scratch.deploy(source);
+        yield* expectWorkflowGone(accountId, workflowName);
+        const existing = yield* workflows.putWorkflow({
+          accountId,
+          workflowName,
+          scriptName: seededHost.workerName,
+          className: "MyWorkflow",
+          schedules: [{ cron: "0 0 1 1 *" }],
+        });
+        yield* Effect.addFinalizer(() =>
+          workflows.deleteWorkflow({ accountId, workflowName }).pipe(
+            Effect.catchTag("WorkflowNotFound", () => Effect.void),
+            Effect.orDie,
+          ),
+        );
+        const definition = Effect.gen(function* () {
+          yield* source;
+          if (api === "async") return yield* namedHost(workflowName);
+          return yield* ColdEffectWorker;
+        });
+        const denied = yield* scratch
+          .plan(definition.pipe(adopt(false)))
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(denied)).toBe(true);
+        if (Exit.isFailure(denied))
+          expect(Cause.pretty(denied.cause)).toContain("OwnedBySomeoneElse");
+        const untouched = yield* workflows.getWorkflow({
+          accountId,
+          workflowName,
+        });
+        expect(untouched.id).toBe(existing.id);
+        expect(untouched.scriptName).toBe(seededHost.workerName);
+        expect(untouched.schedules?.map((schedule) => schedule.cron)).toEqual([
+          "0 0 1 1 *",
+        ]);
+        const destination = yield* scratch.deploy(definition.pipe(adopt(true)));
+        const adopted = yield* workflows.getWorkflow({
+          accountId,
+          workflowName,
+        });
+        expect(adopted.id).toBe(existing.id);
+        expect(adopted.scriptName).toBe(destination.workerName);
+        expect(adopted.schedules?.map((schedule) => schedule.cron)).toEqual([
+          "0 0 1 1 *",
+        ]);
+        const terminal = yield* runWorkflowToCompletion(destination.url!).pipe(
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
+        );
+        expect(terminal.output?.greeting).toBe("Hello, world!");
+        expect(terminal.output?.workflowName).toBe(workflowName);
+        yield* scratch.destroy();
+        yield* expectWorkflowGone(accountId, workflowName);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+}

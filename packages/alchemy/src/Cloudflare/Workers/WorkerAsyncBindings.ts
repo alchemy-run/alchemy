@@ -215,10 +215,19 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
             const workflow = yield* WorkflowResource(binding.name, {
               workflowName: binding.workflowName,
               className,
-              scriptName: resource.workerName,
+              scriptName:
+                binding.workflowName === undefined
+                  ? resource.workerName
+                  : undefined,
               limits: binding.limits,
               schedules: binding.schedules,
             });
+            // Host linkage must not block the named identity's adoption probe.
+            if (binding.workflowName !== undefined) {
+              yield* workflow.bind`${resource}`({
+                scriptName: resource.workerName,
+              });
+            }
             resolvedBindingMeta = {
               ...resolvedBindingMeta,
               workflowName: binding.workflowName ?? workflow.workflowName,

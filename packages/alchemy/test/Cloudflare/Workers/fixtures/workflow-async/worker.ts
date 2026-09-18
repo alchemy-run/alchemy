@@ -29,8 +29,15 @@ export class MyWorkflow extends WorkflowEntrypoint<AsyncWorkflowEnv, Params> {
 }
 
 export default {
-  async fetch(request: Request, env: AsyncWorkflowEnv): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: AsyncWorkflowEnv & { WORKFLOW_SCRIPT_NAME?: string },
+  ): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/workflow/script-name") {
+      return new Response(env.WORKFLOW_SCRIPT_NAME);
+    }
 
     if (url.pathname.startsWith("/workflow/start/")) {
       const value = url.pathname.split("/workflow/start/")[1] ?? "world";

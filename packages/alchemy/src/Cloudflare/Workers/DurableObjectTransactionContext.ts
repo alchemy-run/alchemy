@@ -7,6 +7,8 @@ export interface ActiveStorageTransaction {
   owner: Fiber.Fiber<unknown, unknown> | undefined;
   active: boolean;
   rolledBack: boolean;
+  alarmTablesEnsured: boolean;
+  alarmDirty: boolean;
 }
 
 export const ActiveStorageTransactions = Context.Reference<

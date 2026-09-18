@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
@@ -78,12 +79,8 @@ export const makeWorkflowBridge =
 
       async run(event: any, step: any): Promise<unknown> {
         const { context, fn, telemetry } = await this.build;
-        // Each run-invocation gets a fresh `Scope`, following the same
-        // per-invocation-scope pattern as `WorkerBridge.processEvent`. `task`
-        // threads it into every step via the surrounding body context, so
-        // `@binding` helpers that acquire per-run resources against the
-        // ambient scope (e.g. `Drizzle.Postgres`) resolve them inside
-        // workflow steps, matching the Worker and Durable Object bridges.
+        // The run scope owns telemetry and resources outside tasks.
+        // Step attempts and rollback handlers use separate scopes.
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
           fn(event.payload).pipe(
@@ -139,44 +136,53 @@ const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
 export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
   do: <T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T> => {
     const { name } = options;
-    // The surrounding body context is already provided in `task`; the bridge
-    // supplies `WorkflowStepContext` and runs the step to completion, so the
-    // effect is fully satisfied (R = never) at this boundary.
+    // `task` provides application services; the bridge supplies attempt-local services.
     const effect = options.effect as Effect.Effect<
       T,
       never,
-      WorkflowStepContext
+      WorkflowStepContext | Scope.Scope
     >;
     const config = toWorkflowStepConfig(options);
     const rollbackEffect = options.rollback;
-    const callback = (context: any) =>
-      Effect.runPromise(
-        effect.pipe(
-          Effect.provideService(WorkflowStepContext, {
-            step: context.step,
-            attempt: context.attempt,
-            config: context.config,
-          }),
-        ),
-      );
     const rollback = rollbackEffect
       ? {
+          // Native compensation may run after this step and the run scope have closed.
           rollback: (context: any) =>
             Effect.runPromise(
-              rollbackEffect({
-                error: context.error,
-                output: context.output,
-              }) as Effect.Effect<void>,
+              Effect.scoped(
+                rollbackEffect({
+                  error: context.error,
+                  output: context.output,
+                }) as Effect.Effect<void, never, Scope.Scope>,
+              ),
             ),
           rollbackConfig: options.rollbackConfig,
         }
       : undefined;
-    return Effect.promise(() => {
-      if (config && rollback) return step.do(name, config, callback, rollback);
-      if (config) return step.do(name, config, callback);
-      if (rollback) return step.do(name, callback, rollback);
-      return step.do(name, callback);
-    });
+    return Effect.scoped(
+      Effect.gen(function* () {
+        // Join active callbacks on interruption, without waiting through native retry delays.
+        const runPromise = yield* FiberSet.makeRuntimePromise<never, T>();
+        const callback = (context: any) =>
+          runPromise(
+            effect.pipe(
+              Effect.provideService(WorkflowStepContext, {
+                step: context.step,
+                attempt: context.attempt,
+                config: context.config,
+              }),
+              Effect.scoped,
+            ),
+          );
+        return yield* Effect.promise<T>(() => {
+          if (config && rollback)
+            return step.do(name, config, callback, rollback);
+          if (config) return step.do(name, config, callback);
+          if (rollback) return step.do(name, callback, rollback);
+          return step.do(name, callback);
+        });
+      }),
+    );
   },
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
     Effect.promise(() => step.sleep(name, duration)),
