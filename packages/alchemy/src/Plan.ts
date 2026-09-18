@@ -1015,15 +1015,6 @@ export const make = <A>(
         );
       });
 
-    // map of resource FQN -> its downstream dependencies (resources that depend on it)
-    const oldDownstreamDependencies: {
-      [fqn: string]: string[];
-    } = Object.fromEntries(
-      oldResources
-        .filter((resource) => !!resource)
-        .map((resource) => [resource.fqn, resource.downstream]),
-    );
-
     // Build a set of FQNs for the new resources to detect orphans
     const newResourceFqns = new Set(resources.map((r) => r.FQN));
     const newActionFqns = new Set(actions.map((t) => t.FQN));
@@ -2052,6 +2043,15 @@ export const make = <A>(
           return yield* Effect.die(missingProviderError(resourceType, fqn));
         }
         const provider = providerOption.value;
+        const downstream = new Set(oldState.downstream);
+        let generation = oldState;
+        while (
+          generation.status === "replacing" ||
+          generation.status === "replaced"
+        ) {
+          generation = generation.old;
+          for (const dep of generation.downstream) downstream.add(dep);
+        }
         // NOTE: an attr-less row (interrupted create) is NOT recovered
         // here. Apply's `deleteResource` performs the authoritative
         // read-then-delete recovery — it also covers replaced-chain
@@ -2081,7 +2081,7 @@ export const make = <A>(
               RuntimeContext: undefined!,
               Providers: undefined,
             } as ResourceLike,
-            downstream: oldDownstreamDependencies[fqn] ?? [],
+            downstream: [...downstream],
             bindings: oldState.bindings.map((binding) => ({
               sid: binding.sid,
               action: "delete" as const,

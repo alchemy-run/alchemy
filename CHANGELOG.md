@@ -1,3 +1,19 @@
+## v2.0.0-beta.79
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **prisma**: Add Website framework support &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1683 [<samp>(530a2)</samp>](https://github.com/alchemy-run/alchemy/commit/530a201e4)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**: Start Bun with production JSX settings &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1694 [<samp>(eef2a)</samp>](https://github.com/alchemy-run/alchemy/commit/eef2a9123)
+- **cloudflare**: Infer env for external Worker classes &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy/issues/1697 [<samp>(233da)</samp>](https://github.com/alchemy-run/alchemy/commit/233da74ef)
+- **cloudflare-runtime**: Declare mime as a dependency &nbsp;-&nbsp; by **Matthew Aylward** in https://github.com/alchemy-run/alchemy/issues/1690 [<samp>(85991)</samp>](https://github.com/alchemy-run/alchemy/commit/859911c14)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy/compare/v2.0.0-beta.78...HEAD)
+
+---
+
 ## v2.0.0-beta.78
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

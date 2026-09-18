@@ -2,7 +2,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { Scope } from "effect/Scope";
+import { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -21,7 +21,11 @@ import {
   type WorkerServices,
 } from "../Workers/Worker.ts";
 import { makeWorkflowName } from "./WorkflowName.ts";
-import { type WorkflowEvent, WorkflowStep } from "./WorkflowRuntime.ts";
+import {
+  type WorkflowEvent,
+  WorkflowStep,
+  WorkflowStepContext,
+} from "./WorkflowRuntime.ts";
 
 export {
   WorkflowEvent,
@@ -143,6 +147,9 @@ type ExcludeWorkflowStepContext<R> = R extends {
  *
  * The step name comes first, followed by the Effect. Retry config, timeout,
  * and a rollback handler can be passed in the optional third `options` arg.
+ * Each attempt and rollback handler has a fresh Scope; its resources close
+ * before that callback completes. Interrupting a task waits for the active
+ * attempt's cleanup without waiting for Cloudflare's native retry delays.
  */
 export function task<T, R = never, RollbackReq = never>(
   name: string,
@@ -151,12 +158,13 @@ export function task<T, R = never, RollbackReq = never>(
 ): Effect.Effect<
   T,
   never,
-  WorkflowStep | ExcludeWorkflowStepContext<R | RollbackReq>
+  WorkflowStep | ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>
 > {
   return Effect.gen(function* () {
     const step = yield* WorkflowStep;
-    const context =
-      yield* Effect.context<ExcludeWorkflowStepContext<R | RollbackReq>>();
+    const context = (yield* Effect.context<
+      ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>
+    >()).pipe(Context.omit(Scope, WorkflowStepContext));
     const rollbackEffect = options?.rollback;
     return yield* step.do({
       ...options,

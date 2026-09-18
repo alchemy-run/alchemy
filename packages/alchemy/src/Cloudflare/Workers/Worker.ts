@@ -819,9 +819,11 @@ export interface WorkerProps<
   /**
    * Extra bundler options applied on top of the standard rolldown
    * input/output options used to build this Worker. Includes the generic
-   * bundle extras (pure-annotation packages, bundle analyzer) plus an
-   * `output` field of rolldown output overrides (e.g. `codeSplitting`
-   * groups) merged over Alchemy's defaults. See {@link WorkerBuildOptions}.
+   * bundle extras (pure-annotation packages, bundle analyzer) plus
+   * `input` and `output` overrides. Input plugins run before Alchemy's
+   * plugins; `input.resolve.alias` takes precedence over Node compatibility
+   * shims. The entry remains {@link main}. Ignored when {@link bundle} is
+   * `false`. See {@link WorkerBuildOptions}.
    */
   build?: WorkerBuildOptions;
   /**
@@ -1785,6 +1787,32 @@ export const isSelf = (value: unknown): value is Self =>
  * }
  * ```
  *
+ * **Example:** Replace Node modules with Worker-compatible stubs
+ * Use Rolldown's `build.input.resolve.alias` for module replacements.
+ * Aliases apply to imports and static `require()` calls before Node
+ * compatibility shims. Use absolute paths for file replacements.
+ * Keep bundling enabled: `bundle: false` uploads files unchanged and
+ * does not apply aliases. Alternatively, apply aliases in your external
+ * build before uploading its output with `bundle: false`.
+ * ```typescript
+ * import * as Path from "effect/Path";
+ *
+ * const path = yield* Path.Path;
+ * const stub = yield* path.fromFileUrl(
+ *   new URL("./.mastra/output/module-stub.mjs", import.meta.url),
+ * );
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./.mastra/output/index.mjs",
+ *   compatibility: {
+ *     date: "2025-04-01",
+ *     flags: ["nodejs_compat", "nodejs_compat_populate_process_env"],
+ *   },
+ *   build: {
+ *     input: { resolve: { alias: { module: stub, "node:module": stub } } },
+ *   },
+ * });
+ * ```
+ *
  * **Example:** Turn it off
  * ```typescript
  * {
@@ -2395,14 +2423,34 @@ export const Worker: ResourceClassLike<Worker> &
        * }) {}
        * ```
        */
-      <const Id extends string, Req = never>(
+      <
+        const Id extends string,
+        const Bindings extends WorkerBindingProps = {},
+        const Assets extends WorkerAssetsConfig | undefined = undefined,
+        Req = never,
+      >(
         id: Id,
         props:
-          | InputProps<WorkerProps>
-          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
-      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+          | InputProps<WorkerProps<Bindings, Assets>>
+          | Effect.Effect<
+              InputProps<WorkerProps<Bindings, Assets>>,
+              ConfigError,
+              Req
+            >,
+      ): Effect.Effect<
+        Worker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
+        never,
+        Req | Providers
+      > &
         Named<Id> & {
-          new (): Named<Id> & Tag<WorkerTypeId>;
+          new (): Named<Id> &
+            Tag<WorkerTypeId> & {
+              /** @internal phantom */
+              readonly "~alchemy/WorkerEnv": NormalizedBindings<
+                Bindings,
+                Assets
+              >;
+            };
         };
     };
     <

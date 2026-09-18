@@ -111,6 +111,9 @@ surrounding Effect context — handy for stack-level config like
 stage, app name, or anything else you'd want to vary per
 environment.
 
+To reuse matching image builds across stages, configure `publish.repository`
+in these same props; see [Share published images across stages](/cloudflare/compute/containers#share-published-images-across-stages).
+
 ## Implement `exec` as an RPC method
 
 Containers have **RPC methods** — the same pattern you used on
