@@ -3,7 +3,9 @@ import * as Layer from "effect/Layer";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "./Events.ts";
 import {
+  contextRef,
   ThreadStorage,
+  type GenerationRecord,
   type InboxRow,
   type SessionMeta,
   type ThreadHandle,
@@ -17,6 +19,9 @@ interface MemorySession {
   inbox: Array<InboxRow>;
   inboxSeq: number;
   drained: number;
+  /** Context chain: closed generations' archived surfaces + records. */
+  lineage: Array<GenerationRecord>;
+  archives: Map<number, Array<Prompt.MessageEncoded>>;
 }
 
 /**
@@ -38,6 +43,8 @@ export const makeThreadStorageMemory = (): ThreadStorageService => {
           inbox: [],
           inboxSeq: 0,
           drained: 0,
+          lineage: [],
+          archives: new Map(),
         };
         sessions.set(id, session);
       }
@@ -118,6 +125,34 @@ export const makeThreadStorageMemory = (): ThreadStorageService => {
             replaceMessages: (messages) =>
               Effect.sync(() => {
                 session.messages = [...messages];
+              }),
+            advanceGeneration: (advance) =>
+              Effect.sync(() => {
+                const tip = session.lineage[0]?.generation ?? 0;
+                session.archives.set(tip, session.messages);
+                session.messages = [...advance.surface];
+                const generation = tip + 1;
+                const record: GenerationRecord = {
+                  ref: contextRef(term, key, generation),
+                  generation,
+                  parent: advance.parent ?? contextRef(term, key, tip),
+                  author: advance.author,
+                  kind: advance.kind,
+                  ...(advance.doc === undefined ? {} : { doc: advance.doc }),
+                  dropped: advance.dropped,
+                  tokensBefore: advance.tokensBefore,
+                  tokensAfter: advance.tokensAfter,
+                  at: Date.now(),
+                };
+                session.lineage.unshift(record);
+                return record;
+              }),
+            lineage: Effect.sync(() => session.lineage.slice()),
+            messagesAt: (generation) =>
+              Effect.sync(() => {
+                const tip = session.lineage[0]?.generation ?? 0;
+                if (generation === tip) return session.messages.slice();
+                return session.archives.get(generation)?.slice() ?? [];
               }),
             appendObservation: (observation, meta) =>
               Effect.sync(() => {

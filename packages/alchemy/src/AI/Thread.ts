@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { Fragment } from "./Fragment.ts";
 import type { Message } from "./Message.ts";
+import type { GenerationRecord } from "./ThreadStorage.ts";
 
 /**
  * A compaction request — the ONE mutation a charter may ask of its
@@ -71,6 +72,18 @@ export interface ThreadService {
   readonly invocations: Effect.Effect<ReadonlyArray<Message<unknown>>>;
   /** Request compaction; applied at the next sampling boundary. */
   readonly compact: (plan: CompactPlan) => Effect.Effect<void>;
+  /**
+   * The current generation's {@link ContextRef} address
+   * (`"<term>/<key>@<n>"`) — the tip of this session's context chain.
+   */
+  readonly tip: Effect.Effect<string>;
+  /**
+   * The session's context chain, tip first — one
+   * {@link GenerationRecord} per compaction that closed a generation
+   * (empty while still on the birth generation). Read-only, like
+   * `entries`: the chain is driver-owned.
+   */
+  readonly lineage: Effect.Effect<ReadonlyArray<GenerationRecord>>;
   /**
    * ANSWER the current round: resolve every pending dispatch waiter
    * with `value`, from wherever the answer is actually produced (a

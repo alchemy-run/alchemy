@@ -26,7 +26,12 @@ import * as Effect from "effect/Effect";
 import * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "../../AI/Events.ts";
 import type { Message } from "../../AI/Message.ts";
-import type { SessionMeta, ThreadHandle } from "../../AI/ThreadStorage.ts";
+import {
+  contextRef,
+  type GenerationRecord,
+  type SessionMeta,
+  type ThreadHandle,
+} from "../../AI/ThreadStorage.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { DurableObjectState } from "../Workers/DurableObjectState.ts";
 
@@ -45,6 +50,10 @@ export const INBOX = "inbox:";
 export const MSG = "msg:";
 export const OBS = "obs:";
 export const REMIND = "remind:";
+/** GenerationRecords, keyed by generation number. */
+export const GEN = "gen:";
+/** Archived thread rows of closed generations. */
+export const ARC = "arc:";
 export const META = "meta";
 
 /** Zero-padded so lexical key order IS arrival order. */
@@ -53,6 +62,14 @@ export const seqKey = (prefix: string, seq: number) =>
 
 export const seqOf = (prefix: string, key: string) =>
   Number(key.slice(prefix.length));
+
+/** `arc:{generation}:{seq}` — both zero-padded, so lexical order is
+ *  numeric order within a generation. */
+export const arcKey = (generation: number, seq: number) =>
+  `${ARC}${String(generation).padStart(12, "0")}:${String(seq).padStart(12, "0")}`;
+
+const arcPrefix = (generation: number) =>
+  `${ARC}${String(generation).padStart(12, "0")}:`;
 
 /**
  * The DO session's full meta — the shared {@link SessionMeta} (which
@@ -319,6 +336,73 @@ export const makeThreadStorageDurableObject = (
       rows.map(([, message]) => message),
     ),
     appendMessages: appendThread,
+    // the ledgered replace: archived copies of the current surface,
+    // the record, the new surface, and the seq — ONE put (plus the
+    // old rows' delete), landed together by workerd's output gate
+    advanceGeneration: (advance) =>
+      sealed(
+        Effect.gen(function* () {
+          // identity is lazy: the plan-time mock state has no id
+          const name = String(state.id.name);
+          const slash = name.indexOf("/");
+          const term = slash < 0 ? name : name.slice(0, slash);
+          const key = slash < 0 ? name : name.slice(slash + 1);
+          const meta = yield* readMeta;
+          const records = yield* listRows<GenerationRecord>(GEN);
+          const tip =
+            records.length === 0
+              ? 0
+              : records[records.length - 1]![1].generation;
+          const current = yield* listRows<Prompt.MessageEncoded>(MSG);
+          const entries: Record<string, unknown> = {};
+          for (const [k, message] of current) {
+            entries[arcKey(tip, seqOf(MSG, k))] = message;
+          }
+          const generation = tip + 1;
+          const record: GenerationRecord = {
+            ref: contextRef(term, key, generation),
+            generation,
+            parent: advance.parent ?? contextRef(term, key, tip),
+            author: advance.author,
+            kind: advance.kind,
+            ...(advance.doc === undefined ? {} : { doc: advance.doc }),
+            dropped: advance.dropped,
+            tokensBefore: advance.tokensBefore,
+            tokensAfter: advance.tokensAfter,
+            at: Date.now(),
+          };
+          entries[seqKey(GEN, generation)] = record;
+          let seq = 0;
+          for (const message of advance.surface) {
+            entries[seqKey(MSG, seq++)] = message;
+          }
+          entries[META] = { ...meta, seq } satisfies DurableSessionMeta;
+          // mirror replaceMessages: old rows deleted, then the batch
+          if (current.length > 0) {
+            yield* storage.delete(current.map(([k]) => k)).pipe(Effect.orDie);
+          }
+          yield* storage.put(entries).pipe(Effect.orDie);
+          return record;
+        }),
+      ),
+    lineage: Effect.map(listRows<GenerationRecord>(GEN), (rows) =>
+      rows.map(([, record]) => record).reverse(),
+    ),
+    messagesAt: (generation) =>
+      sealed(
+        Effect.gen(function* () {
+          const records = yield* listRows<GenerationRecord>(GEN);
+          const tip =
+            records.length === 0
+              ? 0
+              : records[records.length - 1]![1].generation;
+          const rows =
+            generation === tip
+              ? yield* listRows<Prompt.MessageEncoded>(MSG)
+              : yield* listRows<Prompt.MessageEncoded>(arcPrefix(generation));
+          return rows.map(([, message]) => message);
+        }),
+      ),
     replaceMessages: (messages) =>
       sealed(
         Effect.gen(function* () {

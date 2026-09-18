@@ -85,3 +85,4 @@ examples/cloudflare-worker/src/scratch.ts
 .tool-output/
 
 !packages/alchemy/src/Cloudflare/Workers/worker-module.d.ts
+.vendor/

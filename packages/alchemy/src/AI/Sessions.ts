@@ -3,6 +3,7 @@ import type * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { BranchError } from "./Errors.ts";
 import type { SessionObservation } from "./Events.ts";
 import type { Message } from "./Message.ts";
 import type { SessionSummary } from "./SessionIndex.ts";
@@ -198,5 +199,24 @@ export class Sessions extends Context.Service<
       key: string,
       options?: { readonly machine?: boolean },
     ) => Effect.Effect<void, never, RuntimeContext>;
+    /**
+     * BRANCH a new session from any generation of an existing one —
+     * git's "new ref at a commit". `ref` is a context ref
+     * (`"<term>/<key>@<n>"`, see `Thread.tip`/`Thread.lineage`); the
+     * new session under `options.key` is seeded with that
+     * generation's surface (and its record's doc), its birth record
+     * `kind: "branch"` pointing at `ref` as parent. The source is
+     * untouched; a target that already holds a session refuses
+     * (`occupied` — a branch never overwrites). Answers the new
+     * session's key and tip ref.
+     */
+    readonly branch: (
+      ref: string,
+      options: { readonly key: string },
+    ) => Effect.Effect<
+      { readonly session: string; readonly ref: string },
+      BranchError,
+      RuntimeContext
+    >;
   }
 >()("alchemy/AI/Sessions") {}

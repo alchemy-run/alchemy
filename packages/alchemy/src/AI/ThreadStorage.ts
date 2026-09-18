@@ -53,6 +53,62 @@ export interface InboxRow {
   readonly kind?: "reminder";
 }
 
+/**
+ * Stable address of one GENERATION of a session's context:
+ * `"<term>/<key>@<n>"` — usable in URLs, pane tokens, and
+ * `Sessions.branch` calls. The chain of generations is the session's
+ * context history, git-shaped: each generation is immutable, points
+ * at its parent, and carries the distilled doc that opened it.
+ */
+export const contextRef = (term: string, key: string, generation: number) =>
+  `${term}/${key}@${generation}`;
+
+/** Split a {@link contextRef} back into its parts. */
+export const parseContextRef = (
+  ref: string,
+): { term: string; key: string; generation: number } | undefined => {
+  const at = ref.lastIndexOf("@");
+  const slash = ref.indexOf("/");
+  if (at <= slash || slash < 0) return undefined;
+  const generation = Number(ref.slice(at + 1));
+  if (!Number.isInteger(generation) || generation < 0) return undefined;
+  return {
+    term: ref.slice(0, slash),
+    key: ref.slice(slash + 1, at),
+    generation,
+  };
+};
+
+/**
+ * One link in a session's context chain — written when compaction
+ * closes a generation and opens the next. Generation 0 is the
+ * session's birth and has no record (an empty lineage = still on the
+ * birth generation). The record is the INTROSPECTABLE unit: the UI's
+ * generation rail renders `doc`, and `messagesAt` recovers what the
+ * generation shadowed — nothing is destroyed, the surface is
+ * re-pointed.
+ */
+export interface GenerationRecord {
+  /** This generation's address — `contextRef(term, key, generation)`. */
+  readonly ref: string;
+  readonly generation: number;
+  /** The previous generation's ref — or, for a branch birth, the
+   *  FOREIGN ref this session was seeded from. */
+  readonly parent: string | undefined;
+  /** Who advanced it: a policy name (`"observational"`), `"charter"`
+   *  (an explicit `thread.compact`), or `"branch"`. */
+  readonly author: string;
+  readonly kind: "drop" | "reset" | "observe" | "reflect" | "branch";
+  /** The distilled artifact this generation opens with (summary or
+   *  observation log). */
+  readonly doc?: string;
+  /** How many messages of the parent generation were shadowed. */
+  readonly dropped: number;
+  readonly tokensBefore: number;
+  readonly tokensAfter: number;
+  readonly at: number;
+}
+
 /** One session's storage — all reads and writes for `${term}/${key}`. */
 export interface ThreadHandle {
   /** The persisted meta, or `undefined` if nothing was ever written. */
@@ -105,10 +161,42 @@ export interface ThreadHandle {
   readonly appendMessages: (
     messages: ReadonlyArray<Prompt.MessageEncoded>,
   ) => Effect.Effect<void>;
-  /** Replace the whole thread — compaction's one mutation. */
+  /** Replace the whole thread — compaction's one mutation. Prefer
+   *  {@link advanceGeneration}, which replaces AND keeps the shadowed
+   *  rows addressable; this remains for callers that intend true
+   *  destruction. */
   readonly replaceMessages: (
     messages: ReadonlyArray<Prompt.MessageEncoded>,
   ) => Effect.Effect<void>;
+  /**
+   * Compaction's ledgered mutation: archive the current surface under
+   * the current generation number, install `surface` as the new
+   * current messages, and append the {@link GenerationRecord} for the
+   * new generation — atomically. Returns the record (with `ref` and
+   * `parent` filled in by the storage, which knows term/key and the
+   * prior tip). `parent` in the options overrides the computed parent
+   * for branch births seeded from a FOREIGN session.
+   */
+  readonly advanceGeneration: (options: {
+    readonly author: string;
+    readonly kind: GenerationRecord["kind"];
+    readonly doc?: string;
+    readonly dropped: number;
+    readonly tokensBefore: number;
+    readonly tokensAfter: number;
+    readonly parent?: string;
+    readonly surface: ReadonlyArray<Prompt.MessageEncoded>;
+  }) => Effect.Effect<GenerationRecord>;
+  /** The context chain, TIP FIRST (empty = still on generation 0). */
+  readonly lineage: Effect.Effect<ReadonlyArray<GenerationRecord>>;
+  /**
+   * The raw messages of any generation — the archived rows for a
+   * closed generation, the live surface for the tip. Unknown
+   * generations answer empty.
+   */
+  readonly messagesAt: (
+    generation: number,
+  ) => Effect.Effect<ReadonlyArray<Prompt.MessageEncoded>>;
   /**
    * Append one durable observation AND persist the meta whose
    * `observed` cursor accounts for it — one call so implementations

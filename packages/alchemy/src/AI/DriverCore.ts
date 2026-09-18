@@ -60,10 +60,13 @@ import {
   type ThreadService,
   type TickService,
 } from "./Thread.ts";
-import type {
-  SessionMeta,
-  ThreadHandle,
-  ThreadStorageService,
+import { Compaction } from "./Compaction.ts";
+import {
+  contextRef,
+  type GenerationRecord,
+  type SessionMeta,
+  type ThreadHandle,
+  type ThreadStorageService,
 } from "./ThreadStorage.ts";
 import {
   errorTag,
@@ -862,26 +865,43 @@ export interface SessionOps {
   ) => (params: any) => Effect.Effect<any, any>;
 }
 
+/** Chars/4 estimate of a surface's size — the ledger's token columns. */
+const estimateTokens = (rows: ReadonlyArray<Prompt.MessageEncoded>): number =>
+  Math.ceil(JSON.stringify(rows).length / 4);
+
 /**
  * Apply one requested compaction to a session's thread — shared by
  * every host because it operates purely on the {@link ThreadHandle}.
  * The system prompt is untouched; drops leave an archived marker
  * (restorable eviction — nothing is silently rewritten); reset
- * restarts the thread from one summary note.
+ * restarts the thread from one summary note. The mutation is
+ * LEDGERED (`advanceGeneration`): the shadowed rows stay addressable
+ * under the closed generation. Answers the new {@link
+ * GenerationRecord}, or `undefined` when nothing changed (a drop
+ * that matched no rows advances no generation).
  */
 export const applyCompactionPlan = Effect.fn(function* (
   handle: ThreadHandle,
   plan: CompactPlan,
+  author = "charter",
 ) {
+  const rows = yield* handle.messages;
   if ("reset" in plan) {
-    yield* handle.replaceMessages([
+    const surface = [
       noteMessage(
         `The thread was compacted; it restarts from this summary of prior work:\n${plan.reset.summary}`,
       ),
-    ]);
-    return;
+    ];
+    return yield* handle.advanceGeneration({
+      author,
+      kind: "reset",
+      doc: plan.reset.summary,
+      dropped: rows.length,
+      tokensBefore: estimateTokens(rows),
+      tokensAfter: estimateTokens(surface),
+      surface,
+    });
   }
-  const rows = yield* handle.messages;
   const decoded = Prompt.make([...rows]).content;
   const kept: Array<Prompt.MessageEncoded> = [];
   let dropped = 0;
@@ -892,13 +912,21 @@ export const applyCompactionPlan = Effect.fn(function* (
       kept.push(rows[index]!);
     }
   }
-  if (dropped === 0) return;
-  yield* handle.replaceMessages([
+  if (dropped === 0) return undefined;
+  const surface = [
     asUserMessage(
       `[${dropped} earlier message${dropped === 1 ? "" : "s"} archived by compaction]`,
     ),
     ...kept,
-  ]);
+  ];
+  return yield* handle.advanceGeneration({
+    author,
+    kind: "drop",
+    dropped,
+    tokensBefore: estimateTokens(rows),
+    tokensAfter: estimateTokens(surface),
+    surface,
+  });
 });
 
 /**
@@ -2428,6 +2456,13 @@ export const makeSessionEngine = (
       Effect.sync(() => {
         s.pendingCompaction = plan;
       }),
+    // the context chain's address: the tip record's ref, or the birth
+    // generation's when no compaction ever closed one
+    tip: Effect.map(
+      s.handle.lineage,
+      (lineage) => lineage[0]?.ref ?? contextRef(term, s.key, 0),
+    ),
+    lineage: s.handle.lineage,
     // ANSWER the current round, from wherever the answer is produced
     // (usually a tool handler) — the caller resolves now; the session
     // neither parks nor ends
@@ -2935,13 +2970,55 @@ export const makeSessionEngine = (
         break;
       }
       // boundary work: requested compaction applies BEFORE the new
-      // inputs join the thread, so nothing fresh is lost
-      yield* Effect.suspend(() => {
+      // inputs join the thread, so nothing fresh is lost. Absent an
+      // explicit request, the ambient `Compaction` policy from the
+      // charter's captured context is consulted — its plan rides the
+      // same ledgered mechanism, stamped with the policy's name.
+      // CONTAINED: a compaction failure costs the compaction, never
+      // the round.
+      yield* Effect.gen(function* () {
         const plan = s.pendingCompaction;
-        if (plan === undefined) return Effect.void;
         s.pendingCompaction = undefined;
-        return applyCompactionPlan(s.handle, plan);
-      });
+        let record: GenerationRecord | undefined;
+        if (plan !== undefined) {
+          record = yield* applyCompactionPlan(s.handle, plan);
+        } else {
+          const policy = Context.getOption(context, Compaction);
+          if (Option.isSome(policy)) {
+            // the model the session samples with: the stance-provided
+            // one when set, else the driver's Layer (a summarizing
+            // policy needs `generateText`; a streaming-only stub
+            // hands the policy nothing and it declines)
+            const model =
+              s.model ??
+              (typeof (languageModel as { generateText?: unknown })
+                .generateText === "function"
+                ? (languageModel as LanguageModel.LanguageModel)
+                : undefined);
+            const considered = yield* policy.value.consider(
+              makeThreadService(s),
+              model,
+            );
+            if (considered !== undefined) {
+              record = yield* applyCompactionPlan(
+                s.handle,
+                considered,
+                policy.value.name,
+              );
+            }
+          }
+        }
+        if (record !== undefined) {
+          yield* observe(s, { type: "compaction", record });
+        }
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(
+            `${driver} session '${term}/${s.key}': compaction failed (contained)`,
+            cause,
+          ),
+        ),
+      );
       const inputs = rows.map((row) => row.message.content);
       if (rows.length > 0) {
         const maxSeq = rows[rows.length - 1]!.seq;

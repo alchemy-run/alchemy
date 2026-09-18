@@ -27,7 +27,9 @@ import type * as Prompt from "effect/unstable/ai/Prompt";
 import type { SessionObservation } from "../AI/Events.ts";
 import type { Message } from "../AI/Message.ts";
 import {
+  contextRef,
   ThreadStorage,
+  type GenerationRecord,
   type InboxRow,
   type SessionMeta,
   type ThreadHandle,
@@ -84,6 +86,21 @@ CREATE TABLE IF NOT EXISTS session_observations (
   seq  INTEGER NOT NULL,
   data TEXT NOT NULL,
   PRIMARY KEY (term, key, seq)
+);
+CREATE TABLE IF NOT EXISTS session_generations (
+  term       TEXT NOT NULL,
+  key        TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  data       TEXT NOT NULL,
+  PRIMARY KEY (term, key, generation)
+);
+CREATE TABLE IF NOT EXISTS session_archive (
+  term       TEXT NOT NULL,
+  key        TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,
+  data       TEXT NOT NULL,
+  PRIMARY KEY (term, key, generation, seq)
 );`;
 
 export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
@@ -302,6 +319,85 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                     insertMessages(messages);
                   })();
                 }),
+              // the ledgered replace: archive the current surface
+              // under the tip, install the new one, and append the
+              // record — ONE transaction, so a crash leaves either the
+              // old generation or the whole new one
+              advanceGeneration: (advance) =>
+                Effect.sync(() =>
+                  db.transaction((): GenerationRecord => {
+                    const tip = (
+                      db
+                        .query(
+                          "SELECT COALESCE(MAX(generation), 0) AS tip FROM session_generations WHERE term = ? AND key = ?",
+                        )
+                        .get(term, key) as { tip: number }
+                    ).tip;
+                    db.query(
+                      "INSERT INTO session_archive (term, key, generation, seq, data) SELECT term, key, ?, seq, data FROM session_messages WHERE term = ? AND key = ?",
+                    ).run(tip, term, key);
+                    db.query(
+                      "DELETE FROM session_messages WHERE term = ? AND key = ?",
+                    ).run(term, key);
+                    insertMessages(advance.surface);
+                    const generation = tip + 1;
+                    const record: GenerationRecord = {
+                      ref: contextRef(term, key, generation),
+                      generation,
+                      parent: advance.parent ?? contextRef(term, key, tip),
+                      author: advance.author,
+                      kind: advance.kind,
+                      ...(advance.doc === undefined
+                        ? {}
+                        : { doc: advance.doc }),
+                      dropped: advance.dropped,
+                      tokensBefore: advance.tokensBefore,
+                      tokensAfter: advance.tokensAfter,
+                      at: Date.now(),
+                    };
+                    db.query(
+                      "INSERT INTO session_generations (term, key, generation, data) VALUES (?, ?, ?, ?)",
+                    ).run(term, key, generation, JSON.stringify(record));
+                    return record;
+                  })(),
+                ),
+              lineage: Effect.sync(
+                () =>
+                  (
+                    db
+                      .query(
+                        "SELECT data FROM session_generations WHERE term = ? AND key = ? ORDER BY generation DESC",
+                      )
+                      .all(term, key) as Array<{ data: string }>
+                  ).map(
+                    (row) => JSON.parse(row.data) as GenerationRecord,
+                  ) as ReadonlyArray<GenerationRecord>,
+              ),
+              messagesAt: (generation) =>
+                Effect.sync(() => {
+                  const tip = (
+                    db
+                      .query(
+                        "SELECT COALESCE(MAX(generation), 0) AS tip FROM session_generations WHERE term = ? AND key = ?",
+                      )
+                      .get(term, key) as { tip: number }
+                  ).tip;
+                  const table =
+                    generation === tip
+                      ? db
+                          .query(
+                            "SELECT data FROM session_messages WHERE term = ? AND key = ? ORDER BY seq",
+                          )
+                          .all(term, key)
+                      : db
+                          .query(
+                            "SELECT data FROM session_archive WHERE term = ? AND key = ? AND generation = ? ORDER BY seq",
+                          )
+                          .all(term, key, generation);
+                  return (table as Array<{ data: string }>).map(
+                    (row) => JSON.parse(row.data) as Prompt.MessageEncoded,
+                  ) as ReadonlyArray<Prompt.MessageEncoded>;
+                }),
               // the row and its cursor land in ONE transaction: a
               // restored session can never re-issue a used seq
               appendObservation: (observation, meta) =>
@@ -361,6 +457,8 @@ export const ThreadStorageSqlite = (path: string): Layer.Layer<ThreadStorage> =>
                 "session_messages",
                 "session_inbox",
                 "session_observations",
+                "session_generations",
+                "session_archive",
               ]) {
                 db.query(`DELETE FROM ${table} WHERE term = ? AND key = ?`).run(
                   term,

@@ -25,6 +25,8 @@ const phantomThread = (key: string): AI.ThreadService => ({
   entries: Effect.succeed([]),
   invocations: Effect.succeed([]),
   compact: () => Effect.void,
+  tip: Effect.succeed(""),
+  lineage: Effect.succeed([]),
   reply: () => Effect.void,
   remind: () => Effect.void,
   publish: () => Effect.void,

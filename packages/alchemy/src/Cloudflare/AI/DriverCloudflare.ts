@@ -57,7 +57,7 @@ import {
   type SessionShape,
   type SessionEngine,
 } from "../../AI/DriverCore.ts";
-import type { DriverError } from "../../AI/Errors.ts";
+import { BranchError, type DriverError } from "../../AI/Errors.ts";
 import type { SessionObservation } from "../../AI/Events.ts";
 import type { Message } from "../../AI/Message.ts";
 import { SessionIndex, sessionId } from "../../AI/SessionIndex.ts";
@@ -155,6 +155,8 @@ const phantomThread = (key: string): ThreadService => ({
   entries: Effect.succeed([]),
   invocations: Effect.succeed([]),
   compact: () => Effect.void,
+  tip: Effect.succeed(""),
+  lineage: Effect.succeed([]),
   reply: () => Effect.void,
   remind: () => Effect.void,
   publish: () => Effect.void,
@@ -1221,6 +1223,11 @@ export const DurableObjectHost: Layer.Layer<
             onSome: (index) => index.remove(sessionId(term, key)),
           });
         }),
+        // branching needs cross-DO seeding verbs (read a foreign
+        // generation, install it on a fresh instance) — not wired yet
+        // on this placement
+        branch: (ref) =>
+          Effect.fail(new BranchError({ ref, reason: "unsupported" })),
       }),
     );
   }),

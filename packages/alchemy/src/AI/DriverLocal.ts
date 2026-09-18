@@ -24,8 +24,9 @@ import {
   type SessionSocketClientFrame,
   type SessionSocketServerFrame,
 } from "./SessionSocket.ts";
+import { BranchError } from "./Errors.ts";
 import { Sessions } from "./Sessions.ts";
-import { ThreadStorage } from "./ThreadStorage.ts";
+import { parseContextRef, ThreadStorage } from "./ThreadStorage.ts";
 
 type SendFrame = (frame: SessionSocketServerFrame) => Effect.Effect<void>;
 
@@ -123,6 +124,52 @@ export const DriverLocal: Layer.Layer<
       if (!reopened) return;
       residents.get(term)?.(key);
       yield* kicks.get(term)?.(key) ?? Effect.void;
+    });
+
+    // BRANCH: seed a fresh session from any generation of an existing
+    // one — pure ThreadStorage, no engine: the branch exists dormant
+    // until its first input admits it (like `open`, without the row)
+    const branch = Effect.fn(function* (
+      ref: string,
+      options: { readonly key: string },
+    ) {
+      const parsed = parseContextRef(ref);
+      if (parsed === undefined) {
+        return yield* new BranchError({ ref, reason: "invalid-ref" });
+      }
+      const source = yield* threadStorage.open(parsed.term, parsed.key);
+      const lineage = yield* source.lineage;
+      const tip = lineage[0]?.generation ?? 0;
+      if (parsed.generation > tip) {
+        return yield* new BranchError({ ref, reason: "unknown-generation" });
+      }
+      const record = lineage.find(
+        (candidate) => candidate.generation === parsed.generation,
+      );
+      const surface = yield* source.messagesAt(parsed.generation);
+      const target = yield* threadStorage.open(parsed.term, options.key);
+      const meta = yield* target.meta;
+      const occupied = yield* target.messages;
+      if (meta !== undefined || occupied.length > 0) {
+        return yield* new BranchError({
+          ref,
+          reason: "occupied",
+          key: options.key,
+        });
+      }
+      yield* target.putMeta({ tick: 0, observed: 0, active: [] });
+      const tokens = Math.ceil(JSON.stringify(surface).length / 4);
+      const born = yield* target.advanceGeneration({
+        author: "branch",
+        kind: "branch",
+        ...(record?.doc === undefined ? {} : { doc: record.doc }),
+        dropped: 0,
+        tokensBefore: tokens,
+        tokensAfter: tokens,
+        parent: ref,
+        surface,
+      });
+      return { session: options.key, ref: born.ref };
     });
 
     const remove = Effect.fn(function* (term: string, key: string) {
@@ -387,6 +434,7 @@ export const DriverLocal: Layer.Layer<
           }),
         resume,
         remove,
+        branch,
       }),
     );
   }),

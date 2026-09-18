@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
+import type { GenerationRecord } from "./ThreadStorage.ts";
 
 /**
  * The ENCODED form of a round failure — what a `crashed` observation
@@ -266,6 +267,17 @@ export type SessionObservation = ObservationEnvelope &
          * or the thread had already quiesced.
          */
         readonly type: "resumed";
+      }
+    | {
+        /**
+         * A COMPACTION closed a generation and opened the next — the
+         * thread's surface was re-pointed, nothing destroyed. The
+         * {@link GenerationRecord} is the introspectable unit: the
+         * generation rail renders it, and `messagesAt` recovers what
+         * it shadowed. Renderers that don't know the type ignore it.
+         */
+        readonly type: "compaction";
+        readonly record: GenerationRecord;
       }
     | {
         /**

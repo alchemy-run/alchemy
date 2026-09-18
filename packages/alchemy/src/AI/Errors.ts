@@ -57,3 +57,34 @@ export class DriverError extends Data.TaggedError("AI.DriverError")<{
   readonly term: string;
   readonly message: string;
 }> {}
+
+/**
+ * `Sessions.branch` refused: the ref does not parse
+ * (`invalid-ref`), names a generation the source never reached
+ * (`unknown-generation`), the target key already holds a session
+ * (`occupied` — a branch never overwrites), or the placement cannot
+ * branch yet (`unsupported`).
+ */
+export class BranchError extends Data.TaggedError("AI.BranchError")<{
+  readonly ref: string;
+  readonly reason:
+    | "invalid-ref"
+    | "unknown-generation"
+    | "occupied"
+    | "unsupported";
+  /** The target key, when the refusal is about it. */
+  readonly key?: string;
+}> {
+  override get message() {
+    switch (this.reason) {
+      case "invalid-ref":
+        return `branch: '${this.ref}' is not a context ref ("<term>/<key>@<n>")`;
+      case "unknown-generation":
+        return `branch: '${this.ref}' names a generation the source never reached`;
+      case "occupied":
+        return `branch: target '${this.key}' already holds a session — a branch never overwrites`;
+      case "unsupported":
+        return `branch: this driver placement cannot branch yet`;
+    }
+  }
+}
