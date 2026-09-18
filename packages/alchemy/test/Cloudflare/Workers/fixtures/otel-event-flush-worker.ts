@@ -50,7 +50,7 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
           HttpClientRequest.get("http://otel-event-flush-target/"),
         );
         return HttpServerResponse.text(`worker-saw:${yield* response.text}`);
-      }).pipe(Effect.orDie),
+      }).pipe(Effect.withSpan("otel-event-flush.worker"), Effect.orDie),
     };
   }).pipe(
     Effect.provide(

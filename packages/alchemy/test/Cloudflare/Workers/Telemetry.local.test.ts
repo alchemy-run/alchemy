@@ -14,10 +14,13 @@ test.provider(
   "delivers Worker and Durable Object OTLP batches without delaying the Worker response",
   (stack) =>
     Effect.gen(function* () {
-      // Delayed responses expose whether export delivery waits on the
-      // Worker response (it must not) or rides `waitUntil`.
-      const collector = yield* startOtlpCollector({ responseDelay: 500 });
+      // Hold only Worker exports: the DO may flush in either foreground or background.
+      const collector = yield* startOtlpCollector({
+        holdResponse: (body) =>
+          body.includes('"name":"otel-event-flush.worker"'),
+      });
       const currentConfig = yield* ConfigProvider.ConfigProvider;
+      yield* stack.destroy();
       const deployment = yield* stack
         .deploy(
           Effect.gen(function* () {
@@ -47,19 +50,12 @@ test.provider(
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("worker-saw:durable-object-ok");
 
-      // The latency contract: the Worker's own batch must still be in
-      // flight at response time — its export completes in the background
-      // under `ctx.waitUntil`, so the 500ms-delayed collector cannot have
-      // acknowledged it yet. A value of 2 here means the Worker response
-      // waited on its own telemetry export — a latency regression. (The DO
-      // batch may or may not have completed, depending on whether the DO
-      // bridge exports foreground or background — both satisfy the
-      // contract.)
-      const completedAtResponse = collector.completedRequests.value;
-      expect(completedAtResponse).toBeLessThanOrEqual(1);
+      // Release only after the response, not on a timer that can outlive
+      // the exporter's three-second shutdown deadline under runner load.
+      expect(collector.completedRequests.value).toBeLessThanOrEqual(1);
+      yield* Effect.sync(collector.releaseResponses);
 
-      // The delivery contract: with workerd still alive, background
-      // exports must complete — nothing is lost.
+      // Both batches must be acknowledged before the next event.
       yield* Effect.sync(() => collector.completedRequests.value).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("100 millis"),
@@ -71,10 +67,12 @@ test.provider(
 
       // Same contract for the Durable Object RPC event path: the Worker's
       // own batch (the 4th) must not be complete at response time.
+      yield* Effect.sync(collector.holdResponses);
       const rpcResponse = yield* client.get(`${deployment.url}/rpc`);
       expect(rpcResponse.status).toBe(200);
       expect(yield* rpcResponse.text).toBe("worker-saw:durable-object-rpc-ok");
       expect(collector.completedRequests.value).toBeLessThanOrEqual(3);
+      yield* Effect.sync(collector.releaseResponses);
 
       yield* Effect.sync(() => collector.completedRequests.value).pipe(
         Effect.repeat({
@@ -84,6 +82,22 @@ test.provider(
         }),
       );
       expect(collector.completedRequests.value).toBe(4);
+      expect(collector.requests).toHaveLength(4);
+      expect(
+        collector.requests.every((batch) => batch.completed && !batch.aborted),
+      ).toBe(true);
+      for (const [name, count] of [
+        ["otel-event-flush.worker", 2],
+        ["otel-event-flush.child", 1],
+        ["otel-event-flush.rpc", 1],
+        ["http.server GET", 3],
+      ] as const) {
+        expect(
+          collector.requests.filter((batch) =>
+            batch.body.includes(`"name":"${name}"`),
+          ),
+        ).toHaveLength(count);
+      }
 
       yield* stack.destroy();
       expect(collector.completedRequests.value).toBe(4);

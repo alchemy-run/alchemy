@@ -31,7 +31,8 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   "LifecycleWorkflow",
   Effect.gen(function* () {
     const journals = yield* Journal;
-    return Effect.fn(function* (input: { scenario: Scenario }) {
+    return Effect.fn(function* (input: { scenario: Scenario | "ready" }) {
+      if (input.scenario === "ready") return ["workflow-ready"];
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const journal = journals.getByName(event.instanceId);
       const runScope = yield* Effect.scope;
@@ -111,6 +112,16 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         const [, action, value] = path.split("/");
+        if (action === "probe") {
+          if (request.method === "POST") {
+            const instance = yield* workflow.create({
+              params: { scenario: "ready" },
+            });
+            return yield* HttpServerResponse.json({ id: instance.id });
+          }
+          const instance = yield* workflow.get(value);
+          return yield* HttpServerResponse.json(yield* instance.status());
+        }
         if (action === "start" && request.method === "POST") {
           const instance = yield* workflow.create({
             params: { scenario: value as Scenario },

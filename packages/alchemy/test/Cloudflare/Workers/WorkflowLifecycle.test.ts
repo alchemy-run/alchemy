@@ -22,7 +22,7 @@ const Stack = Alchemy.Stack(
 interface Status {
   status: string;
   output?: string[];
-  error?: unknown;
+  error?: { name?: string; message?: string } | null;
   rollback?: { outcome: string } | null;
   entries: string[];
 }
@@ -41,6 +41,51 @@ const request = Effect.fn(function* (
     );
   }
   return body;
+});
+
+const probeWorkflow = Effect.fn(function* (url: string) {
+  const ready = yield* Effect.gen(function* () {
+    const started = yield* request(`${url}/probe`, "POST");
+    const { id } = yield* Effect.try(
+      () => JSON.parse(started) as { id: string },
+    );
+    const status = yield* request(`${url}/probe/${id}`).pipe(
+      Effect.flatMap((body) =>
+        Effect.try(() => JSON.parse(body) as Omit<Status, "entries">),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: 10,
+        until: (status) =>
+          status.status === "complete" || status.status === "errored",
+      }),
+    );
+    yield* Effect.logInfo(
+      `Workflow readiness probe ${id}: ${JSON.stringify(status)}`,
+    );
+    // Only a probe may be recreated when Workflow execution still sees the stub.
+    if (
+      status.status === "errored" &&
+      status.error?.name === "TypeError" &&
+      status.error.message ===
+        "The entrypoint name LifecycleWorkflow was not found in this worker. Ensure the worker exports an entrypoint with that name."
+    ) {
+      return false;
+    }
+    expect(status, JSON.stringify(status)).toMatchObject({
+      status: "complete",
+      output: ["workflow-ready"],
+    });
+    return true;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (ready) => ready,
+    }),
+    Effect.timeout("45 seconds"),
+  );
+  expect(ready, "Workflow entrypoint did not propagate").toBe(true);
 });
 
 const cases: Array<{ scenario: Scenario; entries: string[] }> = [
@@ -89,9 +134,15 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* request(`${output.url}/ready`).pipe(
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+      const ready = yield* request(`${output.url}/ready`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          times: 8,
+          while: (body) => body === "Alchemy worker is being deployed...",
+        }),
       );
+      expect(ready).toBe("ready");
+      yield* probeWorkflow(output.url);
       return output;
     }),
     { timeout: 120_000 },

@@ -7,28 +7,69 @@ export interface OtlpCollector {
   readonly url: string;
   /** Responses fully written to the client. */
   readonly completedRequests: { value: number };
+  /** Received batches, including exports whose client disconnected. */
+  readonly requests: Array<{
+    body: string;
+    completed: boolean;
+    aborted: boolean;
+  }>;
+  /** Re-arm the response gate for subsequent matching batches. */
+  readonly holdResponses: () => void;
+  /** Acknowledge held batches and leave the gate open until re-armed. */
+  readonly releaseResponses: () => void;
 }
 
 /**
- * Starts a local OTLP endpoint that accepts every export and counts the
- * responses fully written to the client. `responseDelay` (ms) holds each
- * response so tests can observe workerd cancellation vs. `waitUntil`
- * delivery. The Node server is a test adapter only.
+ * Starts a local OTLP endpoint that records exports and completed responses.
+ * Matching `holdResponse` batches wait for explicit release, so tests can
+ * assert response/export ordering without timer races. The Node server is
+ * a test adapter only.
  */
-export const startOtlpCollector = (options: { responseDelay?: number } = {}) =>
+export const startOtlpCollector = (
+  options: {
+    holdResponse?: (body: string) => boolean;
+  } = {},
+) =>
   Effect.acquireRelease(
     Effect.callback<OtlpCollector, Error>((resume) => {
       const completedRequests = { value: 0 };
+      const requests: OtlpCollector["requests"] = [];
+      const pending = new Set<() => void>();
+      let held = true;
+      const holdResponses = () => {
+        held = true;
+      };
+      const releaseResponses = () => {
+        held = false;
+        for (const send of pending) send();
+        pending.clear();
+      };
       const server = createServer((request, response) => {
-        request.resume();
+        let body = "";
+        request.setEncoding("utf8");
+        request.on("data", (chunk: string) => {
+          body += chunk;
+        });
         request.once("end", () => {
-          setTimeout(() => {
-            response.once("finish", () => {
-              completedRequests.value += 1;
-            });
+          const batch = { body, completed: false, aborted: false };
+          requests.push(batch);
+          const send = () => {
             response.writeHead(200, { "content-type": "application/json" });
             response.end('{"partialSuccess":{}}');
-          }, options.responseDelay ?? 0);
+          };
+          response.once("finish", () => {
+            batch.completed = true;
+            completedRequests.value += 1;
+          });
+          response.once("close", () => {
+            batch.aborted = !batch.completed;
+            pending.delete(send);
+          });
+          if (held && options.holdResponse?.(body)) {
+            pending.add(send);
+          } else {
+            send();
+          }
         });
       });
       const onError = (error: Error) => resume(Effect.fail(error));
@@ -46,14 +87,18 @@ export const startOtlpCollector = (options: { responseDelay?: number } = {}) =>
           Effect.succeed({
             server,
             completedRequests,
+            requests,
+            holdResponses,
+            releaseResponses,
             url: `http://127.0.0.1:${address.port}`,
           }),
         );
       });
       return Effect.sync(() => server.close());
     }),
-    ({ server }) =>
+    ({ server, releaseResponses }) =>
       Effect.callback<void, Error>((resume) => {
+        releaseResponses();
         server.close((error) =>
           resume(error === undefined ? Effect.void : Effect.fail(error)),
         );

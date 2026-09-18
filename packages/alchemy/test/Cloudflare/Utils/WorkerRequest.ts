@@ -1,4 +1,5 @@
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -18,7 +19,10 @@ const isWorkerPlaceholder = (status: number, body: string) =>
     body.includes("/cdn-cgi/styles/cf.errors.css"));
 
 /** Retry only Cloudflare's pre-invocation placeholder, never application errors. */
-export const requestWorker = (request: HttpClientRequest.HttpClientRequest) =>
+export const requestWorker = (
+  request: HttpClientRequest.HttpClientRequest,
+  options: { retryDelay?: Duration.Input } = {},
+) =>
   HttpClient.execute(request).pipe(
     Effect.flatMap((response) =>
       response.status !== 404 && response.status !== 500
@@ -33,7 +37,7 @@ export const requestWorker = (request: HttpClientRequest.HttpClientRequest) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "WorkerNotPropagated",
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced(options.retryDelay ?? "1 second"),
       times: 8,
     }),
   );
