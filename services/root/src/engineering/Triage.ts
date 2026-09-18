@@ -1,4 +1,5 @@
 import * as AI from "alchemy/AI";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -8,6 +9,9 @@ import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
 import { inWorker } from "../platform/Database.ts";
 import { lineage } from "../Lineage.ts";
+import { handleBurst } from "./Burst.ts";
+import type { InboundEvent } from "./Swarm.ts";
+import { swarmDeps } from "./SwarmLive.ts";
 
 /**
  * TRIAGE — the pump that turns the outside world into messages in the
@@ -32,18 +36,17 @@ export class Triage extends Context.Service<
   {
     /** Record one event key; answers whether it was already seen. */
     readonly delivered: (key: string) => Effect.Effect<boolean>;
+    /** Queue one rendered event for the batcher; answers the depth. */
+    readonly pend: (event: string) => Effect.Effect<number>;
+    /** Drain the queue atomically (empty when already claimed). */
+    readonly claim: () => Effect.Effect<ReadonlyArray<string>>;
   }
 >()("Triage") {}
 
 /** One GitHub delivery, rendered for the manager's inbox. */
 export const inboundOf = (
   event: GitHub.RepositoryEvent,
-): {
-  readonly key: string;
-  readonly ref?: string;
-  readonly kind: InboundKind;
-  readonly text: string;
-} => {
+): { readonly key: string } & Pended => {
   const repo = `${event.repository.owner.login}/${event.repository.name}`;
   const ref = GitHub.eventKey(event);
   const who =
@@ -75,6 +78,18 @@ export const inboundOf = (
         }`;
     }
   })();
+  const number =
+    event._tag === "Push"
+      ? undefined
+      : event._tag.startsWith("PullRequest")
+        ? (event as { pullRequest: { number: number } }).pullRequest.number
+        : (event as { issue: { number: number } }).issue.number;
+  const title =
+    event._tag === "Push"
+      ? undefined
+      : event._tag.startsWith("PullRequest")
+        ? (event as { pullRequest: { title: string } }).pullRequest.title
+        : (event as { issue: { title: string } }).issue.title;
   return {
     key: JSON.stringify(event),
     ...(ref === undefined ? {} : { ref }),
@@ -84,6 +99,9 @@ export const inboundOf = (
         ? "request"
         : "issue") as InboundKind,
     text: line,
+    repo,
+    ...(number === undefined ? {} : { number }),
+    ...(title === undefined ? {} : { title }),
   };
 };
 
@@ -93,6 +111,61 @@ export const MANAGER_ADDRESS = {
   term: "Manager",
   key: lineage("manager"),
 } as const;
+
+/** One pended event, as the batcher stores and drains it. */
+export interface Pended {
+  readonly text: string;
+  readonly ref?: string;
+  readonly kind: InboundKind;
+  readonly repo?: string;
+  readonly number?: number;
+  readonly title?: string;
+}
+
+/** How many pended events make a burst worth a walker. */
+export const BURST_AT = 3;
+
+/**
+ * The batch DECISION, pure: a drained queue either bursts (≥
+ * {@link BURST_AT} events that carry enough identity to swarm over)
+ * or degrades to today's path — one channel message per event. Events
+ * without identity (pushes) always take the single path.
+ */
+export const planBatch = (
+  batch: ReadonlyArray<Pended>,
+): {
+  readonly burst: ReadonlyArray<InboundEvent>;
+  readonly singles: ReadonlyArray<Pended>;
+} => {
+  const burstable = batch.filter(
+    (
+      entry,
+    ): entry is Pended & {
+      repo: string;
+      number: number;
+      title: string;
+      kind: "issue" | "pull";
+    } =>
+      entry.repo !== undefined &&
+      entry.number !== undefined &&
+      entry.title !== undefined &&
+      (entry.kind === "issue" || entry.kind === "pull"),
+  );
+  if (burstable.length >= BURST_AT) {
+    return {
+      burst: burstable.map((entry) => ({
+        repo: entry.repo,
+        number: entry.number,
+        title: entry.title,
+        kind: entry.kind as InboundEvent["kind"],
+      })),
+      singles: batch.filter(
+        (entry) => !(burstable as ReadonlyArray<Pended>).includes(entry),
+      ),
+    };
+  }
+  return { burst: [], singles: batch };
+};
 
 /**
  * The PUMP: every GitHub event of every connected repository, deduped,
@@ -113,6 +186,64 @@ export const TriagePump = Layer.effectDiscard(
       );
     }
 
+    const handleInbound = Effect.fn(function* (event: GitHub.RepositoryEvent) {
+      const inbound = inboundOf(event);
+      if (yield* triage.delivered(inbound.key)) return;
+      // THE BATCHER: arrivals pend; the third arrival flushes
+      // immediately, a lone arrival flushes after the debounce.
+      // A burst becomes ONE walker run (Burst.ts); anything else
+      // degrades to today's path — one message per event.
+      const depth = yield* triage.pend(JSON.stringify(inbound)).pipe(
+        inWorker,
+        Effect.catchCause((cause) =>
+          Effect.as(
+            Effect.logWarning("inbound pend failed", cause),
+            BURST_AT, // fail open: flush now, lose nothing
+          ),
+        ),
+      );
+      const flush = Effect.gen(function* () {
+        const drained = yield* triage.claim().pipe(inWorker);
+        if (drained.length === 0) return; // someone else claimed
+        const batch = drained.map((entry) => JSON.parse(entry) as Pended);
+        const plan = planBatch(batch);
+        if (plan.burst.length > 0) {
+          const deps = yield* swarmDeps;
+          yield* handleBurst(
+            deps("engineering"),
+            "engineering",
+            plan.burst,
+          ).pipe(inWorker);
+        }
+        yield* Effect.forEach(
+          plan.singles,
+          (single) =>
+            sessions
+              .send(
+                MANAGER_ADDRESS.term,
+                MANAGER_ADDRESS.key,
+                `[inbound${single.ref === undefined ? "" : ` ${single.ref}`}] ${single.text}`,
+                { wake: true },
+              )
+              .pipe(inWorker),
+          { discard: true },
+        );
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("inbound delivery failed", cause),
+        ),
+      );
+      if (depth >= BURST_AT) {
+        yield* flush;
+      } else {
+        // the debounce sleeper must outlive the webhook request
+        const exec = yield* Cloudflare.WorkerExecutionContext;
+        yield* exec.waitUntil(
+          Effect.andThen(Effect.sleep("25 seconds"), flush),
+        );
+      }
+    });
+
     yield* Effect.forEach(
       connected,
       (entry) =>
@@ -132,23 +263,12 @@ export const TriagePump = Layer.effectDiscard(
             ],
             ...(Option.isSome(secret) ? { secret: secret.value } : {}),
           },
-          Effect.fn(function* (event) {
-            const inbound = inboundOf(event);
-            if (yield* triage.delivered(inbound.key)) return;
-            yield* sessions
-              .send(
-                MANAGER_ADDRESS.term,
-                MANAGER_ADDRESS.key,
-                `[inbound${inbound.ref === undefined ? "" : ` ${inbound.ref}`}] ${inbound.text}`,
-                { wake: true },
-              )
-              .pipe(
-                inWorker,
-                Effect.catchCause((cause) =>
-                  Effect.logWarning("inbound delivery failed", cause),
-                ),
-              );
-          }),
+          (event) =>
+            handleInbound(event).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("triage intake failed", cause),
+              ),
+            ),
         ),
       { discard: true },
     );

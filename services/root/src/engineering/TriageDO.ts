@@ -20,12 +20,24 @@ const TABLES = [
   `CREATE TABLE IF NOT EXISTS delivered (
     key TEXT PRIMARY KEY
   )`,
+  `CREATE TABLE IF NOT EXISTS pending (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    event TEXT NOT NULL
+  )`,
 ];
 
 interface EngineeringRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly delivered: (
     key: string,
   ) => Effect.Effect<boolean, never, RuntimeContext>;
+  readonly pend: (
+    event: string,
+  ) => Effect.Effect<number, never, RuntimeContext>;
+  readonly claim: () => Effect.Effect<
+    ReadonlyArray<string>,
+    never,
+    RuntimeContext
+  >;
 }
 
 const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
@@ -54,6 +66,25 @@ const TriageDOLive = Cloudflare.DurableObject<EngineeringRpc>()(
           yield* sql.exec("INSERT INTO delivered (key) VALUES (?)", key);
           return false;
         }),
+
+        // the BATCHER's ledger: arrivals pend; whoever claims first
+        // (the N-trigger or the debounce sleeper) drains atomically —
+        // the DO's single-threaded turn IS the lock
+        pend: Effect.fn(function* (event) {
+          yield* sql.exec("INSERT INTO pending (event) VALUES (?)", event);
+          const rows = yield* (yield* sql.exec<
+            { n: number } & Record<string, Cloudflare.SqlStorageValue>
+          >("SELECT COUNT(*) AS n FROM pending")).toArray();
+          return rows[0]?.n ?? 0;
+        }),
+
+        claim: Effect.fn(function* () {
+          const rows = yield* (yield* sql.exec<
+            { event: string } & Record<string, Cloudflare.SqlStorageValue>
+          >("SELECT event FROM pending ORDER BY seq")).toArray();
+          yield* sql.exec("DELETE FROM pending");
+          return rows.map((row) => row.event);
+        }),
       } satisfies EngineeringRpc;
     });
   }),
@@ -71,6 +102,8 @@ export const TriageLive: Layer.Layer<Triage, never, Cloudflare.Worker> =
       const stub = () => namespace.getByName(MAIN);
       return Triage.of({
         delivered: (key) => inWorker(stub().delivered(key)),
+        pend: (event) => inWorker(stub().pend(event)),
+        claim: () => inWorker(stub().claim()),
       });
     }),
   );

@@ -16,11 +16,10 @@ todo(
   "recursive split: a PR whose review finds three separable problems spawns three sub-threads under it",
 );
 
-// P3 — intake
+// P3 — promoted: triage-burst.test.ts (single-event bypass included)
 todo(
   "attach-vs-open: a new burst about last week's OOM ATTACHES to that thread (Scout's search at intake) instead of opening a new tree",
 );
-todo("single event bypasses the batcher and takes today's path unchanged");
 
 // gate.test.ts extensions (family: channel chatter)
 todo(
