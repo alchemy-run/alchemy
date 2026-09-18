@@ -3838,9 +3838,6 @@ export const LiveWorkerProvider = () =>
           namespaces.some(
             (ns) => ns.script === scriptName && ns.class === className,
           );
-        const scriptHostsClass = (scriptName: string, className: string) =>
-          hosts(observedNamespaces, scriptName, className);
-
         const deletedClasses: string[] = [];
         for (const className of deletedClassCandidates) {
           if (dispatchNamespace) {
@@ -3848,17 +3845,6 @@ export const LiveWorkerProvider = () =>
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
-          if (targetScriptName === undefined) {
-            // Plain removal. Delete only if the namespace actually still
-            // lives here — it may have been transferred to another script by
-            // that script's deploy, or removed out-of-band. The stale
-            // alchemy:do tag drops out either way because tags are recomputed
-            // from current bindings.
-            if (scriptHostsClass(name, className)) {
-              deletedClasses.push(className);
-            }
-            continue;
-          }
           const namespaceId =
             oldBindings.flatMap((binding) =>
               binding.type === "durable_object_namespace" &&
@@ -3876,6 +3862,39 @@ export const LiveWorkerProvider = () =>
             observedNamespaces.find(
               (ns) => ns.script === name && ns.class === className,
             )?.id;
+          if (targetScriptName === undefined) {
+            const findNamespace = (namespaces: typeof observedNamespaces) =>
+              namespaces.find((ns) =>
+                namespaceId === undefined
+                  ? ns.script === name && ns.class === className
+                  : ns.id === namespaceId,
+              );
+            // Absence from an account listing does not prove a transfer.
+            const namespace =
+              findNamespace(observedNamespaces) ??
+              (yield* listDurableObjectNamespaces(accountId).pipe(
+                Effect.flatMap((namespaces) => {
+                  const namespace = findNamespace(namespaces);
+                  return namespace
+                    ? Effect.succeed(namespace)
+                    : Effect.fail(
+                        new MissingDurableObjects({
+                          scriptName: name,
+                          expected: [className],
+                        }),
+                      );
+                }),
+                Effect.retry({
+                  while: (error) => error._tag === "MissingDurableObjects",
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 5,
+                }),
+              ));
+            if (namespace.script === name && namespace.class === className) {
+              deletedClasses.push(className);
+            }
+            continue;
+          }
           // A missing listing is inconclusive; the original namespace must appear on the new host.
           const transferred = (namespaces: typeof observedNamespaces) =>
             namespaceId !== undefined &&
@@ -5974,7 +5993,8 @@ const contentTypeFromExtension = (extension: string) => {
  * script, so this is how both sides of a transfer observe where a class
  * currently lives — the destination checks the source still hosts the class
  * before emitting the transfer, and the former host checks whether a class
- * it is about to delete has already been transferred away.
+ * it is about to delete has already been transferred away. Missing records
+ * are inconclusive because pagination is not an atomic account snapshot.
  */
 const listDurableObjectNamespaces = (accountId: string) =>
   durableObjectsApi.listNamespaces.items({ accountId }).pipe(

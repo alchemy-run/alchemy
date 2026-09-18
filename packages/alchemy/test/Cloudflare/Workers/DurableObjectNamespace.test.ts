@@ -1121,6 +1121,7 @@ export default { async fetch() { return new Response("v4"); } };
     "worker with 20 durable objects deploys within the 10-tag limit",
     (scratch) =>
       Effect.gen(function* () {
+        yield* scratch.destroy();
         const { accountId } = yield* yield* CloudflareEnvironment;
         const ids = Array.from({ length: 20 }, (_, i) => `DO_${i}`);
         const makeScript = (classes: string[], version: string) =>
@@ -1156,6 +1157,10 @@ export default { async fetch() { return new Response("${version}"); } };
         );
         expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
+        expect(Object.keys(v1.worker.durableObjectNamespaces).sort()).toEqual(
+          ids.map((_, i) => `Class${i}`).sort(),
+        );
+
         // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
         // migrations resolve their previous class through the packed tag.
         const v2 = yield* scratch.deploy(
@@ -1182,10 +1187,55 @@ export default { async fetch() { return new Response("${version}"); } };
           }),
         );
         expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+        expect(Object.keys(v2.worker.durableObjectNamespaces).sort()).toEqual(
+          [
+            "Class0V2",
+            ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
+          ].sort(),
+        );
+        expect(v2.worker.durableObjectNamespaces.Class0V2).toBe(
+          v1.worker.durableObjectNamespaces.Class0,
+        );
+        expect(v2.worker.durableObjectNamespaces.Class19).toBeUndefined();
+        for (let i = 1; i < 19; i++) {
+          expect(v2.worker.durableObjectNamespaces[`Class${i}`]).toBe(
+            v1.worker.durableObjectNamespaces[`Class${i}`],
+          );
+        }
+
+        const namespaces = yield* durableObjects.listNamespaces
+          .items({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              namespaces.filter((ns) => ns.script === v2.worker.workerName),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (namespaces) =>
+                namespaces.length === 19 &&
+                namespaces.every(
+                  (ns) =>
+                    ns.class !== undefined &&
+                    ns.class !== null &&
+                    v2.worker.durableObjectNamespaces[ns.class] === ns.id,
+                ),
+              times: 8,
+            }),
+          );
+        expect(namespaces).toHaveLength(19);
+        expect(namespaces.map((ns) => ns.id).sort()).toEqual(
+          Object.values(v2.worker.durableObjectNamespaces).sort(),
+        );
+        expect(
+          namespaces.some(
+            (ns) => ns.id === v1.worker.durableObjectNamespaces.Class19,
+          ),
+        ).toBe(false);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   // Roll-forward from the legacy tag format: a worker last deployed by an
