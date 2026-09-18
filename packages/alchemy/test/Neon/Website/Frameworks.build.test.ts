@@ -70,6 +70,14 @@ describe.sequential("Neon Website production Fetch artifacts", () => {
               "const body = await response.text();",
               'if (response.status !== 200 || (method === "HEAD" && body !== "") || (pathname === "/" && !body.includes("Neon"))) { throw new Error(method + " " + pathname + " returned " + response.status + ": " + body.slice(0, 300)); }',
               "}",
+              ...(slug === "sveltekit"
+                ? [
+                    'for (const method of ["GET", "HEAD"]) {',
+                    'const response = await handler.fetch(new Request("http://localhost/about", { method }));',
+                    'const body = await response.text(); if (response.status !== 200 || (method === "HEAD" ? body !== "" : !body.includes("prerendered"))) throw new Error(method + " /about returned " + response.status + ": " + body);',
+                    "}",
+                  ]
+                : []),
               'console.log("NEON_FETCH_ARTIFACT_OK"); process.exit(0);',
             ].join("\n"),
           ]);

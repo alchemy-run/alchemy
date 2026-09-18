@@ -25,7 +25,7 @@ const verify = Effect.fn(function* (url: string, bucket: BucketAttributes) {
   const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
   const response = yield* http
     .get(`${url}/write`)
-    .pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }));
+    .pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 8 }));
   expect(response.status).toBe(200);
   expect(yield* (yield* http.get(url)).json).toEqual({
     size: 18,

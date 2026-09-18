@@ -13,8 +13,9 @@ export type NextjsProps = FrameworkSiteProps;
  * Exact-version Sharp Linux ARM64/glibc packages are integrity-checked and staged.
  * The example artifact passes isolated Node 24 image optimization and desktop/mobile
  * counter, server-action, and redirect navigation checks. The Fetch bridge preserves
- * request-origin metadata without rewriting redirect responses. Fresh Neon deployment
- * currently fails with FunctionDeploymentFailed; live acceptance remains incomplete.
+ * request-origin metadata without rewriting redirect responses. Initial live deployment
+ * and desktop/mobile interactions are verified. Updates may still serve the previous
+ * artifact after Neon accepts a new deployment; full lifecycle acceptance remains incomplete.
  *
  * ### Creating a Website
  * **Example:** Nextjs application

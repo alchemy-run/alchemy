@@ -9,7 +9,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { bodyContaining, exampleRoot } from "./Fixture.ts";
+import {
+  bodyContaining,
+  buildPortableExample,
+  exampleRoot,
+} from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -44,15 +48,9 @@ for (const slug of ["nextjs", "vocs"] as const)
             ),
           );
         }
-        const artifact = yield* packageWebsiteArtifact({
-          root,
-          distDir: next ? root : path.join(root, "dist"),
-          serverEntry: path.join(
-            root,
-            next ? "serve-neon.mjs" : "dist/server/serve-neon.mjs",
-          ),
-          layout: next ? "next" : "output",
-        });
+        const artifact = yield* packageWebsiteArtifact(
+          yield* buildPortableExample(slug),
+        );
         const directory = yield* fs.makeTempDirectoryScoped();
         const zip = path.join(directory, "site.zip");
         yield* fs.writeFile(zip, artifact.archive);

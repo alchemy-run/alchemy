@@ -43,7 +43,7 @@ export const browserRoundtrip = Effect.fn(function* (
   yield* fs.makeDirectory(screenshots, { recursive: true });
   const opened = yield* command([
     "new-tab",
-    slug === "vocs" ? `${url}/counter` : url,
+    slug === "vocs" ? `${url.replace(/\/+$/, "")}/counter` : url,
   ]);
   const tab = yield* Effect.try(
     () => JSON.parse(opened) as { key: string; openedTab: number },
@@ -79,14 +79,14 @@ export const browserRoundtrip = Effect.fn(function* (
   ]) {
     yield* action("set", "viewport", String(width), String(height));
     yield* action("reload");
+    const label = slug === "foldkit" ? "+" : "count: 0";
     const snapshot = yield* action("snapshot", "-i").pipe(
       Effect.repeat({
         schedule: Schedule.spaced("500 millis"),
         times: 8,
-        until: (text) => /button/.test(text),
+        until: (text) => text.includes(label),
       }),
     );
-    const label = slug === "foldkit" ? "+" : "count: 0";
     expect(snapshot).toContain(label);
     yield* action(
       "find",
@@ -111,7 +111,8 @@ export const browserRoundtrip = Effect.fn(function* (
       expect(yield* action("get", "text", "#count")).toContain("0");
     } else {
       expect(yield* action("snapshot", "-i")).toContain("count: 1");
-      if (snapshot.includes("Load greeting")) {
+      if (!["vocs", "waku"].includes(slug)) {
+        expect(snapshot).toContain("Load greeting");
         yield* action(
           "find",
           "role",
@@ -122,7 +123,11 @@ export const browserRoundtrip = Effect.fn(function* (
           "--exact",
         );
         expect(
-          yield* action("get", "text", "body").pipe(
+          yield* action(
+            "get",
+            "text",
+            slug === "nextjs" ? 'section [role="status"]' : '[role="status"]',
+          ).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("500 millis"),
               times: 8,
@@ -178,5 +183,6 @@ export const browserRoundtrip = Effect.fn(function* (
       expect(yield* action("get", "text", "body")).toContain("prerendered");
       yield* action("back");
     }
+    yield* Effect.logInfo(`Website browser ${slug} ${width}x${height}: passed`);
   }
 }, Effect.scoped);

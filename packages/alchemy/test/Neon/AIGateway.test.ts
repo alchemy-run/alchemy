@@ -8,6 +8,7 @@ import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
@@ -42,6 +43,30 @@ test.provider(
           "",
         ),
       ).toBe(deployed.baseUrl);
+      const http = yield* HttpClient.HttpClient;
+      const models = yield* http.execute(
+        HttpClientRequest.get(`${deployed.baseUrl}/v1/models`).pipe(
+          HttpClientRequest.bearerToken(deployed.credential.apiToken),
+        ),
+      );
+      expect(models.status).toBe(200);
+      const catalog = yield* models.json.pipe(
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.Struct({
+              data: Schema.Array(
+                Schema.Struct({ id: Schema.String, enabled: Schema.Boolean }),
+              ),
+            }),
+          ),
+        ),
+      );
+      expect(catalog.data.length).toBeGreaterThan(0);
+      yield* Effect.log("Enabled Neon AI Gateway models", {
+        models: catalog.data
+          .filter((model) => model.enabled)
+          .map((model) => model.id),
+      });
       const list = yield* SDK.listCredentials(request);
       expect(
         list.credentials.find(

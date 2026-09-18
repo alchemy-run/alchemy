@@ -471,7 +471,9 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   for (const file of files) {
     const real = yield* fs.realPath(file);
     const pkg = packageRoot(real);
-    if (pkg && path.basename(pkg) === "sharp") sharpRoots.add(pkg);
+    // Metadata-only trace entries do not load Sharp's native runtime.
+    if (pkg && path.basename(pkg) === "sharp" && javascript(real))
+      sharpRoots.add(pkg);
   }
   for (const sharpRoot of sharpRoots) {
     if (!within(workspace, sharpRoot))

@@ -74,9 +74,10 @@ HEAD, streaming, and Sharp WebP optimization. Desktop/mobile production-artifact
 browser checks pass counters, greeting fetches, server actions, refresh persistence,
 and redirect-link navigation. The source-generated Fetch bridge preserves the request
 protocol, hostname, and port without rewriting redirect responses. Next itself
-normalizes loopback IP hostnames to `localhost`. These checks do not prove live Neon
-behavior: fresh deployment fails with `FunctionDeploymentFailed`. Live acceptance
-remains incomplete, and the full 13-framework live matrix is not green.
+normalizes loopback IP hostnames to `localhost`. Initial live Neon deployment and
+desktop/mobile interactions now pass after removing an unnecessary duplicate native
+library from the artifact. Updates can still serve the previous artifact after Neon
+accepts a new deployment, so complete lifecycle acceptance remains open.
 :::
 
 There is no provisioned ISR/revalidation cache, image-optimization service, or CDN.

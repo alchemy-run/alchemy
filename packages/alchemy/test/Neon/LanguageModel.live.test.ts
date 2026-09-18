@@ -29,7 +29,28 @@ test.provider.skipIf(
         }),
       );
       yield* Effect.gen(function* () {
-        const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+        const client = (yield* HttpClient.HttpClient).pipe(
+          HttpClient.transformResponse(
+            Effect.tap((response) =>
+              response.status < 400
+                ? Effect.void
+                : response.json.pipe(
+                    Effect.flatMap(
+                      Schema.decodeUnknownEffect(
+                        Schema.Struct({ reason: Schema.String }),
+                      ),
+                    ),
+                    Effect.flatMap(({ reason }) =>
+                      Effect.log("Neon AI fixture rejected the request", {
+                        status: response.status,
+                        reason,
+                      }),
+                    ),
+                  ),
+            ),
+          ),
+          HttpClient.filterStatusOk,
+        );
         for (const fn of [deployed.native, deployed.http]) {
           const generated = yield* client.get(`${fn.url}/generate`).pipe(
             Effect.retry({ times: 3, schedule: Schedule.spaced("1 second") }),

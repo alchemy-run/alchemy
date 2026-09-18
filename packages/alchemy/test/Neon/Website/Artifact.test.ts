@@ -342,6 +342,38 @@ for (const machine of [183, 62])
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+it.effect("Sharp metadata-only traces do not materialize native packages", () =>
+  Effect.gen(function* () {
+    const { fs, path, root, dist } = yield* fixture;
+    const sharp = path.join(root, "node_modules/sharp");
+    yield* fs.makeDirectory(sharp, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(sharp, "package.json"),
+      JSON.stringify({ name: "sharp", version: "0.35.4" }),
+    );
+    const serverEntry = path.join(dist, "serve.mjs");
+    yield* fs.writeFileString(
+      serverEntry,
+      'import manifest from "sharp/package.json" with { type: "json" }; export default { fetch: () => new Response(manifest.version) };',
+    );
+    const artifact = yield* stageWebsiteArtifact({
+      root,
+      distDir: dist,
+      serverEntry,
+    });
+    expect(
+      yield* fs.exists(
+        path.join(artifact.directory, "files/node_modules/sharp/package.json"),
+      ),
+    ).toBe(true);
+    expect(
+      yield* fs.exists(
+        path.join(artifact.directory, "files/node_modules/@img"),
+      ),
+    ).toBe(false);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
 // Minimal ustar fixtures exercise the registry boundary without downloading packages.
 const tarball = (files: [string, Uint8Array, string?][]) => {
   const blocks: Buffer[] = [];

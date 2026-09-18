@@ -59,16 +59,16 @@ export default class Api extends Neon.Function<Api>()(
         const bytes = object.ContentLength ?? 0;
         // Record delivery and transition the row atomically; duplicate invocations do no work.
         yield* sql`
-        WITH delivery AS (
-          INSERT INTO upload_events (invocation_id, object_key)
-          VALUES (${event.invocationId}, ${event.objectKey})
-          ON CONFLICT DO NOTHING RETURNING invocation_id
-        )
-        UPDATE uploads SET actual_bytes = ${bytes}, processed_at = now(),
-          status = CASE WHEN expected_bytes = ${bytes} AND content_type = ${object.ContentType ?? ""}
-            THEN 'ready' ELSE 'rejected' END
-        WHERE object_key = ${event.objectKey} AND EXISTS (SELECT 1 FROM delivery)
-      `;
+          WITH delivery AS (
+            INSERT INTO upload_events (invocation_id, object_key)
+            VALUES (${event.invocationId}, ${event.objectKey})
+            ON CONFLICT DO NOTHING RETURNING invocation_id
+          )
+          UPDATE uploads SET actual_bytes = ${bytes}, processed_at = now(),
+            status = CASE WHEN expected_bytes = ${bytes} AND content_type = ${object.ContentType ?? ""}
+              THEN 'ready' ELSE 'rejected' END
+          WHERE object_key = ${event.objectKey} AND EXISTS (SELECT 1 FROM delivery)
+        `;
       }),
     );
 

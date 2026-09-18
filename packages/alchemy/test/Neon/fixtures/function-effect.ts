@@ -1,4 +1,5 @@
 import { Function } from "@/Neon/Function";
+import { FunctionRequest } from "@/Neon/FunctionEnvironment";
 import { waitUntil } from "@/Neon/waitUntil";
 import { upgrade } from "@/Neon/upgrade";
 import { Project } from "@/Neon/Project";
@@ -51,14 +52,35 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         yield* Effect.sync(() => {
           active++;
         });
+        const report = (phase: string) =>
+          Effect.sync(() =>
+            console.info(JSON.stringify({ functionFinalizer: { id, phase } })),
+          );
         yield* Effect.addFinalizer(() =>
-          sql`INSERT INTO alchemy_function_finalizers (id) VALUES (${id}) ON CONFLICT DO NOTHING`.pipe(
+          report("started").pipe(
+            Effect.andThen(
+              sql`INSERT INTO alchemy_function_finalizers (id) VALUES (${id}) ON CONFLICT DO NOTHING`,
+            ),
+            Effect.tapCause(() => report("failed")),
             Effect.orDie,
             Effect.andThen(
               Effect.sync(() => {
                 active--;
               }),
             ),
+            Effect.andThen(report("completed")),
+          ),
+        );
+        const nativeRequest = yield* FunctionRequest;
+        const onAbort = () => Effect.runFork(report("request-aborted"));
+        yield* Effect.sync(() =>
+          nativeRequest.signal.addEventListener("abort", onAbort, {
+            once: true,
+          }),
+        );
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() =>
+            nativeRequest.signal.removeEventListener("abort", onAbort),
           ),
         );
         if (url.pathname === "/background") {
@@ -73,11 +95,16 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         }
         if (url.pathname === "/websocket") {
           const { socket, response } = yield* upgrade();
-          yield* Effect.sync(() =>
+          yield* Effect.sync(() => {
             socket.addEventListener("message", (event) =>
               socket.send(event.data),
-            ),
-          );
+            );
+            socket.addEventListener(
+              "close",
+              () => Effect.runFork(report("socket-closed")),
+              { once: true },
+            );
+          });
           return response;
         }
         if (url.pathname === "/stream-cancel")

@@ -209,6 +209,12 @@ export const DataApiProvider = () =>
       }
     }),
     read: Effect.fn(function* ({ olds, output }) {
+      if (
+        !output &&
+        !(olds?.branch?.projectId && olds.branch.branchId) &&
+        !olds?.project?.projectId
+      )
+        return undefined;
       const branch = output ?? (yield* resolveBranchScope(olds));
       const scope = output ?? {
         ...branch,

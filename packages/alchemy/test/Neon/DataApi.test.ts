@@ -13,6 +13,46 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 const { test } = Test.make({ providers: providers() });
 
 test.provider(
+  "Data API recovery treats incomplete uncreated identities as absent",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* DataApi.Provider;
+      const missingScope = {
+        branch: {
+          projectId: "uncreated-project",
+          branchId: "uncreated-branch",
+        },
+      };
+      const partialScope = {
+        branch: {
+          projectId: "uncreated-project",
+          branchId: "uncreated-branch",
+        },
+      };
+      yield* Effect.sync(() => {
+        Reflect.deleteProperty(missingScope, "branch");
+        Reflect.deleteProperty(partialScope.branch, "branchId");
+      });
+      for (const olds of [
+        missingScope,
+        partialScope,
+        { branch: { projectId: "", branchId: "uncreated-branch" } },
+        { project: { projectId: "" } },
+      ]) {
+        expect(
+          yield* provider.read!({
+            id: "UncreatedDataApi",
+            fqn: "UncreatedDataApi",
+            instanceId: "uncreated-data-api",
+            olds,
+            output: undefined,
+          }),
+        ).toBeUndefined();
+      }
+    }),
+);
+
+test.provider(
   "Data API infers custom databases and rejects ambiguous selection before mutation",
   (stack) =>
     Effect.gen(function* () {

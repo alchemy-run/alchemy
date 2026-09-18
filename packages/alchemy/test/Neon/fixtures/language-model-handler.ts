@@ -1,6 +1,7 @@
 import * as Neon from "@/Neon";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { LanguageModel, Tool, Toolkit } from "effect/unstable/ai";
@@ -19,7 +20,11 @@ const handlers = Tools.toLayer({ sum: ({ a, b }) => Effect.succeed(a + b) });
 export const languageModelHandler = (source = languageModelGateway) =>
   Effect.gen(function* () {
     const gateway = yield* Neon.QueryAIGateway(source);
-    const model = gateway.model({ model: yield* Config.String("AI_MODEL") });
+    const model = Layer.unwrap(
+      Config.String("AI_MODEL").pipe(
+        Effect.map((model) => gateway.model({ model })),
+      ),
+    );
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

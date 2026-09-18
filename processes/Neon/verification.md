@@ -2,6 +2,27 @@
 
 Integration snapshot, 2026-09-17. All 38 required source contracts are present, including 13 Website constructors. Source coverage is not acceptance: two complete scoped, leak-free rounds have not passed.
 
+## Current acceptance rerun
+
+All 293 registered Neon cases have a result across bounded runs (including three new regressions): **267 passed, 17 failed, 9 gated/TODO**. This is a reconciled per-test result, not one uninterrupted green run. The initial combined run hit the 240-second limit; subsequent groups completed the remaining files. The nine unrun cases are seven governance fixtures and two existing storage capability TODOs. Both opt-in Linux artifact tests and both fresh-artifact live tests were explicitly enabled.
+
+- Paid AI is now verified. After the user corrected a declined payment, `gpt-oss-20b` passed generation, streaming, tool execution and structured output through both injected and explicit credentials. Ordinary cleanup passed. `gpt-5-mini` remains separately gated with `model requires a verified account`; authenticated `/v1/models` discovery identifies enabled models. Basic Qwen generation passed, but that model did not pass the same tool-call case.
+- A disk-full interruption exposed Data API recovery of an incomplete, never-created branch reference. The provider now treats that identity as absent, matching Auth/Function recovery. All five Data API cases passed, including normal recovery and destruction of the interrupted live stack.
+- The local Function and storage tests passed with Neon CLI 2.45.0 on PATH. Worker/Lambda storage cases passed after allowing a bounded 24-second initial edge-propagation window; the preceding combined run had hit a fresh workers.dev 404 after eight seconds.
+- All 13 live Website lifecycle cases executed and passed initial deployment, desktop/mobile interaction checks and the initial no-op. All 13 then failed unchanged-content assertions after an accepted update. Post-update no-op was not reached. A separate static-site feasibility case also fails update serving.
+- SvelteKit's Neon target now resolves extensionless prerendered HTML routes. Production-artifact GET/HEAD `/about` and live desktop/mobile navigation/reload passed after the fix.
+- Fresh-artifact tests now build their inputs instead of assuming old example output directories exist. The final artifact run passed all 33 cases, including Next and Vocs Linux ARM64/glibc Node 24 checks and both fresh live deployments. The separate Next deployment feasibility case also passed.
+- Neon deployment failures now retain the API's human-readable error. Next's initial `build failed: mksquashfs build failed (HTTP 413): source_too_large` rejection exposed redundant Sharp native libraries added for a metadata-only trace. Packaging now stages native dependencies only for traced Sharp JavaScript. The example ZIP shrank from 35.970 to 28.015 MiB and expanded files from 115.259 to 97.319 MiB, retaining all traced runtime files. A regression covers metadata-only traces; the fixed live Next deployment and desktop/mobile counter, greeting and server-action flows passed. The numeric upstream size limit is not documented.
+- The latest Function-focused run passed nine cases and failed three. Environment update/removal passed in that run, but code serving was inconsistent: active/completed deployment 3 served `bare-v2` with a deployment query parameter while the plain URL served `native-v1`. Clean WebSocket close and stream abort still left their expected durable finalizer rows absent. Direct bridge finalization tests passed; the live failure's exact cause is not established.
+
+The example's 42 offline tests and real upload-event/SQL/download lifecycle passed. Native authenticated browser flows passed at desktop and mobile sizes, including signup, upload, signed download, persistence, signout/sign-in and negative requests. Full Effect browser acceptance still returned HTTP 500 for uploads. A corrected diagnostic verified the actual bound presigner, UUID generation, SQL insert and JSON response, returning HTTP 201; controlled uninstrumented POSTs and a controlled UI upload also returned 201. The failing full-flow request's exact cause remains unestablished, so no speculative provider fix was applied. Temporary instrumentation was removed byte-for-byte. Preview deployment still refused inherited Auth ownership; an independently run serial child-isolation test passed, which does not establish preview application/trigger acceptance. Test-owned example stacks completed normal destruction and independent absence checks.
+
+The final account census found five residual test projects (Bucket, DataApi, Connect, StorageHttp and Branch cases). The authorized Neon-only nuke deleted those five projects and five branches in one pass. A subsequent census found a newly created `NeonHostContainerStack` project belonging to a concurrently running Container suite in another worktree; destructive cleanup stopped rather than deleting that active test's resources. This run is not a leak-free acceptance round.
+
+Workspace type checking, scoped formatting, JSDoc validation, API-reference generation and the final documentation build passed. Browser checks exercised the updated Next guide and generated reference at desktop 1440×1000 and mobile 390×844, including links, code copying, heading anchors and back navigation, with no page errors or horizontal overflow.
+
+Two complete green, leak-free acceptance rounds remain blocked by the live failures. The following sections retain earlier verification history; their earlier AI-entitlement, missing-matrix and initial Next deployment-failure statements are superseded by this rerun.
+
 ## Coordinator verification
 
 - Distilled companion: https://github.com/alchemy-run/distilled/pull/617. Latest revision `5661366be` adds API-key secret redaction alongside the existing unstructured REST-XML server-error correction and strictly checked parser assertions.
@@ -98,7 +119,7 @@ Direct abort/body-cancellation regressions pass after correcting bridge scope cl
 
 ### AI entitlement
 
-The current public OpenAPI (122 paths) and official config runtime expose AI Gateway discovery but no enablement or credit-purchase operation. Two authorized eight-token inference probes returned HTTP 403 with `ai gateway not enabled for account`; both stacks were destroyed. No credits were purchased and no account plan was changed. Do not repeat inference until entitlement changes.
+The earlier account-level `ai gateway not enabled for account` rejection is resolved after the user corrected a declined credit purchase. Enabled-model paid inference and the complete Effect AI runtime case passed with `gpt-oss-20b`. Foundation-model access is separate: `gpt-5-mini` still returns `model requires a verified account`. Select from `/v1/models` entries with `enabled: true`; tool/structured-output support also varies by model. No purchase or account-plan change was made by the test runner.
 
 ### Website acceptance
 

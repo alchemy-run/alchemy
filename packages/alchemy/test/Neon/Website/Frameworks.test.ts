@@ -41,10 +41,26 @@ describe.sequential("Neon Website complete lifecycle", () => {
           );
           const site = yield* deploy;
           expect(site.url).toMatch(/^https:\/\//);
+          const url = String(site.url).replace(/\/+$/, "");
           const fn = site.function!;
-          yield* bodyContaining(`${site.url}/`, name);
-          yield* browserRoundtrip(String(site.url), slug);
-          const head = yield* HttpClient.head(`${site.url}/example.json`);
+          yield* Effect.logInfo(
+            `Website ${slug}: deployed project=${fn.projectId} function=${fn.functionId} deployment=${fn.activeDeploymentId} url=${site.url}`,
+          );
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              expect(
+                yield* getProject({ project_id: fn.projectId }).pipe(
+                  Effect.as(false),
+                  Effect.catchTag("NotFound", () => Effect.succeed(true)),
+                ),
+              ).toBe(true);
+              yield* Effect.logInfo(`Website ${slug}: cleanup verified`);
+            }).pipe(Effect.orDie),
+          );
+          yield* bodyContaining(`${url}/`, name);
+          yield* browserRoundtrip(url, slug);
+          const head = yield* HttpClient.head(`${url}/example.json`);
           expect(head.status).toBe(200);
           expect(yield* head.text).toBe("");
           const found = yield* getProjectBranchFunction({
@@ -59,6 +75,7 @@ describe.sequential("Neon Website complete lifecycle", () => {
           expect(unchanged.function!.activeDeploymentId).toBe(
             fn.activeDeploymentId,
           );
+          yield* Effect.logInfo(`Website ${slug}: initial no-op verified`);
           yield* fs.writeFileString(
             asset,
             '{"framework":"Neon Website lifecycle updated"}',
@@ -68,10 +85,14 @@ describe.sequential("Neon Website complete lifecycle", () => {
           expect(updated.function!.activeDeploymentId).not.toBe(
             fn.activeDeploymentId,
           );
+          yield* Effect.logInfo(
+            `Website ${slug}: update accepted deployment=${updated.function!.activeDeploymentId}`,
+          );
           yield* bodyContaining(
-            `${updated.url}/example.json`,
+            `${String(updated.url).replace(/\/+$/, "")}/example.json`,
             "Neon Website lifecycle updated",
           );
+          yield* Effect.logInfo(`Website ${slug}: updated content verified`);
           const settled = yield* deploy;
           expect(settled.function!.activeDeploymentId).toBe(
             updated.function!.activeDeploymentId,

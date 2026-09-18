@@ -116,7 +116,20 @@ test.provider(
             body.value === "two",
         }),
       );
+      yield* Effect.logInfo(
+        JSON.stringify({
+          functionEnvironmentUpdate: {
+            projectId: updated.api.projectId,
+            branchId: updated.api.branchId,
+            slug: updated.api.slug,
+            previousDeployment: first.api.activeDeploymentId,
+            activeDeployment: updated.api.activeDeploymentId,
+            observed: changedEnv,
+          },
+        }),
+      );
       expect(changedEnv).toMatchObject({ value: "two" });
+      expect(changedEnv).not.toHaveProperty("removed");
       const state = yield* NeonApi.getProjectBranchFunction({
         project_id: updated.api.projectId,
         branch_id: updated.api.branchId,
@@ -180,18 +193,61 @@ test.provider(
       expect(observed.function.active_deployment?.id).toBe(
         code.activeDeploymentId,
       );
+      yield* Effect.logInfo(
+        JSON.stringify({
+          functionCodeUpdate: {
+            projectId: code.projectId,
+            branchId: code.branchId,
+            slug: code.slug,
+            previousDeployment: configured.activeDeploymentId,
+            activeDeployment: code.activeDeploymentId,
+            status: observed.function.active_deployment?.status,
+            previousCodeHash: configured.codeHash,
+            codeHash: code.codeHash,
+          },
+        }),
+      );
       const response = yield* client
         .get(`${code.url}?deployment=${code.activeDeploymentId}`)
         .pipe(
-          Effect.flatMap((response) => response.text),
+          Effect.flatMap((response) =>
+            Effect.gen(function* () {
+              const text = yield* response.text;
+              yield* Effect.logInfo(
+                JSON.stringify({
+                  functionInvocation: {
+                    variant: "deployment-query",
+                    status: response.status,
+                    cacheControl: response.headers["cache-control"],
+                    age: response.headers.age,
+                    text,
+                  },
+                }),
+              );
+              return text;
+            }),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("5 seconds"),
             times: 8,
             until: (text) => text === "bare-v2",
           }),
         );
+      const plain = yield* client.get(code.url);
+      const plainText = yield* plain.text;
+      yield* Effect.logInfo(
+        JSON.stringify({
+          functionInvocation: {
+            variant: "plain",
+            status: plain.status,
+            cacheControl: plain.headers["cache-control"],
+            age: plain.headers.age,
+            text: plainText,
+          },
+        }),
+      );
       expect(response).toBe("bare-v2");
-      expect(yield* (yield* client.get(code.url)).text).toBe("bare-v2");
+      expect(plainText).toBe("bare-v2");
       yield* stack.destroy();
     }),
   { timeout: 120_000 },

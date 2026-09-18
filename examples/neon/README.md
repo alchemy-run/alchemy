@@ -29,7 +29,7 @@ Install this repository's workspace dependencies and use Node 24. Configure the 
 If you already deployed the old tutorial, follow [local-state migration](#existing-deployments-and-local-state-migration) before running these commands. From this directory, choose one backend:
 
 ```sh
-pnpm deploy --profile testing --stage upload-journal
+pnpm run deploy --profile testing --stage upload-journal
 # Or, for the separate native stack:
 pnpm deploy:native --profile testing --stage upload-journal
 ```
@@ -75,15 +75,17 @@ timeout 240 bun test test/policy.test.ts test/EffectApi.test.ts test/composition
 
 `pnpm test` selects the same offline files. The 17 preserved Effect AI tests use a mock model, including for paid-gate, SSE/context, error, and cancellation coverage; no inference is performed. Composition and native negative-path checks are offline too.
 
-`test/integ.test.ts` and `test/preview.test.ts` are preserved **live** suites. `pnpm test:integ` deploys real resources; `pnpm test:preview` uses configured parent/preview IDs and writes data. Run either only with explicit cloud-test authorization. Do not run bare `bun test` when intending offline verification.
+`test/integ.test.ts` and `test/preview.test.ts` are preserved **live** suites. `pnpm test:integ` deploys real resources; `pnpm test:preview` uses configured parent/preview IDs and writes data. Run either only with explicit cloud-test authorization. Preview fixtures must be disposable, test-owned stacks: process a parent upload before forking, set `PARENT_PROJECT_ID`, `PARENT_BRANCH_ID`, `PARENT_BUCKET_NAME`, and `PREVIEW_BRANCH_ID` from those stacks, and stop parent browser writes before asserting isolation. Never point this test at an existing user's backend. Do not run bare `bun test` when intending offline verification.
 
 ## Verification limits
 
-The consolidated backend passed its live lifecycle: private/public buckets, typed objects, Auth, upload and cron trigger configuration, unauthenticated-request rejection, real upload-event processing, persisted SQL status, byte-for-byte download, and normal cleanup. This does not verify a scheduled cron firing, the optional AI/Function-form deployments, or the native/preview alternatives.
+The 42 offline tests and consolidated Effect backend's live lifecycle passed: private/public buckets, typed objects, Auth, upload and cron trigger configuration, unauthenticated-request rejection, real upload-event processing, persisted SQL status, byte-for-byte download, and normal cleanup. The live lifecycle signs its upload from the test process; it does not prove the Function's authenticated upload route works.
 
-The 42 offline tests cover upload policy, AI streaming behavior and composition. Desktop/mobile browser checks cover the upload UI's unconfigured state and the native AI UI's unauthorized and disabled-inference responses. Full signed-in browser upload/download and preview isolation remain unaccepted. Paid inference remains unverified; an earlier authorized probe returned `403: ai gateway not enabled for account`. No credits were purchased or account upgraded.
+The actual native Website passed desktop (1440×1000) and mobile (390×844) browser flows with disposable managed-Auth accounts: signup, private listing, typed settings, direct browser upload, event-backed ready status, exact signed-download contents, reload persistence, signout, wrong-password rejection, and sign-in. Unauthorized/invalid-JWT requests, unattested events, malformed/empty/oversized uploads, missing downloads, and anonymous storage reads were rejected. Neither viewport overflowed or reported a page error. One earlier native upload remained pending through the bounded event wait; that failed observation is retained, not treated as success.
 
-Neon Function update probes have served old code/environment even after the requested active deployment ID advanced. The preview's resource-scoped Auth adoption was also rejected during verification. Keep those failures visible; do not substitute deployment credentials, use stack-wide adoption, or erase state to proceed.
+The Effect Website passed signup, authenticated listing/settings, and negative requests, but valid `POST /api/uploads` returned HTTP 500 on both viewports during full acceptance. A corrected diagnostic verified the actual bound presigner, UUID generation, SQL insert and response with HTTP 201; controlled uninstrumented POSTs and a controlled UI upload also returned 201. The failing full-flow request's exact cause remains unknown. Full Effect browser upload/download remains blocked. The preview's resource-scoped Auth adoption also failed with `OwnedBySomeoneElse: Existing Auth requires explicit adoption`; consequently its explicit `PreviewUploads` trigger assertion failed. Against the resulting test-owned child branch, a separate serial isolation test passed inherited file/SQL checks, disabled inherited triggers, no inherited custom domains, child-only writes, unchanged parent data/configuration, and temporary credential cleanup. This is not acceptance of the preview Website or child upload trigger.
+
+Verification evidence is retained locally under ignored `.alchemy/acceptance/`. Both acceptance parents, the partial preview, and the diagnostic Function were destroyed through their normal stack lifecycles; independent SDK reads confirmed both projects and the preview branch absent. No scheduled cron firing, optional consolidated AI/Function-form deployment, or paid inference was tested in this pass. Earlier independent Neon Function update probes served old code/environment after the requested active deployment ID advanced. Keep unresolved failures visible; do not substitute deployment credentials, use stack-wide adoption, or erase state to proceed.
 
 The 10 MiB upload limit is an application check, not an S3-enforced quota. Processing validates size/content type, not malware. Signed URLs are temporary bearer capabilities. Add production rate limits, budgets, email verification, and content validation before exposing this application.
 

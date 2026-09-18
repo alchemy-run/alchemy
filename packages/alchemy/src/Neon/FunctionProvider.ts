@@ -18,7 +18,12 @@ import { LocalFunctionProvider } from "./LocalFunctionProvider.ts";
 
 export class FunctionDeploymentFailed extends Data.TaggedError(
   "FunctionDeploymentFailed",
-)<{ slug: string; deploymentId: number; status: string }> {}
+)<{
+  slug: string;
+  deploymentId: number;
+  status: string;
+  message?: string;
+}> {}
 export class FunctionDeploymentNotReady extends Data.TaggedError(
   "FunctionDeploymentNotReady",
 )<{ slug: string; deploymentId: number }> {}
@@ -43,6 +48,7 @@ export const observeFunction = Effect.fn(function* (
         slug,
         deploymentId: 0,
         status: "repeated-pagination-cursor",
+        message: "Neon Function listing returned a repeated pagination cursor",
       });
     if (cursor) seen.add(cursor);
   } while (cursor);
@@ -87,6 +93,8 @@ export const waitForFunctionDeployment = (
         slug,
         deploymentId,
         status: "failed",
+        message:
+          fn.current_deployment.error ?? "Neon Function deployment failed",
       });
     }
     if (

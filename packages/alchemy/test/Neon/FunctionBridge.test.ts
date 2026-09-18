@@ -1,6 +1,7 @@
 import { makeFunctionBridge } from "@/Neon/FunctionBridge";
 import { FunctionRequest } from "@/Neon/FunctionEnvironment";
 import { makeFunctionRuntimeContext } from "@/Neon/FunctionRuntimeContext";
+import { FunctionUpgradeSockets } from "@/Neon/FunctionUpgrade";
 import { expect, test } from "alchemy-test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -68,6 +69,62 @@ for (const cancellation of ["abort", "body"] as const)
         yield* Effect.tryPromise(() => reader.cancel());
       }),
   );
+
+test.effect(
+  "Function bridge preserves upgrade identity and awaits asynchronous close finalizers once",
+  () =>
+    Effect.gen(function* () {
+      const runtime = yield* Effect.sync(() =>
+        makeFunctionRuntimeContext("Upgrade"),
+      );
+      const finalized = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      let count = 0;
+      const socket = yield* Effect.sync(
+        () =>
+          Object.assign(new EventTarget(), {
+            readyState: 1,
+            CLOSED: 3,
+          }) as WebSocket,
+      );
+      const native = yield* Effect.sync(() => new Response(null));
+      yield* Effect.sync(() => FunctionUpgradeSockets.set(native, socket));
+      yield* runtime.route(
+        "/",
+        Effect.gen(function* () {
+          yield* Effect.addFinalizer(() =>
+            Deferred.await(release).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  count++;
+                }),
+              ),
+              Effect.andThen(Deferred.succeed(finalized, undefined)),
+            ),
+          );
+          return HttpServerResponse.raw(native);
+        }),
+      );
+      const bridge = yield* Effect.sync(() =>
+        makeFunctionBridge(Effect.succeed({ RuntimeContext: runtime })),
+      );
+      const controller = yield* Effect.sync(() => new AbortController());
+      const request = yield* Effect.sync(
+        () =>
+          new Request("https://function.test/", { signal: controller.signal }),
+      );
+      const response = yield* Effect.tryPromise(() => bridge.fetch(request));
+      expect(response).toBe(native);
+      expect(count).toBe(0);
+      yield* Effect.sync(() => socket.dispatchEvent(new Event("close")));
+      yield* Effect.sync(() => controller.abort());
+      expect(count).toBe(0);
+      yield* Deferred.succeed(release, undefined);
+      yield* Deferred.await(finalized).pipe(Effect.timeout("2 seconds"));
+      yield* Effect.sync(() => socket.dispatchEvent(new Event("close")));
+      expect(count).toBe(1);
+    }),
+);
 
 test.effect(
   "Function bridge closes bodyless request scopes without consuming a stream",

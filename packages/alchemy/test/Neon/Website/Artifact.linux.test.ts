@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { exampleRoot } from "./Fixture.ts";
+import { buildPortableExample } from "./Fixture.ts";
 
 for (const slug of ["nextjs", "vocs"] as const) {
   it.live.skipIf(!process.env.NEON_WEBSITE_LINUX)(
@@ -15,17 +15,10 @@ for (const slug of ["nextjs", "vocs"] as const) {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* exampleRoot(slug);
         const next = slug === "nextjs";
-        const artifact = yield* stageWebsiteArtifact({
-          root,
-          distDir: next ? root : path.join(root, "dist"),
-          serverEntry: path.join(
-            root,
-            next ? "serve-neon.mjs" : "dist/server/serve-neon.mjs",
-          ),
-          layout: next ? "next" : "output",
-        });
+        const artifact = yield* stageWebsiteArtifact(
+          yield* buildPortableExample(slug),
+        );
         const probe = [
           'import assert from "node:assert/strict";',
           'import fs from "node:fs";',
