@@ -20,9 +20,7 @@ import {
 } from "@/lib/forge";
 import { showCode, type CodePlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
-import { CODE_THEMES } from "@/lib/code-theme";
-import { useResolvedTheme } from "@/lib/theme";
-import { themeToTreeStyles } from "@pierre/trees";
+import { useTreeStyles } from "@/lib/tree-theme";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import {
   ChevronRight,
@@ -107,11 +105,7 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
 
   const crumbs = path.split("/").filter(Boolean);
   const tip = log[0];
-  const mode = useResolvedTheme();
-  const treeStyles = useMemo(
-    () => themeToTreeStyles(CODE_THEMES[mode]),
-    [mode],
-  );
+  const treeStyles = useTreeStyles();
 
   return (
     <div className="flex min-h-0 flex-1">

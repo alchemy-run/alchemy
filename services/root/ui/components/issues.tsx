@@ -31,9 +31,7 @@ import {
 import { showWork, type WorkPlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
-import { CODE_THEMES } from "@/lib/code-theme";
-import { useResolvedTheme } from "@/lib/theme";
-import { themeToTreeStyles } from "@pierre/trees";
+import { useTreeStyles } from "@/lib/tree-theme";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import type { GitStatusEntry } from "@pierre/trees";
 import {
@@ -598,11 +596,7 @@ const PullFiles = ({
   }, [model, paths, files]);
 
   const totals = useMemo(() => diffTotals(raw), [raw]);
-  const mode = useResolvedTheme();
-  const treeStyles = useMemo(
-    () => themeToTreeStyles(CODE_THEMES[mode]),
-    [mode],
-  );
+  const treeStyles = useTreeStyles();
 
   if (files.length === 0) {
     return (

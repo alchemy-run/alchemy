@@ -196,11 +196,12 @@
   ::selection {
     background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
-  /* Rigid scrolling, VS Code-style: no rubber-band at the edges and
-     no scroll chaining out of nested panes — anywhere. */
+  /* Rigid scrolling, VS Code-style: no rubber-band at the page
+     edges. ONLY on the roots — a universal rule turns every
+     overflow-hidden wrapper into a chaining boundary and wheel
+     events die before reaching the real scroller. */
   html,
-  body,
-  * {
+  body {
     overscroll-behavior: none;
   }
 }
