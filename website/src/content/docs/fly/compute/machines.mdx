@@ -40,9 +40,10 @@ makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 
 ## Scale up
 
-Each Machine resource is one VM. Yield another Machine to add
-capacity. Fly's proxy load-balances published `services` across
-them.
+A Machine resource runs one VM by default. Set `count` to manage
+several replicas together, or declare separate resources for Machines
+with different configuration. Fly's proxy load-balances published
+`services` across them.
 
 ```typescript
 const web1 = yield* Fly.Machine("Web1", {
@@ -78,9 +79,9 @@ const web2 = yield* Fly.Machine("Web2", {
 });
 ```
 
-A [`Service`](/fly/compute/services) still scales with `count`. That
-is one program, many Machines. `Fly.Machine` is one resource, one
-VM.
+Both `Fly.Machine` and [`Service`](/fly/compute/services) support
+`count`. Replicas within one resource update sequentially; separate
+Machine resources do not share that update ordering.
 
 ## Scale down
 
@@ -138,11 +139,20 @@ path is part of the binding graph.
 ## Lifecycle
 
 Reconcile waits until the Machine is `started` (`waitMachine`,
-bounded). `skipLaunch: true` creates or updates the config without
-starting it. Delete force-destroys and waits until gone. `Conflict`
-on create/update/delete is treated as a race and retried.
-`autoDestroy: true` tears the Machine down when its main process
-exits.
+bounded). If the Machine has service checks, it then waits until
+all configured checks are passing before updating the next replica.
+Missing or non-passing results keep polling for up to 60 seconds. A
+failed wait stops the rollout with `Fly.ReplicaChecksNotPassing` and
+the last observed check names, statuses, and output. Later replicas
+remain unchanged; earlier updates are not automatically rolled back.
+This is an in-place rollout, not a blue/green replacement: a single
+replica can be unavailable while it updates.
+
+`skipLaunch: true` creates or updates the config without starting
+it or waiting for checks. Delete force-destroys and waits until
+gone. `Conflict` on create/update/delete is treated as a race and
+retried. `autoDestroy: true` tears the Machine down when its main
+process exits.
 
 ## Service or Sprite
 

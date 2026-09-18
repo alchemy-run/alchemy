@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
  * output, the approval prompt, and the live apply/dev/destroy progress —
@@ -17,7 +17,8 @@
  * - Property diffs (`detailed`) render in every mode, and the window is
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
-import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { JSX, ReactNode } from "react";
 import {
   Box,
   KeyBar,

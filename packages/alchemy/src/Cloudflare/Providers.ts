@@ -1,4 +1,3 @@
-import { Retry } from "@distilled.cloud/cloudflare";
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -660,25 +659,20 @@ export const providers = () =>
 /**
  * The foundation every effect tree that talks to the Cloudflare API
  * shares — credentials resolved through the Alchemy auth provider,
- * account environment, Access, profile + credential store — plus a
- * blanket retry policy applied to every Cloudflare API call.
+ * account environment, Access, profile + credential store.
  *
  * Used by {@link providers} and the Cloudflare state store
  * ({@link ../Cloudflare/StateStore/State.ts state}) so that provider
- * lifecycle operations and state-store init/bootstrap probes retry
- * transient failures the same way; without it the state-store
- * subdomain/script/secrets probes run on the SDK's shorter default
- * policy and surface throttling ("Please wait and consider throttling
- * your request speed") to users.
+ * lifecycle operations and state-store init/bootstrap probes run under
+ * the same services.
  *
- * The policy is the SDK's `Retry.makeDefault` (throttling / 5xx /
- * network, server retry-after hints, bounded backoff). The
- * Cloudflare-specific misleadingly-tagged transient cases that used
- * to live here as a custom factory (10001 "internal error", 10001
- * "Unable to authenticate request", 10000 "Authentication error"
- * under load) are now tagged retryable at the source in the SDK's
- * global error map, so `makeDefault`'s transient detection covers
- * them.
+ * No retry policy is installed here: every Cloudflare API call already
+ * runs under the SDK's `makeDefault` (throttling / 5xx / network, server
+ * retry-after hints, bounded backoff) when no policy is in context, and
+ * the Cloudflare-specific misleadingly-tagged transient cases (10001
+ * "internal error", 10001 "Unable to authenticate request", 10000
+ * "Authentication error" under load) are tagged retryable at the source
+ * in the SDK's global error map, so that default covers them.
  */
 export const CloudflareApiLive = () =>
   Credentials.fromAuthProvider().pipe(
@@ -687,5 +681,4 @@ export const CloudflareApiLive = () =>
     Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
-    Layer.provideMerge(Layer.succeed(Retry.Retry, Retry.makeDefault)),
   );

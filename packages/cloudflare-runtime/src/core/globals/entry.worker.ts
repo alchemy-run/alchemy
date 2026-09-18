@@ -26,7 +26,7 @@ import {
   BINDING_PROXY_SHARED_SECRET,
   HEADER_ORIGINAL_URL,
   HEADER_PROXY_SHARED_SECRET,
-} from "../proxy/ProxyHeaders.shared.ts";
+} from "./ProxyHeaders.shared.ts";
 
 interface Env {
   [BINDING_PROXY_SHARED_SECRET]: string;

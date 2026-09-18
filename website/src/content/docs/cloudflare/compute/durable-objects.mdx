@@ -75,7 +75,7 @@ and friends. We'll use it more in the next part for WebSockets.
 :::note
 You resolve the *reference* to `state` in the outer (Construction) Effect,
 but its methods — like `storage.get` — are
-[colored with `RuntimeContext`](/infrastructure-as-effects/layers#runtime-as-a-colored-function),
+[colored with `RuntimeContext`](/infrastructure-as-effects/layers#the-types-hold-the-boundary),
 so you can only *use* them in the inner (runtime) Effect. That's why
 `state` is yielded above but `state.storage.get(...)` lives below.
 :::
