@@ -213,7 +213,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
         if (isWorkflowLike(binding)) {
           const className = binding.className ?? binding.name;
           const scriptName = binding.scriptName ?? resource.workerName;
-          const workflowName = makeWorkflowName(scriptName, className);
+          const workflowName =
+            binding.workflowName ?? makeWorkflowName(scriptName, className);
           resolvedBindingMeta = {
             ...resolvedBindingMeta,
             workflowName,
@@ -221,24 +222,42 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
 
           // A locally-hosted Workflow (no `scriptName`) must be registered
           // with Cloudflare via `putWorkflow` once the host Worker exists.
-          // Cross-script references are binding-only; both sides derive the
-          // same physical workflow name from the host script and class.
+          // Cross-script references are binding-only; both sides use the
+          // explicit physical name when supplied, or derive the same default
+          // from the host script and class.
           const workflow = binding.scriptName
             ? undefined
             : yield* WorkflowResource(binding.name, {
-                workflowName,
+                workflowName: binding.workflowName,
                 className,
-                scriptName: resource.workerName,
+                scriptName:
+                  binding.workflowName === undefined
+                    ? resource.workerName
+                    : undefined,
                 limits: binding.limits,
                 schedules: binding.schedules,
               });
+          if (workflow) {
+            // Host linkage must not block the named identity's adoption probe.
+            if (binding.workflowName !== undefined) {
+              yield* workflow.bind`${resource}`({
+                scriptName: resource.workerName,
+              });
+            }
+            resolvedBindingMeta = {
+              ...resolvedBindingMeta,
+              workflowName: binding.workflowName ?? workflow.workflowName,
+            };
+          }
 
-          // Local outputs depend on registration, not just Worker precreation.
+          // Local outputs depend on registration and preserve deployed identity.
           env[bindingName] = {
             kind: binding.kind,
             name: binding.name,
             className,
-            workflowName: workflow ? workflow.workflowName : workflowName,
+            workflowName: workflow
+              ? workflow.workflowName
+              : Output.asOutput(workflowName),
             scriptName: workflow
               ? workflow.scriptName
               : asScriptNameOutput(scriptName),

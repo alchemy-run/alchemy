@@ -229,9 +229,13 @@ export const SubscriptionProvider = () =>
     stables: ["subscriptionId", "accountId", "source", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
+      }
+      // An unresolved immutable source may change with its upstream resource.
+      // Delete first in case it resolves to the same account-unique source.
+      if (!("source" in news) || !isResolved(news.source)) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       // The source is fixed at creation.
       const oldSource = output?.source ?? olds?.source;

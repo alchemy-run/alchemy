@@ -22,7 +22,10 @@ export class MyWorkflow extends WorkflowEntrypoint<AsyncWorkflowEnv, Params> {
 
     await step.sleep("cooldown", "1 second");
 
-    return await step.do("finalize", async () => ({ greeting }));
+    return await step.do("finalize", async () => ({
+      greeting,
+      workflowName: event.workflowName,
+    }));
   }
 }
 
@@ -44,7 +47,10 @@ export default {
     }
   },
 
-  async fetch(request: Request, env: AsyncWorkflowEnv): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: AsyncWorkflowEnv & { WORKFLOW_SCRIPT_NAME?: string },
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/events") {
@@ -60,6 +66,9 @@ export default {
           await env.ASSETS.fetch(new URL("/test.txt", request.url))
         ).text(),
       });
+    }
+    if (url.pathname === "/workflow/script-name") {
+      return new Response(env.WORKFLOW_SCRIPT_NAME);
     }
 
     if (url.pathname.startsWith("/workflow/start/")) {

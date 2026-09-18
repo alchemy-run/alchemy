@@ -707,6 +707,13 @@ const observeInstanceRequests = Effect.gen(function* () {
     port: string | null;
     parameterGroup: string | null;
     securityGroups: string[];
+    iamAuthentication: string | null;
+    publiclyAccessible: string | null;
+    deletionProtection: string | null;
+    networkType: string | null;
+    applyImmediately: string | null;
+    enabledLogs: string[];
+    disabledLogs: string[];
   }> = [];
   const observedClient = client.pipe(
     HttpClient.tapRequest((request) =>
@@ -723,6 +730,31 @@ const observeInstanceRequests = Effect.gen(function* () {
         ) {
           requests.push({
             action,
+            iamAuthentication: parameters.get(
+              "EnableIAMDatabaseAuthentication",
+            ),
+            publiclyAccessible: parameters.get("PubliclyAccessible"),
+            deletionProtection: parameters.get("DeletionProtection"),
+            networkType: parameters.get("NetworkType"),
+            applyImmediately: parameters.get("ApplyImmediately"),
+            enabledLogs: [...parameters.entries()]
+              .filter(
+                ([key]) =>
+                  key.startsWith("EnableCloudwatchLogsExports.") ||
+                  key.startsWith(
+                    "CloudwatchLogsExportConfiguration.EnableLogTypes.",
+                  ),
+              )
+              .map(([, value]) => value)
+              .sort(),
+            disabledLogs: [...parameters.entries()]
+              .filter(([key]) =>
+                key.startsWith(
+                  "CloudwatchLogsExportConfiguration.DisableLogTypes.",
+                ),
+              )
+              .map(([, value]) => value)
+              .sort(),
             parameterGroup: parameters.get("DBParameterGroupName"),
             securityGroups: [...parameters.entries()]
               .filter(([key]) => key.startsWith("VpcSecurityGroupIds."))
@@ -954,6 +986,532 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
+);
+
+type SecurityProps = Pick<
+  DBInstanceProps,
+  | "enableIAMDatabaseAuthentication"
+  | "publiclyAccessible"
+  | "deletionProtection"
+  | "networkType"
+  | "enableCloudwatchLogsExports"
+>;
+
+const securityProgram = (
+  security: SecurityProps = {},
+  round = "security",
+  identifier?: string,
+  preferredMaintenanceWindow?: string,
+) =>
+  Effect.gen(function* () {
+    const network = yield* Network("SecurityNet", {
+      cidrBlock: "10.51.0.0/16",
+    });
+    const subnetGroup = yield* DBSubnetGroup("SecuritySubnetGroup", {
+      description: "RDS security desired-state lifecycle",
+      subnetIds: network.publicSubnetIds,
+    });
+    return yield* DBInstance("SecurityInstance", {
+      dbInstanceIdentifier: identifier,
+      engine: "postgres",
+      dbInstanceClass: "db.t3.micro",
+      masterUsername: "alchemy",
+      manageMasterUserPassword: true,
+      dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+      backupRetentionPeriod: "0 days",
+      preferredMaintenanceWindow,
+      skipFinalSnapshot: true,
+      ...security,
+      tags: { round },
+    });
+  });
+
+const assertSecurity = Effect.fn(function* (
+  identifier: string,
+  security: SecurityProps = {},
+) {
+  const instance = (yield* rds.describeDBInstances({
+    DBInstanceIdentifier: identifier,
+  })).DBInstances?.[0];
+  expect(["available", "storage-optimization"]).toContain(
+    instance?.DBInstanceStatus,
+  );
+  expect(instance?.IAMDatabaseAuthenticationEnabled).toBe(
+    security.enableIAMDatabaseAuthentication ?? false,
+  );
+  expect(
+    instance?.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled,
+  ).toBeUndefined();
+  expect(instance?.PubliclyAccessible).toBe(
+    security.publiclyAccessible ?? false,
+  );
+  expect(instance?.DeletionProtection).toBe(
+    security.deletionProtection ?? false,
+  );
+  expect(instance?.NetworkType).toBe(security.networkType ?? "IPV4");
+  expect([...(instance?.EnabledCloudwatchLogsExports ?? [])].sort()).toEqual(
+    [...new Set(security.enableCloudwatchLogsExports ?? [])].sort(),
+  );
+  expect(
+    instance?.PendingModifiedValues?.PendingCloudwatchLogsExports
+      ?.LogTypesToEnable ?? [],
+  ).toEqual([]);
+  expect(
+    instance?.PendingModifiedValues?.PendingCloudwatchLogsExports
+      ?.LogTypesToDisable ?? [],
+  ).toEqual([]);
+  return instance;
+});
+
+const waitForSecurityObservation = (
+  identifier: string,
+  until: (instance: rds.DBInstance) => boolean,
+) =>
+  rds.describeDBInstances({ DBInstanceIdentifier: identifier }).pipe(
+    Effect.map((response) => response.DBInstances?.[0]),
+    Effect.repeat({
+      schedule: Schedule.min([
+        Schedule.exponential("5 seconds"),
+        Schedule.spaced("1 minute"),
+      ]),
+      times: 10,
+      until: (instance) =>
+        instance !== undefined &&
+        ["available", "storage-optimization"].includes(
+          instance.DBInstanceStatus ?? "",
+        ) &&
+        until(instance),
+    }),
+    Effect.tap((instance) =>
+      Effect.sync(() => {
+        expect(instance).toBeDefined();
+        expect(["available", "storage-optimization"]).toContain(
+          instance?.DBInstanceStatus,
+        );
+        expect(instance !== undefined && until(instance)).toBe(true);
+      }),
+    ),
+  );
+
+const enabledSecurity: SecurityProps = {
+  enableIAMDatabaseAuthentication: true,
+  publiclyAccessible: true,
+  deletionProtection: true,
+  networkType: "IPV4",
+  enableCloudwatchLogsExports: ["postgresql", "upgrade"],
+};
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "security: defaults, removal, drift, adoption, and no redundant writes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-security-defaults";
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (security: SecurityProps = {}, round = "security") =>
+        securityProgram(security, round, identifier);
+      const deploy = (security: SecurityProps = {}, round = "security") =>
+        stack
+          .deploy(program(security, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      yield* assertSecurity(identifier);
+      expect(created.iamDatabaseAuthenticationEnabled).toBe(false);
+      expect(created.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      expect(created.publiclyAccessible).toBe(false);
+      expect(created.deletionProtection).toBe(false);
+      expect(created.networkType).toBe("IPV4");
+      expect(created.enabledCloudwatchLogsExports).toEqual([]);
+      expect(Object.keys(created.vpcSecurityGroupStatuses).sort()).toEqual(
+        [...created.vpcSecurityGroupIds].sort(),
+      );
+      expect(Object.values(created.vpcSecurityGroupStatuses)).toEqual([
+        "active",
+      ]);
+      expect(
+        requests.filter((request) => request.action === "CreateDBInstance"),
+      ).toMatchObject([
+        {
+          iamAuthentication: "false",
+          publiclyAccessible: "false",
+          deletionProtection: "false",
+          networkType: "IPV4",
+          enabledLogs: [],
+        },
+      ]);
+
+      const enabled = yield* deploy(enabledSecurity);
+      expect(enabled.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(enabled.iamDatabaseAuthenticationEnabled).toBe(true);
+      expect(enabled.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      yield* assertSecurity(identifier, enabledSecurity);
+      requests.length = 0;
+      yield* deploy(
+        {
+          ...enabledSecurity,
+          enableCloudwatchLogsExports: ["upgrade", "postgresql", "postgresql"],
+        },
+        "set-equivalent",
+      );
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toEqual([]);
+
+      requests.length = 0;
+      const removed = yield* deploy();
+      expect(removed.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+      expect(
+        requests.filter((request) => request.disabledLogs.length > 0),
+      ).toMatchObject([
+        {
+          disabledLogs: ["postgresql", "upgrade"],
+          applyImmediately: "false",
+        },
+      ]);
+      expect(
+        (yield* stack.plan(program())).resources.SecurityInstance,
+      ).toMatchObject({ action: "noop" });
+
+      const inject = Effect.gen(function* () {
+        yield* rds.modifyDBInstance({
+          DBInstanceIdentifier: identifier,
+          EnableIAMDatabaseAuthentication: true,
+          PubliclyAccessible: true,
+          DeletionProtection: true,
+          CloudwatchLogsExportConfiguration: {
+            EnableLogTypes: ["postgresql", "upgrade"],
+          },
+          ApplyImmediately: true,
+        });
+        yield* waitForSecurityObservation(
+          identifier,
+          (instance) =>
+            instance.IAMDatabaseAuthenticationEnabled === true &&
+            instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+              undefined &&
+            instance.PubliclyAccessible === true &&
+            instance.DeletionProtection === true &&
+            (instance.EnabledCloudwatchLogsExports ?? []).length === 2 &&
+            (instance.PendingModifiedValues?.PendingCloudwatchLogsExports
+              ?.LogTypesToEnable?.length ?? 0) === 0 &&
+            (instance.PendingModifiedValues?.PendingCloudwatchLogsExports
+              ?.LogTypesToDisable?.length ?? 0) === 0,
+        );
+        yield* assertSecurity(identifier, enabledSecurity);
+      });
+      yield* inject;
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.SecurityInstance?.action).toBe("drifted");
+      expect(
+        (yield* stack.plan(program())).resources.SecurityInstance,
+      ).toMatchObject({ action: "update" });
+      const repaired = yield* deploy();
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+
+      yield* inject;
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "SecurityInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy();
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier);
+      requests.length = 0;
+      yield* deploy({}, "tag-only");
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toEqual([]);
+      expect(
+        (yield* stack.plan(program({}, "tag-only"))).resources.SecurityInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  { timeout: 1_800_000 },
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "security: maintenance-queued IAM convergence and immediate-only queue isolation",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const maintenance = yield* Effect.sync(() => {
+        const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
+          (new Date().getUTCDay() + 2) % 7
+        ];
+        return `${day}:03:00-${day}:04:00`;
+      });
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (security: SecurityProps = {}, round = "security") =>
+        securityProgram(security, round, undefined, maintenance);
+      const deploy = (security: SecurityProps = {}, round = "security") =>
+        stack
+          .deploy(program(security, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      const identifier = created.dbInstanceIdentifier;
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        BackupRetentionPeriod: 1,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.PendingModifiedValues?.BackupRetentionPeriod === 1,
+      );
+      requests.length = 0;
+      const immediateOnly: SecurityProps = {
+        publiclyAccessible: true,
+        deletionProtection: true,
+        enableCloudwatchLogsExports: ["postgresql"],
+      };
+      const changed = yield* deploy(immediateOnly);
+      expect(changed.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(
+        (yield* assertSecurity(identifier, immediateOnly))
+          ?.PendingModifiedValues?.BackupRetentionPeriod,
+      ).toBe(1);
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toMatchObject([{ applyImmediately: "false", iamAuthentication: null }]);
+      expect(
+        (yield* stack.plan(program(immediateOnly))).resources.SecurityInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* deploy();
+      expect(
+        (yield* assertSecurity(identifier))?.PendingModifiedValues
+          ?.BackupRetentionPeriod,
+      ).toBe(1);
+      // Cancel the test's unrelated queued change before exercising queue promotion.
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        BackupRetentionPeriod: 0,
+        ApplyImmediately: true,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.BackupRetentionPeriod === 0 &&
+          instance.PendingModifiedValues?.BackupRetentionPeriod === undefined,
+      );
+
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: true,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === false &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+            true,
+      );
+      const pendingDrift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(pendingDrift.resources.SecurityInstance).toMatchObject({
+        action: "drifted",
+        attr: {
+          iamDatabaseAuthenticationEnabled: false,
+          pendingIamDatabaseAuthenticationEnabled: true,
+        },
+      });
+      requests.length = 0;
+      const desired = { enableIAMDatabaseAuthentication: true };
+      const promoted = yield* deploy(desired);
+      expect(promoted.iamDatabaseAuthenticationEnabled).toBe(true);
+      expect(promoted.pendingIamDatabaseAuthenticationEnabled).toBeUndefined();
+      yield* assertSecurity(identifier, desired);
+      // Matching pending IAM needs queue promotion, not another IAM assignment.
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toMatchObject([{ applyImmediately: "true", iamAuthentication: null }]);
+
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: false,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === true &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+            false,
+      );
+      expect(
+        (yield* stack.plan(program(desired))).resources.SecurityInstance,
+      ).toMatchObject({ action: "update" });
+      requests.length = 0;
+      const repaired = yield* deploy(desired);
+      expect(repaired.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* assertSecurity(identifier, desired);
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toMatchObject([
+        { applyImmediately: "true", iamAuthentication: "true" },
+      ]);
+      requests.length = 0;
+      yield* deploy(desired, "tag-only");
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toEqual([]);
+      yield* rds.modifyDBInstance({
+        DBInstanceIdentifier: identifier,
+        EnableIAMDatabaseAuthentication: false,
+        ApplyImmediately: false,
+      });
+      yield* waitForSecurityObservation(
+        identifier,
+        (instance) =>
+          instance.IAMDatabaseAuthenticationEnabled === true &&
+          instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+            false,
+      );
+      requests.length = 0;
+      yield* deploy();
+      yield* assertSecurity(identifier);
+      expect(
+        requests.filter((request) => request.action === "ModifyDBInstance"),
+      ).toMatchObject([{ applyImmediately: "true", iamAuthentication: null }]);
+      expect(
+        (yield* stack.plan(program())).resources.SecurityInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  { timeout: 1_800_000 },
+);
+
+test.provider.skipIf(!process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "security: Aurora cluster ownership survives omitted membership and adoption",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const identifier = "alchemy-rds-security-aurora";
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (membership = true, explicit = true, round = "created") =>
+        Effect.gen(function* () {
+          const network = yield* Network("AuroraSecurityNet", {
+            cidrBlock: "10.52.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup(
+            "AuroraSecuritySubnetGroup",
+            {
+              description: "Aurora instance security ownership",
+              subnetIds: network.privateSubnetIds,
+            },
+          );
+          const cluster = yield* DBCluster("AuroraSecurityCluster", {
+            engine: "aurora-postgresql",
+            engineMode: "provisioned",
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            enableIAMDatabaseAuthentication: true,
+            enableCloudwatchLogsExports: ["postgresql"],
+            networkType: "IPV4",
+            deletionProtection: false,
+            serverlessV2ScalingConfiguration: {
+              MinCapacity: 0.5,
+              MaxCapacity: 1,
+            },
+          });
+          return yield* DBInstance("AuroraSecurityInstance", {
+            dbInstanceIdentifier: identifier,
+            dbClusterIdentifier: membership
+              ? cluster.dbClusterIdentifier
+              : undefined,
+            engine: "aurora-postgresql",
+            dbInstanceClass: "db.serverless",
+            ...(explicit
+              ? {
+                  enableIAMDatabaseAuthentication: false,
+                  deletionProtection: true,
+                  networkType: "DUAL",
+                  enableCloudwatchLogsExports: ["not-an-instance-log"],
+                }
+              : {}),
+            tags: { round, cluster: cluster.dbClusterIdentifier },
+          });
+        });
+      const deploy = (membership = true, explicit = true, round = "created") =>
+        stack
+          .deploy(program(membership, explicit, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const created = yield* deploy();
+      expect(created.publiclyAccessible).toBe(false);
+      const check = Effect.gen(function* () {
+        const instance = (yield* rds.describeDBInstances({
+          DBInstanceIdentifier: identifier,
+        })).DBInstances![0]!;
+        const cluster = (yield* rds.describeDBClusters({
+          DBClusterIdentifier: instance.DBClusterIdentifier!,
+        })).DBClusters![0]!;
+        expect(cluster.IAMDatabaseAuthenticationEnabled).toBe(true);
+        expect(cluster.EnabledCloudwatchLogsExports).toEqual(["postgresql"]);
+        expect(cluster.DeletionProtection).toBe(false);
+        expect(cluster.NetworkType).toBe("IPV4");
+        expect(instance.PubliclyAccessible).toBe(false);
+        expect(
+          requests
+            .filter(
+              (request) =>
+                request.action === "CreateDBInstance" ||
+                request.action === "ModifyDBInstance",
+            )
+            .every(
+              (request) =>
+                request.iamAuthentication === null &&
+                request.deletionProtection === null &&
+                request.networkType === null &&
+                request.enabledLogs.length === 0 &&
+                request.disabledLogs.length === 0,
+            ),
+        ).toBe(true);
+        return instance;
+      });
+      yield* check;
+      const omitted = yield* deploy(true, false, "omitted");
+      expect(omitted.dbInstanceArn).toBe(created.dbInstanceArn);
+      yield* check;
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "AuroraSecurityInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy(false, true, "adopted");
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      const observed = yield* check;
+      expect(adopted.iamDatabaseAuthenticationEnabled).toBe(
+        observed.IAMDatabaseAuthenticationEnabled,
+      );
+      expect(adopted.enabledCloudwatchLogsExports).toEqual(
+        observed.EnabledCloudwatchLogsExports ?? [],
+      );
+      expect(
+        (yield* stack.plan(program(false, true, "adopted"))).resources
+          .AuroraSecurityInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+    }),
+  { timeout: 1_800_000 },
 );
 
 const associationProgram = (
