@@ -336,9 +336,39 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
- * Applications in the same account reuse a published image when their build
- * inputs match. Changed inputs build with the shared inline layer cache.
- * Pin base images and downloaded dependencies when using this option.
+ * `repository: "web"` names the destination repository, not a source image or
+ * the container application. With the default registry host, Alchemy lowercases
+ * the name and expands it to `registry.cloudflare.com/<account-id>/web`.
+ * Supply only the repository name, without a registry host, account ID, tag,
+ * or digest. A build produces these references:
+ *
+ * ```text
+ * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
+ * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
+ * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+ * ```
+ *
+ * The build hash identifies the inputs; the manifest digest identifies the
+ * published artifact. Applications and stages in the same account can use
+ * `publish: { repository: "web" }` to reuse matching published builds. Changed
+ * inputs produce another hash tag in the same repository and use its inline
+ * layer cache. Pin base images and downloaded dependencies when opting in.
+ * Omitting `publish` uses the application's physical name without shared
+ * registry caching.
+ *
+ * **Example:** Publish an existing image into a named repository
+ * ```typescript
+ * export class Proxy extends Cloudflare.Container<Proxy>()("Proxy", {
+ *   image: "nginx:alpine",
+ *   publish: { repository: "web-proxy" },
+ * }) {}
+ * // Re-publishes nginx into registry.cloudflare.com/<account-id>/web-proxy
+ * // and deploys registry.cloudflare.com/<account-id>/web-proxy@sha256:<manifest-digest>.
+ * ```
+ *
+ * Remote images are re-published without building them. An image already in
+ * the target registry keeps its existing repository; `publish.repository`
+ * does not copy it into another one.
  *
  * **Example:** Remote image (`image`)
  * ```typescript

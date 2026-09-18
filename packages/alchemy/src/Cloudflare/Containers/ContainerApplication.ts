@@ -198,11 +198,44 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   publish?: {
     /**
-     * Repository name within the current account's container registry, shared
-     * across applications and stages. Matching published builds are reused by
-     * digest; changed inputs build with an inline layer cache at `:buildcache`.
-     * Only local builds are cached. Pin base images and downloaded dependencies:
-     * changes outside the build context cannot invalidate its content hash.
+     * Destination repository name within the current Cloudflare account's
+     * container registry, for example `"web"`. This is not a source image,
+     * registry hostname, account ID, tag, or fully qualified image reference.
+     * Alchemy lowercases the name and adds the registry host and account ID:
+     * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
+     * The container application's name is independent of this repository name.
+     * Omitting `publish` uses the application's physical name instead, without
+     * opting into shared registry caching.
+     *
+     * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
+     * tag and an inline layer-cache tag, then deploys an immutable manifest
+     * digest. The build hash and manifest digest are different identifiers.
+     *
+     * Applications and stages in the same account can share `"web"`. Matching
+     * build inputs reuse the published image; changed inputs produce another
+     * hash tag in the same repository. Finished-image cache reuse applies to
+     * builds, not to re-publishing remote images. Pin base images and downloaded
+     * dependencies: changes outside the build context cannot invalidate its
+     * content hash.
+     *
+     * External remote images are re-published into this repository without
+     * building them. Images already in the target registry keep their existing
+     * repository; setting this option does not copy them into another one.
+     *
+     * @example
+     * ```typescript
+     * const app = yield* Cloudflare.Container("WebProduction", {
+     *   context: "./web",
+     *   publish: { repository: "web" },
+     * }).Application;
+     *
+     * // Published build:
+     * // registry.cloudflare.com/<account-id>/web:<build-hash>
+     * // Shared build-layer cache:
+     * // registry.cloudflare.com/<account-id>/web:buildcache
+     * // Deployed image (app.configuration.image):
+     * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+     * ```
      */
     repository: string;
   };
