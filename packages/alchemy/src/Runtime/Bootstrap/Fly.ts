@@ -48,5 +48,13 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Effect.scoped,
   );
 
-  return runProcess("Fly service", program);
+  const timeout = process.env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS;
+  return runProcess("Fly service", program, {
+    managedHttpShutdownTimeoutMs:
+      timeout === undefined
+        ? undefined
+        : /^\d+$/.test(timeout)
+          ? Number(timeout)
+          : NaN,
+  });
 };

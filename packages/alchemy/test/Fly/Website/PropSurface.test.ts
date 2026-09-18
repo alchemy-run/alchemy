@@ -10,6 +10,10 @@ describe("Fly.Website prop surfaces", () => {
   const _pins = [
     () =>
       Fly.Website.Vite("V", {
+        deploy: { strategy: "bluegreen", healthTimeout: "90 seconds" },
+        shutdown: { timeout: "30 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/health" } },
+        services: [],
         assets: { notFoundHandling: "single-page-application" },
         vite: { outDir: "build", base: "/docs/" },
       }),
@@ -63,6 +67,10 @@ describe("Fly.Website prop surfaces", () => {
     () =>
       Fly.Website.StaticSite("St", {
         build: { command: "hugo --minify", output: "public" },
+        deploy: { strategy: "bluegreen" },
+        shutdown: { signal: "SIGTERM" },
+        checks: { ready: { type: "tcp", port: 3000 } },
+        services: [],
         assets: { notFoundHandling: "single-page-application" },
       }),
     () =>

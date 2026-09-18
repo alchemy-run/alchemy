@@ -11,8 +11,16 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
+import type { Input } from "../Input.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
 import { App } from "./App.ts";
+import {
+  deploymentPolicy,
+  validateDeployment,
+  type MachineDeploy,
+  type MachineShutdown,
+  type MachineCheck,
+} from "./Deployment.ts";
 import { toEnvRecord } from "./hosted.ts";
 import {
   createFlyResourceName,
@@ -161,6 +169,12 @@ export interface MachineService {
 export type MachineMount = DiskSpec;
 
 export interface MachineProps {
+  /** Deployment strategy and readiness deadline. Defaults to in-place rolling updates. */
+  deploy?: MachineDeploy;
+  /** Graceful process shutdown. Defaults to SIGTERM / 30 seconds when blue/green is enabled. */
+  shutdown?: MachineShutdown;
+  /** Named readiness checks for workers without public services. */
+  checks?: Record<string, MachineCheck>;
   /**
    * Parent Fly App. Changing it replaces the Machine.
    */
@@ -168,6 +182,7 @@ export interface MachineProps {
   /**
    * Machine name. Unique per App. If omitted, a unique name is generated
    * from the stack, stage and logical ID. Changing it replaces the Machine.
+   * In blue/green mode this is a base for generation-qualified physical names.
    */
   name?: string;
   /**
@@ -186,7 +201,8 @@ export interface MachineProps {
    */
   count?: number;
   /**
-   * Docker image reference. Updated in place via `updateMachine`.
+   * Docker image reference. Rolling updates modify the existing Machines;
+   * blue/green creates replacements. Use immutable tags or digests.
    */
   image: string;
   /**
@@ -250,13 +266,17 @@ export type Machine = Resource<
   "Fly.Machine",
   MachineProps,
   {
+    /** Whether recovery must finish an interrupted deployment. */
+    rolloutPending?: boolean;
     /** Parent Fly App name. */
     appName: string;
     /** Fly Machine id of replica 0. */
     machineId: string;
     /** Fly Machine ids of every replica. */
     machineIds: string[];
-    /** Machine name of replica 0 (unique per App). */
+    /** Logical base for generation-qualified Machine names. */
+    baseName?: string;
+    /** Machine name of replica 0 (unique per App). Changes during blue/green deployment. */
     name: string;
     /** Region the Machines are running in. */
     region: string;
@@ -452,7 +472,8 @@ export type Machine = Resource<
  * polled for up to 60 seconds, then fail deployment with
  * `Fly.ReplicaChecksNotPassing` and the last observed check results.
  * Later replicas remain unchanged; earlier updates are not rolled back.
- * A single replica still updates in place and can be unavailable.
+ * With the default rolling policy, a single replica updates in place and
+ * can be unavailable. Opt into `deploy.strategy: "bluegreen"` for replacements.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -678,6 +699,30 @@ export type Machine = Resource<
  * });
  * ```
  *
+ * ### Blue/green deployments
+ * Prepare a healthy replacement set before retiring the current Machines.
+ * Physical IDs and names change; the App URL remains stable. Volumes,
+ * auto-destroy, skipLaunch, and autostop are incompatible. Raw images must
+ * handle their own shutdown signal and stop accepting background work.
+ *
+ * **Example:** Private worker readiness
+ * ```typescript
+ * const worker = yield* Fly.Machine("Worker", {
+ *   app: Site,
+ *   image: "registry.example.com/worker:v2",
+ *   deploy: { strategy: "bluegreen", healthTimeout: "60 seconds" },
+ *   shutdown: { signal: "SIGTERM", timeout: "30 seconds" },
+ *   checks: {
+ *     ready: { type: "http", port: 3000, path: "/healthz", interval: "5s", timeout: "2s" },
+ *   },
+ * });
+ * ```
+ *
+ * Every published service needs its own service check. A failed candidate
+ * leaves the old generation serving. Retry an interrupted deploy to finish
+ * promotion or retirement; destroy discovers unfinished owned generations.
+ * See the [deployment guide](/fly/compute/deployments) for recovery and limits.
+ *
  * @resource
  */
 export const Machine = Resource<Machine>("Fly.Machine");
@@ -864,12 +909,12 @@ const sameRestart = (
 ) =>
   deepEqual(
     {
-      policy: observed?.policy,
-      max_retries: observed?.max_retries,
+      policy: observed?.policy ?? "on-failure",
+      max_retries: observed?.max_retries ?? 10,
     },
     {
-      policy: desired?.policy,
-      max_retries: desired?.max_retries,
+      policy: desired?.policy ?? "on-failure",
+      max_retries: desired?.max_retries ?? 10,
     },
     { stripNullish: true },
   );
@@ -924,9 +969,11 @@ const configDrifted = (
 
 const toAttrs = (set: ReplicaSet): Machine["Attributes"] => ({
   appName: set.appName,
+  rolloutPending: set.rolloutPending,
   machineId: set.machineId,
   machineIds: set.machineIds,
   name: set.name,
+  baseName: set.baseName,
   region: set.region,
   state: set.state,
   instanceId: set.instanceId,
@@ -947,18 +994,75 @@ const machineIdsOf = (output: Machine["Attributes"] | undefined) =>
 
 export const MachineProvider = () =>
   Provider.succeed(Machine, {
-    stables: ["machineId", "name", "region", "appName"],
+    stables: ["region", "appName"],
     nuke: { dependsOn: ["Fly.App"] },
 
     diff: Effect.fn(function* ({ news, output }) {
-      if (news === undefined || !isResolved(news)) return undefined;
+      if (news === undefined) return;
+      if ("app" in news) {
+        const settings: Input<
+          Pick<
+            MachineProps,
+            | "deploy"
+            | "shutdown"
+            | "checks"
+            | "services"
+            | "mounts"
+            | "skipLaunch"
+            | "autoDestroy"
+            | "restart"
+          >
+        > = {
+          deploy: news.deploy,
+          shutdown: news.shutdown,
+          checks: news.checks,
+          services: news.services,
+          mounts: news.mounts,
+          skipLaunch: news.skipLaunch,
+          autoDestroy: news.autoDestroy,
+          restart: news.restart,
+        };
+        if (
+          isResolved<
+            Pick<
+              MachineProps,
+              | "deploy"
+              | "shutdown"
+              | "checks"
+              | "services"
+              | "mounts"
+              | "skipLaunch"
+              | "autoDestroy"
+              | "restart"
+            >
+          >(settings)
+        ) {
+          yield* validateDeployment(
+            yield* deploymentPolicy(settings.deploy, settings.shutdown),
+            {
+              services: settings.services?.map(toFlyService),
+              checks: settings.checks,
+              auto_destroy: settings.autoDestroy,
+              restart: settings.restart,
+            },
+            (settings.mounts?.length ?? 0) > 0,
+            settings.skipLaunch,
+          );
+        }
+      }
+      if (!isResolved(news))
+        return output?.rolloutPending
+          ? { action: "update" as const }
+          : undefined;
       if (output === undefined) return undefined;
       const desiredAppName = appNameOf(news.app);
       const appChanged =
         desiredAppName !== undefined && desiredAppName !== output.appName;
       const desiredName =
-        news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
-      const nameChanged = desiredName !== output.name;
+        news.name !== undefined
+          ? sanitizeFlyAppName(news.name)
+          : (output.baseName ?? output.name);
+      const nameChanged = desiredName !== (output.baseName ?? output.name);
       const desiredRegion = news.region ?? DEFAULT_REGION;
       const regionChanged = desiredRegion !== output.region;
       if (appChanged || nameChanged || regionChanged) {
@@ -968,16 +1072,22 @@ export const MachineProvider = () =>
           deleteFirst: nameChanged === false && appChanged === false,
         };
       }
-      return undefined;
+      return output.rolloutPending ? { action: "update" as const } : undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
       const appName = appNameOf(olds?.app) ?? output?.appName;
-      const name = yield* resolveMachineName(id, olds?.name, output?.name);
+      const name = yield* resolveMachineName(
+        id,
+        olds?.name,
+        output?.baseName ?? output?.name,
+      );
       const found = yield* observeReplicaSet({
         appName,
         id,
         type: "Fly.Machine",
+        fqn,
+        resourceInstanceId: instanceId,
         machineIds: machineIdsOf(output),
         baseName: name,
       });
@@ -990,15 +1100,27 @@ export const MachineProvider = () =>
       return sets.map(toAttrs);
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
+    reconcile: Effect.fn(function* ({
+      id,
+      fqn,
+      instanceId,
+      news,
+      output,
+      bindings,
+    }) {
       const props = news;
+      const policy = yield* deploymentPolicy(props.deploy, props.shutdown);
       const appName = appNameOf(props.app) ?? output?.appName;
       if (appName === undefined) {
         return yield* new MachineAppNotResolved({
           message: "Fly.Machine requires a resolved App with appName.",
         });
       }
-      const name = yield* resolveMachineName(id, props.name, output?.name);
+      const name = yield* resolveMachineName(
+        id,
+        props.name,
+        output?.baseName ?? output?.name,
+      );
       const region = props.region ?? output?.region ?? DEFAULT_REGION;
       const count = resolveCount(props.count);
       const skipLaunch = props.skipLaunch === true;
@@ -1013,6 +1135,10 @@ export const MachineProvider = () =>
       const set = yield* reconcileReplicas({
         id,
         type: "Fly.Machine",
+        fqn,
+        resourceInstanceId: instanceId,
+        policy,
+        checks: props.checks,
         appName,
         baseName: name,
         region,
@@ -1061,23 +1187,20 @@ export const MachineProvider = () =>
       return toAttrs(set);
     }),
 
-    delete: Effect.fn(function* ({ id, olds, output }) {
+    delete: Effect.fn(function* ({ id, fqn, instanceId, olds, output, force }) {
       const appName = output.appName ?? appNameOf(olds.app);
       if (appName === undefined) return;
-      const current =
-        machineIdsOf(output).length > 0
-          ? output
-          : yield* observeReplicaSet({
-              appName,
-              id,
-              type: "Fly.Machine",
-              baseName: yield* resolveMachineName(id, olds.name, output.name),
-            });
-      if (current === undefined) return;
+      const policy = yield* deploymentPolicy(olds.deploy, olds.shutdown);
       yield* deleteReplicaSet({
         appName,
-        machineIds: current.machineIds,
-        volumeIds: volumeIdsOf(current),
+        id,
+        type: "Fly.Machine",
+        fqn,
+        resourceInstanceId: instanceId,
+        machineIds: machineIdsOf(output),
+        volumeIds: volumeIdsOf(output),
+        shutdown: policy.shutdown,
+        force,
       });
     }),
   });

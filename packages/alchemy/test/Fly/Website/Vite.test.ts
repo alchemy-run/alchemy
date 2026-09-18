@@ -50,6 +50,8 @@ test.provider(
         Effect.gen(function* () {
           const site = yield* Fly.Website.Vite("Web", {
             rootDir,
+            deploy: { strategy: "bluegreen" },
+            shutdown: { timeout: "10 seconds" },
             memo: {
               include: ["index.html", "src/**", "package.json"],
             },
@@ -72,6 +74,12 @@ test.provider(
       });
 
       const appName = deployed.site.app!.appName;
+      const machine = yield* machines.getMachine({
+        app_name: appName,
+        machine_id: deployed.site.service!.machineId,
+      });
+      expect(machine.config?.metadata?.["alchemy.phase"]).toBe("active");
+      expect(machine.config?.stop_config?.timeout).toBe("10s");
       yield* stack.destroy();
       const gone = yield* waitUntilGone(appName);
       expect(gone).toEqual("gone");
