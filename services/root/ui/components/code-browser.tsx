@@ -128,10 +128,16 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
     localStorage.setItem(TABS_STORE, JSON.stringify(tabs));
   }, [tabs]);
 
-  /** A file arrived (tree click or deep link): preview it. */
+  /** A file arrived (tree click or deep link): preview it. The italic
+   *  preview tab is TEMPORARY — switching to a file that already has a
+   *  tab lets any other preview go; opening a fresh file replaces the
+   *  preview in place. */
   const openPreview = (next: Omit<EditorTab, "pinned">) =>
     setTabs((current) => {
-      if (current.some((tab) => TAB_KEY(tab) === TAB_KEY(next))) return current;
+      const key = TAB_KEY(next);
+      if (current.some((tab) => TAB_KEY(tab) === key)) {
+        return current.filter((tab) => tab.pinned || TAB_KEY(tab) === key);
+      }
       const preview = current.findIndex((tab) => !tab.pinned);
       const opened = { ...next, pinned: false };
       if (preview === -1) return [...current, opened];
@@ -300,6 +306,21 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   useEffect(() => {
     model.resetPaths([...paths]);
   }, [model, paths]);
+
+  // never the useless empty pane: with no file in the URL, fall back
+  // to an open tab, and with no tabs at all to the repo's README —
+  // the repository's front page, like GitHub's
+  useEffect(() => {
+    if (path.length > 0) return;
+    const tab = tabs[0];
+    if (tab !== undefined) {
+      showCode(tab.repo, tab.ref, tab.path);
+      return;
+    }
+    if (full?.files.some((entry) => entry.path === "README.md")) {
+      showCode(repo, ref, "README.md");
+    }
+  }, [path, tabs, full, repo, ref]);
 
   useEffect(() => {
     let alive = true;
@@ -484,7 +505,9 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
           <select
             aria-label="branch"
             value={ref}
-            onChange={(event) => showCode(repo, event.target.value)}
+            onChange={(event) =>
+              showCode(repo, event.target.value, path || undefined)
+            }
             className="rounded-md border border-border bg-background px-1.5 py-0.5 font-mono text-xs"
           >
             {(branches.length > 0 ? branches : [ref]).map((branch) => (
@@ -539,11 +562,8 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
             />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col p-4">
-              <div className="rounded-md border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
-                pick a file in the tree
-              </div>
               {log.length > 0 && (
-                <div className="mt-6">
+                <div className="mt-2">
                   <div className="pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     recent commits
                   </div>
