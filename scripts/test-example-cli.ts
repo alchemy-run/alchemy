@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { forwardSignals } from "../packages/alchemy-test/src/DevCli.ts";
 
 const example = process.argv[2];
 if (example === undefined) {
@@ -72,6 +73,7 @@ const run = (
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     const killGroup = () => {
       if (child.pid === undefined) return;
@@ -107,6 +109,7 @@ const runDev = (): Promise<CommandResult> =>
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     let settled = false;
     let ready = false;

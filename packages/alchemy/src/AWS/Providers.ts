@@ -999,9 +999,6 @@ export const providers = () =>
           Config.ConfigurationRecorderProvider(),
           Config.DeliveryChannelProvider(),
           Config.RetentionConfigurationProvider(),
-          flociDual(EC2.DefaultSecurityGroup, () =>
-            EC2.DefaultSecurityGroupProvider(),
-          ),
         ),
         Layer.mergeAll(
           flociDual(ACM.AccountConfiguration, () =>
@@ -1274,6 +1271,9 @@ export const providers = () =>
           // Keep this service-sized group nested: a flat mergeAll here exceeds
           // Effect's variadic inference limit and silently drops tail layers.
           Layer.mergeAll(
+            flociDual(EC2.DefaultSecurityGroup, () =>
+              EC2.DefaultSecurityGroupProvider(),
+            ),
             flociDual(EC2.DhcpOptions, () => EC2.DhcpOptionsProvider()),
             flociDual(EC2.EgressOnlyInternetGateway, () =>
               EC2.EgressOnlyInternetGatewayProvider(),

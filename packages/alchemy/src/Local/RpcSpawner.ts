@@ -355,7 +355,7 @@ export const forwardSidecarLogs = (
   /** Mirrors every forwarded line (e.g. into a dev log file). */
   tee?: (line: SidecarLogLine) => void,
 ): Effect.Effect<void, never, HttpClient.HttpClient | Scope.Scope> =>
-  Config.string(SPAWNER_URL_ENV_KEY).pipe(
+  Config.String(SPAWNER_URL_ENV_KEY).pipe(
     Effect.flatMap((spawnerUrl) => {
       const streamOnce = Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
