@@ -4,9 +4,29 @@ import * as Output from "../../Output.ts";
 import { sha256 } from "../../Util/sha256.ts";
 
 /**
- * Derive an account-global Workflow name from its unique host Worker name and
- * exported class. The hash preserves uniqueness when the readable prefix must
- * be truncated to Cloudflare's 64-character limit.
+ * Derive an account-global Workflow name from a resolved host Worker name and
+ * exported class.
+ *
+ * @internal
+ */
+export const generateWorkflowName = Effect.fn(function* (
+  scriptName: string,
+  className: string,
+) {
+  const base = `${scriptName}-${className}`
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9-]/g, "-");
+  const hash = yield* sha256(base);
+  const suffix = `-${hash.slice(0, 8)}`;
+  // Trim trailing dashes left by mid-name truncation so the result never
+  // contains a `--` seam.
+  const head = base.slice(0, 64 - suffix.length).replace(/-+$/, "");
+  return `${head}${suffix}`;
+});
+
+/**
+ * Derive an account-global Workflow name when the host Worker name may still
+ * be an unresolved input.
  *
  * @internal
  */
@@ -23,19 +43,8 @@ export const makeWorkflowName = (
       | Output.Output<string>
       | Effect.Effect<string>,
   ).pipe(
-    Output.mapEffect((scriptName) => {
-      const base = `${scriptName}-${className}`
-        .toLowerCase()
-        .replaceAll(/[^a-z0-9-]/g, "-");
-      return sha256(base).pipe(
-        Effect.map((hash) => {
-          const suffix = `-${hash.slice(0, 8)}`;
-          // Trim trailing dashes left by mid-name truncation so the result
-          // never contains a `--` seam.
-          const head = base.slice(0, 64 - suffix.length).replace(/-+$/, "");
-          return `${head}${suffix}`;
-        }),
-      );
-    }),
+    Output.mapEffect((scriptName) =>
+      generateWorkflowName(scriptName, className),
+    ),
   );
 };
