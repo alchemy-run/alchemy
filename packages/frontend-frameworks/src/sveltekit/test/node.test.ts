@@ -50,6 +50,7 @@ describe("makeNodeTarget", () => {
         {
           distDirectory: path.join(root, "dist"),
           clientDirectory: path.join(root, ".svelte-kit/node"),
+          serverModules: [],
           externalWorkspaces: new Set(),
         },
         { root, entry: path.join(root, "entry.js") },
