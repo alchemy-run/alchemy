@@ -438,7 +438,7 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Neon](https://alchemy.run/neon) — Declare Neon Postgres, Functions, storage, Auth, AI Gateway and websites together in an Alchemy Stack.
 - [Setup](https://alchemy.run/neon/setup) — Prepare Neon credentials, service access, regions, and external dependencies before deploying with Alchemy.
 - [Organization governance](https://alchemy.run/neon/governance) — Manage existing Neon organization access, billing alerts, and private-network associations with explicit ownership and restoration.
-- [AI Gateway setup](https://alchemy.run/neon/guides/ai-gateway) — Enable account access, purchase credits deliberately, select a model, and verify Neon AI Gateway inference.
+- [AI Gateway setup](https://alchemy.run/neon/guides/ai-gateway) — Buy Neon AI Gateway credits and use a model from an Effect Function.
 - [Production Auth](https://alchemy.run/neon/guides/production-auth) — Configure trusted origins, SMTP, OAuth callbacks, and verification before launching Managed Better Auth.
 - [Private networking](https://alchemy.run/neon/guides/private-networking) — Prepare AWS PrivateLink endpoints, register them with Neon, enable private DNS, and verify database access.
 - [Custom domains](https://alchemy.run/neon/guides/custom-domains) — Register a Function hostname, configure DNS and CAA, verify HTTPS, and retire the domain safely.

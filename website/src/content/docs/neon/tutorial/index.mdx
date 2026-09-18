@@ -5,7 +5,7 @@ description: Sign in, upload private files, process real storage events, and vie
 
 Build a small upload application using Neon Postgres, private Object Storage, Functions, managed Better Auth, and a Vite frontend. A real storage event checks the uploaded metadata and records the result in Postgres. The browser never marks an upload ready itself.
 
-The complete source is in [`examples/neon-tutorial`](https://github.com/alchemy-run/alchemy/tree/main/examples/neon-tutorial). Use that directory as the runnable project; the following pages explain its changes one concept at a time. Both the default Effect Function and the native Fetch alternative implement the same browser API.
+The complete source is in [`examples/neon`](https://github.com/alchemy-run/alchemy/tree/main/examples/neon). Use that directory as the runnable project; the following pages explain its changes one concept at a time. Both the default Effect Function and the native Fetch alternative implement the same browser API.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ Install the repository's workspace dependencies before running the example. Keep
 ## Open the example
 
 ```diff lang="sh"
-+cd examples/neon-tutorial
++cd examples/neon
 ```
 
 All subsequent commands run from this directory, so the migration and Function entrypoint paths resolve correctly.

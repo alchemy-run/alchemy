@@ -1,52 +1,21 @@
 ---
 title: AI Gateway setup
-description: Enable account access, purchase credits deliberately, select a model, and verify Neon AI Gateway inference.
+description: Buy Neon AI Gateway credits and use a model from an Effect Function.
 ---
 
-`Neon.AIGateway` discovers a branch endpoint. Account access and model inference
-are separate: successfully deploying the construct does not prove your account
-can make a model request. Complete [Setup](/neon/setup) first.
+Use Neon AI Gateway from an Effect Function with a model your organization can
+access. Complete [Setup](/neon/setup) first.
 
-## Confirm plan and region
+## Buy AI Gateway credits
 
-Select the intended organization in the [Neon Console](https://console.neon.tech).
-Neon's [AI Gateway overview](https://neon.com/docs/ai-gateway/overview) lists the
-current paid-plan and region requirements. Use a project in a supported region;
-the Alchemy examples use `aws-us-east-2`.
+[Buy AI Gateway credits in the Neon Console](https://console.neon.tech/app/billing)
+before sending model requests. AI Gateway requires a paid Neon plan; follow
+[Neon's purchase guide](https://neon.com/docs/ai-gateway/prepaid-credits) for the
+steps and current requirements.
 
-Plan changes can affect billing. Have the organization's billing owner approve
-any upgrade before making it. Alchemy does not upgrade the account.
-
-## Purchase credits deliberately
-
-For a directly card-billed organization, an organization admin can open
-**Billing → AI gateway credits → Add credits**, select an amount, and confirm
-the one-time purchase. Check the balance after the purchase completes. Follow
-[Neon's prepaid-credit instructions](https://neon.com/docs/ai-gateway/prepaid-credits)
-for the current minimum purchase, usable balance, expiration, and usage limits.
-
-Members, editors, and viewers cannot purchase credits. Marketplace, invoiced,
-trial, and other accounts outside the self-service flow need assistance from
-Neon's account team. A missing purchase control is not something a broader
-runtime token can fix.
-
-:::caution[Explicit billing action]
-Purchasing credits charges the organization's payment method. Alchemy neither
-buys credits nor configures automatic top-up. The public management API currently
-provides gateway discovery, not an enablement or credit-purchase operation.
-:::
-
-## Obtain model access
-
-Choose a model from the current [model catalog](https://neon.com/docs/ai-gateway/models).
-Paid accounts with credits can use the available open-weight models. Foundation
-models may require approval: open **AI Gateway → Apply for access** in the Neon
-Console and wait for access before testing that model.
-
-Choose a Chat Completions-compatible model for Alchemy's Effect AI adapter. A
-model appearing in documentation is not proof that your organization has access.
-For Responses-only or native Anthropic features, use the corresponding SDK with
-the bound dialect URL instead.
+Choose a Chat Completions-compatible model from the
+[model catalog](https://neon.com/docs/ai-gateway/models) that your organization
+can access. The examples use the supported `aws-us-east-2` region.
 
 ## Declare the branch gateway
 
@@ -115,7 +84,7 @@ alone does not verify any of these behaviors. See
 | --- | --- | --- |
 | `403` with `ai gateway not enabled for account` | Correct organization, paid-plan access, and account enablement | Resolve access in the Console or with Neon Support before retrying; redeploying the Function does not enable the account |
 | Model access denied | Approval for that model, not just gateway access | Select an accessible model or request foundation-model access |
-| Authentication failure | Credential scope and target branch | Use an `ai_gateway:invoke` service credential or the same-branch native binding, not a management API key |
+| Authentication failure | Credential scope and target branch | Use an `ai_gateway:invoke` service credential or the same-branch Function's injected credential, not a management API key |
 | `429` / `REQUEST_LIMIT_EXCEEDED` | Token rate, daily cap, and credit balance | Inspect rate-limit headers and Billing; distinguish transient rate limiting from a quota requiring operator action |
 | Incompatible request or model | Chat Completions versus Responses/Anthropic API | Match the model to the adapter or use the appropriate bound SDK URL |
 

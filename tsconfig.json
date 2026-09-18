@@ -364,13 +364,7 @@
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
-    { "path": "./examples/neon-ai-gateway/tsconfig.json" },
-    { "path": "./examples/neon-auth/tsconfig.json" },
-    { "path": "./examples/neon-function/tsconfig.json" },
-    { "path": "./examples/neon-function-effect/tsconfig.json" },
-    { "path": "./examples/neon-storage/tsconfig.json" },
-    { "path": "./examples/neon-triggers/tsconfig.json" },
-    { "path": "./examples/neon-tutorial/tsconfig.json" },
+    { "path": "./examples/neon/tsconfig.json" },
     { "path": "./examples/neon-website-astro/tsconfig.json" },
     { "path": "./examples/neon-website-foldkit/tsconfig.json" },
     { "path": "./examples/neon-website-nextjs/tsconfig.json" },

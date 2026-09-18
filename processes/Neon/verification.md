@@ -39,6 +39,17 @@ No real governance mutation or entitlement probe was performed: no designated fi
 
 All fixtures need the corresponding Neon authorization/entitlement. Invitations remain out of scope because the public API has no corresponding revoke lifecycle. These additions do not resolve the pre-existing Function, AI, Website or historical cleanup acceptance blockers below.
 
+## Comprehensive example consolidation
+
+The seven backend/Function/tutorial example packages are now one `examples/neon` package with shared resources, while all 13 `neon-website-*` example directories remain unchanged. Existing tutorial stack identities are preserved; ignored local state and credentials remain in their original directories, with migration and legacy cleanup instructions in the new README. AI and additional Function forms are opt-in; paid inference remains separately disabled by default.
+
+- **42 offline tests** passed, retaining upload-policy and Effect AI coverage and adding native negative-path/composition checks.
+- **One live consolidated-backend test** passed: deployment of 13 resources, private/public buckets, typed objects, Auth, upload and cron trigger configuration, unauthenticated-request rejection, real upload-event processing and SQL persistence, exact download bytes, and normal destruction with an out-of-band project-not-found check. Cron delivery itself was not awaited.
+- Full workspace typecheck, frozen-lockfile install, relocated frontend production build and documentation build passed. The retained framework examples were not redeployed.
+- Desktop/mobile browser checks exercised the moved upload UI's unconfigured controls and the native AI UI's unauthorized/disabled-inference behavior. Documentation checks passed across 92 navigation checks per viewport, 10 guide flows, 59 internal-link/back flows and six code-copy checks.
+- The AI guide now directs readers to buy credits in Neon Console and links to Neon's purchase instructions. The requested signed-in purchase walkthrough was cancelled by the user before authentication; no payment, upgrade or inference occurred.
+- Signed-in browser upload/download, preview adoption/isolation, optional consolidated deployments, successful paid inference and historical account cleanup remain outside this verification result.
+
 ## Query binding names
 
 `QueryDataApi` / `QueryDataApiHttp` replace `ConnectDataApi` / `ConnectDataApiHttp`. `QueryAIGateway` / `QueryAIGatewayHttp` replace the corresponding Connect names, aligning the AI binding's name and existing `.model(...)` interface with `Cloudflare.AI.QueryGateway`. Old aliases and source paths are removed. Caller-token forwarding, injected/managed credential selection and inference behavior are unchanged; permission provisioning remains out of scope.
