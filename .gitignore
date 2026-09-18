@@ -67,6 +67,8 @@ examples/cloudflare-worker/src/scratch.ts
 /packages/alchemy/README.md
 
 !/packages/alchemy/bin/cli.js
+!/packages/alchemy/bin/alchemy.js
+!/packages/alchemy/bin/exec.js
 !/packages/alchemy/bin/register-dev-mode.js
 !/packages/alchemy/bin/register-oxc.js
 .tmp

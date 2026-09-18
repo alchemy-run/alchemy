@@ -296,6 +296,29 @@ test.provider(
       yield* assertRollback(url);
       yield* assertFailureScenarios(url);
 
+      const client = yield* HttpClient.HttpClient;
+      const events = yield* client
+        .get(`${url}/workflow/events/${instanceId}`)
+        .pipe(Effect.flatMap((response) => response.json));
+      expect(events).toEqual([
+        expect.objectContaining({ type: "workflow_queued" }),
+      ]);
+      const deleted = yield* client
+        .post(`${url}/workflow/delete/${instanceId}`)
+        .pipe(Effect.flatMap((response) => response.json));
+      expect(deleted).toEqual({
+        deleted: [],
+        errors: [expect.objectContaining({ id: instanceId })],
+      });
+      const batchId = yield* startInstance(url);
+      const batch = yield* client
+        .post(`${url}/workflow/delete-batch/${batchId}`)
+        .pipe(Effect.flatMap((response) => response.json));
+      expect(batch).toEqual({
+        deleted: [{ id: batchId }],
+        errors: [expect.objectContaining({ id: "missing-instance" })],
+      });
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
