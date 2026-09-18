@@ -18,21 +18,28 @@ export const useTreeStyles = (): Record<string, string> => {
     const foreground = token("--foreground");
     const accent = token("--accent");
     const muted = token("--muted-foreground");
-    return themeToTreeStyles({
-      type: mode,
-      colors: {
-        "editor.background": background,
-        "editor.foreground": foreground,
-        "sideBar.background": background,
-        "sideBar.foreground": foreground,
-        "list.hoverBackground": accent,
-        "list.activeSelectionBackground": accent,
-        "list.activeSelectionForeground": foreground,
-        "list.inactiveSelectionBackground": accent,
-        "list.focusBackground": accent,
-        "icon.foreground": muted,
-        foreground,
-      },
-    });
+    return {
+      ...themeToTreeStyles({
+        type: mode,
+        colors: {
+          "editor.background": background,
+          "editor.foreground": foreground,
+          "sideBar.background": background,
+          "sideBar.foreground": foreground,
+          "list.hoverBackground": accent,
+          "list.activeSelectionBackground": accent,
+          "list.activeSelectionForeground": foreground,
+          "list.inactiveSelectionBackground": accent,
+          "list.focusBackground": accent,
+          "icon.foreground": muted,
+          foreground,
+        },
+      }),
+      // themeToTreeStyles has no mapping for icon.foreground, so the
+      // tree's muted tone (repo marks, indent guides, decorations)
+      // would fall back to the package's gray — hand it the app's
+      // muted tan outright
+      "--trees-fg-muted-override": muted,
+    };
   }, [mode]);
 };
