@@ -735,7 +735,7 @@ export interface DBInstance extends Resource<
  *   dbInstanceClass: "db.t3.micro",
  *   masterUsername: "admin",
  *   manageMasterUserPassword: true,
- * - masterUserSecretResourcePolicy: readerPolicy,
+ * -  masterUserSecretResourcePolicy: readerPolicy,
  * });
  * ```
  *
