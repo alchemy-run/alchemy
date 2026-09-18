@@ -6,21 +6,25 @@
     "dev": "vite dev",
     "build": "vite build",
     "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "destroy": "alchemy destroy",
+    "test": "bun test"
   },
   "dependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@octanejs/adapter-cloudflare": "catalog:frameworks",
-    "@octanejs/vite-plugin": "catalog:frameworks",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@octanejs/adapter-cloudflare": "catalog:",
+    "@octanejs/vite-plugin": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "octane": "catalog:frameworks",
-    "vite": "^8.0.0"
+    "octane": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "tailwindcss": "catalog:"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",

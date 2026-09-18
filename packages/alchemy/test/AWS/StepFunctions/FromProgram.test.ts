@@ -57,7 +57,7 @@ test.provider(
             main: doublerMain,
             handler: "handler",
             isExternal: true,
-            url: false,
+            functionUrl: false,
             timeout: Duration.seconds(15),
           });
           const machine = yield* StateMachine.fromProgram("OrderProgram", {

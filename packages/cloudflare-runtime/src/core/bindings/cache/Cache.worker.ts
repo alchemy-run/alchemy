@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Local Cache API simulator, adapted from Miniflare's cache plugin workers
  * (`workers-sdk/packages/miniflare/src/workers/cache/*`), collapsed into a

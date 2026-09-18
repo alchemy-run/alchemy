@@ -17,7 +17,7 @@ import { isResourceOfType, Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   generateLocalId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   localRuntimeServices,
 } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
@@ -85,11 +85,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * The secret value is treated as redacted and is only ever sent to
  * Cloudflare at create time. Updating `scopes` or `comment` issues a
  * PATCH; changing `value` or `name` replaces the secret.
- * @resource
- * @product Secrets Store
- * @category Storage & Databases
- * @section Creating a Secret
- * @example Basic Secret
+ * ### Creating a Secret
+ * **Example:** Basic Secret
  * ```typescript
  * const store = yield* Cloudflare.SecretsStore.Store("MyStore");
  * const apiKey = yield* Cloudflare.SecretsStore.Secret("ApiKey", {
@@ -98,8 +95,8 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * });
  * ```
  *
- * @section Binding to a Worker
- * @example Reading a secret at runtime
+ * ### Binding to a Worker
+ * **Example:** Reading a secret at runtime
  * ```typescript
  * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(ApiKey);
  * // `apiKey` is itself an Effect that resolves to the secret value:
@@ -107,6 +104,10 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
  * ```
+ *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  */
 export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret");
 
@@ -390,7 +391,7 @@ export const SecretProviderLive = () =>
 export const SecretProviderLocal = () =>
   RpcProvider.effect(
     Secret,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       // The local runtime services (workerd `Runtime`, binding plugins) and
       // the HTTP client are resolved once at layer build and closed over —
@@ -465,7 +466,7 @@ export const StoreSecretProvider = () =>
     // The local provider's reconcile/delete boot an ephemeral workerd
     // gateway to seed the simulator, so it needs the shared local runtime
     // layer. Under `alchemy dev` the provider is an RPC stub (this gated
-    // layer is empty and unused) and the sidecar entry (`../Local.ts`)
+    // layer is empty and unused) and the provider group (`../Local.ts`)
     // supplies the real runtime; without the proxy the provider builds
     // in-process and this layer is real.
     local: () =>

@@ -3,11 +3,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "next": "16.2.10",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "next": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "1.20.1"
+    "@opennextjs/cloudflare": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "typescript": "catalog:nextjs"
   }
 }

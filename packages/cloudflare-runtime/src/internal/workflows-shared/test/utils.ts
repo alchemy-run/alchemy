@@ -1,4 +1,7 @@
-import { env } from "cloudflare:test";
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
+// Alchemy modifications: uses Array<T> syntax for non-tuple array types to match the repository convention.
+import { env } from "cloudflare:workers";
 import { setTestWorkflowCallback } from "./test-entry.ts";
 import type {
   DatabaseInstance,

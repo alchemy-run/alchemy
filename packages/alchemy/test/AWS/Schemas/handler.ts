@@ -51,7 +51,7 @@ const CODE_BINDING_LANGUAGE = "Python36";
 export default SchemasTestFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
     // The default 128 MB sits at ~114 MB used; the last routes in a test run
     // OOM the instance (platform-level 500 with no handler log).

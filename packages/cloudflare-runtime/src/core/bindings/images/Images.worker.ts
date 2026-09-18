@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Local Images binding service, adapted from Miniflare's images worker
  * (`workers-sdk/packages/miniflare/src/workers/images/images.worker.ts`).

@@ -1,3 +1,4 @@
+import * as Provider from "@/Provider";
 import {
   Deployment as PrismaDeployment,
   DeploymentProvider,
@@ -13,7 +14,10 @@ import {
   type PrismaManagementClient,
 } from "@/Prisma/Client";
 import { executeArtifactUpload } from "@/Prisma/Internal/ArtifactUpload";
-import { PrismaHttpClientLive } from "@/Prisma/Internal/HttpClient";
+import {
+  PrismaHttpClientLive,
+  PrismaUploadClient,
+} from "@/Prisma/Internal/HttpClient";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
 import { describe, expect, it } from "alchemy-test";
@@ -29,11 +33,21 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import {
+  dispatchTo,
+  failure,
+  makeFakeManagementApi,
+  notFound,
+  unhandled,
+} from "./fixtures/FakeManagementApi.ts";
+import {
   createServer as createHttpServer,
   type RequestListener,
   type Server as NodeHttpServer,
 } from "node:http";
 import { WebSocketServer } from "ws";
+import { AlchemyContext } from "@/AlchemyContext";
+import { Credentials } from "@/Prisma/Credentials";
+import { encodeState } from "@/State/StateEncoding";
 
 const currentClient = <T extends object>(client: T): PrismaManagementClient => {
   return client as unknown as PrismaManagementClient;
@@ -41,6 +55,61 @@ const currentClient = <T extends object>(client: T): PrismaManagementClient => {
 
 const fixtureArtifactPath = `${import.meta.dirname}/fixtures/artifact-archive.bin`;
 const sameArtifactPath = `${import.meta.dirname}/fixtures/artifact-same-version.bin`;
+
+const liveProviderContext = Layer.succeed(AlchemyContext, {
+  dotAlchemy: ".alchemy-test",
+  dev: false,
+  adopt: false,
+});
+
+const deploymentProviderLive = () =>
+  DeploymentProvider().pipe(Layer.provide(liveProviderContext));
+
+/**
+ * Serve the Management API from the same hermetic client-shaped handlers this
+ * suite declares, for the routes Deployment now reaches through distilled
+ * operations (list/create under /v1/services/{serviceId}/deployments). The handlers
+ * are synchronous, so the fake runs them directly: an injected
+ * `PrismaApiError` becomes its real status, `undefined` becomes a 404,
+ * everything else a `{ data }` (or `{ data, pagination }`) envelope. The
+ * observe/start/promote/delete paths still resolve the hand-rolled client
+ * (their helpers are D3), so the `PrismaClient` layer stays provided
+ * alongside; tests that stub uploads provide `PrismaUploadClient` because
+ * the ambient `HttpClient` is now this management fake.
+ */
+const clientBackedApi = (client: any) =>
+  makeFakeManagementApi((request) => {
+    // segments[0] is the "v1" prefix.
+    const [head, id, tail] = request.pathname
+      .split("/")
+      .filter((segment) => segment.length > 0)
+      .slice(1);
+    const body = request.bodyJson as any;
+    const query = Object.fromEntries(new URLSearchParams(request.search));
+    const { call, callVoid, list } = dispatchTo(request);
+
+    if (head === "services" && id !== undefined) {
+      if (tail === "deployments") {
+        return request.method === "GET"
+          ? call(client.listAppDeployments, [id, query], list)
+          : call(client.createAppDeployment, [id, body]);
+      }
+      if (tail === "promote") return call(client.promoteApp, [id, body]);
+      if (tail === "rollback") return call(client.rollbackApp, [id, body]);
+      if (tail === undefined && request.method === "GET") {
+        return call(client.getApp, [id]);
+      }
+    }
+    if (head === "deployments" && id !== undefined) {
+      if (tail === "start") return call(client.startDeployment, [id]);
+      if (tail === "stop") return callVoid(client.stopDeployment, [id]);
+      if (request.method === "GET") return call(client.getDeployment, [id]);
+      if (request.method === "DELETE") {
+        return callVoid(client.deleteDeployment, [id]);
+      }
+    }
+    return unhandled(request);
+  });
 
 describe("Prisma Deployment", () => {
   it.effect("redacts signed upload URLs from transport failures", () => {
@@ -70,9 +139,7 @@ describe("Prisma Deployment", () => {
         8,
       ).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
-        "exceeds the 8 byte upload safety limit",
-      );
+      expect(error.message).toContain("exceeds the 8 byte upload safety limit");
     }),
   );
 
@@ -83,7 +150,7 @@ describe("Prisma Deployment", () => {
         MAX_DEPLOYMENT_ARTIFACT_BYTES + 1,
       ).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain("hard limit");
+      expect(error.message).toContain("hard limit");
     }),
   );
 
@@ -221,6 +288,7 @@ describe("Prisma Deployment", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "new",
@@ -253,14 +321,12 @@ describe("Prisma Deployment", () => {
           .pipe(Effect.flip);
 
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "did not return an upload URL",
-        );
+        expect(error.message).toContain("did not return an upload URL");
         expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -284,6 +350,7 @@ describe("Prisma Deployment", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status: "new",
@@ -324,17 +391,16 @@ describe("Prisma Deployment", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain("artifact upload failed");
-      expect((error as Error).message).toContain("HTTP 500");
-      expect((error as Error).message).toContain("29 bytes");
-      expect((error as Error).message).not.toContain(
-        "SIGNED_UPLOAD_SECRET_SENTINEL",
-      );
+      expect(error.message).toContain("artifact upload failed");
+      expect(error.message).toContain("HTTP 500");
+      expect(error.message).toContain("29 bytes");
+      expect(error.message).not.toContain("SIGNED_UPLOAD_SECRET_SENTINEL");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(Layer.succeed(PrismaUploadClient, http)),
       Effect.provide(PlatformServices),
     );
   });
@@ -345,13 +411,13 @@ describe("Prisma Deployment", () => {
       const startError = new PrismaApiError({
         method: "POST",
         path: "/v1/deployments/version-1/start",
-        status: 500,
+        status: 400,
         message: "start failed",
       });
       const deleteError = new PrismaApiError({
         method: "DELETE",
         path: "/v1/deployments/version-1",
-        status: 500,
+        status: 400,
         message: "cleanup failed",
       });
       const client = {
@@ -367,6 +433,7 @@ describe("Prisma Deployment", () => {
           Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "new",
@@ -402,14 +469,17 @@ describe("Prisma Deployment", () => {
           "DELETE /v1/deployments/version-1",
         );
         expect((error as AggregateError).errors).toHaveLength(2);
-        expect((error as AggregateError).errors[0]).toBe(startError);
+        // Over the wire the injected failures decode into the typed errors.
+        expect(
+          ((error as AggregateError).errors[0] as Error).message,
+        ).toContain("start failed");
         expect(
           ((error as AggregateError).errors[1] as Error).message,
         ).toContain("cleanup failed");
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -433,6 +503,7 @@ describe("Prisma Deployment", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status: "new",
@@ -446,7 +517,7 @@ describe("Prisma Deployment", () => {
           new PrismaApiError({
             method: "POST",
             path: `/v1/deployments/${id}/start`,
-            status: 500,
+            status: 400,
             message: "start failed",
           }),
         );
@@ -476,13 +547,14 @@ describe("Prisma Deployment", () => {
         })
         .pipe(Effect.flip);
 
-      expect(error).toBeInstanceOf(PrismaApiError);
-      expect((error as PrismaApiError).message).toBe("start failed");
+      // Over the wire the injected failure decodes into the typed error.
+      expect(error._tag).toBe("BadRequest");
+      expect(error.message).toBe("start failed");
       expect(calls).toContainEqual(["deleteDeployment", "version-1"]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -508,6 +580,7 @@ describe("Prisma Deployment", () => {
           return Effect.succeed({
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status,
@@ -520,6 +593,7 @@ describe("Prisma Deployment", () => {
             {
               id: "version-1",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-1",
               foundryVersionId: "foundry-1",
               createdAt: "2026-01-01T00:00:00Z",
@@ -536,7 +610,7 @@ describe("Prisma Deployment", () => {
           return Effect.succeed({
             id,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${id}`,
+            url: `https://api.prisma.test/v1/services/${id}`,
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -554,8 +628,8 @@ describe("Prisma Deployment", () => {
           return Effect.fail(
             new PrismaApiError({
               method: "POST",
-              path: `/v1/apps/${appId}/promote`,
-              status: 500,
+              path: `/v1/services/${appId}/promote`,
+              status: 400,
               message: "promote failed",
             }),
           );
@@ -564,8 +638,8 @@ describe("Prisma Deployment", () => {
           Effect.fail(
             new PrismaApiError({
               method: "POST",
-              path: "/v1/apps/service-1/rollback",
-              status: 500,
+              path: "/v1/services/service-1/rollback",
+              status: 400,
               message: "promotion recovery failed",
             }),
           ),
@@ -603,9 +677,9 @@ describe("Prisma Deployment", () => {
         expect((error as AggregateError).message).toContain("commit state");
         expect(calls).not.toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -629,6 +703,7 @@ describe("Prisma Deployment", () => {
         Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/version-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -703,9 +778,10 @@ describe("Prisma Deployment", () => {
       expect(uploaded?.contentType).toBe("application/octet-stream");
       expect(new TextDecoder().decode(uploaded?.bytes)).toBe("version-archive");
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(Layer.succeed(PrismaUploadClient, http)),
       Effect.provide(PlatformServices),
     );
   });
@@ -720,6 +796,7 @@ describe("Prisma Deployment", () => {
             {
               id: "version-1",
               type: "deployment" as const,
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-1",
               foundryVersionId: "foundry-1",
               createdAt: "2026-01-01T00:00:00Z",
@@ -732,6 +809,7 @@ describe("Prisma Deployment", () => {
           return {
             id,
             type: "deployment" as const,
+            serviceId: "service-1",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "stopped",
@@ -742,7 +820,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const output = yield* provider.read!({
         id: "Version",
         fqn: "Version",
@@ -769,9 +847,9 @@ describe("Prisma Deployment", () => {
         ["listAppDeployments", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -787,7 +865,7 @@ describe("Prisma Deployment", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
+        const provider = yield* Provider.findProvider(PrismaDeployment);
         const output = yield* provider.read!({
           id: "Deployment",
           fqn: "Deployment",
@@ -798,9 +876,9 @@ describe("Prisma Deployment", () => {
 
         expect(output).toBeUndefined();
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -816,6 +894,7 @@ describe("Prisma Deployment", () => {
             {
               id: "version-1",
               type: "deployment" as const,
+              serviceId: "service-from-output",
               url: "https://api.prisma.test/v1/deployments/version-1",
               foundryVersionId: "foundry-1",
               createdAt: "2026-01-01T00:00:00Z",
@@ -828,6 +907,7 @@ describe("Prisma Deployment", () => {
           return {
             id,
             type: "deployment" as const,
+            serviceId: "service-from-output",
             url: `https://api.prisma.test/v1/deployments/${id}`,
             foundryVersionId: "foundry-1",
             status: "running",
@@ -838,7 +918,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const output = yield* provider.read!({
         id: "Version",
         fqn: "Version",
@@ -865,9 +945,9 @@ describe("Prisma Deployment", () => {
         ["listAppDeployments", "service-from-output"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -891,6 +971,7 @@ describe("Prisma Deployment", () => {
               {
                 id: "version-new",
                 type: "deployment" as const,
+                serviceId: "service-from-output",
                 url: "https://api.prisma.test/v1/deployments/version-new",
                 foundryVersionId: "foundry-1",
                 createdAt: "2026-01-01T00:00:00Z",
@@ -906,6 +987,7 @@ describe("Prisma Deployment", () => {
             return {
               id,
               type: "deployment" as const,
+              serviceId: "service-from-output",
               url: `https://api.prisma.test/v1/deployments/${id}`,
               foundryVersionId: "foundry-1",
               status: "running",
@@ -916,7 +998,7 @@ describe("Prisma Deployment", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* PrismaDeployment.Provider;
+        const provider = yield* Provider.findProvider(PrismaDeployment);
         const output = yield* provider.read!({
           id: "Version",
           fqn: "Version",
@@ -942,14 +1024,15 @@ describe("Prisma Deployment", () => {
           ["getDeployment", "version-old"],
           [
             "listAppDeployments",
-            { appId: "service-from-output", query: { limit: 100 } },
+            // Over the wire, query params arrive as strings.
+            { appId: "service-from-output", query: { limit: "100" } },
           ],
           ["getDeployment", "version-new"],
         ]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -971,6 +1054,7 @@ describe("Prisma Deployment", () => {
           {
             id: "deployment-a",
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/deployment-a",
             foundryVersionId: "foundry-1",
             createdAt: "2026-01-01T00:00:00Z",
@@ -978,6 +1062,7 @@ describe("Prisma Deployment", () => {
           {
             id: "deployment-b",
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/deployment-b",
             foundryVersionId: "foundry-1",
             createdAt: "2026-01-01T00:00:01Z",
@@ -986,7 +1071,7 @@ describe("Prisma Deployment", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* PrismaDeployment.Provider;
+      const provider = yield* Provider.findProvider(PrismaDeployment);
       const error = yield* provider.read!({
         id: "Deployment",
         fqn: "Deployment",
@@ -1003,11 +1088,11 @@ describe("Prisma Deployment", () => {
         },
       }).pipe(Effect.flip);
 
-      expect((error as Error).message).toContain("ambiguous recovery match");
+      expect(error.message).toContain("ambiguous recovery match");
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1053,9 +1138,9 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toEqual({ action: "replace" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1101,9 +1186,9 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toEqual({ action: "replace" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1148,9 +1233,9 @@ describe("Prisma Deployment", () => {
 
         expect(diff).toEqual({ action: "replace" });
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -1195,9 +1280,9 @@ describe("Prisma Deployment", () => {
 
       expect(diff).toBeUndefined();
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1210,7 +1295,7 @@ describe("Prisma Deployment", () => {
     const service = () => ({
       id: "service-1",
       type: "app" as const,
-      url: "https://api.prisma.test/v1/apps/service-1",
+      url: "https://api.prisma.test/v1/services/service-1",
       name: "api",
       region: { id: "us-east-1", name: "US East" },
       projectId: "project-1",
@@ -1236,6 +1321,7 @@ describe("Prisma Deployment", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status,
@@ -1248,6 +1334,7 @@ describe("Prisma Deployment", () => {
           {
             id: "version-1",
             type: "deployment" as const,
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-1",
             foundryVersionId: "foundry-1",
             createdAt: "2026-01-01T00:00:00Z",
@@ -1320,9 +1407,9 @@ describe("Prisma Deployment", () => {
         calls.filter(([name]) => name === "createAppDeployment"),
       ).toHaveLength(1);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1337,6 +1424,7 @@ describe("Prisma Deployment", () => {
         {
           id: string;
           type: "deployment";
+          serviceId: string;
           url: string;
           foundryVersionId: string;
           status: string;
@@ -1349,6 +1437,7 @@ describe("Prisma Deployment", () => {
           {
             id: "version-failed",
             type: "deployment",
+            serviceId: "service-1",
             url: "https://api.prisma.test/v1/deployments/version-failed",
             foundryVersionId: "foundry-failed",
             status: "failed",
@@ -1364,6 +1453,7 @@ describe("Prisma Deployment", () => {
             deployments.set("version-replacement", {
               id: "version-replacement",
               type: "deployment",
+              serviceId: "service-1",
               url: "https://api.prisma.test/v1/deployments/version-replacement",
               foundryVersionId: "foundry-replacement",
               status: "new",
@@ -1386,9 +1476,10 @@ describe("Prisma Deployment", () => {
         listAppDeployments: () =>
           Effect.succeed(
             Array.from(deployments.values()).map(
-              ({ id, type, url, foundryVersionId, createdAt }) => ({
+              ({ id, type, serviceId, url, foundryVersionId, createdAt }) => ({
                 id,
                 type,
+                serviceId,
                 url,
                 foundryVersionId,
                 createdAt,
@@ -1420,7 +1511,7 @@ describe("Prisma Deployment", () => {
           Effect.succeed({
             id: appId,
             type: "app" as const,
-            url: `https://api.prisma.test/v1/apps/${appId}`,
+            url: `https://api.prisma.test/v1/services/${appId}`,
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
@@ -1509,9 +1600,9 @@ describe("Prisma Deployment", () => {
         expect(deployments.get("version-replacement")?.status).toBe("running");
         expect(calls).not.toContainEqual(["startDeployment", "version-failed"]);
       }).pipe(
-        Effect.provide(DeploymentProvider()),
+        Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(clientBackedApi(client).layer),
         Effect.provide(PlatformServices),
       );
     },
@@ -1541,13 +1632,13 @@ describe("Prisma Deployment", () => {
         .pipe(Effect.flip);
 
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "promote cannot be combined with start: false",
       );
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1574,14 +1665,14 @@ describe("Prisma Deployment", () => {
             bindings: [],
           })
           .pipe(Effect.flip);
-        expect((error as Error).message).toContain(
+        expect(error.message).toContain(
           "portMapping.http must be an integer between 1 and 65535",
         );
       }
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1604,6 +1695,7 @@ describe("Prisma Deployment", () => {
         Effect.succeed({
           id: "deployment-1",
           type: "deployment" as const,
+          serviceId: "service-1",
           url: "https://api.prisma.test/v1/deployments/deployment-1",
           foundryVersionId: "foundry-1",
           status: "new",
@@ -1640,9 +1732,9 @@ describe("Prisma Deployment", () => {
         ],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1682,9 +1774,9 @@ describe("Prisma Deployment", () => {
       expect(start).toEqual({ action: "update" });
       expect(promote).toEqual({ action: "update" });
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1707,13 +1799,13 @@ describe("Prisma Deployment", () => {
         })
         .pipe(Effect.flip);
 
-      expect((error as Error).message).toContain(
+      expect(error.message).toContain(
         "requires artifactPath or skipCodeUpload: true",
       );
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1737,6 +1829,7 @@ describe("Prisma Deployment", () => {
         return Effect.succeed({
           id,
           type: "deployment" as const,
+          serviceId: "service-1",
           url: `https://api.prisma.test/v1/deployments/${id}`,
           foundryVersionId: "foundry-1",
           status,
@@ -1783,9 +1876,9 @@ describe("Prisma Deployment", () => {
         ["getDeployment", "version-1"],
       ]);
     }).pipe(
-      Effect.provide(DeploymentProvider()),
+      Effect.provide(deploymentProviderLive()),
       Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
-      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(clientBackedApi(client).layer),
       Effect.provide(PlatformServices),
     );
   });
@@ -1794,11 +1887,12 @@ describe("Prisma Deployment", () => {
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
-        const calls: Array<[string, unknown]> = [];
         let authorization: string | undefined;
+        let requestUrl: string | undefined;
 
         server.on("connection", (socket, request) => {
           authorization = request.headers.authorization;
+          requestUrl = request.url;
           socket.send(
             JSON.stringify({
               type: "log",
@@ -1819,22 +1913,8 @@ describe("Prisma Deployment", () => {
           );
         });
 
-        const client = {
-          getDeploymentLogsRequest: (deploymentId: string, query: unknown) =>
-            Effect.sync(() => {
-              calls.push(["getDeploymentLogsRequest", { deploymentId, query }]);
-              return {
-                url: `${url}/v1/deployments/${deploymentId}/logs`,
-                headers: {
-                  Authorization: Redacted.make("Bearer version-token"),
-                },
-              };
-            }),
-        } as unknown as PrismaManagementClient;
-
-        const provider = yield* PrismaDeployment.Provider.pipe(
-          Effect.provide(DeploymentProvider()),
-          Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        const provider = yield* Provider.findProvider(PrismaDeployment).pipe(
+          Effect.provide(deploymentProviderLive()),
           Effect.provide(PlatformServices),
         );
         const lines = yield* provider.tail!({
@@ -1853,21 +1933,238 @@ describe("Prisma Deployment", () => {
             appEndpointDomain: undefined,
             createdAt: "2026-01-01T00:00:00Z",
           },
-        }).pipe(Stream.runCollect);
+        }).pipe(
+          // The carved-out logs client resolves the distilled Credentials
+          // service directly: the test WebSocket server is the API base.
+          Stream.provideService(
+            Credentials,
+            Effect.succeed({
+              apiToken: Redacted.make("version-token"),
+              apiBaseUrl: url,
+            }),
+          ),
+          Stream.runCollect,
+        );
 
         expect(lines.map((line) => line.message)).toEqual([
           "direct version log",
         ]);
         expect(authorization).toBe("Bearer version-token");
-        expect(calls).toEqual([
-          [
-            "getDeploymentLogsRequest",
-            { deploymentId: "version-1", query: undefined },
-          ],
-        ]);
+        expect(requestUrl).toBe("/v1/deployments/version-1/logs");
       }).pipe(Effect.provide(FetchHttpClient.layer)),
     ),
   );
+  it.effect(
+    "records a redacted triggers fingerprint and replaces when a value changes",
+    () => {
+      const secret = "REDEPLOY_SECRET_SENTINEL";
+      const client = redeployClient();
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const output = yield* provider.reconcile({
+          id: "Deployment",
+          fqn: "Deployment",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { DATABASE_URL: Redacted.make(secret) },
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(Redacted.isRedacted(output.triggersHash!)).toBe(true);
+        const fingerprint = Redacted.value(output.triggersHash!);
+        expect(fingerprint).not.toBe(secret);
+        expect(fingerprint).not.toContain(secret);
+        // encodeState unwraps Redacted, so this is what a state store writes.
+        expect(JSON.stringify(encodeState(output))).not.toContain(secret);
+
+        const unchanged = yield* provider.diff!({
+          ...triggersDiffBase(output.triggersHash),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { DATABASE_URL: Redacted.make(secret) },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { DATABASE_URL: Redacted.make(secret) },
+          },
+        } as never);
+        const changed = yield* provider.diff!({
+          ...triggersDiffBase(output.triggersHash),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { DATABASE_URL: Redacted.make(secret) },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { DATABASE_URL: Redacted.make(`${secret}-rotated`) },
+          },
+        } as never);
+
+        expect(unchanged).toBeUndefined();
+        expect(changed).toEqual({ action: "replace" });
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(clientBackedApi(client).layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect("replaces when a plain triggers value changes", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaDeployment.Provider;
+      const diff = yield* provider.diff!({
+        ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { FEATURE_FLAG: "off" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { FEATURE_FLAG: "on" },
+        },
+      } as never);
+
+      expect(diff).toEqual({ action: "replace" });
+    }).pipe(
+      Effect.provide(deploymentProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect(
+    "keeps a deployment recorded before triggers existed when nothing changed",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDeployment.Provider;
+        const diff = yield* provider.diff!({
+          ...triggersDiffBase(undefined),
+          olds: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "on" },
+          },
+          news: {
+            app: "app-1",
+            skipCodeUpload: true,
+            triggers: { FEATURE_FLAG: "on" },
+          },
+        } as never);
+
+        expect(diff).toBeUndefined();
+      }).pipe(
+        Effect.provide(deploymentProviderLive()),
+        Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+        Effect.provide(clientBackedApi(client).layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect("replaces when triggers cannot be resolved while planning", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaDeployment.Provider;
+      const recorded = yield* provider.diff!({
+        ...triggersDiffBase(Redacted.make("recorded-fingerprint")),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: "postgres://old" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+        },
+      } as never);
+      const neverRecorded = yield* provider.diff!({
+        ...triggersDiffBase(undefined),
+        olds: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: "postgres://old" },
+        },
+        news: {
+          app: "app-1",
+          skipCodeUpload: true,
+          triggers: { DATABASE_URL: Output.asOutput("postgres://new") },
+        },
+      } as never);
+
+      expect(recorded).toEqual({ action: "replace" });
+      expect(neverRecorded).toBeUndefined();
+    }).pipe(
+      Effect.provide(deploymentProviderLive()),
+      Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
+      Effect.provide(clientBackedApi(client).layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+});
+
+const redeployClient = () =>
+  ({
+    createAppDeployment: () =>
+      Effect.succeed({
+        id: "deployment-1",
+        type: "deployment" as const,
+        url: "https://api.prisma.test/v1/deployments/deployment-1",
+        foundryVersionId: "foundry-1",
+      }),
+    getDeployment: (id: string) =>
+      Effect.succeed({
+        id,
+        type: "deployment" as const,
+        serviceId: "app-1",
+        url: "https://api.prisma.test/v1/deployments/deployment-1",
+        foundryVersionId: "foundry-1",
+        status: "new",
+        previewDomain: null,
+        createdAt: "2026-01-01T00:00:00Z",
+      }),
+  }) as unknown as PrismaManagementClient;
+
+const triggersDiffBase = (
+  triggersHash: Redacted.Redacted<string> | undefined,
+) => ({
+  id: "Deployment",
+  fqn: "Deployment",
+  instanceId: "00000000000000000000000000000000",
+  oldBindings: [],
+  newBindings: [],
+  output: {
+    deploymentId: "deployment-1",
+    appId: "app-1",
+    foundryVersionId: "foundry-1",
+    status: "new",
+    previewDomain: null,
+    artifactHash: undefined,
+    triggersHash,
+    appEndpointDomain: undefined,
+    createdAt: "2026-01-01T00:00:00Z",
+  },
 });
 
 const withWebSocketServer = <A, E, R>(
@@ -1888,7 +2185,7 @@ const listenUrl = (server: WebSocketServer) =>
       cleanup();
       const address = server.address();
       if (address && typeof address === "object") {
-        resume(Effect.succeed(`ws://127.0.0.1:${address.port}`));
+        resume(Effect.succeed(`http://127.0.0.1:${address.port}`));
       } else {
         resume(Effect.fail(new Error("WebSocket server has no TCP address")));
       }

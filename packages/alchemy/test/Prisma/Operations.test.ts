@@ -2,6 +2,8 @@ import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import * as Prisma from "@/Prisma/Operations";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { Credentials } from "@/Prisma/Credentials";
 
 type AssertNever<T extends never> = T;
 type ClientOperation = Exclude<
@@ -48,6 +50,13 @@ const expectedOperationHelpers = [
   "createBranch",
   "updateBranch",
   "deleteBranch",
+  "listBuckets",
+  "getBucket",
+  "createBucket",
+  "deleteBucket",
+  "listBucketKeys",
+  "createBucketKey",
+  "deleteBucketKey",
   "getCustomDomain",
   "deleteCustomDomain",
   "retryCustomDomain",
@@ -164,6 +173,14 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.updateBranch("branch-1", { isDefault: true });
       yield* Prisma.deleteBranch("branch-1");
 
+      yield* Prisma.listBuckets({ projectId: "project-1" });
+      yield* Prisma.getBucket("bucket-1");
+      yield* Prisma.createBucket({ projectId: "project-1", name: "uploads" });
+      yield* Prisma.deleteBucket("bucket-1");
+      yield* Prisma.listBucketKeys("bucket-1", { limit: 1 });
+      yield* Prisma.createBucketKey("bucket-1", { role: "read_write" });
+      yield* Prisma.deleteBucketKey("bucket-1", "key-1");
+
       yield* Prisma.getCustomDomain("domain-1");
       yield* Prisma.deleteCustomDomain("domain-1");
       yield* Prisma.retryCustomDomain("domain-1");
@@ -224,7 +241,25 @@ describe("Prisma operation helpers", () => {
       expect(Object.keys(Prisma).sort()).toEqual(
         [...expectedOperationHelpers].sort(),
       );
-      expect(calls.map(([name]) => name)).toEqual(expectedOperationHelpers);
-    }).pipe(Effect.provideService(PrismaClient, client));
+      // The log-request builders resolve the distilled Credentials service
+      // directly instead of delegating to the client, so they never appear in
+      // `calls`.
+      expect(calls.map(([name]) => name)).toEqual(
+        expectedOperationHelpers.filter(
+          (name) =>
+            name !== "getDeploymentLogsRequest" &&
+            name !== "getBuildLogsRequest",
+        ),
+      );
+    }).pipe(
+      Effect.provideService(PrismaClient, client),
+      Effect.provideService(
+        Credentials,
+        Effect.succeed({
+          apiToken: Redacted.make("test-token"),
+          apiBaseUrl: "https://api.prisma.test",
+        }),
+      ),
+    );
   });
 });

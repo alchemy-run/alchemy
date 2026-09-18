@@ -6,6 +6,7 @@ import type {
 } from "@puppeteer/browsers";
 import {
   Browser as ChromeBrowser,
+  Cache,
   CDP_WEBSOCKET_ENDPOINT_REGEX,
   detectBrowserPlatform,
   install,
@@ -31,6 +32,7 @@ import * as Plugin from "../../Plugin.ts";
 import type { BindingHook, PluginContext } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import type { ConfigError } from "../../RuntimeError.shared.ts";
+import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { kVoid } from "../../workerd/Config.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
 import type { BrowserProps } from "./BrowserOptions.shared.ts";
@@ -173,7 +175,14 @@ export const BrowserLive = Layer.effect(
             const browserService: WorkerdConfig.Service = {
               name: SERVICE_BROWSER,
               worker: {
-                compatibilityDate: "2025-01-01",
+                // Miniflare avoids newer compatibility behavior wholesale by
+                // pinning its browser service to 2025-05-01 with nodejs_compat.
+                // Alchemy can adopt the current date and narrowly opt out of
+                // websocket_standard_binary_type: its Blob-default behavior,
+                // introduced on 2026-03-17, stops cross-service CDP WebSockets
+                // from delivering binary frames to the proxy.
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                compatibilityFlags: ["no_websocket_standard_binary_type"],
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(BrowserWorker.worker),
                 ),
@@ -245,6 +254,8 @@ export const remote = (binding: string) =>
 // Chrome launch (`workers-sdk/packages/miniflare/src/plugins/browser-rendering/index.ts`)
 // -----------------------------------------------------------------------------
 
+let installedBrowser: Promise<InstalledBrowser> | undefined;
+
 export async function launchBrowser({
   headful,
 }: {
@@ -273,8 +284,18 @@ export async function launchBrowser({
     downloadProgressCallback: makeDownloadProgressLogger(),
   };
 
-  const { executablePath } =
-    await installWithCorruptedCacheRecovery(installOptions);
+  // `@puppeteer/browsers` v3 extracts the Chrome zip with the system `unzip`
+  // (or `tar.exe`/PowerShell on Windows) and falls back to its optional
+  // `yauzl` peer. We depend on `yauzl` directly so the download still works in
+  // minimal containers that ship no archiver binary.
+  installedBrowser ??= installWithCorruptedCacheRecovery(installOptions);
+  let executablePath: string;
+  try {
+    ({ executablePath } = await installedBrowser);
+  } catch (error) {
+    installedBrowser = undefined;
+    throw error;
+  }
 
   const tempUserData = NodePath.join(
     NodeOs.tmpdir(),
@@ -440,6 +461,45 @@ const CORRUPTED_CACHE_ERROR_PATTERN =
   /The browser folder \((.+?)\) exists but the executable .+? is missing/;
 
 /**
+ * Delete a cached macOS Chrome that exists but cannot actually be executed.
+ *
+ * macOS 26 can stall a write partway through a signed Mach-O, leaving a
+ * truncated Chrome in the cache that `install()` happily reports as already
+ * installed (it only checks that the executable path exists). Probing it with
+ * `--version` catches that; the caller then reinstalls into the cleared
+ * directory.
+ */
+async function clearUnrunnableDarwinCache(
+  installOptions: InstallOptions & { unpack?: true },
+): Promise<void> {
+  const platform = installOptions.platform;
+  if (!platform) {
+    throw new Error("The current platform is not supported.");
+  }
+  const cache = new Cache(installOptions.cacheDir);
+  const executablePath = cache.computeExecutablePath(installOptions);
+  try {
+    await NodeFs.promises.access(executablePath, NodeFs.constants.X_OK);
+    await new Promise<void>((resolve, reject) => {
+      NodeChildProcess.execFile(
+        executablePath,
+        ["--version"],
+        { timeout: 10_000 },
+        (error) => (error ? reject(error) : resolve()),
+      );
+    });
+  } catch {
+    await removeDir(
+      cache.installationDir(
+        installOptions.browser,
+        platform,
+        installOptions.buildId,
+      ),
+    );
+  }
+}
+
+/**
  * Run `@puppeteer/browsers` `install()`, but if it fails with the "folder
  * exists but executable is missing" error, clear the corrupted cache
  * directory and retry once.
@@ -447,6 +507,10 @@ const CORRUPTED_CACHE_ERROR_PATTERN =
 async function installWithCorruptedCacheRecovery(
   installOptions: InstallOptions & { unpack?: true },
 ): Promise<InstalledBrowser> {
+  if (process.platform === "darwin") {
+    await clearUnrunnableDarwinCache(installOptions);
+  }
+
   try {
     return await install(installOptions);
   } catch (e) {

@@ -1,11 +1,14 @@
 import * as Effect from "effect/Effect";
 import { PrismaClient, type PrismaManagementClient } from "./Client.ts";
+import * as LogsClient from "./Internal/LogsClient.ts";
 import type {
   AppCreateInput,
   AppDeploymentTarget,
   AppUpdateInput,
   BranchCreateInput,
   BranchUpdateInput,
+  BucketCreateInput,
+  BucketKeyCreateInput,
   BuildLogsQuery,
   DatabaseConnectionCreateInput,
   DeploymentCreateInput,
@@ -135,6 +138,30 @@ export const updateBranch = (id: string, input: BranchUpdateInput) =>
 export const deleteBranch = (id: string) =>
   withClient((client) => client.deleteBranch(id));
 
+export const listBuckets = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
+}) => withClient((client) => client.listBuckets(query));
+export const getBucket = (id: string) =>
+  withClient((client) => client.getBucket(id));
+export const createBucket = (input: BucketCreateInput) =>
+  withClient((client) => client.createBucket(input));
+export const deleteBucket = (id: string) =>
+  withClient((client) => client.deleteBucket(id));
+export const listBucketKeys = (
+  bucketId: string,
+  query?: { cursor?: string | null; limit?: number },
+) => withClient((client) => client.listBucketKeys(bucketId, query));
+export const createBucketKey = (
+  bucketId: string,
+  input: BucketKeyCreateInput,
+) => withClient((client) => client.createBucketKey(bucketId, input));
+export const deleteBucketKey = (bucketId: string, keyId: string) =>
+  withClient((client) => client.deleteBucketKey(bucketId, keyId));
+
 export const getCustomDomain = (id: string) =>
   withClient((client) => client.getCustomDomain(id));
 export const deleteCustomDomain = (id: string) =>
@@ -185,9 +212,9 @@ export const stopDeployment = (id: string) =>
 export const getDeploymentLogsRequest = (
   id: string,
   query?: DeploymentLogsQuery,
-) => withClient((client) => client.getDeploymentLogsRequest(id, query));
+) => LogsClient.getDeploymentLogsRequest(id, query);
 export const getBuildLogsRequest = (buildId: string, query?: BuildLogsQuery) =>
-  withClient((client) => client.getBuildLogsRequest(buildId, query));
+  LogsClient.getBuildLogsRequest(buildId, query);
 
 export const listEnvironmentVariables = (query?: {
   cursor?: string | null;

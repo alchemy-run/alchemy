@@ -14,7 +14,7 @@ const { test } = Test.make({
 });
 
 // A resource declared once, at module scope, and referenced from a site's
-// `env` — the pattern `examples/cloudflare-tanstack` uses.
+// `env` — the pattern `examples/cloudflare-website-tanstack-start` uses.
 const Cache = Cloudflare.KV.Namespace("Cache", {});
 
 /** Compile the stack and return its registered resources. */
@@ -98,5 +98,24 @@ test(
       }),
     );
     expect(keys).toEqual(["Cache", "Site"]);
+  }),
+);
+
+test(
+  "Astro forwards the prerender environment to its source provider",
+  Effect.gen(function* () {
+    const resources = yield* compile(
+      Cloudflare.Website.Astro("Astro", {
+        prerenderEnvironment: "node",
+        sessionKVBindingName: false,
+      }),
+    );
+    expect(resources["Astro"]?.Props.source).toMatchObject({
+      provider: "@alchemy.run/frontend-frameworks/astro/source",
+      devMode: "server",
+      options: {
+        prerenderEnvironment: "node",
+      },
+    });
   }),
 );

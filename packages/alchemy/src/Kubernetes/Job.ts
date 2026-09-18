@@ -271,9 +271,8 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * `AWS.EKS.Cluster` targets, bindings attach env vars to the pod and IAM
  * policy statements to a generated pod-identity role, exactly like
  * `Kubernetes.Deployment`.
- * @resource
- * @section Creating a Job
- * @example Remote image (external — no Effect runtime in the container)
+ * ### Creating a Job
+ * **Example:** Remote image (external — no Effect runtime in the container)
  * ```typescript
  * const migrate = yield* Kubernetes.Job("DbMigrate", {
  *   cluster,
@@ -282,7 +281,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
- * @example Inline Effect program with a DynamoDB binding (EKS)
+ * **Example:** Inline Effect program with a DynamoDB binding (EKS)
  * ```typescript
  * const seed = yield* Kubernetes.Job(
  *   "SeedData",
@@ -298,7 +297,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @example Tagged Effect program
+ * **Example:** Tagged Effect program
  * ```typescript
  * export class Backfill extends Kubernetes.Job<Backfill, {
  *   progress: () => Effect.Effect<number>;
@@ -315,17 +314,14 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
- * @section Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the job doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * ### Bundling & Tree-shaking
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * @example Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -335,18 +331,7 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * @example Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -354,8 +339,8 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * @section Scheduling
- * @example Nightly CronJob
+ * ### Scheduling
+ * **Example:** Nightly CronJob
  * ```typescript
  * const nightly = yield* Kubernetes.Job("NightlyBackfill", {
  *   cluster,
@@ -363,6 +348,8 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  *   schedule: "0 3 * * *",
  * });
  * ```
+ *
+ * @resource
  */
 export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> =
   Platform("Kubernetes.Job", {

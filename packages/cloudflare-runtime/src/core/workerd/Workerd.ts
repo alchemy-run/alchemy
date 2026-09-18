@@ -1,4 +1,3 @@
-import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -111,12 +110,9 @@ const make = (
           ],
           Buffer.from(serializeConfig(config)),
         );
-        // Scope finalizers may not run if the parent exits, so we use an exit hook to ensure we always kill the process.
-        const unregister = exitHook(() => handle.kill());
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
             handle.kill();
-            unregister();
           }),
         );
         if (handle.configure) {
@@ -194,11 +190,18 @@ const makeStreamPump = (
   };
 };
 
+const externalEnv = () => {
+  const env = { ...process.env };
+  delete env.NODE_ENV;
+  return env;
+};
+
 const makeBun = () =>
   make((command, args, config) =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
+        env: externalEnv(),
         stdio: [config, "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
@@ -270,6 +273,7 @@ const makeNode = () =>
     Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
+          env: externalEnv(),
           stdio: ["pipe", "pipe", "pipe", "pipe"],
           killSignal: "SIGKILL",
         }),

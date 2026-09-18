@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 export const REDIRECTS_VERSION = 1;
 export const HEADERS_VERSION = 2;
 

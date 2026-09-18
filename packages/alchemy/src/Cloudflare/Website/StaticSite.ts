@@ -78,10 +78,9 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
 }
 
 type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
-  [binding in keyof NormalizedBindings<
-    Bindings,
-    WorkerAssetsConfig
-  >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+  [
+    binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
+  ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
 }>;
 
 /**
@@ -96,17 +95,14 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * For Vite-based projects, prefer `Cloudflare.Website.Vite` which handles
  * building automatically.
  *
- * @resource
- * @product Website
- * @category Workers & Compute
  *
- * @section Basic Usage
+ * ### Basic Usage
  * Point `command` at your build script and `outdir` at where it writes
  * output. Alchemy runs the command, hashes the output, and deploys it as
  * an assets-only Worker — no Worker code is uploaded, and Cloudflare's
  * asset layer serves every request itself.
  *
- * @example Deploying a Hugo site
+ * **Example:** Deploying a Hugo site
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -125,7 +121,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * };
  * ```
  *
- * @example Custom Worker in front of the assets
+ * **Example:** Custom Worker in front of the assets
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Blog", {
  *   command: "hugo --minify",
@@ -134,11 +130,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Asset Configuration
+ * ### Asset Configuration
  * Use `assets` to control how Cloudflare handles routing for
  * your static files — HTML handling, not-found behavior, etc.
  *
- * @example SPA-style routing
+ * **Example:** SPA-style routing
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("App", {
  *   command: "npm run build",
@@ -151,11 +147,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Building from a Subdirectory
+ * ### Building from a Subdirectory
  * Set `cwd` to run the build command in a subdirectory (e.g. a
  * monorepo package). `outdir` is resolved relative to `cwd`.
  *
- * @example Building a frontend in a monorepo
+ * **Example:** Building a frontend in a monorepo
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Web", {
  *   cwd: "apps/web",
@@ -165,11 +161,11 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Custom Rebuild Scope
+ * ### Custom Rebuild Scope
  * By default, all non-gitignored files are hashed to decide whether
  * the build should re-run. Use `memo` to narrow the scope.
  *
- * @example Narrowing the memo scope
+ * **Example:** Narrowing the memo scope
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Docs", {
  *   command: "npm run build",
@@ -181,7 +177,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @example Rebuilding when a sibling workspace package changes
+ * **Example:** Rebuilding when a sibling workspace package changes
  * The default scope only hashes files under `cwd` (plus the nearest
  * lockfile), so edits to a sibling workspace package the app imports do
  * not retrigger the build on their own. Add the sibling's sources with a
@@ -200,13 +196,13 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * });
  * ```
  *
- * @section Class Form
+ * ### Class Form
  * Calling `StaticSite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
  * an `Effect` you can `yield*` to deploy and a type you can reference
  * elsewhere — useful when other resources need to bind to this Worker.
  *
- * @example Declaring a Worker class
+ * **Example:** Declaring a Worker class
  * ```typescript
  * class Blog extends Cloudflare.Website.StaticSite<Blog>()("Blog", {
  *   command: "hugo --minify",
@@ -216,6 +212,10 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * const site = yield* Blog;
  * ```
+ *
+ * @resource
+ * @product Website
+ * @category Workers & Compute
  */
 export const StaticSite: {
   <Self>(): {

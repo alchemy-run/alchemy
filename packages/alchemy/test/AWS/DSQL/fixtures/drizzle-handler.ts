@@ -25,7 +25,7 @@ export class DsqlDrizzleFunction extends Lambda.Function<Lambda.Function>()(
 export default DsqlDrizzleFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     timeout: Duration.seconds(30),
     // `pg` is CommonJS and Rolldown's bundled interop turns its Client export
     // into a namespace object under Node. Install it intact in the Lambda

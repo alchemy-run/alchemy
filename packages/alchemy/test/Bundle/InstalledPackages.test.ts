@@ -17,6 +17,7 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { strFromU8, unzipSync } from "fflate";
 import { spawnSync } from "node:child_process";
 import { zipCode } from "@/Util/zip";
 
@@ -396,6 +397,8 @@ describe("Lambda external packages", () => {
               );
 
               const sharpRoot = path.join(directory, "node_modules", "sharp");
+              const sharpBinRoot = path.join(sharpRoot, "bin");
+              const binRoot = path.join(directory, "node_modules", ".bin");
               const binaryRoot = path.join(
                 directory,
                 "node_modules",
@@ -411,11 +414,20 @@ describe("Lambda external packages", () => {
                 "lib",
               );
               yield* fs.makeDirectory(sharpRoot, { recursive: true });
+              yield* fs.makeDirectory(sharpBinRoot, { recursive: true });
+              yield* fs.makeDirectory(binRoot, { recursive: true });
               yield* fs.makeDirectory(binaryRoot, { recursive: true });
               yield* fs.makeDirectory(libvipsRoot, { recursive: true });
               yield* fs.writeFileString(
                 path.join(sharpRoot, "package.json"),
                 JSON.stringify({ name: "sharp", version: "0.34.5" }),
+              );
+              const executablePath = path.join(sharpBinRoot, "sharp-tool");
+              yield* fs.writeFileString(executablePath, "#!/bin/sh\n");
+              yield* fs.chmod(executablePath, 0o755);
+              yield* fs.symlink(
+                "../sharp/bin/sharp-tool",
+                path.join(binRoot, "sharp-tool"),
               );
               yield* fs.writeFile(
                 path.join(binaryRoot, "sharp.node"),
@@ -444,26 +456,34 @@ describe("Lambda external packages", () => {
             "package.json",
             "package-lock.json",
             "node_modules/sharp/package.json",
+            "node_modules/sharp/bin/sharp-tool",
+            "node_modules/.bin/sharp-tool",
             "node_modules/@img/sharp-linux-arm64/lib/sharp.node",
             "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips.so",
           ]),
         );
+        const executable = files.find(
+          (file) => file.path === "node_modules/sharp/bin/sharp-tool",
+        );
+        const symlink = files.find(
+          (file) => file.path === "node_modules/.bin/sharp-tool",
+        );
+        expect(executable?.mode && executable.mode & 0o111).toBe(0o111);
+        expect(symlink?.mode && symlink.mode & 0o170000).toBe(0o120000);
         const archive = yield* zipCode(
           "export const handler = () => {};",
           files,
         );
-        const zip = yield* Effect.promise(async () => {
-          const JSZip = (await import("jszip")).default;
-          return JSZip.loadAsync(archive);
-        });
+        const zip = unzipSync(archive);
         expect(
-          zip.file("node_modules/@img/sharp-linux-arm64/lib/sharp.node"),
-        ).not.toBeNull();
+          zip["node_modules/@img/sharp-linux-arm64/lib/sharp.node"],
+        ).toBeDefined();
         expect(
-          zip.file(
-            "node_modules/@img/sharp-libvips-linux-arm64/lib/libvips.so",
-          ),
-        ).not.toBeNull();
+          zip["node_modules/@img/sharp-libvips-linux-arm64/lib/libvips.so"],
+        ).toBeDefined();
+        expect(strFromU8(zip["node_modules/.bin/sharp-tool"]!)).toBe(
+          "../sharp/bin/sharp-tool",
+        );
         expect(installDirectory).toBeDefined();
         expect(yield* fs.exists(installDirectory!)).toBe(false);
       } finally {

@@ -14,10 +14,12 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/cloudflare-frameworks": "workspace:*",
-    "@types/node": "^24.12.0",
-    "nitropack": "catalog:frameworks",
-    "nuxt": "catalog:frameworks",
+    "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
+    "@types/node": "catalog:node24",
+    "nitropack": "catalog:",
+    "nuxt": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:"
   },
   "repository": {

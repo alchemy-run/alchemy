@@ -6,6 +6,7 @@ import {
 import * as Output from "@/Output.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
@@ -68,6 +69,30 @@ describe("Local.RpcSerialization", () => {
         expect(
           yield* client.password({ password: Redacted.make("hush") }),
         ).toBe("hush");
+      }),
+    );
+
+    it.effect("round-trips a Duration nested inside an object", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          timeout: (env: { timeout: Duration.Duration }) =>
+            Effect.succeed(Duration.toSeconds(env.timeout)),
+        };
+        const client = roundTrip(handlers);
+        expect(yield* client.timeout({ timeout: Duration.seconds(15) })).toBe(
+          15,
+        );
+      }),
+    );
+
+    it.effect("round-trips Duration.negativeInfinity", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          echo: (d: Duration.Duration) => Effect.succeed(d),
+        };
+        const client = roundTrip(handlers);
+        const result = yield* client.echo(Duration.negativeInfinity);
+        expect(Duration.equals(result, Duration.negativeInfinity)).toBe(true);
       }),
     );
 

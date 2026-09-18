@@ -601,6 +601,52 @@ export interface SourceRepositoryCreateInput {
   installationId?: string;
 }
 
+export type BucketKeyRole = "read" | "read_write";
+
+export interface Bucket {
+  id: string;
+  type: "bucket";
+  url: string;
+  name: string;
+  providerName: string;
+  status: string;
+  createdAt: string;
+  project: ResourceRef;
+  branchId: string | null;
+}
+
+export interface BucketCreateInput {
+  projectId: string;
+  name?: string;
+  branchId?: string;
+  branchGitName?: string;
+}
+
+export interface BucketKey {
+  id: string;
+  type: "bucketKey";
+  name: string;
+  valueHint: string;
+  role: BucketKeyRole;
+  createdAt: string;
+}
+
+/**
+ * Response from `POST /v1/buckets/{bucketId}/keys`. The `secretAccessKey`
+ * is returned exactly once in this response and can never be re-read.
+ */
+export interface BucketKeyWithSecret extends BucketKey {
+  accessKeyId: string;
+  secretAccessKey: string;
+  endpoint: string;
+  bucketName: string;
+}
+
+export interface BucketKeyCreateInput {
+  name?: string;
+  role: BucketKeyRole;
+}
+
 export interface PrismaSecretConnection {
   directConnectionString?: Redacted.Redacted<string>;
   pooledConnectionString?: Redacted.Redacted<string>;

@@ -1,3 +1,4 @@
+import { DEFAULT_COMPATIBILITY_DATE } from "../core/internal/constants.ts";
 import { loadInternalWorker } from "../core/internal/internal-worker.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import { EXPORT_TYPES_MODULE_ID } from "../rolldown/export-types.ts";
@@ -9,6 +10,7 @@ import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace
 import * as Json from "../core/bindings/Json.ts";
 import * as Loopback from "../core/bindings/Loopback.ts";
 import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
+import { PlatformServices } from "../Platform.ts";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -51,35 +53,31 @@ export const startServer = async <B extends BindingHooks = BindingHooks>(
   exportTypes: ExportTypes,
 ) => {
   const scope = Scope.makeUnsafe();
+  const proxySharedSecret = crypto.randomUUID();
   const address = await serve(
     options,
     entryEnvironment,
     server,
     exportTypes,
+    proxySharedSecret,
   ).pipe(
-    Effect.provide(ViteAssets.ViteAssetsLive(server)),
-    Effect.provide(context),
+    // `provideMerge`: the assets layer's construction reads `Loopback` (and
+    // friends) from the runtime context, so the context must feed the layer,
+    // not just sit beside it.
+    Effect.provide(
+      ViteAssets.ViteAssetsLive(server).pipe(
+        Layer.provideMerge(Layer.succeedContext(context)),
+      ),
+    ),
     Scope.provide(scope),
     Effect.runPromise,
   );
   return {
     address,
+    proxySharedSecret,
     close: () => closeScope(scope),
   };
 };
-
-const importPlatformServices = Layer.unwrap(
-  Effect.promise(async () => {
-    try {
-      const BunServices = await import("@effect/platform-bun/BunServices");
-      return BunServices.layer;
-    } catch {
-      // ignore and fall back to NodeServices
-    }
-    const NodeServices = await import("@effect/platform-node/NodeServices");
-    return NodeServices.layer;
-  }),
-);
 
 export const createDefaultContext = async (): Promise<
   Context.Context<RuntimeServices.RuntimeServices>
@@ -91,7 +89,7 @@ export const createDefaultContext = async (): Promise<
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
     },
   }).pipe(
-    Layer.provideMerge(importPlatformServices),
+    Layer.provideMerge(PlatformServices),
     Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
@@ -200,6 +198,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   entryEnvironment: Omit<EntryEnvironment, "exportTypesId">,
   server: vite.ViteDevServer,
   exportTypes: ExportTypes,
+  proxySharedSecret: string,
 ) {
   const runtime = yield* Runtime.Runtime;
   const moduleFallback = yield* makeModuleFallbackService;
@@ -207,8 +206,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   const name = options.worker?.name ?? `vite-dev-${crypto.randomUUID()}`;
   return yield* runtime.start({
     name,
+    proxySharedSecret,
     modules: yield* Effect.promise(() => makeWorkerModules(exportTypes)),
-    compatibilityDate: options.compatibilityDate ?? "2026-05-12",
+    compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: [
       UnsafeEval.local("__DISTILLED_UNSAFE_EVAL__"),
@@ -254,6 +254,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     // proxy instead of a local broker — and that accepts-and-drops every
     // message, with `send()` never settling.
     queueConsumers: options.worker?.queueConsumers,
+    crons: options.worker?.crons,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

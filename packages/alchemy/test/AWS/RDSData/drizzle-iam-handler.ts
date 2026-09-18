@@ -37,7 +37,7 @@ export class RDSDrizzleIamFunction extends Lambda.Function<Lambda.Function>()(
 export default RDSDrizzleIamFunction.make(
   {
     main,
-    url: true,
+    functionUrl: true,
     // First query per execution builds the pool + TLS handshake while the
     // serverless cluster may be scaling from idle.
     timeout: Duration.seconds(60),

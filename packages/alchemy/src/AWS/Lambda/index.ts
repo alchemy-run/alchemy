@@ -14,6 +14,8 @@ export * from "./DurableFunction.ts";
 export * from "./EventBridgeEventSource.ts";
 export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";
+export * from "./FlociFunctionProvider.ts";
+export * from "./FlociMicrovmImageProvider.ts";
 export * from "./Function.ts";
 export * from "./GetAccountSettings.ts";
 export * from "./GetAccountSettingsHttp.ts";

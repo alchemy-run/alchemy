@@ -10,7 +10,7 @@ const site = yield* Cloudflare.Website.Waku("WakuSite", {
     flags: ["nodejs_als"], // waku's server runtime needs AsyncLocalStorage
   },
   env: {
-    GREETING: "Hello from alchemy",
+    GREETING: "Hello from Waku on Cloudflare!",
   },
 });
 ```
@@ -25,6 +25,6 @@ bun alchemy destroy  # tear down
 
 ## Notes
 
-- `@alchemy.run/cloudflare-frameworks` must be installed in the project — the Worker's source provider is loaded from its `/waku` export at deploy time.
+- `@alchemy.run/frontend-frameworks` must be installed in the project — the Worker's source provider is loaded from its `/waku` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - Waku's SSG step renders static pages in **Node** (upstream parity), so a top-level `import { env } from "cloudflare:workers"` in a page module breaks the build — read env via `getEnv` from `waku` (as in `src/pages/index.tsx`) or a guarded dynamic import.

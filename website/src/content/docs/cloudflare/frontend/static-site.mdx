@@ -93,7 +93,9 @@ The build contract is two required props, plus a handful of optional ones:
 - `main` — an optional custom Worker entrypoint served in front of the
   assets, instead of the fallback passthrough.
 - `assets` — asset routing behavior (`notFoundHandling`, `htmlHandling`,
-  `runWorkerFirst`, ...), passed flat.
+  `runWorkerFirst`, ...), passed flat. `runWorkerFirst` accepts `true` to
+  route every request through the Worker ahead of assets, or a glob array
+  like `["/api/*"]` to intercept only matching paths.
 
 Everything else a [Worker](/cloudflare/compute/workers) accepts —
 `domain`, `compatibility`, bindings via `env` — applies too, since a

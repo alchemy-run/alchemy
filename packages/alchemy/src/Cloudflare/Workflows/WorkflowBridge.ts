@@ -4,19 +4,21 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { buildEventTelemetry } from "../../Telemetry.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import { isScopeEjected } from "../Workers/HttpServer.ts";
 import { getWorkerExport } from "../Workers/WorkerBridge.ts";
+import type {
+  WorkflowExport,
+  WorkflowImpl,
+  WorkflowStepConfig,
+  WorkflowStepEvent,
+  WorkflowTaskOptions,
+} from "./Workflow.ts";
 import {
   WorkflowEvent as WorkflowEventService,
-  type WorkflowExport,
-  type WorkflowImpl,
   WorkflowStep,
   WorkflowStepContext,
-  type WorkflowStepConfig,
-  type WorkflowStepEvent,
-  type WorkflowTaskOptions,
-} from "./Workflow.ts";
+} from "./WorkflowRuntime.ts";
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and
@@ -131,7 +133,7 @@ const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
       : new Date(event.timestamp),
   instanceId: event.instanceId ?? "",
   workflowName: event.workflowName ?? "",
-  schedule: event.schedule,
+  schedule: event.schedule ?? undefined,
 });
 
 export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
@@ -145,7 +147,7 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
       never,
       WorkflowStepContext
     >;
-    const config = toWorkflowStepConfig(options);
+    const config = definedStepConfig(options);
     const rollbackEffect = options.rollback;
     const callback = (context: any) =>
       Effect.runPromise(
@@ -166,14 +168,6 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
                 output: context.output,
               }) as Effect.Effect<void>,
             ),
-          // Scrubbed like the step's own config, and for the same reason: a
-          // rollback does not get a config of its own — `executeRollbacks`
-          // feeds this straight back through `ctx.do(target, config ?? {}, …)`,
-          // so it lands on the identical defaults-merge and the identical
-          // duration parse. This one arrives from the caller rather than being
-          // synthesized here, so it is a narrower door, but it is the same door
-          // — and it opens during rollback of an already-failing instance,
-          // where the crash is even harder to attribute.
           rollbackConfig: definedStepConfig(options.rollbackConfig),
         }
       : undefined;
@@ -197,55 +191,13 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
     ),
 });
 
-/**
- * A `WorkflowStepConfig` carrying only the keys that have a value — or
- * `undefined` when none do, so the engine keeps every default it has.
- *
- * **A step config must never carry a key it has no value for.** The Workflows
- * engine merges one over its own defaults by spread —
- * `{ ...defaultConfig, ...stepConfig, retries: { ...defaultConfig.retries, ...stepConfig.retries } }`
- * — and an own property whose value is `undefined` still wins a spread. So a
- * config with `timeout: undefined` replaces the engine's `timeout: "10 minutes"`
- * with `undefined`. The engine parses that with itty-time's
- * `(e) => { if (!isNaN(+e)) return +e; e.match(/…/) … }`, and `+undefined` is
- * `NaN`, so it reaches `.match` on `undefined` and throws
- * `Cannot read properties of undefined (reading 'match')`.
- *
- * The symptom is badly disguised. That parse is the first statement of the
- * step's `timeoutPromise`, which *races* the callback rather than gating it —
- * so the step body runs and succeeds on every attempt, and the instance only
- * errors afterwards, with a message naming nothing in the user's workflow. A
- * step with `retries: { limit: 3 }` logs four successful bodies and then fails.
- *
- * `retries: undefined` happens to be survivable today, because the engine
- * rebuilds `retries` from its defaults with an explicit key *after* the spread.
- * It is the same mistake and is dropped for the same reason rather than relying
- * on that.
- *
- * The guard is `=== undefined` rather than falsy so that a caller's `timeout: 0`
- * is forwarded instead of dropped. The engine rejects `0` as invalid, which is a
- * better answer than silently running the step under the 10-minute default.
- */
+// Own undefined properties overwrite the engine's defaults for steps and rollbacks.
 const definedStepConfig = (
-  config: WorkflowStepConfig | undefined,
+  options: WorkflowStepConfig | undefined,
 ): WorkflowStepConfig | undefined => {
-  if (config === undefined) return undefined;
-  const defined: WorkflowStepConfig = {};
-  if (config.retries !== undefined) defined.retries = config.retries;
-  if (config.timeout !== undefined) defined.timeout = config.timeout;
-  return defined.retries === undefined && defined.timeout === undefined
-    ? undefined
-    : defined;
+  if (options === undefined) return undefined;
+  const config: WorkflowStepConfig = {};
+  if (options.retries !== undefined) config.retries = options.retries;
+  if (options.timeout !== undefined) config.timeout = options.timeout;
+  return Object.keys(config).length > 0 ? config : undefined;
 };
-
-/**
- * The step's own config. Built from the options bag rather than passed through,
- * so this is where the `undefined` used to be synthesized: the old
- * `{ retries: options.retries, timeout: options.timeout }` literal set both keys
- * whether or not the caller gave both, which broke every step configured with
- * retries alone.
- */
-const toWorkflowStepConfig = (
-  options: WorkflowTaskOptions<any, any, any>,
-): WorkflowStepConfig | undefined =>
-  definedStepConfig({ retries: options.retries, timeout: options.timeout });

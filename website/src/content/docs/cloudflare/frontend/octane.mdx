@@ -7,7 +7,7 @@ sidebar:
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const devDeps = "@alchemy.run/cloudflare-frameworks @octanejs/adapter-cloudflare";
+export const devDeps = "@alchemy.run/frontend-frameworks @octanejs/adapter-cloudflare";
 
 `Cloudflare.Website.Octane` deploys an [OctaneJS](https://octanejs.dev)
 fullstack app as a Cloudflare Worker. Octane wraps Vite, so the resource
@@ -21,7 +21,7 @@ command to run.
 ## Install
 
 The build integration is not bundled with alchemy. Install
-`@alchemy.run/cloudflare-frameworks` alongside Octane's Cloudflare
+`@alchemy.run/frontend-frameworks` alongside Octane's Cloudflare
 adapter; the resource loads the package's `/octane` export from your
 project at deploy time. Both are only used at build time, so dev
 dependencies are enough:
@@ -123,13 +123,13 @@ vocabulary — KV namespaces, R2 buckets, secrets:
 export const Website = Cloudflare.Website.Octane("Website", {
 +  env: {
 +    CACHE: Cache,
-+    API_KEY: Config.redacted("API_KEY"),
++    API_KEY: Config.Redacted("API_KEY"),
 +  },
 });
 ```
 
 `Cache` is a description, not a deploy — Alchemy provisions the real
-namespace because the Website binds it. `Config.redacted` reads
+namespace because the Website binds it. `Config.Redacted` reads
 `API_KEY` from your environment at deploy time and binds it as a
 Worker secret — see [Secrets & env](/cloudflare/security/secrets-env).
 

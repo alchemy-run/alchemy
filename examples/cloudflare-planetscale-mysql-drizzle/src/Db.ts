@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * A Drizzle schema + PlanetScale MySQL database + feature branch. The
- * branch's `migrationsDir` is wired to the schema resource's `out` output, so
+ * branch's `migrations` prop is wired to the schema resource, so
  * the provider order becomes:
  *
  *   1. `Drizzle.Schema` regenerates pending migration SQL files.
@@ -43,7 +43,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
   const branch = yield* Planetscale.MySQLBranch("app-branch", {
     database,
     isProduction: false,
-    migrationsDir: schema.out,
+    migrations: schema,
   });
 
   const password = yield* Planetscale.MySQLPassword("app-password", {

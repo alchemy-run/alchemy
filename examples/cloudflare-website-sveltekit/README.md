@@ -7,7 +7,7 @@ The resource builds the app with SvelteKit's own Vite pipeline and a wrangler-fr
 ```ts
 const site = yield* Cloudflare.Website.SvelteKit("SvelteKitSite", {
   env: {
-    GREETING: "Hello from alchemy",
+    GREETING: "Hello from SvelteKit on Cloudflare!",
   },
 });
 ```
@@ -22,6 +22,6 @@ bun alchemy destroy  # tear down
 
 ## Notes
 
-- `@alchemy.run/cloudflare-frameworks` must be installed in the project — the Worker's source provider is loaded from its `/sveltekit` export at deploy time.
+- `@alchemy.run/frontend-frameworks` must be installed in the project — the Worker's source provider is loaded from its `/sveltekit` export at deploy time.
 - Unchanged projects skip the build and deploy entirely (the project tree is content-hashed, respecting `.gitignore`).
 - In `alchemy dev`, `platform.env` carries the Worker's real Cloudflare bindings (KV, R2, D1, ...) served by the cloudflare-runtime platform proxy, with literal `env` values (strings and secrets) overlaid.

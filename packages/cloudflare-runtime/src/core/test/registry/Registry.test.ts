@@ -160,6 +160,9 @@ describe.each(watcherModes)(
         yield* waitForRegistryEntry(subscriberEntry, { toBeDefined: false });
 
         expect(yield* registry.read([subscriberEntry])).toEqual({});
+        // A crashed provider cannot run its finalizer. Refresh must actively
+        // reap the expired file rather than leave ignored garbage on disk.
+        expect(yield* fs.exists(entryPath)).toBe(false);
       }).pipe(Effect.provide(services)),
     );
 

@@ -6,6 +6,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Sql from "effect/unstable/sql/SqlClient";
 import { makeExecutionMemo } from "../Runtime/ExecutionMemo.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
+import { resolveConnectionOptions } from "./PostgresTls.ts";
 
 /**
  * Options for {@link Postgres}: `@effect/sql-pg`'s pool configuration, with
@@ -22,7 +23,8 @@ export type PostgresConfig<E, R> = Omit<PgClient.PgPoolConfig, "url"> & {
  * Open an `@effect/sql-pg` client (a connection pool) from a connection URL.
  *
  * Accepts a plain `Redacted` URL or an Effect of one — e.g.
- * `Cloudflare.Hyperdrive.Connect(...)`'s `connectionString` — and returns a
+ * `Cloudflare.Hyperdrive.Connect(...)` or `Fly.ConnectPostgres(...)`'s
+ * `connectionString` — and returns a
  * `PgClient` (which implements the generic `SqlClient` interface) wrapped in
  * a chainable Proxy, so it can be resolved once at init and used from any
  * handler:
@@ -54,7 +56,10 @@ export const Postgres = <E = never, R = never>(config: PostgresConfig<E, R>) =>
         const { url, ...pool } = config;
         const resolved = Effect.isEffect(url) ? yield* url : url;
         const pgCtx = yield* Layer.build(
-          PgClient.layer({ ...pool, url: resolved }),
+          PgClient.layer({
+            ...pool,
+            ...resolveConnectionOptions(resolved, pool.ssl),
+          }),
         );
         return Context.get(pgCtx, PgClient.PgClient);
       }),

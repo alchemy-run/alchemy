@@ -43,7 +43,7 @@ test.provider(
             main: handlerPath,
             handler: "handler",
             isExternal: true,
-            url: false,
+            functionUrl: false,
             env: { VERSION: envVersion },
             reservedConcurrentExecutions,
           });
@@ -134,7 +134,7 @@ test.provider(
       // State resolves to an Effect that initializes and yields the concrete
       // state-store service.
       const state = yield* yield* State;
-      const stage = "test";
+      const stage = stack.stage;
       const fqns = yield* state.list({ stack: stack.name, stage });
       const rows = yield* Effect.forEach(fqns, (fqn) =>
         state

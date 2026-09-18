@@ -1,3 +1,5 @@
+// Alchemy modifications are licensed under Apache-2.0.
+// This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -20,7 +22,10 @@ const ImagesStoreWorker = {
 import * as Loopback from "../../globals/Loopback.ts";
 import type * as LoopbackServer from "../../globals/LoopbackServer.ts";
 import * as Storage from "../../globals/Storage.ts";
-import { SOCKET_USER_ENTRY } from "../../internal/constants.ts";
+import {
+  DEFAULT_COMPATIBILITY_DATE,
+  SOCKET_USER_ENTRY,
+} from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import { PluginContext, type BindingHook } from "../../PluginContext.ts";
@@ -165,7 +170,7 @@ export const ImagesLive = Layer.effect(
             const storeService: WorkerdConfig.Service = {
               name: SERVICE_IMAGES_STORE,
               worker: {
-                compatibilityDate: "2025-01-01",
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(ImagesStoreWorker.worker),
                 ),
@@ -201,7 +206,7 @@ export const ImagesLive = Layer.effect(
             const imagesService: WorkerdConfig.Service = {
               name: SERVICE_IMAGES,
               worker: {
-                compatibilityDate: "2025-04-01",
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: formatInternalWorkerModules(
                   yield* Effect.promise(ImagesWorker.worker),
                 ),
@@ -224,7 +229,7 @@ export const ImagesLive = Layer.effect(
             const deliveryMiddleware: Plugin.Middleware = {
               name: "images:delivery",
               worker: {
-                compatibilityDate: "2025-01-01",
+                compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 modules: [
                   {
                     name: "images/delivery.worker.js",
@@ -461,7 +466,17 @@ async function runInfo(transformer: Sharp): Promise<Response> {
     case "gif":
       mime = "image/gif";
       break;
-    case "avif":
+    // libvips reports both AVIF and HEIC as `heif`, distinguished by the
+    // compression codec. AVIF (av1) is the only variant Cloudflare Images
+    // accepts, and the only one the bundled libvips can decode.
+    case "heif":
+      if (metadata.compression !== "av1") {
+        return errorResponse(
+          415,
+          9520,
+          `ERROR: Unsupported image type ${metadata.format}, expected one of: JPEG, SVG, PNG, WebP, GIF or AVIF`,
+        );
+      }
       mime = "image/avif";
       break;
     default:

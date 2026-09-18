@@ -9,15 +9,7 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Website.Vite("Foldkit", {
-      compatibility: {
-        flags: ["nodejs_compat"],
-      },
-      memo: {},
-      assets: {
-        notFoundHandling: "single-page-application",
-      },
-    });
+    const worker = yield* Cloudflare.Website.Foldkit("Foldkit");
 
     return {
       url: worker.url,

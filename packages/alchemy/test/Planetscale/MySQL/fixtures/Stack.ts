@@ -30,7 +30,7 @@ export const PlanetscaleDb = Effect.gen(function* () {
     database,
     parentBranch: "main",
     isProduction: false,
-    migrationsDir,
+    migrations: migrationsDir,
   });
 
   const password = yield* Planetscale.MySQLPassword(

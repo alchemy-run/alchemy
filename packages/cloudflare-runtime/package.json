@@ -1,9 +1,9 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.70",
+  "version": "2.0.0-beta.79",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "homepage": "https://alchemy.run",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "keywords": [
     "alchemy",
@@ -23,13 +23,15 @@
   "sideEffects": false,
   "files": [
     "src",
-    "dist"
+    "dist",
+    "NOTICE",
+    "THIRD_PARTY_LICENSES.md"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && bun ../../scripts/copy-package-files.ts cloudflare-runtime",
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:rolldown": "vitest run --project rolldown",
@@ -40,45 +42,48 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@alchemy.run/node-utils": "catalog:",
-    "@cloudflare/unenv-preset": "catalog:workers",
-    "@puppeteer/browsers": "catalog:cloudflare",
-    "magic-string": "catalog:cloudflare",
-    "sharp": "catalog:cloudflare",
-    "unenv": "catalog:workers",
-    "workerd": "catalog:workers"
+    "@alchemy.run/node-utils": "workspace:*",
+    "@cloudflare/unenv-preset": "catalog:",
+    "@puppeteer/browsers": "catalog:",
+    "capnp-es": "catalog:",
+    "magic-string": "catalog:",
+    "mime": "catalog:",
+    "sharp": "catalog:",
+    "unenv": "catalog:",
+    "workerd": "catalog:",
+    "yauzl": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:workers",
-    "@cloudflare/vitest-pool-workers": "catalog:cloudflare",
-    "@effect/platform-bun": "catalog:effect",
-    "@effect/platform-node": "catalog:effect",
-    "@effect/vitest": "catalog:effect",
-    "@types/http-cache-semantics": "catalog:cloudflare",
+    "@cloudflare/vitest-plugin": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/http-cache-semantics": "catalog:",
     "@types/node": "catalog:",
-    "@types/ws": "catalog:cloudflare",
-    "capnp-es": "catalog:cloudflare",
-    "capnweb": "catalog:cloudflare",
-    "http-cache-semantics": "catalog:cloudflare",
-    "heap-js": "catalog:cloudflare",
-    "itty-time": "catalog:cloudflare",
-    "mime": "catalog:cloudflare",
-    "mysql2": "catalog:cloudflare",
-    "postal-mime": "catalog:cloudflare",
+    "@types/ws": "catalog:",
+    "capnweb": "catalog:",
+    "heap-js": "catalog:",
+    "http-cache-semantics": "catalog:",
+    "itty-time": "catalog:",
+    "mysql2": "catalog:",
+    "postal-mime": "catalog:",
     "rolldown": "catalog:",
+    "toucan-js": "catalog:",
     "tsdown": "catalog:",
-    "toucan-js": "catalog:cloudflare",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "ws": "catalog:cloudflare"
+    "ws": "catalog:"
   },
   "peerDependencies": {
-    "@distilled.cloud/cloudflare": "catalog:",
-    "@effect/platform-bun": "catalog:effect",
-    "@effect/platform-node": "catalog:effect",
-    "effect": "catalog:effect",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:",
     "rolldown": "catalog:",
-    "vite": "catalog:cloudflare"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
     "@effect/platform-bun": {
@@ -573,11 +578,23 @@
       "worker": "./src/core/globals/Storage.ts",
       "import": "./dist/core/node/globals/Storage.mjs"
     },
+    "./core/internal/constants": {
+      "types": "./dist/core/node/internal/constants.d.mts",
+      "bun": "./src/core/internal/constants.ts",
+      "worker": "./src/core/internal/constants.ts",
+      "import": "./dist/core/node/internal/constants.mjs"
+    },
     "./core/internal/internal-worker": {
       "types": "./dist/core/node/internal/internal-worker.d.mts",
       "bun": "./src/core/internal/internal-worker.ts",
       "worker": "./src/core/internal/internal-worker.ts",
       "import": "./dist/core/node/internal/internal-worker.mjs"
+    },
+    "./core/internal/Port": {
+      "types": "./dist/core/node/internal/Port.d.mts",
+      "bun": "./src/core/internal/Port.ts",
+      "worker": "./src/core/internal/Port.ts",
+      "import": "./dist/core/node/internal/Port.mjs"
     },
     "./core/platform-proxy": {
       "types": "./dist/core/node/platform-proxy/index.d.mts",
@@ -770,7 +787,7 @@
   "inlinedDependencies": {
     "capnp-es": "0.0.14",
     "capnweb": "0.8.0",
-    "effect": "4.0.0-beta.102",
+    "effect": "catalog:effect",
     "http-cache-semantics": "4.2.0",
     "postal-mime": "2.7.5"
   }

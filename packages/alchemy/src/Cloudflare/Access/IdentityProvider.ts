@@ -525,18 +525,15 @@ export type IdentityProvider = Resource<
  * By default the IdP is created at the account level (the modern Zero
  * Trust organization scope); pass `zoneId` to scope it to a single zone
  * (legacy zone-level Access). Moving between scopes replaces the IdP.
- * @resource
- * @product Access
- * @category Cloudflare One (Zero Trust)
- * @section Creating an Identity Provider
- * @example One-time PIN (no external dependencies)
+ * ### Creating an Identity Provider
+ * **Example:** One-time PIN (no external dependencies)
  * ```typescript
  * const otp = yield* Cloudflare.Access.IdentityProvider("Pin", {
  *   type: "onetimepin",
  * });
  * ```
  *
- * @example Generic OIDC provider
+ * **Example:** Generic OIDC provider
  * ```typescript
  * const oidc = yield* Cloudflare.Access.IdentityProvider("Sso", {
  *   type: "oidc",
@@ -551,7 +548,7 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
- * @example Microsoft Entra ID (Azure AD)
+ * **Example:** Microsoft Entra ID (Azure AD)
  * ```typescript
  * const entra = yield* Cloudflare.Access.IdentityProvider("Entra", {
  *   type: "azureAD",
@@ -564,7 +561,7 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
- * @example Zone-scoped IdP (legacy zone-level Access)
+ * **Example:** Zone-scoped IdP (legacy zone-level Access)
  * ```typescript
  * const zoneIdp = yield* Cloudflare.Access.IdentityProvider("ZoneSso", {
  *   zoneId: zone.zoneId,
@@ -576,8 +573,8 @@ export type IdentityProvider = Resource<
  * });
  * ```
  *
- * @section Restricting an Application to an IdP
- * @example Allow only this IdP on an Access application
+ * ### Restricting an Application to an IdP
+ * **Example:** Allow only this IdP on an Access application
  * ```typescript
  * yield* Cloudflare.Access.Application("Admin", {
  *   domain: "admin.example.com",
@@ -586,6 +583,10 @@ export type IdentityProvider = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/cloudflare-one/identity/idp-integration/
+ *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  */
 export const IdentityProvider = Resource<IdentityProvider>(TypeId);
 
