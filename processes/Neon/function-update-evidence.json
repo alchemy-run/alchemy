@@ -1,0 +1,460 @@
+{
+  "date": "2026-09-18",
+  "transport": "neonctl@2.45.0",
+  "region": "aws-us-east-2",
+  "projectId": "morning-king-38511533",
+  "branchId": "br-floral-silence-b5qa86au",
+  "result": "Version assertion failed after cleanup: active deployment 2 still served artifact-a/environment-a.",
+  "counts": [
+    {
+      "slug": "probecold",
+      "version": "artifact-a",
+      "responses": 7
+    },
+    {
+      "slug": "probecold",
+      "version": "artifact-b",
+      "responses": 9
+    },
+    {
+      "slug": "probewarm",
+      "version": "artifact-a",
+      "responses": 16
+    }
+  ],
+  "deployments": [
+    {
+      "slug": "probewarm",
+      "functionId": "probewarm",
+      "current": 1,
+      "active": 1,
+      "status": "completed",
+      "url": "https://br-floral-silence-b5qa86au-probewarm.compute.c-7.us-east-2.aws.neon.tech/",
+      "created": "2026-09-18T08:53:18.856329Z",
+      "transport": "neonctl@2.45.0"
+    },
+    {
+      "slug": "probecold",
+      "functionId": "probecold",
+      "current": 1,
+      "active": 1,
+      "status": "completed",
+      "url": "https://br-floral-silence-b5qa86au-probecold.compute.c-7.us-east-2.aws.neon.tech/",
+      "created": "2026-09-18T08:53:22.467489Z",
+      "transport": "neonctl@2.45.0"
+    },
+    {
+      "slug": "probewarm",
+      "functionId": "probewarm",
+      "current": 2,
+      "active": 2,
+      "status": "completed",
+      "url": "https://br-floral-silence-b5qa86au-probewarm.compute.c-7.us-east-2.aws.neon.tech/",
+      "created": "2026-09-18T08:53:25.680265Z",
+      "transport": "neonctl@2.45.0"
+    },
+    {
+      "slug": "probecold",
+      "functionId": "probecold",
+      "current": 2,
+      "active": 2,
+      "status": "completed",
+      "url": "https://br-floral-silence-b5qa86au-probecold.compute.c-7.us-east-2.aws.neon.tech/",
+      "created": "2026-09-18T08:53:28.858215Z",
+      "transport": "neonctl@2.45.0"
+    }
+  ],
+  "selectedInvocations": [
+    {
+      "phase": "warmup",
+      "slug": "probewarm",
+      "round": 2,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:21 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 1,
+        "now": 1789721601551,
+        "nonce": "warmup-probewarm-2-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "warmup",
+      "slug": "probewarm",
+      "round": 0,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:21 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 2,
+        "now": 1789721601597,
+        "nonce": "warmup-probewarm-0-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "warmup",
+      "slug": "probewarm",
+      "round": 1,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:21 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c10308bd-d184-4a01-97bb-4b4a1f868025",
+        "boot": 1789721601833,
+        "requests": 1,
+        "now": 1789721601604,
+        "nonce": "warmup-probewarm-1-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "warmup",
+      "slug": "probewarm",
+      "round": 3,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:21 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "92e67a91-2a69-4515-a695-d520f6b57726",
+        "boot": 1789721601833,
+        "requests": 1,
+        "now": 1789721601604,
+        "nonce": "warmup-probewarm-3-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 0,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:31 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 3,
+        "now": 1789721611271,
+        "nonce": "after-update-probewarm-0-POST",
+        "method": "POST",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 0,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:31 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c10308bd-d184-4a01-97bb-4b4a1f868025",
+        "boot": 1789721601833,
+        "requests": 2,
+        "now": 1789721611272,
+        "nonce": "after-update-probewarm-0-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 0,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:31 GMT",
+        "x-probe-version": "artifact-b"
+      },
+      "body": {
+        "version": "artifact-b",
+        "instance": "7e1f87f8-21bd-44c9-9612-80032e772b13",
+        "boot": 1789721609114,
+        "requests": 1,
+        "now": 1789721611538,
+        "nonce": "after-update-probecold-0-GET",
+        "method": "GET",
+        "environment": "environment-b",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 0,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:31 GMT",
+        "x-probe-version": "artifact-b"
+      },
+      "body": {
+        "version": "artifact-b",
+        "instance": "ff10c383-544a-439f-9b91-3ab9cad6b92a",
+        "boot": 1789721611992,
+        "requests": 1,
+        "now": 1789721611598,
+        "nonce": "after-update-probecold-0-POST",
+        "method": "POST",
+        "environment": "environment-b",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 1,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:36 GMT",
+        "x-probe-version": "artifact-b"
+      },
+      "body": {
+        "version": "artifact-b",
+        "instance": "7e1f87f8-21bd-44c9-9612-80032e772b13",
+        "boot": 1789721609114,
+        "requests": 2,
+        "now": 1789721616674,
+        "nonce": "after-update-probecold-1-GET",
+        "method": "GET",
+        "environment": "environment-b",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 1,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:36 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 4,
+        "now": 1789721616674,
+        "nonce": "after-update-probewarm-1-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 1,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:36 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c10308bd-d184-4a01-97bb-4b4a1f868025",
+        "boot": 1789721601833,
+        "requests": 3,
+        "now": 1789721616676,
+        "nonce": "after-update-probewarm-1-POST",
+        "method": "POST",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 1,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:53:36 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "ea6dde74-19c6-49c1-9ad6-a4bd51f2d032",
+        "boot": 1789721602878,
+        "requests": 1,
+        "now": 1789721616682,
+        "nonce": "after-update-probecold-1-POST",
+        "method": "POST",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 7,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:54:07 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 12,
+        "now": 1789721647165,
+        "nonce": "after-update-probewarm-7-POST",
+        "method": "POST",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probewarm",
+      "round": 7,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:54:07 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "c416c65d-b895-4ff4-ab99-cc3943aa072f",
+        "boot": 1789721599025,
+        "requests": 13,
+        "now": 1789721647168,
+        "nonce": "after-update-probewarm-7-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 7,
+      "method": "POST",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:54:07 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "ea6dde74-19c6-49c1-9ad6-a4bd51f2d032",
+        "boot": 1789721602878,
+        "requests": 6,
+        "now": 1789721647168,
+        "nonce": "after-update-probecold-7-POST",
+        "method": "POST",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    },
+    {
+      "phase": "after-update",
+      "slug": "probecold",
+      "round": 7,
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "date": "Fri, 18 Sep 2026 08:54:07 GMT",
+        "x-probe-version": "artifact-a"
+      },
+      "body": {
+        "version": "artifact-a",
+        "instance": "cb84e56a-d6af-4df4-b5fc-82553c7a34ad",
+        "boot": 1789721647006,
+        "requests": 1,
+        "now": 1789721647225,
+        "nonce": "after-update-probecold-7-GET",
+        "method": "GET",
+        "environment": "environment-a",
+        "node": "24.16.0",
+        "pid": 95
+      }
+    }
+  ],
+  "selection": "All four warmup responses and post-update rounds 0, 1, and 7. Counts summarize all eight post-update rounds.",
+  "cleanup": [
+    {
+      "projectId": "morning-king-38511533",
+      "absent": true
+    }
+  ]
+}
