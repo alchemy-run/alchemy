@@ -396,11 +396,14 @@ const shouldReplace = (
   if (!recurringEqual(news.recurring, output.recurring)) return true;
   // Stripe accepts `tax_behavior` only while it is still `unspecified`.
   // Once it is `inclusive` or `exclusive` a different value needs a new
-  // price, so treat that transition as a replacement.
+  // price, so treat that transition as a replacement. A price stored
+  // before this attribute existed carries no value, which is the same
+  // situation as `unspecified` and must not force a replacement.
+  const previousTaxBehavior = output.taxBehavior ?? "unspecified";
   if (
     news.taxBehavior !== undefined &&
-    news.taxBehavior !== output.taxBehavior &&
-    output.taxBehavior !== "unspecified"
+    news.taxBehavior !== previousTaxBehavior &&
+    previousTaxBehavior !== "unspecified"
   ) {
     return true;
   }

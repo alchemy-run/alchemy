@@ -249,7 +249,9 @@ test.provider(
       expect(created.taxBehavior).toEqual("unspecified");
 
       // `unspecified` is the one transition Stripe accepts as an update,
-      // so the price keeps its id.
+      // so the price keeps its id. This is also the shape of adding
+      // `taxBehavior` to a price that was deployed before the attribute
+      // existed, where nothing is stored for it.
       const specified = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Stripe.Price("TaxBehaviorPrice", {
