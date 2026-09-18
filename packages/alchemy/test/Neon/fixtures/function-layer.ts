@@ -1,5 +1,6 @@
 import { Function } from "@/Neon/Function";
-import { InvokeFunction, InvokeFunctionBinding } from "@/Neon/InvokeFunction";
+import { InvokeFunction } from "@/Neon/InvokeFunction";
+import { InvokeFunctionHttp } from "@/Neon/InvokeFunctionHttp";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Constructor from "./function-constructor.ts";
@@ -20,5 +21,5 @@ export default LayerFunction.make(
         return HttpServerResponse.text(`layer:${text}`);
       }),
     };
-  }).pipe(Effect.provide(InvokeFunctionBinding)),
+  }).pipe(Effect.provide(InvokeFunctionHttp)),
 );

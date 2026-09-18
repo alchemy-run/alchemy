@@ -58,7 +58,7 @@ export default Neon.Function(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Neon.ReadWriteBucketBinding, Neon.ReadObjectBinding),
+      Layer.mergeAll(Neon.ReadWriteBucketHttp, Neon.ReadObjectHttp),
     ),
   ),
 );

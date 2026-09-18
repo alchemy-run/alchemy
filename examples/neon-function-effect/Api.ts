@@ -36,6 +36,6 @@ export default class Api extends Neon.Function<Api>()(
       }),
     };
   }).pipe(
-    Effect.provide(Layer.mergeAll(Neon.ConnectBinding, Neon.ReadBucketBinding)),
+    Effect.provide(Layer.mergeAll(Neon.ConnectHttp, Neon.ReadBucketHttp)),
   ),
 ) {}

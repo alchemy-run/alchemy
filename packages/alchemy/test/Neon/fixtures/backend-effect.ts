@@ -14,9 +14,9 @@ import {
 } from "./backend-resources.ts";
 
 const bindings = Layer.mergeAll(
-  Neon.ConnectAuthBinding,
-  Neon.ConnectDataApiBinding,
-  Neon.ConnectAIGatewayBinding,
+  Neon.ConnectAuthHttp,
+  Neon.ConnectDataApiHttp,
+  Neon.ConnectAIGatewayHttp,
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 export default class BackendEffect extends Neon.Function<BackendEffect>()(

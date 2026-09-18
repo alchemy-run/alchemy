@@ -1,16 +1,12 @@
 import { Bucket } from "@/Neon/Bucket";
-import {
-  BucketEventSource,
-  BucketEventSourceBinding,
-} from "@/Neon/BucketEventSource";
-import {
-  CronEventSource,
-  CronEventSourceBinding,
-} from "@/Neon/CronEventSource";
+import { BucketEventSource } from "@/Neon/BucketEventSource";
+import { BucketEventSourceHttp } from "@/Neon/BucketEventSourceHttp";
+import { CronEventSource } from "@/Neon/CronEventSource";
+import { CronEventSourceHttp } from "@/Neon/CronEventSourceHttp";
 import { Function } from "@/Neon/Function";
 import { Project } from "@/Neon/Project";
 import { WriteBucket } from "@/Neon/WriteBucket";
-import { WriteBucketBinding } from "@/Neon/WriteBucketBinding";
+import { WriteBucketHttp } from "@/Neon/WriteBucketHttp";
 import { Postgres } from "@/SQL/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -77,9 +73,9 @@ export default class EventFunction extends Function<EventFunction>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        WriteBucketBinding,
-        CronEventSourceBinding,
-        BucketEventSourceBinding,
+        WriteBucketHttp,
+        CronEventSourceHttp,
+        BucketEventSourceHttp,
       ),
     ),
   ),

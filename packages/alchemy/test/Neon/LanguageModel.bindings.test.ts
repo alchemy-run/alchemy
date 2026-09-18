@@ -2,7 +2,6 @@ import type { AIGateway } from "@/Neon/AIGateway.ts";
 import { backendEnvKey } from "@/Neon/BackendConnection.ts";
 import {
   ConnectAIGateway,
-  ConnectAIGatewayBinding,
   ConnectAIGatewayHttp,
 } from "@/Neon/ConnectAIGateway.ts";
 import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
@@ -13,6 +12,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 
 const gateway: AIGateway = {
   FQN: "Gateway",
@@ -24,17 +24,52 @@ const gateway: AIGateway = {
   credential: undefined,
 };
 
-for (const mode of ["native", "http"] as const) {
+const runtimeMode = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const previous = yield* Effect.sync(() => {
+      const previous = globalThis.__ALCHEMY_RUNTIME__;
+      globalThis.__ALCHEMY_RUNTIME__ = true;
+      return previous;
+    });
+    return yield* effect.pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          globalThis.__ALCHEMY_RUNTIME__ = previous;
+        }),
+      ),
+    );
+  });
+
+const services = (injected: boolean, environment?: Record<string, string>) =>
+  ConnectAIGatewayHttp.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        RuntimeContext.phantom,
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]:
+              "https://branch.invalid",
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]:
+              "managed-scoped-token",
+            [backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED")]: injected
+              ? "yes"
+              : "no",
+          }),
+        ),
+        environment
+          ? Layer.succeed(FunctionEnvironment, environment)
+          : Layer.empty,
+      ),
+    ),
+  );
+
+for (const mode of ["injected", "managed", "managed-with-injection"] as const) {
   test.effect(
-    `${mode} binding exposes a runtime model layer and only the scoped redacted token`,
+    `HTTP AI client uses ${mode} credentials without account keys`,
     () =>
-      Effect.gen(function* () {
-        const previous = yield* Effect.sync(() => {
-          const previous = globalThis.__ALCHEMY_RUNTIME__;
-          globalThis.__ALCHEMY_RUNTIME__ = true;
-          return previous;
-        });
-        yield* Effect.gen(function* () {
+      runtimeMode(
+        Effect.gen(function* () {
           const client = yield* ConnectAIGateway(gateway);
           expect(Layer.isLayer(client.model({ model: "gpt-5-mini" }))).toBe(
             true,
@@ -49,35 +84,65 @@ for (const mode of ["native", "http"] as const) {
           const token = yield* client.token;
           expect(Redacted.isRedacted(token)).toBe(true);
           expect(Redacted.value(token)).toBe(
-            mode === "native" ? "native-scoped-token" : "http-scoped-token",
+            mode === "injected"
+              ? "injected-scoped-token"
+              : "managed-scoped-token",
           );
           expect(JSON.stringify(token)).not.toContain("scoped-token");
         }).pipe(
           Effect.provide(
-            mode === "native" ? ConnectAIGatewayBinding : ConnectAIGatewayHttp,
+            services(
+              mode === "injected",
+              mode === "managed"
+                ? undefined
+                : {
+                    NEON_AI_GATEWAY_BASE_URL: "https://branch.invalid/",
+                    NEON_AI_GATEWAY_TOKEN: "injected-scoped-token",
+                    NEON_API_KEY: "DO_NOT_BIND_ACCOUNT_KEY",
+                  },
+            ),
           ),
-          Effect.provideService(FunctionEnvironment, {
-            NEON_AI_GATEWAY_BASE_URL: "https://branch.invalid",
-            NEON_AI_GATEWAY_TOKEN: "native-scoped-token",
-            NEON_API_KEY: "DO_NOT_BIND_ACCOUNT_KEY",
-          }),
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromUnknown({
-              [backendEnvKey(gateway.FQN, "AI_GATEWAY_URL")]:
-                "https://branch.invalid",
-              [backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN")]:
-                "http-scoped-token",
-            }),
-          ),
-          Effect.provide(RuntimeContext.phantom),
-          Effect.ensuring(
-            Effect.sync(() => {
-              globalThis.__ALCHEMY_RUNTIME__ = previous;
-            }),
-          ),
-        );
-      }),
+        ),
+      ),
+    { exclusive: true },
+  );
+}
+
+for (const [name, environment, message] of [
+  [
+    "wrong branch",
+    {
+      NEON_AI_GATEWAY_BASE_URL: "https://other.invalid",
+      NEON_AI_GATEWAY_TOKEN: "other-token",
+    },
+    "does not match",
+  ],
+  [
+    "missing grant",
+    {
+      NEON_AI_GATEWAY_BASE_URL: "https://branch.invalid",
+      NEON_API_KEY: "DO_NOT_BIND_ACCOUNT_KEY",
+    },
+    "did not inject",
+  ],
+  ["missing environment", undefined, "does not match"],
+] as const) {
+  test.effect(
+    `HTTP AI client rejects ${name} instead of falling back to another token`,
+    () =>
+      runtimeMode(
+        Effect.gen(function* () {
+          const client = yield* ConnectAIGateway(gateway);
+          const result = yield* Effect.result(Effect.sandbox(client.token));
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(String(result.failure)).toContain(message);
+            expect(String(result.failure)).not.toContain(
+              "DO_NOT_BIND_ACCOUNT_KEY",
+            );
+          }
+        }).pipe(Effect.provide(services(true, environment))),
+      ),
     { exclusive: true },
   );
 }

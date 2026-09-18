@@ -33,9 +33,9 @@ This client can inspect uploaded metadata and generate signed PUT and GET URLs w
 
 ```diff lang="typescript"
 +}).pipe(Effect.provide(Layer.mergeAll(
-+  Neon.ConnectBinding,
-+  Neon.ReadWriteBucketBinding,
-+  Neon.BucketEventSourceBinding,
++  Neon.ConnectHttp,
++  Neon.ReadWriteBucketHttp,
++  Neon.BucketEventSourceHttp,
 +))),
 ```
 

@@ -60,7 +60,7 @@ export const ConnectDataApi = Binding.Service<ConnectDataApi>(
 );
 
 /** Data API transport, with the host and HTTP client encapsulated at initialization. */
-export const ConnectDataApiBinding = Layer.effect(
+export const ConnectDataApiHttp = Layer.effect(
   ConnectDataApi,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
@@ -116,6 +116,3 @@ export const ConnectDataApiBinding = Layer.effect(
     });
   }),
 );
-
-/** HTTP-host variant; the caller's token is forwarded unchanged on every host. */
-export const ConnectDataApiHttp = ConnectDataApiBinding;

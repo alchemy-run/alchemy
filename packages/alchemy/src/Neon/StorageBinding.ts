@@ -6,16 +6,15 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AlchemyContext } from "../AlchemyContext.ts";
+import { defaultProviderMode } from "../ProviderMode.ts";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
-import { isResource } from "../Resource.ts";
 import {
   CurrentRuntimeContext,
   type RuntimeContext,
 } from "../RuntimeContext.ts";
 import { bindBackendEnvironment } from "./BackendConnection.ts";
-import type { BranchScope } from "./BranchScope.ts";
+import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import type { Bucket } from "./Bucket.ts";
 import { Credential, validateCredential } from "./Credential.ts";
 import { FunctionEnvironment } from "./FunctionEnvironment.ts";
@@ -43,25 +42,8 @@ export type RuntimeStorageMethods<K extends keyof StorageClient> = {
   >;
 };
 
-const scopeIdentity = (scope: BranchScope) => {
-  const source = scope.branch ?? scope.project;
-  if (isResource(source)) return `${source.Type}:${source.FQN}`;
-  if (Effect.isEffect(source) || Output.isOutput(source)) return undefined;
-  if (
-    typeof scope.branch?.projectId === "string" &&
-    typeof scope.branch.branchId === "string"
-  )
-    return `branch:${scope.branch.projectId}:${scope.branch.branchId}`;
-  if (typeof scope.project?.projectId === "string")
-    return `project:${scope.project.projectId}`;
-  return undefined;
-};
-
 /** Internal host wiring shared by read/write and object-bound capabilities. */
-export const makeStorageBinding = (
-  mode: "binding" | "http",
-  scope: "storage:read" | "storage:write",
-) =>
+export const makeStorageBinding = (scope: "storage:read" | "storage:write") =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const runtime = yield* CurrentRuntimeContext;
@@ -72,7 +54,6 @@ export const makeStorageBinding = (
         }),
       );
     const environment = yield* Effect.serviceOption(FunctionEnvironment);
-    const alchemy = yield* Effect.serviceOption(AlchemyContext);
     const createCredential = yield* Credential;
     return Effect.fn(function* (
       bucket: Bucket,
@@ -103,22 +84,10 @@ export const makeStorageBinding = (
         secretAccessKey: `${prefix}_SECRET_ACCESS_KEY`,
       };
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const context = Option.getOrUndefined(alchemy);
-        const hostScope =
-          host.Type === "Neon.Function"
-            ? (host.Props as BranchScope)
-            : undefined;
+        const mode = host.Mode ?? (yield* defaultProviderMode);
         const injected =
-          mode === "binding" &&
           !options.credential &&
-          hostScope !== undefined &&
-          (!context?.dev || host.Mode === "live") &&
-          ((hostScope.branch !== undefined &&
-            hostScope.branch === bucket.Props.branch) ||
-            (hostScope.project !== undefined &&
-              hostScope.project === bucket.Props.project) ||
-            (scopeIdentity(hostScope) !== undefined &&
-              scopeIdentity(hostScope) === scopeIdentity(bucket.Props)));
+          usesInjectedCredentials(host, bucket.Props, mode);
         const env: Record<
           string,
           Output.Output<string | Redacted.Redacted<string>>

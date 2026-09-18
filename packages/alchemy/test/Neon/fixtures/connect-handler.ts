@@ -1,4 +1,4 @@
-import { Connect, ConnectBinding, connectEnvKeys } from "@/Neon/Connect";
+import { Connect, ConnectHttp, connectEnvKeys } from "@/Neon/Connect";
 import { CurrentRuntimeContext } from "@/RuntimeContext";
 import { Postgres } from "@/SQL/Postgres";
 import * as Effect from "effect/Effect";
@@ -51,4 +51,4 @@ export const connectHandler = Effect.gen(function* () {
       Effect.orDie,
     ),
   };
-}).pipe(Effect.provide(ConnectBinding));
+}).pipe(Effect.provide(ConnectHttp));

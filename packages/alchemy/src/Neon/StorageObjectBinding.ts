@@ -22,9 +22,9 @@ import {
 const isBucket = (value: unknown): value is Bucket =>
   isResource(value) && value.Type === "Neon.Bucket";
 
-export const makeReadObjectBinding = (mode: "binding" | "http") =>
+export const makeReadObjectHttp = () =>
   Effect.gen(function* () {
-    const bind = yield* makeStorageBinding(mode, "storage:read");
+    const bind = yield* makeStorageBinding("storage:read");
     const runtime = yield* CurrentRuntimeContext;
     if (!runtime)
       return yield* Effect.die(
@@ -96,9 +96,9 @@ export const makeReadObjectBinding = (mode: "binding" | "http") =>
     });
   });
 
-export const makeWriteObjectBinding = (mode: "binding" | "http") =>
+export const makeWriteObjectHttp = () =>
   Effect.gen(function* () {
-    const bind = yield* makeStorageBinding(mode, "storage:write");
+    const bind = yield* makeStorageBinding("storage:write");
     const runtime = yield* CurrentRuntimeContext;
     if (!runtime)
       return yield* Effect.die(

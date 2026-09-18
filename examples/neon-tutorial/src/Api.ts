@@ -167,9 +167,9 @@ export default class Api extends Neon.Function<Api>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Neon.ConnectBinding,
-        Neon.ReadWriteBucketBinding,
-        Neon.BucketEventSourceBinding,
+        Neon.ConnectHttp,
+        Neon.ReadWriteBucketHttp,
+        Neon.BucketEventSourceHttp,
       ),
     ),
   ),

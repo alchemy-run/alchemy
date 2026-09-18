@@ -41,18 +41,18 @@ Each binding/layer pair is separately accepted, not a single contract counted tw
 
 | Contract | Required implementations | Critical evidence |
 | --- | --- | --- |
-| Connect | ConnectBinding | Injected/explicit redacted pooled/direct connection; real SQL on Function/Worker/Lambda |
-| ReadBucket | ReadBucketBinding / ReadBucketHttp | Injected versus managed storage:read; external write denied; list/head/get/presign |
-| WriteBucket | WriteBucketBinding / WriteBucketHttp | storage:write includes reads; multipart/batch/presigned upload/CORS |
-| ReadWriteBucket | ReadWriteBucketBinding / ReadWriteBucketHttp | One composed client/credential, no duplicate grants |
-| ReadObject<T> | ReadObjectBinding / ReadObjectHttp | get T or undefined; schema/decode error; reuse bucket scope |
-| WriteObject<T> | WriteObjectBinding / WriteObjectHttp | Compile-safe value writes/raw fidelity; no per-key policy fiction |
-| InvokeFunction | InvokeFunctionBinding | Public HTTP streaming/cancellation; caller auth explicit, no admin token |
-| ConnectAuth | ConnectAuthBinding | Public base/JWKS URLs; real verified JWT/auth flow |
-| ConnectDataApi | ConnectDataApiBinding | Forward per-request end-user token; RLS/tenant isolation |
-| ConnectAIGateway | ConnectAIGatewayBinding / ConnectAIGatewayHttp | Native/model SDK configuration, correct dialect route, scoped token/credit gating |
-| CronEventSource | CronEventSourceBinding | [Trigger spec](triggers-domains.md); HTTP dispatch + same FunctionTrigger lifecycle; real bounded cron delivery separate |
-| BucketEventSource | BucketEventSourceBinding | [Trigger spec](triggers-domains.md); real upload delivery, prefix filter, spoof rejection and idempotency |
+| Connect | ConnectHttp | Injected/explicit redacted pooled/direct connection; real SQL on Function/Worker/Lambda |
+| ReadBucket | ReadBucketHttp | Injected versus managed storage:read; external write denied; list/head/get/presign |
+| WriteBucket | WriteBucketHttp | storage:write includes reads; multipart/batch/presigned upload/CORS |
+| ReadWriteBucket | ReadWriteBucketHttp | One composed client/credential, no duplicate grants |
+| ReadObject<T> | ReadObjectHttp | get T or undefined; schema/decode error; reuse bucket scope |
+| WriteObject<T> | WriteObjectHttp | Compile-safe value writes/raw fidelity; no per-key policy fiction |
+| InvokeFunction | InvokeFunctionHttp | Public HTTP streaming/cancellation; caller auth explicit, no admin token |
+| ConnectAuth | ConnectAuthHttp | Public base/JWKS URLs; real verified JWT/auth flow |
+| ConnectDataApi | ConnectDataApiHttp | Forward per-request end-user token; RLS/tenant isolation |
+| ConnectAIGateway | ConnectAIGatewayHttp | Native/model SDK configuration, correct dialect route, scoped token/credit gating |
+| CronEventSource | CronEventSourceHttp | [Trigger spec](triggers-domains.md); HTTP dispatch + same FunctionTrigger lifecycle; real bounded cron delivery separate |
+| BucketEventSource | BucketEventSourceHttp | [Trigger spec](triggers-domains.md); real upload delivery, prefix filter, spoof rejection and idempotency |
 
 ## Thirteen Website acceptance items
 

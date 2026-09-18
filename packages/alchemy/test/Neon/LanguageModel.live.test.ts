@@ -16,7 +16,7 @@ const Text = Schema.Struct({ text: Schema.String });
 test.provider.skipIf(
   process.env.NEON_TEST_AI_PAID !== "1" || !process.env.NEON_TEST_AI_MODEL,
 )(
-  "native and HTTP bound Effect AI generate, stream, call tools and decode objects",
+  "injected and explicit credentials use the same HTTP Effect AI client for generation, streaming, tools and objects",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();

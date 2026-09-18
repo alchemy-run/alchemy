@@ -1,15 +1,15 @@
 import * as Layer from "effect/Layer";
 import { ReadObject } from "./ReadObject.ts";
 import { storageHttpLayer } from "./StorageBinding.ts";
-import { makeReadObjectBinding } from "./StorageObjectBinding.ts";
+import { makeReadObjectHttp } from "./StorageObjectBinding.ts";
 
 /**
- * Typed object reads using a managed storage:read branch credential.
+ * Typed object reads using injected or automatically scoped credentials.
  *
  * @layer
  * @provides ReadObject
  */
 export const ReadObjectHttp = Layer.effect(
   ReadObject,
-  makeReadObjectBinding("http"),
+  makeReadObjectHttp(),
 ).pipe(Layer.provide(storageHttpLayer));

@@ -44,5 +44,5 @@ export default class EffectApi extends Neon.Function<EffectApi>()(
         });
       }),
     };
-  }).pipe(Effect.provide(Neon.ConnectAuthBinding)),
+  }).pipe(Effect.provide(Neon.ConnectAuthHttp)),
 ) {}

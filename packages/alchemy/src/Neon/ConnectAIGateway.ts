@@ -2,10 +2,12 @@ import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Option from "effect/Option";
 import type { LanguageModel } from "effect/unstable/ai/LanguageModel";
 import * as Binding from "../Binding.ts";
 import * as Output from "../Output.ts";
-import { isResource } from "../Resource.ts";
+import { defaultProviderMode } from "../ProviderMode.ts";
+import { scopeIdentity, usesInjectedCredentials } from "./CredentialScope.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { AIGateway } from "./AIGateway.ts";
 import {
@@ -40,10 +42,10 @@ export interface ConnectAIGatewayClient {
 
 /**
  * Obtain an Effect AI LanguageModel or SDK-compatible endpoint and credential
- * effects; no model calls happen during deployment. Native bindings use Neon's
- * injected branch grant. That grant is available to the whole Function process,
- * so a binding is not a
- * Function-level permission sandbox. HTTP bindings use tracked branch credentials.
+ * effects; no model calls happen during deployment. ConnectAIGatewayHttp uses
+ * the same-branch Function's injected grant, otherwise a tracked branch credential.
+ * An explicit credential overrides injection. The injected grant remains available
+ * to the whole Function process; a binding is not a permission sandbox.
  *
  * ### Configure a model client
  * **Example:** OpenAI-compatible chat configuration
@@ -107,123 +109,98 @@ const client = (
   };
 };
 
-/** Native Neon Function binding. Cross-branch access must use ConnectAIGatewayHttp. */
-export const ConnectAIGatewayBinding = Layer.effect(
+/** HTTP client with injected same-branch or managed scoped credentials. */
+export const ConnectAIGatewayHttp = Layer.effect(
   ConnectAIGateway,
   Effect.gen(function* () {
-    const environment = yield* FunctionEnvironment;
-    const connectAIGatewayHttp = yield* makeConnectAIGatewayHttp;
+    const environment = yield* Effect.serviceOption(FunctionEnvironment);
+    const createCredential = yield* Credential;
     return Effect.fn(function* (gateway: AIGateway) {
-      if (gateway.credential) return yield* connectAIGatewayHttp(gateway);
-      const key = backendEnvKey(gateway.FQN, "AI_GATEWAY_URL");
-      yield* bindBackendEnvironment(`Neon.ConnectAIGateway:${gateway.FQN}`, {
-        [key]: gateway.baseUrl,
-      });
-      const baseUrl = backendString(key).pipe(
-        Effect.flatMap((expected) => {
-          const injected = environment.NEON_AI_GATEWAY_BASE_URL?.replace(
-            /\/$/,
-            "",
+      const urlKey = backendEnvKey(gateway.FQN, "AI_GATEWAY_URL");
+      const tokenKey = backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN");
+      const injectedKey = backendEnvKey(gateway.FQN, "AI_GATEWAY_INJECTED");
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const host = yield* Binding.Host;
+        if (!host)
+          return yield* Effect.die(
+            new Error(
+              "ConnectAIGatewayHttp requires a Function or Worker host",
+            ),
           );
-          return injected === expected.replace(/\/$/, "")
-            ? Effect.succeed(injected)
-            : Effect.die(
-                new Error(
-                  "AI Gateway injection does not match the target branch; use ConnectAIGatewayHttp for cross-branch or local access",
-                ),
-              );
-        }),
-      );
-      const token = baseUrl.pipe(
-        Effect.flatMap(() =>
-          environment.NEON_AI_GATEWAY_TOKEN
-            ? Effect.succeed(Redacted.make(environment.NEON_AI_GATEWAY_TOKEN))
-            : Effect.die(
-                new Error("Neon did not inject an AI Gateway credential"),
-              ),
-        ),
-      );
+        const mode = host.Mode ?? (yield* defaultProviderMode);
+        const injected =
+          !gateway.credential &&
+          usesInjectedCredentials(host, gateway.Props, mode);
+        const env: Record<
+          string,
+          Output.Output<string | Redacted.Redacted<string>>
+        > = {
+          [urlKey]: gateway.baseUrl,
+          [injectedKey]: Output.literal(injected ? "yes" : "no"),
+        };
+        if (!injected) {
+          const scopeId = scopeIdentity(gateway.Props) ?? gateway.FQN;
+          const credentialId = yield* Effect.sync(() =>
+            createHash("sha256")
+              .update(`${host.FQN}:${scopeId}:ai_gateway:invoke`)
+              .digest("hex")
+              .slice(0, 24),
+          );
+          const credential =
+            gateway.credential ??
+            (yield* createCredential(`AIGateway${credentialId}`, {
+              ...(gateway.Props.branch !== undefined
+                ? { branch: gateway.Props.branch }
+                : { project: gateway.Props.project }),
+              scopes: ["ai_gateway:invoke"],
+            }));
+          env[tokenKey] = Output.all(
+            credential.projectId,
+            credential.branchId,
+            credential.scopes,
+            gateway.projectId,
+            gateway.branchId,
+            credential.apiToken,
+          ).pipe(
+            Output.mapEffect(
+              ([
+                projectId,
+                branchId,
+                scopes,
+                targetProjectId,
+                targetBranchId,
+                token,
+              ]) =>
+                validateCredential(
+                  { projectId, branchId, scopes },
+                  { projectId: targetProjectId, branchId: targetBranchId },
+                  "ai_gateway:invoke",
+                ).pipe(Effect.as(token), Effect.orDie),
+            ),
+          );
+        }
+        yield* bindBackendEnvironment(
+          `Neon.ConnectAIGateway:${gateway.FQN}`,
+          env,
+        );
+      }
+      const baseUrl = backendString(urlKey);
+      const token = Effect.gen(function* () {
+        if ((yield* backendString(injectedKey)) !== "yes")
+          return yield* backendSecret(tokenKey);
+        const expected = (yield* baseUrl).replace(/\/$/, "");
+        const env = Option.getOrUndefined(environment);
+        if (env?.NEON_AI_GATEWAY_BASE_URL?.replace(/\/$/, "") !== expected)
+          return yield* Effect.die(
+            new Error("AI Gateway injection does not match the target branch"),
+          );
+        if (!env.NEON_AI_GATEWAY_TOKEN)
+          return yield* Effect.die(
+            new Error("Neon did not inject an AI Gateway credential"),
+          );
+        return Redacted.make(env.NEON_AI_GATEWAY_TOKEN);
+      });
       return client(baseUrl, token);
     });
   }),
-);
-
-/**
- * HTTP/secret-binding implementation for Workers, Lambda, local Functions and
- * cross-branch use. Owns a deterministic ai_gateway:invoke credential unless the
- * construct supplies one. The deployment API key is never bound to the host.
- */
-const makeConnectAIGatewayHttp = Effect.gen(function* () {
-  const createCredential = yield* Credential;
-  return Effect.fn(function* (gateway: AIGateway) {
-    const urlKey = backendEnvKey(gateway.FQN, "AI_GATEWAY_URL");
-    const tokenKey = backendEnvKey(gateway.FQN, "AI_GATEWAY_TOKEN");
-    if (!globalThis.__ALCHEMY_RUNTIME__) {
-      const host = yield* Binding.Host;
-      if (!host)
-        return yield* Effect.die(
-          new Error("ConnectAIGatewayHttp requires a Function or Worker host"),
-        );
-      const scope = gateway.Props.branch ?? gateway.Props.project;
-      const scopeId = isResource(scope)
-        ? `${scope.Type}:${scope.FQN}`
-        : gateway.Props.branch &&
-            typeof gateway.Props.branch.projectId === "string" &&
-            typeof gateway.Props.branch.branchId === "string"
-          ? `branch:${gateway.Props.branch.projectId}:${gateway.Props.branch.branchId}`
-          : gateway.Props.project &&
-              typeof gateway.Props.project.projectId === "string"
-            ? `project:${gateway.Props.project.projectId}`
-            : gateway.FQN;
-      const credentialId = yield* Effect.sync(() =>
-        createHash("sha256")
-          .update(`${host.FQN}:${scopeId}:ai_gateway:invoke`)
-          .digest("hex")
-          .slice(0, 24),
-      );
-      const credential =
-        gateway.credential ??
-        (yield* createCredential(`AIGateway${credentialId}`, {
-          ...(gateway.Props.branch !== undefined
-            ? { branch: gateway.Props.branch }
-            : { project: gateway.Props.project }),
-          scopes: ["ai_gateway:invoke"],
-        }));
-      const token = Output.all(
-        credential.projectId,
-        credential.branchId,
-        credential.scopes,
-        gateway.projectId,
-        gateway.branchId,
-        credential.apiToken,
-      ).pipe(
-        Output.mapEffect(
-          ([
-            projectId,
-            branchId,
-            scopes,
-            targetProjectId,
-            targetBranchId,
-            token,
-          ]) =>
-            validateCredential(
-              { projectId, branchId, scopes },
-              { projectId: targetProjectId, branchId: targetBranchId },
-              "ai_gateway:invoke",
-            ).pipe(Effect.as(token), Effect.orDie),
-        ),
-      );
-      yield* bindBackendEnvironment(`Neon.ConnectAIGateway:${gateway.FQN}`, {
-        [urlKey]: gateway.baseUrl,
-        [tokenKey]: token,
-      });
-    }
-    return client(backendString(urlKey), backendSecret(tokenKey));
-  });
-});
-
-/** HTTP transport with tracked, branch-scoped credentials instead of platform injection. */
-export const ConnectAIGatewayHttp = Layer.effect(
-  ConnectAIGateway,
-  makeConnectAIGatewayHttp,
 );

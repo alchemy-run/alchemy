@@ -33,7 +33,7 @@ Inherited triggers retain parent's trigger_id but are disabled with next_run_at 
 
 ## CronEventSource and BucketEventSource bindings
 
-Files: `packages/alchemy/src/Neon/{CronEventSource,CronEventSourceBinding,BucketEventSource,BucketEventSourceBinding}.ts`, shared internal typed HTTP dispatcher, suite-owned fixtures under `test/Neon/fixtures/`.
+Files: `packages/alchemy/src/Neon/{CronEventSource,CronEventSourceHttp,BucketEventSource,BucketEventSourceHttp}.ts`, shared internal typed HTTP dispatcher, suite-owned fixtures under `test/Neon/fixtures/`.
 
 `CronEventSource(name, { cron }, Effect handler)` and `BucketEventSource(bucket, { name, prefix? }, Effect handler)` register an event listener and a trigger declaration on the Function host during init. Use the callable Binding.Service convention and `host.bind` only at deploy time; runtime handler requires RuntimeContext and fresh request scope. Provide Binding layers on the Function once. Function host bindings materialize the same FunctionTrigger lifecycle after Function readiness, avoiding a Function↔Trigger resource cycle. No direct binding-specific trigger CRUD or separate competing ownership.
 

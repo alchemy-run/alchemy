@@ -1,10 +1,10 @@
 import { Function as NeonFunction } from "@/Neon/Function";
 import { ReadWriteBucket } from "@/Neon/ReadWriteBucket";
-import { ReadWriteBucketBinding } from "@/Neon/ReadWriteBucketBinding";
+import { ReadWriteBucketHttp } from "@/Neon/ReadWriteBucketHttp";
 import { ReadObject } from "@/Neon/ReadObject";
-import { ReadObjectBinding } from "@/Neon/ReadObjectBinding";
+import { ReadObjectHttp } from "@/Neon/ReadObjectHttp";
 import { WriteObject } from "@/Neon/WriteObject";
-import { WriteObjectBinding } from "@/Neon/WriteObjectBinding";
+import { WriteObjectHttp } from "@/Neon/WriteObjectHttp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -81,11 +81,7 @@ export default class StorageFunction extends NeonFunction<StorageFunction>()(
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(
-        ReadWriteBucketBinding,
-        ReadObjectBinding,
-        WriteObjectBinding,
-      ),
+      Layer.mergeAll(ReadWriteBucketHttp, ReadObjectHttp, WriteObjectHttp),
     ),
   ),
 ) {}

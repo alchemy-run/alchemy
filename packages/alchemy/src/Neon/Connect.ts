@@ -54,7 +54,7 @@ export interface ConnectClient {
  *   return { fetch: Effect.gen(function* () {
  *     return yield* HttpServerResponse.json(yield* sql`SELECT 1 AS value`);
  *   }) };
- * }).pipe(Effect.provide(Neon.ConnectBinding));
+ * }).pipe(Effect.provide(Neon.ConnectHttp));
  * ```
  *
  * ### Native applications
@@ -157,7 +157,7 @@ const injectedScope = (
 };
 
 /** Host-independent implementation using Platform's common environment channel. */
-export const ConnectBinding = Layer.effect(
+export const ConnectHttp = Layer.effect(
   Connect,
   Effect.gen(function* () {
     const context = yield* CurrentRuntimeContext;

@@ -1,18 +1,34 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { WriteBucket } from "./WriteBucket.ts";
-import { makeWriteBucketClient } from "./WriteBucketBinding.ts";
+import { WriteBucket, type WriteBucketClient } from "./WriteBucket.ts";
 import { makeStorageBinding, storageHttpLayer } from "./StorageBinding.ts";
 
+export const makeWriteBucketClient = (
+  client: Effect.Success<
+    ReturnType<Effect.Success<ReturnType<typeof makeStorageBinding>>>
+  >,
+): WriteBucketClient => ({
+  put: client.put,
+  delete: client.delete,
+  deleteMany: client.deleteMany,
+  createMultipartUpload: client.createMultipartUpload,
+  uploadPart: client.uploadPart,
+  completeMultipartUpload: client.completeMultipartUpload,
+  abortMultipartUpload: client.abortMultipartUpload,
+  listMultipartUploads: client.listMultipartUploads,
+  listParts: client.listParts,
+  presignPut: (key, options) => client.presign(key, "PUT", options),
+});
+
 /**
- * Managed storage:read and storage:write credentials on supported runtime hosts.
+ * Use injected same-branch credentials, otherwise manage explicit read/write scopes.
  *
  * @layer
  * @provides WriteBucket
  */
 export const WriteBucketHttp = Layer.effect(
   WriteBucket,
-  makeStorageBinding("http", "storage:write").pipe(
+  makeStorageBinding("storage:write").pipe(
     Effect.map((bind) =>
       Effect.fn(function* (...args: Parameters<typeof bind>) {
         return makeWriteBucketClient(yield* bind(...args));

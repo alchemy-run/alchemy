@@ -39,6 +39,17 @@ No real governance mutation or entitlement probe was performed: no designated fi
 
 All fixtures need the corresponding Neon authorization/entitlement. Invitations remain out of scope because the public API has no corresponding revoke lifecycle. These additions do not resolve the pre-existing Function, AI, Website or historical cleanup acceptance blockers below.
 
+## HTTP-only implementation layers
+
+Neon's 12 public runtime implementation layers now use only `*Http`, without `*Binding` aliases. Storage and AI Gateway reuse injected credentials for a known same-branch live Function, otherwise manage scoped credentials; explicit credentials override injection. The low-level `FunctionTrigger` remains available, while Effect handlers use `BucketEventSource` / `CronEventSource` with their HTTP layers.
+
+- Full workspace typecheck, JSDoc validation, API-reference regeneration and website `docs:check` passed.
+- **46 focused regressions** passed across credential selection/public exports, AI clients, typed objects, event decoding and Function bridge behavior.
+- **12 deployment/integration tests** passed across live Neon Functions, real upload and cron delivery, trigger lifecycle, Cloudflare Workers, AWS Lambda and RPC-backed local Functions. These were separate scoped runs, not a complete provider acceptance round.
+- The first external-host run passed three Worker/local tests but failed two Lambda tests because AWS SSO had expired. After successful `aws sso login`, both Lambda cases passed, including ordinary destruction of the interrupted stacks and their replacement test deployments. No ownership or state bypass was used.
+- Browser verification traversed **90 documentation routes at each desktop/mobile size**, exercised 10 Setup-to-guide flows, 58 internal-link/back flows and two code-copy checks, and reported no errors. Removed Binding reference routes are absent from navigation; event-source and invocation contracts link to their HTTP implementation pages.
+- Paid AI inference was not rerun. The existing entitlement, full-runtime, Website-matrix and historical cleanup blockers below remain open; these tests do not establish an account-wide zero-leak result.
+
 ## Focused live verification
 
 These are separate completed runs, not a complete combined acceptance suite.

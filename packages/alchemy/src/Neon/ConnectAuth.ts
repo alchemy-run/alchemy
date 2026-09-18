@@ -38,7 +38,7 @@ export interface ConnectAuth extends Binding.Service<
 export const ConnectAuth = Binding.Service<ConnectAuth>("Neon.ConnectAuth");
 
 /** Bind public Auth URLs on Neon Functions, Workers, Lambda and other env hosts. */
-export const ConnectAuthBinding = Layer.succeed(
+export const ConnectAuthHttp = Layer.succeed(
   ConnectAuth,
   Effect.fn(function* (auth: Auth) {
     const baseUrl = backendEnvKey(auth.FQN, "AUTH_URL");
@@ -53,6 +53,3 @@ export const ConnectAuthBinding = Layer.succeed(
     } satisfies ConnectAuthClient;
   }),
 );
-
-/** HTTP-host variant; managed Auth uses the same public HTTPS endpoints on every host. */
-export const ConnectAuthHttp = ConnectAuthBinding;

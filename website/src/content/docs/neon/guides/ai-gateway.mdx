@@ -70,11 +70,12 @@ Inside a Function's initialization Effect:
 const ai = yield* Neon.ConnectAIGateway(gateway);
 ```
 
-Provide `Neon.ConnectAIGatewayBinding` on that application for a same-branch
-production Neon Function. Use `Neon.ConnectAIGatewayHttp` instead for a Worker,
-Lambda, local Function, or cross-branch caller. The HTTP implementation manages a
-tracked `ai_gateway:invoke` branch credential unless one is supplied. The
-deployment management key is never the inference credential.
+Provide `Neon.ConnectAIGatewayHttp` on the application. It uses the injected
+credential for a same-branch production Neon Function and manages a tracked
+`ai_gateway:invoke` credential for a Worker, Lambda, local Function, or cross-branch
+caller. An explicit credential on `Neon.AIGateway` overrides automatic injection.
+Every path uses HTTP; Neon does not expose a Cloudflare-style native gateway
+binding. The deployment management key is never the inference credential.
 
 ## Verify one small request
 

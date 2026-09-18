@@ -66,6 +66,9 @@ export interface FunctionTrigger extends Resource<
 
 /**
  * Deliver scheduled or object-created events as HTTP POSTs to a Function.
+ * For Effect handlers, prefer BucketEventSource or CronEventSource: they create
+ * this resource and register its handler route together. Use FunctionTrigger
+ * directly for an existing native HTTP handler.
  * Check the edge-attested header and validate the payload using
  * `decodeFunctionTriggerEvent`. Invocation IDs support application idempotency;
  * Alchemy does not promise exactly-once delivery or undocumented retries.

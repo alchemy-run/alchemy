@@ -31,9 +31,9 @@ export default class Events extends Neon.Function<Events>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Neon.ConnectBinding,
-        Neon.CronEventSourceBinding,
-        Neon.BucketEventSourceBinding,
+        Neon.ConnectHttp,
+        Neon.CronEventSourceHttp,
+        Neon.BucketEventSourceHttp,
       ),
     ),
   ),

@@ -12,6 +12,17 @@ export const languageModelBranch = Effect.gen(function* () {
 export const languageModelGateway = Effect.gen(function* () {
   const branch = yield* languageModelBranch;
   return yield* Neon.AIGateway("LanguageModelGateway", {
-    branch: { projectId: branch.projectId, branchId: branch.branchId },
+    branch,
+  });
+});
+export const languageModelManagedGateway = Effect.gen(function* () {
+  const branch = yield* languageModelBranch;
+  const credential = yield* Neon.Credential("LanguageModelCredential", {
+    branch,
+    scopes: ["ai_gateway:invoke"],
+  });
+  return yield* Neon.AIGateway("LanguageModelManagedGateway", {
+    branch,
+    credential,
   });
 });

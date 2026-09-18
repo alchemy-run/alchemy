@@ -142,5 +142,5 @@ export default class EffectApi extends Neon.Function<EffectApi>()(
     const ai = yield* Neon.ConnectAIGateway(gateway);
     const environment = yield* Neon.FunctionEnvironment;
     return { fetch: chat(ai, environment) };
-  }).pipe(Effect.provide(Neon.ConnectAIGatewayBinding)),
+  }).pipe(Effect.provide(Neon.ConnectAIGatewayHttp)),
 ) {}

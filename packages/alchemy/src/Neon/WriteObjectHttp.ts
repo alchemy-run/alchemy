@@ -1,15 +1,15 @@
 import * as Layer from "effect/Layer";
 import { WriteObject } from "./WriteObject.ts";
 import { storageHttpLayer } from "./StorageBinding.ts";
-import { makeWriteObjectBinding } from "./StorageObjectBinding.ts";
+import { makeWriteObjectHttp } from "./StorageObjectBinding.ts";
 
 /**
- * Typed object writes using a managed read/write branch credential.
+ * Typed object writes using injected or automatically scoped credentials.
  *
  * @layer
  * @provides WriteObject
  */
 export const WriteObjectHttp = Layer.effect(
   WriteObject,
-  makeWriteObjectBinding("http"),
+  makeWriteObjectHttp(),
 ).pipe(Layer.provide(storageHttpLayer));
