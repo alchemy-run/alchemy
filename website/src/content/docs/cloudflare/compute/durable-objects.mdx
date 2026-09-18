@@ -582,19 +582,14 @@ not interrupt an invocation that is already running.
 
 ## Cancel a pending callback
 
-Expose cancellation as another method on the object:
+Cancel from existing application logic; no additional RPC method is needed:
 
-```diff lang="typescript"
-return {
-  save: /* unchanged */,
-+  cancelSnapshot: (revision: string) => onSnapshot.cancel(revision),
-};
+```typescript
+yield* onSnapshot.cancel(revision);
 ```
 
-Cancelling an absent ID succeeds. It removes pending work without
-interrupting an already-running handler, and it can join the same storage
-transaction as an application write. Scheduling and cancellation failures
-use `Alchemy.CallbackError`.
+Cancellation joins an active storage transaction, succeeds for absent IDs,
+and does not interrupt a running handler. Failures use `Alchemy.CallbackError`.
 
 ## Retry failed callbacks
 
