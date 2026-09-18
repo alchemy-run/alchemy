@@ -487,7 +487,6 @@
     "@octokit/webhooks": "catalog:",
     "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "aws4fetch": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "libsodium-wrappers": "catalog:",
@@ -495,7 +494,6 @@
     "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:",
-    "undici": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
