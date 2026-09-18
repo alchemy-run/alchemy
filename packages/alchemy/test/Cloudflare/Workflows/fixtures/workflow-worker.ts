@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import LocalTestWorkflow, {
@@ -72,6 +73,32 @@ export default class WorkflowLocalWorker extends Cloudflare.Worker<WorkflowLocal
           const instance = yield* workflow.get(instanceId);
           const status = yield* instance.status();
           return yield* HttpServerResponse.json(status);
+        }
+
+        if (request.url.startsWith("/workflow/events/")) {
+          const instance = yield* workflow.get(
+            request.url.split("/workflow/events/")[1]!,
+          );
+          const events = yield* instance
+            .subscribe({ filter: ["workflow_queued"] })
+            .pipe(Stream.take(1), Stream.runCollect);
+          return yield* HttpServerResponse.json(events);
+        }
+        if (request.url.startsWith("/workflow/delete/")) {
+          const instance = yield* workflow.get(
+            request.url.split("/workflow/delete/")[1]!,
+          );
+          yield* instance.delete();
+          // A second deletion should report the now-missing instance as an error.
+          return yield* HttpServerResponse.json(
+            yield* workflow.deleteBatch([instance.id]),
+          );
+        }
+        if (request.url.startsWith("/workflow/delete-batch/")) {
+          const id = request.url.split("/workflow/delete-batch/")[1]!;
+          return yield* HttpServerResponse.json(
+            yield* workflow.deleteBatch([id, "missing-instance"]),
+          );
         }
 
         return HttpServerResponse.text("ok");
