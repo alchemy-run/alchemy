@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@alchemy.run/sigil':
-      specifier: 0.0.0-alpha.11
-      version: 0.0.0-alpha.11
+      specifier: 0.1.0-alpha.1
+      version: 0.1.0-alpha.1
     '@astrojs/check':
       specifier: 0.9.10
       version: 0.9.10
@@ -4932,7 +4932,7 @@ importers:
         version: link:../node-utils
       '@alchemy.run/sigil':
         specifier: 'catalog:'
-        version: 0.0.0-alpha.11(@types/react@19.3.0)(react-devtools-core@7.0.1)
+        version: 0.1.0-alpha.1(@types/react@19.3.0)(react-devtools-core@7.0.1)
       '@distilled.cloud/acme':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/acme
@@ -5207,9 +5207,6 @@ importers:
       svelte:
         specifier: 'catalog:'
         version: 5.56.8
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(@volar/typescript@2.4.28(typescript@7.0.2))(tsx@4.23.12)(typescript@7.0.2)(vue-tsc@3.3.9(typescript@7.0.2))
       tsx:
         specifier: 'catalog:'
         version: 4.23.12
@@ -7982,8 +7979,8 @@ importers:
 
 packages:
 
-  '@alchemy.run/sigil@0.0.0-alpha.11':
-    resolution: {integrity: sha512-JzaCBeRu9kY0qWC8JKkrierstImkrK77dl+7l0RvCTR+7uhOJECL2VxmjhJ1blea+mmbYUVob8OXOH5r8Mqfpw==}
+  '@alchemy.run/sigil@0.1.0-alpha.1':
+    resolution: {integrity: sha512-RtHELG2w+GluVewRsuKm66idtPzC+4STptMr/61X1Vy5uBkDzcCzjzV8G6jUa4iBv6Il0hHV7UL6wvv//9nD/Q==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -18858,12 +18855,6 @@ packages:
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
-  react-reconciler@0.34.0:
-    resolution: {integrity: sha512-eVibvB1fc9j5Qf1KRkiM3GzRPBdjg2P6G6QV2f3P6Eb3OGMxRBhdg2rrUwjbV5JrQaJj8nOa8uajmmJA5tJWjQ==}
-    engines: {node: '>=0.10.0'}
-    peerDependencies:
-      react: ^19.3.0
-
   react-refresh@0.14.2:
     resolution: {integrity: sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA==}
     engines: {node: '>=0.10.0'}
@@ -21096,11 +21087,7 @@ packages:
 
 snapshots:
 
-  '@alchemy.run/sigil@0.0.0-alpha.11(@types/react@19.3.0)(react-devtools-core@7.0.1)':
-    dependencies:
-      react: 19.3.0
-      react-reconciler: 0.34.0(react@19.3.0)
-      scheduler: 0.28.0
+  '@alchemy.run/sigil@0.1.0-alpha.1(@types/react@19.3.0)(react-devtools-core@7.0.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react-devtools-core: 7.0.1
@@ -35044,11 +35031,6 @@ snapshots:
       react: 19.3.0
 
   react-is@17.0.2: {}
-
-  react-reconciler@0.34.0(react@19.3.0):
-    dependencies:
-      react: 19.3.0
-      scheduler: 0.28.0
 
   react-refresh@0.14.2: {}
 

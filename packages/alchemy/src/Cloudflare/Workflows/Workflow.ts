@@ -4,7 +4,8 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../../Diff.ts";
+import { OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
+import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
@@ -20,7 +21,7 @@ import {
   WorkerEnvironment,
   type WorkerServices,
 } from "../Workers/Worker.ts";
-import { makeWorkflowName } from "./WorkflowName.ts";
+import { generateWorkflowName } from "./WorkflowName.ts";
 import {
   type WorkflowEvent,
   WorkflowStep,
@@ -284,6 +285,14 @@ export interface WorkflowLimits {
  */
 export interface WorkflowRefProps {
   /**
+   * Account-global Workflow name. Adopting an existing Workflow requires
+   * `--adopt`; unused names do not. If omitted, Alchemy preserves the deployed
+   * name or derives a stage-scoped default from the hosting Worker and class.
+   * Changing this name replaces the Workflow. Fixed names must be unique to
+   * each independently managed stack and stage.
+   */
+  workflowName?: string;
+  /**
    * Name of the exported `WorkflowEntrypoint` class.
    *
    * @default name
@@ -322,6 +331,14 @@ export interface WorkflowRefProps {
  */
 export interface WorkflowProps {
   /**
+   * Account-global Workflow name. Adopting an existing Workflow requires
+   * `--adopt`; unused names do not. If omitted, Alchemy preserves the deployed
+   * name or derives a stage-scoped default from the hosting Worker and class.
+   * Changing this name replaces the Workflow. Fixed names must be unique to
+   * each independently managed stack and stage.
+   */
+  workflowName?: string;
+  /**
    * Limits applied to the workflow.
    */
   limits?: WorkflowLimits;
@@ -347,7 +364,7 @@ export interface WorkflowProps {
 export interface WorkflowLike<Params = unknown> {
   kind: TypeId;
   name: string;
-  /** @internal phantom */
+  /** Account-global Workflow name, when explicitly configured. */
   workflowName?: string;
   /** @internal phantom */
   className?: string;
@@ -555,6 +572,24 @@ export class WorkflowScope extends Context.Service<
  * ) {}
  * ```
  *
+ * **Example:** Preserving an existing Workflow name
+ *
+ * An existing Workflow has no ownership marker, so the first deployment must
+ * opt in with `--adopt`. Keep fixed names unique per independently managed
+ * stack and stage; unlike the default, they are not stage-scoped by Alchemy.
+ *
+ * ```typescript
+ * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
+ *   "MyWorkflow",
+ *   { workflowName: "my-existing-workflow" },
+ *   Effect.gen(function* () {
+ *     return Effect.fn(function* (input: { name: string }) {
+ *       return { received: input.name };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
  * **Example:** Setting a step limit
  * ```typescript
  * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
@@ -751,6 +786,7 @@ export class WorkflowScope extends Context.Service<
  *   env: {
  *     MY_WORKFLOW: Cloudflare.Workflow<{ value: string }>("MyWorkflow", {
  *       className: "MyWorkflow",
+ *       workflowName: "my-existing-workflow",
  *     }),
  *   },
  * });
@@ -805,6 +841,9 @@ export class WorkflowScope extends Context.Service<
  *     MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
  *       className: "MyWorkflow",
  *       scriptName: host.workerName,
+ *       // Repeat the host's explicit or preserved physical name when it
+ *       // does not use Alchemy's current generated default.
+ *       workflowName: "my-existing-workflow",
  *     }),
  *   },
  * });
@@ -875,6 +914,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     return {
       kind: TypeId,
       name,
+      workflowName: refProps?.workflowName,
       className: refProps?.className ?? name,
       scriptName: refProps?.scriptName,
       limits: refProps?.limits,
@@ -886,16 +926,18 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     Effect.gen(function* () {
       const worker = yield* Worker;
 
-      // Workflow names are account-global, so derive the physical name from
-      // the already-unique host Worker name and exported class name.
-      const workflowName = makeWorkflowName(worker.workerName, name);
       const workflow = yield* WorkflowResource(name, {
-        workflowName,
+        workflowName: props?.workflowName,
         className: name,
-        scriptName: worker.workerName,
+        scriptName:
+          props?.workflowName === undefined ? worker.workerName : undefined,
         limits: props?.limits,
         schedules: props?.schedules,
       });
+      // Keep named identities resolvable for the engine's cold-adoption probe.
+      if (props?.workflowName !== undefined) {
+        yield* workflow.bind`${worker}`({ scriptName: worker.workerName });
+      }
 
       // Add the workflow binding to the Worker metadata
       yield* worker.bind`${name}`({
@@ -903,7 +945,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           {
             type: "workflow",
             name,
-            workflowName: workflow.workflowName,
+            workflowName: props?.workflowName ?? workflow.workflowName,
             className: name,
           },
         ],
@@ -976,11 +1018,15 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
 
 export interface WorkflowResourceProps {
   /**
-   * Account-global Workflow name.
+   * Account-global Workflow name. If omitted, a deterministic name is derived
+   * from `scriptName` and `className`.
+   *
+   * @internal
    */
-  workflowName: string;
+  workflowName?: string;
   className: string;
-  scriptName: string;
+  /** Hosting Worker script, supplied here or through a host binding. */
+  scriptName?: string;
   limits?: WorkflowLimits;
   /**
    * Cron expressions that create a new Workflow instance on each match.
@@ -1006,12 +1052,18 @@ const WorkflowResourceTypeId = "Cloudflare.Workflow";
 export interface WorkflowResource extends Resource<
   typeof WorkflowResourceTypeId,
   WorkflowResourceProps,
-  WorkflowResourceAttrs
+  WorkflowResourceAttrs,
+  { scriptName: string }
 > {}
 
 export const WorkflowResource = Resource<WorkflowResource>(
   WorkflowResourceTypeId,
 );
+
+const getWorkflowOrUndefined = (accountId: string, workflowName: string) =>
+  workflows
+    .getWorkflow({ accountId, workflowName })
+    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)));
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {
@@ -1048,51 +1100,130 @@ export const ProviderLive = () =>
           ),
         );
       }),
+    diff: Effect.fn(function* ({
+      id,
+      olds,
+      news,
+      output,
+      oldBindings,
+      newBindings,
+    }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.accountId !== undefined && output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+
+      // The host script may be unresolved even when the physical name is known.
+      const explicitName =
+        "workflowName" in news && isResolved(news.workflowName)
+          ? news.workflowName
+          : undefined;
+      const oldName =
+        output?.workflowName ??
+        olds.workflowName ??
+        (olds.scriptName === undefined
+          ? undefined
+          : yield* generateWorkflowName(olds.scriptName, olds.className));
+      // Omitting the name preserves the deployed identity, including legacy names.
+      if (explicitName !== undefined && explicitName !== oldName) {
+        const existing = yield* getWorkflowOrUndefined(accountId, explicitName);
+        if (existing !== undefined) {
+          return yield* new OwnedBySomeoneElse({
+            message: `Cannot replace Workflow '${oldName}' with occupied name '${explicitName}'. Choose an unused name.`,
+            resourceType: WorkflowResourceTypeId,
+            logicalId: id,
+            physicalName: explicitName,
+          });
+        }
+        return { action: "replace" } as const;
+      }
+      if (
+        !isResolved(newBindings) ||
+        havePropsChanged(oldBindings, newBindings)
+      ) {
+        return { action: "update" } as const;
+      }
+    }),
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const workflowName = output?.workflowName ?? olds?.workflowName;
+      const workflowName =
+        output?.workflowName ??
+        olds?.workflowName ??
+        (olds?.scriptName === undefined
+          ? undefined
+          : yield* generateWorkflowName(olds.scriptName, olds.className));
       if (workflowName === undefined) return undefined;
 
       const acct = output?.accountId ?? accountId;
-      return yield* workflows
-        .getWorkflow({
-          accountId: acct,
-          workflowName,
-        })
-        .pipe(
-          Effect.map((workflow) => ({
-            workflowId: workflow.id,
-            workflowName: workflow.name,
-            className: workflow.className,
-            scriptName: workflow.scriptName,
-            accountId: acct,
-            schedules: fromObservedSchedules(workflow.schedules),
-          })),
-          Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)),
-        );
+      const workflow = yield* getWorkflowOrUndefined(acct, workflowName);
+      if (workflow === undefined) return undefined;
+      const attrs = {
+        workflowId: workflow.id,
+        workflowName: workflow.name,
+        className: workflow.className,
+        scriptName: workflow.scriptName,
+        accountId: acct,
+        schedules: fromObservedSchedules(workflow.schedules),
+      };
+      // Explicit names carry no ownership marker; cold reads require adoption.
+      return output === undefined && olds?.workflowName !== undefined
+        ? Unowned(attrs)
+        : attrs;
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      const scriptName = yield* resolveWorkflowScriptName(news, bindings);
       const acct = output?.accountId ?? accountId;
-      const workflowName = news.workflowName;
+      const workflowName =
+        news.workflowName ??
+        output?.workflowName ??
+        (yield* generateWorkflowName(scriptName, news.className));
+
+      if (
+        news.workflowName !== undefined &&
+        output?.workflowName !== undefined &&
+        news.workflowName !== output.workflowName
+      ) {
+        return yield* Effect.fail(
+          new Error(
+            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+          ),
+        );
+      }
+
+      const existing = yield* getWorkflowOrUndefined(acct, workflowName);
+      // Re-check occupied names at apply time; replacement is not adoption.
+      if (
+        news.workflowName !== undefined &&
+        output === undefined &&
+        existing !== undefined
+      ) {
+        return yield* new OwnedBySomeoneElse({
+          message:
+            `Cannot create Workflow '${workflowName}': an existing ` +
+            "Workflow has that account-global name. Choose an unused name, " +
+            "or adopt it into a resource with no prior state by re-planning " +
+            "with --adopt.",
+          resourceType: WorkflowResourceTypeId,
+          logicalId: id,
+          physicalName: workflowName,
+        });
+      }
+      // PUT clears omitted schedules; preserve observed state unless explicitly set.
+      const schedules =
+        news.schedules ?? fromObservedSchedules(existing?.schedules);
+
       yield* Effect.logInfo(`Cloudflare Workflow reconcile: ${workflowName}`);
       // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
       // payloads converge to the same state and a missing workflow is
-      // created on the spot. There is no separate observe step needed
-      // — the API is naturally reconciler-shaped.
+      // created on the spot.
       const result = yield* workflows.putWorkflow({
         accountId: acct,
         workflowName,
         className: news.className,
-        scriptName: news.scriptName,
+        scriptName,
         limits: news.limits,
-        // Same as `limits`: only send when the prop is set. `[]` clears
-        // attached schedules; omitting the field leaves Cloudflare's
-        // current list untouched.
-        schedules:
-          news.schedules === undefined
-            ? undefined
-            : toPutSchedules(news.schedules),
+        schedules: toPutSchedules(schedules),
       });
       return {
         workflowId: result.id,
@@ -1100,7 +1231,7 @@ export const ProviderLive = () =>
         className: result.className,
         scriptName: result.scriptName,
         accountId: acct,
-        schedules: news.schedules ?? output?.schedules ?? [],
+        schedules,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -1126,12 +1257,25 @@ export const ProviderLive = () =>
 export const ProviderLocal = () =>
   Provider.succeed(WorkflowResource, {
     stables: ["accountId"],
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ news, output, oldBindings, newBindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!output?.workflowId) return { action: "update" } as const;
-      if (!isResolved(news)) return undefined;
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
+      }
+      // The host script may be unresolved even when the physical name is known.
+      const explicitName =
+        "workflowName" in news && isResolved(news.workflowName)
+          ? news.workflowName
+          : undefined;
+      if (explicitName !== undefined && explicitName !== output.workflowName) {
+        return { action: "replace" } as const;
+      }
+      if (
+        !isResolved(newBindings) ||
+        havePropsChanged(oldBindings, newBindings)
+      ) {
+        return { action: "update" } as const;
       }
       // Fall through to the engine's default prop diff (className /
       // scriptName changes update in place).
@@ -1140,13 +1284,28 @@ export const ProviderLocal = () =>
       // Purely virtual — the persisted state row is the source of truth.
       return output ?? undefined;
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news, output, bindings }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      const scriptName = yield* resolveWorkflowScriptName(news, bindings);
+      if (
+        news.workflowName !== undefined &&
+        output?.workflowName !== undefined &&
+        news.workflowName !== output.workflowName
+      ) {
+        return yield* Effect.fail(
+          new Error(
+            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+          ),
+        );
+      }
       return {
         workflowId: output?.workflowId ?? generateLocalId(),
-        workflowName: news.workflowName,
+        workflowName:
+          news.workflowName ??
+          output?.workflowName ??
+          (yield* generateWorkflowName(scriptName, news.className)),
         className: news.className,
-        scriptName: news.scriptName,
+        scriptName,
         accountId: output?.accountId ?? accountId,
         schedules: news.schedules ?? output?.schedules ?? [],
       };
@@ -1167,6 +1326,25 @@ export const WorkflowProvider = () =>
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const resolveWorkflowScriptName = (
+  props: WorkflowResourceProps,
+  bindings: ReadonlyArray<{ data: { scriptName: string } }>,
+) => {
+  const scripts = [
+    ...new Set(
+      [
+        props.scriptName,
+        ...bindings.map((binding) => binding.data.scriptName),
+      ].filter((name) => name !== undefined),
+    ),
+  ];
+  return scripts.length === 1
+    ? Effect.succeed(scripts[0]!)
+    : Effect.fail(
+        new Error("Workflow requires exactly one hosting Worker script"),
+      );
+};
 
 const toPutSchedules = (
   schedules: string[],

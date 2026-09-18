@@ -349,7 +349,7 @@ const alchemyLayer = Layer.mergeAll(
 /**
  * Build the per-test runtime and return a self-contained Effect.
  *
- * Mirrors {@link "../bin/alchemy.ts"} composition: ConfigProvider via
+ * Mirrors {@link "../bin/alchemy.js"} composition: ConfigProvider via
  * `loadConfigProvider` + `withProfileOverride`, an empty `AuthProviders`
  * registry that the user's `providers` layer populates, the platform layers,
  * and the configured state store. Adapters wrap this into runner-specific

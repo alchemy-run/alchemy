@@ -1,4 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as State from "@/State/State";
@@ -7,9 +6,13 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import ExplicitNameWorkflowWorker, {
+  EXPLICIT_WORKFLOW_NAME,
+} from "./fixtures/explicit-name-worker.ts";
 import WorkflowLocalWorker from "./fixtures/workflow-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -224,22 +227,19 @@ const readWorkflowRow = (stack: Test.ScratchStack) =>
       });
       if (
         row &&
-        (row as { resourceType?: string }).resourceType ===
-          "Cloudflare.Workflow"
+        !State.isActionState(row) &&
+        row.resourceType === "Cloudflare.Workflow"
       ) {
-        return row as {
-          resourceType: string;
-          providerMode?: "live" | "local";
-          attr?: {
-            workflowId: string;
-            workflowName: string;
-            accountId: string;
-          };
-        };
+        return row;
       }
     }
     return undefined;
   }).pipe(Effect.provide(stack.state));
+
+const asyncWorkflowMain = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  return path.resolve(import.meta.dirname, "fixtures/async-workflow-worker.ts");
+});
 
 /**
  * Under `alchemy dev` the Workflow resource is emulated by the local provider
@@ -297,6 +297,177 @@ test.provider(
       yield* assertFailureScenarios(url);
 
       yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Exercise physical names through real workerd bindings, not just metadata.
+test.provider(
+  "async Worker binding preserves an explicit physical Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const workflowName = "existing-workflow-physical-name";
+      const main = yield* asyncWorkflowMain;
+      const deployWith = (name?: string) =>
+        stack.deploy(
+          Cloudflare.Worker("ExplicitWorkflowWorker", {
+            main,
+            env: {
+              WORKFLOW_NAME: name ?? workflowName,
+              EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+                workflowName: name,
+              }),
+            },
+          }),
+        );
+      const created = yield* deployWith(workflowName);
+      const workflowRow = yield* readWorkflowRow(stack);
+      expect(workflowRow?.providerMode).toBe("local");
+      expect(workflowRow?.attr?.workflowId).toMatch(/^dev:/);
+      expect(workflowRow?.attr?.workflowName).toBe(workflowName);
+      const instance = yield* startInstance(created.url!);
+      expect(
+        (yield* waitForTerminal(created.url!, instance)).output?.workflowName,
+      ).toBe(workflowName);
+
+      yield* deployWith();
+      const preserved = yield* readWorkflowRow(stack);
+      expect(preserved?.attr?.workflowId).toBe(workflowRow?.attr?.workflowId);
+      expect(preserved?.attr?.workflowName).toBe(workflowName);
+
+      const renamed = yield* deployWith(`${workflowName}-renamed`);
+      const replaced = yield* readWorkflowRow(stack);
+      expect(replaced?.attr?.workflowId).not.toBe(
+        workflowRow?.attr?.workflowId,
+      );
+      expect(replaced?.attr?.workflowName).toBe(`${workflowName}-renamed`);
+      const client = yield* HttpClient.HttpClient;
+      const ready = yield* client.get(`${renamed.url!}/workflow/name`).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (name) => name === `${workflowName}-renamed`,
+          times: 8,
+        }),
+      );
+      expect(ready).toBe(`${workflowName}-renamed`);
+      const renamedInstance = yield* startInstance(renamed.url!);
+      expect(
+        (yield* waitForTerminal(renamed.url!, renamedInstance)).output
+          ?.workflowName,
+      ).toBe(`${workflowName}-renamed`);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "cross-script binding runs the host's explicit Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const workflowName = "existing-cross-script-workflow";
+      const main = yield* asyncWorkflowMain;
+      const host = Cloudflare.Worker("ExplicitWorkflowHost", {
+        main,
+        env: {
+          EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+            workflowName,
+          }),
+        },
+      });
+      yield* stack.deploy(host);
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* host;
+          return yield* Cloudflare.Worker("ExplicitWorkflowConsumer", {
+            main,
+            env: {
+              EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+                scriptName: worker.workerName,
+                workflowName,
+              }),
+            },
+          });
+        }),
+      );
+      const instance = yield* startInstance(deployed.url!);
+      const status = yield* waitForTerminal(deployed.url!, instance);
+      expect(status.status).toBe("complete");
+      expect(status.output?.workflowName).toBe(workflowName);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "Effect-native Worker binding preserves an explicit physical Workflow name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(ExplicitNameWorkflowWorker);
+
+      const workflowRow = yield* readWorkflowRow(stack);
+      expect(workflowRow?.providerMode).toBe("local");
+      expect(workflowRow?.attr?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
+      const instance = yield* startInstance(deployed.url!);
+      const status = yield* waitForTerminal(deployed.url!, instance);
+      expect(status.status).toBe("complete");
+      expect(status.output?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "Alchemy.remote() preserves an explicit Workflow name and schedules",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const deployed = yield* stack.deploy(
+        ExplicitNameWorkflowWorker.pipe(Alchemy.remote()),
+      );
+      expect(deployed.url).not.toMatch(/^http:\/\/localhost/);
+
+      const row = yield* readWorkflowRow(stack);
+      expect(row?.providerMode).toBe("live");
+      expect(row?.attr?.workflowId).not.toMatch(/^dev:/);
+      const workflowName = row!.attr!.workflowName;
+      const accountId = row!.attr!.accountId;
+      const observed = yield* workflows.getWorkflow({
+        accountId,
+        workflowName,
+      });
+      expect(observed.id).toBe(row!.attr!.workflowId);
+      expect(observed.name).toBe(EXPLICIT_WORKFLOW_NAME);
+      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
+        "0 0 1 1 *",
+      ]);
+
+      const { status } = yield* runInstance(
+        deployed.url!,
+        "/workflow/start/world",
+        true,
+      );
+      expect(status).toMatchObject({ status: "complete" });
+      expect(status.error).toBeFalsy();
+      expect(status.output?.greeting).toBe("Hello, world!");
+      expect(status.output?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
+
+      yield* stack.destroy();
+      const gone = yield* workflows
+        .getWorkflow({ accountId, workflowName })
+        .pipe(
+          Effect.as(false),
+          Effect.catchTag("WorkflowNotFound", () => Effect.succeed(true)),
+        );
+      expect(gone).toBe(true);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
