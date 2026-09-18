@@ -10,7 +10,7 @@ Integration snapshot, 2026-09-17. All 38 required source contracts are present, 
 - Final focused Alchemy regression run: 97 tests across 11 files passed, including typed objects, Effect LanguageModel, Function cancellation/ZIP checks, Website artifact safety, constructor props, and provider composition.
 - AI example: 17 tests and 55 assertions passed, including native/Effect request validation, explicit inference gating, request-scoped streaming, sanitization, and cancellation.
 - Full workspace `pnpm exec tsc -b` passed after restoring declarations removed by a JavaScript-only frontend bundler invocation. The package's normal build already restores those declarations.
-- Frontend framework regressions: 111 tests across 20 files passed earlier, including actual Vite/Astro/Next builds and Fetch invocation. This is not the full live Website matrix.
+- Frontend framework regressions: 111 tests across 20 files passed earlier. After integrating current main and repairing merged dependency snapshots, all 72 core tests across nine files passed, including actual Vite/Astro/Next builds and Fetch invocation; the 97 focused Alchemy tests and workspace typecheck also passed again. This is not the full live Website matrix.
 - JSDoc validation, generated API references, and website `docs:check` passed. Documentation browser checks traversed all 19 Neon overview/tutorial/frontend routes at desktop 1440x1000 and mobile 390x844, including opening the mobile menu, following navigation links, and visiting an API reference and returning. No overflow or browser page errors were observed.
 
 ## Focused live verification
