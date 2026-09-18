@@ -142,21 +142,18 @@ automatically — no extra plumbing inside the step.
 
 ## Run scope
 
-Each run-invocation of the body gets a **fresh `Scope`**, threaded
-into every `task` step and closed when the invocation settles (the
-workflow runtime has no `waitUntil`, so it settles inline). Because
-a workflow can hibernate between steps — a `sleep`, a
-`waitForEvent` — an instance may span several run-invocations, each
-with its own scope; completed tasks replay from the journal, so
-scoped resources are only re-acquired by steps that actually
-execute.
+Each invocation has a scope for the workflow body and telemetry.
+**Every task attempt and rollback handler gets its own fresh scope.**
+Resources close before the callback completes or retries. Completed
+tasks replay from the journal without acquiring those resources again.
 
-Per-run resources like `Drizzle.Postgres` pools follow this: the
-pool opens on the first query inside a step, is reused by every
-later step in the same invocation, and closes when the invocation
-settles (the [SQL connection lifecycle](/sql/effect-sql/lifecycle)
-in workflow terms). The workflow's constructor shares the isolate-lifetime
-layer build with the hosting Worker — pure assembly, no cleanup; see
+A `Drizzle.Postgres` pool opens on the first query of an attempt and
+closes when that attempt finishes; it is not shared across steps or
+retries. See the [SQL connection lifecycle](/sql/effect-sql/lifecycle).
+
+Interrupting a task's Effect interrupts its active callback and waits
+for cleanup, without waiting through Cloudflare's native retry delays.
+The constructor remains isolate-scoped; see
 [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope).
 
 ## Schedule a Workflow
