@@ -38,6 +38,12 @@
     {
       "path": "./submodules/distilled/packages/github/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/zerossl/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
