@@ -152,9 +152,7 @@ const TimelineComment = ({
     <div className="min-w-0 flex-1 rounded-md border border-border">
       <div className="flex items-center gap-2 rounded-t-md border-b border-border/70 bg-muted/40 px-3 py-1.5 text-xs">
         <span className="font-semibold">{author}</span>
-        <span className="text-muted-foreground">
-          commented {age(when)} ago
-        </span>
+        <span className="text-muted-foreground">commented {age(when)} ago</span>
         {origin === "local" && (
           <span className="ml-auto rounded-full border border-border/60 px-1.5 py-px text-[10px] text-muted-foreground">
             org
@@ -428,8 +426,8 @@ const buildTimeline = (
           when,
           text: (
             <>
-              <b className="text-foreground">{actorOf(event)}</b> mentioned
-              this in #{source?.issue?.number}{" "}
+              <b className="text-foreground">{actorOf(event)}</b> mentioned this
+              in #{source?.issue?.number}{" "}
               <span className="text-foreground">{source?.issue?.title}</span>
             </>
           ),
@@ -452,9 +450,11 @@ const buildTimeline = (
                 ? "assigned"
                 : "requested a review from"}{" "}
               <b className="text-foreground">
-                {((event.assignee ??
-                  event.requested_reviewer) as { login?: string } | undefined)
-                  ?.login ?? "someone"}
+                {(
+                  (event.assignee ?? event.requested_reviewer) as
+                    | { login?: string }
+                    | undefined
+                )?.login ?? "someone"}
               </b>
             </>
           ),
@@ -540,9 +540,7 @@ const parseDiff = (text: string): ReadonlyArray<ParsedFile> => {
       const fallback = raw[index] ?? text;
       const meta = file as unknown as { name?: string; prevName?: string };
       const path = meta.name ?? `file-${index}`;
-      const status: GitStatusEntry["status"] = /^new file mode /m.test(
-        fallback,
-      )
+      const status: GitStatusEntry["status"] = /^new file mode /m.test(fallback)
         ? "added"
         : /^deleted file mode /m.test(fallback)
           ? "deleted"
@@ -614,10 +612,7 @@ const PullFiles = ({
           <span className="font-mono text-moss">+{totals.added}</span>{" "}
           <span className="font-mono text-red-400">−{totals.deleted}</span>
         </div>
-        <FileTree
-          model={model}
-          style={{ height: "calc(100dvh - 260px)" }}
-        />
+        <FileTree model={model} style={{ height: "calc(100dvh - 260px)" }} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {files.map((entry) => (
@@ -654,16 +649,20 @@ const ItemView = ({
   const [section, setSection] = useState<"conversation" | "files">(
     "conversation",
   );
-  const [diff, setDiff] = useState<
-    { ok: boolean; text: string } | undefined
-  >();
+  const [diff, setDiff] = useState<{ ok: boolean; text: string } | undefined>();
   const [events, setEvents] = useState<ReadonlyArray<ForgeTimelineEvent>>([]);
   const [composer, setComposer] = useState<"write" | "preview">("write");
 
   const reload = () => {
-    fetchIssue(repo, number).then(setIssue).catch(() => {});
-    fetchComments(repo, number).then(setComments).catch(() => {});
-    fetchTimeline(repo, number).then(setEvents).catch(() => {});
+    fetchIssue(repo, number)
+      .then(setIssue)
+      .catch(() => {});
+    fetchComments(repo, number)
+      .then(setComments)
+      .catch(() => {});
+    fetchTimeline(repo, number)
+      .then(setEvents)
+      .catch(() => {});
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(reload, [repo, number]);
@@ -841,7 +840,9 @@ const ItemView = ({
                 author={issue.user.login}
                 when={issue.created_at}
               >
-                <MarkdownText text={issue.body ?? "*No description provided.*"} />
+                <MarkdownText
+                  text={issue.body ?? "*No description provided.*"}
+                />
               </TimelineComment>
               {timeline.map((item) =>
                 item.kind === "comment" ? (
@@ -889,9 +890,7 @@ const ItemView = ({
                   ) : (
                     <EventRow
                       key={item.key}
-                      icon={
-                        item.state === "approved" ? CheckCircle2 : Eye
-                      }
+                      icon={item.state === "approved" ? CheckCircle2 : Eye}
                       tone={item.state === "approved" ? "open" : "muted"}
                       when={item.when}
                     >
@@ -967,32 +966,32 @@ const ItemView = ({
                       Markdown is supported
                     </span>
                     <span className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={flip}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
-                    >
-                      {issue.state === "open" ? (
-                        <>
-                          <CheckCircle2 className="size-3.5 text-purple-400" />
-                          Close {isPull ? "pull request" : "issue"}
-                        </>
-                      ) : (
-                        <>
-                          <CircleDot className="size-3.5 text-moss" />
-                          Reopen
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy || draft.trim().length === 0}
-                      onClick={submit}
-                      className="cursor-pointer rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-600 disabled:opacity-50"
-                    >
-                      Comment
-                    </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={flip}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                      >
+                        {issue.state === "open" ? (
+                          <>
+                            <CheckCircle2 className="size-3.5 text-purple-400" />
+                            Close {isPull ? "pull request" : "issue"}
+                          </>
+                        ) : (
+                          <>
+                            <CircleDot className="size-3.5 text-moss" />
+                            Reopen
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || draft.trim().length === 0}
+                        onClick={submit}
+                        className="cursor-pointer rounded-md bg-green-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-600 disabled:opacity-50"
+                      >
+                        Comment
+                      </button>
                     </span>
                   </div>
                 </div>
@@ -1075,7 +1074,9 @@ export const WorkPage = ({
   const [body, setBody] = useState("");
 
   useEffect(() => {
-    fetchRepos().then(setRepos).catch(() => {});
+    fetchRepos()
+      .then(setRepos)
+      .catch(() => {});
   }, []);
   useEffect(() => {
     if (number !== undefined) return;

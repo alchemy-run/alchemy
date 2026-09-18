@@ -59,7 +59,9 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   const [log, setLog] = useState<ReadonlyArray<CommitInfo>>([]);
 
   useEffect(() => {
-    fetchRepos().then(setRepos).catch(() => {});
+    fetchRepos()
+      .then(setRepos)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -164,7 +166,10 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
               </option>
             ))}
           </select>
-          <nav aria-label="path" className="flex min-w-0 items-center gap-1 font-mono text-xs">
+          <nav
+            aria-label="path"
+            className="flex min-w-0 items-center gap-1 font-mono text-xs"
+          >
             <button
               type="button"
               onClick={() => showCode(repo, ref)}
@@ -216,11 +221,7 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
                     key={entry.name}
                     type="button"
                     onClick={() =>
-                      showCode(
-                        repo,
-                        ref,
-                        [...crumbs, entry.name].join("/"),
-                      )
+                      showCode(repo, ref, [...crumbs, entry.name].join("/"))
                     }
                     className="flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-accent/40"
                   >

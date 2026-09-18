@@ -214,7 +214,12 @@ const syntheticPatch = (
  *  highlight; the plain head+tail window otherwise. */
 const readBody = (path: unknown, content: string) => {
   const language =
-    READ_LANGS[String(path ?? "").split(".").pop()?.toLowerCase() ?? ""];
+    READ_LANGS[
+      String(path ?? "")
+        .split(".")
+        .pop()
+        ?.toLowerCase() ?? ""
+    ];
   if (language === undefined || content.length > 60_000) {
     return <WindowedText text={content} head={20} tail={5} />;
   }
@@ -673,10 +678,7 @@ const THREAD: {
     input: { name: string },
     output: string | undefined,
   ) => ToolCallView;
-  list_workspaces: (
-    input: unknown,
-    output: string | undefined,
-  ) => ToolCallView;
+  list_workspaces: (input: unknown, output: string | undefined) => ToolCallView;
   call: (
     input: { members?: ReadonlyArray<string>; topic?: string },
     output: string | undefined,
@@ -750,8 +752,7 @@ const THREAD: {
 
   workspace: (input, output) => {
     const record = parseRecord(output);
-    const name =
-      typeof record?.name === "string" ? record.name : undefined;
+    const name = typeof record?.name === "string" ? record.name : undefined;
     return {
       icon: FolderTree,
       title:
@@ -1204,8 +1205,7 @@ const CODER: Renderers<typeof GeneralEngineer> = {
   // any other surface.
   ask: (input, output, running) => {
     const record = parseRecord(output);
-    const postId =
-      typeof record?.post === "string" ? record.post : undefined;
+    const postId = typeof record?.post === "string" ? record.post : undefined;
     return {
       icon: MessageSquare,
       title: (

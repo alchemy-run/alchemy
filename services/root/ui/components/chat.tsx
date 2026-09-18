@@ -100,11 +100,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import {
-  agentFromLocation,
-  showAgent,
-  showChannel,
-} from "@/lib/routes";
+import { agentFromLocation, showAgent, showChannel } from "@/lib/routes";
 import {
   fetchOrg,
   findTool,
@@ -583,13 +579,7 @@ const spliceActions = (
  *  chart, the agent's charter); click goes to its place (the owning
  *  profile's tab with the card selected, the group's channel, the
  *  agent's page). */
-export const SplicePill = ({
-  kind,
-  name,
-}: {
-  kind: string;
-  name: string;
-}) => {
+export const SplicePill = ({ kind, name }: { kind: string; name: string }) => {
   const spec = SPLICE_KINDS[kind] ?? SPLICE_KINDS.param!;
   const Icon = spec.icon;
   const org = useOrg();
@@ -649,9 +639,7 @@ const MarkdownAnchorLink = ({ href, children, node: _node, ...rest }: any) => {
   }
   // an agent mention (`/agents/name`) — the discord chip
   if (typeof href === "string" && href.startsWith("/agents/")) {
-    return (
-      <Mention name={decodeURIComponent(href.slice("/agents/".length))} />
-    );
+    return <Mention name={decodeURIComponent(href.slice("/agents/".length))} />;
   }
   // a message reference (`/p/p-x`) — the chip that reveals the post
   if (typeof href === "string" && href.startsWith("/p/")) {
@@ -818,7 +806,10 @@ const CollapsibleProse = ({ children }: { children: ReactNode }) => {
           className="mt-1 flex cursor-pointer items-center gap-1 rounded-md border border-border/60 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <ChevronDown
-            className={cn("size-3 transition-transform", expanded && "rotate-180")}
+            className={cn(
+              "size-3 transition-transform",
+              expanded && "rotate-180",
+            )}
           />
           {expanded ? "collapse" : "read more"}
         </button>
@@ -968,7 +959,9 @@ const InboundPill = ({
  *  chain breadcrumb says who is asking on whose behalf. */
 const parseAskHeader = (
   text: string,
-): { id: string; chain: ReadonlyArray<string>; question: string } | undefined => {
+):
+  | { id: string; chain: ReadonlyArray<string>; question: string }
+  | undefined => {
   const match = /^\[ask ([a-z0-9-]+) \| ([^\]]+)\]\n?([\s\S]*)$/.exec(
     text.trim(),
   );
@@ -1850,8 +1843,7 @@ const ChatTranscript = ({
                   // reached it) — settle it exactly as the snapshot
                   // would.
                   const burstLive =
-                    working &&
-                    message.id === messages[messages.length - 1]?.id;
+                    working && message.id === messages[messages.length - 1]?.id;
                   const cutOpen = (state: string) =>
                     !burstLive &&
                     (state === "input-available" ||
@@ -1960,255 +1952,257 @@ const ChatTranscript = ({
                             )}
                           </>
                         )}
-                      <div
-                        data-message-id={message.id}
-                        data-selected={
-                          selection.has(message.id) ? "" : undefined
-                        }
-                        data-targeted={
-                          menuIds.includes(message.id) ? "" : undefined
-                        }
-                        onMouseDown={onRowMouseDown}
-                        onClick={(event: MouseEvent) => {
-                          if (!skipRowClick(event)) {
-                            selection.click(message.id, event);
+                        <div
+                          data-message-id={message.id}
+                          data-selected={
+                            selection.has(message.id) ? "" : undefined
                           }
-                        }}
-                        onContextMenu={() =>
-                          setMenuIds(selection.target(message.id))
-                        }
-                        className={cn(
-                          "group/row -mx-2 flex min-w-0 flex-1 items-stretch gap-2 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
-                          // spacing lives on the TREE: posts breathe,
-                          // replies sit tight against their trunk
-                          threaded ? "-mx-0" : "mt-6",
-                          // the row under the pointer lifts; a selected one stays lit
-                          selection.has(message.id) ||
-                            menuIds.includes(message.id)
-                            ? "border-primary/60 bg-accent/60"
-                            : "hover:bg-accent/70",
-                        )}
-                      >
-                        {/* the AVATAR column — reddit's uniform 24px
+                          data-targeted={
+                            menuIds.includes(message.id) ? "" : undefined
+                          }
+                          onMouseDown={onRowMouseDown}
+                          onClick={(event: MouseEvent) => {
+                            if (!skipRowClick(event)) {
+                              selection.click(message.id, event);
+                            }
+                          }}
+                          onContextMenu={() =>
+                            setMenuIds(selection.target(message.id))
+                          }
+                          className={cn(
+                            "group/row -mx-2 flex min-w-0 flex-1 items-stretch gap-2 rounded-md border-l-2 border-transparent px-1.5 py-0.5 transition-colors",
+                            // spacing lives on the TREE: posts breathe,
+                            // replies sit tight against their trunk
+                            threaded ? "-mx-0" : "mt-6",
+                            // the row under the pointer lifts; a selected one stays lit
+                            selection.has(message.id) ||
+                              menuIds.includes(message.id)
+                              ? "border-primary/60 bg-accent/60"
+                              : "hover:bg-accent/70",
+                          )}
+                        >
+                          {/* the AVATAR column — reddit's uniform 24px
                             at every depth; a post with replies grows
                             the TRUNK under its avatar (⊖ at its
                             head) */}
-                        <div className="flex w-6 shrink-0 flex-col items-center">
-                          <Avatar
-                            {...author}
-                            size={24}
-                            className="mt-0.5"
-                          />
-                          {hasReplies &&
-                            (replies.length > 0 ? (
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  toggleThread(message.id);
-                                }}
-                                aria-label={
-                                  foldedHere
-                                    ? "expand this thread"
-                                    : "collapse this thread"
-                                }
-                                title={foldedHere ? "expand" : "collapse"}
-                                className="group/trunk relative w-4 flex-1 cursor-pointer"
-                              >
-                                {/* the line runs UNBROKEN from the
+                          <div className="flex w-6 shrink-0 flex-col items-center">
+                            <Avatar {...author} size={24} className="mt-0.5" />
+                            {hasReplies &&
+                              (replies.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleThread(message.id);
+                                  }}
+                                  aria-label={
+                                    foldedHere
+                                      ? "expand this thread"
+                                      : "collapse this thread"
+                                  }
+                                  title={foldedHere ? "expand" : "collapse"}
+                                  className="group/trunk relative w-4 flex-1 cursor-pointer"
+                                >
+                                  {/* the line runs UNBROKEN from the
                                     avatar's bottom; the ⊖ rides the
                                     JUNCTION at its foot, where the
                                     reply's arc leaves the trunk */}
-                                <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
-                                {!foldedHere && (
-                                  <CircleMinus className="absolute -bottom-2 left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
-                                )}
-                              </button>
-                            ) : (
-                              // the ask inside this message hangs
-                              // from the author's trunk; its own
-                              // comments carry the fold handles
-                              <span className="relative w-4 flex-1">
-                                <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
-                              </span>
-                            ))}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-[13px] font-semibold leading-5">
-                              {author.name}
-                            </span>
-                            <KindBadge kind={author.kind} />
-                            {meta?.at !== undefined && (
-                              <AtTooltip at={meta.at}>
-                                <span className="cursor-default font-mono text-[10px] text-muted-foreground/70 hover:text-foreground">
-                                  {formatAt(meta.at)}
+                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
+                                  {!foldedHere && (
+                                    <CircleMinus className="absolute -bottom-2 left-1/2 z-10 size-3.5 -translate-x-1/2 rounded-full bg-background text-muted-foreground/70 group-hover/trunk:text-foreground" />
+                                  )}
+                                </button>
+                              ) : (
+                                // the ask inside this message hangs
+                                // from the author's trunk; its own
+                                // comments carry the fold handles
+                                <span className="relative w-4 flex-1">
+                                  <span className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-muted-foreground/30" />
                                 </span>
-                              </AtTooltip>
-                            )}
-                            {/* the message still being written wears
+                              ))}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-[13px] font-semibold leading-5">
+                                {author.name}
+                              </span>
+                              <KindBadge kind={author.kind} />
+                              {meta?.at !== undefined && (
+                                <AtTooltip at={meta.at}>
+                                  <span className="cursor-default font-mono text-[10px] text-muted-foreground/70 hover:text-foreground">
+                                    {formatAt(meta.at)}
+                                  </span>
+                                </AtTooltip>
+                              )}
+                              {/* the message still being written wears
                                 the spinner — the response happens IN
                                 the thread, not as a row below it */}
-                            {burstLive && (
-                              <LoaderCircle className="size-3 shrink-0 animate-spin self-center text-muted-foreground" />
-                            )}
-                          </div>
-                        <Message
-                          from={message.role}
-                          className="ml-0 w-full max-w-full min-w-0"
-                        >
-                          <MessageContent
-                            className={cn(
-                              // cards must never flex-SHRINK vertically — a
-                              // height-squeezed `overflow-hidden` card
-                              // collapses into an empty border pill
-                              "*:shrink-0",
-                              // the tree's connectors are drawn OUTSIDE
-                              // this box (elbows reach back to the
-                              // author's avatar) — clipping erases them
-                              "overflow-visible",
-                              // discord rows are FLAT and LEFT — no
-                              // right-aligned bubble for the human
-                              "w-full max-w-full group-[.is-user]:ml-0 group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
-                            )}
-                          >
-                            {foldToolRuns(message.parts, (part, index) =>
-                              part.type === "text"
-                                ? isReplyText(index)
-                                : part.type === "dynamic-tool"
-                                  ? // orphan part (an output whose call this
-                                    // client never saw) — nothing renderable;
-                                    // restated in a later message — that one
-                                    // renders the card
-                                    !part.toolName || superseded(message, part)
-                                  : false,
-                            ).map((item) => {
-                              if (item.kind === "run") {
-                                if (item.toolName === "ask") {
-                                  return item.calls.map((call, callIndex) =>
-                                    renderAsk(
-                                      call,
-                                      `${item.index}-${callIndex}`,
-                                    ),
-                                  );
-                                }
-                                return (
-                                  <ToolRun
-                                    key={item.index}
-                                    toolName={item.toolName}
-                                    calls={item.calls.map((call) => ({
-                                      toolName: call.toolName,
-                                      state: cutOpen(call.state)
-                                        ? ("output-error" as const)
-                                        : call.state,
-                                      input: call.input,
-                                      output: call.output,
-                                      errorText: cutOpen(call.state)
-                                        ? STOPPED_TEXT
-                                        : call.errorText,
-                                    }))}
-                                  />
-                                );
-                              }
-                              const { part, index } = item;
-                              if (part.type === "reasoning") {
-                                const key = traceKey(part.text);
-                                return (
-                                  <ReasoningTrace
-                                    key={index}
-                                    text={part.text}
-                                    ms={reasoningMs(part)}
-                                    streaming={part.state === "streaming"}
-                                    open={expandedTraces.has(key)}
-                                    onToggle={() => toggleTrace(key)}
-                                  />
-                                );
-                              }
-                              if (part.type === "text") {
-                                return (
-                                  <TextPart
-                                    key={index}
-                                    text={part.text}
-                                    repo={repo}
-                                    kind={kind}
-                                  />
-                                );
-                              }
-                              if (part.type === "dynamic-tool") {
-                                const tool = part;
-                                if (tool.toolName === "ask") {
-                                  return renderAsk(tool, index);
-                                }
-                                const cut = cutOpen(tool.state);
-                                const card = (
-                                  <ToolCard
-                                    key={index}
-                                    toolName={tool.toolName}
-                                    state={cut ? "output-error" : tool.state}
-                                    input={tool.input}
-                                    output={tool.output}
-                                    errorText={
-                                      cut ? STOPPED_TEXT : tool.errorText
+                              {burstLive && (
+                                <LoaderCircle className="size-3 shrink-0 animate-spin self-center text-muted-foreground" />
+                              )}
+                            </div>
+                            <Message
+                              from={message.role}
+                              className="ml-0 w-full max-w-full min-w-0"
+                            >
+                              <MessageContent
+                                className={cn(
+                                  // cards must never flex-SHRINK vertically — a
+                                  // height-squeezed `overflow-hidden` card
+                                  // collapses into an empty border pill
+                                  "*:shrink-0",
+                                  // the tree's connectors are drawn OUTSIDE
+                                  // this box (elbows reach back to the
+                                  // author's avatar) — clipping erases them
+                                  "overflow-visible",
+                                  // discord rows are FLAT and LEFT — no
+                                  // right-aligned bubble for the human
+                                  "w-full max-w-full group-[.is-user]:ml-0 group-[.is-user]:bg-transparent group-[.is-user]:px-0 group-[.is-user]:py-0",
+                                )}
+                              >
+                                {foldToolRuns(message.parts, (part, index) =>
+                                  part.type === "text"
+                                    ? isReplyText(index)
+                                    : part.type === "dynamic-tool"
+                                      ? // orphan part (an output whose call this
+                                        // client never saw) — nothing renderable;
+                                        // restated in a later message — that one
+                                        // renders the card
+                                        !part.toolName ||
+                                        superseded(message, part)
+                                      : false,
+                                ).map((item) => {
+                                  if (item.kind === "run") {
+                                    if (item.toolName === "ask") {
+                                      return item.calls.map((call, callIndex) =>
+                                        renderAsk(
+                                          call,
+                                          `${item.index}-${callIndex}`,
+                                        ),
+                                      );
                                     }
-                                  />
-                                );
-                                // registry-rendered tools get the compact
-                                // card; unknown tools keep the generic
-                                // collapsible
-                                if (hasToolCard(tool.toolName)) return card;
-                                return (
-                                  <Tool key={index}>
-                                    <ToolHeader
-                                      type={tool.type}
-                                      state={
-                                        cut ? "output-error" : tool.state
-                                      }
-                                      toolName={tool.toolName}
-                                    />
-                                    <ToolContent>
-                                      <ToolInput input={tool.input} />
-                                      <ToolOutput
-                                        output={
-                                          typeof tool.output === "string" ? (
-                                            <pre className="whitespace-pre-wrap p-3 text-xs">
-                                              <Ansi text={tool.output} />
-                                            </pre>
-                                          ) : tool.output !== undefined ? (
-                                            <pre className="whitespace-pre-wrap p-3 text-xs">
-                                              {JSON.stringify(
-                                                tool.output,
-                                                null,
-                                                2,
-                                              )}
-                                            </pre>
-                                          ) : undefined
+                                    return (
+                                      <ToolRun
+                                        key={item.index}
+                                        toolName={item.toolName}
+                                        calls={item.calls.map((call) => ({
+                                          toolName: call.toolName,
+                                          state: cutOpen(call.state)
+                                            ? ("output-error" as const)
+                                            : call.state,
+                                          input: call.input,
+                                          output: call.output,
+                                          errorText: cutOpen(call.state)
+                                            ? STOPPED_TEXT
+                                            : call.errorText,
+                                        }))}
+                                      />
+                                    );
+                                  }
+                                  const { part, index } = item;
+                                  if (part.type === "reasoning") {
+                                    const key = traceKey(part.text);
+                                    return (
+                                      <ReasoningTrace
+                                        key={index}
+                                        text={part.text}
+                                        ms={reasoningMs(part)}
+                                        streaming={part.state === "streaming"}
+                                        open={expandedTraces.has(key)}
+                                        onToggle={() => toggleTrace(key)}
+                                      />
+                                    );
+                                  }
+                                  if (part.type === "text") {
+                                    return (
+                                      <TextPart
+                                        key={index}
+                                        text={part.text}
+                                        repo={repo}
+                                        kind={kind}
+                                      />
+                                    );
+                                  }
+                                  if (part.type === "dynamic-tool") {
+                                    const tool = part;
+                                    if (tool.toolName === "ask") {
+                                      return renderAsk(tool, index);
+                                    }
+                                    const cut = cutOpen(tool.state);
+                                    const card = (
+                                      <ToolCard
+                                        key={index}
+                                        toolName={tool.toolName}
+                                        state={
+                                          cut ? "output-error" : tool.state
                                         }
+                                        input={tool.input}
+                                        output={tool.output}
                                         errorText={
                                           cut ? STOPPED_TEXT : tool.errorText
                                         }
                                       />
-                                    </ToolContent>
-                                  </Tool>
-                                );
-                              }
-                              return null;
-                            })}
-                            {/* the operator's stop — a quiet marker where the
+                                    );
+                                    // registry-rendered tools get the compact
+                                    // card; unknown tools keep the generic
+                                    // collapsible
+                                    if (hasToolCard(tool.toolName)) return card;
+                                    return (
+                                      <Tool key={index}>
+                                        <ToolHeader
+                                          type={tool.type}
+                                          state={
+                                            cut ? "output-error" : tool.state
+                                          }
+                                          toolName={tool.toolName}
+                                        />
+                                        <ToolContent>
+                                          <ToolInput input={tool.input} />
+                                          <ToolOutput
+                                            output={
+                                              typeof tool.output ===
+                                              "string" ? (
+                                                <pre className="whitespace-pre-wrap p-3 text-xs">
+                                                  <Ansi text={tool.output} />
+                                                </pre>
+                                              ) : tool.output !== undefined ? (
+                                                <pre className="whitespace-pre-wrap p-3 text-xs">
+                                                  {JSON.stringify(
+                                                    tool.output,
+                                                    null,
+                                                    2,
+                                                  )}
+                                                </pre>
+                                              ) : undefined
+                                            }
+                                            errorText={
+                                              cut
+                                                ? STOPPED_TEXT
+                                                : tool.errorText
+                                            }
+                                          />
+                                        </ToolContent>
+                                      </Tool>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                                {/* the operator's stop — a quiet marker where the
                           round was cut short (live: the turn's finish
                           carried it; snapshot: the burst wears it) */}
-                            {meta?.aborted === true && (
-                              <div
-                                data-aborted
-                                className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
-                              >
-                                <Square className="size-3 fill-current" />
-                                Stopped
-                              </div>
-                            )}
-                          </MessageContent>
-                        </Message>
+                                {meta?.aborted === true && (
+                                  <div
+                                    data-aborted
+                                    className="flex items-center gap-1.5 py-0.5 text-xs text-muted-foreground"
+                                  >
+                                    <Square className="size-3 fill-current" />
+                                    Stopped
+                                  </div>
+                                )}
+                              </MessageContent>
+                            </Message>
+                          </div>
                         </div>
-                      </div>
                       </div>
                       {/* a folded thread — reddit's "⊕ N replies",
                           hanging off the post by its elbow */}
@@ -2260,36 +2254,34 @@ const ChatTranscript = ({
               the message itself is the response (its header wears the
               spinner) and a second row would be a duplicate */}
           {working &&
-            [...messages]
-              .reverse()
-              .find((entry) => !deleted.has(entry.id))?.role !==
-              "assistant" && (
-            <div
-              data-working=""
-              role="status"
-              aria-label={`${agentAuthor.name} is responding`}
-              className="relative ml-8 mt-1"
-            >
+            [...messages].reverse().find((entry) => !deleted.has(entry.id))
+              ?.role !== "assistant" && (
               <div
-                aria-hidden
-                className="pointer-events-none absolute -left-5 top-0 h-4 w-5 border-b border-l border-muted-foreground/30"
-              />
-              <div className="flex min-w-0 items-center gap-2 py-0.5">
-                <Avatar
-                  {...agentAuthor}
-                  size={24}
-                  className="mt-0.5 opacity-70"
+                data-working=""
+                role="status"
+                aria-label={`${agentAuthor.name} is responding`}
+                className="relative ml-8 mt-1"
+              >
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -left-5 top-0 h-4 w-5 border-b border-l border-muted-foreground/30"
                 />
-                <span className="text-[13px] font-semibold leading-5 text-muted-foreground">
-                  {agentAuthor.name}
-                </span>
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <LoaderCircle className="size-3 animate-spin" />
-                  <span className="animate-pulse">is responding…</span>
-                </span>
+                <div className="flex min-w-0 items-center gap-2 py-0.5">
+                  <Avatar
+                    {...agentAuthor}
+                    size={24}
+                    className="mt-0.5 opacity-70"
+                  />
+                  <span className="text-[13px] font-semibold leading-5 text-muted-foreground">
+                    {agentAuthor.name}
+                  </span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <LoaderCircle className="size-3 animate-spin" />
+                    <span className="animate-pulse">is responding…</span>
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>

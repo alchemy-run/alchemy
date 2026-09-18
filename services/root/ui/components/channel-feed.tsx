@@ -26,6 +26,7 @@ import {
   MessageContext,
   threadsOf,
   Typing,
+  TypingRow,
   type Post,
 } from "@/components/post-thread";
 import { formatAt, MarkdownText } from "@/components/chat";
@@ -469,9 +470,7 @@ export const ThreadView = ({
                 <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
                   {formatAt(thread.root.at)}
                 </span>
-                {thread.root.status === "running" && replies.length === 0 && (
-                  <Typing name={thread.root.answering} />
-                )}
+
                 {thread.root.status === "failed" && (
                   <span className="shrink-0 text-[11px] text-destructive">
                     failed
@@ -481,6 +480,7 @@ export const ThreadView = ({
               <div className="ml-8 min-w-0 text-[13px]">
                 <MarkdownText text={thread.root.text} />
               </div>
+              {replies.length === 0 && <TypingRow post={thread.root} />}
             </div>
             <div className="pt-3">
               {/* SUB-THREADS render as cards (recursively — a reply

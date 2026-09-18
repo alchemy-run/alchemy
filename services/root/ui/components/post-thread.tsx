@@ -281,6 +281,37 @@ export const Typing = ({ name }: { readonly name?: string }) =>
     </span>
   );
 
+/** In-flight exchanges older than this render nothing: a fiber that
+ *  died in a reload never settles its post, and a pill that types
+ *  forever is a lie. */
+const TYPING_STALE_MS = 10 * 60_000;
+
+/**
+ * The typing indicator as an INCOMING message — the agent's own row
+ * forming under the human's message, never a badge on the human's
+ * header.
+ */
+export const TypingRow = ({
+  post,
+  indent = true,
+}: {
+  readonly post: Post;
+  readonly indent?: boolean;
+}) => {
+  if (post.status !== "running") return null;
+  if (Date.now() - post.at > TYPING_STALE_MS) return null;
+  return (
+    <div className={cn("mt-1.5 flex items-center gap-1.5", indent && "ml-8")}>
+      {post.answering !== undefined && (
+        <Avatar name={post.answering} kind="agent" size={16} />
+      )}
+      <span className="flex items-center rounded-full border border-border/60 bg-muted/40 px-2 py-0.5">
+        <Typing name={post.answering} />
+      </span>
+    </div>
+  );
+};
+
 /** One message of the stream. */
 export const PostRow = ({
   post,
@@ -313,7 +344,6 @@ export const PostRow = ({
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
             {formatAt(post.at)}
           </span>
-          {post.status === "running" && <Typing name={post.answering} />}
           {post.status === "failed" && (
             <span className="shrink-0 text-[11px] text-destructive">
               failed
@@ -327,6 +357,7 @@ export const PostRow = ({
         </div>
       )}
       <Working post={post} parent={reference} />
+      <TypingRow post={post} />
     </div>
   </MessageContext.Provider>
 );
@@ -695,11 +726,6 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
             {formatAt(thread.root.at)}
           </span>
-          {thread.root.status === "running" &&
-            replies.length === 0 &&
-            thread.root.mode !== "thread" && (
-              <Typing name={thread.root.answering} />
-            )}
           {thread.root.status === "failed" && (
             <span className="shrink-0 text-[11px] text-destructive">
               failed
@@ -710,6 +736,9 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
           <div className="ml-8 min-w-0 text-[13px]">
             <MarkdownText text={thread.root.text} />
           </div>
+        )}
+        {replies.length === 0 && thread.root.mode !== "thread" && (
+          <TypingRow post={thread.root} />
         )}
         {(replies.length > 0 ||
           (thread.root.mode === "thread" &&
@@ -736,9 +765,7 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
                 )}
               </span>
               {replies.length === 0 && (
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Typing name={thread.root.answering} />
-                </span>
+                <TypingRow post={thread.root} indent={false} />
               )}
               {last !== undefined && (
                 <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">

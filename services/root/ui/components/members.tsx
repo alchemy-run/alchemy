@@ -45,8 +45,7 @@ const Section = ({
           title={member.detail ?? member.name}
           className={cn(
             "flex items-center gap-2 rounded-md px-2 py-1 text-left",
-            member.session !== undefined &&
-              "cursor-pointer hover:bg-accent/70",
+            member.session !== undefined && "cursor-pointer hover:bg-accent/70",
           )}
         >
           <div className="relative">
