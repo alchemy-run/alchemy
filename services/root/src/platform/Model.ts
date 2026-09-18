@@ -18,15 +18,11 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 export class Opus extends AI.Model<Opus>()("root/Opus") {}
 export class Fable extends AI.Model<Fable>()("root/Fable") {}
 export class Haiku extends AI.Model<Haiku>()("root/Haiku") {}
-export class Gpt6Astra extends AI.Model<Gpt6Astra>()(
-  "root/Gpt6Astra",
-) {}
+export class Gpt6Astra extends AI.Model<Gpt6Astra>()("root/Gpt6Astra") {}
 export class DeepSeekFlash extends AI.Model<DeepSeekFlash>()(
   "root/DeepSeekFlash",
 ) {}
-export class DeepSeekPro extends AI.Model<DeepSeekPro>()(
-  "root/DeepSeekPro",
-) {}
+export class DeepSeekPro extends AI.Model<DeepSeekPro>()("root/DeepSeekPro") {}
 
 /* ── implementations ────────────────────────────────────────────── */
 

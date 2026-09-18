@@ -98,16 +98,13 @@ export const PullsApi = Effect.gen(function* () {
       const token = Redacted.value(yield* publishToken);
       const client = yield* HttpClient.HttpClient;
       const response = yield* client
-        .get(
-          `https://api.github.com/repos/${mirror.github}/pulls/${number}`,
-          {
-            headers: {
-              accept: "application/vnd.github.diff",
-              authorization: `Bearer ${token}`,
-              "user-agent": "root-forge",
-            },
+        .get(`https://api.github.com/repos/${mirror.github}/pulls/${number}`, {
+          headers: {
+            accept: "application/vnd.github.diff",
+            authorization: `Bearer ${token}`,
+            "user-agent": "root-forge",
           },
-        )
+        })
         .pipe(Effect.orDie);
       if (response.status !== 200) {
         return HttpServerResponse.jsonUnsafe(

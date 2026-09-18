@@ -121,94 +121,94 @@ const ProposalsDOLive = Cloudflare.DurableObject<ProposalsRpc>()(
       );
 
       return {
-      stage: Effect.fn(function* (input) {
-        const at = yield* Clock.currentTimeMillis;
-        const id = `p-${at.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-        yield* sql.exec(
-          `INSERT INTO proposals
+        stage: Effect.fn(function* (input) {
+          const at = yield* Clock.currentTimeMillis;
+          const id = `p-${at.toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+          yield* sql.exec(
+            `INSERT INTO proposals
             (id, kind, status, summary, detail, payload, proposer_term,
              proposer_key, created_at)
            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
-          id,
-          input.kind,
-          input.summary,
-          input.detail,
-          JSON.stringify(input.payload),
-          input.proposer.term,
-          input.proposer.key,
-          at,
-        );
-        return (yield* byId(id))!;
-      }),
+            id,
+            input.kind,
+            input.summary,
+            input.detail,
+            JSON.stringify(input.payload),
+            input.proposer.term,
+            input.proposer.key,
+            at,
+          );
+          return (yield* byId(id))!;
+        }),
 
-      read: Effect.fn(function* (id) {
-        return yield* byId(id);
-      }),
+        read: Effect.fn(function* (id) {
+          return yield* byId(id);
+        }),
 
-      list: Effect.fn(function* (status) {
-        const cursor =
-          status === undefined
-            ? yield* sql.exec<ProposalRow>(
-                "SELECT * FROM proposals ORDER BY created_at DESC LIMIT 200",
-              )
-            : yield* sql.exec<ProposalRow>(
-                "SELECT * FROM proposals WHERE status = ? ORDER BY created_at ASC",
-                status,
-              );
-        return (yield* cursor.toArray()).map(toProposal);
-      }),
+        list: Effect.fn(function* (status) {
+          const cursor =
+            status === undefined
+              ? yield* sql.exec<ProposalRow>(
+                  "SELECT * FROM proposals ORDER BY created_at DESC LIMIT 200",
+                )
+              : yield* sql.exec<ProposalRow>(
+                  "SELECT * FROM proposals WHERE status = ? ORDER BY created_at ASC",
+                  status,
+                );
+          return (yield* cursor.toArray()).map(toProposal);
+        }),
 
-      mark: Effect.fn(function* (id, status, outcome) {
-        const current = yield* byId(id);
-        if (current === undefined) return undefined;
-        const at = yield* Clock.currentTimeMillis;
-        yield* sql.exec(
-          "UPDATE proposals SET status = ?, outcome = ?, decided_at = ? WHERE id = ?",
-          status,
-          outcome ?? current.outcome ?? null,
-          at,
-          id,
-        );
-        return yield* byId(id);
-      }),
+        mark: Effect.fn(function* (id, status, outcome) {
+          const current = yield* byId(id);
+          if (current === undefined) return undefined;
+          const at = yield* Clock.currentTimeMillis;
+          yield* sql.exec(
+            "UPDATE proposals SET status = ?, outcome = ?, decided_at = ? WHERE id = ?",
+            status,
+            outcome ?? current.outcome ?? null,
+            at,
+            id,
+          );
+          return yield* byId(id);
+        }),
 
-      // policy: unset means GATED — safety is the default; widening a
-      // kind is the humans' explicit act
-      gated: Effect.fn(function* (kind) {
-        const cursor = yield* sql.exec<
-          { gated: number } & Record<string, Cloudflare.SqlStorageValue>
-        >("SELECT gated FROM policy WHERE kind = ?", kind);
-        const row = (yield* cursor.toArray())[0];
-        return row === undefined ? true : row.gated === 1;
-      }),
+        // policy: unset means GATED — safety is the default; widening a
+        // kind is the humans' explicit act
+        gated: Effect.fn(function* (kind) {
+          const cursor = yield* sql.exec<
+            { gated: number } & Record<string, Cloudflare.SqlStorageValue>
+          >("SELECT gated FROM policy WHERE kind = ?", kind);
+          const row = (yield* cursor.toArray())[0];
+          return row === undefined ? true : row.gated === 1;
+        }),
 
-      setPolicy: Effect.fn(function* (kind, gated) {
-        yield* sql.exec(
-          "INSERT OR REPLACE INTO policy (kind, gated) VALUES (?, ?)",
-          kind,
-          gated ? 1 : 0,
-        );
-      }),
+        setPolicy: Effect.fn(function* (kind, gated) {
+          yield* sql.exec(
+            "INSERT OR REPLACE INTO policy (kind, gated) VALUES (?, ?)",
+            kind,
+            gated ? 1 : 0,
+          );
+        }),
 
-      policy: Effect.fn(function* () {
-        const kinds: ReadonlyArray<ProposalKind> = [
-          "comment",
-          "push",
-          "open_pull",
-          "merge",
-          "close",
-        ];
-        const cursor = yield* sql.exec<
-          { kind: string; gated: number } & Record<
-            string,
-            Cloudflare.SqlStorageValue
-          >
-        >("SELECT kind, gated FROM policy");
-        const set = new Map(
-          (yield* cursor.toArray()).map((row) => [row.kind, row.gated === 1]),
-        );
-        return kinds.map((kind) => ({ kind, gated: set.get(kind) ?? true }));
-      }),
+        policy: Effect.fn(function* () {
+          const kinds: ReadonlyArray<ProposalKind> = [
+            "comment",
+            "push",
+            "open_pull",
+            "merge",
+            "close",
+          ];
+          const cursor = yield* sql.exec<
+            { kind: string; gated: number } & Record<
+              string,
+              Cloudflare.SqlStorageValue
+            >
+          >("SELECT kind, gated FROM policy");
+          const set = new Map(
+            (yield* cursor.toArray()).map((row) => [row.kind, row.gated === 1]),
+          );
+          return kinds.map((kind) => ({ kind, gated: set.get(kind) ?? true }));
+        }),
       } satisfies ProposalsRpc;
     });
   }),
@@ -233,7 +233,8 @@ export const ProposalsLive: Layer.Layer<Proposals, never, Cloudflare.Worker> =
         stage: (input) => inWorker(stub().stage(input)),
         read: (id) => inWorker(stub().read(id)),
         list: (status) => inWorker(stub().list(status)),
-        mark: (id, status, outcome) => inWorker(stub().mark(id, status, outcome)),
+        mark: (id, status, outcome) =>
+          inWorker(stub().mark(id, status, outcome)),
         gated: (kind) => inWorker(stub().gated(kind)),
         setPolicy: (kind, gated) => inWorker(stub().setPolicy(kind, gated)),
         policy: () => inWorker(stub().policy()),

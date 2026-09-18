@@ -18,9 +18,7 @@ import {
  * the humans' explicit act, never a default.
  */
 
-export class StagedForApproval extends Data.TaggedError(
-  "StagedForApproval",
-)<{
+export class StagedForApproval extends Data.TaggedError("StagedForApproval")<{
   message: string;
 }> {}
 

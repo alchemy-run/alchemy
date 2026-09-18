@@ -192,16 +192,14 @@ export const readIssue = AI.Tool("read_issue")`
     const { repoOf, comments } = yield* entityRepos;
     return Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
-      const issue = yield* repo
-        .getIssue({ issue_number: number })
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new BadRef({
-                message: `could not read ${p.ref}: ${error.message}`,
-              }),
-          ),
-        );
+      const issue = yield* repo.getIssue({ issue_number: number }).pipe(
+        Effect.mapError(
+          (error) =>
+            new BadRef({
+              message: `could not read ${p.ref}: ${error.message}`,
+            }),
+        ),
+      );
       return {
         title: issue.title,
         state: issue.state,
@@ -221,16 +219,14 @@ export const readPull = AI.Tool("read_pull")`
     const { repoOf, comments } = yield* entityRepos;
     return Effect.fn(function* (p: { ref: string }) {
       const { repo, number } = yield* repoOf(p.ref);
-      const pull = yield* repo
-        .getPull({ pull_number: number })
-        .pipe(
-          Effect.mapError(
-            (error) =>
-              new BadRef({
-                message: `could not read ${p.ref}: ${error.message}`,
-              }),
-          ),
-        );
+      const pull = yield* repo.getPull({ pull_number: number }).pipe(
+        Effect.mapError(
+          (error) =>
+            new BadRef({
+              message: `could not read ${p.ref}: ${error.message}`,
+            }),
+        ),
+      );
       return {
         title: pull.title,
         state: pull.merged_at != null ? "merged" : pull.state,

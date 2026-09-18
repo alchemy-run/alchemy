@@ -12,6 +12,8 @@ import { SeedApi } from "./forge/SeedApi.ts";
 import { SyncApi } from "./forge/Sync.ts";
 import { StatusApi } from "./github/StatusApi.ts";
 import { OrgApi } from "./OrgApi.ts";
+import { TreeApi } from "./forge/TreeApi.ts";
+import { SwarmApi } from "./SwarmApi.ts";
 import { DecideApi } from "./proposals/DecideApi.ts";
 import { ExecApi } from "./sandbox/ExecApi.ts";
 
@@ -43,5 +45,7 @@ export const Api = Effect.gen(function* () {
     yield* PullsApi,
     yield* StatusApi,
     yield* OrgApi,
+    yield* SwarmApi,
+    yield* TreeApi,
   );
 });

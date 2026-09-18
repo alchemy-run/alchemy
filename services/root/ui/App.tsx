@@ -61,7 +61,14 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { useRef, Fragment, useEffect, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useRef,
+  Fragment,
+  useEffect,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 
 interface Channel {
   readonly name: string;
@@ -131,41 +138,41 @@ const AgentColumn = ({ id }: { id: string }) => {
   // session's internal id
   const author = sessionAuthor(id);
   return (
-  <section
-    aria-label="agent session"
-    className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
-  >
-    <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <Avatar name={author.name} kind={author.kind} size={20} />
-        <span className="truncate font-mono text-xs font-semibold">
-          {author.name}
-        </span>
-        <KindBadge kind={author.kind} />
-        <Wrench
-          className="size-3 shrink-0 text-muted-foreground"
-          aria-label="an agent's working"
-        />
-      </div>
-      <button
-        type="button"
-        onClick={() => closePane({ kind: "agent", id })}
-        aria-label="close the agent column"
-        className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent"
-      >
-        <X className="size-3.5" />
-      </button>
-    </header>
-    <ChatView
-      id={id}
-      active={false}
-      readOnly
-      flat
-      {...(invocation !== undefined && invocation.startsWith("p-")
-        ? { hideInput: invocation }
-        : {})}
-    />
-  </section>
+    <section
+      aria-label="agent session"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+    >
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Avatar name={author.name} kind={author.kind} size={20} />
+          <span className="truncate font-mono text-xs font-semibold">
+            {author.name}
+          </span>
+          <KindBadge kind={author.kind} />
+          <Wrench
+            className="size-3 shrink-0 text-muted-foreground"
+            aria-label="an agent's working"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => closePane({ kind: "agent", id })}
+          aria-label="close the agent column"
+          className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-accent"
+        >
+          <X className="size-3.5" />
+        </button>
+      </header>
+      <ChatView
+        id={id}
+        active={false}
+        readOnly
+        flat
+        {...(invocation !== undefined && invocation.startsWith("p-")
+          ? { hideInput: invocation }
+          : {})}
+      />
+    </section>
   );
 };
 
@@ -397,7 +404,11 @@ export const App = () => {
       const ok = (value: unknown): value is number =>
         typeof value === "number" && Number.isFinite(value) && value > 0;
       if (ok(stored.feed) && ok(stored.thread) && ok(stored.panes)) {
-        return { feed: stored.feed, thread: stored.thread, panes: stored.panes };
+        return {
+          feed: stored.feed,
+          thread: stored.thread,
+          panes: stored.panes,
+        };
       }
     } catch {
       // first run (or the old px keys) — equal shares
@@ -528,303 +539,305 @@ export const App = () => {
       ) : tab === "pulls" ? (
         <WorkPage kind="pulls" place={workPlace} />
       ) : (
-      <div className="relative flex min-h-0 flex-1">
-        {/* the rail: one channel per group — the org chart, as rooms */}
-        <nav
-          aria-label="Channels"
-          style={{ width: railWidth }}
-          className="relative flex shrink-0 flex-col border-r border-border bg-muted/20"
-        >
-          <div className="flex items-center justify-between px-3 py-2">
-            <span className="text-sm font-semibold tracking-tight">root</span>
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label="toggle theme"
-              className="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent"
-            >
-              <ThemeIcon className="size-3.5" />
-            </button>
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
-            {channels.filter((entry) => !entry.dm).map((entry) => (
-              <div key={entry.name} className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => pick(entry.name)}
-                  aria-label={`open the ${entry.name} channel`}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px]",
-                    // ONE selection in the rail: an open profile takes
-                    // it; the channel stays only background context
-                    agent === undefined && entry.name === channel.name
-                      ? "bg-accent font-medium"
-                      : "text-muted-foreground hover:bg-accent/60",
-                  )}
-                >
-                  <Hash className="size-3.5 shrink-0" />
-                  {entry.name}
-                </button>
-              </div>
-            ))}
-            {/* the AGENTS — the roster as DMs: clicking one opens
+        <div className="relative flex min-h-0 flex-1">
+          {/* the rail: one channel per group — the org chart, as rooms */}
+          <nav
+            aria-label="Channels"
+            style={{ width: railWidth }}
+            className="relative flex shrink-0 flex-col border-r border-border bg-muted/20"
+          >
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-sm font-semibold tracking-tight">root</span>
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label="toggle theme"
+                className="flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent"
+              >
+                <ThemeIcon className="size-3.5" />
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+              {channels
+                .filter((entry) => !entry.dm)
+                .map((entry) => (
+                  <div key={entry.name} className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => pick(entry.name)}
+                      aria-label={`open the ${entry.name} channel`}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px]",
+                        // ONE selection in the rail: an open profile takes
+                        // it; the channel stays only background context
+                        agent === undefined && entry.name === channel.name
+                          ? "bg-accent font-medium"
+                          : "text-muted-foreground hover:bg-accent/60",
+                      )}
+                    >
+                      <Hash className="size-3.5 shrink-0" />
+                      {entry.name}
+                    </button>
+                  </div>
+                ))}
+              {/* the AGENTS — the roster as DMs: clicking one opens
                 the human's private line to that agent (its DM
                 channel). Profiles live on the RIGHT sidebar's
                 member rows (`/a/:name`). */}
-            {roster.length > 0 && (
-              <div className="flex flex-col gap-0.5 pt-3">
-                <div className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  agents
-                </div>
-                {roster.map((entry) => (
-                  <button
-                    key={entry.name}
-                    type="button"
-                    onClick={() => pick(entry.slug)}
-                    aria-label={`open the DM with ${entry.slug}`}
-                    title={entry.model}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
-                      agent === undefined && channel.name === entry.slug
-                        ? "bg-accent font-medium"
-                        : "text-muted-foreground hover:bg-accent/60",
-                    )}
-                  >
-                    <Avatar name={entry.slug} kind="agent" size={18} />
-                    <span className="min-w-0 flex-1 truncate text-left">
-                      {entry.slug}
-                    </span>
-                    <span
-                      aria-hidden
+              {roster.length > 0 && (
+                <div className="flex flex-col gap-0.5 pt-3">
+                  <div className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    agents
+                  </div>
+                  {roster.map((entry) => (
+                    <button
+                      key={entry.name}
+                      type="button"
+                      onClick={() => pick(entry.slug)}
+                      aria-label={`open the DM with ${entry.slug}`}
                       title={entry.model}
-                      className="size-1.5 shrink-0 rounded-full bg-moss/70"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* the resize handle — drag the rail's edge */}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="resize the sidebar"
-            onPointerDown={startRailDrag}
-            className="absolute inset-y-0 -right-0.5 z-10 w-1.5 cursor-col-resize hover:bg-border active:bg-border"
-          />
-        </nav>
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
+                        agent === undefined && channel.name === entry.slug
+                          ? "bg-accent font-medium"
+                          : "text-muted-foreground hover:bg-accent/60",
+                      )}
+                    >
+                      <Avatar name={entry.slug} kind="agent" size={18} />
+                      <span className="min-w-0 flex-1 truncate text-left">
+                        {entry.slug}
+                      </span>
+                      <span
+                        aria-hidden
+                        title={entry.model}
+                        className="size-1.5 shrink-0 rounded-full bg-moss/70"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* the resize handle — drag the rail's edge */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="resize the sidebar"
+              onPointerDown={startRailDrag}
+              className="absolute inset-y-0 -right-0.5 z-10 w-1.5 cursor-col-resize hover:bg-border active:bg-border"
+            />
+          </nav>
 
-        {/* the center: an agent's PROFILE (the org's mirror page),
+          {/* the center: an agent's PROFILE (the org's mirror page),
             the focused THREAD (the tweet-permalink move — a thread
             opens as the main view, not a side panel), or the channel
             feed */}
-        {agent !== undefined ? (
-          <AgentProfile
-            key={agent.name}
-            name={agent.name}
-            tab={agent.tab}
-            item={agent.item}
-            onUp={() => showChannel(channel.name)}
-          />
-        ) : channel.dm ? (
-          /* a DM wears the SAME surface as the profile — one header,
+          {agent !== undefined ? (
+            <AgentProfile
+              key={agent.name}
+              name={agent.name}
+              tab={agent.tab}
+              item={agent.item}
+              onUp={() => showChannel(channel.name)}
+            />
+          ) : channel.dm ? (
+            /* a DM wears the SAME surface as the profile — one header,
              Chat the active tab, the feed as its body */
-          <AgentProfile
-            key={`dm-${channel.name}`}
-            name={channel.name}
-            tab="chat"
-            onUp={() => pick("root")}
-            chat={
+            <AgentProfile
+              key={`dm-${channel.name}`}
+              name={channel.name}
+              tab="chat"
+              onUp={() => pick("root")}
+              chat={
+                <ChannelFeed
+                  key={channel.name}
+                  channel={channel.name}
+                  chat={channel.chat}
+                  dm
+                  placeholder={`Message @${channel.name}…`}
+                />
+              }
+            />
+          ) : (
+            <section
+              data-column="feed"
+              style={{ flexGrow: colWeights.feed, flexBasis: 0 }}
+              className="flex min-h-0 min-w-[220px] flex-col"
+            >
+              <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
+                <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+                  <Hash className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="text-sm font-medium">{channel.name}</span>
+                  <span className="hidden min-w-0 truncate pl-1 font-mono text-[10px] text-muted-foreground lg:inline">
+                    {channel.chat}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {/* search WITHIN the channel — filters the transcript */}
+                  <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 focus-within:border-border">
+                    <Search className="size-3 shrink-0 text-muted-foreground" />
+                    <input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={`search #${channel.name}…`}
+                      aria-label={`search the ${channel.name} channel`}
+                      className="w-24 min-w-0 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/70 md:w-36"
+                    />
+                    {search.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSearch("")}
+                        aria-label="clear the search"
+                        className="flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </div>
+                  <StopResume chat={channel.chat} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !members;
+                      setMembers(next);
+                      window.localStorage.setItem(
+                        "root:members",
+                        next ? "1" : "0",
+                      );
+                    }}
+                    aria-label="toggle the member list"
+                    aria-pressed={members}
+                    className={cn(
+                      "flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent",
+                      members ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    <Users className="size-3.5" />
+                  </button>
+                </div>
+              </header>
               <ChannelFeed
                 key={channel.name}
                 channel={channel.name}
                 chat={channel.chat}
-                dm
-                placeholder={`Message @${channel.name}…`}
+                placeholder={`Message #${channel.name}…`}
+                filter={search}
               />
-            }
-          />
-        ) : (
-        <section
-            data-column="feed"
-            style={{ flexGrow: colWeights.feed, flexBasis: 0 }}
-            className="flex min-h-0 min-w-[220px] flex-col"
-          >
-          <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-1.5">
-            <div className="flex min-w-0 shrink-0 items-center gap-1.5">
-              <Hash className="size-4 shrink-0 text-muted-foreground" />
-              <span className="text-sm font-medium">{channel.name}</span>
-              <span className="hidden min-w-0 truncate pl-1 font-mono text-[10px] text-muted-foreground lg:inline">
-                {channel.chat}
-              </span>
-            </div>
-            <div className="flex min-w-0 items-center gap-1.5">
-              {/* search WITHIN the channel — filters the transcript */}
-              <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-border/60 px-2 py-0.5 focus-within:border-border">
-                <Search className="size-3 shrink-0 text-muted-foreground" />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder={`search #${channel.name}…`}
-                  aria-label={`search the ${channel.name} channel`}
-                  className="w-24 min-w-0 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/70 md:w-36"
-                />
-                {search.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    aria-label="clear the search"
-                    className="flex cursor-pointer items-center text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-3" />
-                  </button>
-                )}
-              </div>
-              <StopResume chat={channel.chat} />
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !members;
-                  setMembers(next);
-                  window.localStorage.setItem(
-                    "root:members",
-                    next ? "1" : "0",
-                  );
-                }}
-                aria-label="toggle the member list"
-                aria-pressed={members}
-                className={cn(
-                  "flex size-6 cursor-pointer items-center justify-center rounded hover:bg-accent",
-                  members ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <Users className="size-3.5" />
-              </button>
-            </div>
-          </header>
-          <ChannelFeed
-            key={channel.name}
-            channel={channel.name}
-            chat={channel.chat}
-            placeholder={`Message #${channel.name}…`}
-            filter={search}
-          />
-        </section>
-        )}
+            </section>
+          )}
 
-        {/* the OPEN thread — a finder column split to the right; its
+          {/* the OPEN thread — a finder column split to the right; its
             composer speaks into the thread. Every thread ever opened
             stays mounted, hidden — switching back shows it exactly
             as last left. */}
-        {thread !== undefined && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="resize the thread"
-            onPointerDown={(down) => startColDrag(down, "feed", "thread")}
-            className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
-          />
-        )}
-        {openedThreads.map((entry) => (
-          <ThreadView
-            key={entry.id}
-            channel={entry.channel}
-            chat={entry.chat}
-            id={entry.id}
-            active={entry.id === thread}
-            weight={colWeights.thread}
-          />
-        ))}
+          {thread !== undefined && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="resize the thread"
+              onPointerDown={(down) => startColDrag(down, "feed", "thread")}
+              className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
+            />
+          )}
+          {openedThreads.map((entry) => (
+            <ThreadView
+              key={entry.id}
+              channel={entry.channel}
+              chat={entry.chat}
+              id={entry.id}
+              active={entry.id === thread}
+              weight={colWeights.thread}
+            />
+          ))}
 
-        {/* the PANE STACK — MILLER COLUMNS marching right of the
+          {/* the PANE STACK — MILLER COLUMNS marching right of the
             thread: agent workings, terminals, and referenced threads
             in click order. A reference clicked inside a pane splits
             right-adjacent to it; the chain grows arbitrarily far
             right (the stack scrolls) and is never blown away. */}
-        {panes.length > 0 && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="resize the panes"
-            onPointerDown={(down) =>
-              startColDrag(
-                down,
-                thread !== undefined ? "thread" : "feed",
-                "panes",
-              )
-            }
-            className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
-          />
-        )}
-        {panes.length > 0 && (
-          <aside
-            ref={stackRef}
-            aria-label="panes"
-            style={{ flexGrow: colWeights.panes, flexBasis: 0 }}
-            className="flex min-h-0 min-w-0 flex-row overflow-x-auto border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
-          >
-            {panes.map((pane, index) => (
-              <Fragment
-                key={
-                  pane.kind === "agent"
-                    ? `a:${pane.id}`
-                    : pane.kind === "workspace"
-                      ? `w:${pane.name}`
-                      : `p:${pane.channel}:${pane.id}`
-                }
-              >
-                {index > 0 && (
-                  <div
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="resize the pane"
-                    onPointerDown={(down) => startRowDrag(down, index - 1)}
-                    className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize border-l border-border hover:bg-border active:bg-primary/40"
-                  />
-                )}
-                <div
-                  style={{
-                    flexGrow: paneWeights[index] ?? 1,
-                    flexShrink: 1,
-                    flexBasis: 0,
-                  }}
-                  className="flex min-h-0 min-w-[20rem] flex-col"
+          {panes.length > 0 && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="resize the panes"
+              onPointerDown={(down) =>
+                startColDrag(
+                  down,
+                  thread !== undefined ? "thread" : "feed",
+                  "panes",
+                )
+              }
+              className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize hover:bg-border active:bg-primary/40 max-md:hidden"
+            />
+          )}
+          {panes.length > 0 && (
+            <aside
+              ref={stackRef}
+              aria-label="panes"
+              style={{ flexGrow: colWeights.panes, flexBasis: 0 }}
+              className="flex min-h-0 min-w-0 flex-row overflow-x-auto border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
+            >
+              {panes.map((pane, index) => (
+                <Fragment
+                  key={
+                    pane.kind === "agent"
+                      ? `a:${pane.id}`
+                      : pane.kind === "workspace"
+                        ? `w:${pane.name}`
+                        : `p:${pane.channel}:${pane.id}`
+                  }
                 >
-                  {/* the pane knows ITSELF — a reference clicked
+                  {index > 0 && (
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="resize the pane"
+                      onPointerDown={(down) => startRowDrag(down, index - 1)}
+                      className="z-10 -mx-[3px] w-1.5 shrink-0 cursor-col-resize border-l border-border hover:bg-border active:bg-primary/40"
+                    />
+                  )}
+                  <div
+                    style={{
+                      flexGrow: paneWeights[index] ?? 1,
+                      flexShrink: 1,
+                      flexBasis: 0,
+                    }}
+                    className="flex min-h-0 min-w-[20rem] flex-col"
+                  >
+                    {/* the pane knows ITSELF — a reference clicked
                       inside opens right-adjacent to it */}
-                  <PaneContext.Provider value={pane}>
-                    {pane.kind === "agent" ? (
-                      <AgentColumn id={pane.id} />
-                    ) : pane.kind === "workspace" ? (
-                      <WorkspaceColumn name={pane.name} />
-                    ) : (
-                      <ThreadView
-                        channel={pane.channel}
-                        chat={
-                          channels.find(
-                            (entry) => entry.name === pane.channel,
-                          )?.chat ?? ""
-                        }
-                        id={pane.id}
-                        onClose={() => closePane(pane)}
-                      />
-                    )}
-                  </PaneContext.Provider>
-                </div>
-              </Fragment>
-            ))}
-          </aside>
-        )}
+                    <PaneContext.Provider value={pane}>
+                      {pane.kind === "agent" ? (
+                        <AgentColumn id={pane.id} />
+                      ) : pane.kind === "workspace" ? (
+                        <WorkspaceColumn name={pane.name} />
+                      ) : (
+                        <ThreadView
+                          channel={pane.channel}
+                          chat={
+                            channels.find(
+                              (entry) => entry.name === pane.channel,
+                            )?.chat ?? ""
+                          }
+                          id={pane.id}
+                          onClose={() => closePane(pane)}
+                        />
+                      )}
+                    </PaneContext.Provider>
+                  </div>
+                </Fragment>
+              ))}
+            </aside>
+          )}
 
-        {/* WHO is here — humans and agents, discord's member list.
+          {/* WHO is here — humans and agents, discord's member list.
             A room's furniture: profiles and DMs are about ONE agent,
             so the panel stays out of them. */}
-        {members &&
-          thread === undefined &&
-          panes.length === 0 &&
-          agent === undefined &&
-          !channel.dm && <MembersPanel channel={channel.name} />}
-      </div>
+          {members &&
+            thread === undefined &&
+            panes.length === 0 &&
+            agent === undefined &&
+            !channel.dm && <MembersPanel channel={channel.name} />}
+        </div>
       )}
       {overlay !== undefined && <OverlayView overlay={overlay} />}
     </div>

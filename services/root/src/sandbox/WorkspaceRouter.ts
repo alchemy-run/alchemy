@@ -315,7 +315,8 @@ export const WorkspaceRouter: Layer.Layer<
             close: (id) =>
               ptyTarget.pipe(
                 Effect.flatMap((target) =>
-                  inTarget(target)(raw.pty!.close(id))),
+                  inTarget(target)(raw.pty!.close(id)),
+                ),
               ),
           };
 

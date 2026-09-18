@@ -66,10 +66,9 @@ interface GitHubComment {
   readonly issue_url: string;
 }
 
-const labelNames = (
-  labels: GitHubIssue["labels"],
-): ReadonlyArray<string> =>
-  labels.map((label) => (typeof label === "string" ? label : (label.name ?? "")))
+const labelNames = (labels: GitHubIssue["labels"]): ReadonlyArray<string> =>
+  labels
+    .map((label) => (typeof label === "string" ? label : (label.name ?? "")))
     .filter((name) => name.length > 0);
 
 export interface SyncReport {

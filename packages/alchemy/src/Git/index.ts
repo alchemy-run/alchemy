@@ -23,6 +23,7 @@
 export * from "./Api.ts";
 export { GitApi as Api } from "./Api.ts";
 export { Engine, EngineLive } from "./Engine.ts";
+export { Operations, OperationsLive } from "./Operations.ts";
 export type { PushInput, PreparedPush, RefUpdate } from "./Push.ts";
 export * as Http from "./Http.ts";
 export * as Push from "./PushInput.ts";

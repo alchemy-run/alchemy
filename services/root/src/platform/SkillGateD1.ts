@@ -62,9 +62,7 @@ export const skillConfig = Effect.gen(function* () {
         .prepare("SELECT agent, skill FROM agent_skills WHERE enabled = 0")
         .all<{ agent: string; skill: string }>(),
     );
-    return new Set(
-      rows.results.map((row) => `${row.agent}/${row.skill}`),
-    );
+    return new Set(rows.results.map((row) => `${row.agent}/${row.skill}`));
   });
 
   return { enabled, set, disabled };

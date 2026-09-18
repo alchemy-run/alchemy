@@ -96,15 +96,13 @@ export const seed = Effect.gen(function* () {
         Effect.catchTag("RepoAlreadyExists", () => Effect.succeed("exists")),
       );
     // the mirrors are PUBLIC: anonymous clones, no credential
-    yield* engine.repositories
-      .get({ owner: spec.owner, repo: spec.name })
-      .pipe(
-        Effect.flatMap((repo) =>
-          engine.repositories.update(repo, { public: true }),
-        ),
-        Effect.asVoid,
-        Effect.catchCause(() => Effect.void),
-      );
+    yield* engine.repositories.get({ owner: spec.owner, repo: spec.name }).pipe(
+      Effect.flatMap((repo) =>
+        engine.repositories.update(repo, { public: true }),
+      ),
+      Effect.asVoid,
+      Effect.catchCause(() => Effect.void),
+    );
     reports.push({ repo: `${spec.owner}/${spec.name}`, status: started });
   }
   return reports;

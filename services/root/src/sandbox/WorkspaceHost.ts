@@ -174,10 +174,7 @@ export const makeWorkspaceHost = Effect.fn(function* (repoRoot: string) {
     return outcome.success;
   });
 
-  const git = Effect.fn(function* (
-    args: ReadonlyArray<string>,
-    cwd: string,
-  ) {
+  const git = Effect.fn(function* (args: ReadonlyArray<string>, cwd: string) {
     const result = yield* run("git", args, cwd);
     if (result.exitCode !== 0) {
       return yield* new Failure({
@@ -543,9 +540,7 @@ export const makeWorkspaceHost = Effect.fn(function* (repoRoot: string) {
 
   const shape: WorkspaceHostShape = {
     workspaceEnsure: (key, options) =>
-      forKey(key)
-        .ensure(options)
-        .pipe(Effect.mapError(reason)),
+      forKey(key).ensure(options).pipe(Effect.mapError(reason)),
     workspaceGet: (key) => forKey(key).get.pipe(Effect.mapError(reason)),
     workspaceDrop: (key) => forKey(key).drop.pipe(Effect.mapError(reason)),
   };

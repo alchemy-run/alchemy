@@ -214,3 +214,22 @@ export const patchIssue = (
     headers: { "content-type": "application/json" },
     body: JSON.stringify(patch),
   }).then((response) => response.json() as Promise<ForgeIssue>);
+
+/** The WHOLE tree of a repo at a ref — one request, cached per commit
+ *  server-side (the forge walks the immutable tree graph itself). */
+export interface FullTree {
+  readonly ref: string;
+  readonly commit: string;
+  readonly files: ReadonlyArray<{ readonly path: string; readonly kind: string }>;
+}
+
+export const fetchFullTree = async (
+  repo: string,
+  ref: string,
+): Promise<FullTree> => {
+  const response = await fetch(
+    `/api/forge/repos/org/${encodeURIComponent(repo)}/tree?ref=${encodeURIComponent(ref)}`,
+  );
+  if (!response.ok) throw new Error(`tree ${response.status}`);
+  return (await response.json()) as FullTree;
+};
