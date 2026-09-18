@@ -24,7 +24,7 @@ packages:
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
-  "@alchemy.run/sigil": "0.0.0-alpha.11"
+  "@alchemy.run/sigil": "0.1.0-alpha.1"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.10.1"
   "@astrojs/mdx": "8.0.0"
@@ -41,7 +41,7 @@ catalog:
   "@cloudflare/puppeteer": "^1.1.0"
   "@cloudflare/unenv-preset": "^2.16.1"
   "@cloudflare/vitest-plugin": "^1.0.0"
-  "@cloudflare/workers-types": "5.20260901.1"
+  "@cloudflare/workers-types": "5.20260918.1"
   "@effect/atom-react": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/language-service": "^0.87.2"
   "@effect/platform-bun": ">=4.0.0-rc.115 || >=4.0.0"
@@ -189,7 +189,7 @@ catalog:
   vue-router: "^5.0.4"
   vue-tsc: "^3.2.6"
   waku: "1.0.0-beta.7"
-  workerd: "1.20260901.1"
+  workerd: "1.20260918.1"
   wrangler: "^4.103.0"
   ws: "^8.21.0"
   yaml: "^2.9.0"
@@ -219,8 +219,8 @@ catalogs:
     "@types/node": "^22.10.2"
     "@vitejs/plugin-react": "^5.1.4"
 overrides:
-  "@cloudflare/workers-types": 5.20260901.1
-  workerd: 1.20260901.1
+  "@cloudflare/workers-types": 5.20260918.1
+  workerd: 1.20260918.1
   effect: 4.0.0-rc.115
   "@effect/platform-browser": 4.0.0-rc.115
   drizzle-kit: 1.0.0-rc.5-ab785fc
@@ -234,7 +234,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.11"
+  - "@alchemy.run/sigil@0.1.0-alpha.1"
   - "@effect/atom-react@4.0.0-rc.115"
   - "@effect/platform-bun@4.0.0-rc.115"
   - "@effect/platform-node-shared@4.0.0-rc.115"
@@ -248,13 +248,13 @@ minimumReleaseAgeExclude:
   - effect@4.0.0-rc.115
   - foldkit@0.160.0
   - "@solidjs/start@2.0.4"
-  - "@cloudflare/workers-types@5.20260901.1"
-  - "@cloudflare/workerd-darwin-64@1.20260901.1"
-  - "@cloudflare/workerd-darwin-arm64@1.20260901.1"
-  - "@cloudflare/workerd-linux-64@1.20260901.1"
-  - "@cloudflare/workerd-linux-arm64@1.20260901.1"
-  - "@cloudflare/workerd-windows-64@1.20260901.1"
-  - workerd@1.20260901.1
+  - "@cloudflare/workers-types@5.20260918.1"
+  - "@cloudflare/workerd-darwin-64@1.20260918.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20260918.1"
+  - "@cloudflare/workerd-linux-64@1.20260918.1"
+  - "@cloudflare/workerd-linux-arm64@1.20260918.1"
+  - "@cloudflare/workerd-windows-64@1.20260918.1"
+  - workerd@1.20260918.1
   - '@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1'
   - '@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1'
   - '@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1'
