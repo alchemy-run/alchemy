@@ -133,10 +133,28 @@ configured entirely from flags: `--method` picks the provider's configure
 method and repeatable `--set` supplies its fields. Values come in three
 forms so secrets stay out of shell history: a literal (`name=value`), an
 environment variable (`name=env:VAR`, resolved from the environment and
-`--env-file`), or stdin (`name=-`, one field at most). Each provider
-documents its methods and fields in `alchemy profile edit --help`; when a
-provider has exactly one method, `--method` can be omitted. Browser-OAuth
-methods stay interactive-only.
+`--env-file`), or stdin (`name=-`, one field at most). `--method` is
+required whenever `--set` is used. Browser-OAuth and `gh auth` methods stay
+interactive-only.
+
+`--method` is the same `method` value the provider writes to its file under
+`~/.alchemy/credentials/<profile>/`, and `--set` keys are that file's
+properties. `stored` is the pasted-credential method every provider shares:
+
+| Provider    | `--method` | `--set` fields                                                       |
+| ----------- | ---------- | -------------------------------------------------------------------- |
+| AWS         | `stored`   | `accessKeyId`, `secretAccessKey`, `region`, optional `sessionToken`  |
+| AWS         | `sso`      | `ssoProfile` (from `~/.aws/config`)                                  |
+| Axiom       | `stored`   | `token`, optional `orgId`, `apiBaseUrl`                              |
+| Cloudflare  | `stored`   | `accountId` plus either `apiToken`, or `apiKey` and `email`          |
+| Fly         | `stored`   | `apiKey`, optional `apiBaseUrl`                                      |
+| GitHub      | `stored`   | `token`, optional `baseUrl`                                          |
+| Hetzner     | `stored`   | `token`, optional `apiBaseUrl`                                       |
+| Neon        | `stored`   | `apiKey`                                                             |
+| Planetscale | `stored`   | `tokenId`, `token`, `organization`                                   |
+| Prisma      | `stored`   | `serviceToken`                                                       |
+| Railway     | `stored`   | `token`, optional `apiBaseUrl`                                       |
+| Railway     | `env`      | none (reads `RAILWAY_API_TOKEN` on every run)                        |
 
 In a non-interactive session (no terminal, CI, coding agents), the menu can't
 open. The command prints its usage and exits non-zero. Use the action flags.
@@ -168,11 +186,11 @@ alchemy profile edit --remove cloudflare
 alchemy profile edit --remove cloudflare --add github
 
 # Fully non-interactive: an agent connects Cloudflare with an API token
-alchemy profile edit --add cloudflare --method api-token \
+alchemy profile edit --add cloudflare --method stored \
   --set apiToken=env:CLOUDFLARE_API_TOKEN --set accountId=0123456789abcdef0123456789abcdef
 
-# Single-method providers don't need --method; secret via stdin
-op read op://vault/neon/key | alchemy profile edit --add neon --set apiKey=-
+# Secret via stdin
+op read op://vault/neon/key | alchemy profile edit --add neon --method stored --set apiKey=-
 ```
 
 ## profile refresh

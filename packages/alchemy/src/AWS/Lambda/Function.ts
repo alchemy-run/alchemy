@@ -68,12 +68,24 @@ export type FunctionTypeId = typeof FunctionTypeId;
 
 class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
   functionName: string;
-}> {}
+  state?: string;
+  stateReason?: string;
+  lastUpdateStatus?: string;
+  lastUpdateStatusReason?: string;
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
+  }
+}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
-}> {}
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
+  }
+}
 
 export class HandlerContext extends Context.Service<
   HandlerContext,
@@ -595,7 +607,7 @@ export const normalizeFunctionUrl = (
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
  *
- * See [Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers)
+ * See [Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
  * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
@@ -1012,7 +1024,7 @@ export const Function: Platform<
       get: <T>(key: string) =>
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
-        // must never resolve through `Config.string`.
+        // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore
@@ -1386,6 +1398,7 @@ export const FunctionProvider = () =>
       const waitForFunctionUpdate = Effect.fn(function* (
         functionName: string,
         session: { note: (note: string) => Effect.Effect<void> },
+        vpc: boolean,
       ) {
         return yield* Effect.gen(function* () {
           const configuration = (yield* Lambda.getFunction({
@@ -1409,18 +1422,25 @@ export const FunctionProvider = () =>
           ) {
             return;
           }
-          return yield* new FunctionUpdatePending({ functionName });
+          return yield* new FunctionUpdatePending({
+            functionName,
+            state: configuration?.State,
+            stateReason: configuration?.StateReason,
+            lastUpdateStatus: configuration?.LastUpdateStatus,
+            lastUpdateStatusReason: configuration?.LastUpdateStatusReason,
+          });
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionUpdatePending",
             schedule: Schedule.spaced("2 seconds").pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
-                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                  `Waiting for Lambda function update: ${functionName} (${attempt * 2}s)`,
                 ),
               ),
             ),
-            times: 30,
+            // New VPC attachments can spend several minutes provisioning Hyperplane ENIs.
+            times: vpc ? 150 : 30,
           }),
         );
       });
@@ -1527,12 +1547,8 @@ export const FunctionProvider = () =>
           return yield* prepareImageFunctionCode({ id, props, session });
         }
 
-        // Mock code for the pre-created stub. It responds 503 (rather than a
-        // bare 200) so that, during the brief window where the real code/config
-        // update is still `InProgress`, a Function URL hit serves an honest
-        // "not ready" signal. Downstream readiness probes already retry on
-        // non-200, so they wait for the real handler without blocking the
-        // provider.
+        // The precreated stub responds 503 until reconciliation installs the
+        // real handler and waits for its configuration to become active.
         const code = new TextEncoder().encode(
           `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
         );
@@ -1643,9 +1659,15 @@ export const FunctionProvider = () =>
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
-        const noteRolePropagationWait = () =>
+        const isSecurityGroupPropagationError = (
+          e: Lambda.CreateFunctionError,
+        ) =>
+          e._tag === "InvalidParameterValueException" &&
+          e.message?.includes("InvalidGroup.NotFound");
+
+        const noteCreateDependencyWait = () =>
           session.note(
-            `Waiting for Lambda execution role to become assumable: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
           );
 
         const tags = yield* createInternalTags(id);
@@ -1763,7 +1785,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1798,7 +1820,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1820,9 +1842,10 @@ export const FunctionProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (e) => isRolePropagationError(e),
+            while: (e) =>
+              isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(
-              Schedule.tap(() => noteRolePropagationWait()),
+              Schedule.tap(() => noteCreateDependencyWait()),
             ),
           }),
           Effect.catchTags({
@@ -2456,6 +2479,12 @@ export const FunctionProvider = () =>
             session,
           });
 
+          yield* waitForFunctionUpdate(
+            functionName,
+            session,
+            vpc !== undefined,
+          );
+
           const previousImage = output?.code.image;
           const nextImage =
             "image" in prepared.attributes
@@ -2465,10 +2494,8 @@ export const FunctionProvider = () =>
             previousImage?.ownsRepository === true &&
             previousImage.repositoryUri !== nextImage?.repositoryUri
           ) {
-            // The function has moved from an Alchemy-owned local image to a
-            // different source. Wait until Lambda has adopted the new digest
-            // before deleting the now-unreferenced managed repository.
-            yield* waitForFunctionUpdate(functionName, session);
+            // Lambda has adopted the new image; the previous managed
+            // repository is no longer referenced.
             yield* functionImage.deleteRepository(previousImage.repositoryName);
           }
 

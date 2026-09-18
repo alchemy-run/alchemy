@@ -121,7 +121,7 @@ identical props never rotate it.
 ## Bind Axiom to the Worker
 
 Import the datasets and token into the Worker's module and provide
-the `Axiom.Telemetry` binding layer on its init Effect, merged into
+the `Axiom.Telemetry` binding layer on its constructor Effect, merged into
 the single `Effect.provide` with the other binding layers. That's
 the whole integration — every span, log record, and metric the
 Worker produces is exported, flushed as each request completes:

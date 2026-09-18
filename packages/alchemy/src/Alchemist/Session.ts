@@ -22,25 +22,27 @@ import { withProfileOverride } from "../Auth/Resolve.ts";
 import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
+import { FlyAuth } from "../Fly/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
+import { RailwayAuth } from "../Railway/AuthProvider.ts";
+import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
-import { UserFacingError } from "../UserFacingError.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { fileLogger } from "../Util/FileLogger.ts";
 
-export class StackEntrypointError extends Data.TaggedError(
-  "StackEntrypointError",
-)<{ readonly message: string }> {
-  readonly [UserFacingError] = true;
-}
+import {
+  DEFAULT_ENTRYPOINT,
+  resolveStackEntrypoint,
+  StackEntrypointError,
+} from "./Entrypoint.ts";
 
-export const DEFAULT_ENTRYPOINT = "alchemy.run.ts";
+export { DEFAULT_ENTRYPOINT, resolveStackEntrypoint, StackEntrypointError };
 
 /** Stage used by routes that inspect a project without addressing a deployment. */
 export const PLACEHOLDER_STAGE = "placeholder";
@@ -55,19 +57,22 @@ export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
   readonly state: Layer.Layer<never> | undefined;
 };
 
+export interface StackModuleLoader {
+  readonly import: (url: string) => Promise<{ readonly default?: unknown }>;
+}
+
+export const StackModuleLoader = Context.Reference<StackModuleLoader>(
+  "Alchemy/Alchemist/StackModuleLoader",
+  {
+    defaultValue: () => ({ import: (url) => import(url) }),
+  },
+);
+
 export const importStack = Effect.fn(function* (main: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const absolutePath = path.resolve(main);
-  if (!(yield* fs.exists(absolutePath))) {
-    return yield* Effect.fail(
-      new StackEntrypointError({
-        message: `Stack entrypoint '${main}' does not exist in '${path.dirname(absolutePath)}'. Run this command from an Alchemy project, pass --config <path>, or use --backend aws / --backend cloudflare for config-less state access.`,
-      }),
-    );
-  }
-  const module: { readonly default?: unknown } = yield* Effect.promise(
-    () => import(pathToFileURL(absolutePath).href),
+  const absolutePath = yield* resolveStackEntrypoint(main);
+  const loader = yield* StackModuleLoader;
+  const module = yield* Effect.promise(() =>
+    loader.import(pathToFileURL(absolutePath).href),
   );
   if (
     !Effect.isEffect(module.default) ||
@@ -355,11 +360,14 @@ const builtinAuth = Layer.mergeAll(
   AwsAuth,
   AxiomAuth,
   CloudflareAuth,
+  FlyAuth,
   GitHubAuth,
   HetznerAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,
+  RailwayAuth,
+  StripeAuth,
 );
 
 const buildBuiltinAuthProviders = Effect.fn("buildBuiltinAuthProviders")(

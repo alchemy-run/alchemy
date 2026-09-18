@@ -1,5 +1,5 @@
 import { Interaction, layerNonInteractive, accessors } from "@/Interaction.ts";
-import { transformTypesFlags } from "@/Util/Node.ts";
+import { nodeLoaderArgs } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -7,7 +7,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { nodePath, nodeSupportsDevMode, nodeVersion } from "./nodeProbe.ts";
+import { nodePath, nodeSupportsDevMode } from "./nodeProbe.ts";
 
 class CaptureStream extends PassThrough {
   readonly columns = 80;
@@ -65,14 +65,13 @@ it("task prints a start line and settles with a status line", () => {
   }).pipe(Effect.provide(nonInteractive(stdout)));
 });
 
-// The regression this pins: spawned dev children run under plain Node type
-// stripping (which cannot load TSX) and carry NO interaction services at
-// all. The vite child runner's entire module graph must therefore load
-// under node and proceed to config resolution — the original bug was an
-// eager CliKit/TSX import killing every `runtime: "node"` dev child at
-// startup.
+// The regression this pins: spawned dev children carry NO interaction
+// services at all, so the vite child runner's entire module graph must load
+// under node (the same dev-mode loader `ViteChild.ts` spawns it with) and
+// proceed to config resolution — the original bug was an eager CliKit import
+// killing every `runtime: "node"` dev child at startup.
 it.live.skipIf(!nodeSupportsDevMode)(
-  "the vite child runner's module graph loads under plain node",
+  "the vite child runner's module graph loads under node",
   () =>
     Effect.gen(function* () {
       const runner = fileURLToPath(
@@ -83,7 +82,7 @@ it.live.skipIf(!nodeSupportsDevMode)(
       );
       const handle = yield* ChildProcess.make(
         nodePath!,
-        [...transformTypesFlags(nodeVersion ?? undefined), runner],
+        [...nodeLoaderArgs(runner), runner],
         {
           cwd: fileURLToPath(new URL("..", import.meta.url)),
           env: { NO_COLOR: "1" },

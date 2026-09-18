@@ -15,7 +15,7 @@ export const AXIOM_AUTH_PROVIDER_NAME = "Axiom";
 export type AxiomAuthConfig = StoredAuthConfig;
 
 /**
- * Resolved Axiom credentials. The stored credential file is a flat record
+ * Resolved Axiom credentials. The provider values are a flat record
  * (token + optional orgId/apiBaseUrl); the `apiToken`/`pat` distinction is
  * derived at resolution time from orgId presence — an org id means the token
  * is treated as a personal access token, mirroring how the CI environment
@@ -67,7 +67,6 @@ const readEnvironment = Effect.gen(function* () {
 
 const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
   provider: AXIOM_AUTH_PROVIDER_NAME,
-  storageKey: "axiom-stored",
   fields: [
     {
       name: "token",
@@ -135,6 +134,6 @@ const axiomAuth = makeStoredAuthProvider<AxiomResolvedCredentials>({
  */
 export const AxiomAuth = axiomAuth.layer;
 
-/** Schema of the stored Axiom credential file (flat field record). */
+/** Schema of Axiom's inline static-token values. */
 export const AxiomStoredCredentials = axiomAuth.storedSchema;
 export type AxiomStoredCredentials = typeof AxiomStoredCredentials.Type;

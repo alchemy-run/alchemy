@@ -21,7 +21,10 @@ export class MyWorkflow extends WorkflowEntrypoint<AsyncWorkflowEnv, Params> {
 
     await step.sleep("cooldown", "1 second");
 
-    return await step.do("finalize", async () => ({ greeting }));
+    return await step.do("finalize", async () => ({
+      greeting,
+      workflowName: event.workflowName,
+    }));
   }
 }
 

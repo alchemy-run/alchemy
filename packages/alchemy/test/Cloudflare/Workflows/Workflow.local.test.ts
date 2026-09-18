@@ -111,54 +111,19 @@ const waitForTerminal = (url: string, instanceId: string) =>
 const readWorkflowRow = (stack: Test.ScratchStack) =>
   Effect.gen(function* () {
     const state = yield* yield* State.State;
-    const fqns = yield* state.list({ stack: stack.name, stage: "test" });
+    const fqns = yield* state.list({ stack: stack.name, stage: stack.stage });
     for (const fqn of fqns) {
-      const row = yield* state.get({ stack: stack.name, stage: "test", fqn });
+      const row = yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn,
+      });
       if (
         row &&
-        (row as { resourceType?: string }).resourceType ===
-          "Cloudflare.Workflow"
+        !State.isActionState(row) &&
+        row.resourceType === "Cloudflare.Workflow"
       ) {
-        return row as {
-          resourceType: string;
-          providerMode?: "live" | "local";
-          attr?: {
-            workflowId: string;
-            workflowName: string;
-            accountId: string;
-          };
-        };
-      }
-    }
-    return undefined;
-  }).pipe(Effect.provide(stack.state));
-
-const readWorkerWorkflowBinding = (stack: Test.ScratchStack) =>
-  Effect.gen(function* () {
-    const state = yield* yield* State.State;
-    const fqns = yield* state.list({ stack: stack.name, stage: "test" });
-    for (const fqn of fqns) {
-      const row = yield* state.get({ stack: stack.name, stage: "test", fqn });
-      if (
-        row &&
-        (row as { resourceType?: string }).resourceType === "Cloudflare.Worker"
-      ) {
-        const contributions = (
-          row as {
-            bindings?: Array<{
-              data?: {
-                bindings?: Array<{
-                  type: string;
-                  workflowName?: string;
-                }>;
-              };
-            }>;
-          }
-        ).bindings;
-        const binding = contributions
-          ?.flatMap((contribution) => contribution.data?.bindings ?? [])
-          .find((binding) => binding.type === "workflow");
-        if (binding) return binding;
+        return row;
       }
     }
     return undefined;
@@ -199,8 +164,6 @@ test.provider(
       expect(row).toBeDefined();
       expect(row!.attr?.workflowId).toMatch(/^dev:/);
       expect(row!.providerMode).toBe("local");
-      const binding = yield* readWorkerWorkflowBinding(stack);
-      expect(binding?.workflowName).toBe(row!.attr?.workflowName);
 
       // Drive the workflow through the binding against local workerd.
       const url = deployed.worker.url!;
@@ -216,11 +179,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-/**
- * An explicit name must flow through both the local Workflow provider and the
- * Worker's serialized binding metadata. This stays entirely in local mode, so
- * it proves the exact-name wiring without creating a Cloudflare Workflow.
- */
+// Exercise physical names through real workerd bindings, not just metadata.
 test.provider(
   "async Worker binding preserves an explicit physical Workflow name",
   (stack) =>
@@ -229,23 +188,54 @@ test.provider(
 
       const workflowName = "existing-workflow-physical-name";
       const main = yield* asyncWorkflowMain;
-      yield* stack.deploy(
-        Cloudflare.Worker("ExplicitWorkflowWorker", {
-          main,
-          env: {
-            EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
-              workflowName,
-            }),
-          },
-        }),
-      );
-
+      const deployWith = (name?: string) =>
+        stack.deploy(
+          Cloudflare.Worker("ExplicitWorkflowWorker", {
+            main,
+            env: {
+              WORKFLOW_NAME: name ?? workflowName,
+              EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+                workflowName: name,
+              }),
+            },
+          }),
+        );
+      const created = yield* deployWith(workflowName);
       const workflowRow = yield* readWorkflowRow(stack);
       expect(workflowRow?.providerMode).toBe("local");
+      expect(workflowRow?.attr?.workflowId).toMatch(/^dev:/);
       expect(workflowRow?.attr?.workflowName).toBe(workflowName);
+      const instance = yield* startInstance(created.url!);
+      expect(
+        (yield* waitForTerminal(created.url!, instance)).output?.workflowName,
+      ).toBe(workflowName);
 
-      const binding = yield* readWorkerWorkflowBinding(stack);
-      expect(binding?.workflowName).toBe(workflowName);
+      yield* deployWith();
+      const preserved = yield* readWorkflowRow(stack);
+      expect(preserved?.attr?.workflowId).toBe(workflowRow?.attr?.workflowId);
+      expect(preserved?.attr?.workflowName).toBe(workflowName);
+
+      const renamed = yield* deployWith(`${workflowName}-renamed`);
+      const replaced = yield* readWorkflowRow(stack);
+      expect(replaced?.attr?.workflowId).not.toBe(
+        workflowRow?.attr?.workflowId,
+      );
+      expect(replaced?.attr?.workflowName).toBe(`${workflowName}-renamed`);
+      const client = yield* HttpClient.HttpClient;
+      const ready = yield* client.get(`${renamed.url!}/workflow/name`).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (name) => name === `${workflowName}-renamed`,
+          times: 8,
+        }),
+      );
+      expect(ready).toBe(`${workflowName}-renamed`);
+      const renamedInstance = yield* startInstance(renamed.url!);
+      expect(
+        (yield* waitForTerminal(renamed.url!, renamedInstance)).output
+          ?.workflowName,
+      ).toBe(`${workflowName}-renamed`);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -253,30 +243,40 @@ test.provider(
 );
 
 test.provider(
-  "cross-script binding serializes the host's explicit Workflow name",
+  "cross-script binding runs the host's explicit Workflow name",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const workflowName = "existing-cross-script-workflow";
       const main = yield* asyncWorkflowMain;
-      yield* stack.deploy(
-        Cloudflare.Worker("ExplicitWorkflowConsumer", {
-          main,
-          env: {
-            EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
-              scriptName: "existing-workflow-host",
-              workflowName,
-            }),
-          },
+      const host = Cloudflare.Worker("ExplicitWorkflowHost", {
+        main,
+        env: {
+          EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+            workflowName,
+          }),
+        },
+      });
+      yield* stack.deploy(host);
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* host;
+          return yield* Cloudflare.Worker("ExplicitWorkflowConsumer", {
+            main,
+            env: {
+              EXISTING_WORKFLOW: Cloudflare.Workflow("ExistingWorkflow", {
+                scriptName: worker.workerName,
+                workflowName,
+              }),
+            },
+          });
         }),
       );
-
-      // Cross-script references are binding-only: the consumer must serialize
-      // the host's exact physical name without registering another Workflow.
-      expect(yield* readWorkflowRow(stack)).toBeUndefined();
-      const binding = yield* readWorkerWorkflowBinding(stack);
-      expect(binding?.workflowName).toBe(workflowName);
+      const instance = yield* startInstance(deployed.url!);
+      const status = yield* waitForTerminal(deployed.url!, instance);
+      expect(status.status).toBe("complete");
+      expect(status.output?.workflowName).toBe(workflowName);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -288,14 +288,15 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      yield* stack.deploy(ExplicitNameWorkflowWorker);
+      const deployed = yield* stack.deploy(ExplicitNameWorkflowWorker);
 
       const workflowRow = yield* readWorkflowRow(stack);
       expect(workflowRow?.providerMode).toBe("local");
       expect(workflowRow?.attr?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
-
-      const binding = yield* readWorkerWorkflowBinding(stack);
-      expect(binding?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
+      const instance = yield* startInstance(deployed.url!);
+      const status = yield* waitForTerminal(deployed.url!, instance);
+      expect(status.status).toBe("complete");
+      expect(status.output?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -319,7 +320,7 @@ test.provider(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const worker = yield* WorkflowLocalWorker;
+          const worker = yield* ExplicitNameWorkflowWorker;
           return { worker };
         }).pipe(Alchemy.remote()),
       );
@@ -341,6 +342,10 @@ test.provider(
         workflowName,
       });
       expect(live.id).toBe(row!.attr!.workflowId);
+      expect(live.name).toBe(EXPLICIT_WORKFLOW_NAME);
+      expect(live.schedules?.map((schedule) => schedule.cron)).toEqual([
+        "0 0 1 1 *",
+      ]);
 
       // Round-trip an instance through the real edge. A freshly-deployed
       // worker's engine link can still be propagating, in which case the
@@ -364,6 +369,7 @@ test.provider(
         Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
       );
       expect(status.output?.greeting).toBe("Hello, world!");
+      expect(status.output?.workflowName).toBe(EXPLICIT_WORKFLOW_NAME);
 
       yield* stack.destroy();
 

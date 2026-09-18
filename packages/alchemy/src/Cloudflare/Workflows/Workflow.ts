@@ -22,31 +22,29 @@ import {
   type WorkerServices,
 } from "../Workers/Worker.ts";
 import { generateWorkflowName } from "./WorkflowName.ts";
+import { type WorkflowEvent, WorkflowStep } from "./WorkflowRuntime.ts";
+
+export {
+  WorkflowEvent,
+  WorkflowStep,
+  WorkflowStepContext,
+} from "./WorkflowRuntime.ts";
 
 type TypeId = "Cloudflare.Workflow";
 const TypeId = "Cloudflare.Workflow" as const;
 
-// ---------------------------------------------------------------------------
-// Runtime services -- provided by the bridge when the workflow executes
-// ---------------------------------------------------------------------------
-
 /**
- * Service that carries the current workflow event payload.
- * `yield* WorkflowEvent` inside a workflow body to access it.
+ * Cron trigger metadata on a Workflow instance created by a native
+ * `schedules` expression. Mirrors Cloudflare's `event.schedule`.
  */
-export class WorkflowEvent extends Context.Service<
-  WorkflowEvent,
-  {
-    payload: unknown;
-    timestamp: Date;
-    instanceId: string;
-    workflowName: string;
-    schedule?: WorkflowCronSchedule;
-  }
->()("Cloudflare.Workflows.WorkflowEvent") {}
-
 export interface WorkflowCronSchedule {
+  /**
+   * The matching cron expression that created this instance.
+   */
   cron: string;
+  /**
+   * The scheduled fire time, milliseconds since the Unix epoch.
+   */
   scheduledTime: number;
 }
 
@@ -69,14 +67,6 @@ export interface WorkflowStepContextData {
   attempt: number;
   config: WorkflowStepConfig;
 }
-
-/**
- * Runtime information for the current `task` attempt.
- */
-export class WorkflowStepContext extends Context.Service<
-  WorkflowStepContext,
-  WorkflowStepContextData
->()("Cloudflare.WorkflowStepContext") {}
 
 export interface WorkflowRollbackContext<Output = unknown> {
   error: Error;
@@ -137,24 +127,6 @@ type ExcludeWorkflowStepContext<R> = R extends {
 }
   ? never
   : R;
-
-/**
- * Internal service that wraps the Cloudflare `WorkflowStep` object.
- * Not accessed directly by users -- use `task`, `sleep`, `sleepUntil`, and
- * `waitForEvent` instead.
- */
-export class WorkflowStep extends Context.Service<
-  WorkflowStep,
-  {
-    do<T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T>;
-    sleep(name: string, duration: string | number): Effect.Effect<void>;
-    sleepUntil(name: string, timestamp: Date | number): Effect.Effect<void>;
-    waitForEvent<T>(
-      name: string,
-      options: WorkflowWaitForEventOptions,
-    ): Effect.Effect<WorkflowStepEvent<T>>;
-  }
->()("Cloudflare.Workflows.WorkflowStep") {}
 
 // ---------------------------------------------------------------------------
 // User-facing step primitives
@@ -305,11 +277,11 @@ export interface WorkflowLimits {
  */
 export interface WorkflowRefProps {
   /**
-   * Account-global Workflow name. Set this to preserve an existing Workflow;
-   * its first deployment requires `--adopt`. If omitted, Alchemy derives a
-   * stage-scoped name from the hosting Worker and exported class. Fixed names
-   * bypass that default, so they must be unique to each independently managed
-   * stack and stage.
+   * Account-global Workflow name. Adopting an existing Workflow requires
+   * `--adopt`; unused names do not. If omitted, Alchemy preserves the deployed
+   * name or derives a stage-scoped default from the hosting Worker and class.
+   * Changing this name replaces the Workflow. Fixed names must be unique to
+   * each independently managed stack and stage.
    */
   workflowName?: string;
   /**
@@ -328,6 +300,20 @@ export interface WorkflowRefProps {
    * the Worker that declares the binding; ignored when `scriptName` is set.
    */
   limits?: WorkflowLimits;
+  /**
+   * Cron expressions that create a new Workflow instance on each match.
+   * Wrangler-compatible: `schedules: ["0 * * * *"]`.
+   *
+   * Native Workflow schedules replace a Worker Cron Trigger whose
+   * `scheduled` handler called `workflow.create()`. Pass an empty
+   * array to remove all schedules.
+   *
+   * Only applies when the workflow is hosted by the Worker that declares
+   * the binding; ignored when `scriptName` is set.
+   *
+   * Account-wide limit: 100 cron expressions.
+   */
+  schedules?: string[];
 }
 
 /**
@@ -337,17 +323,28 @@ export interface WorkflowRefProps {
  */
 export interface WorkflowProps {
   /**
-   * Account-global Workflow name. Set this to preserve an existing Workflow;
-   * its first deployment requires `--adopt`. If omitted, Alchemy derives a
-   * stage-scoped name from the hosting Worker and exported class. Fixed names
-   * bypass that default, so they must be unique to each independently managed
-   * stack and stage.
+   * Account-global Workflow name. Adopting an existing Workflow requires
+   * `--adopt`; unused names do not. If omitted, Alchemy preserves the deployed
+   * name or derives a stage-scoped default from the hosting Worker and class.
+   * Changing this name replaces the Workflow. Fixed names must be unique to
+   * each independently managed stack and stage.
    */
   workflowName?: string;
   /**
    * Limits applied to the workflow.
    */
   limits?: WorkflowLimits;
+  /**
+   * Cron expressions that create a new Workflow instance on each match.
+   * Wrangler-compatible: `schedules: ["0 * * * *"]`.
+   *
+   * Native Workflow schedules replace a Worker Cron Trigger whose
+   * `scheduled` handler called `workflow.create()`. Pass an empty
+   * array to remove all schedules.
+   *
+   * Account-wide limit: 100 cron expressions.
+   */
+  schedules?: string[];
 }
 
 /**
@@ -367,6 +364,8 @@ export interface WorkflowLike<Params = unknown> {
   scriptName?: Input<string>;
   /** @internal phantom */
   limits?: WorkflowLimits;
+  /** @internal phantom */
+  schedules?: string[];
   /** @internal phantom */
   Params?: Params;
 }
@@ -596,6 +595,26 @@ export class WorkflowScope extends Context.Service<
  * ) {}
  * ```
  *
+ * ### Scheduling instances
+ * Each matching cron expression creates a new instance automatically —
+ * no Worker Cron Trigger or `scheduled` handler required.
+ * **Example:** Native cron schedules
+ * ```typescript
+ * export default class HourlyWorkflow extends Cloudflare.Workflow<HourlyWorkflow>()(
+ *   "HourlyWorkflow",
+ *   { schedules: ["0 * * * *"] },
+ *   Effect.gen(function* () {
+ *     return Effect.fn(function* () {
+ *       const event = yield* Cloudflare.Workflows.WorkflowEvent;
+ *       if (event.schedule) {
+ *         return { cron: event.schedule.cron };
+ *       }
+ *       return {};
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
  * ### Step Primitives
  * **Example:** Running a named task
  * ```typescript
@@ -765,6 +784,19 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
+ * **Example:** Native cron schedules on an async Workflow binding
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     HOURLY: Cloudflare.Workflow("HourlyWorkflow", {
+ *       className: "HourlyWorkflow",
+ *       schedules: ["0 * * * *"],
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * **Example:** Using the Workflow from a plain async handler
  * ```typescript
  * // src/worker.ts
@@ -878,6 +910,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       className: refProps?.className ?? name,
       scriptName: refProps?.scriptName,
       limits: refProps?.limits,
+      schedules: refProps?.schedules,
     } satisfies WorkflowLike;
   }
   const props = Effect.isEffect(second) ? undefined : (second as WorkflowProps);
@@ -890,6 +923,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
         className: name,
         scriptName: worker.workerName,
         limits: props?.limits,
+        schedules: props?.schedules,
       });
 
       // Add the workflow binding to the Worker metadata
@@ -898,7 +932,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           {
             type: "workflow",
             name,
-            workflowName: workflow.workflowName,
+            workflowName: props?.workflowName ?? workflow.workflowName,
             className: name,
           },
         ],
@@ -980,6 +1014,11 @@ export interface WorkflowResourceProps {
   className: string;
   scriptName: string;
   limits?: WorkflowLimits;
+  /**
+   * Cron expressions that create a new Workflow instance on each match.
+   * Pass an empty array to remove all schedules.
+   */
+  schedules?: string[];
 }
 
 export interface WorkflowResourceAttrs {
@@ -988,6 +1027,10 @@ export interface WorkflowResourceAttrs {
   className: string;
   scriptName: string;
   accountId: string;
+  /**
+   * Cron expressions currently attached to this Workflow.
+   */
+  schedules: string[];
 }
 
 const WorkflowResourceTypeId = "Cloudflare.Workflow";
@@ -1036,40 +1079,38 @@ export const ProviderLive = () =>
                 className: wf.className ?? "",
                 scriptName: wf.scriptName ?? "",
                 accountId,
+                schedules: fromObservedSchedules(wf.schedules),
               })),
             ),
           ),
         );
       }),
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.accountId !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
 
+      // The host script may be unresolved even when the physical name is known.
+      const explicitName =
+        "workflowName" in news && isResolved(news.workflowName)
+          ? news.workflowName
+          : undefined;
       const oldName =
         output?.workflowName ??
-        (typeof olds.workflowName === "string"
-          ? olds.workflowName
-          : isResolved(olds)
-            ? yield* generateWorkflowName(olds.scriptName, olds.className)
-            : undefined);
-      // Compare an explicit physical name independently of other unresolved
-      // props so a rename can never be misclassified as an in-place update.
-      const explicitName = (news as Partial<WorkflowResourceProps>)
-        .workflowName;
-      if (
-        typeof explicitName === "string" &&
-        oldName !== undefined &&
-        explicitName !== oldName
-      ) {
-        return { action: "replace" } as const;
-      }
-      if (!isResolved(news)) return undefined;
-      // Auto-generated names are engine-owned: the deployed name stays
-      // authoritative unless the user supplies a different physical name.
-      const workflowName = news.workflowName ?? oldName;
-      if (oldName !== undefined && workflowName !== oldName) {
+        olds.workflowName ??
+        (yield* generateWorkflowName(olds.scriptName, olds.className));
+      // Omitting the name preserves the deployed identity, including legacy names.
+      if (explicitName !== undefined && explicitName !== oldName) {
+        const existing = yield* getWorkflowOrUndefined(accountId, explicitName);
+        if (existing !== undefined) {
+          return yield* new OwnedBySomeoneElse({
+            message: `Cannot replace Workflow '${oldName}' with occupied name '${explicitName}'. Choose an unused name.`,
+            resourceType: WorkflowResourceTypeId,
+            logicalId: id,
+            physicalName: explicitName,
+          });
+        }
         return { action: "replace" } as const;
       }
     }),
@@ -1092,9 +1133,9 @@ export const ProviderLive = () =>
         className: workflow.className,
         scriptName: workflow.scriptName,
         accountId: acct,
+        schedules: fromObservedSchedules(workflow.schedules),
       };
-      // Explicit cold reads target resources that carry no ownership marker.
-      // Require --adopt before Alchemy is allowed to mutate or delete them.
+      // Explicit names carry no ownership marker; cold reads require adoption.
       return output === undefined && olds?.workflowName !== undefined
         ? Unowned(attrs)
         : attrs;
@@ -1119,24 +1160,27 @@ export const ProviderLive = () =>
         );
       }
 
-      // Explicit names may point at hand-managed or differently managed
-      // Workflows. Re-check immediately before a create/replacement PUT to
-      // prevent a plan/apply race or rename from overwriting another owner.
-      if (news.workflowName !== undefined && output === undefined) {
-        const existing = yield* getWorkflowOrUndefined(acct, workflowName);
-        if (existing !== undefined) {
-          return yield* new OwnedBySomeoneElse({
-            message:
-              `Cannot create Workflow '${workflowName}': an existing ` +
-              "Workflow has that account-global name. Choose an unused name, " +
-              "or adopt it into a resource with no prior state by re-planning " +
-              "with --adopt.",
-            resourceType: WorkflowResourceTypeId,
-            logicalId: id,
-            physicalName: workflowName,
-          });
-        }
+      const existing = yield* getWorkflowOrUndefined(acct, workflowName);
+      // Re-check occupied names at apply time; replacement is not adoption.
+      if (
+        news.workflowName !== undefined &&
+        output === undefined &&
+        existing !== undefined
+      ) {
+        return yield* new OwnedBySomeoneElse({
+          message:
+            `Cannot create Workflow '${workflowName}': an existing ` +
+            "Workflow has that account-global name. Choose an unused name, " +
+            "or adopt it into a resource with no prior state by re-planning " +
+            "with --adopt.",
+          resourceType: WorkflowResourceTypeId,
+          logicalId: id,
+          physicalName: workflowName,
+        });
       }
+      // PUT clears omitted schedules; preserve observed state unless explicitly set.
+      const schedules =
+        news.schedules ?? fromObservedSchedules(existing?.schedules);
 
       yield* Effect.logInfo(`Cloudflare Workflow reconcile: ${workflowName}`);
       // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
@@ -1148,6 +1192,7 @@ export const ProviderLive = () =>
         className: news.className,
         scriptName: news.scriptName,
         limits: news.limits,
+        schedules: toPutSchedules(schedules),
       });
       return {
         workflowId: result.id,
@@ -1155,6 +1200,7 @@ export const ProviderLive = () =>
         className: result.className,
         scriptName: result.scriptName,
         accountId: acct,
+        schedules,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -1186,15 +1232,14 @@ export const ProviderLocal = () =>
       if (output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      const explicitName = (news as Partial<WorkflowResourceProps>)
-        .workflowName;
-      if (
-        typeof explicitName === "string" &&
-        explicitName !== output.workflowName
-      ) {
+      // The host script may be unresolved even when the physical name is known.
+      const explicitName =
+        "workflowName" in news && isResolved(news.workflowName)
+          ? news.workflowName
+          : undefined;
+      if (explicitName !== undefined && explicitName !== output.workflowName) {
         return { action: "replace" } as const;
       }
-      if (!isResolved(news)) return undefined;
       // Fall through to the engine's default prop diff (className /
       // scriptName changes update in place).
     }),
@@ -1224,6 +1269,7 @@ export const ProviderLocal = () =>
         className: news.className,
         scriptName: news.scriptName,
         accountId: output?.accountId ?? accountId,
+        schedules: news.schedules ?? output?.schedules ?? [],
       };
     }),
     delete: Effect.fn(function* () {
@@ -1242,6 +1288,14 @@ export const WorkflowProvider = () =>
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const toPutSchedules = (
+  schedules: string[],
+): workflows.UpdateRequestSchedulesList => schedules.map((cron) => ({ cron }));
+
+const fromObservedSchedules = (
+  schedules?: ReadonlyArray<{ cron: string }> | null,
+): string[] => (schedules ?? []).map((s) => s.cron);
 
 const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   id: raw.id,

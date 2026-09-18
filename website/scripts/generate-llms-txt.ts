@@ -99,16 +99,15 @@ const SECTIONS: Section[] = [
   {
     heading: "Infrastructure as Effects",
     intro:
-      "How app code and infrastructure compose: Functions & Servers, Bindings, the init/runtime Phases, and Layers.",
+      "How app code and infrastructure compose: Runtime, Bindings, the Construction and Runtime Phases, and Layers.",
     pages: {
       slugs: [
-        "infrastructure-as-effects/index",
-        "infrastructure-as-effects/functions-and-servers",
+        "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/layers",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",
-        "infrastructure-as-effects/layers",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
       ],
@@ -228,6 +227,32 @@ const SECTIONS: Section[] = [
   {
     heading: "Cloudflare — Networking",
     pages: { directory: "cloudflare/networking" },
+  },
+  {
+    heading: "Prisma — start here",
+    pages: { slugs: ["prisma/index", "prisma/setup"] },
+  },
+  {
+    heading: "Prisma — tutorial",
+    intro:
+      "A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and a Vite frontend.",
+    pages: { directory: "prisma/tutorial" },
+  },
+  {
+    heading: "Prisma — Compute",
+    pages: { directory: "prisma/compute" },
+  },
+  {
+    heading: "Prisma — Data",
+    pages: { directory: "prisma/data" },
+  },
+  {
+    heading: "Prisma — Frontend",
+    pages: { directory: "prisma/frontend" },
+  },
+  {
+    heading: "Prisma — Guides",
+    pages: { directory: "prisma/guides" },
   },
   {
     heading: "AWS — start here",
@@ -383,6 +408,51 @@ const SECTIONS: Section[] = [
         "github/repository",
         "github/actions-config",
         "github/events",
+      ],
+    },
+  },
+  {
+    heading: "Git",
+    intro:
+      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
+    pages: {
+      slugs: [
+        "git/index",
+        "git/getting-started",
+        "git/tutorial/part-1",
+        "git/tutorial/part-2",
+        "git/tutorial/part-3",
+        "git/tutorial/part-4",
+        "git/clone-and-push",
+        "git/repositories",
+        "git/pull-requests",
+        "git/github-api",
+        "git/blocks/index",
+        "git/blocks/server",
+        "git/blocks/repositories",
+        "git/blocks/registry",
+        "git/blocks/blob-store",
+        "git/blocks/hasher",
+        "git/blocks/auth",
+        "git/recipes/index",
+        "git/recipes/scaling",
+        "git/recipes/cloudflare",
+        "git/recipes/cloudflare-aws",
+        "git/recipes/your-own-store",
+      ],
+    },
+  },
+  {
+    heading: "Stripe",
+    intro:
+      "Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.",
+    pages: {
+      slugs: [
+        "stripe/index",
+        "stripe/setup",
+        "stripe/guides/subscriptions",
+        "stripe/guides/connect",
+        "stripe/guides/webhooks",
       ],
     },
   },

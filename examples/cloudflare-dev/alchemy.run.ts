@@ -76,7 +76,7 @@ const AsyncWorker = (deps: {
           className: "QueueMessages",
         }),
         MY_VARIABLE: "my-variable-abc123",
-        MY_SECRET: Config.redacted("MY_SECRET").pipe(
+        MY_SECRET: Config.Redacted("MY_SECRET").pipe(
           Config.withDefault(Redacted.make("my-secret-abc123")),
         ),
         // The worker's own URL, injected as a plain-text binding (`self_url`).

@@ -217,10 +217,11 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
               className,
               scriptName: resource.workerName,
               limits: binding.limits,
+              schedules: binding.schedules,
             });
             resolvedBindingMeta = {
               ...resolvedBindingMeta,
-              workflowName: workflow.workflowName,
+              workflowName: binding.workflowName ?? workflow.workflowName,
             };
           }
         }

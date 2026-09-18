@@ -14,7 +14,7 @@ import {
   type ConfigureMethod,
   type ProviderDetails,
 } from "../Auth/AuthProvider.ts";
-import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
+import { displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
 import {
   storedSecret,
@@ -41,30 +41,27 @@ const options: Array<{
   {
     value: "stored",
     label: "Personal Access Token",
-    description: "enter PAT interactively, stored in ~/.alchemy/credentials",
+    description: "enter PAT interactively and store it in the profile",
   },
 ];
 
-/** Manifest-entry schema for GitHub authentication. */
+/** Typed values stored in a GitHub provider profile document. */
 export const GitHubAuthConfigSchema = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("stored"),
+    token: Schema.String,
     baseUrl: Schema.optionalKey(Schema.String),
   }),
   Schema.Struct({
     method: Schema.Literal("gh-cli"),
+    // v0 delegated to `gh auth token` and therefore had no inline token.
+    // Keep that migration state readable; the first credential resolution
+    // captures the token inline through updateConfig.
+    token: Schema.optionalKey(Schema.String),
     baseUrl: Schema.optionalKey(Schema.String),
   }),
 ]);
 export type GitHubAuthConfig = typeof GitHubAuthConfigSchema.Type;
-
-export const GitHubStoredCredentials = Schema.Struct({
-  type: Schema.Literal("pat"),
-  token: Schema.RedactedFromValue(Schema.String),
-});
-export type GitHubStoredCredentials = typeof GitHubStoredCredentials.Type;
-
-const STORAGE_KEY = "github-stored";
 
 export interface GitHubResolvedCredentials {
   type: "token";
@@ -129,7 +126,7 @@ export const readEnvCredentials = (
  *
  * Supported methods:
  * - `gh-cli`: shells out to `gh auth token` (recommended).
- * - `stored`: prompts for a PAT and writes it to `~/.alchemy/credentials`.
+ * - `stored`: prompts for a PAT and stores it inline in the provider file.
  *
  * GitHub Enterprise (Server or Cloud with data residency) is supported by
  * every method: `alchemy profile edit --reconfigure GitHub` prompts for the host, or set
@@ -163,7 +160,6 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       // requirements, and child processes (which only ever call `read`) build
       // this layer with no interaction services at all.
       const interaction = Interaction.accessors;
-      const store = yield* CredentialsStore;
       const cp = yield* ChildProcessSpawner;
 
       // Hard-coded host from `providers({ baseUrl })`, resolved once at layer
@@ -240,10 +236,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           ),
         );
 
-      const loginStored = Effect.fn(function* (
-        profileName: string,
-        baseUrl?: string,
-      ) {
+      const loginStored = Effect.fn(function* (baseUrl?: string) {
         const token = yield* interaction.prompt
           .password({
             message: "GitHub Personal Access Token",
@@ -251,14 +244,9 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               "Requires `repo` scope and `workflow` for GitHub Actions.",
             validate: (v) => (v.length === 0 ? "Required" : undefined),
           })
-          .pipe(mapPromptCancellation, Effect.map(Redacted.make));
-
-        yield* store.write(profileName, STORAGE_KEY, GitHubStoredCredentials, {
-          type: "pat",
-          token,
-        });
+          .pipe(mapPromptCancellation);
         yield* interaction.output.success("GitHub: credentials saved.");
-        return { method: "stored" as const, baseUrl };
+        return { method: "stored" as const, token, baseUrl };
       });
 
       // Optional GitHub Enterprise host. Blank means github.com; anything else
@@ -282,7 +270,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           }),
         );
 
-      const configureInteractive = (profileName: string) =>
+      const configureInteractive = (_profileName: string) =>
         Effect.gen(function* () {
           const method = yield* interaction.prompt.select({
             message: "GitHub authentication method",
@@ -301,7 +289,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                   ? githubHostname(verifyHost)
                   : undefined,
               ).pipe(
-                Effect.as({ method: "gh-cli" as const, baseUrl }),
+                Effect.map((token) => ({
+                  method: "gh-cli" as const,
+                  token,
+                  baseUrl,
+                })),
                 Effect.mapError(
                   (e) =>
                     new AuthError({
@@ -311,7 +303,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                 ),
               ),
             ),
-            Match.when("stored", () => loginStored(profileName, baseUrl)),
+            Match.when("stored", () => loginStored(baseUrl)),
             Match.exhaustive,
           );
         });
@@ -330,27 +322,18 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       const resolveCredentials = (
         profileName: string,
         config: GitHubAuthConfig,
+        updateConfig?: (
+          config: GitHubAuthConfig,
+        ) => Effect.Effect<void, AuthError>,
       ): Effect.Effect<GitHubResolvedCredentials, AuthError | NeedsReauth> =>
         Match.value(config).pipe(
           Match.when(
             { method: "stored" },
             Effect.fn(function* (c) {
               const baseUrl = yield* effectiveBaseUrl(c);
-              const creds = yield* store.read(
-                profileName,
-                STORAGE_KEY,
-                GitHubStoredCredentials,
-              );
-              if (creds == null) {
-                return yield* new NeedsReauth({
-                  provider: GITHUB_AUTH_PROVIDER_NAME,
-                  profile: profileName,
-                  message: `GitHub stored credentials not found. ${refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
-                });
-              }
               return {
                 type: "token" as const,
-                token: creds.token,
+                token: Redacted.make(c.token),
                 baseUrl,
                 source: { type: "stored" as const },
               };
@@ -360,9 +343,24 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             { method: "gh-cli" },
             Effect.fn(function* (c) {
               const baseUrl = yield* effectiveBaseUrl(c);
-              const token = yield* ghCliToken(
-                baseUrl !== undefined ? githubHostname(baseUrl) : undefined,
-              );
+              const token =
+                c.token ??
+                (yield* ghCliToken(
+                  baseUrl !== undefined ? githubHostname(baseUrl) : undefined,
+                ).pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new NeedsReauth({
+                        provider: GITHUB_AUTH_PROVIDER_NAME,
+                        profile: profileName,
+                        message: `GitHub CLI credentials need to be refreshed. ${refreshHint(GITHUB_AUTH_PROVIDER_NAME, profileName)}`,
+                        cause,
+                      }),
+                  ),
+                ));
+              if (c.token === undefined && updateConfig !== undefined) {
+                yield* updateConfig({ ...c, token });
+              }
               return {
                 type: "token" as const,
                 token: Redacted.make(token),
@@ -374,24 +372,14 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           Match.exhaustive,
         );
 
-      const logout = (profileName: string, config: GitHubAuthConfig) =>
+      const logout = (_profileName: string, config: GitHubAuthConfig) =>
         Match.value(config).pipe(
           Match.when({ method: "gh-cli" }, () => Effect.void),
-          Match.when({ method: "stored" }, () =>
-            store
-              .delete(profileName, STORAGE_KEY)
-              .pipe(
-                Effect.andThen(
-                  interaction.output.success(
-                    "GitHub: stored credentials removed",
-                  ),
-                ),
-              ),
-          ),
+          Match.when({ method: "stored" }, () => Effect.void),
           Match.exhaustive,
         );
 
-      const login = (profileName: string, config: GitHubAuthConfig) =>
+      const login = (_profileName: string, config: GitHubAuthConfig) =>
         Match.value(config)
           .pipe(
             Match.when({ method: "gh-cli" }, (c) =>
@@ -406,20 +394,10 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                     "GitHub: gh CLI authentication available.",
                   ),
                 ),
-                Effect.asVoid,
+                Effect.map((token) => ({ ...c, token })),
               ),
             ),
-            Match.when({ method: "stored" }, (c) =>
-              store
-                .read(profileName, STORAGE_KEY, GitHubStoredCredentials)
-                .pipe(
-                  Effect.flatMap((creds) =>
-                    creds == null
-                      ? loginStored(profileName, c.baseUrl)
-                      : Effect.void,
-                  ),
-                ),
-            ),
+            Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
             Match.exhaustive,
           )
           .pipe(
@@ -431,8 +409,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       const details = (
         profileName: string,
         config: GitHubAuthConfig,
+        updateConfig?: (
+          config: GitHubAuthConfig,
+        ) => Effect.Effect<void, AuthError>,
       ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth> =>
-        resolveCredentials(profileName, config).pipe(
+        resolveCredentials(profileName, config, updateConfig).pipe(
           Effect.map((creds) => {
             const sourceStr = creds.source.details
               ? `${creds.source.type} - ${creds.source.details}`
@@ -474,7 +455,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       ];
 
       const configureWith = (
-        profileName: string,
+        _profileName: string,
         input: {
           readonly method: string;
           readonly values: Record<string, string>;
@@ -499,27 +480,19 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                             storedValueText(values.baseUrl) ?? "",
                           )
                         : undefined;
-                  yield* store.write(
-                    profileName,
-                    STORAGE_KEY,
-                    GitHubStoredCredentials,
-                    {
-                      type: "pat",
-                      token: storedSecret(values.token) ?? Redacted.make(""),
-                    },
+                  const token = Redacted.value(
+                    storedSecret(values.token) ?? Redacted.make(""),
                   );
                   yield* interaction.output.success(
                     "GitHub: credentials saved.",
                   );
-                  return { method: "stored" as const, baseUrl };
+                  return { method: "stored" as const, token, baseUrl };
                 }),
               ),
             )
           : Effect.fail(
               new AuthError({
-                message:
-                  `GitHub: unknown method '${input.method}'. Only 'stored' supports ` +
-                  "flag-driven configuration; use interactive configure for 'gh-cli'.",
+                message: `GitHub: unknown method '${input.method}'. Valid methods: stored. (gh-cli is interactive-only.)`,
               }),
             );
 

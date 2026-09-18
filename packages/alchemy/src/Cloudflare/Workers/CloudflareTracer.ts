@@ -104,7 +104,7 @@ export const layer: Layer.Layer<never> = Layer.effect(
         );
       },
       context(primitive, fiber) {
-        return contextFor(fiber.currentSpan)(() =>
+        return contextFor(fiber.cache.span)(() =>
           primitive["~effect/Effect/evaluate"](fiber),
         );
       },

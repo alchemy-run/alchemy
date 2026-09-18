@@ -2,16 +2,23 @@ import type {
   FlyMachineConfig,
   FlyMachineMount,
   FlyMachineService,
+  FlyMachineServiceCheck,
   ImageRef as FlyImageRef,
   Machine as FlyMachine,
   Volume as FlyVolume,
 } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { listOwnedApps } from "./App.ts";
-import type { MachineGuest, MachineImageRef } from "./Machine.ts";
+import type {
+  MachineGuest,
+  MachineImageRef,
+  MachineService,
+  MachineServiceCheck,
+} from "./Machine.ts";
 import {
   alchemyMetadataKeys,
   createMachineMetadata,
@@ -29,6 +36,9 @@ import {
 
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
+const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
+const CHECK_POLL = Schedule.spaced("5 seconds");
+const CHECK_WAIT = "60 seconds";
 
 export class ReplicaNotCreated extends Data.TaggedError(
   "Fly.ReplicaNotCreated",
@@ -36,6 +46,26 @@ export class ReplicaNotCreated extends Data.TaggedError(
   name: string;
   appName: string;
 }> {}
+
+export class ReplicaChecksNotPassing extends Data.TaggedError(
+  "Fly.ReplicaChecksNotPassing",
+)<{
+  appName: string;
+  machineId: string;
+  checks: ReadonlyArray<{
+    name: string | undefined;
+    status: string | undefined;
+    output: string | undefined;
+  }>;
+}> {
+  get message() {
+    const checks = this.checks.map(
+      (check) =>
+        `${check.name ?? "unnamed"}: ${check.status ?? "unknown"}${check.output ? ` (${check.output})` : ""}`,
+    );
+    return `Service checks did not pass for ${this.appName}/${this.machineId}: ${checks.join("; ") || "no service check results"}`;
+  }
+}
 
 export interface Replica {
   machineId: string;
@@ -165,6 +195,46 @@ export const toGuestAttrs = (
   };
 };
 
+export const toFlyServiceCheck = (
+  check: MachineServiceCheck,
+): FlyMachineServiceCheck => ({
+  type: check.type,
+  port: check.port,
+  interval: check.interval,
+  timeout: check.timeout,
+  grace_period: check.gracePeriod,
+  method: check.method,
+  path: check.path,
+  protocol: check.protocol,
+  headers: check.headers?.map((header) => ({
+    name: header.name,
+    values: header.values,
+  })),
+  tls_server_name: check.tlsServerName,
+  tls_skip_verify: check.tlsSkipVerify,
+});
+
+export const toFlyService = (service: MachineService): FlyMachineService => ({
+  protocol: service.protocol,
+  internal_port: service.internalPort,
+  autostart: service.autostart,
+  autostop:
+    typeof service.autostop === "boolean"
+      ? service.autostop
+        ? "stop"
+        : "off"
+      : service.autostop,
+  min_machines_running: service.minMachinesRunning,
+  ports: service.ports?.map((port) => ({
+    port: port.port,
+    handlers: port.handlers,
+    force_https: port.forceHttps,
+    start_port: port.startPort,
+    end_port: port.endPort,
+  })),
+  checks: service.checks?.map(toFlyServiceCheck),
+});
+
 export const hasPublishedService = (
   services: FlyMachineService[] | undefined,
 ) =>
@@ -186,10 +256,82 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
+        while: (e) =>
+          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
       Effect.timeout("50 seconds"),
     );
+
+const configuredServiceChecks = (machine: FlyMachine) =>
+  (machine.config?.services ?? []).flatMap((service) => service.checks ?? []);
+
+const liveServiceChecks = (machine: FlyMachine) =>
+  (machine.checks ?? []).filter((check) =>
+    (check.name ?? "").startsWith(SERVICE_CHECK_NAME_PREFIX),
+  );
+
+const allServiceChecksPassing = (machine: FlyMachine, expected: number) => {
+  const checks = liveServiceChecks(machine);
+  return (
+    checks.length >= expected &&
+    checks.every((check) => check.status === "passing")
+  );
+};
+
+const TRANSIENT_GET_TAGS = [
+  "TooManyRequests",
+  "InternalServerError",
+  "BadGateway",
+  "ServiceUnavailable",
+  "GatewayTimeout",
+] as const;
+
+/**
+ * After the Machine is started, wait until Fly reports every service
+ * check as passing. No configured checks is a no-op. Empty live
+ * `servicecheck-*` results keep polling — they are not success.
+ * `warning` / `unknown` during grace keep polling.
+ */
+export const waitHealthy = Effect.fn(function* (
+  appName: string,
+  machine: FlyMachine,
+) {
+  const machineId = machine.id;
+  const expected = configuredServiceChecks(machine).length;
+  if (machineId === undefined || expected === 0) return machine;
+
+  let observed = machine;
+  const notPassing = () =>
+    new ReplicaChecksNotPassing({
+      appName,
+      machineId,
+      checks: liveServiceChecks(observed).map((check) => ({
+        name: check.name,
+        status: check.status,
+        output: check.output,
+      })),
+    });
+  const passing = yield* getMachineById(appName, machineId).pipe(
+    Retry.none,
+    Effect.map((current) => {
+      if (current === undefined) return false;
+      observed = current;
+      return allServiceChecksPassing(current, expected);
+    }),
+    Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
+    Effect.repeat({
+      schedule: CHECK_POLL,
+      until: (passing) => passing,
+      times: 10,
+    }),
+    Effect.timeoutOrElse({
+      duration: CHECK_WAIT,
+      orElse: () => Effect.fail(notPassing()),
+    }),
+  );
+  if (!passing) return yield* notPassing();
+  return observed;
+});
 
 export const waitDestroyed = (appName: string, machineId: string) =>
   machines
@@ -205,7 +347,8 @@ export const waitDestroyed = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
+        while: (e) =>
+          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
     );
 
@@ -216,17 +359,53 @@ export const ensureStarted = Effect.fn(function* (
 ) {
   const machineId = machine.id;
   if (machineId === undefined || skipLaunch) return machine;
-  const state = machine.state;
-  if (state !== "started" && state !== "starting") {
-    yield* machines
-      .startMachine({
+  const started = yield* Effect.gen(function* () {
+    // Create/update responses can lag Fly's automatic launch.
+    const current = yield* machines.getMachine({
+      app_name: appName,
+      machine_id: machineId,
+    });
+    yield* Effect.logDebug("Fly machine startup", {
+      appName,
+      machineId,
+      state: current.state,
+    });
+    if (
+      current.state === "stopped" ||
+      current.state === "suspended" ||
+      current.state === "failed"
+    ) {
+      yield* machines.startMachine({
         app_name: appName,
         machine_id: machineId,
+      });
+    }
+    // Re-observe state between waits instead of retrying the wait in the SDK.
+    yield* machines
+      .waitMachine({
+        app_name: appName,
+        machine_id: machineId,
+        state: "started",
+        timeout: WAIT_TIMEOUT_SECONDS,
       })
-      .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
-  }
-  yield* waitStarted(appName, machineId);
-  return (yield* getMachineById(appName, machineId)) ?? machine;
+      .pipe(Retry.none);
+    return yield* machines.getMachine({
+      app_name: appName,
+      machine_id: machineId,
+    });
+  }).pipe(
+    Effect.retry({
+      times: 6,
+      schedule: waitBackoff,
+      while: (error) =>
+        error._tag === "MachineStartFromCreatedState" ||
+        error._tag === "MachineWaitTimeout" ||
+        error._tag === "Conflict" ||
+        error._tag === "GatewayTimeout",
+    }),
+    Effect.timeout("50 seconds"),
+  );
+  return yield* waitHealthy(appName, started);
 });
 
 export const deleteMachine = Effect.fn(function* (
@@ -614,7 +793,9 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     if (input.baseName === undefined) return true;
     const name = machine.name ?? "";
     if (name === input.baseName) return true;
-    return name.startsWith(`${input.baseName}-`);
+    return (
+      name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2)
+    );
   });
   if (listed.length > 0) {
     const volumesById = new Map<string, FlyVolume>();

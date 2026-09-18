@@ -184,9 +184,9 @@ export const checkLatestVersion = Effect.gen(function* () {
     typeof process !== "undefined" && process.versions.bun !== undefined
       ? `bun add alchemy@${latest}`
       : `pnpm add alchemy@${latest}`;
-  // Print via the Console service, not Effect.logWarning: TelemetryLive
-  // replaces the default stdout logger with an OTLP-only logger at this
-  // stage of the program, so log output would never reach the terminal.
+  // Print via the Console service, not Effect.logWarning: this is a
+  // user-facing notice, not a log record, so it should reach the terminal
+  // regardless of the installed loggers or the configured log floor.
   const useColor = colorsEnabled();
   const glyphs = glyphsFor(unicodeEnabled());
   const message =

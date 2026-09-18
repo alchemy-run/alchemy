@@ -74,18 +74,29 @@ const acquireFileLock = Effect.fn(function* (
 
   // A non-recursive mkdir is the atomic test-and-set; the owner marker lets
   // release and refresh verify the lock wasn't reaped and re-taken.
-  yield* fs.makeDirectory(lockPath).pipe(
-    Effect.andThen(
-      fs
-        .writeFileString(ownerPath, owner)
-        .pipe(
-          Effect.onError(() =>
-            fs
-              .remove(lockPath, { recursive: true, force: true })
-              .pipe(Effect.ignore),
-          ),
+  yield* Effect.acquireRelease(
+    fs
+      .makeDirectory(lockPath)
+      .pipe(
+        Effect.andThen(
+          fs
+            .writeFileString(ownerPath, owner)
+            .pipe(
+              Effect.onError(() =>
+                fs
+                  .remove(lockPath, { recursive: true, force: true })
+                  .pipe(Effect.ignore),
+              ),
+            ),
         ),
-    ),
+      ),
+    () =>
+      fs.readFileString(ownerPath).pipe(
+        Effect.filterOrFail((current) => current === owner),
+        Effect.andThen(fs.remove(lockPath, { recursive: true, force: true })),
+        Effect.ignore,
+      ),
+  ).pipe(
     Effect.catchReason("PlatformError", "AlreadyExists", () =>
       reapStale.pipe(Effect.andThen(Effect.fail(new LockHeld()))),
     ),
@@ -106,14 +117,6 @@ const acquireFileLock = Effect.fn(function* (
             `alchemy process is running, delete the lock directory and retry.`,
         }),
       ),
-    ),
-  );
-
-  yield* Effect.addFinalizer(() =>
-    fs.readFileString(ownerPath).pipe(
-      Effect.filterOrFail((current) => current === owner),
-      Effect.andThen(fs.remove(lockPath, { recursive: true, force: true })),
-      Effect.ignore,
     ),
   );
 

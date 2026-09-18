@@ -1,4 +1,10 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
+import { WorkflowResource } from "@/Cloudflare/Workflows/Workflow";
+import { generateWorkflowName } from "@/Cloudflare/Workflows/WorkflowName";
+import { sha256 } from "@/Util/sha256";
+import * as Cause from "effect/Cause";
+import * as Exit from "effect/Exit";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
@@ -31,7 +37,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 interface WorkflowStatus {
   status: string;
-  output?: { greeting: string };
+  output?: { greeting: string; workflowName?: string };
   error?: { message?: string } | null;
 }
 
@@ -326,6 +332,341 @@ test.provider(
       expect(applied).toBe(steps);
 
       yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// ---------------------------------------------------------------------------
+// #1473 regression: native Workflow schedules on the async (props-only)
+// reference form, driven by a file-based fixture (`main`, not inline
+// `script`). Yearly crons so the test never waits for a fire; create →
+// update → clear is asserted out-of-band via getWorkflow.
+// ---------------------------------------------------------------------------
+
+const scheduledWorkflowMain = `${import.meta.dirname}/fixtures/workflow-schedules/async-worker.ts`;
+
+const waitForAppliedSchedules = (workflowName: string, expected: string[]) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const workflow = yield* workflows.getWorkflow({
+      accountId,
+      workflowName,
+    });
+    return (workflow.schedules ?? []).map((s) => s.cron);
+  }).pipe(
+    Effect.flatMap((crons) =>
+      crons.length === expected.length &&
+      crons.every((cron, index) => cron === expected[index])
+        ? Effect.succeed(crons)
+        : Effect.fail(
+            new Error(`schedules not applied yet: ${JSON.stringify(crons)}`),
+          ),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+  );
+
+test.provider(
+  "async worker workflow binding applies native cron schedules",
+  (scratch) =>
+    Effect.gen(function* () {
+      const yearly = "0 0 1 1 *";
+      const other = "0 0 2 1 *";
+
+      const deployWith = (schedules: string[]) =>
+        scratch.deploy(
+          Effect.gen(function* () {
+            return {
+              worker: yield* Cloudflare.Worker("scheduled-workflow-worker", {
+                main: scheduledWorkflowMain,
+                env: {
+                  HOURLY: Cloudflare.Workflow("HourlyWorkflow", {
+                    className: "HourlyWorkflow",
+                    schedules,
+                  }),
+                },
+              }),
+            };
+          }),
+        );
+
+      const created = yield* deployWith([yearly]);
+      const workflowName = yield* readWorkflowName(created.worker.workerName);
+      expect(yield* waitForAppliedSchedules(workflowName, [yearly])).toEqual([
+        yearly,
+      ]);
+
+      yield* deployWith([other]);
+      expect(yield* waitForAppliedSchedules(workflowName, [other])).toEqual([
+        other,
+      ]);
+
+      yield* deployWith([]);
+      expect(yield* waitForAppliedSchedules(workflowName, [])).toEqual([]);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+const namedWorkflowMain = `${import.meta.dirname}/fixtures/workflow-async/worker.ts`;
+const physicalName = (scratch: Test.ScratchStack) =>
+  sha256(`${scratch.name}:${scratch.stage}`).pipe(
+    Effect.map((hash) => `alchemy-workflow-${hash.slice(0, 16)}`),
+  );
+const expectWorkflowGone = (accountId: string, workflowName: string) =>
+  workflows.getWorkflow({ accountId, workflowName }).pipe(
+    Effect.as(false),
+    Effect.catchTag("WorkflowNotFound", () => Effect.succeed(true)),
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (gone) => gone,
+      times: 8,
+    }),
+    Effect.tap((gone) => Effect.sync(() => expect(gone).toBe(true))),
+  );
+
+const namedHost = (workflowName?: string, schedules?: string[]) =>
+  Cloudflare.Worker("NamedHost", {
+    main: namedWorkflowMain,
+    env: {
+      MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
+        workflowName,
+        schedules,
+      }),
+    },
+  });
+
+test.provider(
+  "physical names preserve defaults, replace on rename, and retain schedules",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const explicit = yield* physicalName(scratch);
+      const original = yield* scratch.deploy(namedHost());
+      const generated = yield* readWorkflowName(original.workerName);
+      expect(generated).toBe(
+        yield* generateWorkflowName(original.workerName, "MyWorkflow"),
+      );
+      const first = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: generated,
+      });
+
+      yield* scratch.deploy(namedHost(generated));
+      expect(
+        (yield* workflows.getWorkflow({ accountId, workflowName: generated }))
+          .id,
+      ).toBe(first.id);
+
+      const renamed = yield* scratch.deploy(namedHost(explicit, ["0 0 1 1 *"]));
+      const replacement = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: explicit,
+      });
+      expect(replacement.id).not.toBe(first.id);
+      expect(yield* readWorkflowName(renamed.workerName)).toBe(explicit);
+      yield* expectWorkflowGone(accountId, generated);
+      expect(yield* waitForAppliedSchedules(explicit, ["0 0 1 1 *"])).toEqual([
+        "0 0 1 1 *",
+      ]);
+
+      const preserved = yield* scratch.deploy(namedHost());
+      expect(yield* readWorkflowName(preserved.workerName)).toBe(explicit);
+      const observed = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: explicit,
+      });
+      expect(observed.id).toBe(replacement.id);
+      expect(observed.schedules?.map((schedule) => schedule.cron)).toEqual([
+        "0 0 1 1 *",
+      ]);
+      const terminal = yield* runWorkflowToCompletion(preserved.url!).pipe(
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
+      );
+      expect(terminal.output?.workflowName).toBe(explicit);
+
+      yield* scratch.deploy(namedHost(undefined, []));
+      expect(yield* waitForAppliedSchedules(explicit, [])).toEqual([]);
+      yield* scratch.destroy();
+      yield* expectWorkflowGone(accountId, explicit);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "physical names require adoption and preserve adopted identity and schedules",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = yield* physicalName(scratch);
+      const host = Cloudflare.Worker("AdoptionHost", {
+        main: namedWorkflowMain,
+      });
+      const deployed = yield* scratch.deploy(host);
+      yield* expectWorkflowGone(accountId, workflowName);
+      const foreign = yield* workflows.putWorkflow({
+        accountId,
+        workflowName,
+        scriptName: deployed.workerName,
+        className: "MyWorkflow",
+        schedules: [{ cron: "0 0 1 1 *" }],
+      });
+      yield* Effect.addFinalizer(() =>
+        workflows.deleteWorkflow({ accountId, workflowName }).pipe(
+          Effect.catchTag("WorkflowNotFound", () => Effect.void),
+          Effect.orDie,
+        ),
+      );
+      const definition = (adopting: boolean, schedules?: string[]) =>
+        Effect.gen(function* () {
+          const worker = yield* host;
+          return yield* WorkflowResource("Adopted", {
+            workflowName,
+            className: "MyWorkflow",
+            scriptName: worker.workerName,
+            schedules,
+          }).pipe(adopt(adopting));
+        });
+      const denied = yield* scratch.plan(definition(false)).pipe(Effect.exit);
+      expect(Exit.isFailure(denied)).toBe(true);
+      if (Exit.isFailure(denied))
+        expect(Cause.pretty(denied.cause)).toContain("OwnedBySomeoneElse");
+      expect(
+        (yield* workflows.getWorkflow({ accountId, workflowName })).id,
+      ).toBe(foreign.id);
+
+      const adopted = yield* scratch.deploy(definition(true));
+      expect(adopted.workflowName).toBe(workflowName);
+      expect(adopted.workflowId).toBe(foreign.id);
+      expect(adopted.schedules).toEqual(["0 0 1 1 *"]);
+      const updated = yield* scratch.deploy(definition(false, []));
+      expect(updated.workflowId).toBe(foreign.id);
+      expect(yield* waitForAppliedSchedules(workflowName, [])).toEqual([]);
+      yield* scratch.destroy();
+      yield* expectWorkflowGone(accountId, workflowName);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "physical names refuse occupied rename targets even with adoption enabled",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const originalName = yield* physicalName(scratch);
+      const occupiedName = `${originalName}-occupied`;
+      const occupiedHost = Cloudflare.Worker("OccupiedHost", {
+        main: namedWorkflowMain,
+        env: {
+          MY_WORKFLOW: Cloudflare.Workflow("OccupiedWorkflow", {
+            className: "MyWorkflow",
+            workflowName: occupiedName,
+            schedules: ["0 0 1 1 *"],
+          }),
+        },
+      });
+      const definition = (name: string) =>
+        Effect.gen(function* () {
+          const host = yield* namedHost(name);
+          const occupied = yield* occupiedHost;
+          return { host, occupied };
+        });
+      yield* scratch.deploy(definition(originalName));
+      const original = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: originalName,
+      });
+      const occupied = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: occupiedName,
+      });
+      const denied = yield* scratch
+        .deploy(definition(occupiedName).pipe(adopt(true)))
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(denied)).toBe(true);
+      if (Exit.isFailure(denied))
+        expect(Cause.pretty(denied.cause)).toContain("OwnedBySomeoneElse");
+      const untouched = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: occupiedName,
+      });
+      expect(untouched.id).toBe(occupied.id);
+      expect(untouched.scriptName).toBe(occupied.scriptName);
+      expect(untouched.schedules).toEqual(occupied.schedules);
+      expect(
+        (yield* workflows.getWorkflow({
+          accountId,
+          workflowName: originalName,
+        })).id,
+      ).toBe(original.id);
+      // Removing the rejected source must not delete the occupied target.
+      yield* scratch.deploy(
+        Effect.gen(function* () {
+          yield* Cloudflare.Worker("NamedHost", { main: namedWorkflowMain });
+          yield* occupiedHost;
+        }),
+      );
+      yield* expectWorkflowGone(accountId, originalName);
+      expect(
+        (yield* workflows.getWorkflow({
+          accountId,
+          workflowName: occupiedName,
+        })).id,
+      ).toBe(occupied.id);
+      yield* scratch.destroy();
+      yield* expectWorkflowGone(accountId, originalName);
+      yield* expectWorkflowGone(accountId, occupiedName);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "physical names link cross-script consumers without owning the host Workflow",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workflowName = yield* physicalName(scratch);
+      const host = namedHost(workflowName);
+      yield* scratch.deploy(host);
+      const original = yield* workflows.getWorkflow({
+        accountId,
+        workflowName,
+      });
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const worker = yield* host;
+          const consumer = yield* Cloudflare.Worker("NamedConsumer", {
+            main: namedWorkflowMain,
+            env: {
+              MY_WORKFLOW: Cloudflare.Workflow("ForeignWorkflow", {
+                className: "MyWorkflow",
+                scriptName: worker.workerName,
+                workflowName,
+              }),
+            },
+          });
+          return { worker, consumer };
+        }),
+      );
+      expect(yield* readWorkflowName(deployed.consumer.workerName)).toBe(
+        workflowName,
+      );
+      const terminal = yield* runWorkflowToCompletion(
+        deployed.consumer.url!,
+      ).pipe(
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 2 }),
+      );
+      expect(terminal.output?.workflowName).toBe(workflowName);
+      yield* scratch.deploy(host);
+      expect(
+        (yield* workflows.getWorkflow({ accountId, workflowName })).id,
+      ).toBe(original.id);
+      yield* scratch.destroy();
+      yield* expectWorkflowGone(accountId, workflowName);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

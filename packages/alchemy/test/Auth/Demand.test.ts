@@ -111,15 +111,12 @@ const withTempHome = <A, E, R>(
           else process.env.ALCHEMY_HOME = previous;
         }),
     );
-    return yield* effect;
-  }).pipe(Effect.scoped, Effect.provide(makeTestLayer(config)));
+    return yield* effect.pipe(Effect.provide(makeTestLayer(config)));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
 const configureProbe = Effect.gen(function* () {
   const profile = yield* ProfileStore;
-  yield* profile.setProfile("default", {
-    id: "default",
-    providers: { [PROBE]: { method: "stored" } },
-  });
+  yield* profile.setProviderConfig("default", PROBE, { method: "stored" });
 });
 
 const demand: CredentialDemand = {
@@ -210,27 +207,11 @@ it.live(
   { exclusive: true },
 );
 
-/** Set a process env var for the duration of the surrounding scope. */
-const withProcessEnv = (name: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = process.env[name];
-      process.env[name] = value;
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) delete process.env[name];
-        else process.env[name] = previous;
-      }),
-  );
-
 it.live(
   "exported env credentials satisfy the gate when no profile is selected",
   () =>
     withTempHome(
       Effect.gen(function* () {
-        yield* withProcessEnv(ENV_PROBE_TOKEN, "token");
         yield* demandCredentials([
           {
             provider: ENV_PROBE,
@@ -241,6 +222,7 @@ it.live(
         // same source the run's lazy resolution will use.
         expect(envState.reads).toBe(1);
       }),
+      { [ENV_PROBE_TOKEN]: "token" },
     ),
   { exclusive: true },
 );
