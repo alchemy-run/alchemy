@@ -17,7 +17,7 @@ const FIXTURE_DIR = fileURLToPath(
   new URL("./fixtures/dev-cli/", import.meta.url),
 );
 const ALCHEMY_BIN = fileURLToPath(
-  new URL("../../bin/alchemy.ts", import.meta.url),
+  new URL("../../bin/alchemy.js", import.meta.url),
 );
 
 /** Every live pid on the system with its parent and command (POSIX). */
