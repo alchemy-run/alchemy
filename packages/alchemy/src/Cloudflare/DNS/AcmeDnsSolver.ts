@@ -34,11 +34,11 @@ export interface CloudflareDnsSolver extends DnsSolverDescriptor {
  * const wildcard = yield* ACME.Certificate("Wildcard", {
  *   account,
  *   identifiers: ["*.example.com"],
- *   solver: Cloudflare.DNS.acmeSolver(zone),
+ *   solver: Cloudflare.DNS.AcmeSolver(zone),
  * });
  * ```
  */
-export const acmeSolver = <ZoneId extends Input<string>>(zone: {
+export const AcmeSolver = <ZoneId extends Input<string>>(zone: {
   readonly zoneId: ZoneId;
 }) => ({
   type: "Cloudflare.DNS" as const,

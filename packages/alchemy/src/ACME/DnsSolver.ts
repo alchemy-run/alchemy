@@ -7,7 +7,7 @@
  * - a **descriptor** — plain, serializable data in a resource's props
  *   (`{ type: "Cloudflare.DNS", zoneId }`) that survives state and the RPC
  *   boundary. Each DNS provider contributes a constructor
- *   (`Cloudflare.DNS.acmeSolver(zone)`) and registers the matching
+ *   (`Cloudflare.DNS.AcmeSolver(zone)`) and registers the matching
  *   implementation from its `providers()` layer, so the ACME provider
  *   never imports a DNS SDK itself.
  * - a **runtime solver** — the {@link DnsSolver} interface a running

@@ -12,7 +12,7 @@ import * as Stream from "effect/Stream";
 
 /**
  * The real DNS-01 path: Let's Encrypt staging validates `_acme-challenge`
- * TXT records that `Cloudflare.DNS.acmeSolver` publishes in the standing
+ * TXT records that `Cloudflare.DNS.AcmeSolver` publishes in the standing
  * test zone. Staging has generous limits; the chain is untrusted but the
  * flow is production's.
  */

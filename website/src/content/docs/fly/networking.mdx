@@ -130,7 +130,7 @@ const account = yield* ACME.Account("LetsEncrypt", {
 const certificate = yield* ACME.Certificate("Wildcard", {
   account,
   identifiers: ["*.example.com"],
-  solver: Cloudflare.DNS.acmeSolver(zone),
+  solver: Cloudflare.DNS.AcmeSolver(zone),
 });
 yield* Fly.Certificate("WildcardUpload", {
   app: site,

@@ -27,7 +27,7 @@ export interface CertificateProps {
   identifiers: string[];
   /**
    * How `_acme-challenge` TXT records are published, e.g.
-   * `Cloudflare.DNS.acmeSolver(zone)`. Changing the solver alone does not
+   * `Cloudflare.DNS.AcmeSolver(zone)`. Changing the solver alone does not
    * re-issue.
    */
   solver: DnsSolverDescriptor;
@@ -116,7 +116,7 @@ export interface Certificate extends Resource<
  * const wildcard = yield* ACME.Certificate("Wildcard", {
  *   account,
  *   identifiers: ["*.example.com", "example.com"],
- *   solver: Cloudflare.DNS.acmeSolver(zone),
+ *   solver: Cloudflare.DNS.AcmeSolver(zone),
  * });
  * ```
  *
@@ -140,7 +140,7 @@ export interface Certificate extends Resource<
  * const api = yield* ACME.Certificate("Api", {
  *   account,
  *   identifiers: ["api.example.com"],
- *   solver: Cloudflare.DNS.acmeSolver(zone),
+ *   solver: Cloudflare.DNS.AcmeSolver(zone),
  *   renewBefore: "45 days",
  *   revokeOnDelete: true,
  * });

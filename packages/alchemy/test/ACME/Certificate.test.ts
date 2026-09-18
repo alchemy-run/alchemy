@@ -42,7 +42,7 @@ test.provider(
           const cert = yield* ACME.Certificate("Certificate", {
             account,
             identifiers: [name],
-            solver: Cloudflare.DNS.acmeSolver({ zoneId }),
+            solver: Cloudflare.DNS.AcmeSolver({ zoneId }),
             ...extra,
           });
           return { account, cert };
@@ -108,7 +108,7 @@ test.provider(
           return yield* ACME.Certificate("Certificate", {
             account: second ? secondAccount : firstAccount,
             identifiers: [`alchemy-acme-account-switch.${zoneName}`],
-            solver: Cloudflare.DNS.acmeSolver({ zoneId }),
+            solver: Cloudflare.DNS.AcmeSolver({ zoneId }),
             revokeOnDelete: true,
           });
         });

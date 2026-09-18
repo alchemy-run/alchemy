@@ -55,7 +55,7 @@ const Stack = Alchemy.Stack(
     const certificate = yield* ACME.Certificate("Upload", {
       account,
       identifiers: [UPLOAD_HOST],
-      solver: Cloudflare.DNS.acmeSolver({ zoneId: zone.id }),
+      solver: Cloudflare.DNS.AcmeSolver({ zoneId: zone.id }),
       revokeOnDelete: true,
     });
     return {

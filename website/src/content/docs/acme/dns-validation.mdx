@@ -16,13 +16,13 @@ Inside the stack from [Getting started](/acme/getting-started):
 const certificate = yield* ACME.Certificate("Site", {
   account,
   identifiers: ["example.com"],
-  solver: Cloudflare.DNS.acmeSolver({
+  solver: Cloudflare.DNS.AcmeSolver({
     zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
   }),
 });
 ```
 
-`acmeSolver` returns serializable data containing the solver type and zone ID.
+`AcmeSolver` returns serializable data containing the solver type and zone ID.
 Include both `ACME.providers()` and `Cloudflare.providers()` in the stack. The
 Cloudflare credentials must allow listing, creating, and deleting TXT records in
 that zone. The domain must already be delegated to that zone's nameservers.
@@ -36,10 +36,10 @@ If your stack already owns a Cloudflare `Zone` resource, pass the resolved zone:
  const certificate = yield* ACME.Certificate("Site", {
    account,
    identifiers: ["example.com"],
--  solver: Cloudflare.DNS.acmeSolver({
+-  solver: Cloudflare.DNS.AcmeSolver({
 -    zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
 -  }),
-+  solver: Cloudflare.DNS.acmeSolver(zone),
++  solver: Cloudflare.DNS.AcmeSolver(zone),
  });
 ```
 
@@ -77,7 +77,7 @@ possible.
  const certificate = yield* ACME.Certificate("Site", {
    account,
    identifiers: ["example.com", "*.example.com"],
-   solver: Cloudflare.DNS.acmeSolver(zone),
+   solver: Cloudflare.DNS.AcmeSolver(zone),
 +  propagation: {
 +    delay: "60 seconds",
 +    timeout: "90 seconds",
@@ -121,7 +121,7 @@ const solver = Cloudflare.DNS.acmeDnsSolver(dns);
 ```
 
 The runtime helper is **`acmeDnsSolver`**, while the deploy-time helper is
-**`acmeSolver`**. Provide `Cloudflare.DNS.WriteDnsHttp` on the host Effect. Its
+**`AcmeSolver`**. Provide `Cloudflare.DNS.WriteDnsHttp` on the host Effect. Its
 client uses a zone-scoped token created at deployment, rather than exposing the
 deployer's entire credential set to the application.
 

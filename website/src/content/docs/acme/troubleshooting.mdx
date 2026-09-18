@@ -19,7 +19,7 @@ const providers = Layer.mergeAll(ACME.providers(), Cloudflare.providers());
 
 Pass this layer as the stack's `providers`. For runtime issuance, use
 `acmeDnsSolver(dns)` with a bound DNS client instead of passing the deploy-time
-descriptor returned by `acmeSolver`.
+descriptor returned by `AcmeSolver`.
 
 ## DNS API access fails
 

@@ -83,7 +83,7 @@ const account = yield* Issuer;
 const certificate = yield* ACME.Certificate("Api", {
   account,
   identifiers: ["api.example.com"],
-  solver: Cloudflare.DNS.acmeSolver({
+  solver: Cloudflare.DNS.AcmeSolver({
     zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
   }),
 });

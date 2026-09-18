@@ -101,7 +101,7 @@ reuses on subsequent deployments.
 +  const certificate = yield* ACME.Certificate("Site", {
 +    account,
 +    identifiers: ["example.com"],
-+    solver: Cloudflare.DNS.acmeSolver({
++    solver: Cloudflare.DNS.AcmeSolver({
 +      zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
 +    }),
 +  });
@@ -161,7 +161,7 @@ export default Alchemy.Stack(
     const certificate = yield* ACME.Certificate("Site", {
       account,
       identifiers: ["example.com"],
-      solver: Cloudflare.DNS.acmeSolver({
+      solver: Cloudflare.DNS.AcmeSolver({
         zoneId: Config.String("CLOUDFLARE_ZONE_ID"),
       }),
     });
