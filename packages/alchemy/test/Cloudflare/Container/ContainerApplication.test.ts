@@ -757,7 +757,7 @@ describe.concurrent("ContainerApplication", () => {
           prefix: "alchemy-registry-cache-",
         });
         const context = path.join(root, "context");
-        const imageName = `alchemy-registry-cache-${stack.stage.toLowerCase()}`;
+        const repositoryName = `alchemy-registry-cache-${stack.stage.toLowerCase()}`;
         yield* fs.makeDirectory(context);
         yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-first");
         yield* fs.writeFileString(
@@ -778,13 +778,13 @@ describe.concurrent("ContainerApplication", () => {
           path.join(context, "Dockerfile"),
           'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
         );
-        const deploy = (id: string, repository = imageName) =>
+        const deploy = (id: string, repository = repositoryName) =>
           stack.deploy(
             Effect.gen(function* () {
               return {
                 app: yield* Cloudflare.Container(id, {
                   context,
-                  imageName: repository,
+                  publish: { repository },
                 }).Application,
               };
             }),
@@ -796,7 +796,7 @@ describe.concurrent("ContainerApplication", () => {
           history.filter((build) => build.status === "Completed"),
         ).toHaveLength(1);
         expect(first.app.configuration.image).toContain(
-          `/${imageName}@sha256:`,
+          `/${repositoryName}@sha256:`,
         );
         const credentials =
           yield* Containers.createContainerRegistryCredentials({
@@ -810,7 +810,7 @@ describe.concurrent("ContainerApplication", () => {
         const http = yield* HttpClient.HttpClient;
         const cached = yield* http.execute(
           HttpClientRequest.head(
-            `https://registry.cloudflare.com/v2/${first.app.accountId}/${imageName}/manifests/buildcache`,
+            `https://registry.cloudflare.com/v2/${first.app.accountId}/${repositoryName}/manifests/buildcache`,
           ).pipe(
             HttpClientRequest.basicAuth(username, credentials.password),
             HttpClientRequest.setHeader(
@@ -851,9 +851,9 @@ describe.concurrent("ContainerApplication", () => {
           (yield* buildHistory).filter((build) => build.status === "Completed"),
         ).toHaveLength(2);
 
-        const moved = yield* deploy("Second", `${imageName}-other`);
+        const moved = yield* deploy("Second", `${repositoryName}-other`);
         expect(moved.app.configuration.image).toContain(
-          `/${imageName}-other@sha256:`,
+          `/${repositoryName}-other@sha256:`,
         );
         expect(
           (yield* buildHistory).filter((build) => build.status === "Completed"),
@@ -898,9 +898,9 @@ describe.concurrent("ContainerApplication", () => {
           );
         }
         const initial = yield* stack.deploy(sharedApplication(context));
-        const imageName = initial.app.applicationName;
+        const repositoryName = initial.app.applicationName;
         const shared = yield* stack.deploy(
-          sharedApplication(context, imageName),
+          sharedApplication(context, repositoryName),
         );
         expect(shared.app.applicationId).toBe(initial.app.applicationId);
         const history = yield* buildHistory;
@@ -916,7 +916,7 @@ describe.concurrent("ContainerApplication", () => {
               providers: Layer.fresh(Cloudflare.providers()),
               state: stack.state,
             },
-            sharedApplication(otherContext, imageName),
+            sharedApplication(otherContext, repositoryName),
           ),
         };
         yield* Destroy.destroy(secondStage);
@@ -947,12 +947,12 @@ describe.concurrent("ContainerApplication", () => {
           ).toBe(shared.app.configuration.image);
 
           const moved = yield* stack.deploy(
-            sharedApplication(context, `${imageName}-moved`),
+            sharedApplication(context, `${repositoryName}-moved`),
           );
           expect(moved.app.applicationId).toBe(shared.app.applicationId);
           expect(moved.app.hash?.digest).toBe(shared.app.hash?.digest);
           expect(moved.app.configuration.image).toContain(
-            `/${imageName}-moved@sha256:`,
+            `/${repositoryName}-moved@sha256:`,
           );
           expect(
             (yield* waitForImage(

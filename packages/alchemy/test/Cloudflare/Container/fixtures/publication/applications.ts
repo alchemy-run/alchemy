@@ -29,11 +29,11 @@ export const publicationApplications = (contexts: {
     return { first, second, other, changed };
   });
 
-export const sharedApplication = (context: string, imageName?: string) =>
+export const sharedApplication = (context: string, repository?: string) =>
   Effect.gen(function* () {
     const app = yield* Cloudflare.Container("SharedPublication", {
       context,
-      imageName,
+      publish: repository === undefined ? undefined : { repository },
       maxInstances: 2,
     }).Application;
     return { app };

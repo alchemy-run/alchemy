@@ -389,12 +389,15 @@ export const LiveContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createApplicationName(id, props.name);
         const registryId = props.registryId ?? "registry.cloudflare.com";
-        const repositoryName = (props.imageName ?? name).toLowerCase();
+        const repositoryName = (
+          props.publish?.repository ?? name
+        ).toLowerCase();
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
         yield* validateContainerImageProps(props);
 
+        // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
         // generated Dockerfile around it; the environment preamble comes
         // from `image` / inline `dockerfile` (default: the runtime base).
@@ -418,7 +421,7 @@ export const LiveContainerProvider = () =>
           const imageHash = (yield* sha256Object({
             bundleHash,
             dockerfile: finalDockerfile,
-            imageName: props.imageName?.toLowerCase(),
+            imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           // The dev image is the deterministic build-context directory that
           // `buildAndPushImage` materializes into (and that the local provider
@@ -448,7 +451,7 @@ export const LiveContainerProvider = () =>
         if (props.image) {
           const imageHash = (yield* sha256Object({
             image: props.image,
-            imageName: props.imageName?.toLowerCase(),
+            imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           // Already in the target registry (e.g. pushed by CI as a digest
           // reference) — deploy the reference as-is and skip the docker
@@ -497,7 +500,7 @@ export const LiveContainerProvider = () =>
             yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
-            imageName: props.imageName?.toLowerCase(),
+            imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
             build: { kind: "external" as const, context, dockerfile },
@@ -526,7 +529,7 @@ export const LiveContainerProvider = () =>
         );
         const imageHash = (yield* sha256Object({
           contextHash,
-          imageName: props.imageName?.toLowerCase(),
+          imageName: props.publish?.repository?.toLowerCase(),
         })).slice(0, 16);
         return {
           build: { kind: "external" as const, context, dockerfile },
@@ -563,7 +566,10 @@ export const LiveContainerProvider = () =>
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
-        if (props.imageName !== undefined && build.kind !== "remote") {
+        if (
+          props.publish?.repository !== undefined &&
+          build.kind !== "remote"
+        ) {
           const digest = yield* resolveRegistryDigest(
             imageRef,
             credentials,
@@ -589,7 +595,7 @@ export const LiveContainerProvider = () =>
         }
         const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
         const cacheOptions =
-          props.imageName === undefined
+          props.publish?.repository === undefined
             ? {}
             : {
                 "cache-from": [`type=registry,ref=${cacheRef}`],
@@ -632,7 +638,7 @@ export const LiveContainerProvider = () =>
               {
                 ...cacheOptions,
                 tag:
-                  props.imageName === undefined
+                  props.publish?.repository === undefined
                     ? imageRef
                     : [imageRef, cacheRef],
                 context: build.context,
@@ -677,7 +683,7 @@ export const LiveContainerProvider = () =>
               {
                 ...cacheOptions,
                 tag:
-                  props.imageName === undefined
+                  props.publish?.repository === undefined
                     ? imageRef
                     : [imageRef, cacheRef],
                 context: contextDir,
@@ -716,7 +722,7 @@ export const LiveContainerProvider = () =>
         const key = JSON.stringify([
           accountId,
           props.registryId ?? "registry.cloudflare.com",
-          props.imageName,
+          props.publish?.repository,
           publicationPlatform,
           build.kind,
           imageHash,
@@ -982,7 +988,8 @@ export const LiveContainerProvider = () =>
           const existingDigest =
             existing.hash?.digest ?? published.previousDigest;
           deploymentImageRef =
-            published.digest === existingDigest && news.imageName === undefined
+            published.digest === existingDigest &&
+            news.publish?.repository === undefined
               ? existing.configuration.image
               : published.imageRef;
           imageDigest = published.digest;
@@ -1395,7 +1402,7 @@ export const LiveContainerProvider = () =>
                 existing.hash?.digest ?? published.previousDigest;
               deploymentImageRef =
                 published.digest === existingDigest &&
-                news.imageName === undefined
+                news.publish?.repository === undefined
                   ? existing.configuration.image
                   : published.imageRef;
               imageDigest = published.digest;

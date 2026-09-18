@@ -332,7 +332,7 @@ export type Container<Id extends string = string> = Named<Id> & {
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
- *   imageName: "web",
+ *   publish: { repository: "web" },
  * }) {}
  * ```
  *
