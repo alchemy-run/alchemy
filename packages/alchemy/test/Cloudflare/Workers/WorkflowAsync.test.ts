@@ -8,6 +8,7 @@ import * as Exit from "effect/Exit";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import * as TestCore from "@/Test/Core";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
@@ -132,6 +133,7 @@ const expectWorkerGone = (accountId: string, scriptName: string) =>
   workers.getScriptScriptAndVersionSetting({ accountId, scriptName }).pipe(
     Effect.as(false),
     Effect.catchTag("WorkerNotFound", () => Effect.succeed(true)),
+    Effect.catchTag("WorkerHasNoVersions", () => Effect.succeed(false)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: Boolean,
@@ -306,6 +308,278 @@ test.provider(
         );
       expect(subscriptionGone).toBe(true);
     }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+const expectWorkflowEvent = (
+  url: string,
+  instanceId: string,
+  workflowName: string,
+) =>
+  getJson(`${url}/events`, WorkflowEvents).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (events) =>
+        events.some((event) => event.payload.instanceId === instanceId),
+      times: 10,
+    }),
+    Effect.timeout("60 seconds"),
+    Effect.tap((events) =>
+      Effect.sync(() =>
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: "cf.workflows.workflow.instance.completed",
+            source: { type: "workflows.workflow", workflowName },
+            payload: expect.objectContaining({ instanceId }),
+          }),
+        ),
+      ),
+    ),
+  );
+
+const expectWorkflowSubscriptionGone = (
+  accountId: string,
+  subscriptionId: string,
+  queueId: string,
+) =>
+  Effect.gen(function* () {
+    expect(
+      yield* queues.getSubscription({ accountId, subscriptionId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(true)),
+      ),
+    ).toBe(true);
+    expect(
+      yield* queues.getQueue({ accountId, queueId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+      ),
+    ).toBe(true);
+  });
+
+test.provider(
+  "Workflow.ref same-stack and WorkflowResource sources deliver queue events without duplicate ownership",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const program = (reference: boolean) =>
+        Effect.gen(function* () {
+          const worker = yield* AsyncWorkflowWorker;
+          const workflow = reference
+            ? yield* Cloudflare.Workflow.ref("Greeting")
+            : yield* WorkflowResource("Greeting", {
+                className: "MyWorkflow",
+                scriptName: worker.workerName,
+              });
+          expect(workflow.Type).toBe("Cloudflare.Workflow");
+          expect(Output.isOutput(workflow.workflowName)).toBe(true);
+          if (reference) {
+            expect(typeof workflow).toBe("function");
+            expect(Output.isOutput(workflow)).toBe(true);
+          }
+          const queue = yield* Cloudflare.Queues.Queue("RefEventsQueue");
+          const subscription = yield* Cloudflare.Queues.Subscription(
+            "RefEvents",
+            {
+              source: workflow,
+              events: ["instance.completed"],
+              queueId: queue.queueId,
+            },
+          );
+          expect(subscription.Props.source).toEqual({
+            type: "workflows.workflow",
+            workflowName: expect.anything(),
+          });
+          yield* Cloudflare.Queues.Consumer("RefEventsConsumer", {
+            queueId: queue.queueId,
+            scriptName: worker.workerName,
+            settings: { batchSize: 1, maxWaitTimeMs: 1000 },
+          });
+          return {
+            worker,
+            queue,
+            subscription,
+            workflowName: workflow.workflowName,
+          };
+        });
+      const firstPlan = yield* stack.plan(program(false));
+      expect(firstPlan.resources.Greeting.downstream).toContain("RefEvents");
+      const first = yield* stack.deploy(program(false));
+      const original = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: first.workflowName,
+      });
+      // Resource refs read persisted state, so deploy the host before using one.
+      const deployed = yield* stack.deploy(program(true));
+      const plan = yield* stack.plan(program(true));
+      expect(
+        Object.values(plan.resources).filter(
+          (node) => node.resource.Type === "Cloudflare.Workflow",
+        ),
+      ).toHaveLength(1);
+      expect(deployed.workflowName).toBe(first.workflowName);
+      expect(deployed.subscription.subscriptionId).toBe(
+        first.subscription.subscriptionId,
+      );
+      const source = {
+        type: "workflows.workflow",
+        workflowName: first.workflowName,
+      };
+      expect(plan.resources.RefEvents.state).toHaveProperty(
+        "props.source",
+        source,
+      );
+      const observed = yield* queues.getSubscription({
+        accountId,
+        subscriptionId: deployed.subscription.subscriptionId,
+      });
+      expect(observed.source).toEqual(expect.objectContaining(source));
+      expect(observed.destination.queueId).toBe(deployed.queue.queueId);
+      const { instanceId } = yield* runWorkflowToCompletion(
+        deployed.worker.url!,
+      ).pipe(
+        Effect.retry({
+          schedule: Schedule.spaced("3 seconds"),
+          times: 2,
+          while: (error) =>
+            error instanceof Error &&
+            error.message ===
+              'workflow errored: {"message":"Worker not found."}',
+        }),
+      );
+      yield* expectWorkflowEvent(
+        deployed.worker.url!,
+        instanceId,
+        first.workflowName,
+      );
+
+      yield* stack.deploy(AsyncWorkflowWorker);
+      yield* expectWorkflowSubscriptionGone(
+        accountId,
+        deployed.subscription.subscriptionId,
+        deployed.queue.queueId,
+      );
+      expect(
+        (yield* workflows.getWorkflow({
+          accountId,
+          workflowName: first.workflowName,
+        })).id,
+      ).toBe(original.id);
+      expect(yield* readWorkflowName(deployed.worker.workerName)).toBe(
+        first.workflowName,
+      );
+      yield* stack.destroy();
+      yield* expectWorkerGone(accountId, deployed.worker.workerName);
+      yield* expectWorkflowGone(accountId, first.workflowName);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "Workflow.ref cross-stack and cross-stage source delivers queue events without owning the host",
+  (stack) => {
+    const host = TestCore.scratchStack(
+      { providers: Cloudflare.providers(), stage: `${stack.stage}-host` },
+      "WorkflowRefHost",
+      "test/Cloudflare/Workers/WorkflowAsync.test.ts",
+    );
+    return Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* host.destroy();
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const hosted = yield* host.deploy(
+        Effect.gen(function* () {
+          const worker = yield* AsyncWorkflowWorker;
+          return { worker, workflowName: worker.env.MY_WORKFLOW.workflowName };
+        }),
+      );
+      const original = yield* workflows.getWorkflow({
+        accountId,
+        workflowName: hosted.workflowName,
+      });
+      const program = Effect.gen(function* () {
+        const worker = yield* Cloudflare.Worker("RefEventsWorker", {
+          main: hostMain,
+          env: { EVENTS: Cloudflare.DurableObject("WorkflowEvents") },
+        });
+        const queue = yield* Cloudflare.Queues.Queue("RefEventsQueue");
+        const Subscription = yield* Cloudflare.Queues.Subscription;
+        const subscription = yield* Subscription(
+          "RefEvents",
+          Effect.gen(function* () {
+            return {
+              source: yield* Cloudflare.Workflow.ref("Greeting", {
+                stack: host.name,
+                stage: host.stage,
+              }),
+              events: ["instance.completed"],
+              queueId: queue.queueId,
+            };
+          }),
+        );
+        yield* Cloudflare.Queues.Consumer("RefEventsConsumer", {
+          queueId: queue.queueId,
+          scriptName: worker.workerName,
+          settings: { batchSize: 1, maxWaitTimeMs: 1000 },
+        });
+        return { worker, queue, subscription };
+      });
+      const deployed = yield* stack.deploy(program);
+      const plan = yield* stack.plan(program);
+      expect(
+        Object.values(plan.resources).filter(
+          (node) => node.resource.Type === "Cloudflare.Workflow",
+        ),
+      ).toHaveLength(0);
+      const source = {
+        type: "workflows.workflow",
+        workflowName: hosted.workflowName,
+      };
+      expect(plan.resources.RefEvents.state).toHaveProperty(
+        "props.source",
+        source,
+      );
+      expect(deployed.subscription.source).toEqual(source);
+      const observed = yield* queues.getSubscription({
+        accountId,
+        subscriptionId: deployed.subscription.subscriptionId,
+      });
+      expect(observed.source).toEqual(expect.objectContaining(source));
+      expect(observed.destination.queueId).toBe(deployed.queue.queueId);
+      const { instanceId } = yield* runWorkflowToCompletion(hosted.worker.url!);
+      yield* expectWorkflowEvent(
+        deployed.worker.url!,
+        instanceId,
+        hosted.workflowName,
+      );
+
+      yield* stack.destroy();
+      yield* expectWorkerGone(accountId, deployed.worker.workerName);
+      yield* expectWorkflowSubscriptionGone(
+        accountId,
+        deployed.subscription.subscriptionId,
+        deployed.queue.queueId,
+      );
+      expect(
+        (yield* workflows.getWorkflow({
+          accountId,
+          workflowName: hosted.workflowName,
+        })).id,
+      ).toBe(original.id);
+      expect(yield* readWorkflowName(hosted.worker.workerName)).toBe(
+        hosted.workflowName,
+      );
+      yield* host.destroy();
+      yield* expectWorkerGone(accountId, hosted.worker.workerName);
+      yield* expectWorkflowGone(accountId, hosted.workflowName);
+    }).pipe(
+      logLevel,
+      Effect.ensuring(
+        stack.destroy().pipe(Effect.andThen(host.destroy()), Effect.ignore),
+      ),
+    );
+  },
   { timeout: 120_000 },
 );
 

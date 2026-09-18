@@ -8,10 +8,17 @@ import { isResolved } from "../../Diff.ts";
 import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource, type ResourceClass } from "../../Resource.ts";
+import {
+  isResourceOfType,
+  Resource,
+  type ResourceClass,
+} from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { WorkflowBinding } from "../Workflows/Workflow.ts";
+import type {
+  WorkflowBinding,
+  WorkflowResource,
+} from "../Workflows/Workflow.ts";
 
 const TypeId = "Cloudflare.Queues.Subscription" as const;
 type TypeId = typeof TypeId;
@@ -71,8 +78,9 @@ export type SubscriptionProps = {
   name?: string;
   /**
    * The event source to subscribe to (e.g. `{ type: "r2" }` for R2 bucket
-   * events). The constructor also accepts a Workflow binding directly
-   * (`source: worker.env.INGESTION`), normalized to its physical workflow name.
+   * events). The constructor also accepts a Workflow binding, WorkflowResource,
+   * or `yield* Cloudflare.Workflow.ref(...)`, normalized to its deferred physical
+   * workflow name. References read persisted state without owning the Workflow.
    * Fixed at creation — changing it triggers a replacement. Cloudflare
    * allows at most one subscription per source per account.
    */
@@ -142,13 +150,16 @@ export type Subscription = Resource<
   Providers
 >;
 
-/** Constructor inputs; Workflow bindings are normalized before registration. */
+/** Constructor inputs; Workflow sources are normalized before registration. */
 export type SubscriptionInput = Omit<
   PropsInput<SubscriptionProps>,
   "source"
 > & {
-  /** An explicit event source or a Workflow bound on a Worker's `env`. */
-  source: PropsInput<SubscriptionProps>["source"] | WorkflowBinding;
+  /** An explicit source, Workflow binding, Workflow resource, or `Workflow.ref`. */
+  source:
+    | PropsInput<SubscriptionProps>["source"]
+    | WorkflowBinding
+    | WorkflowResource;
 };
 
 type SubscriptionConstructor<Req = never> = {
@@ -177,9 +188,11 @@ const SubscriptionResource = Resource<Subscription>(TypeId, {
 
 const isWorkflowSource = (
   source: SubscriptionInput["source"],
-): source is WorkflowBinding =>
-  Predicate.hasProperty(source, "kind") &&
-  source.kind === "Cloudflare.Workflow";
+): source is WorkflowBinding | WorkflowResource =>
+  isResourceOfType(source, "Cloudflare.Workflow") ||
+  (typeof source === "object" &&
+    source !== null &&
+    (source as WorkflowBinding).kind === "Cloudflare.Workflow");
 
 const normalizeSubscriptionProps = (
   props: SubscriptionInput,
@@ -225,7 +238,7 @@ const normalizeSubscriptionProps = (
  * ```typescript
  * const subscription = yield* Cloudflare.Queues.Subscription("BuildEvents", {
  *   source: { type: "workersBuilds.worker", workerName: "my-worker" },
- *   events: ["build.started", "build.completed"],
+ *   events: ["build.started", "build.succeeded"],
  *   queueId: queue.queueId,
  * });
  * ```
@@ -243,6 +256,21 @@ const normalizeSubscriptionProps = (
  *
  * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
  *   source: worker.env.INGESTION,
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Workflow lifecycle events from a persisted resource reference
+ * Use the logical resource ID, including any namespace. References read
+ * persisted state, so deploy the host first. Omitting the options uses the
+ * current stack and stage; the reference does not take ownership of the host.
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: yield* Cloudflare.Workflow.ref("Ingestion", {
+ *     stack: "workflow-host",
+ *     stage: "production",
+ *   }),
  *   events: ["instance.completed", "instance.errored"],
  *   queueId: queue.queueId,
  * });

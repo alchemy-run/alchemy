@@ -214,6 +214,72 @@ type _SubscriptionReference = Assert<
   >
 >;
 
+const referencedWorkflow = Cloudflare.Workflow.ref("Greeting", {
+  stack: "workflow-host",
+  stage: "production",
+});
+type _WorkflowRefSignature = Assert<
+  Equals<
+    typeof Cloudflare.Workflow.ref,
+    typeof Cloudflare.Workflows.WorkflowResource.ref
+  >
+>;
+type _WorkflowRefResult = Assert<
+  Equals<
+    Effect.Success<typeof referencedWorkflow>,
+    Cloudflare.Workflows.WorkflowResource
+  >
+>;
+type _WorkflowRefRequirements = Assert<
+  Equals<Effect.Services<typeof referencedWorkflow>, never>
+>;
+type _WorkflowRefNameIsOutput = Assert<
+  Equals<
+    Effect.Success<typeof referencedWorkflow>["workflowName"],
+    Output.Output<string, never>
+  >
+>;
+type _WorkflowHandleIsNotASource = Assert<
+  Equals<
+    Cloudflare.Workflows.WorkflowHandle extends Cloudflare.Queues.SubscriptionInput["source"]
+      ? true
+      : false,
+    false
+  >
+>;
+
+export const workflowResourceSubscriptions = Effect.gen(function* () {
+  const props = { events: ["instance.completed"], queueId: "queue-id" };
+  const workflow = yield* Cloudflare.Workflows.WorkflowResource("Owned", {
+    className: "MyWorkflow",
+    scriptName: "host-worker",
+  });
+  yield* Cloudflare.Queues.Subscription("ResourceEvents", {
+    ...props,
+    source: workflow,
+  });
+  yield* Cloudflare.Queues.Subscription("SameStackRefEvents", {
+    ...props,
+    source: yield* Cloudflare.Workflow.ref("Owned"),
+  });
+  yield* Cloudflare.Queues.Subscription(
+    "CrossStackRefEvents",
+    Effect.gen(function* () {
+      yield* Cloudflare.Queues.Subscription.Self;
+      return { ...props, source: yield* referencedWorkflow };
+    }),
+  );
+  const Subscription = yield* Cloudflare.Queues.Subscription;
+  yield* Subscription("YieldedRefEvents", {
+    ...props,
+    source: yield* Cloudflare.Workflow.ref("Owned"),
+  });
+  yield* Subscription(
+    "YieldedEffectRefEvents",
+    Effect.map(referencedWorkflow, (source) => ({ ...props, source })),
+  );
+});
+
 export const subscriptionConstructors = Effect.gen(function* () {
   const worker = yield* program;
   const props = {

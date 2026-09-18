@@ -525,6 +525,8 @@ export interface WorkflowClass extends Effect.Effect<
   never,
   WorkflowHandle
 > {
+  /** Reference a deployed Workflow by logical ID, optionally in another stack or stage. */
+  ref: typeof WorkflowResource.ref;
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
@@ -894,6 +896,25 @@ export class WorkflowScope extends Context.Service<
  * });
  * ```
  *
+ * ### Referencing a Deployed Workflow
+ * `Workflow.ref` reads the same persisted resource as `WorkflowResource.ref`.
+ * Use its logical ID (including any namespace), not its physical name or
+ * Worker env key. Omitting `stack` and `stage` uses the current stack/stage.
+ * Deploy the host first; a reference does not register or own the Workflow
+ * and returns resource attributes, not a runtime `WorkflowHandle`.
+ *
+ * **Example:** Subscribe to a Workflow in another stack
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: yield* Cloudflare.Workflow.ref("Ingestion", {
+ *     stack: "workflow-host",
+ *     stage: "production",
+ *   }),
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
  * ### Cross-Script Binding in an Async Worker
  * Async Workers can also bind to a Workflow hosted by another Worker
  * script. The host Worker declares and exports the `WorkflowEntrypoint`
@@ -1100,6 +1121,8 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     }),
   );
 }) as any);
+
+Workflow.ref = (id, options) => WorkflowResource.ref(id, options);
 
 // ---------------------------------------------------------------------------
 // WorkflowResource -- manages the Cloudflare Workflows API lifecycle

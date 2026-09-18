@@ -323,6 +323,24 @@ the Workflow on its first deployment and follows later renames. Only
 `{ type: "workflows.workflow", workflowName }` is persisted as the source;
 binding metadata such as `className` and `scriptName` is not stored.
 
+For an already-deployed Workflow, use its resource reference directly:
+
+```typescript
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: yield* Cloudflare.Workflow.ref("MyWorkflow"),
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+`Workflow.ref` delegates to `Workflows.WorkflowResource.ref`: it reads
+persisted resource attributes, not a runtime Workflow handle. Pass the logical
+ID (including any namespace), not the env key or physical name. It defaults to
+the current stack and stage; pass `{ stack: "workflow-host", stage: "production" }`
+as the second argument to reference another deployment. Deploy the host first.
+The reference does not register a Workflow or transfer ownership, so destroying
+the subscription's stack leaves a separately managed host intact.
+
 For a Workflow referenced by physical name, the explicit descriptor is
 still supported:
 

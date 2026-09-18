@@ -272,6 +272,23 @@ The subscription uses the binding's deferred physical name, including on
 the first deployment. Renaming the Workflow replaces the subscription.
 The Queue still needs a consumer to handle these messages, as above.
 
+A `WorkflowResource` or a reference to a deployed Workflow is also a source:
+
+```typescript
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: yield* Cloudflare.Workflow.ref("Ingestion", {
+    stack: "workflow-host",
+    stage: "production",
+  }),
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+Use the Workflow's logical ID, including any namespace. Omit the options for
+the current stack and stage. References read persisted state, so deploy the
+host first; deleting the consumer stack does not delete the referenced Workflow.
+
 Explicit sources remain supported, including
 `{ type: "workflows.workflow", workflowName: "existing-ingestion" }` for a
 Workflow referenced by name and `{ type: "r2" }` for R2 events. Cloudflare
