@@ -1330,6 +1330,16 @@ export default defineConfig({
           label: "ACME",
           items: [
             { label: "Overview", link: "/acme" },
+            { label: "Getting started", link: "/acme/getting-started" },
+            {
+              label: "Certificate authorities",
+              link: "/acme/certificate-authorities",
+            },
+            { label: "DNS validation", link: "/acme/dns-validation" },
+            { label: "Renewal & revocation", link: "/acme/renewal" },
+            { label: "Runtime issuance", link: "/acme/runtime" },
+            { label: "Using certificates", link: "/acme/using-certificates" },
+            { label: "Troubleshooting", link: "/acme/troubleshooting" },
             providerResourcesEntry("ACME"),
           ],
         },

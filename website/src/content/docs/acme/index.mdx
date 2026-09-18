@@ -1,86 +1,63 @@
 ---
 title: ACME
-description: Issue TLS certificates with an ACME certificate authority and DNS-01 validation.
+description: Manage TLS certificates independently of your hosting provider, at deploy time or from an application.
 ---
 
-ACME (Automatic Certificate Management Environment) issues TLS certificates
-through certificate authorities such as Let's Encrypt and ZeroSSL. Alchemy
-manages the account, private keys, and certificate lifecycle independently of
-the service that will use the certificate.
+ACME (Automatic Certificate Management Environment) is the protocol used by
+certificate authorities such as Let's Encrypt and ZeroSSL to issue TLS
+certificates. Alchemy manages the account and certificate separately from the
+service that terminates TLS. You can issue a certificate once and pass its PEM
+chain and private key to Fly or another consumer.
 
-## Configure providers
+## Choose when to issue
 
-Combine `ACME.providers()` with your DNS provider. Cloudflare currently supplies
-the built-in DNS-01 solver.
+| | During deployment | From an application |
+| --- | --- | --- |
+| API | `ACME.Certificate` | `ACME.IssueCertificate` |
+| Account | `ACME.Account` | Bind an existing `ACME.Account` |
+| DNS-01 validation | Serializable solver descriptor | Runtime DNS client wrapped as a solver |
+| Certificate storage | Stack state | Your application's responsibility |
+| Renewal | Evaluated on each deployment | Your application's scheduler |
+| Revocation | Optional on resource deletion | Explicit `revoke` call |
 
-```typescript
-import * as ACME from "alchemy/ACME";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Layer from "effect/Layer";
+Start with a deploy-time certificate unless your application needs to issue
+certificates without redeploying. Both paths support wildcard names and use
+DNS-01 validation; HTTP-01 and TLS-ALPN-01 are not implemented.
 
-const providers = Layer.mergeAll(ACME.providers(), Cloudflare.providers());
-```
+## Guides
 
-Pass `providers` to your Stack configuration. Configure Cloudflare credentials
-as described in [Cloudflare setup](/cloudflare/setup).
+- [Getting started](/acme/getting-started) — deploy a Let's Encrypt staging
+  certificate using an existing Cloudflare zone.
+- [Certificate authorities](/acme/certificate-authorities) — choose staging or
+  production, configure ZeroSSL external account binding, and understand account keys.
+- [DNS validation](/acme/dns-validation) — configure Cloudflare, validate wildcard
+  names, tune propagation, and implement a custom solver.
+- [Renewal & revocation](/acme/renewal) — schedule deployments, understand
+  replacement and deletion, and protect persisted keys.
+- [Runtime issuance](/acme/runtime) — deploy an authenticated Worker that issues
+  and revokes certificates, then integrate your own storage and renewal scheduler.
+- [Using certificates](/acme/using-certificates) — upload a certificate to Fly
+  or pass its outputs to another TLS consumer.
+- [Troubleshooting](/acme/troubleshooting) — diagnose DNS failures, CA rejection,
+  rate limits, and runtime connectivity.
 
-## Create an account
+## Security and lifecycle
 
-Inside the Stack's Effect, create an account with the selected certificate authority.
+Account and deploy-time certificate private keys are stored in stack state.
+`Redacted` masks ordinary logs; it does **not** encrypt your state backend.
+Protect the state store, backups, deployment credentials, and any runtime that
+receives the account key.
 
-```typescript
-const account = yield* ACME.Account("LetsEncrypt", {
-  ca: ACME.LetsEncryptStaging,
-  contact: ["mailto:ops@example.com"],
-  termsOfServiceAgreed: true,
-});
-```
+Renewal needs execution: a certificate resource checks its expiry when you deploy,
+not in a background process. Runtime-issued certificates are not tracked as stack
+resources. In either mode, monitor expiry and arrange renewal before relying on a
+certificate in production.
 
-Staging certificates are not trusted by browsers. Switch to `ACME.LetsEncrypt`
-for production. ZeroSSL and Google Trust Services require external account
-binding credentials; see [Account](/providers/acme/account).
+## API reference
 
-## Issue a certificate
+The generated references document each property and method:
 
-Resolve your Cloudflare `Zone` resource and pass it to the DNS solver.
-
-```typescript
-const zone = yield* Zone;
-const certificate = yield* ACME.Certificate("Wildcard", {
-  account,
-  identifiers: ["example.com", "*.example.com"],
-  solver: Cloudflare.DNS.acmeSolver(zone),
-});
-```
-
-The solver publishes the challenge TXT records, waits for propagation, and removes
-them after validation. Cloudflare waits 60 seconds before validation to allow
-cached challenge values to expire. The certificate exposes `certificate` (leaf
-PEM), `chain` (full PEM chain), and a redacted `privateKey`.
-
-## Deploy and renew
-
-Pass the chain and key to the service terminating TLS. For example, the
-[Fly certificate guide](/fly/networking#issue-a-certificate-independently)
-uploads them with `Fly.Certificate`.
-
-A deployment renews certificates that expire within 30 days by default. There
-is no background renewal process: schedule deployments or implement runtime
-renewal. Set `revokeOnDelete: true` if destroying a certificate resource should
-also revoke it; otherwise destruction removes its state without revoking it.
-
-Private account and certificate keys are persisted in stack state. Redaction
-protects ordinary logs, not the storage backend. Restrict access to the state
-store and protect its backups.
-
-## Issue from an application
-
-[`IssueCertificate`](/providers/acme/issuecertificate) binds an account into a
-Worker or Service. Provide
-[`IssueCertificateHttp`](/providers/acme/issuecertificatehttp) on the host Effect
-and pass a runtime DNS solver when calling `issue`.
-
-The application owns renewal, revocation, and cleanup of runtime-issued
-certificates. Verify that the selected certificate authority is reachable from
-your hosting environment. See the binding reference for runtime examples and
-rate-limit handling.
+- [Account](/providers/acme/account)
+- [Certificate](/providers/acme/certificate)
+- [IssueCertificate](/providers/acme/issuecertificate)
+- [IssueCertificateHttp](/providers/acme/issuecertificatehttp)
