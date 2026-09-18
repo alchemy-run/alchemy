@@ -12,7 +12,7 @@ export class ExternalContainer extends Cloudflare.Container<ExternalContainer>()
     // `path.join(undefined, …)` there throws a ScriptStartupError at module
     // load. `context` is only consumed at build time, so a plain string is
     // sufficient and never evaluates `path.join` at runtime.
-    context: `${import.meta.dirname}/context`,
+    image: { context: `${import.meta.dirname}/context` },
     observability: { logs: { enabled: true } },
   },
 ) {}

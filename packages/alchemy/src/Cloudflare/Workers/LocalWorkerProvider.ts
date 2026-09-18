@@ -9,7 +9,15 @@ import {
   type QueueConsumer as RuntimeQueueConsumer,
   type Workflow as RuntimeWorkflow,
 } from "@alchemy.run/cloudflare-runtime/core";
-import type { ContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
+import {
+  ensureLocalImage,
+  type LocalImageBuild,
+} from "../../Docker/LocalImage.ts";
+import {
+  prepareImageBuild,
+  type DockerBuildOptions,
+} from "../../Docker/ImageBuild.ts";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as ConsoleService from "effect/Console";
@@ -73,6 +81,10 @@ import {
 } from "./RuntimeBindings.ts";
 import { startViteChild } from "./ViteChild.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
+
+type ContainerImage = RuntimeContainerImage & {
+  readonly localBuild?: LocalImageBuild;
+};
 
 /** Local dev-server options (the worker-mode arm of `WorkerProps["dev"]`). */
 type DevServerOptions = Extract<WorkerProps["dev"], { mode?: "worker" }> & {
@@ -139,6 +151,14 @@ export const LocalWorkerProvider = () =>
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
+      const imageServices =
+        yield* Effect.context<
+          Effect.Services<ReturnType<typeof ensureLocalImage>>
+        >();
+      const refreshImage = (source: LocalImageBuild) =>
+        ensureLocalImage(source).pipe(Effect.provide(imageServices));
+      const prepareBuild = (build: DockerBuildOptions) =>
+        prepareImageBuild(build).pipe(Effect.provide(imageServices));
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
       const openDevLog = yield* makeDevLogOpener;
@@ -362,7 +382,10 @@ export const LocalWorkerProvider = () =>
         const bindingDescriptors: WorkerBinding[] = [];
         const durableObjectNamespaces: Record<
           string,
-          RuntimeDurableObject & { uniqueKey: string }
+          RuntimeDurableObject & {
+            uniqueKey: string;
+            container?: ContainerImage;
+          }
         > = {};
         const workflows: Record<string, RuntimeWorkflow> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
@@ -568,6 +591,21 @@ export const LocalWorkerProvider = () =>
       });
 
       type WorkerConfig = Effect.Success<ReturnType<typeof resolveConfig>>;
+      const prepareContainers = (
+        namespaces: WorkerConfig["durableObjectNamespaces"],
+      ) =>
+        Effect.forEach(
+          namespaces,
+          Effect.fn(function* (
+            namespace: WorkerConfig["durableObjectNamespaces"][number],
+          ) {
+            const image = namespace.container;
+            if (!image?.localBuild) return namespace;
+            const { ref } = yield* refreshImage(image.localBuild);
+            return { ...namespace, container: { tag: ref, env: image.env } };
+          }),
+        );
+
       /** A worker-mode config with its runtime `BindingHook`s materialized. */
       type RunnableWorkerConfig = Omit<WorkerConfig, "dev"> & {
         dev: DevServerOptions;
@@ -665,9 +703,8 @@ export const LocalWorkerProvider = () =>
         });
 
       /**
-       * Watch a worker's Build-variant container contexts and restart the
-       * instance when their CONTENT changes — the docker build happens at
-       * instance start, so a restart IS the image rebuild.
+       * Watch local Docker build inputs and refresh the image before restarting
+       * the worker when their content changes.
        *
        * This is the reload path for USER-supplied Dockerfile/context
        * containers: those files are not imported by the stack, so
@@ -677,9 +714,8 @@ export const LocalWorkerProvider = () =>
        * rewrites its bundle there on every plan, which would loop; that
        * variant reloads through the config's `containerHashes` instead.
        *
-       * Events are debounced and gated on a content fingerprint
-       * (`node_modules`/`.git` skipped), so editor double-saves and
-       * metadata-only churn don't bounce the instance.
+       * Events are debounced and gated on Docker's build-input hash, including
+       * Docker ignore rules, so irrelevant changes do not restart the worker.
        */
       const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
@@ -693,16 +729,34 @@ export const LocalWorkerProvider = () =>
       ) =>
         Effect.gen(function* () {
           const fs = yield* PlatformFileSystem.FileSystem;
-          const watched = new Map<string, { dockerfile: string | undefined }>();
+          const watched = new Map<
+            string,
+            { dockerfile: string | undefined; build: DockerBuildOptions }
+          >();
           for (const namespace of worker.durableObjectNamespaces) {
             const image = namespace.container;
-            if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(image.context ?? ".");
+            const build =
+              image?.localBuild?.build ??
+              (image && "dockerfile" in image
+                ? {
+                    context: image.context,
+                    dockerfile: image.dockerfile,
+                    args: image.buildArgs,
+                  }
+                : undefined);
+            if (
+              !build ||
+              (build.dockerfile !== undefined &&
+                typeof build.dockerfile !== "string")
+            )
+              continue;
+            const context = path.resolve(build.context ?? ".");
             if (context.split(path.sep).includes(".alchemy")) continue;
             watched.set(context, {
+              build,
               dockerfile:
-                image.dockerfile !== undefined
-                  ? path.resolve(context, image.dockerfile)
+                build.dockerfile !== undefined
+                  ? path.resolve(context, build.dockerfile)
                   : undefined,
             });
           }
@@ -714,34 +768,14 @@ export const LocalWorkerProvider = () =>
           }
           if (watched.size === 0) return;
 
-          const fingerprint = Effect.gen(function* () {
-            const hashes: string[] = [];
-            const walk = (dir: string): Effect.Effect<void, any> =>
-              Effect.gen(function* () {
-                const entries = yield* fs.readDirectory(dir);
-                for (const entry of entries.sort()) {
-                  if (entry === "node_modules" || entry === ".git") continue;
-                  const file = path.join(dir, entry);
-                  const stat = yield* fs.stat(file);
-                  if (stat.type === "Directory") {
-                    yield* walk(file);
-                  } else {
-                    hashes.push(
-                      `${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`,
-                    );
-                  }
-                }
-              });
-            for (const [context, { dockerfile }] of watched) {
-              yield* walk(context);
-              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
-                hashes.push(
-                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
-                );
-              }
-            }
-            return yield* sha256(hashes.join("\n"));
-          }).pipe(Effect.orElseSucceed(() => undefined));
+          const fingerprint = Effect.forEach(
+            [...watched.values()],
+            ({ build }) =>
+              prepareBuild(build).pipe(Effect.map((prepared) => prepared.hash)),
+          ).pipe(
+            Effect.flatMap((hashes) => sha256(hashes.join("\n"))),
+            Effect.orElseSucceed(() => undefined),
+          );
 
           const streams = [...watched.entries()].flatMap(
             ([context, { dockerfile }]) => [
@@ -856,7 +890,9 @@ export const LocalWorkerProvider = () =>
                       compatibilityFlags: worker.compatibility.flags,
                       bindings: worker.workerBindings as never,
                       hyperdrives: worker.hyperdrives,
-                      durableObjectNamespaces: worker.durableObjectNamespaces,
+                      durableObjectNamespaces: yield* prepareContainers(
+                        worker.durableObjectNamespaces,
+                      ),
                       workflows: worker.workflows,
                       queueConsumers,
                       // Cron triggers: the runtime starts a Node-side timer
@@ -1290,7 +1326,9 @@ export const LocalWorkerProvider = () =>
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
                         devAccess: worker.dev.access,
-                        durableObjectNamespaces: worker.durableObjectNamespaces,
+                        durableObjectNamespaces: yield* prepareContainers(
+                          worker.durableObjectNamespaces,
+                        ),
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
@@ -1420,7 +1458,9 @@ export const LocalWorkerProvider = () =>
           assets: worker.assets,
           worker: {
             bindings: worker.workerBindings,
-            durableObjectNamespaces: worker.durableObjectNamespaces,
+            durableObjectNamespaces: yield* prepareContainers(
+              worker.durableObjectNamespaces,
+            ),
             hyperdrives: worker.hyperdrives,
             queueConsumers: getQueueConsumers(worker.name),
             assets: yield* toRuntimeAssets(worker.assets),

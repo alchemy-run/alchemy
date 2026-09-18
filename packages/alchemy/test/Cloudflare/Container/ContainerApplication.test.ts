@@ -1,6 +1,9 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Drift from "@/Drift.ts";
+import * as Deploy from "@/Deploy.ts";
+import * as Destroy from "@/Destroy.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
+import * as DockerResources from "@/Docker";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as FileSystem from "effect/FileSystem";
@@ -27,6 +30,8 @@ import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
+  descriptorApplications,
+  sharedApplication,
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
@@ -42,7 +47,21 @@ import {
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    DockerResources.providers(),
+    DockerLive,
+  ),
+});
+const { test: registryCacheTest } = Test.make({
+  // Each deployment must consult the registry, not a previous provider's map.
+  providers: Layer.fresh(
+    Layer.mergeAll(
+      Cloudflare.providers(),
+      DockerResources.providers(),
+      DockerLive,
+    ),
+  ),
 });
 
 const logLevel = Effect.provideService(
@@ -120,6 +139,117 @@ const patchRow = <A extends Record<string, any>>(
 // whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
 // themselves.
 describe.concurrent("ContainerApplication", () => {
+  test.provider("rejects ambiguous or empty embedded image options", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      for (const image of [
+        { ref: "alpine:3.19", context: "." },
+        { ref: "alpine:3.19", args: { VERSION: "1" } },
+        {},
+      ]) {
+        const application = Cloudflare.Container("Invalid", {
+          // @ts-expect-error JavaScript callers must receive the same validation as typed callers.
+          image,
+        }).Application;
+        const result = yield* stack.plan(application).pipe(Effect.exit);
+        assert(Exit.isFailure(result));
+        expect(Cause.pretty(result.cause)).toMatch(
+          /cannot be combined|requires ref, context, or dockerfile/,
+        );
+      }
+      yield* stack.destroy();
+    }),
+  );
+  test.provider(
+    "composes plain image options into managed child resources",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const context = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-image-descriptors-",
+        });
+        yield* fs.writeFileString(
+          path.join(context, "Dockerfile.custom"),
+          'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
+        );
+        yield* fs.writeFileString(path.join(context, "payload"), "first");
+        const first = yield* stack.deploy(descriptorApplications(context));
+        expect(first.first?.configuration.image).toBe(
+          first.second.configuration.image,
+        );
+        expect(first.remote.hash?.digest).toBe(first.second.hash?.digest);
+        for (const [app, repository] of [
+          [first.second, "alchemy-embedded-build"],
+          [first.remote, "alchemy-embedded-mirror"],
+          [first.generated, "alchemy-embedded-generated"],
+        ] as const)
+          expect(app.configuration.image).toMatch(
+            new RegExp(
+              `^registry.cloudflare.com/${app.accountId}/${repository}@sha256:`,
+            ),
+          );
+        const unchanged = yield* stack.plan(descriptorApplications(context));
+        for (const name of [
+          "DescriptorFirst",
+          "DescriptorSecond",
+          "DescriptorRemote",
+          "DescriptorGenerated",
+        ])
+          expect(unchanged.resources[`${name}/Image`]).toMatchObject({
+            action: "noop",
+          });
+        yield* fs.writeFileString(path.join(context, "payload"), "changed");
+        const changedPlan = yield* stack.plan(descriptorApplications(context));
+        expect(changedPlan.resources["DescriptorSecond/Image"]).toMatchObject({
+          action: "update",
+        });
+        const changed = yield* stack.deploy(descriptorApplications(context));
+        expect(changed.second.configuration.image).not.toBe(
+          first.second.configuration.image,
+        );
+        expect(changed.remote.hash?.digest).toBe(changed.second.hash?.digest);
+        const retained = yield* stack.deploy(
+          descriptorApplications(
+            context,
+            false,
+            `registry.cloudflare.com/${changed.remote.accountId}/alchemy-embedded-mirror`,
+          ),
+        );
+        expect(retained.second.applicationId).toBe(
+          changed.second.applicationId,
+        );
+        expect(retained.remote.configuration.image).toBe(
+          changed.remote.configuration.image,
+        );
+        expect(
+          (yield* waitForImage(
+            retained.second.accountId,
+            retained.second.applicationId,
+            retained.second.configuration.image,
+          )).image,
+        ).toBe(retained.second.configuration.image);
+        yield* stack.destroy();
+        const gone = yield* Containers.getContainerApplication({
+          accountId: retained.second.accountId,
+          applicationId: retained.second.applicationId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            until: (gone) => gone,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(gone).toBe(true);
+      }),
+    { timeout: 120_000 },
+  );
+
   test.provider(
     "recovers an interrupted generated create and reconciles observed drift",
     (stack) =>
@@ -416,7 +546,7 @@ describe.concurrent("ContainerApplication", () => {
               }
               const updated = yield* stack.deploy(historyApplications(true));
               assert(updated.target);
-              expect(updated.target.configuration.image).not.toBe(
+              expect(updated.target.configuration.image).toBe(
                 initial.first.configuration.image,
               );
               expect(updated.target.hash?.digest).toBe(
@@ -491,6 +621,10 @@ describe.concurrent("ContainerApplication", () => {
         Effect.gen(function* () {
           yield* stack.destroy();
           const provider = yield* Provider.findProvider(ContainerPlatform);
+          const fs = yield* FileSystem.FileSystem;
+          const seed = yield* fs.makeTempDirectoryScoped({
+            prefix: "alchemy-publication-recovery-",
+          });
           const program = (includeSecond = false) =>
             Effect.gen(function* () {
               expect(yield* Provider.findProvider(ContainerPlatform)).toBe(
@@ -499,6 +633,7 @@ describe.concurrent("ContainerApplication", () => {
               return yield* recoveryApplications(
                 failure === "interrupted" ? 10 : 0,
                 includeSecond,
+                seed,
               );
             });
           if (failure === "failed") {
@@ -640,7 +775,10 @@ describe.concurrent("ContainerApplication", () => {
             path.join(context, ".gitignore"),
             "payload.txt\n",
           );
-          yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
+          yield* fs.writeFileString(
+            path.join(context, "payload.txt"),
+            `${root}/${kind}`,
+          );
           yield* fs.writeFileString(path.join(context, "input.txt"), "first");
           yield* fs.writeFileString(
             path.join(context, "Dockerfile"),
@@ -660,7 +798,7 @@ describe.concurrent("ContainerApplication", () => {
         ).toHaveLength(3);
         // Each distinct publication can make at most six export attempts.
         expect(history.length).toBeLessThanOrEqual(18);
-        expect(first.first.hash?.image).toBe(first.other.hash?.image);
+        expect(first.first.hash?.image).not.toBe(first.other.hash?.image);
         expect(first.first.configuration.image).toBe(
           first.second.configuration.image,
         );
@@ -734,6 +872,266 @@ describe.concurrent("ContainerApplication", () => {
           expect(deleted).toBeUndefined();
         }
       }).pipe(withBuilder("alchemy-publication-cache"), logLevel),
+    { timeout: 120_000, exclusive: true },
+  );
+
+  // Publication reuse was confined to a provider instance in:
+  // https://github.com/alchemy-run/alchemy/commit/275361dfe8358684439e42120298723305175d39
+  registryCacheTest.provider(
+    "reuses registry images across fresh providers and invalidates changed build inputs",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-registry-cache-",
+        });
+        const context = path.join(root, "context");
+        const imageName = `alchemy-registry-cache-${stack.stage.toLowerCase()}`;
+        yield* fs.makeDirectory(context);
+        yield* fs.writeFileString(path.join(root, "bun.lock"), "outside-first");
+        yield* fs.writeFileString(
+          path.join(context, ".gitignore"),
+          "payload\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, ".dockerignore"),
+          "ignored\n",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "ignored"),
+          "ignored-first",
+        );
+        // Fresh payload bytes force a cold source tag even after a prior run.
+        yield* fs.writeFileString(path.join(context, "payload"), root);
+        yield* fs.writeFileString(
+          path.join(context, "Dockerfile"),
+          'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
+        );
+        const deploy = (id: string, repository = imageName) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const { accountId } = yield* yield* CloudflareEnvironment;
+              const image = yield* DockerResources.Image("Image", {
+                build: { context, platform: "linux/amd64" },
+                publish: {
+                  repository: `registry.cloudflare.com/${accountId}/${repository}`,
+                },
+              });
+              return {
+                app: yield* Cloudflare.Container(id, {
+                  image: image.ref,
+                }).Application,
+              };
+            }),
+          );
+
+        const first = yield* deploy("First");
+        const history = yield* buildHistory;
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(1);
+        expect(first.app.configuration.image).toContain(
+          `/${imageName}@sha256:`,
+        );
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
+        const username = credentials.username ?? credentials.user;
+        assert(username);
+        const http = yield* HttpClient.HttpClient;
+        const cached = yield* http.execute(
+          HttpClientRequest.head(
+            `https://registry.cloudflare.com/v2/${first.app.accountId}/${imageName}/manifests/buildcache`,
+          ).pipe(
+            HttpClientRequest.basicAuth(username, credentials.password),
+            HttpClientRequest.setHeader(
+              "Accept",
+              "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+            ),
+          ),
+        );
+        expect(cached.status).toBe(200);
+        expect(cached.headers["docker-content-digest"]).toBe(
+          first.app.hash?.digest,
+        );
+
+        yield* stack.destroy();
+        yield* fs.writeFileString(
+          path.join(root, "bun.lock"),
+          "outside-second",
+        );
+        yield* fs.writeFileString(
+          path.join(context, "ignored"),
+          "ignored-second",
+        );
+        const second = yield* deploy("Second");
+        expect(yield* buildHistory).toEqual(history);
+        expect(second.app.applicationId).not.toBe(first.app.applicationId);
+        expect(second.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
+
+        // Git ignores this file, but Docker copies it into the image.
+        yield* fs.writeFileString(
+          path.join(context, "payload"),
+          `${root}-changed`,
+        );
+        const changed = yield* deploy("Second");
+        expect(changed.app.hash?.digest).not.toBe(second.app.hash?.digest);
+        expect(
+          (yield* buildHistory).filter((build) => build.status === "Completed"),
+        ).toHaveLength(2);
+
+        const moved = yield* deploy("Second", `${imageName}-other`);
+        expect(moved.app.configuration.image).toContain(
+          `/${imageName}-other@sha256:`,
+        );
+        expect(
+          (yield* buildHistory).filter((build) => build.status === "Completed"),
+        ).toHaveLength(3);
+        yield* stack.destroy();
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: moved.app.accountId,
+          applicationId: moved.app.applicationId,
+        }).pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
+      }).pipe(withBuilder("alchemy-registry-cache"), logLevel),
+    { timeout: 120_000, exclusive: true },
+  );
+
+  test.provider(
+    "reuses shared registry images across stages without a builder and moves repositories with an unchanged digest",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-shared-publication-",
+        });
+        const context = path.join(root, "first");
+        const otherContext = path.join(root, "second");
+        for (const dir of [context, otherContext]) {
+          yield* fs.makeDirectory(dir);
+          yield* fs.writeFileString(path.join(dir, "payload.txt"), root);
+          yield* fs.writeFileString(
+            path.join(dir, "Dockerfile"),
+            'FROM alpine:3.19\nCOPY payload.txt /payload.txt\nCMD ["sleep", "3600"]\n',
+          );
+        }
+        const initial = yield* stack.deploy(sharedApplication(context));
+        const imageName = initial.app.applicationName;
+        const shared = yield* stack.deploy(
+          sharedApplication(context, imageName),
+        );
+        expect(shared.app.applicationId).toBe(initial.app.applicationId);
+        const history = yield* buildHistory;
+        expect(
+          history.filter((build) => build.status === "Completed"),
+        ).toHaveLength(2);
+
+        const secondStage = {
+          stage: `${stack.stage}-shared`,
+          stack: Stack(
+            stack.name,
+            {
+              providers: Layer.fresh(
+                Layer.mergeAll(
+                  Cloudflare.providers(),
+                  DockerResources.providers(),
+                ),
+              ),
+              state: stack.state,
+            },
+            sharedApplication(otherContext, imageName),
+          ),
+        };
+        yield* Destroy.destroy(secondStage);
+        const reused = yield* Effect.gen(function* () {
+          // A fresh provider and an unusable builder rule out process-local reuse.
+          const reused = yield* Effect.acquireUseRelease(
+            Effect.sync(() => {
+              const previous = process.env.BUILDX_BUILDER;
+              process.env.BUILDX_BUILDER =
+                "alchemy-shared-cache-must-not-build";
+              return previous;
+            }),
+            () => Deploy.deploy(secondStage),
+            (previous) =>
+              Effect.sync(() => {
+                if (previous === undefined) delete process.env.BUILDX_BUILDER;
+                else process.env.BUILDX_BUILDER = previous;
+              }),
+          );
+          expect(reused.app.applicationId).not.toBe(shared.app.applicationId);
+          expect(reused.app.hash?.image).toBe(shared.app.hash?.image);
+          expect(reused.app.configuration.image).toBe(
+            shared.app.configuration.image,
+          );
+          expect(yield* buildHistory).toEqual(history);
+          expect(
+            (yield* live(reused.app.accountId, reused.app.applicationId)).image,
+          ).toBe(shared.app.configuration.image);
+
+          const moved = yield* stack.deploy(
+            sharedApplication(context, `${imageName}-moved`),
+          );
+          expect(moved.app.applicationId).toBe(shared.app.applicationId);
+          expect(moved.app.hash?.digest).toBe(shared.app.hash?.digest);
+          expect(moved.app.configuration.image).toContain(
+            `/${imageName}-moved@sha256:`,
+          );
+          expect(
+            (yield* waitForImage(
+              moved.app.accountId,
+              moved.app.applicationId,
+              moved.app.configuration.image!,
+            )).image,
+          ).toBe(moved.app.configuration.image);
+          expect(
+            (yield* live(reused.app.accountId, reused.app.applicationId)).image,
+          ).toBe(shared.app.configuration.image);
+          return reused;
+        }).pipe(
+          Effect.ensuring(Destroy.destroy(secondStage).pipe(Effect.orDie)),
+        );
+        yield* stack.destroy();
+        for (const app of [shared.app, reused.app]) {
+          const deleted = yield* Containers.getContainerApplication({
+            accountId: app.accountId,
+            applicationId: app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (app) => app === undefined,
+              times: 8,
+            }),
+          );
+          expect(deleted).toBeUndefined();
+        }
+      }).pipe(
+        // Timestamped provenance would give identical image builds different digests.
+        withBuilder("alchemy-shared-registry-cache", { attestations: false }),
+        logLevel,
+      ),
     { timeout: 120_000, exclusive: true },
   );
 
@@ -1274,12 +1672,8 @@ describe.concurrent("ContainerApplication", () => {
     { timeout: 900_000 },
   );
 
-  // State written before #1282 carries only `hash.image`, and its live
-  // application runs the mutable `<repo>:<sourceHash>` tag. On the first
-  // reconcile after upgrading, the provider resolves that tag's digest
-  // through the registry, keeps the live tag reference when the rebuilt
-  // image matches, and persists the digest + configuration fingerprint
-  // through one normal update. Every later source-hash drift is then a noop.
+  // Legacy rows use a mutable tag. Migrate once to the image resource's
+  // immutable reference, then preserve it across equivalent source spellings.
   test.provider(
     "legacy state without a digest migrates through one update",
     (scratch) =>
@@ -1320,19 +1714,15 @@ describe.concurrent("ContainerApplication", () => {
           hash: { image: attr.hash!.image },
         }));
 
-        // Source-hash drift on the migrated row: the rebuilt digest is
-        // compared against the live tag's digest (resolved via the
-        // registry), the live reference is kept, and the digest +
-        // fingerprint are persisted through one update. That update still
-        // carries one rollout — the live configuration is Cloudflare-
-        // enriched, so the pre-fingerprint `deepEqual` misses — which is
-        // exactly what the fingerprint prevents from here on.
+        // Normalize the old tag reference and persist the configuration hash.
         const migrated = yield* deployImage(
           scratch,
           "docker.io/mendhak/http-https-echo:41",
         );
         expect(migrated.app.applicationId).toBe(applicationId);
-        expect(migrated.app.configuration.image).toBe(taggedRef);
+        expect(migrated.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
         expect(migrated.app.hash?.digest).toBe(first.app.hash?.digest);
         expect(migrated.app.hash?.configuration).toBeDefined();
         const after = yield* live(accountId, applicationId).pipe(
@@ -1342,18 +1732,20 @@ describe.concurrent("ContainerApplication", () => {
             times: 30,
           }),
         );
-        expect(after.image).toBe(taggedRef);
+        expect(after.image).toBe(first.app.configuration.image);
 
         // From here on, drift is free: no update, no rollout.
         const settled = yield* deployImage(
           scratch,
           "mendhak/http-https-echo:41",
         );
-        expect(settled.app.configuration.image).toBe(taggedRef);
-        expect(settled.app.hash?.image).not.toBe(migrated.app.hash?.image);
+        expect(settled.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
+        expect(settled.app.hash?.image).toBe(migrated.app.hash?.image);
         yield* Effect.sleep("10 seconds");
         expect(yield* live(accountId, applicationId)).toMatchObject({
-          image: taggedRef,
+          image: first.app.configuration.image,
           version: after.version,
         });
 

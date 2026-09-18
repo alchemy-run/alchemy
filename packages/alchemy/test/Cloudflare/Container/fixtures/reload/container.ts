@@ -24,7 +24,7 @@ export const RELOAD_CONTAINER_PORT = 17362;
 export class ReloadContainer extends Cloudflare.Container<ReloadContainer>()(
   "ReloadContainer",
   {
-    context: RELOAD_CONTEXT_DIR,
+    image: { context: RELOAD_CONTEXT_DIR },
     observability: { logs: { enabled: true } },
   },
 ) {}

@@ -1,20 +1,12 @@
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
-import { Docker } from "../../Docker/Docker.ts";
+import { findCwdForBundle, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import { Stack } from "../../Stack.ts";
-import { sha256Object } from "../../Util/sha256.ts";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
 
 /**
@@ -189,7 +181,7 @@ export const containerEnvPreamble = (
     }
     return Effect.succeed(content.trimEnd());
   }
-  const ref = props.image?.trim();
+  const ref = typeof props.image === "string" ? props.image.trim() : undefined;
   if (ref) {
     if (/\s/.test(ref)) {
       // A registry reference never contains whitespace — catch Dockerfile
@@ -247,35 +239,12 @@ export const buildFinalDockerfile = (
 };
 
 /**
- * Materialize resolved inline `dockerfile` content into a stable,
- * deterministic build-context directory (containing only the Dockerfile) so
- * both the live provider and the local dev runtime can `docker build` it.
- * Shared by the live and local providers so they agree on the path.
- */
-export const materializeInlineDockerfileContext = Effect.fn(function* (
-  id: string,
-  content: string,
-) {
-  const { dotAlchemy } = yield* AlchemyContext;
-  const docker = yield* Docker;
-  const path = yield* Path.Path;
-  const context = yield* getStableContextDir(
-    dotAlchemy,
-    dotAlchemy,
-    `${id}-dockerfile`,
-  );
-  yield* docker.materialize({ context, dockerfile: content, files: [] });
-  return { context, dockerfile: path.join(context, "Dockerfile") };
-});
-
-/**
  * Bundle the container entrypoint program with rolldown. Returns every emitted
  * file (entry chunk plus shared chunks) so the full set can be materialized
  * into the Docker build context, along with a content hash of the bundle.
  *
- * Shared between the live provider (which builds + pushes a Cloudflare image)
- * and the local provider (which writes the context to disk for the runtime to
- * `docker build`).
+ * The container adapter passes these files to its Docker.Image child for
+ * materialization, hashing, and local or published builds.
  */
 export const bundleContainerProgram = Effect.fn(function* ({
   main,
@@ -366,87 +335,15 @@ await bootstrap(entrypoint, ${JSON.stringify({
   // `Cannot find module './chunk-XXX.js'` runtime crash inside the
   // container (with zero stdout, because it crashes before any user
   // code runs).
-  const files = bundleOutput.files.map((f) => ({
-    path: f.path,
-    content:
-      typeof f.content === "string"
-        ? new TextEncoder().encode(f.content)
-        : f.content,
-  }));
+  const files = yield* Effect.sync(() =>
+    bundleOutput.files.map((f) => ({
+      path: f.path,
+      content:
+        typeof f.content === "string"
+          ? new TextEncoder().encode(f.content)
+          : f.content,
+    })),
+  );
 
   return { files, hash: bundleOutput.hash };
-});
-
-/**
- * Bundle an Effect-native container `main` and materialize it (plus the
- * generated Dockerfile) into a stable Docker build context directory, then
- * return the paths + content hash of that context.
- *
- * This is the local-dev image shape (`ContainerImage.Build`) that
- * `@alchemy.run/cloudflare-runtime/core` consumes: it `docker build`s the
- * `dockerfile` against the `context` directory. Shared between the local
- * provider (which serves this context to the runtime as the `dev` image) and
- * the live provider (which persists the same deterministic context path as
- * `dev` so a subsequent `alchemy dev` run has an image to build even though the
- * live deploy pushed to Cloudflare's registry instead).
- *
- * The context directory is deterministic for a given resource id, so live and
- * local agree on the path. Callers that want to skip re-bundling on an
- * unchanged resource should wrap this in {@link Artifacts.cached}.
- */
-export const prepareContainerBuildContext = Effect.fn(function* (
-  id: string,
-  news: AnyContainerApplicationProps,
-) {
-  const { dotAlchemy } = yield* AlchemyContext;
-  const docker = yield* Docker;
-  const path = yield* Path.Path;
-
-  const main = news.main;
-  if (!main) {
-    return yield* Effect.die(
-      new Error("Container requires a `main` entrypoint."),
-    );
-  }
-  yield* validateContainerImageProps(news);
-  const runtime = news.runtime ?? "bun";
-  const context = yield* getStableContextDir(
-    process.cwd(),
-    dotAlchemy,
-    `${id}-container`,
-  );
-  const dockerfileContent = buildFinalDockerfile(
-    yield* containerEnvPreamble(news),
-    runtime,
-    news.external,
-    news.autoInstallExternals,
-  );
-  const [bundle] = yield* Effect.all(
-    [
-      bundleContainerProgram({
-        id,
-        main,
-        runtime,
-        handler: news.handler,
-        isExternal: news.isExternal,
-        external: news.external,
-        outdir: context,
-        build: news.build,
-      }),
-      docker.materialize({
-        context,
-        dockerfile: dockerfileContent,
-        files: [],
-      }),
-    ],
-    { concurrency: "unbounded" },
-  );
-  return {
-    context,
-    dockerfile: path.join(context, "Dockerfile"),
-    hash: yield* sha256Object({
-      bundle: bundle.hash,
-      dockerfileContent,
-    }),
-  };
 });

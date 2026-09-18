@@ -189,7 +189,7 @@ describe("Docker.image", (it) => {
         yield* docker.image.build(
           {
             context: "/ctx",
-            tag: "registry.invalid/app:1",
+            tag: ["registry.invalid/app:1", "registry.invalid/app:buildcache"],
             platform: "linux/amd64",
           },
           undefined,
@@ -201,6 +201,8 @@ describe("Docker.image", (it) => {
       expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--push"]);
       expect(build!.args).toContain("/ctx");
       expect(build!.args).toContain("registry.invalid/app:1");
+      expect(build!.args).toContain("registry.invalid/app:buildcache");
+      expect(build!.args.filter((arg) => arg === "--tag")).toHaveLength(2);
       expect(build!.env.DOCKER_CONFIG).toBeUndefined();
       const auth = JSON.parse(build!.env.DOCKER_AUTH_CONFIG!) as {
         auths: Record<string, { auth: string }>;
@@ -222,15 +224,18 @@ describe("Docker.image", (it) => {
           yield* docker.image.build(
             {
               context: "/ctx",
-              tag: "registry.invalid/app:1",
+              tag: [
+                "registry.invalid/app:1",
+                "registry.invalid/app:buildcache",
+              ],
               platform: "linux/amd64",
             },
             undefined,
             registry,
           );
         }).pipe(Effect.provide(fake.layer));
-        expect(fake.calls).toHaveLength(2);
-        const [build, push] = fake.calls;
+        expect(fake.calls).toHaveLength(3);
+        const [build, push, cachePush] = fake.calls;
         // `--load` so non-loading (docker-container) builders still land the
         // image in the local store for the follow-up push.
         expect(build!.args.slice(0, 3)).toEqual(["buildx", "build", "--load"]);
@@ -246,6 +251,12 @@ describe("Docker.image", (it) => {
           "registry.invalid/app:1",
         ]);
         expect(push!.env.DOCKER_AUTH_CONFIG).toBeUndefined();
+        expect(cachePush!.args).toEqual([
+          "push",
+          "--platform",
+          "linux/amd64",
+          "registry.invalid/app:buildcache",
+        ]);
         // The isolated config is written under a temp dir for the push only
         // and removed once the push scope closes.
         const dir = push!.env.DOCKER_CONFIG;

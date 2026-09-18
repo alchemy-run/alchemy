@@ -3,6 +3,10 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import { DockerLive } from "../Docker/Docker.ts";
+import { Image } from "../Docker/Image.ts";
+import { RemoteImage } from "../Docker/RemoteImage.ts";
+import { imageProviders } from "../Docker/Providers.ts";
+import { ContainerRegistryAuth } from "./Containers/ContainerRegistryAuth.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -193,6 +197,8 @@ export const providers = () =>
       Configuration.Configuration,
       Connectivity.DirectoryService,
       Containers.ContainerPlatform,
+      Image,
+      RemoteImage,
       ContentScanning.ContentScanning,
       ContentScanning.Expression,
       CustomCertificates.CustomCertificate,
@@ -647,7 +653,9 @@ export const providers = () =>
     ),
     // Plan-executable data-source capabilities (`Binding.Service.execute`).
     Layer.provideMerge(GetIdentityProviderHttp),
+    Layer.provide(imageProviders),
     Layer.provide(DockerLive),
+    Layer.provideMerge(ContainerRegistryAuth),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually
