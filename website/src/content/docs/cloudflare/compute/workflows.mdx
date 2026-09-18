@@ -302,6 +302,39 @@ Add `scriptName` to bind a workflow hosted by another Worker script
 — bindings only, so deploy the host first. The full async-handler
 example lives in the API reference.
 
+## Send lifecycle events to a Queue
+
+Pass a Workflow binding from the declared Worker's `env` directly to
+`Queues.Subscription`:
+
+```typescript
+const worker = yield* Worker;
+const queue = yield* Cloudflare.Queues.Queue("WorkflowEventsQueue");
+
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: worker.env.MY_WORKFLOW,
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+The binding's physical name is an `Output`, so the subscription waits for
+the Workflow on its first deployment and follows later renames. Only
+`{ type: "workflows.workflow", workflowName }` is persisted as the source;
+binding metadata such as `className` and `scriptName` is not stored.
+
+For a Workflow referenced by physical name, the explicit descriptor is
+still supported:
+
+```typescript
+source: { type: "workflows.workflow", workflowName: "existing-ingestion" }
+```
+
+A cross-script Workflow binding can also be passed directly; the
+subscription does not take ownership of the foreign Workflow. Attach a
+[Queue consumer](/cloudflare/messaging/queues) to process the lifecycle events.
+Cloudflare permits one subscription per source per account.
+
 ## Where next
 
 The full walkthrough:

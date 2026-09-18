@@ -163,7 +163,7 @@ const bindingSnapshot = (binding: Cloudflare.Workflows.WorkflowBinding) => ({
 });
 
 test.provider(
-  "async worker workflow binding exposes workflowName for a first-deployment queue subscription",
+  "async worker workflow binding is a direct first-deployment queue subscription source",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -174,14 +174,15 @@ test.provider(
         const subscription = yield* Cloudflare.Queues.Subscription(
           "WorkflowEvents",
           {
-            source: {
-              type: "workflows.workflow",
-              workflowName: worker.env.MY_WORKFLOW.workflowName,
-            },
+            source: worker.env.MY_WORKFLOW,
             events: ["instance.completed", "instance.errored"],
             queueId: queue.queueId,
           },
         );
+        expect(subscription.Props.source).toEqual({
+          type: "workflows.workflow",
+          workflowName: worker.env.MY_WORKFLOW.workflowName,
+        });
         yield* Cloudflare.Queues.Consumer("WorkflowEventsConsumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
@@ -242,6 +243,10 @@ test.provider(
         workflowName: binding.workflowName,
       };
       expect(subscription.source).toEqual(source);
+      expect(plan.resources.WorkflowEvents.state).toHaveProperty(
+        "props.source",
+        source,
+      );
       const liveSubscription = yield* queues.getSubscription({
         accountId,
         subscriptionId: subscription.subscriptionId,
@@ -566,7 +571,7 @@ test.provider(
 );
 
 test.provider(
-  "explicit workflow outputs subscribe on first deploy and preserve identity through omission and rename",
+  "direct workflow sources with Effect props preserve explicit identity through omission and rename",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -587,15 +592,16 @@ test.provider(
           const queue = yield* Cloudflare.Queues.Queue("IdentityQueue");
           const subscription = yield* Cloudflare.Queues.Subscription(
             "IdentityEvents",
-            {
-              source: {
-                type: "workflows.workflow",
-                workflowName: worker.env.MY_WORKFLOW.workflowName,
-              },
+            Effect.succeed({
+              source: worker.env.MY_WORKFLOW,
               events: ["instance.completed"],
               queueId: queue.queueId,
-            },
+            }),
           );
+          expect(subscription.Props.source).toEqual({
+            type: "workflows.workflow",
+            workflowName: worker.env.MY_WORKFLOW.workflowName,
+          });
           yield* Cloudflare.Queues.Consumer("IdentityConsumer", {
             queueId: queue.queueId,
             scriptName: worker.workerName,
@@ -647,6 +653,10 @@ test.provider(
             const plan = yield* stack.plan(program(name));
             expect(plan.resources.IdentityWorkflow.downstream).toContain(
               "IdentityEvents",
+            );
+            expect(plan.resources.IdentityEvents.state).toHaveProperty(
+              "props.source",
+              source,
             );
             const terminal = yield* runWorkflowToCompletion(worker.url!).pipe(
               Effect.retry({
@@ -839,7 +849,7 @@ test.provider(
 );
 
 test.provider(
-  "physical names link cross-script consumers without owning the host Workflow",
+  "direct foreign workflow subscription sources do not own the host Workflow",
   (scratch) =>
     Effect.gen(function* () {
       yield* scratch.destroy();
@@ -864,9 +874,22 @@ test.provider(
               }),
             },
           });
+          const queue = yield* Cloudflare.Queues.Queue("ForeignEventsQueue");
+          const Subscription = yield* Cloudflare.Queues.Subscription;
+          const subscription = yield* Subscription("ForeignEvents", {
+            source: consumer.env.MY_WORKFLOW,
+            events: ["instance.completed"],
+            queueId: queue.queueId,
+          });
+          expect(subscription.Props.source).toEqual({
+            type: "workflows.workflow",
+            workflowName: consumer.env.MY_WORKFLOW.workflowName,
+          });
           return {
             worker,
             consumer,
+            queue,
+            subscription,
             hostBinding: bindingSnapshot(worker.env.MY_WORKFLOW),
             consumerBinding: bindingSnapshot(consumer.env.MY_WORKFLOW),
           };
@@ -879,6 +902,14 @@ test.provider(
       );
       expect(deployed.consumerBinding.workflowIsOutput).toBe(true);
       expect(deployed.consumerBinding.scriptIsOutput).toBe(true);
+      const source = { type: "workflows.workflow", workflowName };
+      expect(deployed.subscription.source).toEqual(source);
+      const liveSubscription = yield* queues.getSubscription({
+        accountId,
+        subscriptionId: deployed.subscription.subscriptionId,
+      });
+      expect(liveSubscription.source).toEqual(expect.objectContaining(source));
+      expect(liveSubscription.destination.queueId).toBe(deployed.queue.queueId);
       const owned = yield* workflows.listWorkflows.items({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((all) =>
@@ -902,6 +933,25 @@ test.provider(
       expect(terminal.output?.workflowName).toBe(workflowName);
       yield* scratch.deploy(host);
       yield* expectWorkerGone(accountId, deployed.consumer.workerName);
+      expect(
+        yield* queues
+          .getSubscription({
+            accountId,
+            subscriptionId: deployed.subscription.subscriptionId,
+          })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(true)),
+          ),
+      ).toBe(true);
+      expect(
+        yield* queues
+          .getQueue({ accountId, queueId: deployed.queue.queueId })
+          .pipe(
+            Effect.as(false),
+            Effect.catchTag("QueueNotFound", () => Effect.succeed(true)),
+          ),
+      ).toBe(true);
       expect(
         (yield* workflows.getWorkflow({ accountId, workflowName })).id,
       ).toBe(original.id);

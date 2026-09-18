@@ -245,6 +245,38 @@ the dispatch to the registered listener — but you get
 `Effect.gen` composition, typed errors, automatic batch
 ack/retry, and the same surface as `AWS.SQS.consumeQueueMessages(queue, handler)`.
 
+## Receive Workflow lifecycle events
+
+A subscription delivers platform events into a Queue. For a Workflow
+bound to an async Worker, pass the binding directly as the source:
+
+```typescript
+const worker = yield* Cloudflare.Worker("IngestionWorker", {
+  main: "./src/worker.ts",
+  env: {
+    INGESTION: Cloudflare.Workflow("Ingestion", {
+      className: "IngestionWorkflow",
+    }),
+  },
+});
+const queue = yield* Cloudflare.Queues.Queue("WorkflowEventsQueue");
+
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: worker.env.INGESTION,
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+The subscription uses the binding's deferred physical name, including on
+the first deployment. Renaming the Workflow replaces the subscription.
+The Queue still needs a consumer to handle these messages, as above.
+
+Explicit sources remain supported, including
+`{ type: "workflows.workflow", workflowName: "existing-ingestion" }` for a
+Workflow referenced by name and `{ type: "r2" }` for R2 events. Cloudflare
+allows at most one subscription per source per account.
+
 ## Where next
 
 Related:
@@ -260,3 +292,4 @@ Reference:
 
 - [Queue API reference](/providers/cloudflare/queues/queue)
 - [Consumer API reference](/providers/cloudflare/queues/consumer)
+- [Subscription API reference](/providers/cloudflare/queues/subscription)

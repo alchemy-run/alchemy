@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Cloudflare from "@/Cloudflare";
 import * as Output from "@/Output.ts";
+import type { ResourceClass } from "@/Resource.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -187,11 +188,96 @@ type _WorkerRuntimeRetainsEnv = Assert<
 export const subscription = Effect.gen(function* () {
   const worker = yield* program;
   return yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+    source: worker.env.MY_WORKFLOW,
+    events: ["instance.completed"],
+    queueId: "queue-id",
+  });
+});
+
+type _SubscriptionResult = Assert<
+  Equals<Effect.Success<typeof subscription>, Cloudflare.Queues.Subscription>
+>;
+type _SubscriptionPropsStayNormalized = Assert<
+  Equals<
+    Cloudflare.Queues.Subscription["Props"]["source"],
+    Cloudflare.Queues.SubscriptionSource
+  >
+>;
+type _SubscriptionResourceClass = Assert<
+  typeof Cloudflare.Queues.Subscription extends ResourceClass<Cloudflare.Queues.Subscription>
+    ? true
+    : false
+>;
+type _SubscriptionReference = Assert<
+  Equals<
+    Effect.Success<ReturnType<typeof Cloudflare.Queues.Subscription.ref>>,
+    Cloudflare.Queues.Subscription
+  >
+>;
+
+export const subscriptionConstructors = Effect.gen(function* () {
+  const worker = yield* program;
+  const props = {
+    source: worker.env.MY_WORKFLOW,
+    events: ["instance.completed"],
+    queueId: "queue-id",
+  };
+  const effectProps = Effect.gen(function* () {
+    yield* Cloudflare.Queues.Subscription.Self;
+    return props;
+  });
+  const effectSubscription = Cloudflare.Queues.Subscription(
+    "EffectEvents",
+    effectProps,
+  );
+  type _EffectPropsRequirements = Assert<
+    Equals<
+      Effect.Services<typeof effectSubscription>,
+      Effect.Services<typeof effectProps> | Cloudflare.Providers
+    >
+  >;
+  const Subscription = yield* Cloudflare.Queues.Subscription;
+  const yieldedSubscription = Subscription("YieldedEvents", props);
+  type _YieldedRequirements = Assert<
+    Equals<Effect.Services<typeof yieldedSubscription>, never>
+  >;
+  const yieldedEffectSubscription = Subscription(
+    "YieldedEffectEvents",
+    effectProps,
+  );
+  type _YieldedEffectRequirements = Assert<
+    Equals<
+      Effect.Services<typeof yieldedEffectSubscription>,
+      Effect.Services<typeof effectProps>
+    >
+  >;
+  const Extended = Cloudflare.Queues.Subscription({ description: "events" });
+  type _MethodExtension = Assert<Equals<typeof Extended.description, "events">>;
+  yield* Extended("ExtendedEvents", props);
+  yield* Extended("ExtendedEffectEvents", Effect.succeed(props));
+  yield* Subscription("YieldedEvents", props);
+  yield* Subscription("YieldedEffectEvents", Effect.succeed(props));
+  yield* Cloudflare.Queues.Subscription("EffectBindingEvents", {
+    ...props,
+    source: worker.env.EFFECT_WORKFLOW,
+  });
+  yield* Cloudflare.Queues.Subscription("ExplicitEvents", {
+    ...props,
     source: {
       type: "workflows.workflow",
       workflowName: worker.env.MY_WORKFLOW.workflowName,
     },
-    events: ["instance.completed"],
-    queueId: "queue-id",
   });
+  yield* Cloudflare.Queues.Subscription(
+    "ExplicitEffectEvents",
+    Effect.succeed({
+      ...props,
+      source: { type: "r2" as const },
+    }),
+  );
+  const unbound: Cloudflare.Queues.SubscriptionInput = {
+    ...props,
+    // @ts-expect-error A Workflow declaration has no bound deployment identity.
+    source: Cloudflare.Workflow("UnboundWorkflow"),
+  };
 });

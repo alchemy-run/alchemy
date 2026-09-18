@@ -857,9 +857,10 @@ export class WorkflowScope extends Context.Service<
  * ### Consuming the Workflow's Physical Name
  * An external/async Worker declaration exposes each Workflow binding on `worker.env` with
  * the Workflow's account-global `workflowName` as an `Output` of the
- * current deploy. A Queue subscription to the Workflow's lifecycle events
- * can therefore live in the same stack and deploys after the Workflow is
- * registered — on its first deployment too.
+ * current deploy. Pass the binding directly as a Queue subscription's
+ * `source`; it deploys after the Workflow is registered, including on the
+ * first deployment. Explicit source descriptors remain supported for
+ * Workflows referenced by physical name.
  *
  * **Example:** Subscribing a Queue to the Workflow's events
  * ```typescript
@@ -873,10 +874,7 @@ export class WorkflowScope extends Context.Service<
  * });
  *
  * yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
- *   source: {
- *     type: "workflows.workflow",
- *     workflowName: worker.env.FILE_URL_INGESTION.workflowName,
- *   },
+ *   source: worker.env.FILE_URL_INGESTION,
  *   events: ["instance.completed", "instance.errored"],
  *   queueId: queue.queueId,
  * });
