@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -16,6 +17,11 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
           request.url,
           "http://localhost",
         ).pathname.split("/");
+        if (action === "not-found" || action === "server-error") {
+          return HttpServerResponse.text("application error", {
+            status: action === "not-found" ? 404 : 500,
+          });
+        }
         if (action === "rpc") {
           return yield* objects.fetch(name, request);
         }
@@ -43,7 +49,13 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
           );
         }
         return HttpServerResponse.text("ready");
-      }),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+          ),
+        ),
+      ),
     };
   }).pipe(Effect.provide(SocketObjectLive)),
 ) {}

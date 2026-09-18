@@ -892,6 +892,9 @@ export default { async fetch() { return new Response("v4"); } };
           .pipe(Effect.flip);
 
         expect(error._tag).toEqual("DurableObjectTransferRequired");
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/get`)).value,
+        ).toBe(1);
 
         yield* scratch.destroy();
       }).pipe(logLevel),

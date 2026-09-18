@@ -3859,24 +3859,43 @@ export const LiveWorkerProvider = () =>
             }
             continue;
           }
-          // The class went local → cross-script. When the new host's deploy
-          // ran a `transferred_classes` migration moments ago, the account
-          // listing can briefly still attribute the namespace to this script,
-          // so re-observe with a short bounded budget until the transfer
-          // becomes visible (namespace off this script) or the state is
-          // conclusively a conflict (still here — including the case where
-          // the target created a *fresh* namespace for the same class name).
+          const namespaceId =
+            oldBindings.flatMap((binding) =>
+              binding.type === "durable_object_namespace" &&
+              "className" in binding &&
+              binding.className === className &&
+              (!("scriptName" in binding) ||
+                binding.scriptName === undefined ||
+                binding.scriptName === name) &&
+              "namespaceId" in binding &&
+              typeof binding.namespaceId === "string"
+                ? [binding.namespaceId]
+                : [],
+            )[0] ??
+            output?.durableObjectNamespaces?.[className] ??
+            observedNamespaces.find(
+              (ns) => ns.script === name && ns.class === className,
+            )?.id;
+          // A missing listing is inconclusive; the original namespace must appear on the new host.
+          const transferred = (namespaces: typeof observedNamespaces) =>
+            namespaceId !== undefined &&
+            namespaces.some(
+              (ns) =>
+                ns.id === namespaceId &&
+                ns.script === targetScriptName &&
+                ns.class === className,
+            );
           const namespaces = yield* listDurableObjectNamespaces(accountId).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               until: (observed) =>
-                !hosts(observed, name, className) ||
-                hosts(observed, targetScriptName, className),
+                transferred(observed) ||
+                (hosts(observed, name, className) &&
+                  hosts(observed, targetScriptName, className)),
               times: 5,
             }),
           );
-          if (!hosts(namespaces, name, className)) {
-            // Transferred away — nothing to delete.
+          if (transferred(namespaces)) {
             continue;
           }
           // local → cross-script transition without a transfer. Fail before
@@ -5949,8 +5968,8 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 /**
- * Observe every Durable Object namespace on the account as `(script, class)`
- * pairs. Namespace ownership is authoritative cloud state: after a
+ * Observe every Durable Object namespace on the account with its identity,
+ * script and class. Namespace ownership is authoritative cloud state: after a
  * `transferred_classes` migration the namespace moves to the receiving
  * script, so this is how both sides of a transfer observe where a class
  * currently lives — the destination checks the source still hosts the class
@@ -5962,7 +5981,9 @@ const listDurableObjectNamespaces = (accountId: string) =>
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
-        ns.script && ns.class ? [{ script: ns.script, class: ns.class }] : [],
+        ns.script && ns.class
+          ? [{ id: ns.id, script: ns.script, class: ns.class }]
+          : [],
       ),
     ),
   );

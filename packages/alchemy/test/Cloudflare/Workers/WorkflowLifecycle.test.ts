@@ -4,7 +4,8 @@ import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import LifecycleWorker, {
   type Scenario,
 } from "./fixtures/workflow-lifecycle/worker.ts";
@@ -30,8 +31,9 @@ const request = Effect.fn(function* (
   url: string,
   method: "GET" | "POST" = "GET",
 ) {
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* method === "GET" ? client.get(url) : client.post(url);
+  const response = yield* requestWorker(
+    method === "GET" ? HttpClientRequest.get(url) : HttpClientRequest.post(url),
+  );
   const body = yield* response.text;
   if (response.status !== 200) {
     return yield* Effect.fail(
@@ -107,6 +109,20 @@ describe.concurrent.each([
         const { id } = yield* Effect.try(
           () => JSON.parse(started) as { id: string },
         );
+        if (scenario === "rollback") {
+          // Native status() can reject during compensation; observe cleanup first.
+          const journal = yield* request(`${url}/journal/${id}`).pipe(
+            Effect.flatMap((body) =>
+              Effect.try(() => JSON.parse(body) as string[]),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+              until: (entries) => entries.includes("rollback-close"),
+            }),
+          );
+          expect(journal).toEqual(entries);
+        }
         const status = yield* request(`${url}/status/${id}`).pipe(
           Effect.flatMap((body) =>
             Effect.try(() => JSON.parse(body) as Status),
@@ -115,17 +131,23 @@ describe.concurrent.each([
             schedule: Schedule.spaced("2 seconds"),
             times: 10,
             until: (status) =>
-              (status.status === "complete" || status.status === "errored") &&
-              (scenario !== "rollback" ||
-                (status.entries.includes("rollback-body") &&
-                  status.entries.includes("rollback-close"))),
+              status.status === "complete" || status.status === "errored",
           }),
         );
         expect(status, JSON.stringify(status)).toMatchObject({
           status: scenario === "rollback" ? "errored" : "complete",
           entries,
         });
-        if (scenario !== "rollback") expect(status.output).toEqual(entries);
+        if (scenario === "rollback") {
+          if (!dev) {
+            expect(status.rollback).toMatchObject({ outcome: "complete" });
+          }
+          expect(status.error).toMatchObject({
+            message: "trigger compensation",
+          });
+        } else {
+          expect(status.output).toEqual(entries);
+        }
       }),
       { timeout: 60_000 },
     );

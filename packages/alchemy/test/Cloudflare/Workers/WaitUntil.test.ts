@@ -39,6 +39,31 @@ describe.skipIf(!!process.env.FAST)(
   "waitUntil runs background Effects past the response (worker ctx + DO state)",
   () => {
     test(
+      "concurrent background journal writes retain every entry",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+        yield* expectUrlContains(`${url}/bg-many`, "bg-many-scheduled");
+        const entries = yield* Effect.gen(function* () {
+          const text = yield* getText(client, `${url}/entries-many`);
+          return yield* Effect.try(
+            () => (JSON.parse(text) as { entries: string[] }).entries,
+          );
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            times: 8,
+            until: (entries) => entries.length === 40,
+          }),
+        );
+        expect(entries.toSorted()).toEqual(
+          Array.from({ length: 40 }, (_, i) => `parallel-${i}`).sort(),
+        );
+      }).pipe(logLevel),
+      { timeout: 60_000 },
+    );
+
+    test(
       "waitUntil runs background Effects past the response (worker ctx + DO state)",
       Effect.gen(function* () {
         const { url } = yield* stack;

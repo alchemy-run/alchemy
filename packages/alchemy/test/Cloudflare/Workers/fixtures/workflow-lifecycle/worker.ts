@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -116,6 +117,11 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
           });
           return yield* HttpServerResponse.json({ id: instance.id });
         }
+        if (action === "journal") {
+          return yield* HttpServerResponse.json(
+            (yield* journals.getByName(value).entries()) ?? [],
+          );
+        }
         if (action === "status") {
           const instance = yield* workflow.get(value);
           return yield* HttpServerResponse.json({
@@ -123,8 +129,15 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
             entries: (yield* journals.getByName(value).entries()) ?? [],
           });
         }
+        yield* journals.getByName("ready").entries();
         return HttpServerResponse.text("ready");
-      }),
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+          ),
+        ),
+      ),
     };
   }),
 ) {}
