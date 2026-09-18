@@ -58,6 +58,11 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
                 error instanceof Cloudflare.RpcCallError
                   ? error.cause
                   : undefined;
+              const methodUnavailable =
+                native instanceof Error &&
+                native.name === "TypeError" &&
+                native.message ===
+                  'The RPC receiver does not implement the method "ping".';
               const retryable =
                 native instanceof Error &&
                 "retryable" in native &&
@@ -67,7 +72,10 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
                 { operation: "ping", cause: Cause.pretty(cause), retryable },
                 {
                   status: 500,
-                  headers: { "x-do-retryable": String(retryable) },
+                  headers: {
+                    "x-do-retryable": String(retryable),
+                    "x-do-method-unavailable": String(methodUnavailable),
+                  },
                 },
               );
             }),

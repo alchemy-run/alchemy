@@ -54,10 +54,11 @@ const getJson = <T>(
         return (
           (response.status === 404 &&
             (response.headers["content-type"] ?? "").includes("text/html")) ||
-          // Only initial readiness may retry a platform-marked transient RPC failure.
+          // Initial reads can still reach the precreate class, which has no ping method.
           (phase === "before abort" &&
             response.status === 500 &&
-            response.headers["x-do-retryable"] === "true")
+            (response.headers["x-do-retryable"] === "true" ||
+              response.headers["x-do-method-unavailable"] === "true"))
         );
       },
       schedule: Schedule.spaced("1 second"),
