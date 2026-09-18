@@ -53,13 +53,11 @@ export const makeHttpSecretBinding = <
       options.kms === true ? makeKmsAuth(context) : makeSecretAuth(context);
 
     return Effect.fn(function* (resource: Target) {
-      // Output → RuntimeContext.set at plan, get at runtime. Do not
-      // host.bind({ env }) — Platform already copies ctx.env to the host.
-      yield* bindFlyApiToken();
+      yield* bindFlyApiToken().pipe(Effect.provideContext(context));
       const appName = yield* resource.appName;
       const secretName = yield* resource.name;
       return options.makeClient(auth, appName, secretName);
-    }) as (resource: Target) => Effect.Effect<Client>;
+    });
   });
 
 /**
@@ -75,10 +73,10 @@ export const makeHttpAppBinding = <Client>(options: {
     >();
 
     return Effect.fn(function* (app: App) {
-      yield* bindFlyApiToken();
+      yield* bindFlyApiToken().pipe(Effect.provideContext(context));
       const appName = yield* app.appName;
       return options.makeClient(makeSecretAuth(context), appName);
-    }) as (app: App) => Effect.Effect<Client>;
+    });
   });
 
 /**

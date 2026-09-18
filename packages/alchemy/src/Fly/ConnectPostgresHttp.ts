@@ -39,10 +39,9 @@ const asRedactedUrl = (
  * Implementation of {@link ConnectPostgres}. Provide it on the
  * {@link Service} Effect.
  *
- * At deploy time this registers the cluster on the host so Service
- * reconcile can attach it (6PN). Connection URIs travel as Outputs
- * (`yield* postgres.pooledConnectionUri`) — RuntimeContext.set at plan,
- * get at runtime. Do not `host.bind({ env })` for the URIs.
+ * Registers the cluster attachment for Fly's private network. Alchemy
+ * transports each cluster's connection URIs through resource Outputs,
+ * so callers do not configure connection-string environment variables.
  *
  *
  * ### Provide the layer

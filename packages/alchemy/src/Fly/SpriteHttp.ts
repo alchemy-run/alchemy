@@ -28,10 +28,10 @@ export const makeHttpSpriteBinding = <Client>(options: {
     >();
 
     return Effect.fn(function* (sprite: Sprite) {
-      yield* bindFlyApiToken();
+      yield* bindFlyApiToken().pipe(Effect.provideContext(context));
       const name = yield* sprite.name;
       return options.makeClient(makeSpriteAuth(context), name);
-    }) as (sprite: Sprite) => Effect.Effect<Client>;
+    });
   });
 
 export interface SpriteAuth {

@@ -22,16 +22,11 @@ export {
 } from "@distilled.cloud/fly-io";
 
 /**
- * Resolve the org API token from ambient stack credentials and `yield*`
- * it so RuntimeContext.set runs. Platform copies `runtimeContext.env`
- * into host `props.env`; Fly flattens that onto the Machine. Do not
- * `host.bind({ env: { FLY_API_TOKEN } })`.
- *
- * The token is read now (bind/init), not via `Output.fromEffect`, so
- * plan/diff keeps the profile-backed Credentials instead of falling
- * through to CI env.
+ * Capture the deployment's org token as a named runtime Output.
+ * Resolve it during binding initialization so plan/diff retains
+ * profile-backed credentials rather than falling back to process env.
  */
-export const bindFlyApiToken = (): Effect.Effect<void> =>
+export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   Effect.gen(function* () {
     const token = globalThis.__ALCHEMY_RUNTIME__
       ? ""
@@ -40,7 +35,7 @@ export const bindFlyApiToken = (): Effect.Effect<void> =>
           Effect.map((cfg) => Redacted.value(cfg.apiKey)),
         );
     yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN");
-  }) as Effect.Effect<void>;
+  });
 
 /**
  * `Credentials` for the HTTP binding layers (`GetSecretHttp`, `ExecHttp`, …).

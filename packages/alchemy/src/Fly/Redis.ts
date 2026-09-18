@@ -103,9 +103,8 @@ export type Redis = Resource<
     /** Whether eviction is enabled. */
     eviction: boolean | undefined;
     /**
-     * Upstash Redis URL from GraphQL `publicUrl`. Never logged.
-     * Bindings `yield*` this so RuntimeContext transports it; Service
-     * reconcile also writes `REDIS_URL` as an App secret.
+     * Redacted Upstash connection URL. Bindings transport it to the
+     * runtime automatically. Service attachments also set `REDIS_URL`.
      */
     url: Redacted.Redacted<string> | undefined;
   },
@@ -116,9 +115,9 @@ export type Redis = Resource<
 /**
  * Managed Upstash Redis in a Fly org. Bind {@link ReadRedis},
  * {@link WriteRedis}, or {@link ReadWriteRedis} on a {@link Service}.
- * Alchemy writes `REDIS_URL` as an App secret. The runtime client
- * `yield*`s the Redis `url` attribute. Redis is not reachable from CI —
- * drive it over HTTP.
+ * Alchemy transports the redacted `url` Output to the runtime client
+ * and also writes `REDIS_URL` as an App secret for compatibility.
+ * Redis is not reachable from CI — drive it over HTTP.
  *
  * @see https://fly.io/docs/upstash/redis/
  *
@@ -797,12 +796,8 @@ export const RedisProvider = () =>
         unwrapSensitive(latest.publicUrl) === undefined &&
         latest.id !== undefined
       ) {
-        const detail = yield* addons
-          .addOn({ id: latest.id })
-          .pipe(
-            Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)),
-          );
-        if (detail !== undefined) latest = { ...latest, ...detail };
+        const detail = yield* addons.addOn({ id: latest.id });
+        latest = { ...latest, ...detail };
       }
       return toAttrs(latest, {
         name,

@@ -3,23 +3,16 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import {
-  API_PORT,
-  BoxKey,
-  Marker,
-  SECRET_NAME,
-  SignKey,
-  Site,
-} from "./bindings-shared.ts";
+import { API_PORT, BoxKey, Marker, SignKey, Site } from "./bindings-shared.ts";
+import Box from "./bindings-sprite.ts";
 
 const bytesToB64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 const b64ToBytes = (value: string) =>
   Uint8Array.from(Buffer.from(value, "base64"));
 
 /**
- * HTTP Service that exercises Secret and SecretKey bindings over
- * one route per behavior. Crypto runs on the Machine (PetSem), not
- * from a laptop Action.
+ * HTTP Service that exercises Secret, SecretKey, and Sprite bindings.
+ * Cryptographic operations run inside the deployed Machine.
  */
 export default class BindingsApi extends Fly.Service<BindingsApi>()(
   "BindingsApi",
@@ -42,6 +35,7 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
     const decrypt = yield* Fly.Decrypt(BoxKey);
     const sign = yield* Fly.Sign(SignKey);
     const verify = yield* Fly.Verify(SignKey);
+    const exec = yield* Fly.Exec(Box);
 
     return {
       fetch: Effect.gen(function* () {
@@ -71,7 +65,6 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
             ok: true,
             appName: resolvedApp,
             secretName: resolvedSecret,
-            viaRuntimeContext: true,
             hasFlySecretMarkerEnv: process.env.FLY_SECRET_Marker !== undefined,
             hasToken: token.length > 0,
             tokenKind: token.startsWith("{")
@@ -82,6 +75,18 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
                   ? "other"
                   : "missing",
           });
+        }
+
+        if (path === "/sprite" && request.method === "GET") {
+          return yield* exec({ cmd: ["echo", "sprite-runtime-binding"] }).pipe(
+            Effect.flatMap((result) =>
+              HttpServerResponse.json({
+                stdout: result.stdout,
+                exitCode: result.exit_code,
+              }),
+            ),
+            Effect.catch(fail),
+          );
         }
 
         if (path === "/secret" && request.method === "GET") {
@@ -204,6 +209,7 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
       Fly.DecryptHttp,
       Fly.SignHttp,
       Fly.VerifyHttp,
+      Fly.ExecHttp,
     ]),
   ),
 ) {}
