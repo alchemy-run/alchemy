@@ -13,11 +13,21 @@ import { Posts } from "./Posts.ts";
  *   THREAD it lives in (the root of its reference chain)
  * - `GET /api/posts/:id/workspaces` — the workspaces ACTIVE in the
  *   thread the message lives in (created there by any agent)
+ * - `GET /api/posts/:id/edges` — the association graph touching the
+ *   message, either direction (answers, about, continues)
  */
 export const PostsApi = Effect.gen(function* () {
   const posts = yield* Posts;
 
   return Layer.mergeAll(
+    HttpRouter.add(
+      "GET",
+      "/api/posts/:id/edges",
+      Effect.gen(function* () {
+        const { id } = (yield* HttpRouter.params) as { id: string };
+        return yield* HttpServerResponse.json(yield* posts.edgesOf(id));
+      }),
+    ),
     HttpRouter.add(
       "GET",
       "/api/posts",

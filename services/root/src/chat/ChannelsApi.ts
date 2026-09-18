@@ -13,6 +13,7 @@ import { lineage, nameOfKey, ROOT } from "../Lineage.ts";
 import { Issues } from "../forge/Issues.ts";
 import { mentionsOf } from "./Ask.ts";
 import { Posts } from "./Posts.ts";
+import { edgesOfJudgment, SQUASH_GAP_MS } from "./Edges.ts";
 import { repliesToQuestion, type Respondent } from "./Gate.ts";
 import { Roster } from "./Roster.ts";
 import { scout } from "./Scout.ts";
@@ -236,6 +237,7 @@ export const ChannelsApi = Effect.gen(function* () {
           {
             channel: channel.name,
             message: text,
+            self: postId,
             roster: [...channel.members],
             recent: conversation.map((line) => ({
               id: line.id,
@@ -274,22 +276,49 @@ export const ChannelsApi = Effect.gen(function* () {
     // stamp the routing outcome: `answering` names who the exchange
     // waits on ("engineer is typing…"), `mode` tells the UI whether to
     // open a thread shell right away or keep the reply in the stream
+    // THE GRAPH, kept fresh at write time (Edges.ts): the judged
+    // reply keeps its `answers` edge even below the rewire bar, every
+    // scout evidence card becomes an `about` edge, and a rapid
+    // same-author continuation gets its `continues` edge — search
+    // walks these instead of scanning history.
     const piled = judged?.extras.repliesTo;
-    const pileConfidence =
-      (judged?.extraAnswers.repliesTo as { confidence?: number } | undefined)
-        ?.confidence ?? 0;
-    const arcTo =
+    const graph = edgesOfJudgment({
+      from: postId,
+      repliesTo:
+        replyTo === undefined && typeof piled === "string" ? piled : undefined,
+      confidence:
+        (judged?.extraAnswers.repliesTo as { confidence?: number } | undefined)
+          ?.confidence ?? 0,
+      evidence: scouted?.evidence ?? [],
+    });
+    const previous = conversation
+      .filter((candidate) => candidate.id !== postId)
+      .at(-1);
+    const continues =
+      previous !== undefined &&
+      previous.id !== postId &&
+      previous.author === HUMAN &&
+      previous.replyTo === undefined &&
       replyTo === undefined &&
-      typeof piled === "string" &&
-      piled !== "none" &&
-      pileConfidence >= 0.7
-        ? piled
-        : undefined;
+      minted - previous.at <= SQUASH_GAP_MS
+        ? [
+            {
+              from: postId,
+              to: previous.id,
+              label: "continues",
+              confidence: 1,
+              provenance: "structural",
+            },
+          ]
+        : [];
+    if (graph.edges.length > 0 || continues.length > 0) {
+      yield* posts.edgesAdd([...graph.edges, ...continues]);
+    }
     yield* posts.route(
       postId,
       agent,
       inline || channel.dm === true ? "inline" : "thread",
-      arcTo,
+      graph.rewireTo,
     );
 
     // dispatch rides the post's id (idempotent delivery; the agent's

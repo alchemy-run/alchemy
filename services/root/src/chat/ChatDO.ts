@@ -41,6 +41,16 @@ const TABLES = [
   )`,
   `CREATE INDEX IF NOT EXISTS posts_reply ON posts (reply_to)`,
   `CREATE INDEX IF NOT EXISTS posts_channel ON posts (channel)`,
+  `CREATE TABLE IF NOT EXISTS edges (
+    from_id TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    provenance TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (from_id, to_id, label)
+  )`,
+  `CREATE INDEX IF NOT EXISTS edges_to ON edges (to_id)`,
   `CREATE TABLE IF NOT EXISTS thread_workspaces (
     thread TEXT NOT NULL,
     workspace TEXT NOT NULL,
@@ -135,6 +145,26 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     id: string,
     status: Post["status"],
   ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly edgesAdd: (
+    rows: ReadonlyArray<{
+      from: string;
+      to: string;
+      label: string;
+      confidence: number;
+      provenance: string;
+    }>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly edgesOf: (id: string) => Effect.Effect<
+    ReadonlyArray<{
+      from: string;
+      to: string;
+      label: string;
+      confidence: number;
+      provenance: string;
+    }>,
+    never,
+    RuntimeContext
+  >;
   readonly postRoute: (
     id: string,
     answering: string,
@@ -343,6 +373,51 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
             status,
             id,
           );
+        }),
+
+        edgesAdd: Effect.fn(function* (rows) {
+          const now = Date.now();
+          for (const row of rows) {
+            yield* sql.exec(
+              `INSERT INTO edges (from_id, to_id, label, confidence, provenance, at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT (from_id, to_id, label) DO UPDATE SET
+                 confidence = excluded.confidence,
+                 provenance = excluded.provenance,
+                 at = excluded.at`
+                .trim()
+                .replaceAll(/\s+/g, " "),
+              row.from,
+              row.to,
+              row.label,
+              row.confidence,
+              row.provenance,
+              now,
+            );
+          }
+        }),
+
+        edgesOf: Effect.fn(function* (id) {
+          const rows = yield* (yield* sql.exec<
+            {
+              from_id: string;
+              to_id: string;
+              label: string;
+              confidence: number;
+              provenance: string;
+            } & Record<string, Cloudflare.SqlStorageValue>
+          >(
+            "SELECT * FROM edges WHERE from_id = ? OR to_id = ? ORDER BY at ASC",
+            id,
+            id,
+          )).toArray();
+          return rows.map((row) => ({
+            from: row.from_id,
+            to: row.to_id,
+            label: row.label,
+            confidence: row.confidence,
+            provenance: row.provenance,
+          }));
         }),
 
         postRoute: Effect.fn(function* (id, answering, mode, replyTo) {
@@ -557,6 +632,8 @@ export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
         settle: (id, status) => inWorker(stub().postSettle(id, status)),
         route: (id, answering, mode, replyTo) =>
           inWorker(stub().postRoute(id, answering, mode, replyTo)),
+        edgesAdd: (rows) => inWorker(stub().edgesAdd(rows)),
+        edgesOf: (id) => inWorker(stub().edgesOf(id)),
         get: (id) => inWorker(stub().postGet(id)),
         replies: (id) => inWorker(stub().postReplies(id)),
         ancestors: (id) => inWorker(stub().postAncestors(id)),

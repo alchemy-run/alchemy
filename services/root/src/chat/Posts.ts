@@ -67,6 +67,26 @@ export class Posts extends Context.Service<
       readonly answering?: string;
       readonly mode?: Post["mode"];
     }) => Effect.Effect<void>;
+    /** Persist association edges (upsert on from+to+label). */
+    readonly edgesAdd: (
+      rows: ReadonlyArray<{
+        from: string;
+        to: string;
+        label: string;
+        confidence: number;
+        provenance: string;
+      }>,
+    ) => Effect.Effect<void>;
+    /** Every edge touching a post, either direction. */
+    readonly edgesOf: (id: string) => Effect.Effect<
+      ReadonlyArray<{
+        from: string;
+        to: string;
+        label: string;
+        confidence: number;
+        provenance: string;
+      }>
+    >;
     /** Stamp the routing outcome once the gate decides. */
     readonly route: (
       id: string,

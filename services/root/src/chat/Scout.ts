@@ -195,7 +195,7 @@ const searchThreads = Effect.fn(function* (deps: ScoutDeps, state: Message) {
     }
   }
   const roots = stream
-    .filter((post) => post.replyTo === undefined)
+    .filter((post) => post.replyTo === undefined && post.id !== state.self)
     .slice(-HOP_WIDTH);
   if (roots.length === 0) return [];
 
@@ -253,8 +253,11 @@ export const scout = Effect.fn("root/Scout.scout")(function* (
   );
   if (first === undefined) return undefined;
 
-  // extraction is free; resolution is one graph walk
-  const explicit = referencesOf(state.message);
+  // extraction is free; resolution is one graph walk — a message can
+  // never be evidence for itself
+  const explicit = referencesOf(state.message).filter(
+    (ref) => ref.kind !== "post" || ref.id !== state.self,
+  );
   let evidence = yield* resolveReferences(deps, explicit);
 
   // implicit reference, nothing explicit found → one judged search hop

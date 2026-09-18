@@ -272,6 +272,8 @@ export interface Message {
   readonly roster: ReadonlyArray<Respondent>;
   /** The conversation so far, oldest first. */
   readonly recent: ReadonlyArray<Line>;
+  /** The post id of `message` itself — never a search candidate. */
+  readonly self?: string;
   /** Resolved-reference cards, when the scout walked the graph. */
   readonly evidence?: ReadonlyArray<string>;
   readonly [field: string]: unknown;
