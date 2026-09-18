@@ -28,6 +28,7 @@ import { TriageLive } from "./engineering/TriageDO.ts";
 import { GitRoutes } from "./forge/GitServer.ts";
 import { IssuesLive } from "./forge/IssuesDO.ts";
 import { GitHubWorker } from "./github/GitHubWorker.ts";
+import { RosterLive } from "./chat/Roster.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { HeadLive } from "./Head.ts";
@@ -234,7 +235,7 @@ const Company = Layer.mergeAll(
   Layer.provideMerge(CallsLive),
   Layer.provideMerge(PostsLive),
   Layer.provideMerge(CheckoutsRouter),
-  Layer.provideMerge(OrgStructure),
+  Layer.provideMerge(RosterLive.pipe(Layer.provideMerge(OrgStructure))),
   // the runtime switch over skill activation (the profile UI's
   // toggles) — consulted by the driver's activation doors
   Layer.provideMerge(SkillGateD1),

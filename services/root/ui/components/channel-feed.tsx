@@ -483,11 +483,56 @@ export const ThreadView = ({
               </div>
             </div>
             <div className="pt-3">
-              <PostList
-                posts={replies}
-                context={[thread.root]}
-                suppressRef={thread.root.id}
-              />
+              {/* SUB-THREADS render as cards (recursively — a reply
+                  that grew its own conversation is a thread here the
+                  way this thread is one in the channel); loose replies
+                  stay a flat stream */}
+              {(() => {
+                const descendants = (id: string): Post[] =>
+                  replies
+                    .filter((candidate) => candidate.replyTo === id)
+                    .flatMap((child) => [child, ...descendants(child.id)]);
+                const direct = replies.filter(
+                  (candidate) => candidate.replyTo === thread.root.id,
+                );
+                const nested = new Set(
+                  direct
+                    .filter(
+                      (candidate) =>
+                        candidate.mode === "thread" ||
+                        descendants(candidate.id).length > 0,
+                    )
+                    .flatMap((sub) => [
+                      sub.id,
+                      ...descendants(sub.id).map((post) => post.id),
+                    ]),
+                );
+                const flat = replies.filter(
+                  (candidate) => !nested.has(candidate.id),
+                );
+                const subRoots = direct.filter((candidate) =>
+                  nested.has(candidate.id),
+                );
+                return (
+                  <>
+                    {subRoots.map((sub) => (
+                      <div key={sub.id} className="mb-3">
+                        <ThreadCard
+                          thread={{
+                            root: sub,
+                            posts: [sub, ...descendants(sub.id)],
+                          }}
+                        />
+                      </div>
+                    ))}
+                    <PostList
+                      posts={flat}
+                      context={[thread.root]}
+                      suppressRef={thread.root.id}
+                    />
+                  </>
+                );
+              })()}
             </div>
           </MessageContext.Provider>
         )}

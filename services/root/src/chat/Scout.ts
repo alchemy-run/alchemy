@@ -94,6 +94,11 @@ export interface ScoutDeps {
   readonly issues: IssueGraph;
   /** `#123` with no owner/repo resolves here. */
   readonly defaultRepo: string;
+  /** Routing rubrics per member — derived from the org graph. */
+  readonly roles?: Record<
+    string,
+    { what: string; notFor?: string; examples?: ReadonlyArray<string> }
+  >;
 }
 
 /** `#123`, `owner/repo#123` and `#p-…` — extraction is code, not judgment. */
@@ -238,9 +243,12 @@ export const scout = Effect.fn("root/Scout.scout")(function* (
   state: Message,
 ) {
   // round 1 — the reflex, plus "do I need to look something up?"
-  const first = yield* judge(deps.query, state, {
-    needsContext: needsContextQuestion,
-  });
+  const first = yield* judge(
+    deps.query,
+    state,
+    { needsContext: needsContextQuestion },
+    deps.roles,
+  );
   if (first === undefined) return undefined;
 
   // extraction is free; resolution is one graph walk
@@ -256,9 +264,11 @@ export const scout = Effect.fn("root/Scout.scout")(function* (
   }
 
   // round 2 — the same questions, now with the evidence in hand
-  const second = yield* judge(deps.query, {
-    ...state,
-    evidence: evidence.map((card) => card.card),
-  });
+  const second = yield* judge(
+    deps.query,
+    { ...state, evidence: evidence.map((card) => card.card) },
+    {},
+    deps.roles,
+  );
   return { verdict: second ?? first, evidence };
 });

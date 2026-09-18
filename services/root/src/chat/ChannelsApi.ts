@@ -13,6 +13,8 @@ import { lineage, nameOfKey, ROOT } from "../Lineage.ts";
 import { Issues } from "../forge/Issues.ts";
 import { mentionsOf } from "./Ask.ts";
 import { Posts } from "./Posts.ts";
+import type { Respondent } from "./Gate.ts";
+import { Roster } from "./Roster.ts";
 import { scout } from "./Scout.ts";
 
 /**
@@ -38,17 +40,41 @@ export const ChannelsApi = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
   const posts = yield* Posts;
   const issues = yield* Issues;
+  // membership DERIVED from the org graph — the hand-written lists
+  // below remain only as the fallback for a graph that lacks the room
+  const roster = yield* Roster;
+  const KNOWN: ReadonlyArray<Respondent> = [
+    "head",
+    "manager",
+    "engineer",
+    "reviewer",
+  ];
+  const membersOf = (
+    channel: string,
+    fallback: ReadonlyArray<Respondent>,
+  ): ReadonlyArray<Respondent> => {
+    const derived = roster
+      .membersOf(channel)
+      ?.filter((member): member is Respondent =>
+        (KNOWN as ReadonlyArray<string>).includes(member),
+      );
+    return derived !== undefined && derived.length > 0 ? derived : fallback;
+  };
   const exec = yield* Cloudflare.WorkerExecutionContext;
 
   // `members` is the room — the group's own agents (Root.ts,
   // engineering/Group.ts). The gate can only route a message to
   // someone in it, so the engineer never turns up in #root.
   const channels = [
-    { name: "root", chat: `Head:${ROOT}`, members: ["head"] as const },
+    {
+      name: "root",
+      chat: `Head:${ROOT}`,
+      members: membersOf("root", ["head"]),
+    },
     {
       name: "engineering",
       chat: `${MANAGER_ADDRESS.term}:${MANAGER_ADDRESS.key}`,
-      members: ["manager", "engineer", "reviewer"] as const,
+      members: membersOf("engineering", ["manager", "engineer", "reviewer"]),
     },
     // DMs — the human's private line to ONE agent. The left rail's
     // agent rows open these; the resident answers, no @mention
@@ -186,6 +212,7 @@ export const ChannelsApi = Effect.gen(function* () {
             },
             issues: { get: (repo, number) => issues.get(repo, number) },
             defaultRepo: "org/alchemy",
+            roles: roster.rolesFor([...channel.members]),
           },
           {
             channel: channel.name,
