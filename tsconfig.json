@@ -92,6 +92,12 @@
       "path": "./examples/cloudflare-git-service/tsconfig.json"
     },
     {
+      "path": "./examples/gcp-cloud-run-api/tsconfig.json"
+    },
+    {
+      "path": "./examples/gcp-event-pipeline/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
     {

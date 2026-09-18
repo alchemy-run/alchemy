@@ -315,18 +315,15 @@ const SECTIONS: Section[] = [
   {
     heading: "GCP",
     intro:
-      "Google Cloud as Stack resources — Cloud Run Functions, Storage, Pub/Sub, Memorystore. Bindings grant IAM onto a per-host service account.",
+      "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
       slugs: [
         "gcp/index",
         "gcp/setup",
-        "gcp/tutorial/part-1",
-        "gcp/tutorial/part-2",
-        "gcp/tutorial/part-3",
-        "gcp/tutorial/part-4",
         "gcp/guides/cloud-run-api",
-        "gcp/guides/pubsub",
+        "gcp/guides/event-pipeline",
         "gcp/guides/memorystore",
+        "gcp/guides/bindings",
       ],
     },
   },

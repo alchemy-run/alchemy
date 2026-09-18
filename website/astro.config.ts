@@ -790,10 +790,6 @@ export default defineConfig({
             { label: "Overview", link: "/gcp" },
             { label: "Setup", link: "/gcp/setup" },
             {
-              label: "Tutorial",
-              items: [{ autogenerate: { directory: "gcp/tutorial" } }],
-            },
-            {
               label: "Guides",
               items: [
                 {
@@ -801,12 +797,16 @@ export default defineConfig({
                   link: "/gcp/guides/cloud-run-api",
                 },
                 {
-                  label: "Publish and subscribe",
-                  link: "/gcp/guides/pubsub",
+                  label: "Ingest events into BigQuery",
+                  link: "/gcp/guides/event-pipeline",
                 },
                 {
                   label: "Cache with Memorystore",
                   link: "/gcp/guides/memorystore",
+                },
+                {
+                  label: "How bindings grant IAM",
+                  link: "/gcp/guides/bindings",
                 },
               ],
             },

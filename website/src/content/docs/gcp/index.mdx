@@ -1,48 +1,109 @@
 ---
 title: GCP
-description: Google Cloud resources as one Effect program — Cloud Run Functions, Storage, Pub/Sub, Memorystore, and the rest of the catalog.
+description: Google Cloud in one Effect program — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, and Memorystore, with IAM granted by the bindings themselves.
 ---
 
-Alchemy's GCP provider is Infrastructure-as-Effects: you declare
-Cloud Run services, buckets, topics, and Memorystore instances in the
-same type-safe program that serves HTTP. Bindings grant IAM onto a
-per-host service account and inject env — the analog of AWS
-`policyStatements` and Cloudflare `AccountApiToken`.
+GCP with alchemy means the Cloud Run service and everything it talks
+to live in the same TypeScript program. The Firestore database is
+declared on the service that reads it. The service calls Google APIs
+through typed bindings that carry their own IAM. `bun alchemy deploy`
+builds the container, mints a runtime service account, grants exactly
+the roles the bindings need, and ships it; `alchemy destroy` takes all
+of that back down, service account included.
 
-New here? [Set up credentials](/gcp/setup) first.
+New here? [Set up credentials](/gcp/setup), then pick the guide that
+matches what you're building.
 
-## Resources
+## What are you building?
 
-The pieces you will use most:
+- **An HTTP API with a datastore and a secret** →
+  [Serve an API on Cloud Run](/gcp/guides/cloud-run-api). A link
+  shortener on one Cloud Run service, Firestore for state, Secret
+  Manager for the API key.
+- **An ingestion pipeline** →
+  [Ingest events into BigQuery](/gcp/guides/event-pipeline). A service
+  publishes to Pub/Sub, a Cloud Run Job drains the subscription into
+  BigQuery, and the service triggers the job.
+- **Something that needs a cache** →
+  [Cache with Memorystore](/gcp/guides/memorystore). Redis on a
+  private IP, reached over Direct VPC egress.
+- **Wondering where the IAM comes from** →
+  [How bindings grant IAM](/gcp/guides/bindings).
 
-- **Run** — `GCP.Function` (alias of `GCP.Run.Service`) is the
-  effectful HTTP platform. `GCP.Run.Job` runs to completion.
-  `GCP.CloudFunctions.Function` is the zip-source API wrapper (no
-  `main`).
-- **Storage** — `GCP.Storage.Bucket` plus `PutObject` / `GetObject`
-  bindings.
-- **Pub/Sub** — `Topic`, `Publish`, and `Subscription`.
-- **Memorystore** — `GCP.Redis.Instance` over `alchemy/Redis`
-  Read/Write/ReadWrite.
-- **Secret Manager, Cloud SQL, BigQuery, KMS, IAM** — same
-  observe-ensure-sync reconcilers. The generated reference lists
-  every resource.
+Each guide walks a runnable example under `examples/` end to end.
+
+## What it looks like
 
 ```typescript
-import * as GCP from "alchemy/GCP";
+// src/Api.ts
+export default class Api extends GCP.Function<Api>()(
+  "Api",
+  { main: import.meta.url, location: "us-central1" },
+  Effect.gen(function* () {
+    // Resources — deployed with the service.
+    const links = yield* GCP.Firestore.Database("Links", {
+      location: "us-central1",
+      type: "FIRESTORE_NATIVE",
+    });
 
-const bucket = yield* GCP.Storage.Bucket("assets", { forceDestroy: true });
+    // Bindings — each grants its role on the runtime service account.
+    const getDocument = yield* GCP.Firestore.GetDocument(links);
+    const patchDocument = yield* GCP.Firestore.PatchDocument(links);
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* patchDocument({
+          documentPath: "links/demo",
+          body: { fields: { url: { stringValue: "https://alchemy.run" } } },
+        });
+        const document = yield* getDocument({ documentPath: "links/demo" });
+        return yield* HttpServerResponse.json(document.fields ?? {});
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide([
+      GCP.Firestore.GetDocumentHttp,
+      GCP.Firestore.PatchDocumentHttp,
+    ]),
+  ),
+) {}
 ```
 
-## The GCP path
+Three ideas carry the whole provider:
 
-1. [Setup](/gcp/setup) — service-account JSON, project, profile
-2. [Tutorial](/gcp/tutorial/part-1) — bucket, Function, Pub/Sub, destroy
-3. [Serve an API](/gcp/guides/cloud-run-api)
-4. [Publish and subscribe](/gcp/guides/pubsub)
-5. [Cache with Memorystore](/gcp/guides/memorystore)
+- **Resources** (`Firestore.Database`, `PubSub.Topic`,
+  `BigQuery.Table`, `SecretManager.Secret`, `Redis.Instance`, …) are
+  Stack-managed. Alchemy creates, updates, and deletes them.
+- **Bindings** (`GetDocument`, `Publish`, `Query`,
+  `AccessSecretVersion`, `RunJob`, …) are what the container calls at
+  runtime. Yielding one grants the IAM role it needs on a per-host
+  service account and returns a callable. Provide the matching `*Http`
+  layer once at the end.
+- **Outputs** like `table.tableId` are yielded at plan time to get an
+  accessor, then yielded again where the value is needed. That's how a
+  resource id reaches runtime without an environment variable.
+
+## Hosts
+
+| Host | Entry | Use it for |
+| --- | --- | --- |
+| `GCP.Function` (= `GCP.Run.Service`) | `fetch` | HTTP services that scale to zero |
+| `GCP.Run.Job` | `run` | batch work that starts, finishes, and exits |
+| `GCP.Run.WorkerPool` | `run` | always-on consumers with no request path |
+| `GCP.CloudFunctions.Function` | — | zip-source gen2 functions (no `main`) |
+
+The first three build a container image locally, so Docker has to be
+running to deploy them.
 
 ## Reference
 
-Generated API pages for every GCP resource live under Resources in
-the sidebar.
+[Run.Service](/providers/gcp/run/service) ·
+[Run.Job](/providers/gcp/run/job) ·
+[Firestore.Database](/providers/gcp/firestore/database) ·
+[PubSub.Topic](/providers/gcp/pubsub/topic) ·
+[BigQuery.Table](/providers/gcp/bigquery/table) ·
+[SecretManager.Secret](/providers/gcp/secretmanager/secret) ·
+[Storage.Bucket](/providers/gcp/storage/bucket) ·
+[Redis.Instance](/providers/gcp/redis/instance)
+
+The full list is under **Resources** in the sidebar.
