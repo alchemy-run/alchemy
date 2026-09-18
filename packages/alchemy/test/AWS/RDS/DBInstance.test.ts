@@ -1,4 +1,10 @@
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import {
+  normalizePolicyDocument,
+  type PolicyDocument,
+} from "@/AWS/IAM/Policy.ts";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
 import { DBParameterGroup } from "@/AWS/RDS/DBParameterGroup";
@@ -1265,6 +1271,354 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       ).toMatchObject({ action: "noop" });
       yield* stack.destroy();
       yield* assertInstanceGone(identifier);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "managed secret policy: create, update, removal, drift, adoption, and public rejection",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* AWSEnvironment.current;
+      const policy = (actions: string[]): PolicyDocument => ({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: actions,
+            Resource: "*",
+          },
+        ],
+      });
+      const initialPolicy = policy(["secretsmanager:DescribeSecret"]);
+      const updatedPolicy = policy([
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy",
+      ]);
+      const client = yield* HttpClient.HttpClient;
+      const requests: Array<{
+        action: string;
+        blockPublicPolicy: boolean | undefined;
+      }> = [];
+      const observedClient = client.pipe(
+        HttpClient.tapRequest((request) =>
+          Effect.sync(() => {
+            const target = request.headers["x-amz-target"];
+            if (!target?.startsWith("secretsmanager.")) return;
+            const body =
+              request.body._tag === "Uint8Array"
+                ? JSON.parse(new TextDecoder().decode(request.body.body))
+                : {};
+            requests.push({
+              action: target.split(".").at(-1)!,
+              blockPublicPolicy: body.BlockPublicPolicy,
+            });
+          }),
+        ),
+      );
+      const identifier = "alchemy-rds-secret-policy";
+      const program = (
+        masterUserSecretResourcePolicy: PolicyDocument | undefined,
+        round = "default",
+      ) =>
+        Effect.gen(function* () {
+          const net = yield* Network("SecretPolicyNet", {
+            cidrBlock: "10.49.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("SecretPolicySubnetGroup", {
+            description: "RDS managed secret policy lifecycle",
+            subnetIds: net.privateSubnetIds,
+          });
+          return yield* DBInstance("SecretPolicyInstance", {
+            dbInstanceIdentifier: identifier,
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            masterUserSecretResourcePolicy,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            backupRetentionPeriod: "0 days",
+            deletionProtection: false,
+            skipFinalSnapshot: true,
+            publiclyAccessible: false,
+            tags: { round },
+          });
+        });
+      const deploy = (desired: PolicyDocument | undefined, round = "default") =>
+        stack
+          .deploy(program(desired, round))
+          .pipe(Effect.provideService(HttpClient.HttpClient, observedClient));
+      const created = yield* deploy(initialPolicy);
+      const secretArn = created.masterUserSecretArn;
+      if (!secretArn)
+        return yield* Effect.fail(
+          new Error("RDS did not return its managed secret ARN"),
+        );
+      const readPolicy = secretsmanager
+        .getResourcePolicy({ SecretId: secretArn })
+        .pipe(
+          Effect.map((response) =>
+            response.ResourcePolicy === undefined
+              ? undefined
+              : normalizePolicyDocument(response.ResourcePolicy),
+          ),
+        );
+      const waitPolicy = (desired: PolicyDocument | undefined) =>
+        readPolicy.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (actual) =>
+              actual ===
+              (desired === undefined
+                ? undefined
+                : normalizePolicyDocument(desired)),
+          }),
+        );
+      const injectPolicy = (desired: PolicyDocument) =>
+        Effect.gen(function* () {
+          yield* secretsmanager.putResourcePolicy({
+            SecretId: secretArn,
+            ResourcePolicy: JSON.stringify(desired),
+            BlockPublicPolicy: true,
+          });
+          expect(yield* waitPolicy(desired)).toBe(
+            normalizePolicyDocument(desired),
+          );
+        });
+      const metadata = yield* secretsmanager.describeSecret({
+        SecretId: secretArn,
+      });
+      expect(metadata.OwningService).toBe("rds");
+      expect(created.masterUserSecretResourcePolicy).toBe(
+        normalizePolicyDocument(initialPolicy),
+      );
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(initialPolicy));
+      expect(
+        requests.filter((request) => request.action === "PutResourcePolicy"),
+      ).toEqual([{ action: "PutResourcePolicy", blockPublicPolicy: true }]);
+      const beforePlan = requests.length;
+      expect(
+        (yield* stack
+          .plan(program(initialPolicy))
+          .pipe(Effect.provideService(HttpClient.HttpClient, observedClient)))
+          .resources.SecretPolicyInstance,
+      ).toMatchObject({ action: "noop" });
+      expect(
+        requests
+          .slice(beforePlan)
+          .some((request) => request.action === "ValidateResourcePolicy"),
+      ).toBe(true);
+
+      const beforeNoop = requests.length;
+      const unchanged = yield* deploy(initialPolicy, "force-reconcile");
+      expect(unchanged.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(
+        requests
+          .slice(beforeNoop)
+          .some((request) => request.action === "ValidateResourcePolicy"),
+      ).toBe(true);
+      expect(
+        requests
+          .slice(beforeNoop)
+          .filter((request) =>
+            ["PutResourcePolicy", "DeleteResourcePolicy"].includes(
+              request.action,
+            ),
+          ),
+      ).toEqual([]);
+
+      const updated = yield* deploy(updatedPolicy);
+      expect(updated.masterUserSecretArn).toBe(secretArn);
+      expect(updated.masterUserSecretResourcePolicy).toBe(
+        normalizePolicyDocument(updatedPolicy),
+      );
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+
+      yield* secretsmanager.deleteResourcePolicy({ SecretId: secretArn });
+      expect(yield* waitPolicy(undefined)).toBeUndefined();
+      expect(
+        (yield* stack.plan(program(updatedPolicy))).resources
+          .SecretPolicyInstance,
+      ).toMatchObject({ action: "update" });
+      yield* deploy(updatedPolicy);
+      expect(yield* readPolicy).toBe(normalizePolicyDocument(updatedPolicy));
+
+      const removed = yield* deploy(undefined);
+      expect(removed.masterUserSecretArn).toBe(secretArn);
+      expect(removed.masterUserSecretResourcePolicy).toBeUndefined();
+      expect(yield* readPolicy).toBeUndefined();
+      expect(
+        (yield* stack.plan(program(undefined))).resources.SecretPolicyInstance,
+      ).toMatchObject({ action: "noop" });
+
+      yield* injectPolicy(initialPolicy);
+      const drift = yield* Drift.detect({
+        name: stack.name,
+        stage: stack.stage,
+      });
+      expect(drift.resources.SecretPolicyInstance?.action).toBe("drifted");
+      expect(
+        (yield* stack.plan(program(undefined))).resources.SecretPolicyInstance,
+      ).toMatchObject({ action: "update" });
+      yield* deploy(undefined);
+      expect(yield* readPolicy).toBeUndefined();
+
+      yield* injectPolicy(updatedPolicy);
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "SecretPolicyInstance",
+        });
+      }).pipe(Effect.provide(stack.state));
+      const adopted = yield* deploy(undefined);
+      expect(adopted.dbInstanceArn).toBe(created.dbInstanceArn);
+      expect(adopted.masterUserSecretArn).toBe(secretArn);
+      expect(yield* readPolicy).toBeUndefined();
+
+      const publicPolicy: PolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: "*" },
+            Action: ["secretsmanager:GetSecretValue"],
+            Resource: "*",
+          },
+        ],
+      };
+      const rejected = yield* deploy(publicPolicy).pipe(Effect.result);
+      expect(Result.isFailure(rejected)).toBe(true);
+      expect(renderFailure(rejected)).toContain(
+        "InvalidDBInstanceSecretPolicy",
+      );
+      expect(yield* readPolicy).toBeUndefined();
+      yield* deploy(undefined);
+      const finalMetadata = yield* secretsmanager.describeSecret({
+        SecretId: secretArn,
+      });
+      expect(finalMetadata.ARN).toBe(metadata.ARN);
+      expect(finalMetadata.RotationEnabled).toBe(metadata.RotationEnabled);
+      expect(finalMetadata.VersionIdsToStages).toEqual(
+        metadata.VersionIdsToStages,
+      );
+      expect(
+        requests.some((request) =>
+          [
+            "GetSecretValue",
+            "BatchGetSecretValue",
+            "PutSecretValue",
+            "UpdateSecret",
+            "RotateSecret",
+            "DeleteSecret",
+          ].includes(request.action),
+        ),
+      ).toBe(false);
+      expect(
+        requests
+          .filter((request) => request.action === "PutResourcePolicy")
+          .every((request) => request.blockPublicPolicy),
+      ).toBe(true);
+      expect(
+        (yield* stack.plan(program(undefined))).resources.SecretPolicyInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(identifier);
+      expect(
+        yield* secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+          Effect.as(false),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+            until: (gone) => gone,
+          }),
+        ),
+      ).toBe(true);
+    }),
+);
+
+test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
+  "managed secret policy: enable management on an existing instance",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId } = yield* AWSEnvironment.current;
+      const policy: PolicyDocument = {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+            Action: ["secretsmanager:DescribeSecret"],
+            Resource: "*",
+          },
+        ],
+      };
+      const program = (managed: boolean, resourcePolicy?: PolicyDocument) =>
+        Effect.gen(function* () {
+          const net = yield* Network("EnableSecretNet", {
+            cidrBlock: "10.50.0.0/16",
+          });
+          const subnetGroup = yield* DBSubnetGroup("EnableSecretSubnetGroup", {
+            description: "Enable RDS managed credentials",
+            subnetIds: net.privateSubnetIds,
+          });
+          return yield* DBInstance("EnableSecretInstance", {
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            masterUsername: "alchemy",
+            masterUserPassword: managed
+              ? undefined
+              : Redacted.make("Alchemy-secret-policy-42!"),
+            manageMasterUserPassword: managed,
+            masterUserSecretResourcePolicy: resourcePolicy,
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            backupRetentionPeriod: "0 days",
+            deletionProtection: false,
+            skipFinalSnapshot: true,
+            publiclyAccessible: false,
+          });
+        });
+      const invalid = yield* stack
+        .deploy(program(false, policy))
+        .pipe(Effect.result);
+      expect(renderFailure(invalid)).toContain("InvalidDBInstanceSecretPolicy");
+      const created = yield* stack.deploy(program(false));
+      expect(created.masterUserSecretArn).toBeUndefined();
+      expect(created.masterUserSecretResourcePolicy).toBeUndefined();
+      const enabled = yield* stack.deploy(program(true, policy));
+      expect(enabled.dbInstanceArn).toBe(created.dbInstanceArn);
+      const secretArn = enabled.masterUserSecretArn;
+      if (!secretArn)
+        return yield* Effect.fail(
+          new Error("RDS did not enable its managed secret"),
+        );
+      expect(enabled.masterUserSecretResourcePolicy).toBe(
+        normalizePolicyDocument(policy),
+      );
+      expect(
+        normalizePolicyDocument(
+          (yield* secretsmanager.getResourcePolicy({ SecretId: secretArn }))
+            .ResourcePolicy!,
+        ),
+      ).toBe(normalizePolicyDocument(policy));
+      const removed = yield* stack.deploy(program(true));
+      expect(removed.masterUserSecretArn).toBe(secretArn);
+      expect(
+        (yield* secretsmanager.getResourcePolicy({ SecretId: secretArn }))
+          .ResourcePolicy,
+      ).toBeUndefined();
+      expect(
+        (yield* stack.plan(program(true))).resources.EnableSecretInstance,
+      ).toMatchObject({ action: "noop" });
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),
 );
 

@@ -69,6 +69,12 @@
       "path": "../../submodules/distilled/packages/prisma/tsconfig.json"
     },
     {
+      "path": "../../submodules/distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "../../submodules/distilled/packages/zerossl/tsconfig.json"
+    },
+    {
       "path": "../cloudflare-runtime/tsconfig.json"
     }
   ]
