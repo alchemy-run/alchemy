@@ -79,6 +79,22 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "primary",
   },
   {
+    label: "Celld",
+    href: "/providers/celld/fleet",
+    prefixes: ["/providers/celld"],
+    slot: "more",
+    category: "Runtimes",
+    hint: "fleets · workers · durable objects",
+  },
+  {
+    label: "Rivet",
+    href: "/providers/rivet/cluster",
+    prefixes: ["/providers/rivet"],
+    slot: "more",
+    category: "Runtimes",
+    hint: "clusters · workers · actors",
+  },
+  {
     label: "Better Auth",
     href: "/better-auth",
     prefixes: ["/better-auth", "/providers/betterauth"],

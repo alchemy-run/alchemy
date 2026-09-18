@@ -7,6 +7,7 @@ import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
+import type { WorkflowExport as CelldWorkflowExport } from "../../../Celld/Workflows/Workflow.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import {
   isWorkflowExport,
@@ -15,7 +16,7 @@ import {
 import {
   isDurableObjectExport,
   type DurableObjectExport,
-} from "../DurableObject.ts";
+} from "../../../Workers/DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
@@ -52,7 +53,24 @@ export interface WorkerBundleOptions {
       }
     | {
         kind: "effect";
-        exports: Record<string, DurableObjectExport | WorkflowExport>;
+        exports: Record<
+          string,
+          DurableObjectExport | WorkflowExport | CelldWorkflowExport
+        >;
+        /**
+         * Override the generated virtual entry module. Defaults to
+         * {@link makeEffectVirtualEntry} (the Cloudflare Workers entry);
+         * other Worker-bundle runtimes (e.g. Celld fleets, whose loader
+         * requires the object-form `export default { fetch }`) substitute
+         * their own generator.
+         */
+        makeVirtualEntry?: (
+          exports: Record<
+            string,
+            DurableObjectExport | WorkflowExport | CelldWorkflowExport
+          >,
+          stack: { name: string; stage: string },
+        ) => (importPath: string) => string;
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
@@ -209,7 +227,10 @@ export const WorkerBundle = Effect.gen(function* () {
         options.entry.kind === "effect"
           ? [
               virtualEntryPlugin(
-                makeEffectVirtualEntry(options.entry.exports, options.stack),
+                (options.entry.makeVirtualEntry ?? makeEffectVirtualEntry)(
+                  options.entry.exports,
+                  options.stack,
+                ),
               ),
             ]
           : undefined,
@@ -280,7 +301,10 @@ export const WorkerBundle = Effect.gen(function* () {
 });
 
 export const makeEffectVirtualEntry = (
-  exports: Record<string, DurableObjectExport | WorkflowExport>,
+  exports: Record<
+    string,
+    DurableObjectExport | WorkflowExport | CelldWorkflowExport
+  >,
   stack: { name: string; stage: string },
 ) => {
   const doClasses: string[] = [];

@@ -6,6 +6,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import {
+  isScriptNotFound,
+  isWorkersDevNotFound,
+} from "./WorkerDeploymentResponse.ts";
 import type {
   AlarmObservationResult,
   BatchResult,
@@ -36,9 +40,10 @@ const requestJson = <T>(url: string, method: "GET" | "POST") =>
     if (response.status !== 200) {
       const message = `${method} ${url}: HTTP ${response.status}: ${body}`;
       if (
-        response.status === 404 ||
-        (response.status >= 500 &&
-          (method === "GET" || body.includes("<title>Script not found |")))
+        (method === "GET" &&
+          (response.status === 404 || response.status >= 500)) ||
+        isScriptNotFound(response, body, fresh.href) ||
+        isWorkersDevNotFound(response, body, fresh.href)
       ) {
         return yield* Effect.fail(
           Object.assign(new Test.WorkerNotReady({ status: response.status }), {
@@ -530,6 +535,16 @@ describe.concurrent.each([
         "POST",
       );
       expect(aborted.aborted).toBe(true);
+      const reconstructed = yield* json<Snapshot>(
+        `${url}/reset-first/snapshot`,
+      );
+      expect(reconstructed.boots).toBeGreaterThan(first.boots);
+      expect(reconstructed.deliveries).toEqual([]);
+      expect(reconstructed.pendingJobs).toEqual(first.pendingJobs);
+      yield* Effect.all([
+        json(`${url}/reset-first/release-reset`, "POST"),
+        json(`${url}/reset-second/release-reset`, "POST"),
+      ]);
       const [afterFirst, afterSecond] = yield* Effect.all(
         [
           poll<Snapshot>(`${url}/reset-first/snapshot`, drained(1)),

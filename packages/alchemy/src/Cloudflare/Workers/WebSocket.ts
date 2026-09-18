@@ -3,24 +3,13 @@ import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { DurableObjectState } from "./DurableObjectState.ts";
+import { fromWebSocket } from "../../Workers/Workerd/WebSocket.ts";
 
-export type RawWebSocket = cf.WebSocket;
-
-export interface WebSocket {
-  readonly ws: RawWebSocket;
-  send(data: string | Uint8Array): Effect.Effect<void>;
-  close(code: number, reason: string): Effect.Effect<void>;
-  serializeAttachment<T>(value: T): void;
-  deserializeAttachment<T>(): T | null;
-}
-
-export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
-  ws,
-  send: (data) => Effect.sync(() => ws.send(data as any)),
-  close: (code, reason) => Effect.sync(() => ws.close(code, reason)),
-  serializeAttachment: (value) => ws.serializeAttachment(value),
-  deserializeAttachment: () => ws.deserializeAttachment() as any,
-});
+export {
+  fromWebSocket,
+  type RawWebSocket,
+  type WebSocket,
+} from "../../Workers/Workerd/WebSocket.ts";
 
 // declare global {
 //   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];

@@ -1,41 +1,85 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
+import { describe, expect, it } from "alchemy-test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { isScriptNotFound } from "./WorkerDeploymentResponse.ts";
 import type {
   MigrationProbe,
   Snapshot,
 } from "./fixtures/alarm-upgrade/types.ts";
 import AlarmUpgradeWorker from "./fixtures/alarm-upgrade/v2.ts";
 
-const requestJson = Effect.fn(function* (url: string, action = "snapshot") {
-  // A fresh connection avoids polling an edge still pinned to the old deployment.
-  const client = HttpClient.mapRequest(
-    yield* HttpClient.HttpClient,
-    HttpClientRequest.setHeaders({
-      connection: "close",
-      "cache-control": "no-cache",
-    }),
-  );
-  const fresh = yield* Effect.sync(() => {
-    const fresh = new URL(`${url}/${action}`);
-    fresh.searchParams.set("cb", String(Date.now()));
-    return fresh.href;
-  });
-  const response = yield* (
-    action === "snapshot" ? client.get(fresh) : client.post(fresh)
-  ).pipe(Effect.timeout("5 seconds"));
-  if (response.status !== 200) {
-    return yield* Effect.fail(
-      new Error(`Upgrade fixture ${action}: HTTP ${response.status}`),
+class UpgradeRequestNotExecuted extends Data.TaggedError(
+  "UpgradeRequestNotExecuted",
+)<{
+  url: string;
+  status: number;
+  body: string;
+  ray: string | undefined;
+}> {}
+
+const requestJson = Effect.fn(
+  function* (url: string, action = "snapshot") {
+    // A fresh connection avoids polling an edge still pinned to the old deployment.
+    const client = HttpClient.mapRequest(
+      yield* HttpClient.HttpClient,
+      HttpClientRequest.setHeaders({
+        connection: "close",
+        "cache-control": "no-cache",
+      }),
     );
-  }
-  const body: unknown = yield* response.json;
-  return body;
-});
+    const fresh = yield* Effect.sync(() => {
+      const fresh = new URL(`${url}/${action}`);
+      fresh.searchParams.set("cb", String(Date.now()));
+      return fresh.href;
+    });
+    const response = yield* (
+      action === "snapshot" ? client.get(fresh) : client.post(fresh)
+    ).pipe(Effect.timeout("5 seconds"));
+    if (response.status !== 200) {
+      const body = yield* response.text;
+      if (
+        (response.status === 404 &&
+          response.headers["x-alchemy-upgrade-version"] === "v1") ||
+        isScriptNotFound(response, body, fresh)
+      ) {
+        // Neither the stale route nor the missing script executed the mutation.
+        yield* Effect.logInfo("Upgrade request did not execute", {
+          url: fresh,
+          status: response.status,
+          server: response.headers.server,
+          contentType: response.headers["content-type"],
+          ray: response.headers["cf-ray"],
+        });
+        return yield* Effect.fail(
+          new UpgradeRequestNotExecuted({
+            url: fresh,
+            status: response.status,
+            body,
+            ray: response.headers["cf-ray"],
+          }),
+        );
+      }
+      return yield* Effect.fail(
+        new Error(
+          `Upgrade fixture ${fresh}: HTTP ${response.status}; server=${response.headers.server}; content-type=${response.headers["content-type"]}; cf-ray=${response.headers["cf-ray"]}: ${body}`,
+        ),
+      );
+    }
+    const body: unknown = yield* response.json;
+    return body;
+  },
+  Effect.retry({
+    while: (error) => error instanceof UpgradeRequestNotExecuted,
+    schedule: Schedule.spaced("1 second"),
+    times: 8,
+  }),
+);
 
 const request = (url: string, action = "snapshot") =>
   requestJson(url, action).pipe(Effect.map((body) => body as Snapshot));
@@ -68,6 +112,145 @@ const count = (
   snapshot.deliveries.filter(
     (delivery) => delivery.channel === channel && delivery.id === id,
   ).length;
+
+describe("upgrade response classification", () => {
+  const url = "https://upgrade.testing.workers.dev";
+  const body = `<!DOCTYPE html>
+<title>Script not found | upgrade.testing.workers.dev | Cloudflare</title>
+<span class="cf-error-code">1104</span>
+<p>The script used to render this page could not be found.</p>`;
+  const headers = {
+    server: "cloudflare",
+    "content-type": "text/html; charset=UTF-8",
+    "cf-ray": "a3d1ff6739c3fef7-SEA",
+  };
+
+  const retryable: Array<{
+    name: string;
+    status: number;
+    headers: Record<string, string>;
+    body: string;
+  }> = [
+    { name: "native missing script", status: 500, headers, body },
+    {
+      name: "explicit stale V1 route",
+      status: 404,
+      headers: { "x-alchemy-upgrade-version": "v1" },
+      body: "Not Found",
+    },
+  ];
+  for (const response of retryable) {
+    it.live(`retries ${response.name} before executing a mutation`, () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        let mutations = 0;
+        const client = HttpClient.make((request) =>
+          Effect.sync(() => {
+            expect(request.method).toBe("POST");
+            attempts++;
+            if (attempts === 1) {
+              return HttpClientResponse.fromWeb(
+                request,
+                new Response(response.body, response),
+              );
+            }
+            mutations++;
+            return HttpClientResponse.fromWeb(
+              request,
+              Response.json({ seeded: true }),
+            );
+          }),
+        );
+        const result = yield* requestJson(url, "seed").pipe(
+          Effect.provideService(HttpClient.HttpClient, client),
+        );
+        expect(result).toEqual({ seeded: true });
+        expect(attempts).toBe(2);
+        expect(mutations).toBe(1);
+      }),
+    );
+  }
+
+  const rejected: Array<{
+    name: string;
+    status?: number;
+    body?: string;
+    headers?: Record<string, string>;
+  }> = [
+    { name: "generic HTTP500", body: "Internal Server Error" },
+    { name: "empty HTTP500", body: "" },
+    { name: "other edge error", body: body.replace("1104", "1101") },
+    { name: "wrong status", status: 502 },
+    { name: "unmarked HTTP404", status: 404, body: "Not Found" },
+    {
+      name: "JSON error",
+      headers: { ...headers, "content-type": "application/json" },
+    },
+    {
+      name: "non-Cloudflare response",
+      headers: { ...headers, server: "test" },
+    },
+    { name: "missing Ray ID", headers: { ...headers, "cf-ray": "" } },
+    { name: "invalid Ray ID", headers: { ...headers, "cf-ray": "not-a-ray" } },
+    {
+      name: "wrong host",
+      body: body.replace("upgrade.testing.workers.dev", "other.workers.dev"),
+    },
+    {
+      name: "missing script explanation",
+      body: body.replace(
+        "The script used to render this page could not be found.",
+        "Script crashed.",
+      ),
+    },
+  ];
+  for (const response of rejected) {
+    it.live(`does not replay a mutation after ${response.name}`, () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const client = HttpClient.make((request) =>
+          Effect.sync(() => {
+            attempts++;
+            return HttpClientResponse.fromWeb(
+              request,
+              new Response(response.body ?? body, {
+                status: response.status ?? 500,
+                headers: response.headers ?? headers,
+              }),
+            );
+          }),
+        );
+        const error = yield* requestJson(url, "seed").pipe(
+          Effect.provideService(HttpClient.HttpClient, client),
+          Effect.flip,
+        );
+        expect(error).not.toBeInstanceOf(UpgradeRequestNotExecuted);
+        expect(attempts).toBe(1);
+      }),
+    );
+  }
+
+  it.live("bounds repeated missing-script responses", () =>
+    Effect.gen(function* () {
+      let attempts = 0;
+      const client = HttpClient.make((request) =>
+        Effect.sync(() => {
+          attempts++;
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(body, { status: 500, headers }),
+          );
+        }),
+      );
+      const error = yield* requestJson(url, "seed").pipe(
+        Effect.provideService(HttpClient.HttpClient, client),
+        Effect.flip,
+      );
+      expect(error).toBeInstanceOf(UpgradeRequestNotExecuted);
+      expect(attempts).toBe(9);
+    }),
+  );
+});
 
 for (const dev of [true, false]) {
   describe(dev ? "local alarm upgrade" : "live alarm upgrade", () => {

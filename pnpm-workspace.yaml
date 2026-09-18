@@ -6,6 +6,8 @@ onlyBuiltDependencies:
   - workerd
 allowBuilds:
   "@parcel/watcher": true
+  better-sqlite3: true
+  cbor-extract: true
   es5-ext: false
   esbuild: true
   msgpackr-extract: true

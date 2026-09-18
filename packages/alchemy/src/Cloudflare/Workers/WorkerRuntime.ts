@@ -11,10 +11,7 @@ import {
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export class WorkerEnvironment extends Context.Service<
-  WorkerEnvironment,
-  Record<string, any>
->()("Cloudflare.Workers.WorkerEnvironment") {}
+export { WorkerEnvironment } from "../../Workers/Worker.ts";
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;
