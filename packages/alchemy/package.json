@@ -516,6 +516,8 @@
     "@opennextjs/aws": "catalog:",
     "@opennextjs/cloudflare": "catalog:",
     "@oxc-project/types": "catalog:",
+    "@prisma/orm-family-sql": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "@react-router/dev": "catalog:",
     "@react-router/node": "catalog:",
     "@solidjs/router": "catalog:",
@@ -536,6 +538,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
     "alchemy-test": "workspace:*",
+    "arktype": "catalog:",
     "astro": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:",
@@ -549,6 +552,7 @@
     "nuxt": "catalog:",
     "octane": "catalog:",
     "pg": "catalog:",
+    "prisma": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
     "react-dom": "catalog:",
@@ -571,6 +575,7 @@
   "peerDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@aws/durable-execution-sdk-js": "catalog:",
+    "@prisma/orm-postgres": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-mysql2": "catalog:",
@@ -582,6 +587,7 @@
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
+    "prisma": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -620,6 +626,12 @@
       "optional": true
     },
     "pg": {
+      "optional": true
+    },
+    "@prisma/orm-postgres": {
+      "optional": true
+    },
+    "prisma": {
       "optional": true
     },
     "vite": {
