@@ -21,33 +21,16 @@ import {
   type WorkerServices,
 } from "../Workers/Worker.ts";
 import { makeWorkflowName } from "./WorkflowName.ts";
+import { type WorkflowEvent, WorkflowStep } from "./WorkflowRuntime.ts";
+
+export {
+  WorkflowEvent,
+  WorkflowStep,
+  WorkflowStepContext,
+} from "./WorkflowRuntime.ts";
 
 type TypeId = "Cloudflare.Workflow";
 const TypeId = "Cloudflare.Workflow" as const;
-
-// ---------------------------------------------------------------------------
-// Runtime services -- provided by the bridge when the workflow executes
-// ---------------------------------------------------------------------------
-
-/**
- * Service that carries the current workflow event payload.
- * `yield* WorkflowEvent` inside a workflow body to access it.
- */
-export class WorkflowEvent extends Context.Service<
-  WorkflowEvent,
-  {
-    payload: unknown;
-    timestamp: Date;
-    instanceId: string;
-    workflowName: string;
-    /**
-     * Present when Cloudflare created this instance from a native
-     * {@link WorkflowProps.schedules} cron expression. Absent for
-     * instances started with `create` / `createBatch`.
-     */
-    schedule?: WorkflowCronSchedule;
-  }
->()("Cloudflare.Workflows.WorkflowEvent") {}
 
 /**
  * Cron trigger metadata on a Workflow instance created by a native
@@ -83,14 +66,6 @@ export interface WorkflowStepContextData {
   attempt: number;
   config: WorkflowStepConfig;
 }
-
-/**
- * Runtime information for the current `task` attempt.
- */
-export class WorkflowStepContext extends Context.Service<
-  WorkflowStepContext,
-  WorkflowStepContextData
->()("Cloudflare.WorkflowStepContext") {}
 
 export interface WorkflowRollbackContext<Output = unknown> {
   error: Error;
@@ -151,24 +126,6 @@ type ExcludeWorkflowStepContext<R> = R extends {
 }
   ? never
   : R;
-
-/**
- * Internal service that wraps the Cloudflare `WorkflowStep` object.
- * Not accessed directly by users -- use `task`, `sleep`, `sleepUntil`, and
- * `waitForEvent` instead.
- */
-export class WorkflowStep extends Context.Service<
-  WorkflowStep,
-  {
-    do<T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T>;
-    sleep(name: string, duration: string | number): Effect.Effect<void>;
-    sleepUntil(name: string, timestamp: Date | number): Effect.Effect<void>;
-    waitForEvent<T>(
-      name: string,
-      options: WorkflowWaitForEventOptions,
-    ): Effect.Effect<WorkflowStepEvent<T>>;
-  }
->()("Cloudflare.Workflows.WorkflowStep") {}
 
 // ---------------------------------------------------------------------------
 // User-facing step primitives

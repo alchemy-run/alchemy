@@ -229,6 +229,32 @@ const SECTIONS: Section[] = [
     pages: { directory: "cloudflare/networking" },
   },
   {
+    heading: "Prisma — start here",
+    pages: { slugs: ["prisma/index", "prisma/setup"] },
+  },
+  {
+    heading: "Prisma — tutorial",
+    intro:
+      "A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and a Vite frontend.",
+    pages: { directory: "prisma/tutorial" },
+  },
+  {
+    heading: "Prisma — Compute",
+    pages: { directory: "prisma/compute" },
+  },
+  {
+    heading: "Prisma — Data",
+    pages: { directory: "prisma/data" },
+  },
+  {
+    heading: "Prisma — Frontend",
+    pages: { directory: "prisma/frontend" },
+  },
+  {
+    heading: "Prisma — Guides",
+    pages: { directory: "prisma/guides" },
+  },
+  {
     heading: "AWS — start here",
     intro:
       "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
@@ -413,6 +439,20 @@ const SECTIONS: Section[] = [
         "git/recipes/cloudflare",
         "git/recipes/cloudflare-aws",
         "git/recipes/your-own-store",
+      ],
+    },
+  },
+  {
+    heading: "Stripe",
+    intro:
+      "Products, prices, coupons, customers, payment links, and webhooks as Stack resources. HTTP bindings run inside a Worker or Lambda.",
+    pages: {
+      slugs: [
+        "stripe/index",
+        "stripe/setup",
+        "stripe/guides/subscriptions",
+        "stripe/guides/connect",
+        "stripe/guides/webhooks",
       ],
     },
   },

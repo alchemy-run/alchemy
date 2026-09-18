@@ -34,6 +34,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
@@ -1070,6 +1071,17 @@ export default defineConfig({
             { label: "Overview", link: "/prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "prisma/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
@@ -1079,10 +1091,28 @@ export default defineConfig({
               ],
             },
             {
-              label: "Compute",
+              label: "Frontend",
               items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
+                { label: "Overview", link: "/prisma/frontend/websites" },
+                { label: "Astro", link: "/prisma/frontend/astro" },
+                { label: "Foldkit", link: "/prisma/frontend/foldkit" },
+                { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "Nuxt", link: "/prisma/frontend/nuxt" },
+                { label: "Octane", link: "/prisma/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/prisma/frontend/react-router",
+                },
+                { label: "SolidStart", link: "/prisma/frontend/solidstart" },
+                { label: "Static sites", link: "/prisma/frontend/static-site" },
+                { label: "SvelteKit", link: "/prisma/frontend/sveltekit" },
+                {
+                  label: "TanStack Start",
+                  link: "/prisma/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/prisma/frontend/vite" },
+                { label: "Vocs", link: "/prisma/frontend/vocs" },
+                { label: "Waku", link: "/prisma/frontend/waku" },
               ],
             },
             {
@@ -1095,6 +1125,31 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
+                },
+                {
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
+                  link: "/stripe/guides/webhooks",
+                },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
           ],
         },
         {

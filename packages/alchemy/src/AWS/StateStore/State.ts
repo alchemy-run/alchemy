@@ -3,7 +3,6 @@ import type { Region } from "@distilled.cloud/aws/Region";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
@@ -26,7 +25,7 @@ import {
   Default as DefaultEnvironment,
 } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
-import type { BucketEncryption } from "../S3/Bucket.ts";
+import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
 
 /**
  * The bookkeeping object that stores a stack's resolved output. Lives
@@ -58,11 +57,12 @@ export interface S3StateOptions {
    */
   prefix?: string;
   /**
-   * Default encryption enforced on the state bucket. Set
-   * `blockedEncryptionTypes: ["SSE-C"]` to block customer-provided encryption
-   * keys, omit it to preserve existing restrictions, or use `[]` to clear them.
+   * Default encryption enforced on every fresh state-service initialization.
+   * Omission restores AES256, no KMS key, bucket keys disabled, and no blocked
+   * encryption types. Set `blockedEncryptionTypes: ["SSE-C"]` to block
+   * customer-provided keys. Existing encrypted state objects are not rewritten.
    *
-   * @default `{ sseAlgorithm: "AES256" }`
+   * @default `{ sseAlgorithm: "AES256", bucketKeyEnabled: false, blockedEncryptionTypes: [] }`
    */
   encryption?: BucketEncryption;
 }
@@ -139,9 +139,11 @@ type S3Deps = Credentials | HttpClient | Region;
  * });
  * ```
  *
- * Omit `blockedEncryptionTypes` to preserve existing restrictions. Set it to
- * `[]` to allow SSE-C writes; this sends AWS's `NONE` value. The default
- * encryption algorithm remains managed independently of these restrictions.
+ * Omitted `blockedEncryptionTypes` is equivalent to `[]`: no encryption types
+ * are blocked, so SSE-C writes are permitted via AWS's `NONE` value. Removing
+ * an explicit block clears it. Omitting `encryption` restores AES256, no KMS
+ * key, disabled bucket keys, and no encryption restrictions. Existing objects
+ * are not rewritten.
  *
  * @resource
  */
@@ -467,58 +469,7 @@ const ensureStateBucket = (
       });
     }
 
-    const desiredEncryption = options.encryption ?? {
-      sseAlgorithm: "AES256",
-    };
-    const observedEncryption = (yield* s3.getBucketEncryption({
-      Bucket: bucket,
-    })).ServerSideEncryptionConfiguration?.Rules?.[0];
-    const desiredEncryptionRule: s3.ServerSideEncryptionRule = {
-      ApplyServerSideEncryptionByDefault: {
-        SSEAlgorithm: desiredEncryption.sseAlgorithm,
-        KMSMasterKeyID: desiredEncryption.kmsMasterKeyId,
-      },
-      BucketKeyEnabled: desiredEncryption.bucketKeyEnabled ?? false,
-      BlockedEncryptionTypes:
-        desiredEncryption.blockedEncryptionTypes === undefined
-          ? observedEncryption?.BlockedEncryptionTypes
-          : {
-              EncryptionType: desiredEncryption.blockedEncryptionTypes.length
-                ? [...new Set(desiredEncryption.blockedEncryptionTypes)]
-                : ["NONE"],
-            },
-    };
-    // SensitiveString decodes to Redacted; its JSON form hides the key identity.
-    const keyValue = (
-      key: s3.ServerSideEncryptionByDefault["KMSMasterKeyID"],
-    ) => (Redacted.isRedacted(key) ? Redacted.value(key) : key);
-    const encryptionFingerprint = (
-      rule: s3.ServerSideEncryptionRule | undefined,
-    ) =>
-      JSON.stringify({
-        algorithm:
-          rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-        key:
-          keyValue(rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
-          null,
-        bucketKey: rule?.BucketKeyEnabled ?? false,
-        blockedEncryptionTypes: [
-          ...new Set(
-            rule?.BlockedEncryptionTypes?.EncryptionType?.filter(
-              (type) => type !== "NONE",
-            ) ?? [],
-          ),
-        ].sort(),
-      });
-    if (
-      encryptionFingerprint(observedEncryption) !==
-      encryptionFingerprint(desiredEncryptionRule)
-    ) {
-      yield* s3.putBucketEncryption({
-        Bucket: bucket,
-        ServerSideEncryptionConfiguration: { Rules: [desiredEncryptionRule] },
-      });
-    }
+    yield* syncBucketEncryption(bucket, options.encryption);
 
     const desiredPublicAccess: s3.PublicAccessBlockConfiguration = {
       BlockPublicAcls: true,

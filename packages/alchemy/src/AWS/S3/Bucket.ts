@@ -2,6 +2,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Arr from "effect/Array";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
@@ -44,8 +45,10 @@ export interface BucketEncryption {
   /**
    * Encryption types to block for new object writes. Currently supports SSE-C
    * (server-side encryption with customer-provided keys).
-   * Omit to preserve the bucket's current restrictions. Set to `[]` to remove
-   * them and allow SSE-C; this sends AWS's `NONE` value.
+   * Omitted or `[]` blocks no encryption types and permits SSE-C, sending
+   * AWS's `NONE` value. Set to `["SSE-C"]` to block customer-provided keys.
+   * Removing this property resets the blocklist to its default.
+   * @default []
    */
   blockedEncryptionTypes?: "SSE-C"[];
 }
@@ -153,7 +156,9 @@ export interface BucketProps {
    */
   mfaDelete?: "Enabled" | "Disabled";
   /**
-   * Default server-side encryption for objects written to the bucket.
+   * Default server-side encryption for new objects. Omission restores AES256,
+   * no KMS key, bucket keys disabled, and no encryption types blocked.
+   * Existing objects are not re-encrypted. External changes are repaired on deploy.
    */
   encryption?: BucketEncryption;
   /**
@@ -342,8 +347,19 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * ### Managing SSE-C Restrictions
- * **Example:** Block writes encrypted with customer-provided keys
+ * ### Default Bucket Encryption
+ * **Example:** Use the default encryption settings
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {});
+ * ```
+ *
+ * The default is AES256 encryption with S3-managed keys, bucket keys disabled,
+ * and no encryption types blocked. Requests may explicitly supply their own
+ * encryption keys (SSE-C); permitting SSE-C does not change the default
+ * encryption used by requests without those keys.
+ *
+ * ### Blocking Customer-Provided Encryption Keys
+ * **Example:** Reject new SSE-C writes
  * ```typescript
  * const bucket = yield* S3.Bucket("my-bucket", {
  *   encryption: {
@@ -353,10 +369,26 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * Omit `blockedEncryptionTypes` to preserve the bucket's current restrictions,
- * including when changing its default encryption algorithm or KMS key.
+ * `blockedEncryptionTypes` lists encryption types to reject. This blocks new
+ * writes using customer-provided keys while retaining AES256 default encryption.
+ * Existing encrypted objects are unchanged.
  *
- * **Example:** Allow SSE-C writes
+ * ### Resetting Encryption Restrictions
+ * **Example:** Remove the block to restore the default
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   encryption: {
+ *     sseAlgorithm: "AES256",
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ *   },
+ * });
+ * ```
+ *
+ * Redeploy the same logical resource after removing the property. Alchemy
+ * resets the blocklist to its default, `[]`, so SSE-C writes are permitted.
+ * It updates AWS rather than preserving the previously configured block.
+ *
+ * **Example:** Set the default blocklist explicitly
  * ```typescript
  * const bucket = yield* S3.Bucket("my-bucket", {
  *   encryption: {
@@ -366,8 +398,26 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * An empty array removes the restriction by sending AWS's `NONE` value.
- * This affects new object writes; existing encrypted objects are unchanged.
+ * `[]` and omission have the same desired state: no encryption types blocked.
+ * The provider sends AWS's `NONE` value when it needs to reset a restriction.
+ * Redeploying unchanged code also repairs externally modified restrictions.
+ *
+ * ### Resetting All Encryption Settings
+ * **Example:** Remove the entire encryption configuration
+ * ```diff
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ * -  encryption: {
+ * -    sseAlgorithm: "aws:kms",
+ * -    kmsMasterKeyId: "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012",
+ * -    bucketKeyEnabled: true,
+ * -    blockedEncryptionTypes: ["SSE-C"],
+ * -  },
+ * });
+ * ```
+ *
+ * Omitting `encryption` resets every setting to the defaults: AES256, no custom
+ * KMS key, bucket keys disabled, and an empty blocklist. Previously configured
+ * KMS encryption is also reset; existing objects are not re-encrypted.
  *
  * ### Runtime Operations
  * Bind S3 operations in the init phase and use them in runtime
@@ -869,63 +919,6 @@ export const BucketProvider = () =>
           },
         });
         yield* session.note(`Updated bucket versioning: ${bucketName}`);
-      });
-
-      const syncBucketEncryption = Effect.fn(function* ({
-        bucketName,
-        encryption,
-        session,
-      }: {
-        bucketName: string;
-        encryption?: BucketEncryption;
-        session: ScopedPlanStatusSession;
-      }) {
-        if (encryption === undefined) return;
-        const current = yield* s3
-          .getBucketEncryption({ Bucket: bucketName })
-          .pipe(
-            Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
-          );
-        const desiredRule: s3.ServerSideEncryptionRule = {
-          ApplyServerSideEncryptionByDefault: {
-            SSEAlgorithm: encryption.sseAlgorithm,
-            KMSMasterKeyID: encryption.kmsMasterKeyId,
-          },
-          BucketKeyEnabled: encryption.bucketKeyEnabled ?? false,
-          BlockedEncryptionTypes:
-            encryption.blockedEncryptionTypes === undefined
-              ? current?.BlockedEncryptionTypes
-              : {
-                  EncryptionType: encryption.blockedEncryptionTypes.length
-                    ? [...new Set(encryption.blockedEncryptionTypes)]
-                    : ["NONE"],
-                },
-        };
-        // SensitiveString decodes to Redacted; its JSON form hides the key identity.
-        const keyValue = (
-          key: s3.ServerSideEncryptionByDefault["KMSMasterKeyID"],
-        ) => (Redacted.isRedacted(key) ? Redacted.value(key) : key);
-        const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
-          JSON.stringify({
-            alg: r?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
-            key:
-              keyValue(r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID) ??
-              null,
-            bucketKey: r?.BucketKeyEnabled ?? false,
-            blockedEncryptionTypes: [
-              ...new Set(
-                r?.BlockedEncryptionTypes?.EncryptionType?.filter(
-                  (type) => type !== "NONE",
-                ) ?? [],
-              ),
-            ].sort(),
-          });
-        if (canon(current) === canon(desiredRule)) return;
-        yield* s3.putBucketEncryption({
-          Bucket: bucketName,
-          ServerSideEncryptionConfiguration: { Rules: [desiredRule] },
-        });
-        yield* session.note(`Updated bucket encryption: ${bucketName}`);
       });
 
       const syncPublicAccessBlock = Effect.fn(function* ({
@@ -1445,7 +1438,7 @@ export const BucketProvider = () =>
             accountId,
           };
         }),
-        diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {}, output }) {
           if (!isResolved(news)) return undefined;
           const oldBucketName = yield* createBucketName(id, olds);
           const newBucketName = yield* createBucketName(id, news);
@@ -1467,6 +1460,19 @@ export const BucketProvider = () =>
               `S3 Bucket diff: replacing bucket because object lock changed for ${newBucketName}`,
             );
             return { action: "replace" } as const;
+          }
+          if (output) {
+            const observed = yield* readBucketEncryption(
+              output.bucketName,
+            ).pipe(
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+            );
+            if (
+              encryptionFingerprint(observed) !==
+              encryptionFingerprint(desiredEncryptionRule(news.encryption))
+            ) {
+              return { action: "update" } as const;
+            }
           }
         }),
         precreate: (props) => ensureBucketExists(props),
@@ -1513,11 +1519,13 @@ export const BucketProvider = () =>
             session,
           });
 
-          yield* syncBucketEncryption({
-            bucketName: resolved.bucketName,
-            encryption: news.encryption,
-            session,
-          });
+          if (
+            yield* syncBucketEncryption(resolved.bucketName, news.encryption)
+          ) {
+            yield* session.note(
+              `Updated bucket encryption: ${resolved.bucketName}`,
+            );
+          }
 
           yield* syncBucketCors({
             bucketName: resolved.bucketName,
@@ -1704,3 +1712,77 @@ export const BucketProvider = () =>
       };
     }),
   );
+
+class BucketEncryptionNotConverged extends Data.TaggedError(
+  "BucketEncryptionNotConverged",
+)<{ bucket: string }> {}
+
+const desiredEncryptionRule = (
+  encryption?: BucketEncryption,
+): s3.ServerSideEncryptionRule => {
+  const algorithm = encryption?.sseAlgorithm ?? "AES256";
+  const blocked = encryption?.blockedEncryptionTypes ?? [];
+  return {
+    ApplyServerSideEncryptionByDefault: {
+      SSEAlgorithm: algorithm,
+      KMSMasterKeyID:
+        algorithm === "AES256" ? undefined : encryption?.kmsMasterKeyId,
+    },
+    BucketKeyEnabled: encryption?.bucketKeyEnabled ?? false,
+    BlockedEncryptionTypes: {
+      EncryptionType: blocked.length ? [...new Set(blocked)] : ["NONE"],
+    },
+  };
+};
+
+const encryptionFingerprint = (
+  rule: s3.ServerSideEncryptionRule | undefined,
+) => {
+  const key = rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+  return JSON.stringify({
+    algorithm: rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
+    key: (Redacted.isRedacted(key) ? Redacted.value(key) : key) ?? null,
+    bucketKey: rule?.BucketKeyEnabled ?? false,
+    blocked: [
+      ...new Set(
+        rule?.BlockedEncryptionTypes?.EncryptionType?.filter(
+          (type) => type !== "NONE",
+        ) ?? [],
+      ),
+    ].sort(),
+  });
+};
+
+const readBucketEncryption = (bucket: string) =>
+  s3
+    .getBucketEncryption({ Bucket: bucket })
+    .pipe(
+      Effect.map(
+        (result) => result.ServerSideEncryptionConfiguration?.Rules?.[0],
+      ),
+    );
+
+export const syncBucketEncryption = Effect.fn(function* (
+  bucket: string,
+  encryption?: BucketEncryption,
+) {
+  const desired = desiredEncryptionRule(encryption);
+  const matches = (rule: s3.ServerSideEncryptionRule | undefined) =>
+    encryptionFingerprint(rule) === encryptionFingerprint(desired);
+  if (matches(yield* readBucketEncryption(bucket))) return false;
+  yield* s3.putBucketEncryption({
+    Bucket: bucket,
+    ServerSideEncryptionConfiguration: { Rules: [desired] },
+  });
+  const observed = yield* readBucketEncryption(bucket).pipe(
+    Effect.repeat({
+      until: matches,
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+  if (!matches(observed)) {
+    return yield* Effect.fail(new BucketEncryptionNotConverged({ bucket }));
+  }
+  return true;
+});

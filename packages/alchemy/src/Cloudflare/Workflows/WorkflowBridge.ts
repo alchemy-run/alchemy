@@ -4,19 +4,21 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { buildEventTelemetry } from "../../Telemetry.ts";
+import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import { isScopeEjected } from "../Workers/HttpServer.ts";
 import { getWorkerExport } from "../Workers/WorkerBridge.ts";
+import type {
+  WorkflowExport,
+  WorkflowImpl,
+  WorkflowStepConfig,
+  WorkflowStepEvent,
+  WorkflowTaskOptions,
+} from "./Workflow.ts";
 import {
   WorkflowEvent as WorkflowEventService,
-  type WorkflowExport,
-  type WorkflowImpl,
   WorkflowStep,
   WorkflowStepContext,
-  type WorkflowStepConfig,
-  type WorkflowStepEvent,
-  type WorkflowTaskOptions,
-} from "./Workflow.ts";
+} from "./WorkflowRuntime.ts";
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and

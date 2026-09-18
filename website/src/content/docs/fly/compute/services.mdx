@@ -165,7 +165,9 @@ Alchemy bundles `main` with Rolldown. If the hash matches the last
 deploy, it skips build and push. Otherwise it builds `linux/amd64`
 from `image` (default `oven/bun:1`) and pushes to
 `registry.fly.io/{app}:{id}-{hash}`. Then it creates or updates
-`count` Machines and waits until they are `started`.
+`count` Machines one at a time. After each Machine is `started`,
+if it has service checks, reconcile waits until those checks are
+passing before updating the next replica.
 
 Changed code is a new image and an in-place Machine update.
 Unchanged code is a no-op.
@@ -173,9 +175,19 @@ Unchanged code is a no-op.
 Override the base image with `image` (must still run bun). Pass
 `services: []` for a process that should not be published.
 
-:::note[Deploy waits for `started`, not `/health`]
-Alchemy waits until the Machine is `started`. It does not poll
-`/health`. Omitting that route does not fail the deploy.
+:::note[Deploy waits for Fly service checks]
+If a Machine has service checks (the default TCP check, or your HTTP
+checks), reconcile waits until Fly reports them `passing` before it
+moves on to the next replica. `started` only means the VM booted.
+Missing or non-passing results keep polling for up to 60 seconds.
+If checks do not pass, deployment fails with
+`Fly.ReplicaChecksNotPassing`, including the last observed check
+results, and later replicas remain unchanged. Earlier updates are
+not automatically rolled back.
+
+Omitting `/health` does not fail the deploy unless you configured an
+HTTP check on that path. A single replica still updates in place and
+can be unavailable during deployment; this is not blue/green deployment.
 :::
 
 ## Config
