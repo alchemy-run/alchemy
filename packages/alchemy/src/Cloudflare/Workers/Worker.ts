@@ -2395,14 +2395,34 @@ export const Worker: ResourceClassLike<Worker> &
        * }) {}
        * ```
        */
-      <const Id extends string, Req = never>(
+      <
+        const Id extends string,
+        const Bindings extends WorkerBindingProps = {},
+        const Assets extends WorkerAssetsConfig | undefined = undefined,
+        Req = never,
+      >(
         id: Id,
         props:
-          | InputProps<WorkerProps>
-          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
-      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+          | InputProps<WorkerProps<Bindings, Assets>>
+          | Effect.Effect<
+              InputProps<WorkerProps<Bindings, Assets>>,
+              ConfigError,
+              Req
+            >,
+      ): Effect.Effect<
+        Worker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
+        never,
+        Req | Providers
+      > &
         Named<Id> & {
-          new (): Named<Id> & Tag<WorkerTypeId>;
+          new (): Named<Id> &
+            Tag<WorkerTypeId> & {
+              /** @internal phantom */
+              readonly "~alchemy/WorkerEnv": NormalizedBindings<
+                Bindings,
+                Assets
+              >;
+            };
         };
     };
     <
