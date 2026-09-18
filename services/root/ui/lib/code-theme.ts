@@ -227,13 +227,60 @@ const makeTheme = (
       scope: ["punctuation.section.embedded", "meta.embedded"],
       settings: { foreground: p.foreground },
     },
+    // Markdown — prose, not code: headings carry the tag tone, links
+    // the function blue, inline code the string honey, and the marker
+    // punctuation (#, *, >, backticks) recedes to the muted tone so
+    // the words stay in front.
     {
-      scope: ["markup.heading", "markup.bold"],
+      scope: [
+        "markup.heading",
+        "markup.heading entity.name.section",
+        "entity.name.section.markdown",
+      ],
+      settings: { foreground: p.tag, fontStyle: "bold" },
+    },
+    {
+      scope: ["markup.bold"],
       settings: { foreground: p.foreground, fontStyle: "bold" },
     },
     {
       scope: ["markup.italic"],
       settings: { foreground: p.foreground, fontStyle: "italic" },
+    },
+    {
+      scope: ["markup.inline.raw", "markup.raw.block"],
+      settings: { foreground: p.string },
+    },
+    {
+      scope: ["markup.underline.link"],
+      settings: { foreground: p.fn, fontStyle: "underline" },
+    },
+    {
+      scope: [
+        "string.other.link.title.markdown",
+        "string.other.link.description.markdown",
+        "constant.other.reference.link.markdown",
+      ],
+      settings: { foreground: p.fn },
+    },
+    {
+      scope: ["markup.quote"],
+      settings: { foreground: p.comment, fontStyle: "italic" },
+    },
+    {
+      scope: [
+        "punctuation.definition.heading.markdown",
+        "punctuation.definition.list.begin.markdown",
+        "punctuation.definition.quote.begin.markdown",
+        "punctuation.definition.bold.markdown",
+        "punctuation.definition.italic.markdown",
+        "punctuation.definition.raw.markdown",
+        "punctuation.definition.link.title.begin.markdown",
+        "punctuation.definition.link.title.end.markdown",
+        "punctuation.definition.metadata.markdown",
+        "punctuation.definition.markdown",
+      ],
+      settings: { foreground: p.muted },
     },
     {
       scope: ["markup.inserted", "markup.inserted.diff"],

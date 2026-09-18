@@ -231,6 +231,10 @@ export const FileCard = memo(
         ...base,
         disableFileHeader: true,
         overflow: "scroll" as const,
+        // the renderer's default gives up tokenizing past 100k chars —
+        // a big CHANGELOG renders plain; the browser caps contents at
+        // ~200k, so cover the whole cap
+        tokenizeMaxLength: 250_000,
       }),
       [base],
     );

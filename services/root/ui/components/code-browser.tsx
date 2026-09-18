@@ -22,13 +22,7 @@ import { showCode, type CodePlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { useTreeStyles } from "@/lib/tree-theme";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import {
-  ChevronRight,
-  FolderGit2,
-  GitBranch,
-  GitCommitHorizontal,
-  X,
-} from "lucide-react";
+import { ChevronRight, GitBranch, GitCommitHorizontal, X } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -66,11 +60,33 @@ const loadTabs = (): EditorTab[] => {
  *  over presentation attributes. Injected post-mount because the
  *  component reads its unsafe-css attribute only at construction,
  *  before React has set it. */
+const REPO_ICON = encodeURIComponent(
+  // Octicons repo-16 — the forge's repository mark
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"/></svg>`,
+);
+
 const TREE_CSS = `
   [data-icon-name="file-tree-icon-chevron"] {
     width: 11px;
     height: 11px;
     opacity: 0.75;
+  }
+  /* repo roots: VS Code's semibold workspace folder, with the forge's
+     repo mark drawn before the name (the icon slot holds the chevron,
+     so the mark rides the name's flex container) */
+  [data-item-type="folder"][aria-level="1"] {
+    font-weight: var(--trees-font-weight-semibold);
+  }
+  [data-item-type="folder"][aria-level="1"] [data-truncate-group-container]::before {
+    content: "";
+    align-self: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    background-color: var(--trees-fg-muted);
+    -webkit-mask: url("data:image/svg+xml,${REPO_ICON}") center / contain no-repeat;
+    mask: url("data:image/svg+xml,${REPO_ICON}") center / contain no-repeat;
   }
 `;
 
@@ -274,7 +290,8 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
     paths: [],
     onSelectionChange: (selected: ReadonlyArray<string>) => {
       const chosen = selected[0];
-      if (chosen === undefined) return;
+      // folders select too (their paths end in "/") — only files open
+      if (chosen === undefined || chosen.endsWith("/")) return;
       const [root, ...rest] = chosen.split("/");
       if (root === undefined || rest.length === 0) return;
       showCode(root, root === repo ? ref : "main", rest.join("/"));
@@ -308,17 +325,11 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
     <div className="flex min-h-0 flex-1">
       {/* repos + the whole tree, one request */}
       <aside className="flex w-72 shrink-0 flex-col border-r border-border">
-        <div className="flex shrink-0 items-center gap-2 px-3 pt-2 pb-1">
-          <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            org
-          </span>
-          {repos.some((entry) => entry.status !== "ready") && (
-            <span className="text-[9px] text-muted-foreground">
-              (some repositories still importing)
-            </span>
-          )}
-        </div>
+        {repos.some((entry) => entry.status !== "ready") && (
+          <div className="shrink-0 px-3 pt-2 pb-1 text-[10px] text-muted-foreground">
+            some repositories are still importing…
+          </div>
+        )}
         <div ref={treeHost} className="min-h-0 flex-1 overflow-y-auto">
           {paths.length === 0 ? (
             <div className="px-3 py-4 text-[12px] text-muted-foreground">
@@ -330,9 +341,11 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
               style={
                 {
                   height: "100%",
-                  // VS Code posture: flat square rows, tight leading
+                  // VS Code posture: flat square rows whose hover and
+                  // selection bands run flush to the sidebar's edges
                   "--trees-border-radius-override": "0px",
-                  "--trees-row-height": "24px",
+                  "--trees-padding-inline-override": "0px",
+                  "--trees-item-margin-x-override": "0px",
                   ...treeStyles,
                 } as React.CSSProperties
               }
