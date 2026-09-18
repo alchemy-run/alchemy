@@ -38,6 +38,7 @@ function providersSidebarEntry() {
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "ACME", link: "/acme" },
     ],
   };
 }
@@ -1323,6 +1324,13 @@ export default defineConfig({
             },
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
+          ],
+        },
+        {
+          label: "ACME",
+          items: [
+            { label: "Overview", link: "/acme" },
+            providerResourcesEntry("ACME"),
           ],
         },
         providersSidebarEntry(),
