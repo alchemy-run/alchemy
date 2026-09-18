@@ -150,6 +150,24 @@ const makeNodeAdapterTarget = (
         const root = context.root;
         const distDirectory =
           output.distDirectory ?? path.resolve(root, "dist");
+        if (output.clientDirectory === undefined) {
+          return yield* Effect.fail(
+            fail(
+              "The SvelteKit build produced no client directory for the Node serve entry",
+            ),
+          );
+        }
+        // Container hosts package only distDirectory. Keep the assets beside
+        // the server so the output remains runnable after it is relocated.
+        const clientDirectory = path.join(distDirectory, "client");
+        yield* fs
+          .remove(clientDirectory, { recursive: true, force: true })
+          .pipe(
+            Effect.andThen(fs.copy(output.clientDirectory, clientDirectory)),
+            Effect.mapError((error) =>
+              fail("Failed to package the SvelteKit client assets", error),
+            ),
+          );
         const serverOutDir = path.join(distDirectory, "server");
         yield* fs
           .remove(serverOutDir, { recursive: true, force: true })
@@ -192,18 +210,12 @@ const makeNodeAdapterTarget = (
         const bundled: FrameworkCore.BuildOutput = {
           ...output,
           distDirectory,
+          clientDirectory,
           serverModules: FrameworkCore.sortServerModules(
             modules,
             SERVER_ENTRY_NAME,
           ),
         };
-        if (bundled.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail(
-              "The SvelteKit build produced no client directory for the Node serve entry",
-            ),
-          );
-        }
         const servePath = path.join(serverOutDir, NODE_SERVE_ENTRY_FILE_NAME);
         return yield* writeNodeServeEntry({
           output: bundled,
@@ -213,8 +225,9 @@ const makeNodeAdapterTarget = (
             .replaceAll("\\", "/"),
           clientDirExpression: relativeClientDirExpression(
             servePath,
-            bundled.clientDirectory,
+            clientDirectory,
           ),
+          htmlHandling: "drop-trailing-slash",
           handler: {
             kind: "fetch",
             imports: `import { handler } from "./index.mjs";`,
