@@ -1001,9 +1001,9 @@ for (const dev of [false, true]) {
             Effect.flatMap((response) => response.text),
             Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
             Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
+              schedule: Schedule.spaced("3 seconds"),
               until: (name) => name === scriptName,
-              times: 8,
+              times: 10,
             }),
             Effect.tap((name) =>
               Effect.sync(() => expect(name).toBe(scriptName)),

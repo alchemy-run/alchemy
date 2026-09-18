@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as Cloudflare from "@/Cloudflare";
 import * as Output from "@/Output.ts";
 import type { ResourceClass } from "@/Resource.ts";
@@ -71,14 +70,14 @@ type Env = Cloudflare.InferEnv<typeof program>;
 type _DeclaredEnvRuntimeWorkflow = Assert<
   Equals<
     Cloudflare.InferEnv<DeclaredEnv>["MY_WORKFLOW"],
-    cf.Workflow<{ value: string }>
+    Workflow<{ value: string }>
   >
 >;
 type _RuntimeWorkflow = Assert<
-  Equals<Env["MY_WORKFLOW"], cf.Workflow<{ value: string }>>
+  Equals<Env["MY_WORKFLOW"], Workflow<{ value: string }>>
 >;
 type _RuntimeEffectWorkflow = Assert<
-  Equals<Env["EFFECT_WORKFLOW"], cf.Workflow<{ count: number }>>
+  Equals<Env["EFFECT_WORKFLOW"], Workflow<{ count: number }>>
 >;
 type _RuntimeConfig = Assert<Equals<Env["CONFIG"], string>>;
 type _RuntimeSecret = Assert<Equals<Env["SECRET"], string>>;
@@ -100,7 +99,7 @@ type _ClassOutput = Assert<
   >
 >;
 type _ClassRuntimeWorkflow = Assert<
-  Equals<ClassEnv["MY_WORKFLOW"], cf.Workflow<{ value: string }>>
+  Equals<ClassEnv["MY_WORKFLOW"], Workflow<{ value: string }>>
 >;
 type _ClassInstanceWorkflow = Assert<
   Equals<InstanceEnv["MY_WORKFLOW"], ClassEnv["MY_WORKFLOW"]>

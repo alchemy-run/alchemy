@@ -1,3 +1,4 @@
+import type * as runtime from "@cloudflare/workers-types";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
@@ -428,6 +429,11 @@ export const isWorkflowBinding = (binding: {
   scriptName?: string;
 } => binding.type === "workflow";
 
+export type WorkflowBatchDeleteResult = runtime.WorkflowBatchDeleteResult;
+export type WorkflowSubscriptionEvent = runtime.WorkflowInstanceEvent;
+export type WorkflowInstanceSubscribeOptions =
+  runtime.WorkflowInstanceSubscribeOptions;
+
 /**
  * Handle returned to the caller at deploy/bind time. Allows starting
  * workflow instances and checking their status from the Api layer.
@@ -446,6 +452,8 @@ export interface WorkflowHandle<Input = unknown, Result = unknown> {
     batch: WorkflowInstanceCreateOptions<Input>[],
   ): Effect.Effect<WorkflowInstance<Result>[]>;
   get(instanceId: string): Effect.Effect<WorkflowInstance<Result>>;
+  /** Delete up to 100 instances and their stored state, returning per-instance results. */
+  deleteBatch(instanceIds: string[]): Effect.Effect<WorkflowBatchDeleteResult>;
 }
 
 /** Options for starting a workflow instance. */
@@ -468,6 +476,12 @@ export interface WorkflowInstance<Result = unknown> {
   resume(): Effect.Effect<void>;
   restart(options?: WorkflowInstanceRestartOptions): Effect.Effect<void>;
   terminate(): Effect.Effect<void>;
+  /** Stop execution and delete this instance and its stored state. */
+  delete(): Effect.Effect<void>;
+  /** Stream historical and new events; release the subscription when consumption ends. */
+  subscribe(
+    options?: WorkflowInstanceSubscribeOptions,
+  ): Stream.Stream<WorkflowSubscriptionEvent>;
   sendEvent<Event = unknown>(
     event: WorkflowInstanceEvent<Event>,
   ): Effect.Effect<void>;
@@ -937,6 +951,19 @@ export class WorkflowScope extends Context.Service<
  * );
  * ```
  *
+ * ### Observing and Deleting Instances
+ * **Example:** Read an event and remove stored state
+ * ```typescript
+ * const instance = yield* workflow.get("report-123");
+ * const events = yield* instance.subscribe({ filter: ["workflow_queued"] }).pipe(
+ *   Stream.take(1),
+ *   Stream.runCollect,
+ * );
+ * yield* instance.delete();
+ * const result = yield* workflow.deleteBatch(["report-456", "report-789"]);
+ * // result.deleted contains successful IDs; result.errors contains per-instance failures.
+ * ```
+ *
  * @resource
  * @product Workflows
  * @category Workers & Compute
@@ -1039,6 +1066,13 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
             Effect.map((instances: any[]) => instances.map(wrapInstance)),
             Effect.orDie,
           ),
+        deleteBatch: (instanceIds) =>
+          Effect.tryPromise(
+            () =>
+              binding.deleteBatch(
+                instanceIds,
+              ) as Promise<WorkflowBatchDeleteResult>,
+          ).pipe(Effect.orDie),
         get: (instanceId: string) =>
           Effect.tryPromise(() => binding.get(instanceId)).pipe(
             Effect.map(wrapInstance),
@@ -1426,6 +1460,30 @@ const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   restart: (options?: WorkflowInstanceRestartOptions) =>
     Effect.tryPromise(() => raw.restart(options)).pipe(Effect.orDie),
   terminate: () => Effect.tryPromise(() => raw.terminate()).pipe(Effect.orDie),
+  delete: () => Effect.tryPromise(() => raw.delete()).pipe(Effect.orDie),
+  subscribe: (options) =>
+    Stream.unwrap(
+      Effect.acquireRelease(
+        Effect.tryPromise(
+          () =>
+            raw.subscribe(options) as Promise<
+              runtime.WorkflowInstanceSubscription & Disposable
+            >,
+        ).pipe(Effect.orDie),
+        (subscription) => Effect.sync(() => subscription[Symbol.dispose]()),
+      ).pipe(
+        Effect.map((subscription) =>
+          Stream.fromAsyncIterable(
+            {
+              [Symbol.asyncIterator]: () => ({
+                next: () => subscription.next(),
+              }),
+            },
+            (error) => error,
+          ).pipe(Stream.orDie),
+        ),
+      ),
+    ),
   sendEvent: <Event = unknown>(event: WorkflowInstanceEvent<Event>) =>
     Effect.tryPromise(() => raw.sendEvent(event)).pipe(Effect.orDie),
 });
