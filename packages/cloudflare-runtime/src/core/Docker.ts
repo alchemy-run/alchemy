@@ -50,6 +50,10 @@ export class Docker extends Context.Service<
       tag: string,
       image: ContainerImage.Pull,
     ) => Effect.Effect<void, SystemError>;
+    readonly tag: (
+      source: string,
+      target: string,
+    ) => Effect.Effect<void, SystemError>;
     readonly validate: (tag: string) => Effect.Effect<void, ConfigError>;
     readonly removeImageTag: (tag: string) => Effect.Effect<void>;
     readonly removeContainer: (tag: string) => Effect.Effect<void, SystemError>;
@@ -459,6 +463,30 @@ export const DockerLive = Layer.effect(
         (result) => result.stdout,
       );
 
+    const tagImage = (source: string, target: string) =>
+      run(["tag", source, target]).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SystemError({
+              subtag: "DockerTagFailed",
+              message: `Failed to tag image "${source}" as "${target}".`,
+              cause,
+            }),
+        ),
+        Effect.flatMap((result) =>
+          ensureExitZero(
+            result,
+            ({ exitCode, stdout, stderr }) =>
+              new SystemError({
+                subtag: "DockerTagFailed",
+                message: `Failed to tag image "${source}" as "${target}".`,
+                detail: { bin, source, target, exitCode, stdout, stderr },
+              }),
+          ),
+        ),
+        Effect.asVoid,
+      );
+
     const list = (ancestor: string) =>
       run([
         "ps",
@@ -618,6 +646,7 @@ export const DockerLive = Layer.effect(
           Effect.withLogSpan(`docker: pull ${image.imageUri}`),
           Effect.asVoid,
         ),
+      tag: tagImage,
       validate: (tag) =>
         inspect(tag, "{{ len .Config.ExposedPorts }}").pipe(
           Effect.withLogSpan(`docker: inspect ${tag} for exposed ports`),

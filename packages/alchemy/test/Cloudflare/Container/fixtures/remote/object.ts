@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Docker from "@/Docker";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -23,7 +24,7 @@ export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
   Effect.gen(function* () {
     const bucket = yield* EnvBucket;
     return {
-      image: "mendhak/http-https-echo:latest",
+      image: Docker.RemoteImage({ source: "mendhak/http-https-echo:latest" }),
       vcpu: 1,
       memoryMib: 4096,
       observability: { logs: { enabled: true } },

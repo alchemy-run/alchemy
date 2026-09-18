@@ -3,6 +3,7 @@ import * as Drift from "@/Drift.ts";
 import * as Deploy from "@/Deploy.ts";
 import * as Destroy from "@/Destroy.ts";
 import { Docker, DockerLive } from "@/Docker/Docker.ts";
+import * as DockerResources from "@/Docker";
 import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as FileSystem from "effect/FileSystem";
@@ -29,6 +30,7 @@ import * as Schedule from "effect/Schedule";
 import { applications } from "./fixtures/identity/applications.ts";
 import {
   publicationApplications,
+  descriptorApplications,
   sharedApplication,
   recoveryApplications,
   historyApplications,
@@ -45,11 +47,21 @@ import {
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 const { test } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), DockerLive),
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    DockerResources.providers(),
+    DockerLive,
+  ),
 });
 const { test: registryCacheTest } = Test.make({
   // Each deployment must consult the registry, not a previous provider's map.
-  providers: Layer.fresh(Layer.mergeAll(Cloudflare.providers(), DockerLive)),
+  providers: Layer.fresh(
+    Layer.mergeAll(
+      Cloudflare.providers(),
+      DockerResources.providers(),
+      DockerLive,
+    ),
+  ),
 });
 
 const logLevel = Effect.provideService(
@@ -127,6 +139,91 @@ const patchRow = <A extends Record<string, any>>(
 // whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
 // themselves.
 describe.concurrent("ContainerApplication", () => {
+  test.provider(
+    "turns unnamed image descriptors into managed child resources",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const context = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-image-descriptors-",
+        });
+        yield* fs.writeFileString(
+          path.join(context, "Dockerfile"),
+          'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
+        );
+        yield* fs.writeFileString(path.join(context, "payload"), "first");
+        const descriptor = DockerResources.Image({ context });
+        const remoteDescriptor = DockerResources.RemoteImage({
+          source: "alpine:3.19",
+        });
+        expect(Effect.isEffect(descriptor)).toBe(false);
+        expect(Effect.isEffect(remoteDescriptor)).toBe(false);
+        expect("FQN" in descriptor).toBe(false);
+        expect("FQN" in remoteDescriptor).toBe(false);
+        expect("context" in DockerResources.Image).toBe(false);
+        expect("source" in DockerResources.RemoteImage).toBe(false);
+        const first = yield* stack.deploy(descriptorApplications(context));
+        expect(first.first?.configuration.image).toBe(
+          first.second.configuration.image,
+        );
+        expect(first.remote.hash?.digest).toBe(first.second.hash?.digest);
+        const unchanged = yield* stack.plan(descriptorApplications(context));
+        for (const name of [
+          "DescriptorFirst",
+          "DescriptorSecond",
+          "DescriptorRemote",
+        ])
+          expect(unchanged.resources[`${name}/Image`]).toMatchObject({
+            action: "noop",
+          });
+        yield* fs.writeFileString(path.join(context, "payload"), "changed");
+        const changedPlan = yield* stack.plan(descriptorApplications(context));
+        expect(changedPlan.resources["DescriptorSecond/Image"]).toMatchObject({
+          action: "update",
+        });
+        const changed = yield* stack.deploy(descriptorApplications(context));
+        expect(changed.second.configuration.image).not.toBe(
+          first.second.configuration.image,
+        );
+        expect(changed.remote.hash?.digest).toBe(changed.second.hash?.digest);
+        const retained = yield* stack.deploy(
+          descriptorApplications(context, false),
+        );
+        expect(retained.second.applicationId).toBe(
+          changed.second.applicationId,
+        );
+        expect(retained.remote.configuration.image).toBe(
+          changed.remote.configuration.image,
+        );
+        expect(
+          (yield* waitForImage(
+            retained.second.accountId,
+            retained.second.applicationId,
+            retained.second.configuration.image,
+          )).image,
+        ).toBe(retained.second.configuration.image);
+        yield* stack.destroy();
+        const gone = yield* Containers.getContainerApplication({
+          accountId: retained.second.accountId,
+          applicationId: retained.second.applicationId,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(true),
+          ),
+          Effect.repeat({
+            until: (gone) => gone,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(gone).toBe(true);
+      }),
+    { timeout: 120_000 },
+  );
+
   test.provider(
     "recovers an interrupted generated create and reconciles observed drift",
     (stack) =>
@@ -423,7 +520,7 @@ describe.concurrent("ContainerApplication", () => {
               }
               const updated = yield* stack.deploy(historyApplications(true));
               assert(updated.target);
-              expect(updated.target.configuration.image).not.toBe(
+              expect(updated.target.configuration.image).toBe(
                 initial.first.configuration.image,
               );
               expect(updated.target.hash?.digest).toBe(
@@ -498,6 +595,10 @@ describe.concurrent("ContainerApplication", () => {
         Effect.gen(function* () {
           yield* stack.destroy();
           const provider = yield* Provider.findProvider(ContainerPlatform);
+          const fs = yield* FileSystem.FileSystem;
+          const seed = yield* fs.makeTempDirectoryScoped({
+            prefix: "alchemy-publication-recovery-",
+          });
           const program = (includeSecond = false) =>
             Effect.gen(function* () {
               expect(yield* Provider.findProvider(ContainerPlatform)).toBe(
@@ -506,6 +607,7 @@ describe.concurrent("ContainerApplication", () => {
               return yield* recoveryApplications(
                 failure === "interrupted" ? 10 : 0,
                 includeSecond,
+                seed,
               );
             });
           if (failure === "failed") {
@@ -647,7 +749,10 @@ describe.concurrent("ContainerApplication", () => {
             path.join(context, ".gitignore"),
             "payload.txt\n",
           );
-          yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
+          yield* fs.writeFileString(
+            path.join(context, "payload.txt"),
+            `${root}/${kind}`,
+          );
           yield* fs.writeFileString(path.join(context, "input.txt"), "first");
           yield* fs.writeFileString(
             path.join(context, "Dockerfile"),
@@ -781,10 +886,15 @@ describe.concurrent("ContainerApplication", () => {
         const deploy = (id: string, repository = imageName) =>
           stack.deploy(
             Effect.gen(function* () {
+              const image = yield* DockerResources.Image("Image", {
+                build: { context, platform: "linux/amd64" },
+                publish: {
+                  repository: yield* Cloudflare.containerRepository(repository),
+                },
+              });
               return {
                 app: yield* Cloudflare.Container(id, {
-                  context,
-                  imageName: repository,
+                  image: image.ref,
                 }).Application,
               };
             }),
@@ -891,7 +1001,7 @@ describe.concurrent("ContainerApplication", () => {
         const otherContext = path.join(root, "second");
         for (const dir of [context, otherContext]) {
           yield* fs.makeDirectory(dir);
-          yield* fs.writeFileString(path.join(dir, "payload.txt"), "first");
+          yield* fs.writeFileString(path.join(dir, "payload.txt"), root);
           yield* fs.writeFileString(
             path.join(dir, "Dockerfile"),
             'FROM alpine:3.19\nCOPY payload.txt /payload.txt\nCMD ["sleep", "3600"]\n',
@@ -913,7 +1023,12 @@ describe.concurrent("ContainerApplication", () => {
           stack: Stack(
             stack.name,
             {
-              providers: Layer.fresh(Cloudflare.providers()),
+              providers: Layer.fresh(
+                Layer.mergeAll(
+                  Cloudflare.providers(),
+                  DockerResources.providers(),
+                ),
+              ),
               state: stack.state,
             },
             sharedApplication(otherContext, imageName),
@@ -1530,12 +1645,8 @@ describe.concurrent("ContainerApplication", () => {
     { timeout: 900_000 },
   );
 
-  // State written before #1282 carries only `hash.image`, and its live
-  // application runs the mutable `<repo>:<sourceHash>` tag. On the first
-  // reconcile after upgrading, the provider resolves that tag's digest
-  // through the registry, keeps the live tag reference when the rebuilt
-  // image matches, and persists the digest + configuration fingerprint
-  // through one normal update. Every later source-hash drift is then a noop.
+  // Legacy rows use a mutable tag. Migrate once to the image resource's
+  // immutable reference, then preserve it across equivalent source spellings.
   test.provider(
     "legacy state without a digest migrates through one update",
     (scratch) =>
@@ -1576,19 +1687,15 @@ describe.concurrent("ContainerApplication", () => {
           hash: { image: attr.hash!.image },
         }));
 
-        // Source-hash drift on the migrated row: the rebuilt digest is
-        // compared against the live tag's digest (resolved via the
-        // registry), the live reference is kept, and the digest +
-        // fingerprint are persisted through one update. That update still
-        // carries one rollout — the live configuration is Cloudflare-
-        // enriched, so the pre-fingerprint `deepEqual` misses — which is
-        // exactly what the fingerprint prevents from here on.
+        // Normalize the old tag reference and persist the configuration hash.
         const migrated = yield* deployImage(
           scratch,
           "docker.io/mendhak/http-https-echo:41",
         );
         expect(migrated.app.applicationId).toBe(applicationId);
-        expect(migrated.app.configuration.image).toBe(taggedRef);
+        expect(migrated.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
         expect(migrated.app.hash?.digest).toBe(first.app.hash?.digest);
         expect(migrated.app.hash?.configuration).toBeDefined();
         const after = yield* live(accountId, applicationId).pipe(
@@ -1598,18 +1705,20 @@ describe.concurrent("ContainerApplication", () => {
             times: 30,
           }),
         );
-        expect(after.image).toBe(taggedRef);
+        expect(after.image).toBe(first.app.configuration.image);
 
         // From here on, drift is free: no update, no rollout.
         const settled = yield* deployImage(
           scratch,
           "mendhak/http-https-echo:41",
         );
-        expect(settled.app.configuration.image).toBe(taggedRef);
-        expect(settled.app.hash?.image).not.toBe(migrated.app.hash?.image);
+        expect(settled.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
+        expect(settled.app.hash?.image).toBe(migrated.app.hash?.image);
         yield* Effect.sleep("10 seconds");
         expect(yield* live(accountId, applicationId)).toMatchObject({
-          image: taggedRef,
+          image: first.app.configuration.image,
           version: after.version,
         });
 

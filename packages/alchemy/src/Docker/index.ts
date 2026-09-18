@@ -3,6 +3,7 @@ export * from "./Context.ts";
 export * from "./Docker.ts";
 export * as Dockerfile from "./Dockerfile.ts";
 export * from "./Image.ts";
+export { RegistryAuth, ImageRegistryError } from "./ImageRegistry.ts";
 export * from "./Network.ts";
 export * from "./Providers.ts";
 export type { ImageRegistry } from "./Registry.ts";

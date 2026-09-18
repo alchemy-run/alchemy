@@ -1,20 +1,9 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { AlchemyContext } from "../../AlchemyContext.ts";
-import { getStableContextDir } from "../../Bundle/TempRoot.ts";
-import { hashDockerBuildInputs } from "../../Docker/BuildHash.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { Docker } from "../../Docker/Docker.ts";
-import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import * as Provider from "../../Provider.ts";
 import { type ResourceBinding } from "../../Resource.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -26,115 +15,17 @@ import type {
   AnyContainerApplicationProps,
   ContainerApplication,
 } from "./ContainerApplication.ts";
-import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import {
-  buildFinalDockerfile,
-  bundleContainerProgram,
-  containerEnvPreamble,
   createContainerApplicationName,
   makeContainerEnv,
-  materializeInlineDockerfileContext,
-  validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { retryContainerPublication } from "./ContainerPublication.ts";
-
-/**
- * The image source resolved from a {@link ContainerApplicationProps}. Selects
- * one of three strategies used by `buildAndPushImage`:
- *
- * - `effectful` — bundle an Effect-native `main` and build a generated image.
- * - `external` — build a user-supplied Dockerfile against a context directory.
- * - `remote` — pull a pre-built remote image and re-push it to Cloudflare.
- * - `prepushed` — the image already lives in the target registry; use the
- *   reference as-is with no docker pull/build/push at all.
- */
-type ImageBuild =
-  | {
-      readonly kind: "effectful";
-      readonly files: ReadonlyArray<{ path: string; content: Uint8Array }>;
-    }
-  | {
-      readonly kind: "external";
-      readonly context: string;
-      readonly dockerfile: string;
-    }
-  | {
-      readonly kind: "remote";
-      readonly image: string;
-    }
-  | {
-      readonly kind: "prepushed";
-      readonly image: string;
-    };
-
-/**
- * Whether an image reference already points at the target registry host —
- * e.g. `registry.cloudflare.com/<accountId>/repo@sha256:...` pushed by CI.
- * Such references are deployed as-is; there is nothing to pull or push.
- */
-const isTargetRegistryRef = (image: string, registryId: string) =>
-  image.startsWith(`${registryId}/`);
-
-/**
- * Insert the account namespace into a Cloudflare-registry reference that
- * omits it (`registry.cloudflare.com/app:tag` →
- * `registry.cloudflare.com/<accountId>/app:tag`), mirroring wrangler's
- * `resolveImageName`. Custom registries are left untouched — the account
- * namespace rule is specific to Cloudflare's managed registry.
- */
-const normalizePrepushedRef = (
-  image: string,
-  registryId: string,
-  accountId: string,
-) => {
-  if (registryId !== "registry.cloudflare.com") return image;
-  const rest = image.slice(registryId.length + 1);
-  const first = rest.split("/")[0];
-  return first !== undefined && /^[a-f0-9]{32}$/.test(first)
-    ? image
-    : `${registryId}/${accountId}/${rest}`;
-};
-
-const RegistryDigest = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^[a-z0-9]+:[a-f0-9]{64}$/i)),
-);
-const isRegistryDigest = Schema.is(RegistryDigest);
-
-class ContainerRegistryError extends Schema.TaggedError<ContainerRegistryError>()(
-  "ContainerRegistryError",
-  {
-    reason: Schema.Literals([
-      "CredentialsMissingUsername",
-      "ImageOutsideRegistry",
-      "InvalidImageReference",
-      "ImageNotFound",
-      "ManifestRequestFailed",
-      "InvalidManifestDigest",
-    ]),
-    message: Schema.String,
-    imageRef: Schema.optional(Schema.String),
-    cause: Schema.optional(Schema.Defect({ includeStack: true })),
-  },
-) {}
-
-const digestFromImageRef = (imageRef: string) => {
-  const separator = imageRef.lastIndexOf("@");
-  if (separator === -1) return undefined;
-  const digest = imageRef.slice(separator + 1);
-  return isRegistryDigest(digest) ? digest : undefined;
-};
+import { resolveContainerImage } from "./ContainerImage.ts";
 
 export const LiveContainerProvider = () =>
   Provider.effect(
     ContainerPlatform,
     Effect.gen(function* () {
-      const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const docker = yield* Docker;
-      const http = yield* HttpClient.HttpClient;
-
       const telemetry = yield* CloudflareLogs;
 
       const createApplicationName = createContainerApplicationName;
@@ -251,510 +142,6 @@ export const LiveContainerProvider = () =>
           affinities: normalizeNulls(affinities),
           configuration,
         });
-      });
-
-      const registryCredentials = Effect.fn("registryCredentials")(function* (
-        props: AnyContainerApplicationProps,
-        permissions: Array<"pull" | "push">,
-      ) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const registryId = props.registryId ?? "registry.cloudflare.com";
-        const credentials =
-          yield* Containers.createContainerRegistryCredentials({
-            accountId,
-            registryId,
-            permissions,
-            expirationMinutes: 60,
-          });
-        const username = credentials.username ?? credentials.user;
-        if (!username) {
-          return yield* new ContainerRegistryError({
-            reason: "CredentialsMissingUsername",
-            message: `Cloudflare registry ${registryId} did not return a username`,
-          });
-        }
-        return {
-          server: registryId,
-          username,
-          password: credentials.password,
-        };
-      });
-
-      const resolveRegistryDigest = Effect.fn("resolveRegistryDigest")(
-        function* (
-          imageRef: string,
-          credentials: {
-            server: string;
-            username: string;
-            password: string | Redacted.Redacted<string>;
-          },
-        ) {
-          const embeddedDigest = digestFromImageRef(imageRef);
-          if (embeddedDigest !== undefined) return embeddedDigest;
-
-          const registryHost = credentials.server
-            .replace(/^https?:\/\//, "")
-            .replace(/\/$/, "");
-          if (!imageRef.startsWith(`${registryHost}/`)) {
-            return yield* new ContainerRegistryError({
-              reason: "ImageOutsideRegistry",
-              message: `Cannot resolve an image outside registry ${registryHost}`,
-              imageRef,
-            });
-          }
-          const repositoryAndTag = imageRef.slice(registryHost.length + 1);
-          const tagSeparator = repositoryAndTag.lastIndexOf(":");
-          if (tagSeparator <= repositoryAndTag.lastIndexOf("/")) {
-            return yield* new ContainerRegistryError({
-              reason: "InvalidImageReference",
-              message: "Container image reference has no tag or digest",
-              imageRef,
-            });
-          }
-          const repository = repositoryAndTag.slice(0, tagSeparator);
-          const tag = repositoryAndTag.slice(tagSeparator + 1);
-          const manifestUrl = `https://${registryHost}/v2/${repository
-            .split("/")
-            .map(encodeURIComponent)
-            .join("/")}/manifests/${encodeURIComponent(tag)}`;
-          const request = HttpClientRequest.head(manifestUrl).pipe(
-            HttpClientRequest.basicAuth(
-              credentials.username,
-              credentials.password,
-            ),
-            HttpClientRequest.setHeader(
-              "Accept",
-              "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json",
-            ),
-          );
-          const response = yield* http.execute(request).pipe(
-            Effect.mapError(
-              () =>
-                new ContainerRegistryError({
-                  reason: "ManifestRequestFailed",
-                  message: "Failed to resolve the container registry digest",
-                  imageRef,
-                }),
-            ),
-          );
-          if (response.status === 404) {
-            return yield* new ContainerRegistryError({
-              reason: "ImageNotFound",
-              message: "Container image is not published",
-              imageRef,
-            });
-          }
-          if (response.status < 200 || response.status >= 300) {
-            return yield* new ContainerRegistryError({
-              reason: "ManifestRequestFailed",
-              message: `Container registry returned HTTP ${response.status}`,
-              imageRef,
-            });
-          }
-          return yield* Schema.decodeUnknownEffect(RegistryDigest)(
-            response.headers["docker-content-digest"],
-          ).pipe(
-            Effect.mapError(
-              (cause) =>
-                new ContainerRegistryError({
-                  reason: "InvalidManifestDigest",
-                  message: "Registry response did not include a valid digest",
-                  imageRef,
-                  cause,
-                }),
-            ),
-          );
-        },
-      );
-
-      const resolvePublishedImageRef = Effect.fn("resolvePublishedImageRef")(
-        function* (props: AnyContainerApplicationProps, imageRef: string) {
-          let digest = digestFromImageRef(imageRef);
-          if (digest === undefined) {
-            const credentials = yield* registryCredentials(props, ["pull"]);
-            digest = yield* resolveRegistryDigest(imageRef, credentials);
-          }
-          return {
-            imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
-            digest,
-          };
-        },
-      );
-
-      const computeImage = Effect.fn(function* (
-        id: string,
-        props: AnyContainerApplicationProps,
-        env: Record<string, string | Redacted.Redacted<string>>,
-      ) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const name = yield* createApplicationName(id, props.name);
-        const registryId = props.registryId ?? "registry.cloudflare.com";
-        const repositoryName = (props.imageName ?? name).toLowerCase();
-        const makeRef = (imageHash: string) =>
-          `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
-
-        yield* validateContainerImageProps(props);
-
-        // Variant 1 — Effect-native program. Bundle `main` and build a
-        // generated Dockerfile around it; the environment preamble comes
-        // from `image` / inline `dockerfile` (default: the runtime base).
-        if (props.main) {
-          const runtime = props.runtime ?? "bun";
-          const { files, hash: bundleHash } = yield* bundleContainerProgram({
-            id,
-            main: props.main,
-            runtime,
-            handler: props.handler,
-            isExternal: props.isExternal,
-            external: props.external,
-            build: props.build,
-          });
-          const finalDockerfile = buildFinalDockerfile(
-            yield* containerEnvPreamble(props),
-            runtime,
-            props.external,
-            props.autoInstallExternals,
-          );
-          const imageHash = (yield* sha256Object({
-            bundleHash,
-            dockerfile: finalDockerfile,
-            imageName: props.imageName?.toLowerCase(),
-          })).slice(0, 16);
-          // The dev image is the deterministic build-context directory that
-          // `buildAndPushImage` materializes into (and that the local provider
-          // regenerates on the next `alchemy dev`). We persist the path here so
-          // a dev run after a live deploy has an image to `docker build` — the
-          // live deploy pushes to Cloudflare's registry, which the local
-          // `workerd` runtime can't pull. See `prepareContainerBuildContext`.
-          const contextDir = yield* getStableContextDir(
-            process.cwd(),
-            dotAlchemy,
-            `${id}-container`,
-          );
-          return {
-            build: { kind: "effectful" as const, files },
-            imageRef: makeRef(imageHash),
-            imageHash,
-            dev: {
-              context: path.relative(process.cwd(), contextDir),
-              dockerfile: "Dockerfile",
-              env,
-            },
-          };
-        }
-
-        // Variant 2 — pre-built remote image. The image reference is the
-        // identity; we pull and re-push it without building anything.
-        if (props.image) {
-          const imageHash = (yield* sha256Object({
-            image: props.image,
-            imageName: props.imageName?.toLowerCase(),
-          })).slice(0, 16);
-          // Already in the target registry (e.g. pushed by CI as a digest
-          // reference) — deploy the reference as-is and skip the docker
-          // pull/tag/push round-trip entirely.
-          if (isTargetRegistryRef(props.image, registryId)) {
-            const prepushedRef = normalizePrepushedRef(
-              props.image,
-              registryId,
-              accountId,
-            );
-            return {
-              build: { kind: "prepushed" as const, image: prepushedRef },
-              imageRef: prepushedRef,
-              imageHash,
-              // The local runtime pulls this image directly (no build
-              // context); pulling from the Cloudflare registry requires a
-              // local `docker login`.
-              dev: { imageUri: prepushedRef, env },
-            };
-          }
-          return {
-            build: { kind: "remote" as const, image: props.image },
-            imageRef: makeRef(imageHash),
-            imageHash,
-            // The local runtime pulls this image directly (no build context).
-            dev: { imageUri: props.image, env },
-          };
-        }
-
-        // Variant 3a — inline Dockerfile content (`Dockerfile.inline`), no
-        // build context. Materialize the content into a stable generated
-        // context directory and build that.
-        if (
-          props.dockerfile !== undefined &&
-          isInlineDockerfile(props.dockerfile)
-        ) {
-          const content = props.dockerfile.content;
-          if (typeof content !== "string") {
-            return yield* Effect.die(
-              new Error(
-                "Inline `dockerfile` content is an unresolved Output at image-build time — its dependencies have not resolved yet (e.g. during precreate of a circular binding). Break the cycle or inline the resolved value.",
-              ),
-            );
-          }
-          const { context, dockerfile } =
-            yield* materializeInlineDockerfileContext(id, content);
-          const imageHash = (yield* sha256Object({
-            dockerfile: content,
-            imageName: props.imageName?.toLowerCase(),
-          })).slice(0, 16);
-          return {
-            build: { kind: "external" as const, context, dockerfile },
-            imageRef: makeRef(imageHash),
-            imageHash,
-            // The local runtime builds the same materialized context.
-            dev: {
-              context: path.relative(process.cwd(), context),
-              dockerfile: "Dockerfile",
-              env,
-            },
-          };
-        }
-
-        // Variant 3b — user-supplied Dockerfile path + build context
-        // directory.
-        const context = yield* fs.realPath(props.context ?? ".");
-        const dockerfile = props.dockerfile
-          ? yield* fs.realPath(props.dockerfile)
-          : path.join(context, "Dockerfile");
-        // Hash what Docker can consume, including gitignored files and file
-        // modes, but excluding ancestor lockfiles outside the build context.
-        const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform },
-          "effective",
-        );
-        const imageHash = (yield* sha256Object({
-          contextHash,
-          imageName: props.imageName?.toLowerCase(),
-        })).slice(0, 16);
-        return {
-          build: { kind: "external" as const, context, dockerfile },
-          imageRef: makeRef(imageHash),
-          imageHash,
-          // The local runtime builds the user's Dockerfile against the same
-          // (already real-path'd) context directory.
-          dev: {
-            context: path.relative(process.cwd(), context),
-            dockerfile: path.relative(context, dockerfile),
-            env,
-          },
-        };
-      });
-
-      const publicationPlatform = "linux/amd64";
-      const publishImage = Effect.fn("publishImage")(function* (
-        id: string,
-        props: AnyContainerApplicationProps,
-        build: ImageBuild,
-        imageRef: string,
-        session?: { note: (message: string) => Effect.Effect<void> },
-      ) {
-        const platform = publicationPlatform;
-
-        if (build.kind === "prepushed") {
-          // The reference already lives in the target registry — nothing to
-          // pull, build, or push.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: using pre-pushed ${imageRef}`,
-          );
-          return yield* resolvePublishedImageRef(props, imageRef);
-        }
-
-        const credentials = yield* registryCredentials(props, ["pull", "push"]);
-
-        if (props.imageName !== undefined && build.kind !== "remote") {
-          const digest = yield* resolveRegistryDigest(
-            imageRef,
-            credentials,
-          ).pipe(
-            Effect.catchTag("ContainerRegistryError", (error) =>
-              error.reason === "ImageNotFound"
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
-            ),
-          );
-          if (digest !== undefined) {
-            const published = `${repositoryFromImageRef(imageRef)}@${digest}`;
-            yield* Effect.logInfo(
-              `Cloudflare Container image: registry cache hit ${published}`,
-            );
-            if (session) {
-              yield* session.note(
-                `Reusing registry container image ${published}.`,
-              );
-            }
-            return { imageRef: published, digest };
-          }
-        }
-        const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
-        const cacheOptions =
-          props.imageName === undefined
-            ? {}
-            : {
-                "cache-from": [`type=registry,ref=${cacheRef}`],
-                "cache-to": ["type=inline"],
-              };
-
-        if (build.kind === "remote") {
-          // Pull the pre-built image and re-tag it to the Cloudflare registry
-          // reference; nothing is built locally.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: pulling ${build.image}`,
-          );
-          if (session) {
-            yield* session.note(`Pulling container image ${build.image}...`);
-          }
-          yield* docker.image.pull(build.image, platform);
-          yield* docker.image.tag(build.image, imageRef);
-          yield* Effect.logInfo(
-            `Cloudflare Container image: pushing ${imageRef}`,
-          );
-          if (session) {
-            yield* session.note(`Pushing container image ${imageRef}...`);
-          }
-          // Push the same platform that was pulled. A containerd image store
-          // may also hold a host-architecture variant under this tag.
-          yield* docker.image
-            .push(imageRef, credentials, platform)
-            .pipe(retryContainerPublication);
-        } else if (build.kind === "external") {
-          // Build the user's Dockerfile directly against their context dir so
-          // relative `COPY`/`ADD` paths resolve as the author intended.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: building ${imageRef}`,
-          );
-          if (session) {
-            yield* session.note(`Building container image ${imageRef}...`);
-          }
-          yield* docker.image
-            .build(
-              {
-                ...cacheOptions,
-                tag:
-                  props.imageName === undefined
-                    ? imageRef
-                    : [imageRef, cacheRef],
-                context: build.context,
-                platform,
-                file: build.dockerfile,
-              },
-              undefined,
-              credentials,
-            )
-            .pipe(retryContainerPublication);
-        } else {
-          // Effect-native program: materialize the generated Dockerfile and
-          // bundled chunks into a stable staging dir, then build.
-          yield* Effect.logInfo(
-            `Cloudflare Container image: building ${imageRef}`,
-          );
-          if (session) {
-            yield* session.note(`Building container image ${imageRef}...`);
-          }
-          const runtime = props.runtime ?? "bun";
-          const contextDir = yield* getStableContextDir(
-            process.cwd(),
-            dotAlchemy,
-            `${id}-container`,
-          );
-          const finalDockerfile = buildFinalDockerfile(
-            yield* containerEnvPreamble(props),
-            runtime,
-            props.external,
-            props.autoInstallExternals,
-          );
-          yield* docker.materialize({
-            context: contextDir,
-            dockerfile: finalDockerfile,
-            files: build.files.map((f, i) => ({
-              path: i === 0 ? "index.mjs" : f.path,
-              content: f.content,
-            })),
-          });
-          yield* docker.image
-            .build(
-              {
-                ...cacheOptions,
-                tag:
-                  props.imageName === undefined
-                    ? imageRef
-                    : [imageRef, cacheRef],
-                context: contextDir,
-                platform,
-              },
-              undefined,
-              credentials,
-            )
-            .pipe(retryContainerPublication);
-        }
-
-        // Resolve the pushed manifest digest from the registry itself rather
-        // than scraping `docker push` output: one mechanism for every image
-        // source (local build, remote re-push, pre-pushed tag), and the
-        // registry is authoritative for what the application will pull.
-        const digest = yield* resolveRegistryDigest(imageRef, credentials);
-        return {
-          imageRef: `${repositoryFromImageRef(imageRef)}@${digest}`,
-          digest,
-        };
-      });
-
-      // Applications with identical image inputs can share one immutable
-      // registry reference. Keep publication state within this provider instance.
-      const publications = new Map<string, ReturnType<typeof publishImage>>();
-      const buildAndPushImage = Effect.fn("buildAndPushImage")(function* (
-        id: string,
-        props: AnyContainerApplicationProps,
-        build: ImageBuild,
-        imageRef: string,
-        imageHash: string,
-        previousImageRef: string | undefined,
-        session?: { note: (message: string) => Effect.Effect<void> },
-      ) {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const key = JSON.stringify([
-          accountId,
-          props.registryId ?? "registry.cloudflare.com",
-          props.imageName,
-          publicationPlatform,
-          build.kind,
-          imageHash,
-        ]);
-        const candidate: ReturnType<typeof publishImage> = yield* Effect.cached(
-          publishImage(id, props, build, imageRef, session).pipe(
-            Effect.onExit((exit) =>
-              Exit.isFailure(exit)
-                ? Effect.sync(() => {
-                    // A failed or interrupted publisher must not poison a
-                    // later attempt, or remove an entry that replaced it.
-                    if (publications.get(key) === candidate) {
-                      publications.delete(key);
-                    }
-                  })
-                : Effect.void,
-            ),
-          ),
-        );
-        const publication = yield* Effect.sync(() => {
-          // Allocate atomically: concurrent callers execute only the winning
-          // candidate, sharing both its in-flight work and successful result.
-          const existing = publications.get(key);
-          if (existing) return existing;
-          publications.set(key, candidate);
-          return candidate;
-        });
-        const published = yield* publication;
-        return {
-          ...published,
-          // Previous image identity belongs to each application, not the
-          // shared image publication. Resolve it separately for every caller.
-          previousDigest:
-            previousImageRef === undefined
-              ? undefined
-              : (yield* resolvePublishedImageRef(props, previousImageRef))
-                  .digest,
-        };
       });
 
       const maybeCreateRollout = Effect.fn(function* ({
@@ -960,33 +347,10 @@ export const LiveContainerProvider = () =>
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
         const env = makeContainerEnv(news, accountId, bindings);
-        const { build, imageRef, imageHash, dev } = yield* computeImage(
-          id,
-          news,
-          env,
-        );
-        let deploymentImageRef = existing.configuration.image;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined
-              ? existing.configuration.image
-              : undefined,
-            session,
-          );
-          const existingDigest =
-            existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.imageName === undefined
-              ? existing.configuration.image
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
+        const { imageRef, imageHash, dev, digest } =
+          yield* resolveContainerImage(news, env);
+        const deploymentImageRef = imageRef;
+        const imageDigest = digest;
         const configuration = desiredConfiguration(
           news,
           env,
@@ -1182,77 +546,17 @@ export const LiveContainerProvider = () =>
             return { action: "replace" } as const;
           }
 
-          const { imageHash, dev } = yield* computeImage(
-            id,
+          const { imageRef, imageHash, dev } = yield* resolveContainerImage(
             news,
             makeContainerEnv(news, accountId, newBindings),
           );
-          if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
+          if (
+            imageRef !== output.configuration.image ||
+            imageHash !== output.hash?.image ||
+            !deepEqual(dev, output.dev)
+          ) {
             return { action: "update" } as const;
           }
-        }),
-        precreate: Effect.fn(function* ({ id, news = {}, session }) {
-          const name = yield* createApplicationName(id, news.name);
-          yield* Effect.logInfo(
-            `Cloudflare Container precreate: starting ${name}`,
-          );
-
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const env = makeContainerEnv(news, accountId);
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
-          const configuration = desiredConfiguration(
-            news,
-            env,
-            published.imageRef,
-          );
-          const configurationHash = yield* applicationConfigurationHash(
-            scalingDefaults(news),
-            news.affinities,
-            configuration,
-          );
-
-          // Precreate intentionally omits the Durable Object attachment so the
-          // worker can bind to this application id and break the circular
-          // dependency. The final create step recreates the application with the
-          // resolved namespace when needed.
-          const result = yield* createApplication({
-            id,
-            news,
-            // Precreate runs before the engine resolves bindings (that is what
-            // breaks the worker <-> container cycle), so binding-injected env
-            // lands on the following reconcile.
-            bindings: [],
-            name,
-            configuration,
-            durableObjects: undefined,
-            session: {
-              ...session,
-              note: (message) =>
-                session.note(message.replace("Creating", "Pre-creating")),
-            },
-          });
-          return {
-            ...("applicationId" in result ? result : toAttributes(result)),
-            hash: {
-              image: imageHash,
-              digest: published.digest,
-              configuration: configurationHash,
-            },
-            dev,
-          };
         }),
         reconcile: Effect.fn(function* ({
           id,
@@ -1333,16 +637,11 @@ export const LiveContainerProvider = () =>
               ),
             );
           }
-          const { build, imageRef, imageHash, dev } = yield* computeImage(
-            id,
-            news,
-            env,
-          );
+          const { imageRef, imageHash, dev, digest } =
+            yield* resolveContainerImage(news, env);
 
-          // Special case: precreate produced an application without the
-          // durable object attachment, but the real reconcile now has one.
-          // The DO attachment is immutable, so we delete
-          // and recreate. Adoption-by-namespace is preferred when an app
+          // The DO attachment is immutable, so a changed attachment
+          // requires deleting and recreating the application. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
           // An unresolved declaration is not an intentional removal.
           if (
@@ -1377,29 +676,8 @@ export const LiveContainerProvider = () =>
                 });
               }
             }
-            let deploymentImageRef = existing.configuration.image;
-            let imageDigest = existing.hash?.digest;
-            if (imageHash !== existing.hash?.image) {
-              const published = yield* buildAndPushImage(
-                id,
-                news,
-                build,
-                imageRef,
-                imageHash,
-                existing.hash?.digest === undefined
-                  ? existing.configuration.image
-                  : undefined,
-                session,
-              );
-              const existingDigest =
-                existing.hash?.digest ?? published.previousDigest;
-              deploymentImageRef =
-                published.digest === existingDigest &&
-                news.imageName === undefined
-                  ? existing.configuration.image
-                  : published.imageRef;
-              imageDigest = published.digest;
-            }
+            const deploymentImageRef = imageRef;
+            const imageDigest = digest;
             const configuration = desiredConfiguration(
               news,
               env,
@@ -1451,9 +729,7 @@ export const LiveContainerProvider = () =>
 
           // Sync — application exists with correct DO attachment. Apply
           // the desired configuration (image + scheduling + secrets, etc.)
-          // through the upsert path, which builds and pushes the image
-          // only when the hash changed and creates a rollout if the
-          // configuration drifted.
+          // through the upsert path, creating a rollout when configuration drifted.
           if (existing) {
             return yield* upsertApplication({
               id,
@@ -1467,24 +743,10 @@ export const LiveContainerProvider = () =>
             });
           }
 
-          // Ensure — no application exists. Build and push the image,
-          // then create. `createApplication` itself tolerates concurrent
+          // Ensure — no application exists. The image resource is already ready. `createApplication` itself tolerates concurrent
           // creates by adopting an existing application with the same
           // name or namespace.
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
-          const configuration = desiredConfiguration(
-            news,
-            env,
-            published.imageRef,
-          );
+          const configuration = desiredConfiguration(news, env, imageRef);
           const configurationHash = yield* applicationConfigurationHash(
             scalingDefaults(news),
             news.affinities,
@@ -1503,7 +765,7 @@ export const LiveContainerProvider = () =>
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: {
               image: imageHash,
-              digest: published.digest,
+              digest: digest,
               configuration: configurationHash,
             },
             dev,

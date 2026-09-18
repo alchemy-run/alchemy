@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Docker from "@/Docker";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -12,7 +13,7 @@ export class ExternalContainer extends Cloudflare.Container<ExternalContainer>()
     // `path.join(undefined, …)` there throws a ScriptStartupError at module
     // load. `context` is only consumed at build time, so a plain string is
     // sufficient and never evaluates `path.join` at runtime.
-    context: `${import.meta.dirname}/context`,
+    image: Docker.Image({ context: `${import.meta.dirname}/context` }),
     observability: { logs: { enabled: true } },
   },
 ) {}

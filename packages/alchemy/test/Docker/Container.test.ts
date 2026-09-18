@@ -163,7 +163,7 @@ describe("Docker.Container", { concurrent: false }, () => {
             "traefik.http.services.web.loadbalancer.server.port": "80",
           },
           stopTimeout: "10 minutes",
-          start: true,
+          start: false,
         }),
       );
 

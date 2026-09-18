@@ -15,6 +15,7 @@ import { DurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { Worker } from "../Workers/Worker.ts";
 import { ContainerTypeId } from "./Container.ts";
+import { composeContainerImage } from "./ContainerImage.ts";
 import type {
   ContainerApplication,
   ContainerServices,
@@ -58,6 +59,7 @@ export const ContainerPlatform: Platform<
 > = Platform(
   "Cloudflare.Container",
   {
+    transformProps: composeContainerImage,
     createRuntimeContext: (id: string): ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};

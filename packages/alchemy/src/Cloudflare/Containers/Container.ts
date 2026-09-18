@@ -290,7 +290,8 @@ export type Container<Id extends string = string> = Named<Id> & {
  *
  * - `main` — bundle your Effect program into a generated image.
  * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — pull a pre-built remote image and re-push it.
+ * - `image` — consume a reference or a `Docker.Image` / `Docker.RemoteImage`
+ *   descriptor, creating a managed child image without a separate image name.
  *
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
@@ -328,17 +329,33 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
- * **Example:** Reuse builds across stages
+ * **Example:** Build an unnamed image
  * ```typescript
- * export class Web extends Cloudflare.Container<Web>()("Web", {
- *   context: `${import.meta.dirname}/context`,
- *   imageName: "web",
- * }) {}
+ * const web = yield* Cloudflare.Container("Web", {
+ *   image: Docker.Image({ context: "./web" }),
+ * }).Application;
  * ```
  *
- * Applications in the same account reuse a published image when their build
- * inputs match. Changed inputs build with the shared inline layer cache.
- * Pin base images and downloaded dependencies when using this option.
+ * The no-ID helper returns plain data, not an Effect or a resource. Container
+ * creates the real `Web/Image` child resource, which performs the build and
+ * publication. Use `Docker.RemoteImage({ source: "nginx:alpine" })` for an
+ * existing image. The named overload remains useful for explicitly shared images.
+ *
+ * **Example:** Share a Docker image across applications and stages
+ * ```typescript
+ * const image = yield* Docker.Image("WebImage", {
+ *   build: { context: "./web", platform: "linux/amd64" },
+ *   publish: {
+ *     repository: yield* Cloudflare.containerRepository("web"),
+ *   },
+ * });
+ * const web = yield* Cloudflare.Container("Web", { image: image.ref }).Application;
+ * ```
+ *
+ * `Docker.Image` owns building, publication, and registry reuse. Containers
+ * consume its immutable `ref`. Matching build inputs in the same repository
+ * reuse the published image without invoking a builder. Pin base images and
+ * downloaded dependencies because they are outside the build-context hash.
  *
  * **Example:** Remote image (`image`)
  * ```typescript
