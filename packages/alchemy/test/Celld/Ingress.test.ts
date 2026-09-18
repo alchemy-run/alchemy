@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Celld from "@/Celld";
+import { Application } from "@/Celld/Application.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
@@ -162,8 +163,8 @@ const probeRedirect = (url: string) =>
 // the EXISTING node service), an ACM certificate DNS-validated through
 // `Cloudflare.CloudflareDns()` on the standing test zone, and the domain
 // CNAME declared through the same seam. Gated like an entitlement: set
-// ALCHEMY_TEST_FLEETS=1 to run it (first deploy builds the node image and
-// waits out Fargate placement, target health AND certificate issuance).
+// ALCHEMY_TEST_FLEETS=1 to run it (cold provisioning waits for Fargate
+// placement, target health AND certificate issuance).
 describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
   "celld ingress (public ALB + domain)",
   () => {
@@ -172,10 +173,17 @@ describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
         yield* sharedStack.destroy();
         const { url } = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* IngressCells;
-            const worker = yield* IngressWorker;
-            return { url: worker.url };
-          }).pipe(Effect.provide(IngressWorkerLive)),
+            const application = yield* Application("IngressApp", {
+              entrypoint: IngressWorker,
+            });
+            return { url: application.url };
+          }).pipe(
+            Effect.provide(
+              IngressWorkerLive.pipe(
+                Layer.provideMerge(Celld.Fleet.layer(IngressCells)),
+              ),
+            ),
+          ),
         );
         expect(url).toBeTruthy();
         workerUrl = String(url).replace(/\/+$/, "");
@@ -193,7 +201,7 @@ describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
         // domain (see above) — every test below may then use `workerUrl`.
         yield* resolveDoh(INGRESS_DOMAIN, "A");
       }),
-      // Image build + Fargate placement + ALB target health + ACM DNS
+      // Fleet provisioning + ALB target health + ACM DNS
       // validation (issuance alone can take 10+ minutes).
       { timeout: 1_500_000 },
     );

@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import type { WorkflowExport as CelldWorkflowExport } from "../../Celld/Workflows/Workflow.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -33,7 +34,10 @@ export interface WorkerRuntimeContext extends Serverless.FunctionContext {
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-  const exports: Record<string, DurableObjectExport | WorkflowExport> = {};
+  const exports: Record<
+    string,
+    DurableObjectExport | WorkflowExport | CelldWorkflowExport
+  > = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
 

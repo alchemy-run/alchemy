@@ -9,11 +9,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { conformanceFetch } from "../../../Cloudflare/Workers/conformance/routes.ts";
 import { Counter, CounterLive } from "./counter.ts";
-import { INGRESS_DOMAIN, IngressCells, IngressWorker } from "./fleet.ts";
+import { INGRESS_DOMAIN, IngressWorker } from "./fleet.ts";
 
 export default IngressWorker.make(
   {
-    fleet: IngressCells,
     main: import.meta.url,
     expose: "public",
     domain: INGRESS_DOMAIN,

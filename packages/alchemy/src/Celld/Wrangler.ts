@@ -2,9 +2,7 @@
  * Wrangler-project generation for Celld fleet deploys.
  *
  * `celld deploy` consumes a wrangler.jsonc project and REJECTS unknown keys,
- * so {@link renderWranglerJson} emits only the keys celld documents support
- * for: `name`, `main`, `compatibility_date`, `compatibility_flags`,
- * `durable_objects`, `migrations`, `vars`.
+ * so {@link renderWranglerJson} emits only v0.5-supported deployment keys.
  *
  * Durable Object class migrations follow the wrangler convention: the config
  * carries the FULL migration history (each entry tagged `v1`, `v2`, …), and
@@ -17,6 +15,12 @@
  */
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type {
+  CelldAssetsConfig,
+  CelldBinding,
+  CelldContainerConfig,
+  CelldQueueConsumer,
+} from "./DeploymentConfig.ts";
 
 export interface CelldMigration {
   readonly tag: string;
@@ -170,12 +174,110 @@ export interface WranglerRenderOptions {
   readonly durableObjects: readonly FleetDurableObjectBinding[];
   readonly migrations: readonly CelldMigration[];
   readonly vars?: Record<string, string>;
+  readonly bindings?: readonly CelldBinding[];
+  readonly crons?: readonly string[];
+  readonly queueConsumers?: readonly CelldQueueConsumer[];
+  readonly containers?: readonly CelldContainerConfig[];
+  readonly assets?: CelldAssetsConfig;
+  /** Upload an already-flat JavaScript entry without invoking esbuild. */
+  readonly noBundle?: boolean;
 }
 
-/**
- * Render the wrangler.json for a fleet deploy. ONLY celld-supported keys are
- * emitted — an unknown key fails the deploy.
- */
+const renderBindings = (bindings: readonly CelldBinding[]) => {
+  const kv = bindings.filter((binding) => binding.type === "kv_namespace");
+  const d1 = bindings.filter((binding) => binding.type === "d1");
+  const r2 = bindings.filter((binding) => binding.type === "r2_bucket");
+  const workflows = bindings.filter((binding) => binding.type === "workflow");
+  const services = bindings.filter((binding) => binding.type === "service");
+  const loaders = bindings.filter(
+    (binding) => binding.type === "worker_loader",
+  );
+  return {
+    ...(kv.length
+      ? {
+          kv_namespaces: kv.map((b) => ({
+            binding: b.name,
+            id: b.namespaceId,
+          })),
+        }
+      : {}),
+    ...(d1.length
+      ? {
+          d1_databases: d1.map((b) => ({
+            binding: b.name,
+            database_id: b.id,
+            database_name: b.databaseName ?? b.id,
+          })),
+        }
+      : {}),
+    ...(r2.length
+      ? {
+          r2_buckets: r2.map((b) => ({
+            binding: b.name,
+            bucket_name: b.bucketName,
+          })),
+        }
+      : {}),
+    ...(workflows.length
+      ? {
+          workflows: workflows.map((b) => ({
+            binding: b.name,
+            name: b.workflowName,
+            class_name: b.className,
+          })),
+        }
+      : {}),
+    ...(services.length
+      ? {
+          services: services.map((b) => ({
+            binding: b.name,
+            service: b.service,
+            ...(b.entrypoint ? { entrypoint: b.entrypoint } : {}),
+          })),
+        }
+      : {}),
+    ...(loaders.length
+      ? { worker_loaders: loaders.map((b) => ({ binding: b.name })) }
+      : {}),
+  };
+};
+
+const renderQueues = (options: WranglerRenderOptions) => {
+  const producers = (options.bindings ?? []).filter(
+    (binding) => binding.type === "queue",
+  );
+  const consumers = options.queueConsumers ?? [];
+  return producers.length || consumers.length
+    ? {
+        queues: {
+          ...(producers.length
+            ? {
+                producers: producers.map((b) => ({
+                  binding: b.name,
+                  queue: b.queueName,
+                  delivery_delay: b.deliveryDelay,
+                })),
+              }
+            : {}),
+          ...(consumers.length
+            ? {
+                consumers: consumers.map((c) => ({
+                  queue: c.queue,
+                  max_batch_size: c.maxBatchSize,
+                  max_batch_timeout: c.maxBatchTimeout,
+                  max_retries: c.maxRetries,
+                  dead_letter_queue: c.deadLetterQueue,
+                  max_concurrency: c.maxConcurrency,
+                  retry_delay: c.retryDelay,
+                })),
+              }
+            : {}),
+        },
+      }
+    : {};
+};
+
+/** Render only configuration keys accepted by Celld v0.5.0. */
 export const renderWranglerJson = (options: WranglerRenderOptions): string =>
   `${JSON.stringify(
     {

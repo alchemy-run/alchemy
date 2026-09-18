@@ -13,25 +13,25 @@
  *
  * @internal not exported from the Celld barrel.
  */
-import {
-  isDurableObjectExport,
-  type DurableObjectExport,
-} from "../Workers/DurableObject.ts";
-import type { WorkflowExport } from "../Cloudflare/Workflows/Workflow.ts";
+import { isDurableObjectExport } from "../Workers/DurableObject.ts";
+import { isWorkflowExport } from "./Workflows/Workflow.ts";
 
 export const makeCelldVirtualEntry = (
-  exports: Record<string, DurableObjectExport | WorkflowExport>,
+  exports: Record<string, unknown>,
   stack: { name: string; stage: string },
 ) => {
   const doClasses = Object.keys(exports).filter((className) =>
     isDurableObjectExport(exports[className]),
   );
+  const workflowClasses = Object.keys(exports).filter((className) =>
+    isWorkflowExport(exports[className]),
+  );
   return (importPath: string) => `
-import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
+import { DurableObject, WorkerEntrypoint${workflowClasses.length ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { makeFleetBootstrap } from "alchemy/Runtime/Bootstrap/CelldFleet";
 import entrypoint from ${JSON.stringify(importPath)};
 
-const fleet = makeFleetBootstrap({ DurableObject, WorkerEntrypoint }, entrypoint, {
+const fleet = makeFleetBootstrap({ DurableObject, WorkerEntrypoint${workflowClasses.length ? ", WorkflowEntrypoint" : ""} }, entrypoint, {
   stack: {
     name: ${JSON.stringify(stack.name)},
     stage: ${JSON.stringify(stack.stage)},
@@ -44,6 +44,12 @@ ${doClasses
   .map(
     (className) =>
       `export class ${className} extends fleet.durableObject(${JSON.stringify(className)}) {}`,
+  )
+  .join("\n")}
+${workflowClasses
+  .map(
+    (className) =>
+      `export class ${className} extends fleet.workflow(${JSON.stringify(className)}) {}`,
   )
   .join("\n")}
 `;

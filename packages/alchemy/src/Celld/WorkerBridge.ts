@@ -114,7 +114,28 @@ export const makeCelldWorkerBridge = (
       Layer.succeed(WorkerExecutionContext, fromExecutionContext(context, env)),
   });
 
+  const dispatch = (
+    method: "queue" | "scheduled",
+    input: unknown,
+    env: Record<string, unknown>,
+    ctx: unknown,
+  ) => {
+    const bridge = new WorkerBridge(ctx, env) as unknown as Record<
+      typeof method,
+      (input: unknown) => Promise<void>
+    >;
+    return bridge[method](input);
+  };
+
   return {
+    // Native events bypass the HTTP gateway and its RPC authentication guard.
+    queue: (batch: unknown, env: Record<string, unknown>, ctx: unknown) =>
+      dispatch("queue", batch, env, ctx),
+    scheduled: (
+      controller: unknown,
+      env: Record<string, unknown>,
+      ctx: unknown,
+    ) => dispatch("scheduled", controller, env, ctx),
     fetch: (
       request: Request,
       env: Record<string, unknown>,

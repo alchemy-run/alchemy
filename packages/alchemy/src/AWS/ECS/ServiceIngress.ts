@@ -51,7 +51,9 @@ export interface ServiceIngressProps {
     /** Name of the container receiving traffic. */
     containerName: Input<string>;
   };
-  /** Container port the load balancer forwards to. */
+  /** Task network mode. Host/bridge tasks register instance targets; awsvpc tasks register IP targets. @default "awsvpc" */
+  networkMode?: Input<"awsvpc" | "host" | "bridge">;
+  /** Container port declared in the task definition. ECS resolves its host port when registering instance targets. */
   port: number;
   /** Target-group health check against the container. */
   healthCheck: {
@@ -234,11 +236,20 @@ export const ServiceIngress = (id: string, props: ServiceIngressProps) =>
         tags,
       });
 
+      const networkMode = props.networkMode ?? "awsvpc";
+      const targetType = (mode: "awsvpc" | "host" | "bridge") =>
+        mode === "awsvpc" ? ("ip" as const) : ("instance" as const);
       const targetGroup = yield* TargetGroup("TargetGroup", {
         vpcId: props.network.vpcId,
         port: props.port,
         protocol: "HTTP",
-        targetType: "ip",
+        targetType: Output.isOutput(networkMode)
+          ? networkMode.pipe(Output.map(targetType))
+          : targetType(
+              typeof networkMode === "string"
+                ? networkMode
+                : yield* networkMode,
+            ),
         healthCheckPath: props.healthCheck.path,
         healthCheckPort:
           props.healthCheck.port !== undefined

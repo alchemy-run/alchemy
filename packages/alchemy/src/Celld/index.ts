@@ -1,9 +1,8 @@
-export { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "./CelldCli.ts";
 export {
-  CelldDeployError,
-  CelldDownloadError,
-  EsbuildNotFoundError,
-} from "./CelldCli.ts";
+  DEFAULT_CELLD_IMAGE,
+  DEFAULT_CELLD_VERSION,
+  CelldVersionMismatch,
+} from "./RuntimeVersion.ts";
 export {
   DurableObject,
   type DurableObjectClass,
@@ -65,7 +64,42 @@ export {
   type FleetRef,
 } from "./Worker.ts";
 export { CelldMigrationConflictError } from "./Wrangler.ts";
-// Internal scaffolding stays un-exported: CelldCli (deploy machinery),
-// Wrangler (project rendering), FleetEntry (the bundle shim), and the
-// runtime bridges (WorkerBridge, DurableObjectBridge) consumed by
-// `Runtime/Bootstrap/CelldFleet`.
+export {
+  Application,
+  type ApplicationProps,
+  type ApplicationAttributes,
+} from "./Application.ts";
+export {
+  Bootstrap,
+  type BootstrapProps,
+  type BootstrapAttributes,
+} from "./Bootstrap.ts";
+export { CurrentFleet, FleetRegistrationConflict } from "./FleetContext.ts";
+export * as KV from "./KV/index.ts";
+export * as D1 from "./D1/index.ts";
+export * as R2 from "./R2/index.ts";
+export * as Queues from "./Queues/index.ts";
+export * as Workflows from "./Workflows/index.ts";
+export * as Containers from "./Containers/index.ts";
+export { Container } from "./Containers/Container.ts";
+export { Workflow } from "./Workflows/Workflow.ts";
+export {
+  cron,
+  CronEventSource,
+  CronEventSourceLive,
+} from "./CronEventSource.ts";
+export * from "./WorkerLoader.ts";
+export * from "./WorkerEntrypoint.ts";
+export type { Fetcher } from "./Fetcher.ts";
+export {
+  Fetch,
+  FetchBinding,
+  type ServiceFetch,
+  type ServiceBindingOptions,
+} from "./ServiceBinding.ts";
+export { Assets, AssetsBinding } from "./AssetsBinding.ts";
+export type {
+  CelldAssetsConfig,
+  CelldBinding,
+  CelldQueueConsumer,
+} from "./DeploymentConfig.ts";

@@ -234,8 +234,9 @@ celldNamespace.namespaceId;
 
 cloudflareState.container;
 cloudflareState.storage.getCurrentBookmark();
-// @ts-expect-error Celld does not advertise Cloudflare containers.
-celldState.container;
+export const _nativeCelldContainerStart:
+  | ((options?: Celld.Containers.ContainerStartupOptions) => void)
+  | undefined = celldState.container?.start;
 // @ts-expect-error Celld does not advertise unverified storage bookmarks.
 celldState.storage.getCurrentBookmark();
 // @ts-expect-error Rivet does not implement workerd input gates.

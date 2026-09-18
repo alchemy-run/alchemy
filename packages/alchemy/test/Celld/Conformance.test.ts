@@ -12,7 +12,7 @@ import {
   waitForReady,
 } from "../Cloudflare/Workers/conformance/spec.ts";
 import ConformanceApi from "./fixtures/api.ts";
-import { ConformanceCells, ConformanceWorker } from "./fixtures/fleet.ts";
+import { ConformanceApplication, ConformanceCells } from "./fixtures/fleet.ts";
 import ConformanceWorkerLive from "./fixtures/worker.ts";
 
 const testOptions = {
@@ -74,8 +74,8 @@ const inWorker = <T>(route: string) =>
 // The engine conformance spec, run against a REAL celld fleet on Fargate.
 // The fleet is private, so the Lambda re-exposes the same routes and
 // drives the cells through `Celld.bindWorker`'s stub. Gated like an
-// entitlement: set ALCHEMY_TEST_FLEETS=1 to run it (first deploy builds
-// the node image and waits out Fargate placement — minutes, not seconds).
+// entitlement: set ALCHEMY_TEST_FLEETS=1 to run it (cold fleet provisioning
+// and Fargate placement take minutes, not seconds).
 describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
   "celld engine conformance",
   () => {
@@ -84,21 +84,24 @@ describe.skipIf(!process.env.ALCHEMY_TEST_FLEETS || !!process.env.FAST)(
         yield* sharedStack.destroy();
         const { apiUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* ConformanceCells;
-            yield* ConformanceWorker;
+            yield* ConformanceApplication;
             const api = yield* ConformanceApi;
             return { apiUrl: api.functionUrl };
-          }).pipe(Effect.provide(ConformanceWorkerLive)),
+          }).pipe(
+            Effect.provide(
+              ConformanceWorkerLive.pipe(
+                Layer.provideMerge(Celld.Fleet.layer(ConformanceCells)),
+              ),
+            ),
+          ),
         );
         expect(apiUrl).toBeTruthy();
         baseUrl = String(apiUrl).replace(/\/+$/, "");
         yield* Effect.logInfo(`celld conformance api: ${baseUrl}`);
-        // Fargate placement + the service rollout after the first `celld
-        // deploy` take minutes on a cold fleet.
+        // Application activation precedes the Lambda endpoint readiness probe.
         yield* waitForReady(baseUrl, { attempts: 60, base: "5 seconds" });
       }),
-      // Image build + ECR push + Fargate placement of a 3-node fleet + the
-      // Lambda's VPC attachment.
+      // Three-node fleet provisioning and the Lambda's VPC attachment.
       { timeout: 900_000 },
     );
 

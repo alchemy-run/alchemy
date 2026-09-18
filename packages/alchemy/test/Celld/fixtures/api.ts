@@ -28,7 +28,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { type CounterShape } from "../../Cloudflare/Workers/conformance/counter-shape.ts";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
-import { ConformanceWorker } from "./fleet.ts";
+import { ConformanceApplication, ConformanceWorker } from "./fleet.ts";
 import type { ConformanceWorkerRpc } from "./worker.ts";
 
 export default class ConformanceApi extends AWS.Lambda.Function<ConformanceApi>()(
@@ -37,8 +37,10 @@ export default class ConformanceApi extends AWS.Lambda.Function<ConformanceApi>(
   // restore + replicate-before-ack); the 3s default is too tight.
   { main: import.meta.url, timeout: Duration.seconds(30) },
   Effect.gen(function* () {
-    const cells =
-      yield* Celld.bindWorker<ConformanceWorkerRpc>(ConformanceWorker);
+    const cells = yield* Celld.bindWorker<ConformanceWorkerRpc>(
+      ConformanceApplication,
+      ConformanceWorker,
+    );
     const counters = cells.durableObject<CounterShape>("Counter");
     const conformance = conformanceFetch(counters);
 

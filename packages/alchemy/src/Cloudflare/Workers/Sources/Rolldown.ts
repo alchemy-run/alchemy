@@ -7,6 +7,7 @@ import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../../Artifacts.ts";
 import * as Bundle from "../../../Bundle/Bundle.ts";
+import type { WorkflowExport as CelldWorkflowExport } from "../../../Celld/Workflows/Workflow.ts";
 import { findCwdForBundle, resolveMainPath } from "../../../Bundle/TempRoot.ts";
 import {
   isWorkflowExport,
@@ -52,7 +53,10 @@ export interface WorkerBundleOptions {
       }
     | {
         kind: "effect";
-        exports: Record<string, DurableObjectExport | WorkflowExport>;
+        exports: Record<
+          string,
+          DurableObjectExport | WorkflowExport | CelldWorkflowExport
+        >;
         /**
          * Override the generated virtual entry module. Defaults to
          * {@link makeEffectVirtualEntry} (the Cloudflare Workers entry);
@@ -61,7 +65,10 @@ export interface WorkerBundleOptions {
          * their own generator.
          */
         makeVirtualEntry?: (
-          exports: Record<string, DurableObjectExport | WorkflowExport>,
+          exports: Record<
+            string,
+            DurableObjectExport | WorkflowExport | CelldWorkflowExport
+          >,
           stack: { name: string; stage: string },
         ) => (importPath: string) => string;
       };
@@ -239,7 +246,10 @@ export const WorkerBundle = Effect.gen(function* () {
 });
 
 export const makeEffectVirtualEntry = (
-  exports: Record<string, DurableObjectExport | WorkflowExport>,
+  exports: Record<
+    string,
+    DurableObjectExport | WorkflowExport | CelldWorkflowExport
+  >,
   stack: { name: string; stage: string },
 ) => {
   const doClasses: string[] = [];

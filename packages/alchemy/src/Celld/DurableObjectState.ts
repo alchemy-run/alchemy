@@ -1,6 +1,16 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import type { Scope } from "effect/Scope";
+import type { NativeContainer } from "./Containers/Native.ts";
+import type { NativeFetcher } from "./Fetcher.ts";
+import {
+  fromNativeWorkerEntrypoint,
+  type WorkerEntrypoint,
+  type NativeWorkerExports,
+} from "./WorkerEntrypoint.ts";
+import type { NativeDurableObjectClass } from "./WorkerLoader.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { fromDurableObjectState as fromNativeState } from "../Workers/Workerd/DurableObjectState.ts";
 import { fromWebSocket as fromNativeWebSocket } from "../Workers/Workerd/WebSocket.ts";
@@ -10,8 +20,73 @@ import type { WebSocket } from "./WebSocket.ts";
 export type DurableObjectId = cf.DurableObjectId;
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
-/** Per-instance state supplied by a Celld workerd isolate. */
+export interface FacetStartupOptions {
+  /** Opaque class returned by a loaded Worker's getDurableObjectClass(). */
+  class: NativeDurableObjectClass;
+  /** Defaults to the parent Durable Object id. */
+  id?: DurableObjectId | string;
+}
+
+/** Celld abort/delete schedule barriers but do not return completion promises. */
+export interface NativeDurableObjectFacets {
+  get(
+    name: string,
+    getStartupOptions: () => FacetStartupOptions | Promise<FacetStartupOptions>,
+  ): NativeFetcher;
+  abort(name: string, reason?: unknown): void;
+  delete(name: string): void;
+}
+
+export class DurableObjectFacetError extends Data.TaggedError(
+  "Celld.DurableObjectFacetError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export interface DurableObjectFacets {
+  /**
+   * Lazily start a facet, memoized by name in this parent instance. Maximum
+   * nesting depth is four including the root. The handle stays in this event.
+   */
+  get<Shape = {}, E = never, R = never>(
+    name: string,
+    getStartupOptions: () =>
+      | FacetStartupOptions
+      | Effect.Effect<FacetStartupOptions, E, R>,
+  ): Effect.Effect<
+    WorkerEntrypoint<Shape>,
+    DurableObjectFacetError,
+    RuntimeContext | Scope | R
+  >;
+  /** Schedule abort; a subsequent get waits behind the native abort barrier. */
+  abort(
+    name: string,
+    reason?: unknown,
+  ): Effect.Effect<void, DurableObjectFacetError, RuntimeContext>;
+  /** Schedule storage deletion, not an acknowledgement that deletion completed. */
+  delete(
+    name: string,
+  ): Effect.Effect<void, DurableObjectFacetError, RuntimeContext>;
+}
+
+/** Capabilities implemented by Celld's own V8 harness, not workerd aliases. */
+export interface NativeDurableObjectCapabilities {
+  readonly container?: NativeContainer;
+  readonly facets: NativeDurableObjectFacets;
+  readonly exports: NativeWorkerExports;
+  readonly props?: unknown;
+}
+
+/** Per-instance state supplied by the Celld V8 runtime. */
 export interface DurableObjectStateService {
+  /** Instance-bound native handle; operations create I/O within each calling event. */
+  readonly container?: NativeContainer;
+  readonly facets: DurableObjectFacets;
+  /** Native loopback capabilities; only declared exports are present. */
+  readonly exports: NativeWorkerExports;
+  /** Structured-clone properties supplied to a facet class. */
+  readonly props?: unknown;
   readonly id: DurableObjectId;
   readonly storage: DurableObjectStorage;
   /** Native state restricted to Celld's supported operations. */
@@ -30,7 +105,7 @@ export interface DurableObjectStateService {
       | "getBookmarkForTime"
       | "onNextSessionRestoreBookmark"
     >;
-  };
+  } & NativeDurableObjectCapabilities;
   /** Keep the instance alive while an effect runs with the caller's context. */
   waitUntil<A, E, R>(
     effect: Effect.Effect<A, E, R>,
@@ -58,10 +133,20 @@ export const fromDurableObjectState = (
   state: cf.DurableObjectState,
 ): DurableObjectStateService => {
   const native = fromNativeState(state);
+  // Celld harness.js creates these on ctx; the legacy bridge's input type is cf state.
+  const capabilities = state as object as NativeDurableObjectCapabilities;
   return {
     id: native.id,
     storage: native.storage,
-    raw: native.raw,
+    raw: state as object as DurableObjectStateService["raw"],
+    container: capabilities.container,
+    facets: fromNativeFacets(() => capabilities.facets),
+    get exports() {
+      return capabilities.exports;
+    },
+    get props() {
+      return capabilities.props;
+    },
     waitUntil: native.waitUntil,
     blockConcurrencyWhile: native.blockConcurrencyWhile,
     acceptWebSocket: (socket, tags) =>
@@ -70,3 +155,46 @@ export const fromDurableObjectState = (
     getTags: native.getTags,
   };
 };
+
+const facetFailure = (operation: string) => (cause: unknown) =>
+  new DurableObjectFacetError({
+    message: `Celld facet ${operation} failed`,
+    cause,
+  });
+
+/** @internal */
+export const fromNativeFacets = (
+  get: () => NativeDurableObjectFacets,
+): DurableObjectFacets => ({
+  get: <Shape = {}, E = never, R = never>(
+    name: string,
+    getStartupOptions: () =>
+      | FacetStartupOptions
+      | Effect.Effect<FacetStartupOptions, E, R>,
+  ) =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      return yield* Effect.try({
+        try: () =>
+          fromNativeWorkerEntrypoint<Shape>(
+            get().get(name, () => {
+              const options = getStartupOptions();
+              return Effect.isEffect(options)
+                ? Effect.runPromise(options.pipe(Effect.provide(context)))
+                : options;
+            }),
+          ),
+        catch: facetFailure("get"),
+      });
+    }),
+  abort: (name, reason) =>
+    Effect.try({
+      try: () => get().abort(name, reason),
+      catch: facetFailure("abort"),
+    }),
+  delete: (name) =>
+    Effect.try({
+      try: () => get().delete(name),
+      catch: facetFailure("delete"),
+    }),
+});

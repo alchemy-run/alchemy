@@ -2,7 +2,7 @@
 import * as Effect from "effect/Effect";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
 import { Counter, CounterLive } from "./counter.ts";
-import { ConformanceCells, ConformanceWorker } from "./fleet.ts";
+import { ConformanceWorker } from "./fleet.ts";
 
 /** The worker-level RPC surface (the impl shape minus `fetch`). */
 export interface ConformanceWorkerRpc {
@@ -10,7 +10,7 @@ export interface ConformanceWorkerRpc {
 }
 
 export default ConformanceWorker.make(
-  { fleet: ConformanceCells, main: import.meta.url },
+  { main: import.meta.url },
   Effect.gen(function* () {
     const counters = yield* Counter;
     return {

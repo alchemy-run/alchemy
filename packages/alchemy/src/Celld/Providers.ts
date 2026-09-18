@@ -4,6 +4,14 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
 import { CelldWorkerProvider, Worker } from "./Worker.ts";
+import { Application, ApplicationProvider } from "./Application.ts";
+import { Bootstrap, BootstrapProvider } from "./Bootstrap.ts";
+import { Namespace, NamespaceProvider } from "./KV/Namespace.ts";
+import { Bucket, BucketProvider } from "./R2/Bucket.ts";
+import { Queue, QueueProvider } from "./Queues/Queue.ts";
+import { Database, DatabaseProvider } from "./D1/Database.ts";
+import { FleetStorageS3 } from "./FleetStorageS3.ts";
+import { ManagementBindings } from "./ManagementBindings.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Celld",
@@ -24,9 +32,32 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Fleet, Worker])).pipe(
-    Layer.provide(FleetProvider()),
-    Layer.provide(CelldWorkerProvider()),
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Fleet,
+      Worker,
+      Application,
+      Bootstrap,
+      Namespace,
+      Bucket,
+      Queue,
+      Database,
+    ]),
+  ).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        FleetProvider(),
+        CelldWorkerProvider(),
+        ApplicationProvider(),
+        BootstrapProvider(),
+        NamespaceProvider(),
+        BucketProvider(),
+        QueueProvider(),
+        DatabaseProvider(),
+      ),
+    ),
+    Layer.provideMerge(Layer.mergeAll(FleetStorageS3, ManagementBindings)),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
     Layer.orDie,
   );

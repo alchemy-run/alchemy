@@ -27,10 +27,23 @@ export interface HostComposeResult {
     readonly endpoint?: Input<string>;
     readonly region?: Input<string>;
   };
-  /** The HTTP endpoint network-attached callers reach the fleet's nodes on. */
+  /** Public Worker listener, reached over the fleet's private network. */
   readonly fleetUrl: Input<string>;
   /** Host-specific state persisted on the Fleet's attributes. */
-  readonly hostState?: Record<string, Input<any>>;
+  readonly hostState?: Record<string, Input<any>> & {
+    /** Private operator/peer listener; never route this through public ingress. */
+    readonly managementUrl?: Input<string>;
+    /** IAM-only private runner; no Function URL or peer credentials are persisted. */
+    readonly managementFunctionArn?: Input<string>;
+    /** Attach only to the trusted private management runner, never to Worker callers. */
+    readonly managementSecurityGroupIds?: Input<string[]>;
+    /** Network subnets used by fleet nodes and Worker callers. */
+    readonly subnetIds?: Input<string[]>;
+    /** Runner subnets with a private S3 route or NAT egress. */
+    readonly managementSubnetIds?: Input<string[]>;
+    /** Actual host support, not capabilities merely requested by an application. */
+    readonly capabilities?: Input<HostCapabilities>;
+  };
 }
 
 /**
@@ -54,6 +67,13 @@ export interface HostIngressResult {
    * domain), shaped for the `Alchemy.Dns` seam.
    */
   readonly validationRecords: readonly DnsRecordProps[];
+}
+
+export interface HostCapabilities {
+  /** A trusted node can reach a fenced host Docker daemon. */
+  readonly containers: boolean;
+  /** Container execution is isolated by the configured sandbox runtime. */
+  readonly sandbox: boolean;
 }
 
 export interface HostService {
@@ -82,15 +102,21 @@ export interface HostService {
     readonly domain?: string | undefined;
   }) => Effect.Effect<HostIngressResult, any, any>;
   /**
-   * The environment for the `celld deploy` child process: standard-chain
-   * object-store credentials (celld reads no profiles or SSO caches).
+   * Resolve private object-store credentials for the storage API adapter.
+   * The legacy name is retained for compatibility; no child process is run.
+   * Returned credentials must not be persisted in fleet attributes.
    */
   readonly deployEnv: (options: {
     readonly news: FleetConnection;
-  }) => Effect.Effect<Record<string, string>, any, any>;
+  }) => Effect.Effect<Record<string, string>, any>;
+  /** Credential-only alias for hosts migrating away from the legacy name. */
+  readonly storageCredentials?: (options: {
+    readonly news: FleetConnection;
+  }) => Effect.Effect<Record<string, string>, any>;
   /**
-   * Roll the fleet's nodes after a deploy: celld nodes load a deployment at
-   * startup, so a new version requires a restart.
+   * Legacy deployment hook. v0.5.0 adopts the deployment pointer in place;
+   * hosts should return `Effect.void`, and Workers must not restart nodes
+   * after publishing code. Runtime binary upgrades are a separate operation.
    */
   readonly restartNodes: (options: {
     readonly news: FleetConnection;

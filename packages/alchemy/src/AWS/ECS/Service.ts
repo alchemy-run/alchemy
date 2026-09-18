@@ -70,6 +70,30 @@ import {
   type TaskDefinitionConfig,
 } from "./Task.ts";
 
+/** Only awsvpc tasks accept service-level network configuration. */
+export const serviceNetworkConfiguration = (
+  networkMode: ecs.NetworkMode,
+  network: { subnets: string[]; assignPublicIp: boolean } | undefined,
+  securityGroups: string[] | undefined,
+): ecs.NetworkConfiguration | undefined =>
+  networkMode !== "awsvpc" || network === undefined
+    ? undefined
+    : {
+        awsvpcConfiguration: {
+          subnets: network.subnets,
+          securityGroups,
+          assignPublicIp: network.assignPublicIp ? "ENABLED" : "DISABLED",
+        },
+      };
+
+/** Host/bridge tasks register an instance and mapped host port; awsvpc tasks register an ENI IP. */
+export const serviceTargetType = (networkMode: ecs.NetworkMode) =>
+  networkMode === "awsvpc" ? ("ip" as const) : ("instance" as const);
+
+export class ServiceTaskNetworkModeRequired extends Data.TaggedError(
+  "ServiceTaskNetworkModeRequired",
+)<{ readonly message: string }> {}
+
 export type ServiceName = string;
 export type ServiceArn =
   `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
@@ -800,6 +824,8 @@ export interface TaskReferenceServiceProps extends ServicePropsBase {
      * Registered task definition ARN to deploy.
      */
     taskDefinitionArn: string;
+    /** Network mode used to compose managed ingress. Defaults to awsvpc; checked against the registered definition before deployment. */
+    networkMode?: ecs.NetworkMode;
     /**
      * Container name inside the task definition that should receive traffic.
      */
@@ -1381,6 +1407,14 @@ export const Service: Platform<
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
+/** Task-definition overrides take precedence over the convenience properties. */
+export const declaredServiceNetworkMode = (
+  props: ServiceProps,
+): ecs.NetworkMode =>
+  "task" in props
+    ? (props.task.networkMode ?? "awsvpc")
+    : (props.taskDefinition?.networkMode ?? props.networkMode ?? "awsvpc");
+
 // ───────────────────────────────────────────────────────────────────────────
 // Managed load balancer — composition (the StaticSite pattern)
 // ───────────────────────────────────────────────────────────────────────────
@@ -1664,6 +1698,11 @@ const composeManagedIngress = (
   lbProp: true | Listener | ServiceLoadBalancerConfig,
 ) =>
   Effect.gen(function* () {
+    if (declaredServiceNetworkMode(props) === "none") {
+      return yield* new ServiceTaskNetworkModeRequired({
+        message: `AWS.ECS.Service "${id}": managed ingress requires awsvpc, host, or bridge networking.`,
+      });
+    }
     const config: ServiceLoadBalancerConfig =
       lbProp === true
         ? {}
@@ -2071,7 +2110,7 @@ const composeManagedIngress = (
           vpcId: network.vpcId as string,
           port: spec.port as number,
           protocol: spec.protocol,
-          targetType: "ip",
+          targetType: serviceTargetType(declaredServiceNetworkMode(props)),
           healthCheckPath: isNetworkTg
             ? wantsHttpCheck
               ? (health?.path ?? "/")
@@ -3195,22 +3234,6 @@ export const ServiceProvider = () =>
         };
       });
 
-      const networkConfigurationOf = (
-        network: {
-          subnets: string[];
-          assignPublicIp: boolean;
-        },
-        securityGroups: string[] | undefined,
-      ) => ({
-        awsvpcConfiguration: {
-          subnets: network.subnets,
-          securityGroups,
-          assignPublicIp: (network.assignPublicIp ? "ENABLED" : "DISABLED") as
-            | "ENABLED"
-            | "DISABLED",
-        },
-      });
-
       // load balancers passed to create/update: explicit user-supplied list
       // plus the composed managed-ingress target groups.
       const loadBalancersOf = (
@@ -3231,8 +3254,8 @@ export const ServiceProvider = () =>
       // In-place mutable fields shared by createService and updateService.
       const mutableInput = (
         news: ServiceProps,
-        task: { taskDefinitionArn: string },
-        network: { subnets: string[]; assignPublicIp: boolean },
+        task: { taskDefinitionArn: string; networkMode: ecs.NetworkMode },
+        network: { subnets: string[]; assignPublicIp: boolean } | undefined,
         securityGroups: string[] | undefined,
       ) => ({
         taskDefinition: task.taskDefinitionArn,
@@ -3241,7 +3264,11 @@ export const ServiceProvider = () =>
         healthCheckGracePeriodSeconds: toWireSeconds(
           news.healthCheckGracePeriod,
         ),
-        networkConfiguration: networkConfigurationOf(network, securityGroups),
+        networkConfiguration: serviceNetworkConfiguration(
+          task.networkMode,
+          network,
+          securityGroups,
+        ),
         capacityProviderStrategy: news.capacityProviderStrategy,
         placementConstraints: news.placementConstraints,
         placementStrategy: news.placementStrategy,
@@ -3291,6 +3318,7 @@ export const ServiceProvider = () =>
               {
                 // launchType ↔ capacityProviderStrategy switch is immutable.
                 usesStrategy: !!olds.capacityProviderStrategy,
+                networkMode: declaredServiceNetworkMode(olds),
                 schedulingStrategy: olds.schedulingStrategy ?? "REPLICA",
                 deploymentControllerType:
                   olds.deploymentController?.type ?? "ECS",
@@ -3299,6 +3327,7 @@ export const ServiceProvider = () =>
               },
               {
                 usesStrategy: !!news.capacityProviderStrategy,
+                networkMode: declaredServiceNetworkMode(news),
                 schedulingStrategy: news.schedulingStrategy ?? "REPLICA",
                 deploymentControllerType:
                   news.deploymentController?.type ?? "ECS",
@@ -3468,14 +3497,38 @@ export const ServiceProvider = () =>
                   session,
                 })
               : undefined;
-          const task = byoTask ?? {
+          const reference = byoTask ?? {
             taskDefinitionArn: owned!.taskDefinitionArn,
             containerName: owned!.containerName,
             port: owned!.port,
           };
-
-          // Resolve networking (explicit props or the default VPC).
-          const network = yield* resolveNetwork(news);
+          // The registered definition is authoritative, including BYO tasks and overrides.
+          const describedTask = yield* ecs.describeTaskDefinition({
+            taskDefinition: reference.taskDefinitionArn,
+          });
+          if (describedTask.taskDefinition === undefined) {
+            return yield* new ServiceTaskNetworkModeRequired({
+              message: `Task definition ${reference.taskDefinitionArn} was not returned by ECS.`,
+            });
+          }
+          const task = {
+            ...reference,
+            networkMode: describedTask.taskDefinition.networkMode ?? "bridge",
+          };
+          if (
+            news.ingress !== undefined &&
+            (task.networkMode === "none" ||
+              serviceTargetType(task.networkMode) !==
+                serviceTargetType(declaredServiceNetworkMode(news)))
+          ) {
+            return yield* new ServiceTaskNetworkModeRequired({
+              message: `Managed ingress network mode does not match ${reference.taskDefinitionArn}. Set task.networkMode to the registered mode for a referenced task.`,
+            });
+          }
+          const network =
+            task.networkMode === "awsvpc"
+              ? yield* resolveNetwork(news)
+              : undefined;
 
           // Managed ingress: the composed child-resource outputs arrive via
           // the internal `ingress` prop (written by the factory's
@@ -3621,7 +3674,12 @@ export const ServiceProvider = () =>
                 news.serviceRegistries ??
                 ((olds?.serviceRegistries?.length ?? 0) > 0 ? [] : undefined),
               enableExecuteCommand: news.enableExecuteCommand,
-              forceNewDeployment: true,
+              // Idle services have no tasks to replace; configuration changes
+              // still trigger ECS deployments without forcing an empty rollout.
+              forceNewDeployment:
+                news.desiredCount !== 0 ||
+                (observed.runningCount ?? 0) > 0 ||
+                (observed.pendingCount ?? 0) > 0,
             })
             .pipe(
               // The service may still be transitioning (e.g. a prior

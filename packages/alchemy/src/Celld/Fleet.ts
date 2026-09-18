@@ -1,12 +1,14 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { InputProps } from "../Input.ts";
 import type { Named, Tag } from "../Named.ts";
 import { Platform, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import { Resource, isResourceOfType } from "../Resource.ts";
+import { isResourceOfType, type Resource } from "../Resource.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
+import { CurrentFleet } from "./FleetContext.ts";
 import { Host, type FleetBucket } from "./Host.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -156,6 +158,8 @@ const makeFleetContext = (id: string): BaseRuntimeContext => ({
  * tag + props forms the generic `Platform` type lacks.
  */
 export type FleetClass = {
+  /** Select a fleet for declarations in this Layer's scope. */
+  layer<E, R>(ref: Effect.Effect<Fleet, E, R>): Layer.Layer<CurrentFleet, E, R>;
   <Self>(): {
     <const Id extends string>(
       id: Id,
@@ -180,8 +184,35 @@ export type FleetClass = {
  *
  * The fleet is platform-agnostic: WHERE the nodes run (and which bucket
  * backs them) is owned by the `Celld.Host` Layer composed alongside the
- * providers — `Celld.EcsFleet()` runs them as an ECS Fargate service. The fleet
- * carries no code; deploy a `Celld.Worker` onto it.
+ * providers. `Celld.EcsFleet()` uses ECS Fargate by default; the EC2 capacity
+ * option provides dedicated Docker hosts for experimental Containers and Sandbox.
+ * The fleet carries no code. Workers stage immutable artifacts through object
+ * storage APIs; {@link Celld.Application} publishes and activates the selected graph.
+ * Neither Wrangler nor `celld deploy` is invoked.
+ *
+ * ### v0.5.0 capabilities and limits <!-- api-prose -->
+ * Celld embeds V8 rather than workerd. This integration targets the pinned
+ * v0.5.0 runtime and is not a general Cloudflare API implementation.
+ *
+ * - {@link Celld.KV.Namespace}, {@link Celld.D1.Database}, {@link Celld.R2.Bucket},
+ *   {@link Celld.Queues.Queue}, {@link Celld.DurableObject}, {@link Celld.Workflow},
+ *   {@link Celld.cron}, {@link Celld.Assets}, {@link Celld.Fetch}, and
+ *   {@link Celld.WorkerLoader} use Celld's native runtime interfaces.
+ * - R2 buckets are isolated keyspaces in the fleet's backing object store,
+ *   rather than independently provisioned S3 buckets.
+ * - Queues support producers and push consumers, not a pull-consumer API.
+ * - Native service bindings expose fetch. Cross-host RPC is a separate Alchemy
+ *   gateway capability and must target the activated Application entrypoint.
+ * - Publication writes multiple objects in order under an exclusive lock; it
+ *   is not a multi-object atomic transaction. Activation verifies a locked
+ *   graph generation, not cron delivery or completion of previously admitted work.
+ * - Persistent data and ownership records are retained by default. Removing
+ *   declarations is not authorization to erase data or transfer ownership.
+ * - Containers and Sandbox require EC2 capacity. Fargate rejects them. Changing
+ *   or removing cached container specifications requires explicit retirement;
+ *   an isolate reload alone is insufficient.
+ * - Persistent Cache API, AI, Vectorize, Hyperdrive, browser rendering, email,
+ *   Python Workers, and a CDN are not supplied by this integration.
  *
  * ### Creating a Fleet
  * **Example:** A two-node fleet on ECS Fargate
@@ -200,6 +231,20 @@ export type FleetClass = {
  *   state: AWS.state(),
  * });
  * ```
+ *
+ * ### Selecting a Fleet
+ * **Example:** Scope persistent declarations to a fleet
+ * ```typescript
+ * const storage = Effect.gen(function* () {
+ *   const cache = yield* Celld.KV.Namespace("Cache");
+ *   const files = yield* Celld.R2.Bucket("Files");
+ *   const work = yield* Celld.Queues.Queue("Work");
+ *   return { cache, files, work };
+ * }).pipe(Effect.provide(Celld.Fleet.layer(Cells)));
+ * ```
+ *
+ * Nested layers may select different fleets when their declarations use
+ * distinct Alchemy namespaces. No last-created or global default fleet exists.
  *
  * ### Sizing the Nodes
  * **Example:** Autoscaling range on larger tasks
@@ -224,13 +269,38 @@ export type FleetClass = {
  * }) {}
  * ```
  *
+ * ### Publishing Workers
+ * **Example:** An entrypoint and a background Worker
+ * ```typescript
+ * const app = Effect.gen(function* () {
+ *   return yield* Celld.Application("App", { entrypoint: Api, workers: [Jobs] });
+ * }).pipe(
+ *   Effect.provide(
+ *     Layer.mergeAll(ApiLive, JobsLive).pipe(
+ *       Layer.provideMerge(Celld.Fleet.layer(Cells)),
+ *     ),
+ *   ),
+ * );
+ * ```
+ * All members must belong to the selected fleet. Only the entrypoint may expose
+ * public ingress. Service bindings and queue attachments select other members;
+ * they do not give those Workers separate public URLs.
+ *
  * @resource
  * @product Celld
  */
-export const Fleet: FleetClass = Platform(FleetTypeId, {
-  createRuntimeContext: makeFleetContext,
-  transformProps: transformFleetProps,
-}) as FleetClass;
+export const Fleet: FleetClass = Platform(
+  FleetTypeId,
+  {
+    createRuntimeContext: makeFleetContext,
+    transformProps: transformFleetProps,
+  },
+  {
+    layer: <E, R>(
+      ref: Effect.Effect<Fleet, E, R>,
+    ): Layer.Layer<CurrentFleet, E, R> => Layer.effect(CurrentFleet, ref),
+  },
+) as FleetClass;
 
 /** The fleet's connection material was never composed (no host ran). */
 export class FleetNotComposed extends Data.TaggedError(
