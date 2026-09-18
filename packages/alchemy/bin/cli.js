@@ -3,9 +3,8 @@
 // alchemy CLI launcher
 //
 // Resolves the alchemy CLI entrypoint and runs it under whichever runtime the
-// user invoked us with — in this very process whenever that is possible, by
-// replacing this process with bun when the CLI needs no flags, and as a
-// foreground child only when it does (see the bottom of this file). The
+// user invoked us with — in this process for node, or as a foreground child
+// for bun so production JSX settings apply from startup. The
 // shebang forces this launcher to run as node even when bun was the
 // invoker, but bun forwards signals about itself via env vars on every child
 // it spawns:
@@ -19,9 +18,8 @@
 // Dev vs published: when this launcher runs out of an alchemy checkout
 // (i.e. *not* from inside a `node_modules/` tree) and bun is available, we
 // run the .ts source directly so dev iteration is edit → reload, no rebuild.
-// The published tarball ships the .ts files as well (alchemy's `bun`/`worker`
-// exports point at .ts source), but consumers install into `node_modules/`,
-// so the path check sends them to the bundled `alchemy.js` regardless.
+// Published installs also run .ts source under bun (matching alchemy's `bun`
+// exports); node runs the compiled `alchemy.js` instead.
 //
 // When a child is needed, own the spawn so runtime diagnostics can be
 // filtered while signals, IPC messages, and the child's exit status are
@@ -112,8 +110,6 @@ const foregroundChild = (program, args, stderrFilter) => {
 /**
  * The bun executable, as an absolute path, or `undefined` when it cannot be
  * found. `bun run` names itself in `npm_execpath`; otherwise walk `PATH`.
- * `process.execve` does no lookup of its own and aborts the process on a
- * missing file, so this must be certain before handing off.
  *
  * @returns {string | undefined}
  */
@@ -204,65 +200,30 @@ if (entry === jsEntry && !existsSync(jsEntry)) {
 // again (see Cloudflare/Workers/ViteChild.ts).
 process.env.NODE_ENV = "production";
 
-// The launcher IS the right runtime in two cases, and then simply becomes
-// the CLI instead of paying for a second process that only relays signals:
-//
-//   - node: the loader hooks are ordinary runtime-installable module hooks
-//     (`module.registerHooks`); `--import` was only ever a way to run them
-//     first. Checkout: register-dev-mode loads .ts/.tsx through Oxc AND
-//     resolves the monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
-//     `@distilled.cloud/*`) through their `bun` export condition onto src/,
-//     so the CLI, the user's stack, and every workspace dependency load one
-//     source universe instead of whatever built lib/ happens to be around.
-//     Published: only the Oxc loader, for the user's own .ts/.tsx.
-//   - bun on a published install: the bundled `alchemy.js` needs no flags.
-//
-// Otherwise the CLI must start as bun. On a published install that bun
-// needs no flags and prints nothing of its own, so this node launcher (the
-// shebang) under `bun run` becomes it in place where node can
-// (`process.execve`: POSIX, 22.15+) — same pid, same fds, no relay. A
-// checkout instead needs `--tsconfig-override` (below), a flag that makes
-// bun print a benign internal warning only a parent can filter, so there —
-// and on Windows, and with an IPC channel from a node parent that bun would
-// not pick up — bun runs as a foreground child.
-if (runtime === "node" || (typeof globalThis.Bun !== "undefined" && !isDev)) {
-  if (runtime === "node") {
-    await import(
-      new URL(
-        isDev ? "register-dev-mode.js" : "register-oxc.js",
-        import.meta.url,
-      ).href
-    );
-  }
+// Node's loader hooks can be installed in-process. Bun must start again:
+// it selects its JSX transform at startup, before the NODE_ENV assignment
+// above. Importing the CLI in this Bun process could call jsxDEV against
+// React's production runtime, where jsxDEV is undefined.
+if (runtime === "node") {
+  await import(
+    new URL(isDev ? "register-dev-mode.js" : "register-oxc.js", import.meta.url)
+      .href
+  );
   await import(pathToFileURL(entry).href);
 } else {
-  const args = [];
-  if (isDev) {
-    // Pin bun's tsconfig to alchemy's, not whatever happens to be in the
-    // invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json` — it
-    // does not consult a file's own nearest tsconfig — which means invoking
-    // `alchemy` from e.g. `examples/cloudflare-solidstart` would transpile
-    // alchemy's own .tsx files with that example's JSX settings
-    // (jsx: "preserve", jsxImportSource: "solid-js"), breaking the React
-    // files inside the alchemy CLI. Pragmas do not cover it: under a
-    // `preserve` tsconfig bun emits `jsxDEV` even in production, which
-    // React's production build leaves undefined.
-    args.push(
-      `--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`,
-    );
-  }
-  args.push(entry, ...process.argv.slice(2));
+  // The caller's tsconfig can force development JSX even in production.
+  // Published installs ship a standalone config in bin; checkouts retain
+  // their workspace paths. JSX import-source pragmas alone are insufficient.
+  const tsconfig = path.join(binDir, isDev ? ".." : ".", "tsconfig.json");
+  const args = [
+    `--tsconfig-override=${tsconfig}`,
+    entry,
+    ...process.argv.slice(2),
+  ];
   const bun =
     typeof globalThis.Bun !== "undefined" ? process.execPath : findBun();
-  if (
-    !isDev &&
-    bun !== undefined &&
-    typeof process.execve === "function" &&
-    process.platform !== "win32" &&
-    !process.send
-  ) {
-    process.execve(bun, ["bun", ...args], process.env);
-  }
+  // Keep the launcher to filter Bun's tsconfig-override warning on every
+  // path, including published installs invoked through the Node shebang.
   // Stderr filter — substring match (not regex), bun may wrap the line in
   // ANSI color codes when stderr is piped to a TTY-aware parent, so anchored
   // regex is fragile. "directory mismatch for directory" is bun's
@@ -270,8 +231,7 @@ if (runtime === "node" || (typeof globalThis.Bun !== "undefined" && !isDev)) {
   // (oven-sh/bun#25730): the resolver openat()s the tsconfig basename
   // against a cached dir fd that isn't its parent, falls back to an
   // absolute open, and logs. Bun's own tsconfig-override tests tolerate the
-  // same line. Only the checkout path passes --tsconfig-override, which is
-  // why published installs never see it.
+  // same line.
   foregroundChild(
     bun ?? "bun",
     args,
