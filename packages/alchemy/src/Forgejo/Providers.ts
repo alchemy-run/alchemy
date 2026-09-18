@@ -4,6 +4,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import { Random, RandomProvider } from "../Random.ts";
 import { ApiToken, ApiTokenProvider } from "./ApiToken.ts";
 import { ForgejoAuth } from "./AuthProvider.ts";
 import {
@@ -70,6 +71,7 @@ export const providers = (options?: ProvidersOptions) => {
     Providers,
     Provider.collection([
       ApiToken,
+      Random,
       BranchProtection,
       Label,
       Organization,
@@ -84,6 +86,7 @@ export const providers = (options?: ProvidersOptions) => {
     Layer.provide(
       Layer.mergeAll(
         ApiTokenProvider(),
+        RandomProvider(),
         BranchProtectionProvider(),
         LabelProvider(),
         OrganizationProvider(),

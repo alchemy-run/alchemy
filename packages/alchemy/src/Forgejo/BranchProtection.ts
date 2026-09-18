@@ -1,6 +1,8 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { BranchProtection as ApiBranchProtection } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
@@ -187,21 +189,27 @@ const copy = (list: readonly string[] | undefined) =>
  * the endpoint identity, added by create alone — `EditBranchProtectionOption`
  * does not carry it.
  */
-const settingsOf = (props: BranchProtectionProps) => {
+const settingsOf = (
+  props: BranchProtectionProps,
+  observed?: ApiBranchProtection,
+) => {
   // A whitelist is inert unless its enable flags are on, so declaring one
   // turns them on by default — otherwise the rule silently permits everyone.
   const hasPushWhitelist =
     (props.pushWhitelistUsernames?.length ?? 0) > 0 ||
     (props.pushWhitelistTeams?.length ?? 0) > 0;
   const whitelistDefault = hasPushWhitelist ? true : undefined;
-  const enablePush = props.enablePush ?? whitelistDefault;
-  // Forgejo stores `enable_push_whitelist` as false whenever `enable_push` is
-  // false, on create and on edit alike. Asking for a `true` it will not keep
-  // never converges: every reconcile observes false, sees drift, and re-issues
-  // the same edit. Apply the server's own rule here instead. An omitted prop
-  // is `undefined`, which `&&` passes through, so it stays unmanaged.
+  const managesWhitelist =
+    props.enablePushWhitelist !== undefined || hasPushWhitelist;
+  const enablePush =
+    props.enablePush ??
+    (managesWhitelist
+      ? (observed?.enable_push ?? whitelistDefault ?? true)
+      : undefined);
   const enablePushWhitelist =
-    (props.enablePushWhitelist ?? whitelistDefault) && enablePush === true;
+    enablePush === false
+      ? false
+      : (props.enablePushWhitelist ?? whitelistDefault);
   return {
     required_approvals: props.requiredApprovals,
     require_signed_commits: props.requireSignedCommits,
@@ -224,12 +232,18 @@ const observe = (
     .repoGetBranchProtection({ ...target(props), name: props.ruleName })
     .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
-const edit = (props: BranchProtectionProps) =>
+const edit = (props: BranchProtectionProps, observed: ApiBranchProtection) =>
   Services.repository.repoEditBranchProtection({
     ...target(props),
     name: props.ruleName,
-    ...settingsOf(props),
+    ...settingsOf(props, observed),
   });
+
+export class InvalidBranchProtection extends Data.TaggedError(
+  "InvalidBranchProtection",
+)<{
+  readonly message: string;
+}> {}
 
 /**
  * Provider layer implementing branch-protection lifecycle.
@@ -272,14 +286,24 @@ export const BranchProtectionProvider = () =>
       );
       return rules.flat();
     }),
-    read: Effect.fn(function* ({ olds }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds);
-      return observed === undefined ? undefined : attributesOf(olds, observed);
+      return observed === undefined
+        ? undefined
+        : discovered(attributesOf(olds, observed), output !== undefined);
     }),
-    reconcile: Effect.fn(function* ({ news }) {
-      // Observe: the rule name is the endpoint identity, so live state alone
-      // decides whether this creates or updates.
+    reconcile: Effect.fn(function* ({ news, output }) {
       const observed = yield* observe(news);
+      if (
+        news.enablePushWhitelist === true &&
+        (news.enablePush ?? observed?.enable_push) === false
+      ) {
+        return yield* new InvalidBranchProtection({
+          message: "Push whitelist enforcement requires enablePush: true.",
+        });
+      }
+      if (observed !== undefined)
+        yield* requireOwnership(output !== undefined, news.ruleName);
 
       if (observed === undefined) {
         const created = yield* Services.repository
@@ -289,20 +313,13 @@ export const BranchProtectionProvider = () =>
             ...settingsOf(news),
           })
           .pipe(
-            // A concurrent create wins the race; converge onto the rule that
-            // is already there. This endpoint declares 403/422/423 for an
-            // existing rule, not 409, so the conflict arrives under those.
-            //
-            // Those tags also cover genuine failures — a credential without
-            // admin rights on the repository gets the same 403 — so converge
-            // only if the rule actually turned up. Otherwise re-fail with the
-            // original error: editing a rule that does not exist replaces the
-            // clearest diagnosis with a misleading not-found.
+            // A race winner needs saved ownership; genuine permission errors survive.
             Effect.catchTag(["Forbidden", "UnprocessableEntity"], (cause) =>
               Effect.gen(function* () {
                 const existing = yield* observe(news);
                 if (existing === undefined) return yield* Effect.fail(cause);
-                return yield* edit(news);
+                yield* requireOwnership(output !== undefined, news.ruleName);
+                return yield* edit(news, existing);
               }),
             ),
           );
@@ -310,9 +327,9 @@ export const BranchProtectionProvider = () =>
       }
 
       // Sync only when the live rule differs from what was declared.
-      const updated = matchesDesired(observed, settingsOf(news))
+      const updated = matchesDesired(observed, settingsOf(news, observed))
         ? observed
-        : yield* edit(news);
+        : yield* edit(news, observed);
       return attributesOf(news, updated);
     }),
     delete: Effect.fn(function* ({ output }) {

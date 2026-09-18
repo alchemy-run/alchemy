@@ -36,16 +36,16 @@ values can be outputs of other resources. See
 
 ```typescript
 yield* Forgejo.Secrets({
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   secrets: {
     DEPLOY_TOKEN: Redacted.make(process.env.DEPLOY_TOKEN!),
   },
 });
 
 yield* Forgejo.Variables({
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   variables: {
     DEPLOY_STAGE: "production",
   },
@@ -63,9 +63,10 @@ const org = yield* Forgejo.Organization("acme", {
 });
 
 const platform = yield* Forgejo.Team("platform", {
-  organization: "acme",
+  organization: org.username,
   name: "platform",
   permission: "write",
+  units: ["repo.code", "repo.issues"],
 });
 
 yield* Forgejo.TeamMember("alice", {
@@ -78,8 +79,8 @@ yield* Forgejo.TeamMember("alice", {
 
 ```typescript
 yield* Forgejo.Webhook("deploy", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   url: "https://deploy.example/hooks/forgejo",
   events: ["push", "pull_request"],
   secret: Redacted.make(process.env.WEBHOOK_SECRET!),
@@ -91,21 +92,37 @@ and its protected-branch rules:
 
 ```typescript
 yield* Forgejo.Label("bug", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   name: "bug",
   color: "d73a4a",
 });
 
 yield* Forgejo.BranchProtection("main", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   ruleName: "main",
   requiredApprovals: 1,
   enableStatusCheck: true,
   statusCheckContexts: ["ci/test"],
 });
 ```
+
+## Runtime bindings
+
+[Worker & Lambda bindings](/forgejo/bindings) give Effect-native handlers
+repository and issue clients. Alchemy provisions repository-restricted
+tokens from the deployment profile and binds them to the host:
+
+```typescript
+const repository = yield* Forgejo.ReadRepository(repo);
+const issues = yield* Forgejo.WriteIssues(repo);
+```
+
+Provide `Cloudflare.ForgejoBindings` or `Lambda.ForgejoBindings` on the
+host's implementation effect. The client methods run inside its handlers.
+`Forgejo.RepositoryEventSource` also provisions its webhook and signing
+secret automatically; no manually configured runtime credential is needed.
 
 ## Mint a token as code
 
@@ -121,12 +138,12 @@ const token = yield* Forgejo.ApiToken("ci", {
   username: "ci-bot",
   name: "ci",
   scopes: ["write:repository"],
-  repositories: [{ owner: "acme", name: "api" }],
+  repositories: [{ owner: repo.owner, name: repo.name }],
 });
 
 yield* Forgejo.Secret("forgejo-token", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   name: "FORGEJO_TOKEN",
   value: token.token,
 });
@@ -150,8 +167,9 @@ two APIs are not identical:
 - **The instance URL is part of the credential.** Forgejo is
   self-hosted, so a profile stores an instance URL alongside the token
   rather than assuming a single host.
-- **No repository event source.** There is no `consumeRepositoryEvents`
-  equivalent yet — use `Webhook` and handle deliveries yourself.
+- **Signed repository events.** `RepositoryEventSource` generates its
+  signing secret and configures deliveries to an Effect-native Worker or
+  Lambda. See [Worker & Lambda bindings](/forgejo/bindings).
 
 ## Reference
 

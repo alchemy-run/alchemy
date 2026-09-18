@@ -1,6 +1,7 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { ActionVariable as ApiVariable } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -273,19 +274,23 @@ export const VariableProvider = () =>
 
       return [...scopedVariables, ...userVariables];
     }),
-    read: Effect.fn(function* ({ olds }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const scope = variableScope(olds);
       const observed = yield* getVariable(scope, olds.name).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
-      return observed === undefined ? undefined : toAttributes(scope, observed);
+      return observed === undefined
+        ? undefined
+        : discovered(toAttributes(scope, observed), output !== undefined);
     }),
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const scope = variableScope(news);
       const observed = yield* getVariable(scope, news.name).pipe(
         Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
       );
 
+      if (observed !== undefined)
+        yield* requireOwnership(output !== undefined, news.name);
       if (observed === undefined) {
         yield* createVariable(scope, news.name, news.value);
       } else if (observed.data !== news.value) {

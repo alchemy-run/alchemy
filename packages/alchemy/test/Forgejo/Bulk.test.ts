@@ -2,7 +2,14 @@ import { Repository, Secrets, Variables } from "@/Forgejo/index.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
+import { adopt } from "@/AdoptPolicy.ts";
 import { forgejoTest } from "./support/stack.ts";
 
 const secrets = new Map<string, string>();
@@ -27,8 +34,18 @@ const repository = {
   owner: { login: "acme" },
 };
 
-const server = mockForgejo(({ method, path, body }) => {
+const server = mockForgejo((request) => {
+  const { method, path, body } = request;
   const fields = body as Record<string, string> | undefined;
+  if (method === "GET" && path === "/repos/acme/api/actions/secrets") {
+    return jsonList(
+      request,
+      [...secrets.keys()].map((name) => ({
+        name,
+        created_at: "2026-01-01T00:00:00Z",
+      })),
+    );
+  }
 
   if (method === "GET" && path === "/user") return json({ login: "acme" });
   if (path === "/repos/acme/api" || path === "/repositories/1") {
@@ -107,7 +124,7 @@ test.provider("resolves a secret value that arrives as an Output", (stack) =>
         const repo = yield* Repository("Repo", {
           owner: "acme",
           name: "api",
-        });
+        }).pipe(adopt(true));
         // The value is only known after the repository reconciles, so it
         // reaches `Secrets` as an unresolved `Output`. Casting it to
         // `Redacted` instead of lifting through the input would hand the

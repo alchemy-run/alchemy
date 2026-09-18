@@ -14,7 +14,7 @@ import * as Redacted from "effect/Redacted";
 import {
   makeFakeCredentialsStore,
   makeFakeProfileStore,
-} from "../Prisma/fakes.ts";
+} from "./support/auth.ts";
 import { json, mockForgejo } from "./support/mock.ts";
 
 /**

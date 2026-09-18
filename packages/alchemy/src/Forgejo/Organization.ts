@@ -2,6 +2,7 @@ import { Credentials, Services } from "@distilled.cloud/forgejo";
 import type { Organization as ApiOrganization } from "@distilled.cloud/forgejo/organization";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Schedule from "effect/Schedule";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -32,7 +33,8 @@ export interface OrganizationProps {
    */
   readonly fullName?: string;
   /**
-   * Visibility.
+   * Visibility. Forgejo 16.0.3 ignores edits from non-public to public;
+   * reconciliation reports OrganizationSettingsNotApplied rather than false success.
    */
   readonly visibility?: "public" | "limited" | "private";
   /**
@@ -82,8 +84,8 @@ export interface Organization extends Resource<
  * A Forgejo organization.
  *
  * Creating one uses Forgejo's admin endpoint, so the provider credential must
- * belong to an administrator. An organization that already exists is adopted
- * and its settings converge. Organizations are retained by default.
+ * belong to an administrator. Existing organizations require explicit adoption
+ * before their settings converge. Organizations are retained by default.
  *
  * ### Creating an Organization
  * **Example:** Basic Organization
@@ -156,6 +158,13 @@ export class UnsupportedOwnerChange extends Data.TaggedError(
   }
 }
 
+/** A successful edit response did not converge the requested settings. */
+export class OrganizationSettingsNotApplied extends Data.TaggedError(
+  "OrganizationSettingsNotApplied",
+)<{
+  readonly message: string;
+}> {}
+
 /**
  * Origin of the instance the credential points at.
  *
@@ -196,7 +205,7 @@ const observe = (props: Pick<OrganizationProps, "username">) =>
  */
 export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
-    stables: ["organizationId"],
+    stables: ["organizationId", "username", "htmlUrl"],
     // Only the login identifies a different organization. `owner` names the
     // account the create was issued under, and Forgejo exposes no ownership
     // transfer, so replacing on it would tear down and re-adopt the very same
@@ -209,14 +218,17 @@ export const OrganizationProvider = () =>
         attributesOf(origin, organization),
       );
     }),
-    read: Effect.fn(function* ({ olds }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const origin = yield* instanceOrigin;
       const observed = yield* observe(olds);
-      return observed === undefined
-        ? undefined
-        : attributesOf(origin, observed);
+      if (
+        observed === undefined ||
+        (output !== undefined && observed.id !== output.organizationId)
+      )
+        return undefined;
+      return discovered(attributesOf(origin, observed), output !== undefined);
     }),
-    reconcile: Effect.fn(function* ({ news, olds }) {
+    reconcile: Effect.fn(function* ({ news, olds, output }) {
       const origin = yield* instanceOrigin;
 
       // An organization's login is globally unique, so a changed `owner` still
@@ -234,37 +246,33 @@ export const OrganizationProvider = () =>
       // Observe: live state decides whether this is a create or a settings
       // sync, so an adopted organization converges the same way as one we
       // provisioned ourselves.
-      const observed = yield* observe(news);
-
+      let observed = yield* observe(news);
+      if (observed !== undefined)
+        yield* requireOwnership(
+          output?.organizationId === observed.id,
+          news.username,
+        );
       if (observed === undefined) {
-        const created = yield* Services.admin
+        observed = yield* Services.admin
           .adminCreateOrg({
             owner: news.owner,
             username: news.username,
             ...settingsOf(news),
           })
           .pipe(
-            // A concurrent create wins the race; adopt what is there. The
-            // admin endpoint declares 403/422 for a duplicate, not 409, so
-            // the conflict surfaces under those tags.
-            //
-            // Those tags also cover genuine failures — a non-administrator
-            // credential gets the same 403 — so recover only if the
-            // organization actually turned up. Otherwise re-fail with the
-            // original error: reporting "not found" for what is really "your
-            // token is not an administrator" replaces the clearest diagnosis
-            // with the most misleading one.
+            // Duplicate organizations share 403/422 with permission failures.
             Effect.catchTag(["UnprocessableEntity", "Forbidden"], (cause) =>
-              observe(news).pipe(
-                Effect.flatMap((existing) =>
-                  existing === undefined
-                    ? Effect.fail(cause)
-                    : Effect.succeed(existing),
-                ),
-              ),
+              Effect.gen(function* () {
+                const existing = yield* observe(news);
+                if (existing === undefined) return yield* Effect.fail(cause);
+                yield* requireOwnership(
+                  output?.organizationId === existing.id,
+                  news.username,
+                );
+                return existing;
+              }),
             ),
           );
-        return attributesOf(origin, created);
       }
 
       // Sync only when the live organization differs from what was declared.
@@ -274,16 +282,28 @@ export const OrganizationProvider = () =>
         : yield* Services.organization.editOrg({
             org: news.username,
             ...desired,
+            // Forgejo's non-pointer string fields clear on omission.
+            description: news.description ?? observed.description,
+            full_name: news.fullName ?? observed.full_name,
+            website: news.website ?? observed.website,
+            location: news.location ?? observed.location,
           });
+      if (!matchesDesired(updated, desired)) {
+        return yield* new OrganizationSettingsNotApplied({
+          message: `Forgejo did not apply the requested settings for '${news.username}'. Forgejo 16.0.3 cannot change an existing non-public organization to public through its edit API.`,
+        });
+      }
       return attributesOf(origin, updated);
     }),
-    delete: Effect.fn(function* ({ olds }) {
+    delete: Effect.fn(function* ({ output }) {
+      const live = yield* observe({ username: output.username });
+      if (live === undefined || live.id !== output.organizationId) return;
       // Forgejo refuses to delete an organization that still owns
       // repositories, and the engine deletes independent resources
       // concurrently — so an organization that loses the race against its own
       // repositories fails the destroy outright, succeeding only on a re-run.
       // Retry until the repositories are gone.
-      yield* Services.organization.deleteOrg({ org: olds.username }).pipe(
+      yield* Services.organization.deleteOrg({ org: live.username }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: (error) => error._tag === "OrganizationOwnsRepositories",

@@ -1,6 +1,9 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Hook as ApiHook } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
+import * as Data from "effect/Data";
+import { isResolved } from "../Diff.ts";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -33,9 +36,9 @@ export interface WebhookProps {
   /**
    * Secret used to sign webhook deliveries.
    *
-   * Forgejo only overwrites the stored secret when the field is present in
-   * the request, so removing this prop leaves the previously-set secret in
-   * place rather than clearing it. Set it to an empty string to clear.
+   * Forgejo 16.0.3 cannot edit signing secrets. Changing or removing this
+   * property replaces the hook delete-first, with a delivery gap until the
+   * successor is created. Identical hooks cannot be recovered unambiguously.
    */
   readonly secret?: Redacted.Redacted<string>;
   /**
@@ -53,7 +56,7 @@ export interface WebhookProps {
   /**
    * Optional Authorization header sent with deliveries.
    *
-   * Cannot be cleared by removing the prop; see {@link secret}.
+   * Omission leaves the existing header unmanaged. Set an empty string to clear.
    */
   readonly authorizationHeader?: Redacted.Redacted<string>;
 }
@@ -127,6 +130,18 @@ export interface Webhook extends Resource<
  */
 export const Webhook = Resource<Webhook>("Forgejo.Webhook");
 
+/** Forgejo exposes no ownership marker to disambiguate identical hooks. */
+export class AmbiguousWebhook extends Data.TaggedError("AmbiguousWebhook")<{
+  readonly url: string;
+}> {}
+
+/** The existing signing secret is write-only and cannot be verified on adoption. */
+export class UnverifiableWebhookSecret extends Data.TaggedError(
+  "UnverifiableWebhookSecret",
+)<{
+  readonly message: string;
+}> {}
+
 /** Events Forgejo delivers when a webhook declares none. */
 const DEFAULT_EVENTS = ["push"] as const;
 
@@ -161,17 +176,8 @@ const sameEvents = (
   );
 
 /**
- * Whether a live hook is the one this resource declares.
- *
- * Every field Forgejo lets a hook differ by has to take part. Forgejo accepts
- * several hooks on one URL — verified on 16.0.3, which happily created two
- * with the same URL *and* the same events — so any field left out of this
- * comparison is a field two `Webhook` resources may legitimately differ by
- * while both match the same live hook. They would then share one hook, and
- * each deploy would overwrite the other's configuration.
- *
- * Compared against the same defaults {@link bodyOf} sends, so a hook this
- * provider just created matches the props that created it.
+ * Candidate discovery from readable configuration, not ownership evidence.
+ * Secrets are write-only, and identical candidates require operator intervention.
  */
 const matchesIdentity = (
   hook: ApiHook,
@@ -200,12 +206,8 @@ const listHooks = (props: Pick<WebhookProps, "owner" | "repository">) =>
   );
 
 /**
- * Locate the live hook, by ID when one is already known and otherwise by its
- * full declared identity within the repository.
- *
- * Forgejo happily accepts several hooks pointing at the same URL, so creating
- * unconditionally would turn a create whose state write failed into a
- * duplicate on every retry. Matching an existing hook adopts it instead.
+ * A saved ID never falls back to a matcher. Discovery without state requires
+ * explicit adoption, and multiple matches fail even with adoption enabled.
  */
 const observe = Effect.fn(function* (
   props: Pick<
@@ -224,10 +226,13 @@ const observe = Effect.fn(function* (
     const byId = yield* Services.repository
       .repoGetHook({ ...target(props), id: webhookId })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    if (byId !== undefined) return byId;
+    return byId;
   }
   const hooks = yield* listHooks(props);
-  return hooks.find((hook) => matchesIdentity(hook, props));
+  const matches = hooks.filter((hook) => matchesIdentity(hook, props));
+  if (matches.length > 1)
+    return yield* new AmbiguousWebhook({ url: props.url });
+  return matches[0];
 });
 
 const bodyOf = (props: WebhookProps) => ({
@@ -253,9 +258,29 @@ const bodyOf = (props: WebhookProps) => ({
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId", "owner", "repository"],
-    // A hook belongs to one repository and cannot be moved, so a changed
-    // repository names a different hook. Every other prop is editable.
-    diff: replaceWhenChanged<WebhookProps>("owner", "repository"),
+    diff: Effect.fn(function* (input) {
+      if (!isResolved(input.news) && input.olds !== undefined) {
+        // An unresolved secret cannot safely be treated as an editable setting.
+        return { action: "replace" as const, deleteFirst: true };
+      }
+      const parent = yield* replaceWhenChanged<WebhookProps>(
+        "owner",
+        "repository",
+      )(input);
+      if (parent !== undefined) return parent;
+      const { news, olds } = input;
+      if (
+        isResolved(news) &&
+        olds !== undefined &&
+        (news.secret === undefined
+          ? undefined
+          : Redacted.value(news.secret)) !==
+          (olds.secret === undefined ? undefined : Redacted.value(olds.secret))
+      ) {
+        // Forgejo 16 cannot edit secrets. Delete-first avoids rediscovering the predecessor.
+        return { action: "replace" as const, deleteFirst: true };
+      }
+    }),
     list: Effect.fn(function* () {
       const repositories = yield* listAccessibleRepositories();
       const hooks = yield* Effect.forEach(
@@ -277,19 +302,31 @@ export const WebhookProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.webhookId);
-      return observed === undefined ? undefined : attributesOf(olds, observed);
+      return observed === undefined
+        ? undefined
+        : discovered(attributesOf(olds, observed), output !== undefined);
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
-      // Observe: live state decides create-vs-update, so adoption and a
-      // re-run after a failed state write both converge onto one hook.
+    reconcile: Effect.fn(function* ({ news, olds, output }) {
+      if (
+        output !== undefined &&
+        olds === undefined &&
+        news.secret !== undefined
+      ) {
+        return yield* new UnverifiableWebhookSecret({
+          message:
+            "Forgejo cannot read or edit an adopted hook's signing secret. Adopt with secret omitted, then declare the secret in a subsequent deployment to replace the hook.",
+        });
+      }
+      // Unrecorded matches must pass the engine's adoption gate first.
       const observed = yield* observe(news, output?.webhookId);
 
-      // Unlike the other reconcilers there is no `matchesDesired` no-op skip:
-      // Forgejo never reads `secret` or `authorization_header` back, so a
-      // rotation of either is invisible in the observed hook. Skipping on an
-      // identity match would silently drop it, and the write is cheap.
-      //
-      // `CreateHookOption` carries `type`; `EditHookOption` does not.
+      if (observed !== undefined)
+        yield* requireOwnership(output?.webhookId === observed.id, news.url);
+      if (observed === undefined) {
+        const conflict = yield* observe(news, undefined);
+        if (conflict !== undefined) yield* requireOwnership(false, news.url);
+      }
+      // Authorization headers are write-only; signing secrets are replaced in diff.
       const hook =
         observed === undefined
           ? yield* Services.repository.repoCreateHook({
@@ -301,6 +338,10 @@ export const WebhookProvider = () =>
               ...target(news),
               id: observed.id,
               ...bodyOf(news),
+              config: {
+                url: news.url,
+                content_type: news.contentType ?? "json",
+              },
             });
       return attributesOf(news, hook);
     }),

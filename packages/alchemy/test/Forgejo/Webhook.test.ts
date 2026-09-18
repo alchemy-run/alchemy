@@ -83,8 +83,307 @@ const server = mockForgejo((request) => {
 
 const { test } = forgejoTest(server);
 
+import { adopt } from "@/AdoptPolicy.ts";
+import { Repository } from "@/Forgejo/index.ts";
+import { destroy } from "@/RemovalPolicy";
+import { Services } from "@distilled.cloud/forgejo";
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import { createHmac } from "node:crypto";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { fixture, liveTest } from "./support/live.ts";
+
+const live = liveTest();
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: webhook rotation changes actual delivery signatures",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner, webhookUrl } = yield* fixture;
+      const deliveries = yield* Ref.make<
+        ReadonlyArray<{ body: string; signature: string | undefined }>
+      >([]);
+      const receiver = yield* BunHttpServer.make({
+        hostname: "0.0.0.0",
+        port: 31426,
+      });
+      yield* receiver.serve(
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const body = yield* request.text;
+          yield* Ref.update(deliveries, (items) => [
+            ...items,
+            { body, signature: request.headers["x-forgejo-signature"] },
+          ]);
+          return HttpServerResponse.text("ok");
+        }),
+      );
+      const repoName = "alchemy-1425-hooks";
+      const deploy = (secret?: string) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: repoName,
+            autoInit: true,
+          }).pipe(destroy());
+          return yield* Webhook("Hook", {
+            owner,
+            repository: repo.name,
+            url: webhookUrl ?? "http://host.docker.internal:31426/hook",
+            secret: secret === undefined ? undefined : Redacted.make(secret),
+          });
+        });
+      const ping = Effect.fn(function* (id: number) {
+        yield* Ref.set(deliveries, []);
+        yield* Services.repository.repoTestHook({ owner, repo: repoName, id });
+        const received = yield* Ref.get(deliveries).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+            until: (items) => items.length > 0,
+          }),
+        );
+        expect(received.length).toBeGreaterThan(0);
+        return received[0]!;
+      });
+      const first = yield* stack.deploy(deploy("secret-a"));
+      const deliveryA = yield* ping(first.webhookId);
+      const expectedA = yield* Effect.sync(() =>
+        createHmac("sha256", "secret-a").update(deliveryA.body).digest("hex"),
+      );
+      expect(deliveryA.signature).toBe(expectedA);
+      const second = yield* stack.deploy(deploy("secret-b"));
+      expect(
+        (yield* Services.repository.repoListHooks({
+          owner,
+          repo: repoName,
+        })).map((hook) => hook.id),
+      ).toEqual([second.webhookId]);
+      const deliveryB = yield* ping(second.webhookId);
+      const expectedB = yield* Effect.sync(() =>
+        createHmac("sha256", "secret-b").update(deliveryB.body).digest("hex"),
+      );
+      const oldSignature = yield* Effect.sync(() =>
+        createHmac("sha256", "secret-a").update(deliveryB.body).digest("hex"),
+      );
+      const unsigned = yield* stack.deploy(deploy());
+      const unsignedDelivery = yield* ping(unsigned.webhookId);
+      yield* stack.destroy();
+      expect(second.webhookId).not.toBe(first.webhookId);
+      expect(deliveryB.signature).toBe(expectedB);
+      expect(deliveryB.signature).not.toBe(oldSignature);
+      expect(unsigned.webhookId).not.toBe(second.webhookId);
+      expect(unsignedDelivery.signature ?? "").toBe("");
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: adopting a signing secret requires an explicit replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const repoName = "alchemy-1425-adopt-signed";
+      const url = "https://example.invalid/adopt-signed";
+      const program = (include: boolean, secret?: string) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: repoName,
+          }).pipe(destroy());
+          if (include)
+            return yield* Webhook("Hook", {
+              owner,
+              repository: repo.name,
+              url,
+              active: false,
+              secret: secret === undefined ? undefined : Redacted.make(secret),
+            }).pipe(adopt(true));
+          return undefined;
+        });
+      yield* stack.deploy(program(false));
+      const foreign = yield* Services.repository.repoCreateHook({
+        owner,
+        repo: repoName,
+        type: "forgejo",
+        active: false,
+        events: ["push"],
+        config: { url, content_type: "json", secret: "foreign-secret" },
+      });
+      const refused = yield* stack
+        .deploy(program(true, "managed-secret"))
+        .pipe(Effect.result);
+      yield* stack.deploy(program(true));
+      const replaced = yield* stack.deploy(program(true, "managed-secret"));
+      yield* stack.destroy();
+      expect(JSON.stringify(refused)).toContain("UnverifiableWebhookSecret");
+      expect(replaced?.webhookId).not.toBe(foreign.id);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: interrupted discovery and duplicate hooks never share identity",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const repoName = "alchemy-1425-duplicate-hooks";
+      const url = "https://example.invalid/duplicate";
+      const program = (probe: boolean) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: repoName,
+          }).pipe(destroy());
+          const first = yield* Webhook("First", {
+            owner,
+            repository: repo.name,
+            url,
+            active: false,
+          });
+          const second = yield* Webhook("Second", {
+            owner,
+            repository: repo.name,
+            url: `${url}/second`,
+            active: false,
+          });
+          if (probe)
+            yield* Webhook("Probe", {
+              owner,
+              repository: repo.name,
+              url,
+              active: false,
+            });
+          return { first, second };
+        });
+      const created = yield* stack.deploy(program(false));
+      const interrupted = yield* stack
+        .deploy(program(true))
+        .pipe(Effect.result);
+      yield* Services.repository.repoEditHook({
+        owner,
+        repo: repoName,
+        id: created.second.webhookId,
+        config: { url },
+      });
+      const ambiguous = yield* stack.deploy(program(true)).pipe(Effect.result);
+      const hooks = yield* Services.repository.repoListHooks({
+        owner,
+        repo: repoName,
+      });
+      yield* stack.destroy();
+      expect(JSON.stringify(interrupted)).toContain("OwnedBySomeoneElse");
+      expect(JSON.stringify(ambiguous)).toContain("AmbiguousWebhook");
+      expect(hooks.map((h) => h.id).sort()).toEqual(
+        [created.first.webhookId, created.second.webhookId].sort(),
+      );
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: failed secret replacement resumes without reviving its predecessor",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const repoName = "alchemy-1425-interrupted-hook";
+      const program = (
+        secret: string,
+        url = "https://example.invalid/rotation",
+      ) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: repoName,
+          }).pipe(destroy());
+          return yield* Webhook("Hook", {
+            owner,
+            repository: repo.name,
+            url,
+            active: false,
+            secret: Redacted.make(secret),
+          });
+        });
+      const first = yield* stack.deploy(program("before"));
+      const interrupted = yield* stack
+        .deploy(program("after", ""))
+        .pipe(Effect.result);
+      const predecessor = yield* Services.repository
+        .repoGetHook({ owner, repo: repoName, id: first.webhookId })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      const recovered = yield* stack.deploy(program("after"));
+      const hooks = yield* Services.repository.repoListHooks({
+        owner,
+        repo: repoName,
+      });
+      yield* stack.destroy();
+      expect(Result.isFailure(interrupted)).toBe(true);
+      expect(predecessor).toBeUndefined();
+      expect(recovered.webhookId).not.toBe(first.webhookId);
+      expect(hooks.map((hook) => hook.id)).toEqual([recovered.webhookId]);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: known webhook ID miss cannot retarget a matching hook",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const repoName = "alchemy-1425-hook-id-miss";
+      const url = "https://example.invalid/id-miss";
+      const program = (updated = false, cleanup = false) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: repoName,
+          }).pipe(destroy());
+          return yield* Webhook(cleanup ? "Foreign" : "Hook", {
+            owner,
+            repository: repo.name,
+            url,
+            active: false,
+            authorizationHeader: updated ? Redacted.make("updated") : undefined,
+          }).pipe(adopt(cleanup));
+        });
+      const first = yield* stack.deploy(program());
+      yield* Services.repository.repoDeleteHook({
+        owner,
+        repo: repoName,
+        id: first.webhookId,
+      });
+      const foreign = yield* Services.repository.repoCreateHook({
+        owner,
+        repo: repoName,
+        type: "forgejo",
+        active: false,
+        events: ["push"],
+        config: { url, content_type: "json" },
+      });
+      const attempted = yield* stack.deploy(program(true)).pipe(Effect.result);
+      const untouched = yield* Services.repository.repoGetHook({
+        owner,
+        repo: repoName,
+        id: foreign.id,
+      });
+      yield* stack.deploy(program(false, true));
+      yield* stack.destroy();
+      expect(Result.isFailure(attempted)).toBe(true);
+      expect(untouched.id).toBe(foreign.id);
+    }),
+  { timeout: 90_000 },
+);
+
 test.provider(
-  "adopts an existing hook with the same delivery URL instead of duplicating it",
+  "requires explicit adoption for an existing hook with the same delivery URL",
   (stack) =>
     Effect.gen(function* () {
       reset();
@@ -102,14 +401,16 @@ test.provider(
       });
       nextId = 2;
 
-      const output = yield* stack.deploy(
-        Webhook("Hook", {
-          owner: "acme",
-          repository: "api",
-          url: "https://deploy.example/hooks",
-          events: ["push", "pull_request"],
-        }),
-      );
+      const resource = Webhook("Hook", {
+        owner: "acme",
+        repository: "api",
+        url: "https://deploy.example/hooks",
+        events: ["push", "pull_request"],
+      });
+      expect(
+        Result.isFailure(yield* stack.deploy(resource).pipe(Effect.result)),
+      ).toBe(true);
+      const output = yield* stack.deploy(resource.pipe(adopt(true)));
 
       expect(output.webhookId).toBe(1);
       expect(hooks.size).toBe(1);

@@ -11,6 +11,146 @@ import {
 } from "./support/mock.ts";
 import { forgejoTest } from "./support/stack.ts";
 
+import { adopt } from "@/AdoptPolicy.ts";
+import { destroy } from "@/RemovalPolicy";
+import { Organization } from "@/Forgejo/index.ts";
+import { Services } from "@distilled.cloud/forgejo";
+import * as Result from "effect/Result";
+import { fixture, liveTest } from "./support/live.ts";
+const live = liveTest();
+
+for (const kind of ["repository", "organization", "user"] as const) {
+  for (const entry of ["secret", "variable"] as const) {
+    live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+      `live: ${kind} ${entry} ownership and lifecycle`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { username: owner } = yield* fixture;
+          const parent = `alchemy-1425-${kind}-${entry}`;
+          const name = "ALCHEMY_1425_FOREIGN";
+          const program = (
+            include: boolean,
+            consent = false,
+            value = "managed",
+          ) =>
+            Effect.gen(function* () {
+              const repo = yield* Repository("Repo", {
+                owner,
+                name: parent,
+              }).pipe(destroy());
+              const org = yield* Organization("Org", {
+                owner,
+                username: parent,
+              }).pipe(destroy());
+              if (include) {
+                const scope =
+                  kind === "repository"
+                    ? { kind, owner: repo.owner, repository: repo.name }
+                    : kind === "organization"
+                      ? { kind, organization: org.username }
+                      : { kind };
+                if (entry === "secret")
+                  yield* Secret("Entry", {
+                    scope,
+                    name,
+                    value: Redacted.make(value),
+                  }).pipe(adopt(consent));
+                else
+                  yield* Variable("Entry", { scope, name, value }).pipe(
+                    adopt(consent),
+                  );
+              }
+            });
+          yield* stack.deploy(program(false));
+          if (entry === "secret") {
+            if (kind === "repository")
+              yield* Services.repository.updateRepoSecret({
+                owner,
+                repo: parent,
+                secretname: name,
+                data: "foreign",
+              });
+            else if (kind === "organization")
+              yield* Services.organization.updateOrgSecret({
+                org: parent,
+                secretname: name,
+                data: "foreign",
+              });
+            else
+              yield* Services.user.updateUserSecret({
+                secretname: name,
+                data: "foreign",
+              });
+          } else {
+            if (kind === "repository")
+              yield* Services.repository.createRepoVariable({
+                owner,
+                repo: parent,
+                variablename: name,
+                value: "foreign",
+              });
+            else if (kind === "organization")
+              yield* Services.organization.createOrgVariable({
+                org: parent,
+                variablename: name,
+                value: "foreign",
+              });
+            else
+              yield* Services.user.createUserVariable({
+                variablename: name,
+                value: "foreign",
+              });
+          }
+          const refused = yield* stack
+            .deploy(program(true))
+            .pipe(Effect.result);
+          yield* stack.deploy(program(true, true));
+          yield* stack.deploy(program(true, false, "updated"));
+          const read = () =>
+            kind === "repository"
+              ? Services.repository.getRepoVariable({
+                  owner,
+                  repo: parent,
+                  variablename: name,
+                })
+              : kind === "organization"
+                ? Services.organization.getOrgVariable({
+                    org: parent,
+                    variablename: name,
+                  })
+                : Services.user.getUserVariable({ variablename: name });
+          if (entry === "variable")
+            expect((yield* read()).data).toBe("updated");
+          yield* stack.deploy(program(false));
+          if (entry === "variable")
+            expect(
+              yield* read().pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              ),
+            ).toBeUndefined();
+          else if (kind === "repository")
+            expect(
+              (yield* Services.repository.repoListActionsSecrets({
+                owner,
+                repo: parent,
+              })).some((s) => s.name === name),
+            ).toBe(false);
+          else if (kind === "organization")
+            expect(
+              (yield* Services.organization.orgListActionsSecrets({
+                org: parent,
+              })).some((s) => s.name === name),
+            ).toBe(false);
+          yield* stack.destroy();
+          expect(Result.isFailure(refused)).toBe(true);
+          expect(JSON.stringify(refused)).toContain("OwnedBySomeoneElse");
+        }),
+      { timeout: 90_000 },
+    );
+  }
+}
+
 const REPO = "/repos/alice/alchemy";
 const TOPICS = `${REPO}/topics`;
 const VARIABLE = `${REPO}/actions/variables/DEPLOY_ENV`;
@@ -86,6 +226,15 @@ const server = mockForgejo((request) => {
       variable = undefined;
       return noContent();
     }
+  }
+
+  if (method === "GET" && path === `${REPO}/actions/secrets`) {
+    return jsonList(
+      request,
+      secret === undefined
+        ? []
+        : [{ name: "DEPLOY_TOKEN", created_at: "2026-01-01T00:00:00Z" }],
+    );
   }
 
   if (path === SECRET) {
@@ -316,6 +465,7 @@ test.provider("uses the webhook create and edit schemas", (stack) =>
         owner: "alice",
         repository: "alchemy",
         url: "https://deploy.example/hooks/forgejo-v2",
+        secret: Redacted.make("signing-secret"),
       }),
     );
 

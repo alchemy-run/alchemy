@@ -6,10 +6,10 @@ import { Secret } from "./Secret.ts";
 
 /** Properties for creating multiple Forgejo Actions secrets. */
 export interface SecretsProps {
-  /** Repository owner. */
-  readonly owner: string;
-  /** Repository name. */
-  readonly repository: string;
+  /** Repository owner, including an output from a managed repository. */
+  readonly owner: Input<string>;
+  /** Repository name, including an output from a managed repository. */
+  readonly repository: Input<string>;
   /** Secret values keyed by Actions secret name. */
   readonly secrets: Readonly<
     Record<string, Input<string | Redacted.Redacted<string>>>

@@ -18,6 +18,497 @@ import {
   status,
 } from "./support/mock.ts";
 import { forgejoTest } from "./support/stack.ts";
+import { adopt } from "@/AdoptPolicy.ts";
+import { Repository } from "@/Forgejo/index.ts";
+import { Services } from "@distilled.cloud/forgejo";
+import { fixture, liveTest } from "./support/live.ts";
+
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+
+const live = liveTest();
+const raceLive = liveTest((client) =>
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
+      if (request.method === "POST" && request.url.endsWith("/orgs")) {
+        yield* client.execute(
+          request.pipe(
+            HttpClientRequest.bodyJsonUnsafe({
+              username: "alchemy-1425-race",
+              description: "race winner",
+              visibility: "private",
+            }),
+          ),
+        );
+      }
+      return yield* client.execute(request);
+    }),
+  ),
+);
+
+raceLive.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: organization create-race winner is not implicitly adopted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const resource = Organization("Org", {
+        owner,
+        username: "alchemy-1425-race",
+        description: "managed",
+        visibility: "limited",
+      }).pipe(destroy());
+      const rejected = yield* stack.deploy(resource).pipe(Effect.result);
+      const before = yield* Services.organization.getOrg({
+        org: "alchemy-1425-race",
+      });
+      yield* stack.deploy(resource.pipe(adopt(true)));
+      const after = yield* Services.organization.getOrg({
+        org: "alchemy-1425-race",
+      });
+      yield* stack.destroy();
+      expect(Result.isFailure(rejected)).toBe(true);
+      expect(JSON.stringify(rejected)).toContain("OwnedBySomeoneElse");
+      expect(before.description).toBe("race winner");
+      expect(before.visibility).toBe("private");
+      expect(after.description).toBe("managed");
+      expect(after.visibility).toBe("limited");
+    }),
+  { timeout: 90_000 },
+);
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: organization preserves omitted strings and rejects unapplied public visibility",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const username = "alchemy-1425-org-visibility";
+      yield* stack.deploy(
+        Organization("Org", {
+          owner,
+          username,
+          visibility: "private",
+          description: "keep",
+          fullName: "Keep",
+          website: "https://example.invalid",
+          location: "Earth",
+        }).pipe(destroy()),
+      );
+      yield* stack.deploy(
+        Organization("Org", { owner, username, visibility: "limited" }).pipe(
+          destroy(),
+        ),
+      );
+      const preserved = yield* Services.organization.getOrg({ org: username });
+      const rejected = yield* stack
+        .deploy(
+          Organization("Org", { owner, username, visibility: "public" }).pipe(
+            destroy(),
+          ),
+        )
+        .pipe(Effect.result);
+      yield* stack.destroy();
+      expect(preserved.description).toBe("keep");
+      expect(preserved.full_name).toBe("Keep");
+      expect(preserved.location).toBe("Earth");
+      expect(JSON.stringify(rejected)).toContain(
+        "OrganizationSettingsNotApplied",
+      );
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: team defaults and standalone all-repositories update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const deploy = (includesAllRepositories?: boolean) =>
+        Effect.gen(function* () {
+          const org = yield* Organization("Org", {
+            owner,
+            username: "alchemy-1425-team",
+          }).pipe(destroy());
+          return yield* Team("Team", {
+            organization: org.username,
+            name: "Readers",
+            includesAllRepositories,
+          });
+        });
+      const first = yield* stack.deploy(deploy());
+      const observed = yield* Services.organization.orgGetTeam({
+        id: first.teamId,
+      });
+      expect(observed.permission).toBe("read");
+      expect(observed.units).toEqual(["repo.code"]);
+      yield* stack.deploy(deploy(true));
+      expect(
+        (yield* Services.organization.orgGetTeam({ id: first.teamId }))
+          .includes_all_repositories,
+      ).toBe(true);
+      yield* stack.deploy(deploy(false));
+      expect(
+        (yield* Services.organization.orgGetTeam({ id: first.teamId }))
+          .includes_all_repositories,
+      ).toBe(false);
+      yield* stack.destroy();
+      expect(
+        yield* Services.organization
+          .orgGetTeam({ id: first.teamId })
+          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+      ).toBeUndefined();
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: team flag updates preserve mixed unit permissions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const program = (
+        includesAllRepositories?: boolean,
+        permission?: "read" | "write",
+        units?: string[],
+      ) =>
+        Effect.gen(function* () {
+          const org = yield* Organization("Org", {
+            owner,
+            username: "alchemy-1425-team-units",
+          }).pipe(destroy());
+          return yield* Team("Team", {
+            organization: org.username,
+            name: "Mixed",
+            includesAllRepositories,
+            permission,
+            units,
+          });
+        });
+      const first = yield* stack.deploy(program());
+      const units_map = { "repo.code": "read", "repo.issues": "write" };
+      yield* Services.organization.orgEditTeam({
+        id: first.teamId,
+        name: "Mixed",
+        permission: "read",
+        units_map,
+      });
+      yield* stack.deploy(program(true));
+      const preserved = yield* Services.organization.orgGetTeam({
+        id: first.teamId,
+      });
+      yield* stack.deploy(program(false, "write", ["repo.issues"]));
+      const changed = yield* Services.organization.orgGetTeam({
+        id: first.teamId,
+      });
+      yield* stack.destroy();
+      expect(preserved.units_map).toEqual(units_map);
+      expect(preserved.includes_all_repositories).toBe(true);
+      expect(changed.permission).toBe("write");
+      expect(changed.units).toEqual(["repo.issues"]);
+      expect(changed.includes_all_repositories).toBe(false);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: label edits preserve unmanaged archive state",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const deploy = (color: string, isArchived?: boolean) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: "alchemy-1425-label",
+          }).pipe(destroy());
+          return yield* Label("Label", {
+            owner,
+            repository: repo.name,
+            name: "old",
+            color,
+            isArchived,
+          });
+        });
+      const first = yield* stack.deploy(deploy("aabbcc", true));
+      yield* stack.deploy(deploy("ddeeff"));
+      const archived = yield* Services.issue.issueGetLabel({
+        owner,
+        repo: "alchemy-1425-label",
+        id: first.labelId,
+      });
+      yield* stack.deploy(deploy("ddeeff", false));
+      const unarchived = yield* Services.issue.issueGetLabel({
+        owner,
+        repo: "alchemy-1425-label",
+        id: first.labelId,
+      });
+      yield* stack.destroy();
+      expect(archived.is_archived).toBe(true);
+      expect(unarchived.is_archived).toBe(false);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: explicit whitelist toggles preserve observed push permission",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username: owner } = yield* fixture;
+      const deploy = (enablePushWhitelist: boolean, enablePush?: boolean) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner,
+            name: "alchemy-1425-branch",
+            autoInit: true,
+          }).pipe(destroy());
+          return yield* BranchProtection("Rule", {
+            owner,
+            repository: repo.name,
+            ruleName: "main",
+            enablePush,
+            enablePushWhitelist,
+          });
+        });
+      yield* stack.deploy(deploy(false, true));
+      yield* Services.repository.repoEditBranchProtection({
+        owner,
+        repo: "alchemy-1425-branch",
+        name: "main",
+        enable_push: true,
+        push_whitelist_usernames: [owner],
+      });
+      yield* stack.deploy(deploy(true));
+      const enabled = yield* Services.repository.repoGetBranchProtection({
+        owner,
+        repo: "alchemy-1425-branch",
+        name: "main",
+      });
+      yield* stack.deploy(deploy(false));
+      const disabled = yield* Services.repository.repoGetBranchProtection({
+        owner,
+        repo: "alchemy-1425-branch",
+        name: "main",
+      });
+      const contradictory = yield* stack
+        .deploy(deploy(true, false))
+        .pipe(Effect.result);
+      yield* stack.destroy();
+      expect(JSON.stringify(contradictory)).toContain(
+        "InvalidBranchProtection",
+      );
+      expect(enabled.enable_push).toBe(true);
+      expect(enabled.enable_push_whitelist).toBe(true);
+      expect(disabled.enable_push).toBe(true);
+      expect(disabled.enable_push_whitelist).toBe(false);
+      expect(enabled.push_whitelist_usernames).toEqual([owner]);
+      expect(disabled.push_whitelist_usernames).toEqual([owner]);
+    }),
+  { timeout: 90_000 },
+);
+
+for (const kind of ["team", "membership", "label", "branch rule"] as const) {
+  live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+    `live: foreign ${kind} requires explicit adoption`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const { username: owner } = yield* fixture;
+        const suffix = kind.replaceAll(" ", "-");
+        const orgName = `alchemy-1425-adopt-${suffix}`;
+        const repoName = `alchemy-1425-adopt-${suffix}`;
+        const program = (include: boolean, consent = false) =>
+          Effect.gen(function* () {
+            const org = yield* Organization("Org", {
+              owner,
+              username: orgName,
+            }).pipe(destroy());
+            const repo = yield* Repository("Repo", {
+              owner,
+              name: repoName,
+              autoInit: true,
+            }).pipe(destroy());
+            const parentTeam = yield* Team("ParentTeam", {
+              organization: org.username,
+              name: "Parent",
+            });
+            if (include) {
+              const child: Effect.Effect<
+                unknown,
+                never,
+                import("@/Forgejo/index.ts").Providers
+              > =
+                kind === "team"
+                  ? Team("Foreign", {
+                      organization: org.username,
+                      name: "Foreign",
+                      description: "managed",
+                    })
+                  : kind === "membership"
+                    ? TeamMember("Foreign", {
+                        teamId: parentTeam.teamId,
+                        username: owner,
+                      })
+                    : kind === "label"
+                      ? Label("Foreign", {
+                          owner,
+                          repository: repo.name,
+                          name: "foreign",
+                          color: "ddeeff",
+                        })
+                      : BranchProtection("Foreign", {
+                          owner,
+                          repository: repo.name,
+                          ruleName: "main",
+                          requiredApprovals: 2,
+                        });
+              yield* child.pipe(adopt(consent));
+            }
+            return { teamId: parentTeam.teamId };
+          });
+        const parent = yield* stack.deploy(program(false));
+        if (kind === "team")
+          yield* Services.organization.orgCreateTeam({
+            org: orgName,
+            name: "Foreign",
+            description: "foreign",
+            permission: "read",
+            units: ["repo.code"],
+          });
+        else if (kind === "membership")
+          yield* Services.organization.orgAddTeamMember({
+            id: parent.teamId,
+            username: owner,
+          });
+        else if (kind === "label")
+          yield* Services.issue.issueCreateLabel({
+            owner,
+            repo: repoName,
+            name: "foreign",
+            color: "aabbcc",
+          });
+        else
+          yield* Services.repository.repoCreateBranchProtection({
+            owner,
+            repo: repoName,
+            rule_name: "main",
+            required_approvals: 1,
+          });
+        const refused = yield* stack.deploy(program(true)).pipe(Effect.result);
+        yield* stack.deploy(program(true, true));
+        if (kind === "team")
+          expect(
+            (yield* Services.organization.orgListTeams({ org: orgName })).find(
+              (t) => t.name === "Foreign",
+            )?.description,
+          ).toBe("managed");
+        else if (kind === "label")
+          expect(
+            (yield* Services.issue.issueListLabels({
+              owner,
+              repo: repoName,
+            })).find((l) => l.name === "foreign")?.color,
+          ).toBe("ddeeff");
+        else if (kind === "branch rule")
+          expect(
+            (yield* Services.repository.repoGetBranchProtection({
+              owner,
+              repo: repoName,
+              name: "main",
+            })).required_approvals,
+          ).toBe(2);
+        yield* stack.destroy();
+        expect(Result.isFailure(refused)).toBe(true);
+        expect(JSON.stringify(refused)).toContain("OwnedBySomeoneElse");
+      }),
+    { timeout: 90_000 },
+  );
+}
+
+for (const kind of ["organization", "team", "label"] as const) {
+  live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+    `live: missing ${kind} ID cannot claim a reused name`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const { username: owner } = yield* fixture;
+        const name = `alchemy-1425-missing-${kind}`;
+        const program = (updated = false, cleanup = false) =>
+          Effect.gen(function* () {
+            const org = yield* Organization(
+              kind === "organization" && cleanup ? "ForeignOrg" : "Org",
+              {
+                owner,
+                username: name,
+                description: updated ? "updated" : "original",
+              },
+            ).pipe(destroy(), adopt(kind === "organization" && cleanup));
+            const repo = yield* Repository("Repo", { owner, name }).pipe(
+              destroy(),
+            );
+            if (kind === "team") {
+              const team = yield* Team(cleanup ? "Foreign" : "Child", {
+                organization: org.username,
+                name: "Child",
+                description: updated ? "updated" : "original",
+              }).pipe(adopt(cleanup));
+              return { id: team.teamId };
+            }
+            if (kind === "label") {
+              const label = yield* Label(cleanup ? "Foreign" : "Child", {
+                owner,
+                repository: repo.name,
+                name: "Child",
+                color: updated ? "ddeeff" : "aabbcc",
+              }).pipe(adopt(cleanup));
+              return { id: label.labelId };
+            }
+            return { id: org.organizationId };
+          });
+        const first = yield* stack.deploy(program());
+        let foreignId: number;
+        if (kind === "organization") {
+          yield* Services.organization.deleteOrg({ org: name });
+          foreignId = (yield* Services.admin.adminCreateOrg({
+            owner,
+            username: name,
+            description: "foreign",
+          })).id;
+        } else if (kind === "team") {
+          yield* Services.organization.orgDeleteTeam({ id: first.id });
+          foreignId = (yield* Services.organization.orgCreateTeam({
+            org: name,
+            name: "Child",
+            description: "foreign",
+            permission: "read",
+            units: ["repo.code"],
+          })).id;
+        } else {
+          yield* Services.issue.issueDeleteLabel({
+            owner,
+            repo: name,
+            id: first.id,
+          });
+          foreignId = (yield* Services.issue.issueCreateLabel({
+            owner,
+            repo: name,
+            name: "Child",
+            color: "112233",
+          })).id;
+        }
+        const refused = yield* stack.deploy(program(true)).pipe(Effect.result);
+        const adopted = yield* stack.deploy(program(false, true));
+        yield* stack.destroy();
+        expect(Result.isFailure(refused)).toBe(true);
+        expect(adopted.id).toBe(foreignId);
+        expect(foreignId).not.toBe(first.id);
+      }),
+    { timeout: 90_000 },
+  );
+}
 
 interface StoredOrganization {
   readonly id: number;
@@ -390,9 +881,11 @@ test.provider("adopts an organization that already exists", (stack) =>
       html_url: "https://forge.example/acme",
     });
 
-    const output = yield* stack.deploy(
-      Organization("Acme", { owner: "alice", username: "acme" }),
-    );
+    const resource = Organization("Acme", { owner: "alice", username: "acme" });
+    expect(
+      Result.isFailure(yield* stack.deploy(resource).pipe(Effect.result)),
+    ).toBe(true);
+    const output = yield* stack.deploy(resource.pipe(adopt(true)));
 
     expect(output).toMatchObject({ organizationId: 99 });
     expect(server.count("POST", "/admin/users/alice/orgs")).toBe(0);
@@ -497,9 +990,14 @@ test.provider("adopts a team that already exists by name", (stack) =>
     reset();
     teams.set(7, { id: 7, organization: "acme", name: "reviewers" });
 
-    const output = yield* stack.deploy(
-      Team("Reviewers", { organization: "acme", name: "reviewers" }),
-    );
+    const resource = Team("Reviewers", {
+      organization: "acme",
+      name: "reviewers",
+    });
+    expect(
+      Result.isFailure(yield* stack.deploy(resource).pipe(Effect.result)),
+    ).toBe(true);
+    const output = yield* stack.deploy(resource.pipe(adopt(true)));
 
     // Observing by name is what keeps a re-run after a lost state write from
     // creating a duplicate team.
@@ -571,9 +1069,11 @@ test.provider("still adopts the Owners team when named explicitly", (stack) =>
       permission: "owner",
     });
 
-    const output = yield* stack.deploy(
-      Team("Owners", { organization: "acme", name: "Owners" }),
-    );
+    const resource = Team("Owners", { organization: "acme", name: "Owners" });
+    expect(
+      Result.isFailure(yield* stack.deploy(resource).pipe(Effect.result)),
+    ).toBe(true);
+    const output = yield* stack.deploy(resource.pipe(adopt(true)));
 
     expect(output).toMatchObject({ teamId: 4 });
     expect(server.count("POST", "/orgs/acme/teams")).toBe(0);
@@ -648,14 +1148,16 @@ test.provider("adopts a label that already exists by name", (stack) =>
       color: "ff0000",
     });
 
-    const output = yield* stack.deploy(
-      Label("Bug", {
-        owner: "alice",
-        repository: "alchemy",
-        name: "bug",
-        color: "0000ff",
-      }),
-    );
+    const resource = Label("Bug", {
+      owner: "alice",
+      repository: "alchemy",
+      name: "bug",
+      color: "0000ff",
+    });
+    expect(
+      Result.isFailure(yield* stack.deploy(resource).pipe(Effect.result)),
+    ).toBe(true);
+    const output = yield* stack.deploy(resource.pipe(adopt(true)));
 
     expect(output).toMatchObject({ labelId: 4, color: "0000ff" });
     expect(server.count("POST", "/repos/alice/alchemy/labels")).toBe(0);

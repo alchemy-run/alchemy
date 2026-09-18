@@ -1,6 +1,7 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Secret as ApiSecret } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -107,7 +108,11 @@ export interface Secret extends Resource<
  *
  * Forgejo accepts secret values as plaintext over authenticated TLS; unlike
  * GitHub there is no public-key encryption handshake. The stored value can
- * never be read back, so every deploy writes it.
+ * never be read back, so reconciliation writes it when scheduled. Repository
+ * and organization secrets are discovered through their name lists and require
+ * explicit adoption when not recorded in state. User secrets have no existence
+ * API, so their initial upsert always requires `adopt(true)`. The API has no
+ * conditional-create operation to guard against a concurrent secret writer.
  *
  * ### Creating a Secret
  * **Example:** Repository Secret
@@ -134,11 +139,13 @@ export interface Secret extends Resource<
  *
  * **Example:** User Secret
  * ```typescript
+ * import { adopt } from "alchemy";
+ *
  * yield* Forgejo.Secret("npm", {
  *   scope: { kind: "user" },
  *   name: "NPM_TOKEN",
  *   value: Redacted.make(process.env.NPM_TOKEN!),
- * });
+ * }).pipe(adopt(true));
  * ```
  *
  * @resource
@@ -203,6 +210,27 @@ const toAttributes = (
   updatedAt: secret.created_at,
 });
 
+const observeSecret = Effect.fn(function* (scope: ActionsScope, name: string) {
+  if (scope.kind === "user") return undefined;
+  const secrets = yield* (
+    scope.kind === "repository"
+      ? paginate(Services.repository.repoListActionsSecrets, {
+          owner: scope.owner,
+          repo: scope.repository,
+        })
+      : paginate(Services.organization.orgListActionsSecrets, {
+          org: scope.organization,
+        })
+  ).pipe(
+    Effect.catchTag("NotFound", () =>
+      Effect.succeed([] as readonly ApiSecret[]),
+    ),
+  );
+  return secrets.find(
+    (secret) => secret.name.toUpperCase() === name.toUpperCase(),
+  );
+});
+
 /**
  * Provider layer implementing Actions-secret lifecycle.
  */
@@ -243,10 +271,24 @@ export const SecretProvider = () =>
           ),
         toAttributes,
       }),
-    reconcile: Effect.fn(function* ({ news }) {
-      // Forgejo's secret endpoint is an upsert and the stored value can never
-      // be read back, so there is nothing to observe or diff against.
+    read: Effect.fn(function* ({ olds, output }) {
+      const scope = secretScope(olds);
+      // User secrets have no existence API: explicit adoption authorizes the upsert.
+      if (scope.kind === "user")
+        return discovered(
+          output ?? { scope, name: olds.name, updatedAt: "" },
+          output !== undefined,
+        );
+      const observed = yield* observeSecret(scope, olds.name);
+      return observed === undefined
+        ? undefined
+        : discovered(toAttributes(scope, observed), output !== undefined);
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
       const scope = secretScope(news);
+      const observed = yield* observeSecret(scope, news.name);
+      if (scope.kind === "user" || observed !== undefined)
+        yield* requireOwnership(output !== undefined, news.name);
       yield* putSecret(scope, news.name, Redacted.value(news.value));
       const updatedAt = yield* Effect.sync(() => new Date().toISOString());
       return { scope, name: news.name, updatedAt };

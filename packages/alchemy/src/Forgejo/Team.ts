@@ -1,6 +1,7 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Team as ApiTeam } from "@distilled.cloud/forgejo/organization";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listManageableTeams, listOrganizationTeams } from "./Lists.ts";
@@ -21,7 +22,7 @@ export interface TeamProps {
    */
   readonly name: string;
   /**
-   * Repository permission.
+   * Repository permission. Defaults to read on creation; omission preserves existing permissions.
    */
   readonly permission?: "read" | "write" | "admin";
   /**
@@ -37,7 +38,7 @@ export interface TeamProps {
    */
   readonly canCreateOrgRepo?: boolean;
   /**
-   * Enabled permission units.
+   * Enabled permission units. Defaults to ["repo.code"] on creation; omission preserves existing units.
    */
   readonly units?: readonly string[];
 }
@@ -70,8 +71,8 @@ export interface Team extends Resource<
 /**
  * A team within a Forgejo organization.
  *
- * A team that already exists under the same name is adopted rather than
- * duplicated. Moving a team to a different organization replaces it.
+ * An existing team requires explicit adoption. Moving a team to a different
+ * organization replaces it. New teams default to read access to repository code.
  *
  * ### Creating a Team
  * **Example:** Basic Team
@@ -114,10 +115,7 @@ const attributesOf = (team: ApiTeam): TeamAttributes => ({
 });
 
 /**
- * Locate the live team, by ID when one is already known and otherwise by name
- * within the organization. The name lookup is what lets an existing team be
- * adopted, and what makes a re-run after a partially-persisted create
- * converge instead of failing on a duplicate.
+ * A saved ID never falls back to a name. Name discovery requires explicit adoption.
  */
 const observe = Effect.fn(function* (
   props: Pick<TeamProps, "organization" | "name">,
@@ -127,7 +125,7 @@ const observe = Effect.fn(function* (
     const byId = yield* Services.organization
       .orgGetTeam({ id: teamId })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    if (byId !== undefined) return byId;
+    return byId;
   }
   // Unfiltered on purpose: the Owners team is excluded from *enumeration*
   // (see `list`), but a resource that names it explicitly still adopts it
@@ -150,23 +148,45 @@ export const TeamProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.teamId);
-      return observed === undefined ? undefined : attributesOf(observed);
+      return observed === undefined
+        ? undefined
+        : discovered(attributesOf(observed), output !== undefined);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
-      // Observe: live state decides create-vs-update, so adoption and a
-      // re-run after a failed state write both converge.
-      const observed = yield* observe(news, output?.teamId);
-
+      // A saved ID is authoritative; a matching name is not ownership evidence.
+      let observed = yield* observe(news, output?.teamId);
+      if (observed !== undefined)
+        yield* requireOwnership(
+          output?.teamId === observed.id,
+          `${news.organization}/${news.name}`,
+        );
       if (observed === undefined) {
-        const created = yield* Services.organization.orgCreateTeam({
+        // A missing saved ID must not redirect to another team's name.
+        const conflict = yield* observe(news, undefined);
+        if (conflict !== undefined)
+          yield* requireOwnership(false, `${news.organization}/${news.name}`);
+        observed = yield* Services.organization.orgCreateTeam({
           org: news.organization,
           ...bodyOf(news),
+          permission: news.permission ?? "read",
+          units: [...(news.units ?? ["repo.code"])],
         });
-        return attributesOf(created);
       }
 
-      // Sync only when the live team differs from what was declared.
-      const desired = bodyOf(news);
+      const desired = {
+        ...bodyOf(news),
+        permission:
+          news.permission ??
+          (news.includesAllRepositories === undefined
+            ? undefined
+            : observed.permission),
+        units:
+          news.units === undefined
+            ? news.permission === undefined
+              ? undefined
+              : observed.units
+            : [...news.units],
+      };
       const updated = matchesDesired(observed, desired)
         ? observed
         : yield* Services.organization.orgEditTeam({

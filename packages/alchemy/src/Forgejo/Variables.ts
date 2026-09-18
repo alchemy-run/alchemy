@@ -4,10 +4,10 @@ import { Variable } from "./Variable.ts";
 
 /** Properties for creating multiple Forgejo Actions variables. */
 export interface VariablesProps {
-  /** Repository owner. */
-  readonly owner: string;
-  /** Repository name. */
-  readonly repository: string;
+  /** Repository owner, including an output from a managed repository. */
+  readonly owner: Input<string>;
+  /** Repository name, including an output from a managed repository. */
+  readonly repository: Input<string>;
   /** Values keyed by Actions variable name. */
   readonly variables: Readonly<Record<string, Input<string>>>;
 }

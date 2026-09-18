@@ -28,9 +28,9 @@ const org = yield* Forgejo.Organization("acme", {
 ```
 
 `owner` is the *user account under which an administrator creates the
-organization*, not a parent org. An organization that already exists
-is adopted and its settings converge, so declaring one you created by
-hand brings it under management.
+organization*, not a parent org. Adopting an organization that already
+exists requires `.pipe(Alchemy.adopt(true))` on the resource. Without
+explicit adoption, a matching name does not authorize a takeover.
 
 Like repositories, organizations default to the `retain` removal
 policy — `alchemy destroy` leaves them in place. Opt in with
@@ -47,7 +47,7 @@ Forgejo, then restore the original `owner` here.
 
 ```typescript
 const platform = yield* Forgejo.Team("platform", {
-  organization: "acme",
+  organization: org.username,
   name: "platform",
   description: "Platform engineering",
   permission: "write",
@@ -111,8 +111,8 @@ yield* Forgejo.BranchProtection("main", {
 ```
 
 Restrict who may push directly with `pushWhitelistUsernames` and
-`pushWhitelistTeams` — both lists replace the live values on each
-deploy.
+`pushWhitelistTeams` — declared lists replace the live values when
+the resource is reconciled. Omitted lists remain unmanaged.
 
 ## Next steps
 

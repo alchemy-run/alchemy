@@ -4,7 +4,9 @@ import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
-import { replaceWhenChanged } from "./Replacement.ts";
+import { isResolved } from "../Diff.ts";
+import { Credentials } from "./Credentials.ts";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -113,6 +115,12 @@ export interface RepositoryProps {
  * Observed attributes of a Forgejo repository.
  */
 export interface RepositoryAttributes {
+  /** Current owner login, as returned by Forgejo. */
+  readonly owner: string;
+  /** Current repository name. */
+  readonly name: string;
+  /** API v1 endpoint of the hosting Forgejo instance. */
+  readonly apiBaseUrl: string;
   /**
    * Stable numeric repository identifier.
    */
@@ -187,8 +195,8 @@ export interface Repository extends Resource<
  * ```
  *
  * ### Configuring a Repository
- * Topics replace the live list on every deploy, so the declared set is the
- * whole set.
+ * Declared topics replace the live list during reconciliation, so the
+ * declared set is the whole set.
  *
  * **Example:** Features and Topics
  * ```typescript
@@ -205,7 +213,8 @@ export interface Repository extends Resource<
  *
  * ### Renaming a Repository
  * Changing `name` renames in place and keeps the repository's history and
- * numeric ID. Changing `owner` replaces the resource instead.
+ * numeric ID. An out-of-band transfer followed by changing `owner` updates
+ * the same numeric repository ID; a different physical repository is replaced.
  *
  * **Example:** Rename in Place
  * ```typescript
@@ -272,7 +281,13 @@ const settingsOf = (props: RepositoryProps) => ({
   template: props.template,
 });
 
-const attributesOf = (repository: ApiRepository): RepositoryAttributes => ({
+const attributesOf = (
+  repository: ApiRepository,
+  apiBaseUrl: string,
+): RepositoryAttributes => ({
+  owner: repository.owner.login,
+  name: repository.name,
+  apiBaseUrl,
   repoId: repository.id,
   fullName: repository.full_name,
   htmlUrl: repository.html_url,
@@ -318,14 +333,28 @@ const create = Effect.fn(function* (news: RepositoryProps) {
 export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
     stables: ["repoId"],
-    // An edit cannot move a repository to a different owner, so a changed
-    // `owner` names a different repository.
-    diff: replaceWhenChanged<RepositoryProps>("owner"),
+    diff: Effect.fn(function* ({ news, olds, output }) {
+      if (
+        isResolved(news) &&
+        olds !== undefined &&
+        news.owner.toLowerCase() !== olds.owner.toLowerCase()
+      ) {
+        const target = yield* observe(news.owner, news.name);
+        if (output === undefined || target?.id !== output.repoId)
+          return { action: "replace" as const };
+      }
+      if (
+        output !== undefined &&
+        (!output.owner || !output.name || !output.apiBaseUrl)
+      )
+        return { action: "update" as const };
+    }),
     list: Effect.fn(function* () {
       // `/user/repos` already returns the full repository representation, so
       // enumeration needs no per-repository follow-up request.
       const repositories = yield* listAccessibleRepositories();
-      return repositories.map(attributesOf);
+      const { apiBaseUrl } = yield* yield* Credentials;
+      return repositories.map((repo) => attributesOf(repo, apiBaseUrl));
     }),
     read: Effect.fn(function* ({ olds, output }) {
       // Prefer the numeric ID: `olds.name` goes stale the moment a rename's
@@ -335,24 +364,36 @@ export const RepositoryProvider = () =>
         output === undefined
           ? yield* observe(olds.owner, olds.name)
           : yield* observeById(output.repoId);
-      return observed === undefined ? undefined : attributesOf(observed);
+      const { apiBaseUrl } = yield* yield* Credentials;
+      return observed === undefined
+        ? undefined
+        : discovered(attributesOf(observed, apiBaseUrl), output !== undefined);
     }),
-    reconcile: Effect.fn(function* ({ news, olds, output }) {
-      // Observe by the numeric ID when one is known, so a rename survives
-      // even if the state write that recorded it did not. Otherwise fall
-      // back to the previously-deployed name, which is what lets an
-      // existing repository be adopted.
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { apiBaseUrl } = yield* yield* Credentials;
       let observed =
-        output === undefined ? undefined : yield* observeById(output.repoId);
-      if (observed === undefined) {
-        observed = yield* observe(news.owner, olds?.name ?? news.name);
-      }
-
-      if (observed === undefined) {
+        output === undefined
+          ? yield* observe(news.owner, news.name)
+          : yield* observeById(output.repoId);
+      if (observed !== undefined) {
+        yield* requireOwnership(
+          output?.repoId === observed.id,
+          observed.full_name,
+        );
+      } else {
         observed = yield* create(news).pipe(
-          // A concurrent create wins the race; adopt what is there.
           Effect.catchTag("Conflict", () =>
-            Services.repository.getRepo({ owner: news.owner, repo: news.name }),
+            Effect.gen(function* () {
+              const existing = yield* Services.repository.getRepo({
+                owner: news.owner,
+                repo: news.name,
+              });
+              yield* requireOwnership(
+                output?.repoId === existing.id,
+                existing.full_name,
+              );
+              return existing;
+            }),
           ),
         );
       }
@@ -384,17 +425,18 @@ export const RepositoryProvider = () =>
           yield* Services.repository.repoUpdateTopics({ ...target, topics });
         }
       }
-      return attributesOf(updated);
+      return attributesOf(updated, apiBaseUrl);
     }),
-    delete: Effect.fn(function* ({ olds, output }) {
+    delete: Effect.fn(function* ({ output }) {
       // Resolve the live name from the numeric ID first. Deleting by a stale
       // `olds.name` 404s, which is swallowed as success — the state row would
       // be dropped while the repository lived on.
       const live = yield* observeById(output.repoId);
+      if (live === undefined) return;
       yield* Services.repository
         .deleteRepo({
-          owner: live?.owner.login ?? olds.owner,
-          repo: live?.name ?? olds.name,
+          owner: live.owner.login,
+          repo: live.name,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),

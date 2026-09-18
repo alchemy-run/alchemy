@@ -3,6 +3,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
+import { createPhysicalName } from "../PhysicalName.ts";
+import { Credentials } from "./Credentials.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { toRedacted } from "../Util/redacted.ts";
@@ -29,28 +31,39 @@ export interface ApiTokenRepository {
  */
 export interface ApiTokenProps {
   /**
-   * User that owns the generated token.
+   * User that owns the generated token. Omit to discover the authenticated
+   * deployment user. Automatic provisioning requires an administrator profile.
    */
-  readonly username: string;
+  readonly username?: string;
   /**
-   * Human-readable token name.
+   * Human-readable token name. Omit for a generation-specific physical name
+   * supporting create-first replacement. Explicit same-name rotation is delete-first.
    */
-  readonly name: string;
+  readonly name?: string;
   /**
-   * Permission scopes granted to the token.
+   * Nonempty permission scopes granted to the token. No broad default is applied.
    */
-  readonly scopes?: readonly string[];
+  readonly scopes: readonly string[];
   /**
    * Repositories the token may access. Omit for unrestricted repository
-   * access.
+   * access. An explicit empty list is invalid. Restricted tokens only allow
+   * read/write repository and issue scopes.
    */
   readonly repositories?: readonly ApiTokenRepository[];
+  /** Change this value to replace the credential without changing its permissions. */
+  readonly rotation?: string;
 }
 
 /**
  * Observed attributes of a Forgejo API token.
  */
 export interface ApiTokenAttributes {
+  /** User that owns the token. */
+  readonly username: string;
+  /** Physical token name, including its generation when generated. */
+  readonly name: string;
+  /** Hosting Forgejo API v1 endpoint. */
+  readonly apiBaseUrl: string;
   /**
    * Stable numeric token identifier.
    */
@@ -95,6 +108,7 @@ export interface ApiToken extends Resource<
  * const token = yield* Forgejo.ApiToken("ci", {
  *   username: "ci-bot",
  *   name: "ci",
+ *   scopes: ["read:repository"],
  * });
  * ```
  *
@@ -103,7 +117,7 @@ export interface ApiToken extends Resource<
  * yield* Forgejo.ApiToken("deploy", {
  *   username: "ci-bot",
  *   name: "deploy",
- *   scopes: ["write:repository", "read:organization"],
+ *   scopes: ["write:repository", "read:issue"],
  *   repositories: [{ owner: "acme", name: "api" }],
  * });
  * ```
@@ -114,6 +128,7 @@ export interface ApiToken extends Resource<
  * const token = yield* Forgejo.ApiToken("ci", {
  *   username: "ci-bot",
  *   name: "ci",
+ *   scopes: ["read:repository"],
  * });
  *
  * yield* Forgejo.Secret("forgejo-token", {
@@ -136,8 +151,23 @@ const repositorySlugs = (
 ): readonly string[] | undefined =>
   repositories?.map((repository) => `${repository.owner}/${repository.name}`);
 
+/** The deployment profile cannot provision restricted runtime credentials. */
+export class ForgejoTokenBootstrapDenied extends Data.TaggedError(
+  "ForgejoTokenBootstrapDenied",
+)<{ readonly message: string }> {}
+
+const bootstrapDenied = () =>
+  Effect.fail(
+    new ForgejoTokenBootstrapDenied({
+      message:
+        "Automatic Forgejo token provisioning requires an administrator deployment profile with write:admin and read:user scopes. Update the Forgejo profile credential; the deployment token is never forwarded to runtime.",
+    }),
+  );
+
 const listTokens = (username: string) =>
-  paginate(Services.admin.adminListUserAccessTokens, { username });
+  paginate(Services.admin.adminListUserAccessTokens, { username }).pipe(
+    Effect.catchTag("Forbidden", bootstrapDenied),
+  );
 
 /**
  * Raised when a token of this name already exists but no state row does.
@@ -197,81 +227,136 @@ export class MissingGeneratedToken extends Data.TaggedError(
   }
 }
 
+export class InvalidApiToken extends Data.TaggedError("InvalidApiToken")<{
+  readonly message: string;
+}> {}
+
+const validate = (props: Pick<ApiTokenProps, "scopes" | "repositories">) => {
+  const message =
+    !props.scopes?.length || props.scopes.some((scope) => !scope.trim())
+      ? "API tokens require a nonempty explicit scopes list."
+      : props.repositories?.length === 0
+        ? "repositories: [] is invalid; omit repositories for unrestricted access."
+        : props.repositories !== undefined &&
+            props.scopes.some(
+              (scope) =>
+                ![
+                  "read:repository",
+                  "write:repository",
+                  "read:issue",
+                  "write:issue",
+                ].includes(scope),
+            )
+          ? "Repository-restricted tokens only support read/write repository and issue scopes."
+          : undefined;
+  return message === undefined
+    ? Effect.void
+    : Effect.fail(new InvalidApiToken({ message }));
+};
+
 /**
  * Provider layer implementing the Forgejo API-token lifecycle.
  */
 export const ApiTokenProvider = () =>
   Provider.succeed(ApiToken, {
     stables: ["tokenId", "token"],
-    diff: ({ news, olds }) => {
-      if (!isResolved(news) || olds === undefined) return Effect.void;
-      // Replacing a token deletes the old one before minting the new one
-      // (Forgejo rejects a duplicate token name), so every consumer of the
-      // old value breaks in between. The trigger must therefore fire on a
-      // genuine change only, never on a cosmetic reorder.
-      return Effect.succeed(
+    diff: Effect.fn(function* ({ news, olds }) {
+      // Unresolved restrictions may change permissions. Validate a successor
+      // before revoking the predecessor rather than treating this as an update.
+      if (!isResolved(news))
+        return olds === undefined ? undefined : { action: "replace" as const };
+      yield* validate(news);
+      if (olds === undefined) return;
+      if (
         news.username !== olds.username ||
-          news.name !== olds.name ||
-          !sameSet(news.scopes, olds.scopes) ||
-          !sameSet(
-            repositorySlugs(news.repositories),
-            repositorySlugs(olds.repositories),
-          )
-          ? { action: "replace" as const, deleteFirst: true }
-          : undefined,
-      );
-    },
+        news.name !== olds.name ||
+        news.rotation !== olds.rotation ||
+        !sameSet(news.scopes, olds.scopes) ||
+        (news.repositories === undefined) !==
+          (olds.repositories === undefined) ||
+        !sameSet(
+          repositorySlugs(news.repositories),
+          repositorySlugs(olds.repositories),
+        )
+      ) {
+        return {
+          action: "replace" as const,
+          deleteFirst:
+            news.name !== undefined &&
+            news.name === olds.name &&
+            news.username === olds.username,
+        };
+      }
+    }),
     // Tokens are enumerable only per user, and the set of users is not
     // derivable from the credential, so account-wide enumeration is not
     // offered rather than partially claimed.
     list: () => Effect.succeed([]),
     read: Effect.fn(function* ({ olds, output }) {
       if (output === undefined) return undefined;
-      const tokens = yield* listTokens(olds.username);
+      const tokens = yield* listTokens(output.username ?? olds.username!);
       return tokens.some((token) => token.id === output.tokenId)
         ? output
         : undefined;
     }),
-    reconcile: Effect.fn(function* ({ news, output }) {
-      // Observe: a token we already generated is unchanged and its plaintext
-      // is unrecoverable, so an existing one is kept as-is.
-      const tokens = yield* listTokens(news.username);
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      yield* validate(news);
+      const name =
+        output?.name ??
+        news.name ??
+        (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
+      const { apiBaseUrl } = yield* yield* Credentials;
+      const username =
+        news.username ??
+        (yield* Effect.gen(function* () {
+          const user = yield* Services.user
+            .userGetCurrent({})
+            .pipe(Effect.catchTag("Forbidden", bootstrapDenied));
+          if (!user.is_admin) return yield* bootstrapDenied();
+          return user.login;
+        }));
+      const tokens = yield* listTokens(username);
       if (
         output !== undefined &&
         tokens.some((token) => token.id === output.tokenId)
       ) {
-        return output;
+        return { ...output, name, username, apiBaseUrl };
       }
 
       // Without a state row, a token already holding this name is not ours to
       // replace and not possible to adopt — its secret is gone. Creating here
       // would be rejected for the duplicate name on this deploy and every one
       // after it, so say what actually happened instead.
-      const conflict = tokens.find((token) => token.name === news.name);
+      const conflict = tokens.find((token) => token.name === name);
       if (conflict !== undefined) {
         return yield* new UnrecoverableApiToken({
-          username: news.username,
-          name: news.name,
+          username,
+          name,
           tokenId: conflict.id,
         });
       }
 
-      const created = yield* Services.admin.adminCreateUserAccessToken({
-        username: news.username,
-        name: news.name,
-        scopes: news.scopes === undefined ? undefined : [...news.scopes],
-        repositories:
-          news.repositories === undefined
-            ? undefined
-            : news.repositories.map(({ owner, name }) => ({ owner, name })),
-      });
+      const created = yield* Services.admin
+        .adminCreateUserAccessToken({
+          username,
+          name,
+          scopes: [...news.scopes],
+          repositories:
+            news.repositories === undefined
+              ? undefined
+              : news.repositories.map(({ owner, name }) => ({ owner, name })),
+        })
+        .pipe(Effect.catchTag("Forbidden", bootstrapDenied));
       if (created.sha1 === undefined) {
         return yield* new MissingGeneratedToken({
-          username: news.username,
-          name: news.name,
+          username,
+          name,
         });
       }
       return {
+        username,
+        name,
+        apiBaseUrl,
         tokenId: created.id,
         // The SDK hands the generated secret out Redacted; a plain string is
         // only ever seen from a mock that bypasses the protocol's wrapping.
@@ -283,7 +368,7 @@ export const ApiTokenProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       yield* Services.admin
         .adminDeleteUserAccessToken({
-          username: olds.username,
+          username: output.username ?? olds.username,
           token: String(output.tokenId),
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));

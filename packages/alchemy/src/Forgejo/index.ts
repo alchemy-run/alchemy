@@ -30,3 +30,11 @@ export * from "./Variable.ts";
 export * from "./Variables.ts";
 /** Forgejo repository webhook resource. */
 export * from "./Webhook.ts";
+export * from "./ReadRepository.ts";
+export * from "./WriteRepository.ts";
+export * from "./ReadWriteRepository.ts";
+export * from "./ReadIssues.ts";
+export * from "./WriteIssues.ts";
+export * from "./ReadWriteIssues.ts";
+export * from "./RepositoryEventSource.ts";
+export type { ForgejoBindingOptions, ForgejoSecret } from "./RuntimeTypes.ts";

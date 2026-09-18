@@ -77,6 +77,209 @@ const reset = () => {
 
 const { test } = forgejoTest(server);
 
+import { Repository } from "@/Forgejo/index.ts";
+import { destroy } from "@/RemovalPolicy";
+import { Services } from "@distilled.cloud/forgejo";
+import { fixture, liveTest } from "./support/live.ts";
+import * as Provider from "@/Provider.ts";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+const traffic: string[] = [];
+const live = liveTest((client) =>
+  HttpClient.make((request) =>
+    Effect.gen(function* () {
+      yield* Effect.sync(() =>
+        traffic.push(`${request.method} ${new URL(request.url).pathname}`),
+      );
+      return yield* client.execute(request);
+    }),
+  ),
+);
+
+for (const invalid of [
+  "empty repositories",
+  "empty scopes",
+  "restricted organization scope",
+] as const) {
+  live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+    `live: rejects ${invalid} before revoking token`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const { username } = yield* fixture;
+        const name = `alchemy-1425-${invalid.replaceAll(" ", "-")}`;
+        const valid = { username, name, scopes: ["read:repository"] };
+        const props =
+          invalid === "empty scopes"
+            ? { ...valid, scopes: [] }
+            : invalid === "empty repositories"
+              ? { ...valid, repositories: [] }
+              : {
+                  ...valid,
+                  scopes: ["read:organization"],
+                  repositories: [{ owner: username, name: "nonexistent" }],
+                };
+        const invalidCreate = yield* stack
+          .deploy(ApiToken("Invalid", props))
+          .pipe(Effect.result);
+        yield* stack.destroy();
+        const first = yield* stack.deploy(ApiToken("Token", valid));
+        const result = yield* stack
+          .deploy(ApiToken("Token", props))
+          .pipe(Effect.result);
+        const tokens = yield* Services.admin.adminListUserAccessTokens({
+          username,
+        });
+        yield* stack.destroy();
+        expect(Result.isFailure(result)).toBe(true);
+        expect(tokens.some((t) => t.id === first.tokenId)).toBe(true);
+        expect(JSON.stringify(result)).toContain("InvalidApiToken");
+        expect(JSON.stringify(invalidCreate)).toContain("InvalidApiToken");
+      }),
+    { timeout: 90_000 },
+  );
+}
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: generated token names rotate create-first and preserve no-op identity",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username } = yield* fixture;
+      const deploy = (scopes: string[], name = "alchemy-1425-token-repo") =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner: username,
+            name,
+          }).pipe(destroy());
+          return yield* ApiToken("Token", {
+            username,
+            scopes,
+            repositories: [{ owner: username, name: repo.name }],
+          });
+        });
+      const first = yield* stack.deploy(deploy(["read:repository"]));
+      const same = yield* stack.deploy(deploy(["read:repository"]));
+      yield* Effect.sync(() => {
+        traffic.length = 0;
+      });
+      const second = yield* stack.deploy(deploy(["write:repository"]));
+      const order = yield* Effect.sync(() => [...traffic]);
+      expect(
+        order.indexOf(`POST /api/v1/admin/users/${username}/tokens`),
+      ).toBeLessThan(
+        order.indexOf(
+          `DELETE /api/v1/admin/users/${username}/tokens/${first.tokenId}`,
+        ),
+      );
+      const tokens = yield* Services.admin.adminListUserAccessTokens({
+        username,
+      });
+      const third = yield* stack.deploy(
+        deploy(["read:repository"], "alchemy-1425-token-renamed"),
+      );
+      expect(third.tokenId).not.toBe(second.tokenId);
+      expect(
+        (yield* Services.admin.adminListUserAccessTokens({ username })).find(
+          (t) => t.id === third.tokenId,
+        )?.scopes,
+      ).toEqual(["read:repository"]);
+      yield* stack.destroy();
+      expect(same.tokenId).toBe(first.tokenId);
+      expect(second.tokenId).not.toBe(first.tokenId);
+      expect(tokens.some((t) => t.id === first.tokenId)).toBe(false);
+      expect(tokens.some((t) => t.id === second.tokenId)).toBe(true);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: explicit token restriction transitions replace safely",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username } = yield* fixture;
+      const program = (restricted: boolean) =>
+        Effect.gen(function* () {
+          const repo = yield* Repository("Repo", {
+            owner: username,
+            name: "alchemy-1425-restrictions",
+          }).pipe(destroy());
+          return yield* ApiToken("Token", {
+            username,
+            name: "alchemy-1425-restrictions",
+            scopes: ["read:repository"],
+            repositories: restricted
+              ? [{ owner: repo.owner, name: repo.name }]
+              : undefined,
+          });
+        });
+      const first = yield* stack.deploy(program(false));
+      const restricted = yield* stack.deploy(program(true));
+      const restrictedState = (yield* Services.admin.adminListUserAccessTokens({
+        username,
+      })).find((t) => t.id === restricted.tokenId);
+      const unrestricted = yield* stack.deploy(program(false));
+      const unrestrictedState =
+        (yield* Services.admin.adminListUserAccessTokens({ username })).find(
+          (t) => t.id === unrestricted.tokenId,
+        );
+      yield* stack.destroy();
+      expect(restricted.tokenId).not.toBe(first.tokenId);
+      expect(unrestricted.tokenId).not.toBe(restricted.tokenId);
+      expect(restrictedState?.repositories?.length).toBe(1);
+      expect(unrestrictedState?.repositories?.length ?? 0).toBe(0);
+    }),
+  { timeout: 90_000 },
+);
+
+live.test.provider.skipIf(process.env.FORGEJO_TEST !== "1")(
+  "live: explicit token scope order and unrecoverable plaintext are safe",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { username } = yield* fixture;
+      const props = {
+        username,
+        name: "alchemy-1425-token-recovery",
+        scopes: ["read:repository", "read:issue"],
+      };
+      const first = yield* stack.deploy(ApiToken("Token", props));
+      const reordered = yield* stack.deploy(
+        ApiToken("Token", { ...props, scopes: [...props.scopes].reverse() }),
+      );
+      const provider = yield* Provider.findProvider(ApiToken);
+      const lost = yield* provider
+        .reconcile({
+          id: "Token",
+          fqn: "Token",
+          instanceId: "",
+          olds: undefined,
+          output: undefined,
+          news: props,
+          bindings: [],
+          session: {
+            emit: () => Effect.void,
+            done: () => Effect.void,
+            note: () => Effect.void,
+          },
+        })
+        .pipe(Effect.result);
+      const tokens = yield* Services.admin.adminListUserAccessTokens({
+        username,
+      });
+      yield* stack.destroy();
+      expect(reordered.tokenId).toBe(first.tokenId);
+      expect(JSON.stringify(lost)).toContain("UnrecoverableApiToken");
+      expect(tokens.some((t) => t.id === first.tokenId)).toBe(true);
+      expect(
+        (yield* Services.admin.adminListUserAccessTokens({ username })).some(
+          (t) => t.id === first.tokenId,
+        ),
+      ).toBe(false);
+    }),
+  { timeout: 90_000 },
+);
+
 test.provider(
   "creates, preserves, replaces, and deletes an API token",
   (stack) =>

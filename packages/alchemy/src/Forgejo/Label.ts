@@ -1,6 +1,7 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Label as ApiLabel } from "@distilled.cloud/forgejo/issue";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
@@ -152,10 +153,7 @@ const listLabels = (props: Pick<LabelProps, "owner" | "repository">) =>
   );
 
 /**
- * Locate the live label, by ID when one is already known and otherwise by
- * name within the repository. The name lookup is what lets an existing label
- * be adopted, and what makes a re-run after a partially-persisted create
- * converge instead of creating a duplicate.
+ * A saved ID never falls back to a name. Name discovery requires explicit adoption.
  */
 const observe = Effect.fn(function* (
   props: Pick<LabelProps, "owner" | "repository" | "name">,
@@ -165,7 +163,7 @@ const observe = Effect.fn(function* (
     const byId = yield* Services.issue
       .issueGetLabel({ ...target(props), id: labelId })
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    if (byId !== undefined) return byId;
+    return byId;
   }
   const labels = yield* listLabels(props);
   return labels.find((label) => label.name === props.name);
@@ -201,14 +199,25 @@ export const LabelProvider = () =>
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.labelId);
-      return observed === undefined ? undefined : attributesOf(olds, observed);
+      return observed === undefined
+        ? undefined
+        : discovered(attributesOf(olds, observed), output !== undefined);
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
-      // Observe: live state decides create-vs-update, so adoption and a
-      // re-run after a failed state write both converge.
+      // A saved ID is authoritative; a matching name is not ownership evidence.
       const observed = yield* observe(news, output?.labelId);
-
+      if (observed !== undefined)
+        yield* requireOwnership(
+          output?.labelId === observed.id,
+          `${news.owner}/${news.repository}/${news.name}`,
+        );
       if (observed === undefined) {
+        const conflict = yield* observe(news, undefined);
+        if (conflict !== undefined)
+          yield* requireOwnership(
+            false,
+            `${news.owner}/${news.repository}/${news.name}`,
+          );
         const created = yield* Services.issue.issueCreateLabel({
           ...target(news),
           ...bodyOf(news),
@@ -224,6 +233,7 @@ export const LabelProvider = () =>
             ...target(news),
             id: observed.id,
             ...desired,
+            is_archived: news.isArchived ?? observed.is_archived,
           });
       return attributesOf(news, updated);
     }),

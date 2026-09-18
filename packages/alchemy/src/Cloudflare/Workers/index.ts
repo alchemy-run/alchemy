@@ -16,6 +16,8 @@ export * from "./DurableObjectStorage.ts";
 export * from "./EmailEventSource.ts";
 export * from "./Fetch.ts";
 export * from "./GitHubRepositoryEventSource.ts";
+export * from "./ForgejoBindings.ts";
+export * from "./ForgejoRepositoryEventSource.ts";
 export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
 export * from "./LocalWorkerProvider.ts";

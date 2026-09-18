@@ -82,6 +82,20 @@ Deleting a repository needs no extra scope, but repositories default
 to retain on removal, so you only reach that path if you opt in with
 `destroy()`.
 
+## Automatic runtime credentials
+
+[Worker & Lambda bindings](/forgejo/bindings) use this profile at
+deployment to create their own repository-restricted tokens. Configure
+the deployment profile with administrator token-management permission
+when using API clients. A non-admin personal access token cannot create
+child tokens through Forgejo's administrator API.
+
+The host receives only the restricted runtime token, never this profile's
+credential. Repository-event bindings generate their signing secret and
+configure the webhook automatically; webhook-only subscriptions do not
+need token-minting permission. There is no extra webhook-secret profile
+field or runtime token environment variable to configure manually.
+
 ## Programmatic credentials
 
 Build the credentials layer directly from a token you already have —
@@ -117,8 +131,8 @@ Forgejo.providers({ baseUrl, token }).pipe(Layer.provide(myHttpClient))
 Every failure is a tagged error, so lifecycle code and your own stack
 code can branch on it without inspecting HTTP status codes. Most come
 from the generated SDK, whose per-operation error unions carry exactly
-the failures each endpoint declares; the last four are raised by the
-provider for states Forgejo's API cannot express:
+the failures each endpoint declares. Alchemy also reports ownership,
+validation, and API limitations with the provider errors below:
 
 | Tag | Meaning |
 | --- | --- |
@@ -136,6 +150,33 @@ provider for states Forgejo's API cannot express:
 | `UnrecoverableApiToken` | A token of that name already exists but no state records it, and Forgejo returns a token's secret only once |
 | `MissingGeneratedToken` | Forgejo accepted a token create but omitted the generated secret |
 | `ForgejoPaginationLimit` | A list ran past the page cap, so enumeration would be incomplete |
+| `OwnedBySomeoneElse` | A matching resource exists without ownership evidence; explicit adoption is required |
+| `ForgejoTokenBootstrapDenied` | Automatic token provisioning requires an administrator profile with `write:admin` and `read:user` scopes |
+| `InvalidApiToken` | Scopes or repository restrictions are invalid; the existing token is preserved |
+| `InvalidBranchProtection` | Push and whitelist settings contradict each other |
+| `OrganizationSettingsNotApplied` | Forgejo ignored a requested organization setting |
+| `AmbiguousWebhook` | Several existing webhooks match; Alchemy cannot safely choose one |
+| `UnverifiableWebhookSecret` | An existing webhook's signing secret cannot be verified during adoption |
+
+`UnknownForgejoError` indicates an SDK error-model gap, not a tag to
+catch by inspecting its HTTP status. Report it with the operation and
+sanitized error so the SDK's typed union can be corrected.
+
+## Recovery and enumeration
+
+Access-token plaintext is returned only once. If creation succeeds but
+the token output is lost, Alchemy cannot retrieve it from Forgejo and
+will report `UnrecoverableApiToken` rather than silently revoke an
+unknown token. Protect the stack's state store.
+
+Forgejo cannot list user-scoped Actions secrets, and account-wide token
+enumeration is not available through this provider. Organization
+listing is limited to memberships visible to the credential. A provider
+list operation is therefore not a complete instance-wide inventory.
+
+Forgejo 16.0.3 does not apply some transitions from private or limited
+organization visibility to public through its edit API. Alchemy reports
+`OrganizationSettingsNotApplied` instead of recording false success.
 
 ## Next steps
 

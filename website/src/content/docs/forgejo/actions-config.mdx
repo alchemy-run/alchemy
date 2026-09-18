@@ -14,11 +14,18 @@ New here? [Set up credentials](/forgejo/setup) first.
 ## Bulk-seed a repository
 
 ```typescript
+import * as Alchemy from "alchemy";
+import * as Forgejo from "alchemy/Forgejo";
 import * as Redacted from "effect/Redacted";
 
-yield* Forgejo.Variables({
+const repo = yield* Forgejo.Repository("api", {
   owner: "acme",
-  repository: "api",
+  name: "api",
+});
+
+yield* Forgejo.Variables({
+  owner: repo.owner,
+  repository: repo.name,
   variables: {
     DEPLOY_STAGE: "production",
     REGION: "us-east-1",
@@ -26,8 +33,8 @@ yield* Forgejo.Variables({
 });
 
 yield* Forgejo.Secrets({
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   secrets: {
     DEPLOY_TOKEN: Redacted.make(process.env.DEPLOY_TOKEN!),
     NPM_TOKEN: Redacted.make(process.env.NPM_TOKEN!),
@@ -46,8 +53,8 @@ explicitly to reach the organization or user level:
 ```typescript
 // repository — the default shape
 yield* Forgejo.Secret("deploy-token", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   name: "DEPLOY_TOKEN",
   value: Redacted.make(process.env.DEPLOY_TOKEN!),
 });
@@ -64,8 +71,14 @@ yield* Forgejo.Secret("personal-token", {
   scope: { kind: "user" },
   name: "PERSONAL_TOKEN",
   value: Redacted.make(process.env.PERSONAL_TOKEN!),
-});
+}).pipe(Alchemy.adopt(true));
 ```
+
+Existing repository- or organization-scoped entries require explicit
+adoption before Alchemy can manage them. Forgejo exposes no existence
+or list API for user secrets, so an initial user-scoped secret requires
+`Alchemy.adopt(true)` even if you believe the name is unused. This
+explicitly authorizes replacing a potentially existing value.
 
 Changing a secret's or variable's scope or name replaces it — the
 same name at a different scope is a different physical entry.
@@ -74,13 +87,13 @@ same name at a different scope is a different physical entry.
 
 Forgejo accepts secret values as plaintext over authenticated TLS.
 Unlike GitHub there is no public-key encryption handshake, and the
-stored value can never be read back, so every deploy writes the
-declared value. That means a secret never shows as drifted and never
-needs a re-encrypt step — but it also means alchemy cannot tell you
-whether the live value already matched.
+stored value can never be read back. Whenever the resource is
+reconciled, Alchemy writes the declared value. An unchanged deployment
+can skip reconciliation; Alchemy cannot detect drift in the secret's
+value or confirm that its live value already matches.
 
-Variables *are* readable, so they converge normally: a deploy that
-declares an unchanged value makes no API call.
+Variables are readable. During reconciliation, Alchemy compares the
+observed value with the declared value and skips unnecessary writes.
 
 ## Hand a minted credential to CI
 
@@ -93,12 +106,12 @@ const token = yield* Forgejo.ApiToken("ci", {
   username: "ci-bot",
   name: "ci",
   scopes: ["write:repository"],
-  repositories: [{ owner: "acme", name: "api" }],
+  repositories: [{ owner: repo.owner, name: repo.name }],
 });
 
 yield* Forgejo.Secret("forgejo-token", {
-  owner: "acme",
-  repository: "api",
+  owner: repo.owner,
+  repository: repo.name,
   name: "FORGEJO_TOKEN",
   value: token.token,
 });

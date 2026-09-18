@@ -1,5 +1,6 @@
 import { Services } from "@distilled.cloud/forgejo";
 import * as Effect from "effect/Effect";
+import { discovered, requireOwnership } from "./Ownership.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listManageableTeams } from "./Lists.ts";
@@ -105,17 +106,26 @@ export const TeamMemberProvider = () =>
       );
       return members.flat();
     }),
-    read: Effect.fn(function* ({ olds }) {
+    read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* Services.organization
         .orgListTeamMember({ id: olds.teamId, username: olds.username })
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       return observed === undefined
         ? undefined
-        : { teamId: olds.teamId, username: olds.username };
+        : discovered(
+            { teamId: olds.teamId, username: olds.username },
+            output !== undefined,
+          );
     }),
-    reconcile: Effect.fn(function* ({ news }) {
-      // Membership is existence-only: adding an existing member is a no-op
-      // on Forgejo's side, so the observation is folded into the write.
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const observed = yield* Services.organization
+        .orgListTeamMember({ id: news.teamId, username: news.username })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      if (observed !== undefined)
+        yield* requireOwnership(
+          output !== undefined,
+          `${news.teamId}/${news.username}`,
+        );
       yield* Services.organization.orgAddTeamMember({
         id: news.teamId,
         username: news.username,
