@@ -441,5 +441,16 @@ export const writeNodeServeEntry = (
       .writeFileString(options.servePath, source)
       .pipe(Effect.mapError(fail("Failed to write the Node serve entry")));
     const serveModule = yield* toOutputFile(options.serveModuleName, source);
-    return pinNodeServeModule(options.output, serveModule);
+    return pinNodeServeModule(
+      {
+        ...options.output,
+        nodeServe: {
+          clientDirExpression: options.clientDirExpression,
+          handler: options.handler,
+          htmlHandling: options.htmlHandling,
+          notFoundHandling: options.notFoundHandling,
+        },
+      },
+      serveModule,
+    );
   });

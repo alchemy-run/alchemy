@@ -433,10 +433,21 @@ Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdr
 
 ## Neon
 
-Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.
+Neon backend resources: Postgres branches, Functions, private object storage, managed Auth, Data API, AI Gateway and Website adapters. The upload tutorial combines native and Effect handlers with authenticated browser uploads.
 
-- [Neon](https://alchemy.run/neon) — Serverless Postgres with copy-on-write branching — projects and branches as Stack resources, with built-in SQL migrations.
-- [Setup](https://alchemy.run/neon/setup) — Connect alchemy to Neon — account, credentials, and profiles.
+- [Neon](https://alchemy.run/neon) — Declare Neon Postgres, Functions, storage, Auth, AI Gateway and websites together in an Alchemy Stack.
+- [Setup](https://alchemy.run/neon/setup) — Prepare Neon credentials, service access, regions, and external dependencies before deploying with Alchemy.
+- [Organization governance](https://alchemy.run/neon/governance) — Manage existing Neon organization access, billing alerts, and private-network associations with explicit ownership and restoration.
+- [AI Gateway setup](https://alchemy.run/neon/guides/ai-gateway) — Buy Neon AI Gateway credits and use a model from an Effect Function.
+- [Production Auth](https://alchemy.run/neon/guides/production-auth) — Configure trusted origins, SMTP, OAuth callbacks, and verification before launching Managed Better Auth.
+- [Private networking](https://alchemy.run/neon/guides/private-networking) — Prepare AWS PrivateLink endpoints, register them with Neon, enable private DNS, and verify database access.
+- [Custom domains](https://alchemy.run/neon/guides/custom-domains) — Register a Function hostname, configure DNS and CAA, verify HTTPS, and retire the domain safely.
+- [State and recovery](https://alchemy.run/neon/guides/state-recovery) — Preserve Neon ownership and reveal-once secrets, recover interrupted deployments, and clean up without discarding state.
+- [Build an upload journal](https://alchemy.run/neon/tutorial) — Sign in, upload private files, process real storage events, and view Postgres-backed status with Neon and Alchemy.
+- [Create the upload backend](https://alchemy.run/neon/tutorial/backend) — Add a Neon project, a migrated branch, private storage, and managed authentication.
+- [Protect and process uploads](https://alchemy.run/neon/tutorial/functions) — Verify JWTs, sign private uploads, and record real bucket events in Postgres.
+- [Connect the browser](https://alchemy.run/neon/tutorial/frontend) — Use managed signup and sessions to upload and download private files from Vite.
+- [Fork a preview and clean up](https://alchemy.run/neon/tutorial/previews) — Keep preview writes isolated from the parent, verify inheritance, and destroy only owned resources.
 - [Branching](https://alchemy.run/neon/data/branching) — Neon branches are copy-on-write forks of a parent branch — create them per stage or preview, pin them to a point in time, copy schema only, and let them expire on their own.
 - [Connections](https://alchemy.run/neon/data/connections) — Every Neon project and branch exposes direct and pooled connection URIs plus pre-parsed origin outputs — feed the direct origin to Hyperdrive and the pooled one to everything else.
 - [Migrations](https://alchemy.run/neon/data/migrations) — Apply SQL migrations and seed data to Neon projects and branches as part of every deploy — ordered, hashed, and tracked in Alchemy's __alchemy_migrations table.
@@ -535,4 +546,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~958 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~976 KB) — only fetch it when you need to locate a specific resource's reference page.

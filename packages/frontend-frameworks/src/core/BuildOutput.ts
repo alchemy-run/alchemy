@@ -4,6 +4,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as NodeCrypto from "node:crypto";
+import type { NodeServeEntryOptions } from "./NodeServe.ts";
 
 /**
  * A single server module produced by a framework build.
@@ -39,6 +40,8 @@ export interface BuildOutput {
   clientDirectory: string | undefined;
   serverModules: Array<OutputFile> | undefined;
   externalWorkspaces: Set<string>;
+  /** Portable handler and asset configuration, independent of a listening Node server. */
+  nodeServe?: NodeServeEntryOptions | undefined;
 }
 
 /** Create an {@link OutputFile}, hashing the content with sha256. */
