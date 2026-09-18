@@ -199,7 +199,7 @@ export const runPrismaCli = <T>(
       Effect.mapError(
         (cause) =>
           new CliError({
-            message: `prisma ${args.join(" ")} failed to spawn: ${String(cause)}`,
+            message: `prisma ${args.slice(0, 2).join(" ")} failed to spawn: ${String(cause)}`,
           }),
       ),
     );
@@ -217,7 +217,7 @@ export const runPrismaCli = <T>(
       return yield* Effect.fail(
         new CliError({
           code: error.code,
-          message: `prisma ${args.join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
+          message: `prisma ${args.slice(0, 2).join(" ")} failed: ${[error.summary, error.why].filter(Boolean).join(" — ") || "unknown error"}`,
           fix,
           meta: error.meta,
         }),
@@ -225,7 +225,7 @@ export const runPrismaCli = <T>(
     }
     return yield* Effect.fail(
       new CliError({
-        message: `prisma ${args.join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
+        message: `prisma ${args.slice(0, 2).join(" ")} failed (exit ${result.exitCode}): ${result.stdout}\n${result.stderr}`,
       }),
     );
   });

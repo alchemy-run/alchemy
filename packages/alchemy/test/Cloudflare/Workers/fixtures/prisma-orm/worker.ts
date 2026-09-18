@@ -3,8 +3,7 @@ import * as PrismaPostgres from "@/Prisma/ORM/Postgres.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { Contract } from "./generated/contract.d.ts";
-import contractJson from "./generated/contract.json";
+import { contract } from "./contract.ts";
 import { Hyperdrive } from "./db.ts";
 
 /**
@@ -26,10 +25,9 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* PrismaPostgres.Postgres<Contract>()(
-      conn.connectionString,
-      { contractJson },
-    );
+    const db = yield* PrismaPostgres.Postgres(conn.connectionString, {
+      contract,
+    });
 
     return {
       fetch: Effect.gen(function* () {
@@ -54,6 +52,23 @@ export default class PrismaOrmWorker extends Cloudflare.Worker<PrismaOrmWorker>(
           return yield* HttpServerResponse.json({
             found: widget !== null,
             name: widget?.name ?? null,
+          });
+        }
+
+        if (request.url.startsWith("/widgets/prepared/")) {
+          const id = Number(request.url.split("/widgets/prepared/")[1] ?? "0");
+          const query = yield* db
+            .prepare({ id: "pg/int4@1" }, (sql, params) =>
+              sql.public.widget
+                .select("id", "name")
+                .where((fields, fns) => fns.eq(fields.id, params.id))
+                .build(),
+            )
+            .pipe(Effect.orDie);
+          const rows = yield* query.query({ id }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({
+            found: rows.length === 1,
+            name: rows[0]?.name ?? null,
           });
         }
 

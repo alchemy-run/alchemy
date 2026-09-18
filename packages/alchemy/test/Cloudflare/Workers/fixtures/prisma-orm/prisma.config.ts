@@ -3,7 +3,7 @@ import { definePrismaConfig } from "prisma/config";
 
 export default definePrismaConfig({
   orm: ormConfig({
-    contract: "./contract.prisma",
+    contract: "./contract.ts",
     output: "./generated",
   }),
 });

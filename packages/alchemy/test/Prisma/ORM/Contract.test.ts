@@ -23,7 +23,8 @@ export default definePrismaConfig({
 });
 `;
 
-const CONTRACT_SOURCE = `model User {
+const CONTRACT_SOURCE = `// use prisma-8
+model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?

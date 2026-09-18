@@ -524,6 +524,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-rsc": "catalog:",
     "alchemy-test": "workspace:*",
+    "arktype": "catalog:",
     "astro": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:",

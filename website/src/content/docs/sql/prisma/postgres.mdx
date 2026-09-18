@@ -5,7 +5,7 @@ description: Prisma ORM v8 on Postgres — declare the contract, plan and apply 
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const deps = `@prisma/orm-postgres`;
+export const deps = `@prisma/orm-postgres arktype`;
 export const devDeps = `prisma`;
 
 Prisma ORM v8 (the `8.0.0-rc` line) on Postgres, end to end: a
@@ -16,11 +16,20 @@ and a Worker that queries through the Prisma client over Hyperdrive.
 :::caution
 Prisma v8 is a release candidate. It is a ground-up rewrite of Prisma
 ORM (contract-first, no `prisma generate`, a new migration system) and
-currently targets **PostgreSQL 17+ only** — no MySQL, no D1. Alchemy
-pins the exact RC version; expect small breaking changes per RC.
+this Alchemy integration targets **PostgreSQL 17+ only** — no MySQL, no D1.
+Alchemy pins the exact RC version; expect breaking changes between release candidates.
+
+In rc.11, Prisma's published declarations lose authoring metadata. Import
+`defineContract` from `alchemy/Prisma/ORM/ContractBuilder` to use Alchemy's
+compatibility types for scalar fields, relations, prepared parameters, and
+Postgres aggregates. This exports Prisma's original runtime function and
+builders; it does not introduce a separate schema language or require
+application code generation. The underlying declaration gaps are tracked in
+[Prisma #30341](https://github.com/prisma/orm/issues/30341).
 :::
 
-Install the toolchain — all optional peers of alchemy:
+Prisma ORM and its CLI are optional Alchemy peers. This Worker example also
+installs Arktype to configure Prisma's internal validator for workerd:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -37,6 +46,24 @@ Install the toolchain — all optional peers of alchemy:
   </TabItem>
 </Tabs>
 
+## Configure validation for Workers
+
+Cloudflare Workers prohibit runtime JavaScript compilation during requests.
+Configure Prisma's Arktype dependency before importing the native contract builder:
+
+```typescript
+// src/prisma/validation.ts
+import { configure } from "arktype/config";
+
+configure({ jitless: true });
+```
+
+Keep this in a separate module, imported first by the contract below. If your
+application declares `"sideEffects": false` in `package.json`, preserve this
+bootstrap with `"sideEffects": ["./src/prisma/validation.ts"]` instead. Otherwise
+a bundler can remove the configuration call. Ordinary Node and Bun applications
+do not need this Worker-specific setup.
+
 ## Define the contract
 
 Prisma v8 is contract-first, and TypeScript is the headline authoring
@@ -46,7 +73,8 @@ it:
 
 ```typescript
 // src/prisma/contract.ts
-import { defineContract } from "@prisma/orm-postgres/contract-builder";
+import "./validation.ts";
+import { defineContract } from "alchemy/Prisma/ORM/ContractBuilder";
 
 export const contract = defineContract({}, ({ field, model, rel }) => ({
   models: {
@@ -76,9 +104,15 @@ export const contract = defineContract({}, ({ field, model, rel }) => ({
 }));
 ```
 
-The classic `.prisma` schema language is equally supported — point
-the config at a `contract.prisma` instead and everything downstream
-is identical.
+The deployment resources can also read Prisma's `.prisma` schema language.
+The runtime API shown here takes the native TypeScript contract directly;
+emitted files remain deployment and migration artifacts.
+
+The compatibility adapter supports explicit storage names with
+`.sql({ table: "users" })` and `.column("created_at")`. Global `snake_case`
+naming is rejected rather than inferred incorrectly. Defaults on
+`field.namedType(...)` retain Prisma's declarations and can still require an
+explicit value in create inputs.
 
 ## Point the config at it
 
@@ -144,10 +178,9 @@ what the deploy does — and what it refuses to decide for you.
 
 ## Connect in a Worker
 
-Hyperdrive pools connections at the edge; the runtime client takes
-its connection string plus the emitted contract. The factory is
-curried so the contract type is explicit while everything else
-infers:
+Hyperdrive pools connections at the edge. Pass its connection string and the
+native TypeScript contract to the runtime factory; application code imports
+neither generated JSON nor generated declarations:
 
 ```typescript
 // src/api.ts
@@ -155,8 +188,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { Contract } from "./prisma/generated/contract.d.ts";
-import contractJson from "./prisma/generated/contract.json" with { type: "json" };
+import { contract } from "./prisma/contract.ts";
 import { Hyperdrive } from "./db.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -164,10 +196,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* PrismaPostgres.Postgres<Contract>()(
-      conn.connectionString,
-      { contractJson },
-    );
+    const db = yield* PrismaPostgres.Postgres(conn.connectionString, { contract });
 
     return {
       fetch: Effect.gen(function* () {
@@ -196,10 +225,9 @@ const user = yield* db.orm.public.User.where({ email })
   .include("posts")
   .first();
 
-const created = yield* db.orm.public.Post.create({
-  title,
-  authorId: user.id,
-});
+if (user) {
+  yield* db.orm.public.Post.create({ title, authorId: user.id });
+}
 
 // row types narrow with the chain: select projects, include augments
 const slim = yield* db.orm.public.User.select("id", "email").all();
@@ -217,7 +245,7 @@ codes split by category into `OrmError` / `RuntimeError`
 with an autocompleting `code` field:
 
 ```typescript
-const outcome = yield* db.orm.public.User.create({ email }).pipe(
+const outcome = yield* db.orm.public.User.create({ email, name }).pipe(
   Effect.catchTag("Prisma.UniqueViolationError", () =>
     Effect.succeed("already registered"),
   ),
@@ -230,10 +258,33 @@ const outcome = yield* db.orm.public.User.create({ email }).pipe(
 connection behind them — and `db.execute` / `db.stream` run them:
 
 ```typescript
-const plan = db.sql.public.user.select("id", "email").build();
+const plan = db.sql.public.User.select("id", "email").build();
 const rows = yield* db.execute(plan);          // Effect<{id, email}[]>
 const feed = db.stream(plan);                  // Stream<{id, email}>
 ```
+
+The Stream surfaces consume Prisma's async iterators. Its long-lived Postgres
+driver buffers raw results, so using a Stream does not guarantee bounded memory.
+
+## Prepared queries
+
+A prepared query retains its typed parameters and resolves the current
+execution's client each time it runs:
+
+```typescript
+const findUser = yield* db.prepare({ email: "pg/text@1" }, (sql, params) =>
+  sql.public.User
+    .select("id", "email")
+    .where((fields, fns) => fns.eq(fields.email, params.email))
+    .build(),
+);
+const users = yield* findUser.query({ email: "alice@example.com" });
+const stream = findUser.query({ email: "alice@example.com" }).stream;
+```
+
+An affected-count plan instead returns a handle with `execute(params)`, which
+produces statement statistics. Inside a transaction, `tx.prepare` binds both
+query and mutation handles to that transaction's connection.
 
 ## Transactions
 
@@ -244,7 +295,7 @@ with a typed `Prisma.RollbackError`:
 ```typescript
 yield* db.transaction((tx) =>
   Effect.gen(function* () {
-    const user = yield* tx.orm.public.User.create({ email });
+    const user = yield* tx.orm.public.User.create({ email, name });
     if (!invited) return yield* tx.rollback();
     return user;
   }),

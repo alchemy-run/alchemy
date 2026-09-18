@@ -24,12 +24,17 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 120_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
-}> {}
+  body: string;
+}> {
+  get message() {
+    return `Worker returned ${this.status}: ${this.body}`;
+  }
+}
 
 /** GET with fresh-edge retry: workers.dev serves placeholder errors briefly. */
 const getOk = (url: string) =>
@@ -39,14 +44,19 @@ const getOk = (url: string) =>
       Effect.flatMap((res) =>
         res.status === 200
           ? Effect.succeed(res)
-          : Effect.fail(new WorkerNotReady({ status: res.status })),
+          : res.text.pipe(
+              Effect.flatMap((body) =>
+                Effect.fail(new WorkerNotReady({ status: res.status, body })),
+              ),
+            ),
       ),
+      Effect.timeout("15 seconds"),
       Effect.retry({
-        while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-        schedule: Schedule.max([
-          Schedule.exponential("500 millis"),
-          Schedule.recurs(15),
-        ]),
+        while: (error) =>
+          error._tag === "WorkerNotReady" &&
+          (error.status === 404 || error.status === 503),
+        schedule: Schedule.exponential("500 millis"),
+        times: 6,
       }),
     );
   });
@@ -69,8 +79,16 @@ test(
       Effect.map((json) => json as { found: boolean; name: string | null }),
     );
     expect(fetched).toEqual({ found: true, name: "gizmo" });
+    const prepared = yield* getOk(`${url}/widgets/prepared/${created.id}`).pipe(
+      Effect.flatMap((res) => res.json),
+    );
+    expect(prepared).toEqual({ found: true, name: "gizmo" });
+    const missing = yield* getOk(`${url}/widgets/prepared/0`).pipe(
+      Effect.flatMap((res) => res.json),
+    );
+    expect(missing).toEqual({ found: false, name: null });
   }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 120_000 },
 );
 
 test(

@@ -4,8 +4,7 @@ import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
-import type { Contract } from "./prisma/generated/contract.d.ts";
-import contractJson from "./prisma/generated/contract.json" with { type: "json" };
+import { contract } from "./prisma/contract.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -14,10 +13,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* PrismaPostgres.Postgres<Contract>()(
-      conn.connectionString,
-      { contractJson },
-    );
+    const db = yield* PrismaPostgres.Postgres(conn.connectionString, {
+      contract,
+    });
 
     return {
       fetch: Effect.gen(function* () {

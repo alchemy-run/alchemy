@@ -1,161 +1,252 @@
-// Effect-native facade over Prisma's `orm` lane.
-//
-// Runtime: a path-replaying Proxy. Chainable calls and property accesses are
-// recorded, and only a *terminal* call (first/all/create/...) produces an
-// Effect — which replays the whole chain against the per-execution client's
-// live Collection inside `Effect.tryPromise`. Replay-per-evaluation makes
-// every query lazy and re-runnable (`Effect.retry` re-issues it), exactly
-// like an effect-native builder, without forking Prisma's Collection.
-//
-// Types: hand-authored rather than mapped from `Collection`. Mapped types
-// erase method-level generics (`include`'s relation-name literal, `select`'s
-// field tuple) and collapse overloads, silently widening row inference — so
-// the surface below re-declares the supported subset faithfully from
-// Prisma's *exported* type utilities. Methods not yet re-typed
-// (groupBy, combine, variant, cursor, distinctOn) still work through
-// `db.use(...)`.
-//
-// This module is internal scaffolding: NOT exported from the ORM index.
-// Consumers reach it through `alchemy/Prisma/ORM/Postgres`.
-import type { SqlStorage } from "@prisma/orm-family-sql/contract/types";
 import type { Contract } from "@prisma/orm-postgres/contract/types";
+import type { SqlStorage } from "@prisma/orm-postgres/family-contract/types";
 import type {
   AggregateBuilder,
   AggregateResult,
   AggregateSpec,
-  CreateInput,
+  Collection,
+  CollectionTypeState,
+  DefaultCollectionTypeState,
   DefaultModelRow,
-  ModelAccessor,
+  GroupedCollection,
   RelatedModelName,
   RelationNames,
   RelationsOf,
-  ShorthandWhereFilter,
-  UniqueConstraintCriterion,
 } from "@prisma/orm-postgres/orm-client";
+import type { PostgresClient } from "@prisma/orm-postgres/runtime";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { type ClientError, wrapPrismaError } from "./Errors.ts";
 
 type AnyContract = Contract<SqlStorage>;
-
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-
-type NamespacesOf<C> = C extends { domain: { namespaces: infer N } }
-  ? N
+type InitialState<Ns extends string> = Omit<
+  DefaultCollectionTypeState,
+  "nsId"
+> & {
+  readonly nsId: Ns;
+};
+type WithState<S extends CollectionTypeState, Patch> = Omit<S, keyof Patch> &
+  Patch;
+type Args<F> = F extends {
+  (...args: infer A): unknown;
+  (...args: infer B): unknown;
+  (...args: infer C): unknown;
+  (...args: infer D): unknown;
+}
+  ? A | B | C | D
+  : never;
+type Native<
+  C extends AnyContract,
+  M extends string,
+  Row,
+  S extends CollectionTypeState,
+> = Collection<C, M, Row, S>;
+type NativeRow<T> = T extends { readonly _row?: infer Row } ? Row : never;
+type Root<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+> = Ns extends keyof PostgresClient<C>["orm"]
+  ? M extends keyof PostgresClient<C>["orm"][Ns]
+    ? PostgresClient<C>["orm"][Ns][M]
+    : never
   : never;
 
-type ModelsOf<C, Ns> =
-  NamespacesOf<C> extends infer N
-    ? Ns extends keyof N
-      ? N[Ns] extends { models: infer M }
-        ? M
-        : never
-      : never
-    : never;
+type RootRow<C extends AnyContract, Ns extends string, M extends string> = [
+  Root<C, Ns, M>,
+] extends [never]
+  ? DefaultModelRow<C, M, Ns>
+  : NativeRow<Root<C, Ns, M>>;
 
-/**
- * A `where` filter: either the shorthand object form or a callback over the
- * typed model accessor (`(u) => u.email.eq(email)`). The callback's return
- * is Prisma's opaque predicate expression.
- */
 export type WhereFilter<
   C extends AnyContract,
   M extends string,
   Ns extends string,
-> =
-  | ShorthandWhereFilter<C, M, Ns>
-  | ((model: ModelAccessor<C, M, Ns>) => unknown);
+> = Args<Native<C, M, DefaultModelRow<C, M, Ns>, InitialState<Ns>>["where"]>[0];
 
-type OrderBySelector<
-  C extends AnyContract,
-  M extends string,
-  Ns extends string,
-> = (model: ModelAccessor<C, M, Ns>) => unknown;
-
-type RelationOf<
-  C extends AnyContract,
-  M extends string,
-  Ns extends string,
-  Rel extends string,
-> =
-  RelationsOf<C, M, Ns> extends infer Rels
-    ? Rel extends keyof Rels
-      ? Rels[Rel]
-      : never
-    : never;
-
-type RelationTargetNs<Relation, Fallback extends string> = Relation extends {
-  readonly to: { readonly namespace: infer N extends string };
+/** Buffer a query with `yield*`, or consume its rows incrementally through `stream`. */
+export interface QueryResult<Row, E, R> extends Effect.Effect<Row[], E, R> {
+  readonly stream: Stream.Stream<Row, E, R>;
 }
-  ? N
-  : Fallback;
 
-/**
- * The row shape an included relation contributes: an array for to-many
- * cardinalities, `Row | null` for to-one (widened — FK-nullability precision
- * is not reproduced here).
- */
-type IncludedValue<
+type Relation<
   C extends AnyContract,
-  M extends string,
   Ns extends string,
+  M extends string,
   Rel extends string,
+> = Rel extends keyof RelationsOf<C, M, Ns>
+  ? RelationsOf<C, M, Ns>[Rel]
+  : never;
+type TargetNamespace<
+  C extends AnyContract,
+  Rel,
+  Ns extends string,
+> = Rel extends {
+  readonly to: { readonly namespace: infer Target extends string };
+}
+  ? {
+      [K in keyof C["domain"]["namespaces"] & string]: Target extends K
+        ? K
+        : never;
+    }[keyof C["domain"]["namespaces"] & string]
+  : Ns;
+type RelatedRow<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+  Rel extends string,
+> = RootRow<
+  C,
+  TargetNamespace<C, Relation<C, Ns, M, Rel>, Ns>,
+  RelatedModelName<C, M, Rel, Ns> & string
+>;
+type Cardinality<Rel> = Rel extends { readonly cardinality: infer Card }
+  ? Card
+  : "1:N";
+type RelationValue<Rel, Row, Refined extends boolean = false> =
+  Cardinality<Rel> extends "1:1" | "N:1"
+    ? Refined extends true
+      ? Row | null
+      : Rel extends { readonly nullable: false }
+        ? Row
+        : Row | null
+    : Row[];
+type Terminal =
+  | "all"
+  | "first"
+  | "aggregate"
+  | "groupBy"
+  | "create"
+  | "createAll"
+  | "createAndCount"
+  | "upsert"
+  | "update"
+  | "updateAll"
+  | "updateAndCount"
+  | "delete"
+  | "deleteAll"
+  | "deleteAndCount";
+type Refinement<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+  Rel extends string,
+> = Omit<
+  Native<
+    C,
+    RelatedModelName<C, M, Rel, Ns> & string,
+    RelatedRow<C, Ns, M, Rel>,
+    InitialState<TargetNamespace<C, Relation<C, Ns, M, Rel>, Ns>>
+  >,
+  Terminal
+>;
+type RefinedValue<Rel, T> = T extends {
+  readonly kind: "includeScalar" | "includeCombine";
+}
+  ? T[Extract<keyof T, symbol>]
+  : RelationValue<Rel, NativeRow<T>, true>;
+type RefinementResult =
+  | { readonly _row?: unknown }
+  | { readonly kind: "includeScalar" | "includeCombine" };
+type Model<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+> = Ns extends keyof C["domain"]["namespaces"]
+  ? M extends keyof C["domain"]["namespaces"][Ns]["models"]
+    ? C["domain"]["namespaces"][Ns]["models"][M]
+    : never
+  : never;
+type VariantRow<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+  V extends string,
 > =
-  RelationOf<C, M, Ns, Rel> extends infer Relation
-    ? Relation extends { readonly cardinality: infer Card }
-      ? Card extends "1:N" | "N:M" | "M:N"
-        ? Array<
-            Simplify<
-              DefaultModelRow<
-                C,
-                RelatedModelName<C, M, Rel, Ns> & string,
-                RelationTargetNs<Relation, Ns>
-              >
-            >
+  Model<C, Ns, M> extends {
+    readonly discriminator: { readonly field: infer Field extends string };
+    readonly variants: infer Variants;
+  }
+    ? V extends keyof Variants
+      ? Variants[V] extends { readonly value: infer Value }
+        ? Simplify<
+            Omit<DefaultModelRow<C, M, Ns>, Field> &
+              DefaultModelRow<C, V, Ns> & { [K in Field]: Value }
           >
-        : Simplify<
-            DefaultModelRow<
-              C,
-              RelatedModelName<C, M, Rel, Ns> & string,
-              RelationTargetNs<Relation, Ns>
-            >
-          > | null
+        : never
       : never
     : never;
 
-/**
- * The Effect-native view of one Prisma model collection. Chainables
- * mirror `Collection`'s row/filter typing; terminals return Effects with
- * {@link ClientError} in the error channel. `HasWhere` reproduces
- * Prisma's compile-time gate: `update`/`delete` require a prior
- * `.where(...)`.
- */
+/** Prisma's fluent collection, with native parameter types and Effect terminals. */
 export interface EffectCollection<
   C extends AnyContract,
   Ns extends string,
   M extends string,
   Row,
-  HasWhere extends boolean = false,
+  S extends CollectionTypeState = InitialState<Ns>,
   E = never,
   R = never,
 > {
   where(
-    filter: WhereFilter<C, M, Ns>,
-  ): EffectCollection<C, Ns, M, Row, true, E, R>;
-
+    ...args: Args<Native<C, M, Row, S>["where"]>
+  ): EffectCollection<
+    C,
+    Ns,
+    M,
+    Row,
+    WithState<S, { readonly hasWhere: true }>,
+    E,
+    R
+  >;
+  variant<V extends Parameters<Native<C, M, Row, S>["variant"]>[0]>(
+    name: V,
+  ): EffectCollection<
+    C,
+    Ns,
+    M,
+    VariantRow<C, Ns, M, V>,
+    WithState<S, { readonly hasWhere: true; readonly variantName: V }>,
+    E,
+    R
+  >;
   include<Rel extends RelationNames<C, M, Ns>>(
     relation: Rel,
   ): EffectCollection<
     C,
     Ns,
     M,
-    Simplify<Row & { [K in Rel]: IncludedValue<C, M, Ns, K> }>,
-    HasWhere,
+    Simplify<
+      Row & {
+        [K in Rel]: RelationValue<
+          Relation<C, Ns, M, K>,
+          RelatedRow<C, Ns, M, K>
+        >;
+      }
+    >,
+    S,
     E,
     R
   >;
-
+  include<
+    Rel extends RelationNames<C, M, Ns>,
+    Refined extends RefinementResult,
+  >(
+    relation: Rel,
+    refine: (collection: Refinement<C, Ns, M, Rel>) => Refined,
+  ): EffectCollection<
+    C,
+    Ns,
+    M,
+    Simplify<
+      Row & { [K in Rel]: RefinedValue<Relation<C, Ns, M, K>, Refined> }
+    >,
+    S,
+    E,
+    R
+  >;
   select<
-    Fields extends readonly [
+    const Fields extends readonly [
       keyof DefaultModelRow<C, M, Ns> & string,
       ...(keyof DefaultModelRow<C, M, Ns> & string)[],
     ],
@@ -169,95 +260,152 @@ export interface EffectCollection<
       Pick<DefaultModelRow<C, M, Ns>, Fields[number]> &
         Omit<Row, keyof DefaultModelRow<C, M, Ns>>
     >,
-    HasWhere,
+    S,
     E,
     R
   >;
-
   orderBy(
-    selection:
-      | OrderBySelector<C, M, Ns>
-      | ReadonlyArray<OrderBySelector<C, M, Ns>>,
-  ): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-
-  distinct(): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-  limit(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-  offset(n: number): EffectCollection<C, Ns, M, Row, HasWhere, E, R>;
-
-  // ── read terminals ────────────────────────────────────────────────
-
-  all(): Effect.Effect<Row[], ClientError | E, R>;
+    ...args: Parameters<Native<C, M, Row, S>["orderBy"]>
+  ): EffectCollection<
+    C,
+    Ns,
+    M,
+    Row,
+    WithState<S, { readonly hasOrderBy: true }>,
+    E,
+    R
+  >;
+  cursor(
+    ...args: Parameters<Native<C, M, Row, S>["cursor"]>
+  ): EffectCollection<C, Ns, M, Row, S, E, R>;
+  distinct(
+    ...fields: Parameters<Native<C, M, Row, S>["distinct"]>
+  ): EffectCollection<C, Ns, M, Row, S, E, R>;
+  distinctOn(
+    ...fields: Parameters<Native<C, M, Row, S>["distinctOn"]>
+  ): EffectCollection<C, Ns, M, Row, S, E, R>;
+  limit(n: number): EffectCollection<C, Ns, M, Row, S, E, R>;
+  offset(n: number): EffectCollection<C, Ns, M, Row, S, E, R>;
+  groupBy<
+    const Fields extends readonly [
+      keyof DefaultModelRow<C, M, Ns> & string,
+      ...(keyof DefaultModelRow<C, M, Ns> & string)[],
+    ],
+  >(
+    ...fields: Fields
+  ): EffectGroupedCollection<C, Ns, M, Fields, false, E, R>;
+  all(
+    ...args: Parameters<Native<C, M, Row, S>["all"]>
+  ): QueryResult<Row, ClientError | E, R>;
   first(
-    filter?: WhereFilter<C, M, Ns>,
+    ...args: Args<Native<C, M, Row, S>["first"]>
   ): Effect.Effect<Row | null, ClientError | E, R>;
   aggregate<Spec extends AggregateSpec>(
     fn: (aggregate: AggregateBuilder<C, M, Ns>) => Spec,
+    ...configure: Parameters<Native<C, M, Row, S>["aggregate"]> extends [
+      unknown,
+      ...infer Rest,
+    ]
+      ? Rest
+      : never
   ): Effect.Effect<AggregateResult<Spec>, ClientError | E, R>;
-
-  // ── write terminals ───────────────────────────────────────────────
-
-  create(data: CreateInput<C, M, Ns>): Effect.Effect<Row, ClientError | E, R>;
+  create(
+    ...args: Args<Native<C, M, Row, S>["create"]>
+  ): Effect.Effect<Row, ClientError | E, R>;
   createAll(
-    data: readonly CreateInput<C, M, Ns>[],
-  ): Effect.Effect<Row[], ClientError | E, R>;
+    ...args: Parameters<Native<C, M, Row, S>["createAll"]>
+  ): QueryResult<Row, ClientError | E, R>;
   createAndCount(
-    data: readonly CreateInput<C, M, Ns>[],
+    ...args: Parameters<Native<C, M, Row, S>["createAndCount"]>
   ): Effect.Effect<number, ClientError | E, R>;
-  upsert(input: {
-    create: CreateInput<C, M, Ns>;
-    update: Partial<DefaultModelRow<C, M, Ns>>;
-    conflictOn?: UniqueConstraintCriterion<C, M>;
-  }): Effect.Effect<Row, ClientError | E, R>;
-
+  upsert(
+    ...args: Parameters<Native<C, M, Row, S>["upsert"]>
+  ): Effect.Effect<Row, ClientError | E, R>;
   update(
-    data: HasWhere extends true ? Partial<CreateInput<C, M, Ns>> : never,
+    ...args: Parameters<Native<C, M, Row, S>["update"]>
   ): Effect.Effect<Row | null, ClientError | E, R>;
   updateAll(
-    data: HasWhere extends true ? Partial<DefaultModelRow<C, M, Ns>> : never,
-  ): Effect.Effect<Row[], ClientError | E, R>;
+    ...args: Parameters<Native<C, M, Row, S>["updateAll"]>
+  ): QueryResult<Row, ClientError | E, R>;
   updateAndCount(
-    data: HasWhere extends true ? Partial<DefaultModelRow<C, M, Ns>> : never,
+    ...args: Parameters<Native<C, M, Row, S>["updateAndCount"]>
   ): Effect.Effect<number, ClientError | E, R>;
-
   delete(
-    this: HasWhere extends true
-      ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
+    this: S["hasWhere"] extends true
+      ? EffectCollection<C, Ns, M, Row, S, E, R>
       : never,
+    ...args: Parameters<Native<C, M, Row, S>["delete"]>
   ): Effect.Effect<Row | null, ClientError | E, R>;
   deleteAll(
-    this: HasWhere extends true
-      ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
+    this: S["hasWhere"] extends true
+      ? EffectCollection<C, Ns, M, Row, S, E, R>
       : never,
-  ): Effect.Effect<Row[], ClientError | E, R>;
+    ...args: Parameters<Native<C, M, Row, S>["deleteAll"]>
+  ): QueryResult<Row, ClientError | E, R>;
   deleteAndCount(
-    this: HasWhere extends true
-      ? EffectCollection<C, Ns, M, Row, HasWhere, E, R>
+    this: S["hasWhere"] extends true
+      ? EffectCollection<C, Ns, M, Row, S, E, R>
       : never,
+    ...args: Parameters<Native<C, M, Row, S>["deleteAndCount"]>
   ): Effect.Effect<number, ClientError | E, R>;
 }
 
-/** `db.orm.<namespace>.<Model>` — every model as an {@link EffectCollection}. */
+/** Grouped aggregates retain their selected keys and ordering requirements. */
+export interface EffectGroupedCollection<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+  Fields extends readonly (keyof DefaultModelRow<C, M, Ns> & string)[],
+  Ordered extends boolean = false,
+  E = never,
+  R = never,
+> {
+  having(
+    ...args: Parameters<GroupedCollection<C, M, Fields, Ns, Ordered>["having"]>
+  ): EffectGroupedCollection<C, Ns, M, Fields, Ordered, E, R>;
+  orderBy(
+    ...args: Parameters<GroupedCollection<C, M, Fields, Ns, Ordered>["orderBy"]>
+  ): EffectGroupedCollection<C, Ns, M, Fields, true, E, R>;
+  limit(
+    n: Ordered extends true ? number : never,
+  ): EffectGroupedCollection<C, Ns, M, Fields, Ordered, E, R>;
+  offset(
+    n: Ordered extends true ? number : never,
+  ): EffectGroupedCollection<C, Ns, M, Fields, Ordered, E, R>;
+  aggregate<Spec extends AggregateSpec>(
+    fn: (aggregate: AggregateBuilder<C, M, Ns>) => Spec,
+    ...configure: Parameters<
+      GroupedCollection<C, M, Fields, Ns, Ordered>["aggregate"]
+    > extends [unknown, ...infer Rest]
+      ? Rest
+      : never
+  ): Effect.Effect<
+    Array<
+      Simplify<
+        Pick<DefaultModelRow<C, M, Ns>, Fields[number]> & AggregateResult<Spec>
+      >
+    >,
+    ClientError | E,
+    R
+  >;
+}
+
 export type EffectOrm<C extends AnyContract, E = never, R = never> = {
-  readonly [Ns in keyof NamespacesOf<C> & string]: {
-    readonly [M in keyof ModelsOf<C, Ns> & string]: EffectCollection<
+  readonly [Ns in keyof C["domain"]["namespaces"] & string]: {
+    readonly [
+      M in keyof C["domain"]["namespaces"][Ns]["models"] & string
+    ]: EffectCollection<
       C,
       Ns,
       M,
-      Simplify<DefaultModelRow<C, M, Ns>>,
-      false,
+      NativeRow<Root<C, Ns, M>>,
+      InitialState<Ns>,
       E,
       R
     >;
   };
 };
 
-// ── runtime ─────────────────────────────────────────────────────────
-
-/**
- * Collection methods whose call executes the query. Everything else is
- * either a chainable (returns a new Collection) or a property access
- * (namespace/model lookup) — both recorded and replayed lazily.
- */
 const TERMINALS = new Set([
   "all",
   "first",
@@ -273,12 +421,16 @@ const TERMINALS = new Set([
   "deleteAll",
   "deleteAndCount",
 ]);
-
+const STREAMING_TERMINALS = new Set([
+  "all",
+  "createAll",
+  "updateAll",
+  "deleteAll",
+]);
 interface PathStep {
   readonly prop: string;
   readonly args?: readonly unknown[];
 }
-
 const replayPath = (base: unknown, path: readonly PathStep[]): unknown =>
   path.reduce<any>(
     (current, step) =>
@@ -294,33 +446,38 @@ const node = (
 ): any =>
   new Proxy(function () {}, {
     get: (_target, prop) => {
-      // Not thenable: a bare chain must never be awaited (only terminals
-      // produce Effects), and a `then` node would hang a stray `await`.
       if (typeof prop !== "string" || prop === "then") return undefined;
       return node(root, [...path, { prop }]);
     },
     apply: (_target, _this, args: unknown[]) => {
       const last = path[path.length - 1]!;
       const called = [...path.slice(0, -1), { prop: last.prop, args }];
-      if (TERMINALS.has(last.prop)) {
-        return Effect.flatMap(root, (base) =>
-          Effect.tryPromise({
-            // Terminals return a PromiseLike (AsyncIterableResult for the
-            // streaming ones — awaiting it buffers to Row[]).
-            try: () => Promise.resolve(replayPath(base, called) as any),
-            catch: wrapPrismaError,
-          }),
-        );
-      }
-      return node(root, called);
+      if (!TERMINALS.has(last.prop)) return node(root, called);
+      const effect = Effect.flatMap(root, (base) =>
+        Effect.tryPromise({
+          try: () => Promise.resolve(replayPath(base, called)),
+          catch: wrapPrismaError,
+        }),
+      );
+      if (!STREAMING_TERMINALS.has(last.prop)) return effect;
+      return Object.assign(effect, {
+        stream: Stream.unwrap(
+          Effect.flatMap(root, (base) =>
+            Effect.try({
+              try: () =>
+                Stream.fromAsyncIterable(
+                  replayPath(base, called) as AsyncIterable<unknown>,
+                  wrapPrismaError,
+                ),
+              catch: wrapPrismaError,
+            }),
+          ),
+        ),
+      });
     },
   });
 
-/**
- * Build the `db.orm` facade over a lazily-resolved root (`client.orm` for
- * the per-execution client, or a tx-scoped `orm(...)` inside a
- * transaction). Chains are recorded and replayed per evaluation.
- */
+/** Replays native builders per execution; refinement callbacks stay native and pure. */
 export const makeOrmProxy = <C extends AnyContract, E, R>(
   root: Effect.Effect<unknown, E, R>,
-): EffectOrm<C, E, R> => node(root, []) as EffectOrm<C, E, R>;
+): EffectOrm<C, E, R> => node(root, []);

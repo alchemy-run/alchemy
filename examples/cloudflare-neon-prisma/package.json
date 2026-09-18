@@ -21,6 +21,7 @@
     "@effect/platform-node": "catalog:",
     "@prisma/orm-postgres": "catalog:",
     "alchemy": "workspace:*",
+    "arktype": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

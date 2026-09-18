@@ -1,4 +1,4 @@
-import { rewriteEmittedTypes } from "@/Prisma/ORM/internal.ts";
+import { rewriteEmittedTypes, runPrismaCli } from "@/Prisma/ORM/internal.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -19,6 +19,38 @@ const writeDts = (contents: string) =>
     yield* fs.writeFileString(dtsPath, contents);
     return dtsPath;
   });
+
+describe("runPrismaCli", (it) => {
+  it.effect("omits database arguments from CLI error messages", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const cwd = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-prisma-cli-",
+      });
+      const result = yield* Effect.result(
+        runPrismaCli(
+          [
+            "db",
+            "verify",
+            "--config",
+            path.join(cwd, "missing.config.ts"),
+            "--db",
+            "postgresql://test:private-test-password@127.0.0.1:1/test",
+          ],
+          { cwd },
+        ),
+      );
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(JSON.stringify(result.failure)).not.toContain(
+          "private-test-password",
+        );
+        expect(result.failure.message).toContain("prisma db verify failed");
+      }
+    }).pipe(Effect.scoped),
+  );
+});
 
 describe("rewriteEmittedTypes", (it) => {
   it.effect(
