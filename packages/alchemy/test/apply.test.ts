@@ -8,6 +8,7 @@ import { apply, DestroyError } from "@/Apply";
 import { Cli } from "@/Report.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
+import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
@@ -5810,6 +5811,494 @@ describe("interrupted create persists no unresolved Output exprs", () => {
         expect(yield* getState("B")).toBeUndefined();
         expect(yield* listState()).toEqual([]);
       }),
+  );
+});
+
+describe("opt-in reconciliation ordering", () => {
+  type Props = {
+    revision: string;
+    parent?: string;
+    nested?: { values: string[] };
+    direction?: "in" | "out";
+    identity?: string;
+    deleteFirst?: boolean;
+  };
+  interface Ordered extends Resource<
+    "Test.OrderedReconcile",
+    Props,
+    Props & { stableId: string },
+    { parent: string }
+  > {}
+  const Ordered = Resource<Ordered>("Test.OrderedReconcile");
+  class Registry extends Context.Service<
+    Registry,
+    {
+      calls: string[];
+      diffs: Array<{ id: string; resolved: boolean; parent?: string }>;
+      adoptRoot?: boolean;
+      reconcile?: (id: string) => Effect.Effect<void, ResourceFailure>;
+    }
+  >()("OrderedReconcile.Registry") {}
+  const variant = (ordered?: boolean) =>
+    Provider.succeed(Ordered, {
+      reconcileBeforeDependents: ordered,
+      stables: ["stableId"],
+      read: Effect.fn(function* ({ id }) {
+        const registry = yield* Registry;
+        return id === "Root" && registry.adoptRoot
+          ? { stableId: "Root:default", revision: "adopted" }
+          : undefined;
+      }),
+      diff: Effect.fn(function* ({ id, news, olds }) {
+        const registry = yield* Registry;
+        const resolved = isResolved(news);
+        registry.diffs.push({
+          id,
+          resolved,
+          parent: resolved ? news.parent : undefined,
+        });
+        if (!isResolved(news)) return;
+        if (
+          news.direction !== olds.direction ||
+          news.identity !== olds.identity
+        ) {
+          return { action: "replace", deleteFirst: news.deleteFirst };
+        }
+      }),
+      precreate: Effect.fn(function* ({ id, news }) {
+        (yield* Registry).calls.push(`precreate:${id}`);
+        return { ...news, stableId: `${id}:${news.identity ?? "default"}` };
+      }),
+      reconcile: Effect.fn(function* ({ id, news }) {
+        const registry = yield* Registry;
+        registry.calls.push(`reconcile:${id}`);
+        if (registry.reconcile) yield* registry.reconcile(id);
+        return { ...news, stableId: `${id}:${news.identity ?? "default"}` };
+      }),
+      delete: Effect.fn(function* ({ id }) {
+        (yield* Registry).calls.push(`delete:${id}`);
+      }),
+    });
+  const registryLayer = Layer.effect(
+    Registry,
+    Effect.serviceOption(Registry).pipe(
+      Effect.map(Option.getOrElse(() => ({ calls: [], diffs: [] }))),
+    ),
+  );
+  const { test: orderedTest } = Test.make({
+    providers: ProviderLayer.dual(Ordered, {
+      live: () => variant(true),
+      local: () => variant(false),
+    }).pipe(Layer.provideMerge(registryLayer)),
+  });
+  const { test: ordinaryTest } = Test.make({
+    providers: variant().pipe(Layer.provideMerge(registryLayer)),
+  });
+  const program = (revision: string, child?: Partial<Props>) =>
+    Effect.gen(function* () {
+      const root = yield* Ordered("Root", { revision });
+      if (child) {
+        yield* Ordered("Child", {
+          revision: "child",
+          parent: root.stableId,
+          ...child,
+        });
+      }
+    });
+
+  orderedTest.provider(
+    "materialized stable IDs remain resolved for direction and identity replacements",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const registry = yield* Registry;
+        yield* stack.deploy(
+          program("one", { direction: "in", identity: "one" }),
+        );
+        for (const change of [
+          { direction: "out" as const },
+          { identity: "two" },
+        ]) {
+          const plan = yield* stack.plan(
+            program("two", {
+              direction: "in",
+              identity: "one",
+              ...change,
+            }),
+          );
+          expect(plan.resources.Root.action).toBe("update");
+          expect(plan.resources.Child.action).toBe("replace");
+          expect(plan.reconcileDependencies).toEqual({ Child: ["Root"] });
+          expect(
+            registry.diffs.filter((diff) => diff.id === "Child").at(-1),
+          ).toEqual({
+            id: "Child",
+            resolved: true,
+            parent: "Root:default",
+          });
+          assert(plan.resources.Child.action === "replace");
+          expect(plan.resources.Child.props.parent).toBe("Root:default");
+        }
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
+  );
+
+  for (const deleteFirst of [false, true]) {
+    orderedTest.provider(
+      `replacement preserves direction and waits before deletion (deleteFirst=${deleteFirst})`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(
+            program("one", { direction: "in", identity: "one" }),
+          );
+          const registry = yield* Registry;
+          registry.calls.length = 0;
+          const plan = yield* stack.plan(
+            program("two", {
+              direction: "out",
+              identity: "two",
+              deleteFirst,
+            }),
+          );
+          assert(plan.resources.Child.action === "replace");
+          expect(plan.resources.Child.deleteFirst).toBe(deleteFirst);
+          expect(plan.reconcileDependencies).toEqual({ Child: ["Root"] });
+          yield* apply(plan);
+          expect(registry.calls[0]).toBe("reconcile:Root");
+          expect(registry.calls).toContain("delete:Child");
+          expect((yield* getState("Child")).attr).toMatchObject({
+            direction: "out",
+            identity: "two",
+            stableId: "Child:two",
+          });
+          yield* stack.destroy();
+          expect(yield* listState()).toEqual([]);
+        }),
+      { timeout: 15_000 },
+    );
+  }
+
+  orderedTest.provider(
+    "create and precreate wait for the upstream terminal state commit",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(program("one"));
+        const registry = yield* Registry;
+        registry.calls.length = 0;
+        const enteredCommit = yield* Deferred.make<void>();
+        const releaseCommit = yield* Deferred.make<void>();
+        const state = yield* yield* State;
+        let committed = false;
+        registry.reconcile = (id) =>
+          Effect.sync(() => {
+            if (id === "Child") expect(committed).toBe(true);
+          });
+        const plan = yield* stack.plan(program("two", {}));
+        assert(plan.resources.Child.action === "create");
+        expect(plan.resources.Child.props.parent).toBe("Root:default");
+        expect(plan.reconcileDependencies).toEqual({ Child: ["Root"] });
+        const fiber = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                Effect.gen(function* () {
+                  if (
+                    request.fqn === "Root" &&
+                    request.value.status === "updated"
+                  ) {
+                    yield* Deferred.succeed(enteredCommit, undefined);
+                    yield* Deferred.await(releaseCommit);
+                    const value = yield* state.set(request);
+                    committed = true;
+                    return value;
+                  }
+                  return yield* state.set(request);
+                }),
+            }),
+          ),
+          Effect.forkChild,
+        );
+        yield* Deferred.await(enteredCommit);
+        expect(registry.calls).toEqual(["reconcile:Root"]);
+        yield* Deferred.succeed(releaseCommit, undefined);
+        yield* Fiber.join(fiber);
+        expect(registry.calls).toEqual([
+          "reconcile:Root",
+          "precreate:Child",
+          "reconcile:Child",
+        ]);
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
+  );
+
+  for (const failure of ["reconcile", "commit"] as const) {
+    orderedTest.provider(
+      `upstream ${failure} failure blocks materialized dependents`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(program("one"));
+          const registry = yield* Registry;
+          registry.calls.length = 0;
+          registry.reconcile = (id) =>
+            id === "Root" && failure === "reconcile"
+              ? Effect.fail(new ResourceFailure())
+              : Effect.void;
+          const state = yield* yield* State;
+          const plan = yield* stack.plan(program("two", {}));
+          const exit = yield* apply(plan).pipe(
+            Effect.provideService(
+              State,
+              Effect.succeed({
+                ...state,
+                set: (request) =>
+                  request.fqn === "Root" &&
+                  request.value.status === "updated" &&
+                  failure === "commit"
+                    ? Effect.fail(
+                        new StateStoreError({
+                          message: "terminal commit failed",
+                        }),
+                      )
+                    : state.set(request),
+              }),
+            ),
+            Effect.exit,
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(registry.calls).toEqual(["reconcile:Root"]);
+          expect(yield* getState("Child")).toBeUndefined();
+          registry.reconcile = undefined;
+          yield* stack.destroy();
+        }),
+      { timeout: 15_000 },
+    );
+  }
+
+  ordinaryTest.provider(
+    "ordinary providers retain parallel creation against a stable ID",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(program("one"));
+        const registry = yield* Registry;
+        const childStarted = yield* Deferred.make<void>();
+        registry.reconcile = (id) =>
+          id === "Root"
+            ? Deferred.await(childStarted)
+            : Effect.asVoid(Deferred.succeed(childStarted, undefined));
+        const plan = yield* stack.plan(program("two", {}));
+        expect(plan.reconcileDependencies).toBeUndefined();
+        yield* apply(plan);
+        expect(yield* Deferred.isDone(childStarted)).toBe(true);
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
+  );
+
+  orderedTest.provider(
+    "noop consumers stay noop and force restores ordering without hiding stable values",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(program("one", {}));
+        const unchanged = yield* stack.plan(program("one", {}));
+        expect(unchanged.reconcileDependencies).toBeUndefined();
+        const changed = yield* stack.plan(program("two", {}));
+        expect(changed.resources.Child.action).toBe("noop");
+        expect(changed.reconcileDependencies).toBeUndefined();
+        const newChild = yield* stack.plan(
+          program("one", { revision: "changed" }),
+        );
+        expect(newChild.resources.Root.action).toBe("noop");
+        expect(newChild.resources.Child.action).toBe("update");
+        expect(newChild.reconcileDependencies).toBeUndefined();
+        const forced = yield* Plan.make(
+          {
+            name: stack.name,
+            stage: stack.stage,
+            resources: Object.fromEntries(
+              Object.entries(unchanged.resources).map(([fqn, node]) => [
+                fqn,
+                node.resource,
+              ]),
+            ),
+            bindings: {},
+            actions: {},
+            output: undefined,
+          },
+          { force: true },
+        );
+        expect(forced.resources.Root.action).toBe("update");
+        assert(forced.resources.Child.action === "update");
+        expect(forced.resources.Child.props.parent).toBe("Root:default");
+        expect(forced.reconcileDependencies).toEqual({ Child: ["Root"] });
+        const registry = yield* Registry;
+        registry.calls.length = 0;
+        yield* apply(forced);
+        expect(registry.calls).toEqual(["reconcile:Root", "reconcile:Child"]);
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
+  );
+
+  orderedTest.provider(
+    "mapped nested references and bindings retain transitive ordering through noops",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const registry = yield* Registry;
+        const graph = (revision: string, consumers = false) =>
+          Effect.gen(function* () {
+            const root = yield* Ordered("Root", { revision });
+            const bridge = yield* Ordered("Bridge", {
+              revision: "bridge",
+              parent: root.stableId,
+            });
+            if (consumers) {
+              yield* Ordered("Nested", {
+                revision: "nested",
+                nested: {
+                  values: [Output.map(bridge.stableId, (id) => `mapped:${id}`)],
+                },
+              });
+              const host = yield* Ordered("Host", { revision: "host" });
+              yield* host.bind("parent", {
+                parent: Output.map(root.stableId, (id) => id),
+              });
+              const Run = Action("Run", (_: { parent: string }) =>
+                Effect.sync(() => {
+                  registry.calls.push("action:Run");
+                  expect(registry.calls).toContain("reconcile:Root");
+                }),
+              );
+              yield* Run({ parent: bridge.stableId });
+              const Captured = Action(
+                "Captured",
+                Effect.gen(function* () {
+                  yield* bridge.stableId;
+                  return () =>
+                    Effect.sync(() => {
+                      registry.calls.push("action:Captured");
+                    });
+                }),
+              );
+              yield* Captured({});
+            }
+          });
+        yield* stack.deploy(graph("one"));
+        const plan = yield* stack.plan(graph("two", true));
+        expect(plan.resources.Bridge.action).toBe("noop");
+        expect(plan.reconcileDependencies).toEqual({
+          Nested: ["Root"],
+          Host: ["Root"],
+          Run: ["Root"],
+          Captured: ["Root"],
+        });
+        assert(plan.resources.Nested.action === "create");
+        expect(plan.resources.Nested.props.nested).toEqual({
+          values: ["mapped:Bridge:default"],
+        });
+        expect(plan.resources.Host.bindings[0].data).toEqual({
+          parent: "Root:default",
+        });
+        registry.calls.length = 0;
+        yield* apply(plan);
+        expect(registry.calls[0]).toBe("reconcile:Root");
+        expect(registry.calls).toContain("action:Run");
+        expect(registry.calls).toContain("action:Captured");
+        registry.calls.length = 0;
+        yield* stack.destroy();
+        expect(registry.calls.indexOf("delete:Nested")).toBeLessThan(
+          registry.calls.indexOf("delete:Bridge"),
+        );
+        expect(registry.calls.indexOf("delete:Host")).toBeLessThan(
+          registry.calls.indexOf("delete:Root"),
+        );
+        expect(yield* listState()).toEqual([]);
+      }),
+    { timeout: 15_000 },
+  );
+
+  orderedTest.provider(
+    "cold adoption orders consumers after the first reconciliation",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const registry = yield* Registry;
+        registry.adoptRoot = true;
+        const plan = yield* stack.plan(program("desired", {}));
+        expect(plan.resources.Root.action).toBe("adopted");
+        expect(plan.reconcileDependencies).toEqual({ Child: ["Root"] });
+        registry.calls.length = 0;
+        yield* apply(plan);
+        expect(registry.calls).toEqual([
+          "reconcile:Root",
+          "precreate:Child",
+          "reconcile:Child",
+        ]);
+        registry.adoptRoot = false;
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
+  );
+
+  orderedTest.provider(
+    "binding cycles and self bindings keep convergence and deletion live",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const graph = (revision: string) =>
+          Effect.gen(function* () {
+            const a = yield* Ordered("A", { revision });
+            const b = yield* Ordered("B", { revision });
+            yield* a.bind("from-b", { parent: b.stableId });
+            yield* b.bind("from-a", { parent: a.stableId });
+            yield* a.bind("self", { parent: a.stableId });
+          });
+        const first = yield* stack.plan(graph("one"));
+        expect(first.reconcileDependencies).toBeUndefined();
+        expect(first.cycleMembers).toEqual(new Set(["A", "B"]));
+        yield* apply(first);
+        const second = yield* stack.plan(graph("two"));
+        expect(second.reconcileDependencies).toBeUndefined();
+        yield* apply(second);
+        yield* stack.destroy();
+        expect(yield* listState()).toEqual([]);
+      }),
+    { timeout: 15_000 },
+  );
+
+  orderedTest.provider(
+    "dual providers use the concrete mode's ordering metadata",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const live = yield* Provider.findProvider(Ordered, "live");
+        const local = yield* Provider.findProvider(Ordered, "local");
+        expect(live.reconcileBeforeDependents).toBe(true);
+        expect(local.reconcileBeforeDependents).toBe(false);
+        yield* inDev(stack.deploy(program("one")));
+        const plan = yield* inDev(stack.plan(program("two", {})));
+        expect(plan.resources.Root.mode).toBe("local");
+        expect(plan.reconcileDependencies).toBeUndefined();
+        const registry = yield* Registry;
+        const childStarted = yield* Deferred.make<void>();
+        registry.reconcile = (id) =>
+          id === "Root"
+            ? Deferred.await(childStarted)
+            : Effect.asVoid(Deferred.succeed(childStarted, undefined));
+        yield* apply(plan);
+        expect(yield* Deferred.isDone(childStarted)).toBe(true);
+        yield* stack.destroy();
+      }),
+    { timeout: 15_000 },
   );
 });
 

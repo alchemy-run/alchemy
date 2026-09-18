@@ -479,7 +479,11 @@ const executePlan = Effect.fn(function* (
             stackName,
             stage,
             getOutputs,
-            waitForStableDeps,
+            (deps) =>
+              waitForStableDeps([
+                ...deps,
+                ...(plan.reconcileDependencies?.[fqn] ?? []),
+              ]),
             failures,
           )
         : executeNode(
@@ -497,6 +501,11 @@ const executePlan = Effect.fn(function* (
             waitForDeps,
             failures,
             plan.cycleMembers.has(fqn),
+            plan.reconcileDependencies?.[fqn]
+              ? Effect.asVoid(
+                  waitForStableDeps(plan.reconcileDependencies[fqn]),
+                )
+              : undefined,
           ),
     ),
     { concurrency: "unbounded" },
@@ -581,6 +590,7 @@ const executeNode = (
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
   inCycle: boolean,
+  waitForReconcile: Effect.Effect<void> | undefined,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     const logicalId = node.resource.LogicalId;
@@ -756,6 +766,13 @@ const executeNode = (
         instanceId: node.state.instanceId,
       });
       return;
+    }
+
+    // Retained edges gate precreate and replacement deletion as well as
+    // reconcile. Plan excludes intra-cycle edges so early signals stay usable.
+    if (waitForReconcile) {
+      yield* report("pending");
+      yield* waitForReconcile;
     }
 
     const allUpstreamFqns = () => {
