@@ -31,6 +31,9 @@ import {
 import { showWork, type WorkPlace } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
+import { CODE_THEMES } from "@/lib/code-theme";
+import { useResolvedTheme } from "@/lib/theme";
+import { themeToTreeStyles } from "@pierre/trees";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import type { GitStatusEntry } from "@pierre/trees";
 import {
@@ -595,6 +598,11 @@ const PullFiles = ({
   }, [model, paths, files]);
 
   const totals = useMemo(() => diffTotals(raw), [raw]);
+  const mode = useResolvedTheme();
+  const treeStyles = useMemo(
+    () => themeToTreeStyles(CODE_THEMES[mode]),
+    [mode],
+  );
 
   if (files.length === 0) {
     return (
@@ -612,7 +620,10 @@ const PullFiles = ({
           <span className="font-mono text-moss">+{totals.added}</span>{" "}
           <span className="font-mono text-red-400">−{totals.deleted}</span>
         </div>
-        <FileTree model={model} style={{ height: "calc(100dvh - 260px)" }} />
+        <FileTree
+          model={model}
+          style={{ height: "calc(100dvh - 260px)", ...treeStyles }}
+        />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {files.map((entry) => (

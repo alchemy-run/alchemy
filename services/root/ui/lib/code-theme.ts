@@ -304,6 +304,13 @@ const REGISTERED = Symbol.for("root/code-theme");
  *  a theme added in a later edit still registers on a page whose
  *  earlier module already ran (a boolean "done" flag would skip it and
  *  the renderer, asked for a name it never got, draws nothing). */
+/** The theme OBJECTS — @pierre/trees themes its file tree from the
+ *  same VS Code-shaped palette the code surfaces use. */
+export const CODE_THEMES: Record<"light" | "dark", ThemeRegistration> = {
+  dark: walnutSunrise,
+  light: parchment,
+};
+
 export const ensureCodeTheme = (): void => {
   const global = globalThis as { [REGISTERED]?: Set<string> };
   const registered = (global[REGISTERED] ??= new Set());

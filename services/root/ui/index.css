@@ -196,6 +196,13 @@
   ::selection {
     background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
+  /* Rigid scrolling, VS Code-style: no rubber-band at the edges and
+     no scroll chaining out of nested panes — anywhere. */
+  html,
+  body,
+  * {
+    overscroll-behavior: none;
+  }
 }
 
 /* ============================================================
