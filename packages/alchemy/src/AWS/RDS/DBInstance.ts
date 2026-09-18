@@ -675,6 +675,32 @@ export interface DBInstance extends Resource<
  * manage parameter groups or modify existing security-group attachments;
  * Db2 BYOL requires an explicit parameter group with IBM licensing IDs.
  *
+ * ### Readiness
+ * Deployment waits for an instance ARN and an operational status: `available`
+ * or `storage-optimization`. Storage optimization remains online and can
+ * continue for hours. Missing or pending observations retain the ten-minute
+ * provisioning budget; SDK failures keep their original typed errors rather
+ * than being retried by the readiness loop. Unknown statuses and blue/green
+ * `storage-initialization` remain bounded pending observations, never ready.
+ *
+ * **Example:** Return the ready database's status from a stack
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ * });
+ * return { status: db.status };
+ * ```
+ *
+ * States requiring intervention, including `stopped`, `storage-full`, and
+ * incompatible or failed configurations, fail with `DBInstanceReadinessBlocked`.
+ * Alchemy does not automatically start a stopped instance. Restore its
+ * operational state and deploy again. Unchanged declarations also check
+ * readiness, while storage, port, and association updates wait for both their
+ * requested values and an operational instance before returning.
+ *
  * ### Monitoring & Logs
  * **Example:** Enhanced monitoring + log export
  * ```typescript
@@ -1262,6 +1288,55 @@ const autoscalingConverged = (
   return ceiling === observed.MaxAllocatedStorage;
 };
 
+class DBInstancePending extends Data.TaggedError("DBInstancePending")<{
+  instanceId: string;
+  status: string | undefined;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' is not ready (status: ${this.status ?? "not yet visible"})`;
+  }
+}
+
+class DBInstanceReadinessBlocked extends Data.TaggedError(
+  "DBInstanceReadinessBlocked",
+)<{
+  instanceId: string;
+  status: string;
+}> {
+  override get message() {
+    return `DB instance '${this.instanceId}' requires intervention (status: ${this.status})`;
+  }
+}
+
+const blockedStatuses = new Set([
+  "automation-paused",
+  "delete-precheck",
+  "deleted",
+  "deleting",
+  "failed",
+  "inaccessible-encryption-credentials",
+  "inaccessible-encryption-credentials-recoverable",
+  "incompatible-create",
+  "incompatible-network",
+  "incompatible-option-group",
+  "incompatible-parameters",
+  "incompatible-restore",
+  "insufficient-capacity",
+  "restore-error",
+  "stopped",
+  "stopping",
+  "storage-full",
+  "unsupported-configuration",
+  "upgrade-failed",
+]);
+
+const instanceReady = (
+  instance: rds.DBInstance | undefined,
+): instance is rds.DBInstance & { DBInstanceArn: string } =>
+  !!instance?.DBInstanceArn &&
+  (instance.DBInstanceStatus === "available" ||
+    instance.DBInstanceStatus === "storage-optimization");
+
 export const DBInstanceProvider = () =>
   Provider.effect(
     DBInstance,
@@ -1284,42 +1359,35 @@ export const DBInstanceProvider = () =>
         return response?.DBInstances?.[0];
       });
 
-      // Storage optimization is online and can continue for hours after a resize.
-      // `requireAvailable: false` only waits for the ARN to appear.
-      const waitForInstance = Effect.fn(function* (
-        instanceId: string,
-        { requireAvailable = true }: { requireAvailable?: boolean } = {},
-      ) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
-        return yield* readInstance(instanceId).pipe(
-          Effect.flatMap((instance) => {
-            if (!instance?.DBInstanceArn) {
-              return Effect.fail(
-                new Error(`DB instance '${instanceId}' not found`),
-              );
-            }
-            // Statuses that will never settle on their own — surface instead of
-            // spinning until the bound is hit.
-            const status = instance.DBInstanceStatus;
-            if (
-              requireAvailable &&
-              status !== "available" &&
-              status !== "storage-optimization" &&
-              status !== "incompatible-parameters" &&
-              status !== "incompatible-restore"
-            ) {
-              return Effect.fail(
-                new Error(
-                  `DB instance '${instanceId}' not available (status: ${status})`,
+      const observeReadiness = Effect.fn(function* (instanceId: string) {
+        const instance = yield* readInstance(instanceId);
+        const status = instance?.DBInstanceStatus;
+        if (status !== undefined && blockedStatuses.has(status)) {
+          return yield* new DBInstanceReadinessBlocked({ instanceId, status });
+        }
+        return instance;
+      });
+
+      // Storage optimization is online; provisioning retains its ten-minute budget.
+      const waitForInstance = Effect.fn(function* (instanceId: string) {
+        return yield* observeReadiness(instanceId).pipe(
+          Effect.flatMap((instance) =>
+            instanceReady(instance)
+              ? Effect.succeed(instance)
+              : Effect.fail(
+                  new DBInstancePending({
+                    instanceId,
+                    status: instance?.DBInstanceStatus,
+                  }),
                 ),
-              );
-            }
-            return Effect.succeed(instance);
+          ),
+          Effect.retry({
+            while: (error) => error._tag === "DBInstancePending",
+            schedule: Schedule.max([
+              Schedule.fixed("10 seconds"),
+              Schedule.recurs(60),
+            ]),
           }),
-          Effect.retry({ schedule: readinessPolicy }),
         );
       });
 
@@ -1327,7 +1395,7 @@ export const DBInstanceProvider = () =>
         instanceId: string,
         desired: Associations,
       ) {
-        const instance = yield* readInstance(instanceId).pipe(
+        const instance = yield* observeReadiness(instanceId).pipe(
           Effect.flatMap((instance) =>
             instance?.DBParameterGroups?.some(
               (group) => group.ParameterApplyStatus === "failed-to-apply",
@@ -1346,17 +1414,12 @@ export const DBInstanceProvider = () =>
             ]),
             times: 10,
             until: (instance) =>
-              instance !== undefined &&
-              (instance.DBInstanceStatus === "available" ||
-                instance.DBInstanceStatus === "storage-optimization") &&
+              instanceReady(instance) &&
               associationsConverged(desired, instance),
           }),
         );
         if (
-          !instance?.DBInstanceArn ||
-          !["available", "storage-optimization"].includes(
-            instance.DBInstanceStatus ?? "",
-          ) ||
+          !instanceReady(instance) ||
           !associationsConverged(desired, instance)
         ) {
           return yield* new InvalidDBInstanceAssociations({
@@ -1370,7 +1433,7 @@ export const DBInstanceProvider = () =>
         instanceId: string,
         port: number,
       ) {
-        const instance = yield* readInstance(instanceId).pipe(
+        const instance = yield* observeReadiness(instanceId).pipe(
           Effect.repeat({
             schedule: Schedule.min([
               Schedule.exponential("5 seconds"),
@@ -1378,19 +1441,10 @@ export const DBInstanceProvider = () =>
             ]),
             times: 10,
             until: (instance) =>
-              instance !== undefined &&
-              (instance.DBInstanceStatus === "available" ||
-                instance.DBInstanceStatus === "storage-optimization") &&
-              portConverged(instance, port),
+              instanceReady(instance) && portConverged(instance, port),
           }),
         );
-        if (
-          !instance?.DBInstanceArn ||
-          !["available", "storage-optimization"].includes(
-            instance.DBInstanceStatus ?? "",
-          ) ||
-          !portConverged(instance, port)
-        ) {
+        if (!instanceReady(instance) || !portConverged(instance, port)) {
           return yield* new InvalidDBInstancePort({
             message: `DB instance '${instanceId}' listener did not converge (status: ${instance?.DBInstanceStatus}, desired: ${port}, observed: ${instance?.Endpoint?.Port}, pending: ${instance?.PendingModifiedValues?.Port})`,
           });
@@ -1403,17 +1457,17 @@ export const DBInstanceProvider = () =>
         converged: (instance: rds.DBInstance) => boolean,
       ) {
         // RDS can remain available while an accepted storage resize is pending.
-        const instance = yield* readInstance(instanceId).pipe(
+        const instance = yield* observeReadiness(instanceId).pipe(
           Effect.repeat({
             schedule: Schedule.min([
               Schedule.exponential("5 seconds"),
               Schedule.spaced("1 minute"),
             ]),
             times: 10,
-            until: (instance) => instance !== undefined && converged(instance),
+            until: (instance) => instanceReady(instance) && converged(instance),
           }),
         );
-        if (!instance?.DBInstanceArn || !converged(instance)) {
+        if (!instanceReady(instance) || !converged(instance)) {
           return yield* new InvalidDBInstanceStorage({
             message: `DB instance '${instanceId}' storage did not converge (status: ${instance?.DBInstanceStatus}, allocated: ${instance?.AllocatedStorage}, maximum: ${instance?.MaxAllocatedStorage}, pending allocation: ${instance?.PendingModifiedValues?.AllocatedStorage})`,
           });
@@ -1480,6 +1534,9 @@ export const DBInstanceProvider = () =>
             const instance = yield* readInstance(output.dbInstanceIdentifier);
             if (!instance?.DBInstanceArn) {
               return { action: "update", stables: [] } as const;
+            }
+            if (!instanceReady(instance)) {
+              return { action: "update" } as const;
             }
             const port = yield* desiredInstancePort(news, instance);
             const associations = yield* resolveAssociations(news, instance);
@@ -1551,7 +1608,10 @@ export const DBInstanceProvider = () =>
 
           const storage = yield* toStorageConfiguration(news);
           // Observe — fetch live instance state.
-          let observed = yield* readInstance(identifier);
+          let observed = yield* observeReadiness(identifier);
+          if (observed?.DBInstanceArn) {
+            observed = yield* waitForInstance(identifier);
+          }
           let port = yield* desiredInstancePort(news, observed);
           let associations = yield* resolveAssociations(news, observed);
           let desiredStorage = yield* resolveStorage(
@@ -1622,9 +1682,6 @@ export const DBInstanceProvider = () =>
             observed = yield* waitForInstance(identifier);
           }
           if (!created) {
-            // Wait for the instance to settle before any modify so the call
-            // doesn't hit `InvalidDBInstanceStateFault`.
-            observed = yield* waitForInstance(identifier);
             if (hasPendingStorage(observed)) {
               observed = yield* waitForStorage(
                 identifier,

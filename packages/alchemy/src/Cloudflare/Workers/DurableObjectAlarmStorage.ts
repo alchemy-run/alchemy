@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts";
 
 const SCHEMA_VERSION = 1;
 
@@ -13,6 +14,14 @@ export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
 }> {}
 
 export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
+  Effect.gen(function* () {
+    const transaction = (yield* ActiveStorageTransactions).get(storage);
+    if (transaction?.alarmTablesEnsured) return;
+    yield* initializeAlarmTables(storage);
+    if (transaction !== undefined) transaction.alarmTablesEnsured = true;
+  });
+
+const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
   Effect.sync(() => {
     const hasVersion =
       storage.sql
@@ -68,6 +77,26 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
 
 // Both schedulers share the Durable Object's single native alarm.
 export const reconcileDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
+  Effect.gen(function* () {
+    const transaction = (yield* ActiveStorageTransactions).get(storage);
+    if (transaction !== undefined) {
+      transaction.alarmDirty = true;
+    } else {
+      yield* reconcileAlarm(storage);
+    }
+  });
+
+// Flush before commit or an explicit alarm operation, never after rollback.
+export const flushDurableObjectAlarm = (storage: cf.DurableObjectStorage) =>
+  Effect.gen(function* () {
+    const transaction = (yield* ActiveStorageTransactions).get(storage);
+    if (transaction?.alarmDirty && !transaction.rolledBack) {
+      yield* reconcileAlarm(storage);
+      transaction.alarmDirty = false;
+    }
+  });
+
+const reconcileAlarm = (storage: cf.DurableObjectStorage) =>
   Effect.gen(function* () {
     const next = yield* Effect.sync(
       () =>

@@ -67,6 +67,24 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
           }
           case "late-registration":
             return yield* HttpServerResponse.json(yield* object.registerLate());
+          case "bookkeeping":
+            return yield* HttpServerResponse.json(yield* object.bookkeeping());
+          case "cancel-bookkeeping":
+            return yield* HttpServerResponse.json(
+              yield* object.cancelBookkeeping(),
+            );
+          case "bookkeeping-rollback":
+            return yield* HttpServerResponse.json(
+              yield* object.failedBookkeeping(true),
+            );
+          case "bookkeeping-failure":
+            return yield* HttpServerResponse.json(
+              yield* object.failedBookkeeping(false),
+            );
+          case "alarm-observations":
+            return yield* HttpServerResponse.json(
+              yield* object.alarmObservations(),
+            );
           case "timing":
             return yield* HttpServerResponse.json(yield* object.timing());
           case "atomic":
