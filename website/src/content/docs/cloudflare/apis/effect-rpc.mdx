@@ -572,20 +572,19 @@ yield* stub.setTitle({ title: "hi" });
 For internal DO calls that don't need a schema, see
 [Schemaless RPC on Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc).
 
-## Enable WebSocket RPC
+## HTTP and WebSocket RPC
 
-Opt in on the same class:
+Returning a handler Layer enables both HTTP and hibernating WebSocket RPC
+automatically. Keep the declaration as `{ schema: CounterRpcs }`; the
+incoming request selects the transport.
 
-```diff lang="typescript"
--{ schema: CounterRpcs },
-+{ schema: CounterRpcs, transport: "websocket" },
-```
+WebSocket upgrades use Effect RPC's JSON protocol. Ordinary HTTP requests
+and existing `getByName` clients continue to use NDJSON. A WebSocket is
+opened only when a client connects over one.
 
-WebSockets use Effect RPC's JSON protocol. HTTP remains available with
-NDJSON, so existing `getByName` clients continue to work. The inner
-Effect must return a handler Layer for WebSocket support. Existing
-implementations returning `RpcServer.toHttpEffect(...)` remain supported
-for HTTP.
+Existing implementations returning `RpcServer.toHttpEffect(...)` remain
+HTTP-only. Return the handler Layer instead to let Alchemy provide both
+transports.
 
 ## Forward browser connections
 

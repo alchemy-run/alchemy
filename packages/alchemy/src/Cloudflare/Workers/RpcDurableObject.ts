@@ -35,13 +35,6 @@ import type { Worker as WorkerService } from "./Worker.ts";
 export interface RpcDurableObjectProps<Rpcs extends Rpc.Any> {
   /** The RPC schema shared by the Durable Object and its clients. */
   readonly schema: RpcGroup.RpcGroup<Rpcs>;
-  /**
-   * Enable hibernating WebSocket RPC alongside HTTP. WebSockets use JSON;
-   * HTTP and `getByName` clients continue to use NDJSON. Requires returning
-   * the RPC handler Layer from the inner Effect.
-   * @default "http"
-   */
-  readonly transport?: "http" | "websocket";
 }
 
 type HandlerImplementation<
@@ -138,12 +131,9 @@ export interface RpcDurableObjectClass extends Effect.Effect<
    */
   <Self>(): {
     /** Modular form: separate `static make(impl)` + `static from(scriptName | Worker)`. */
-    <
-      Rpcs extends Rpc.Any,
-      Transport extends "http" | "websocket" | undefined = undefined,
-    >(
+    <Rpcs extends Rpc.Any>(
       name: string,
-      props: RpcDurableObjectProps<Rpcs> & { readonly transport?: Transport },
+      props: RpcDurableObjectProps<Rpcs>,
     ): Effect.Effect<
       RpcDurableObject<Self, Rpcs>,
       never,
@@ -170,21 +160,15 @@ export interface RpcDurableObjectClass extends Effect.Effect<
         HandlerRequirements<Rpcs, Provided, InnerR, InitReq>
       >;
       make<InnerR = never, InitReq = never>(
-        impl: [Transport] extends ["http" | undefined]
-          ? Effect.Effect<
-              Effect.Effect<
-                Effect.Effect<
-                  HttpEffect<InnerR>,
-                  never,
-                  InnerR | RuntimeContext
-                >,
-                never,
-                DurableObjectServices | RuntimeContext
-              >,
-              ConfigError,
-              InitReq
-            >
-          : never,
+        impl: Effect.Effect<
+          Effect.Effect<
+            Effect.Effect<HttpEffect<InnerR>, never, InnerR | RuntimeContext>,
+            never,
+            DurableObjectServices | RuntimeContext
+          >,
+          ConfigError,
+          InitReq
+        >,
       ): Layer.Layer<
         Self,
         never,
@@ -204,7 +188,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
     /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       name: string,
-      props: RpcDurableObjectProps<Rpcs> & { readonly transport?: "http" },
+      props: RpcDurableObjectProps<Rpcs>,
       impl: Effect.Effect<
         Effect.Effect<
           Effect.Effect<HttpEffect<InnerR>, never, InnerR | RuntimeContext>,
@@ -242,7 +226,7 @@ export interface RpcDurableObjectClass extends Effect.Effect<
   /** Bare form: `(name, { schema }, impl)` */
   <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
     name: string,
-    props: RpcDurableObjectProps<Rpcs> & { readonly transport?: "http" },
+    props: RpcDurableObjectProps<Rpcs>,
     impl: Effect.Effect<
       Effect.Effect<
         Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
@@ -262,9 +246,10 @@ export interface RpcDurableObjectClass extends Effect.Effect<
 /**
  * `RpcDurableObject` is sugar over {@link DurableObject}
  * for Durable Objects whose surface is a typed Effect `RpcGroup`. The
- * inner Effect returns the group's handler Layer. HTTP clients use NDJSON;
- * `transport: "websocket"` also enables hibernating WebSocket RPC using JSON.
- * Consumers see `namespace.getByName(id)` as a typed HTTP `RpcClient`.
+ * inner Effect returns the group's handler Layer, automatically enabling
+ * HTTP RPC with NDJSON and hibernating WebSocket RPC with JSON. Incoming
+ * requests select the transport. Consumers see `namespace.getByName(id)`
+ * as a typed HTTP `RpcClient`.
  * Existing implementations returning `RpcServer.toHttpEffect(group)` remain
  * supported for HTTP.
  *
@@ -348,14 +333,9 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ```
  *
  * ### WebSocket RPC
- * **Example:** Enable WebSocket upgrades
- * Add `transport: "websocket"` to the class props and keep returning the
- * handler Layer from its inner Effect. HTTP remains available.
- * ```typescript
- * const props = { schema: CounterRpcs, transport: "websocket" } as const;
- * ```
- *
  * **Example:** Forward a browser connection from the Worker
+ * Handler-Layer implementations accept WebSocket upgrades automatically;
+ * ordinary HTTP RPC remains available on the same object.
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
@@ -560,13 +540,6 @@ const wrapImpl = (
           if (Layer.isLayer(value)) {
             return makeHandlers(props, value as Layer.Layer<any, never, any>);
           }
-          if (props.transport === "websocket") {
-            return Effect.die(
-              new Error(
-                "WebSocket RPC requires a handler Layer from the inner Effect",
-              ),
-            );
-          }
           return Effect.succeed({ fetch: value });
         }),
       ),
@@ -601,8 +574,6 @@ const makeHandlers = Effect.fn(function* (
           );
           return yield* handler;
         });
-        if (props.transport !== "websocket") return { fetch: http };
-
         const state = yield* DurableObjectState;
         const runtime = yield* RuntimeContext;
         const lifetime = Layer.succeed(RpcRequestLifetime, (effect) =>

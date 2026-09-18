@@ -6,7 +6,7 @@ import { Greeting, Rejected, SocketRpcs } from "./rpcs.ts";
 
 export class SocketObject extends Cloudflare.RpcDurableObject<SocketObject>()(
   "SocketObject",
-  { schema: SocketRpcs, transport: "websocket" },
+  { schema: SocketRpcs },
 ) {}
 
 export const SocketObjectLive = SocketObject.make(

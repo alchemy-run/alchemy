@@ -25,20 +25,15 @@ const impl = Effect.gen(function* () {
 
 class Inline extends Cloudflare.RpcDurableObject<Inline>()(
   "Inline",
-  { schema: Api, transport: "websocket" },
+  { schema: Api },
   impl,
 ) {}
 
 class Modular extends Cloudflare.RpcDurableObject<Modular>()("Modular", {
   schema: Api,
-  transport: "websocket",
 }) {}
 
-const bare = Cloudflare.RpcDurableObject(
-  "Bare",
-  { schema: Api, transport: "websocket" },
-  impl,
-);
+const bare = Cloudflare.RpcDurableObject("Bare", { schema: Api }, impl);
 const live = Modular.make(impl);
 
 const inlineRequirements: Effect.Effect<
@@ -75,12 +70,12 @@ const mergedImpl = Effect.succeed(
 
 class MergedInline extends Cloudflare.RpcDurableObject<MergedInline>()(
   "MergedInline",
-  { schema: Api, transport: "websocket" },
+  { schema: Api },
   mergedImpl,
 ) {}
 const mergedBare = Cloudflare.RpcDurableObject(
   "MergedBare",
-  { schema: Api, transport: "websocket" },
+  { schema: Api },
   mergedImpl,
 );
 const mergedLive = Modular.make(mergedImpl);
@@ -107,12 +102,12 @@ const outerImpl = Effect.gen(function* () {
 
 class OuterInline extends Cloudflare.RpcDurableObject<OuterInline>()(
   "OuterInline",
-  { schema: Api, transport: "websocket" },
+  { schema: Api },
   outerImpl,
 ) {}
 const outerBare = Cloudflare.RpcDurableObject(
   "OuterBare",
-  { schema: Api, transport: "websocket" },
+  { schema: Api },
   outerImpl,
 );
 const outerLive = Modular.make(outerImpl);
@@ -148,16 +143,16 @@ const codecImpl = Effect.succeed(
 );
 class CodecInline extends Cloudflare.RpcDurableObject<CodecInline>()(
   "CodecInline",
-  { schema: CodecApi, transport: "websocket" },
+  { schema: CodecApi },
   codecImpl,
 ) {}
 class CodecModular extends Cloudflare.RpcDurableObject<CodecModular>()(
   "CodecModular",
-  { schema: CodecApi, transport: "websocket" },
+  { schema: CodecApi },
 ) {}
 const codecBare = Cloudflare.RpcDurableObject(
   "CodecBare",
-  { schema: CodecApi, transport: "websocket" },
+  { schema: CodecApi },
   codecImpl,
 );
 const codecLive = CodecModular.make(codecImpl);
@@ -186,7 +181,7 @@ const middlewareImpl = Effect.succeed(
 );
 class MiddlewareInline extends Cloudflare.RpcDurableObject<MiddlewareInline>()(
   "MiddlewareInline",
-  { schema: MiddlewareApi, transport: "websocket" },
+  { schema: MiddlewareApi },
   middlewareImpl,
 ) {}
 const middlewareRequirements: Effect.Effect<unknown, never, Cloudflare.Worker> =
@@ -211,63 +206,25 @@ const legacyImpl = Effect.succeed(
     ),
   ),
 );
-const inline = Cloudflare.RpcDurableObject<never>();
-const rpc = Cloudflare.RpcDurableObject;
-const socketProps = { schema: Api, transport: "websocket" } as const;
-
-// @ts-expect-error Inline WebSocket implementations must return handler Layers.
-inline("LegacySocketInline", socketProps, legacyImpl);
-// @ts-expect-error Bare WebSocket implementations must return handler Layers.
-rpc("LegacySocketBare", socketProps, legacyImpl);
-// @ts-expect-error Modular WebSocket implementations must return handler Layers.
-Modular.make(legacyImpl);
-
-const possibleTransport = (transport: "http" | "websocket" | undefined) => {
-  const props = { schema: Api, transport };
-  class PossibleSocket extends Cloudflare.RpcDurableObject<PossibleSocket>()(
-    "PossibleSocket",
-    props,
-  ) {}
-  // @ts-expect-error A possible WebSocket transport also forbids legacy handlers.
-  inline("PossibleSocketInline", props, legacyImpl);
-  // @ts-expect-error A possible WebSocket transport also forbids legacy handlers.
-  rpc("PossibleSocketBare", props, legacyImpl);
-  // @ts-expect-error A possible WebSocket transport also forbids legacy handlers.
-  PossibleSocket.make(legacyImpl);
-  return PossibleSocket.make(impl);
-};
-
 class LegacyInline extends Cloudflare.RpcDurableObject<LegacyInline>()(
   "LegacyInline",
   { schema: Api },
-  legacyImpl,
-) {}
-class LegacyHttpInline extends Cloudflare.RpcDurableObject<LegacyHttpInline>()(
-  "LegacyHttpInline",
-  { schema: Api, transport: "http" },
   legacyImpl,
 ) {}
 class LegacyModular extends Cloudflare.RpcDurableObject<LegacyModular>()(
   "LegacyModular",
   { schema: Api },
 ) {}
-class LegacyHttpModular extends Cloudflare.RpcDurableObject<LegacyHttpModular>()(
-  "LegacyHttpModular",
-  { schema: Api, transport: "http" },
-) {}
-const legacyBare = rpc("LegacyBare", { schema: Api }, legacyImpl);
-const legacyHttpBare = rpc(
-  "LegacyHttpBare",
-  { schema: Api, transport: "http" },
+const legacyBare = Cloudflare.RpcDurableObject(
+  "LegacyBare",
+  { schema: Api },
   legacyImpl,
 );
 const legacyEffects: ReadonlyArray<
   Effect.Effect<unknown, never, Cloudflare.Worker>
-> = [LegacyInline, LegacyHttpInline, legacyBare, legacyHttpBare];
+> = [LegacyInline, legacyBare];
 const legacyLive: Layer.Layer<LegacyModular, never, Cloudflare.Worker> =
   LegacyModular.make(legacyImpl);
-const legacyHttpLive: Layer.Layer<LegacyHttpModular, never, Cloudflare.Worker> =
-  LegacyHttpModular.make(legacyImpl);
 
 void [
   inlineRequirements,
@@ -288,8 +245,6 @@ void [
   middlewareRequirements,
   dependencyEffects,
   dependencyLayers,
-  possibleTransport,
   legacyEffects,
   legacyLive,
-  legacyHttpLive,
 ];
