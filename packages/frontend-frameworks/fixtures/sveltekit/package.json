@@ -26,6 +26,7 @@
     "@types/node": "catalog:node24",
     "effect": "catalog:",
     "svelte": "catalog:",
+    "typescript": "^6.0.0",
     "vite": "catalog:"
   }
 }

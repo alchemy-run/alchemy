@@ -47,17 +47,12 @@ export interface SvelteKitNodeTargetConfig extends SvelteKitTargetConfig {}
 /** The bundled fetch-handler module the finishing pass writes. */
 export const SERVER_ENTRY_NAME = NodePath.join("server", "index.mjs");
 
-const posixify = (str: string): string => str.replace(/\\/g, "/");
-
 const generateFetchEntry = (options: {
   readonly serverImport: string;
-  readonly manifestImport: string;
 }): string =>
   /* js */ `
-import { Server } from ${JSON.stringify(options.serverImport)};
-import { manifest } from ${JSON.stringify(options.manifestImport)};
+import { server } from ${JSON.stringify(options.serverImport)};
 
-const server = new Server(manifest);
 const initialized = server.init({ env: process.env });
 
 export const handler = async (request) => {
@@ -83,39 +78,43 @@ export const makeNodeAdapter = (): SvelteKitAdapter => {
       builder.mkdirp(dest);
       builder.mkdirp(tmp);
 
-      const assetsDest = dest + builder.config.kit.paths.base;
+      const assetsDest = dest + builder.config.paths.base;
       builder.mkdirp(assetsDest);
       builder.writeClient(assetsDest);
       builder.writePrerendered(assetsDest);
 
-      NodeFs.writeFileSync(
-        NodePath.join(tmp, "manifest.js"),
-        `export const manifest = ${builder.generateManifest({
-          relativePath: posixify(
-            NodePath.relative(tmp, builder.getServerDirectory()),
-          ),
-        })};\n\n` +
-          `export const prerendered = new Set(${JSON.stringify(builder.prerendered.paths)});\n`,
-      );
+      // pre-built server instance: kit 3.0 no longer exposes the internal
+      // SSR manifest (`generateManifest` throws), so `generateServerInstance`
+      // writes `export const server = new Server(manifest)` straight to
+      // disk itself instead of returning a manifest string to embed. The
+      // Node serve entry checks the filesystem for static assets, so unlike
+      // the Cloudflare worker shim there's no route manifest to build.
+      builder.generateServerInstance(NodePath.join(tmp, "server.js"));
 
-      const workerEntry = NodePath.join(tmp, "server.js");
+      const workerEntry = NodePath.join(tmp, "entry.js");
       NodeFs.writeFileSync(
         workerEntry,
         generateFetchEntry({
-          serverImport: `./${posixify(NodePath.relative(tmp, builder.getServerDirectory()))}/index.js`,
-          manifestImport: "./manifest.js",
+          serverImport: "./server.js",
         }),
       );
       if (
         typeof builder.hasServerInstrumentationFile === "function" &&
         builder.hasServerInstrumentationFile()
       ) {
+        // kit 3.0 requires an explicit initializer module that populates
+        // `$env/dynamic/private` before instrumentation runs; the default
+        // (`process.env`) is correct for the Node runtime.
+        const initializer = builder.createInstrumentationInitializer({
+          outputDirectory: tmp,
+        });
         builder.instrument({
           entrypoint: workerEntry,
           instrumentation: NodePath.join(
             builder.getServerDirectory(),
             "instrumentation.server.js",
           ),
+          initializer,
         });
       }
 
