@@ -466,7 +466,6 @@
     "@alchemy.run/floci": "workspace:*",
     "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/sigil": "catalog:",
-    "@aws-sdk/credential-providers": "catalog:",
     "@distilled.cloud/acme": "workspace:*",
     "@distilled.cloud/zerossl": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
@@ -488,7 +487,6 @@
     "@octokit/webhooks": "catalog:",
     "@prisma/dev": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "aws4fetch": "catalog:",
     "capnweb": "catalog:",
     "fflate": "catalog:",
     "libsodium-wrappers": "catalog:",
@@ -496,7 +494,6 @@
     "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:",
-    "undici": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
