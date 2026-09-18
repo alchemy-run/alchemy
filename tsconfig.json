@@ -32,6 +32,21 @@
     {
       "path": "./submodules/distilled/packages/gcp/tsconfig.json"
     },
+    {
+      "path": "./submodules/distilled/packages/stripe/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/prisma/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/github/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/acme/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/zerossl/tsconfig.json"
+    },
     // Consolidated Cloudflare runtime, framework, and test-tool projects.
     {
       "path": "./packages/node-utils/tsconfig.json"
@@ -67,12 +82,15 @@
       "path": "./packages/better-auth/tsconfig.json"
     },
     {
-      "path": "./packages/pr-package/tsconfig.json"
+      "path": "./packages/pkg/tsconfig.json"
     },
     // TODO(sam): fix by upgrading starlight to ^0.39.2
     // {
     //   "path": "./website/tsconfig.json"
     // },
+    {
+      "path": "./examples/cloudflare-git-service/tsconfig.json"
+    },
     {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
@@ -125,9 +143,6 @@
       "path": "./examples/cloudflare-worker/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-pr-package/tsconfig.json"
-    },
-    {
       "path": "./examples/cloudflare-email/tsconfig.json"
     },
     {
@@ -173,6 +188,48 @@
       "path": "./examples/prisma-tanstack-start/tsconfig.json"
     },
     {
+      "path": "./examples/prisma-website-astro/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-foldkit/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-nuxt/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-octane/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-react-router/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-solidstart/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-static/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-sveltekit/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-tutorial/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-vite/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-vocs/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-waku/tsconfig.json"
+    },
+    {
       "path": "./examples/docker-postgres/tsconfig.json"
     },
     {
@@ -183,6 +240,12 @@
     },
     {
       "path": "./examples/railway-project/tsconfig.json"
+    },
+    {
+      "path": "./examples/stripe-billing/tsconfig.json"
+    },
+    {
+      "path": "./examples/stripe-connect/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-app/tsconfig.json"

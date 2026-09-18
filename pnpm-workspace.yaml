@@ -21,10 +21,10 @@ packages:
   - benchmark/*
   - demos/*
   - submodules/distilled/packages/*
-  - fixtures/*
+  - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
-  "@alchemy.run/sigil": "0.0.0-alpha.10"
+  "@alchemy.run/sigil": "0.0.0-alpha.11"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.10.1"
   "@astrojs/mdx": "8.0.0"
@@ -35,7 +35,6 @@ catalog:
   "@astrojs/underscore-redirects": "1.0.3"
   "@aws-crypto/crc32": "^5.2.0"
   "@aws-crypto/util": "^5.2.0"
-  "@aws-sdk/credential-providers": "^3.0.0"
   "@aws-sdk/types": "^3.974.3"
   "@aws/durable-execution-sdk-js": "^2.1.0"
   "@cloudflare/containers": "^0.3.7"
@@ -53,7 +52,7 @@ catalog:
   "@effect/sql-sqlite-do": ">=4.0.0-rc.115 || >=4.0.0"
   "@effect/tsgo": "0.36.4"
   "@effect/vitest": ">=4.0.0-rc.115 || >=4.0.0"
-  "@foldkit/vite-plugin": "^0.16.1"
+  "@foldkit/vite-plugin": "^0.22.0"
   "@fontsource-variable/caveat": "^5.3.0"
   "@fontsource-variable/inter": "^5.3.0"
   "@fontsource-variable/jetbrains-mono": "^5.3.0"
@@ -106,8 +105,8 @@ catalog:
   "@types/node": "26.2.0"
   "@types/pg": "^8.20.0"
   "@types/picomatch": "^4.0.0"
-  "@types/react": "^19.2.17"
-  "@types/react-dom": "^19.2.7"
+  "@types/react": "^19.3.0"
+  "@types/react-dom": "^19.3.0"
   "@types/ws": "^8.18.1"
   "@vercel/nft": "^1.10.2"
   "@vitejs/plugin-react": "^6.0.2"
@@ -115,7 +114,6 @@ catalog:
   "@vitejs/plugin-vue": "^6.0.5"
   "@vue/tsconfig": "^0.9.1"
   astro: "7.3.1"
-  aws4fetch: "^1.0.20"
   better-auth: "^1.6.2"
   capnp-es: "^0.0.16"
   capnweb: "^0.12.0"
@@ -131,7 +129,7 @@ catalog:
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.10.1"
-  foldkit: "^0.148.2"
+  foldkit: "^0.160.0"
   heap-js: "^2.5.0"
   hono: "^4.12.14"
   http-cache-semantics: "^4.2.0"
@@ -159,18 +157,17 @@ catalog:
   picomatch: "^4.0.4"
   postal-mime: "^2.4.3"
   postcss: "^8.4.49"
-  react: "^19.2.7"
+  react: "^19.3.0"
   react-devtools-core: "^7.0.1"
-  react-dom: "^19.2.7"
+  react-dom: "^19.3.0"
   react-router: "^7.16.0"
-  react-server-dom-webpack: "~19.2.6"
+  react-server-dom-webpack: "~19.3.0"
   rolldown: "1.2.5"
   satteri: "^0.10.5"
   sharp: "^0.35.3"
   solid-devtools: "^0.34.3"
   solid-js: "^1.9.12"
   starlight-blog: "^0.29.0"
-  string-width: "^8.2.2"
   tinyglobby: "^0.2.17"
   svelte: "^5.56.6"
   tailwindcss: "^4.1.18"
@@ -181,7 +178,6 @@ catalog:
   turbo: "^2.9.16"
   typescript: "^7.0.2"
   typescript-api: "npm:typescript@7.1.0-dev.20260905.1"
-  undici: "^7.16.0"
   unenv: "^2.0.0-rc.24"
   uuid: "^14.0.1"
   vite: "^8.0.7"
@@ -213,8 +209,8 @@ catalogs:
     "@types/node": "^24.12.0"
   # React patch line required by react-server-dom-webpack consumers.
   react-rsc:
-    react: "~19.2.6"
-    react-dom: "~19.2.6"
+    react: "~19.3.0"
+    react-dom: "~19.3.0"
   solid-v1:
     "@solidjs/router": "^0.15.0"
     "@solidjs/start": "2.0.0-alpha.2"
@@ -238,7 +234,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.10"
+  - "@alchemy.run/sigil@0.0.0-alpha.11"
   - "@effect/atom-react@4.0.0-rc.115"
   - "@effect/platform-bun@4.0.0-rc.115"
   - "@effect/platform-node-shared@4.0.0-rc.115"
@@ -248,9 +244,9 @@ minimumReleaseAgeExclude:
   - "@effect/sql-pg@4.0.0-rc.115"
   - "@effect/sql-sqlite-do@4.0.0-rc.115"
   - "@effect/vitest@4.0.0-rc.115"
-  - "@foldkit/vite-plugin@0.16.1"
+  - "@foldkit/vite-plugin@0.22.0"
   - effect@4.0.0-rc.115
-  - foldkit@0.148.2
+  - foldkit@0.160.0
   - "@solidjs/start@2.0.4"
   - "@cloudflare/workers-types@5.20260901.1"
   - "@cloudflare/workerd-darwin-64@1.20260901.1"

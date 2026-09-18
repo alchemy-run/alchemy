@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/node-utils",
-  "version": "2.0.0-beta.77",
+  "version": "2.0.0-beta.79",
   "description": "Runtime utilities for Alchemy packages.",
   "homepage": "https://alchemy.run",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -37,11 +37,6 @@
       "types": "./lib/ignore.d.ts",
       "bun": "./src/ignore.ts",
       "import": "./lib/ignore.js"
-    },
-    "./import-loader": {
-      "types": "./lib/import-loader.d.ts",
-      "bun": "./src/import-loader.ts",
-      "import": "./lib/import-loader.js"
     },
     "./register-oxc": {
       "types": "./lib/register-oxc.d.ts",

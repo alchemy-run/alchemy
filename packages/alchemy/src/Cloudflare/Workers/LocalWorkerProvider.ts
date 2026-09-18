@@ -45,7 +45,7 @@ import { sha256 } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
@@ -135,7 +135,7 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
 export const LocalWorkerProvider = () =>
   LocalProvider.make(
     Worker,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
@@ -379,7 +379,9 @@ export const LocalWorkerProvider = () =>
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
+          if (data.env) Object.assign(boundEnv, data.env);
           for (const binding of data.bindings ?? []) {
             if (
               binding.type === "durable_object_namespace" &&
@@ -476,7 +478,7 @@ export const LocalWorkerProvider = () =>
           name,
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
-          env: props.env,
+          env: Object.keys(boundEnv).length > 0 ? boundEnv : props.env,
           /**
            * Raw inline module source (mutually exclusive with `main`).
            * Serves as-is without the bundler; part of the hashed config so
@@ -1292,6 +1294,7 @@ export const LocalWorkerProvider = () =>
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
+                        crons: worker.crons,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },

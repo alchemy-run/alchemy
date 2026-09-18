@@ -38,7 +38,7 @@ import { parseFqn } from "./FQN.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
-  findProviderByType,
+  tryFindProviderRegistrationByType,
   missingProviderError,
   Provider,
   providerForMode,
@@ -425,7 +425,14 @@ export const make = <A>(
       Type: string;
       Mode?: ProviderMode | undefined;
     }) {
-      const base = yield* findProviderByType(resource.Type);
+      const base = yield* tryFindProviderRegistrationByType(resource.Type).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.die(`Provider not found for ${resource.Type}`),
+            onSome: Effect.succeed,
+          }),
+        ),
+      );
       const mode =
         base.modes !== undefined
           ? (resource.Mode ?? runDefaultMode)
@@ -543,7 +550,7 @@ export const make = <A>(
 
     const resolveRenamer = Effect.fn(function* (resource: ResourceLike) {
       const provider = Option.getOrUndefined(
-        yield* tryFindProviderByType(resource.Type),
+        yield* tryFindProviderRegistrationByType(resource.Type),
       );
       const allowedTypes = new Set([
         resource.Type,
@@ -1003,15 +1010,6 @@ export const make = <A>(
           new Error("Not implemented yet" + (expr as any).kind),
         );
       });
-
-    // map of resource FQN -> its downstream dependencies (resources that depend on it)
-    const oldDownstreamDependencies: {
-      [fqn: string]: string[];
-    } = Object.fromEntries(
-      oldResources
-        .filter((resource) => !!resource)
-        .map((resource) => [resource.fqn, resource.downstream]),
-    );
 
     // Build a set of FQNs for the new resources to detect orphans
     const newResourceFqns = new Set(resources.map((r) => r.FQN));
@@ -2022,6 +2020,15 @@ export const make = <A>(
           return yield* Effect.die(missingProviderError(resourceType, fqn));
         }
         const provider = providerOption.value;
+        const downstream = new Set(oldState.downstream);
+        let generation = oldState;
+        while (
+          generation.status === "replacing" ||
+          generation.status === "replaced"
+        ) {
+          generation = generation.old;
+          for (const dep of generation.downstream) downstream.add(dep);
+        }
         // NOTE: an attr-less row (interrupted create) is NOT recovered
         // here. Apply's `deleteResource` performs the authoritative
         // read-then-delete recovery — it also covers replaced-chain
@@ -2051,7 +2058,7 @@ export const make = <A>(
               RuntimeContext: undefined!,
               Providers: undefined,
             } as ResourceLike,
-            downstream: oldDownstreamDependencies[fqn] ?? [],
+            downstream: [...downstream],
             bindings: oldState.bindings.map((binding) => ({
               sid: binding.sid,
               action: "delete" as const,
