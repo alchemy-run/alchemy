@@ -14,6 +14,7 @@ import { trackBunImports } from "@alchemy.run/node-utils/watch-import-bun";
 import { fileURLToPath } from "node:url";
 
 import { AlchemyContextLive } from "../AlchemyContext.ts";
+import { resolveStackEntrypoint } from "../Alchemist/Entrypoint.ts";
 import { StackModuleLoader } from "../Alchemist/Session.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
@@ -69,7 +70,7 @@ const services = Layer.mergeAll(
 );
 
 /** `alchemy dev` normally parks forever; set for single-pass runs (tests). */
-const devOnce = Config.string("ALCHEMY_DEV_ONCE").pipe(
+const devOnce = Config.String("ALCHEMY_DEV_ONCE").pipe(
   Config.withDefault(""),
   Effect.map((value) => value === "1" || value === "true"),
 );
@@ -156,7 +157,9 @@ const runNodeDevWatcher = Effect.fn(function* (options: DevOptions) {
   // `/tmp`), so the project root the graph is scoped to must be real too.
   // Scope to the invocation directory, not the entrypoint's directory: a
   // config under `infra/` commonly imports application code from `src/`.
-  const entrypoint = yield* fs.realPath(path.resolve(options.main));
+  const entrypoint = yield* fs.realPath(
+    yield* resolveStackEntrypoint(options.main),
+  );
   const root = yield* fs.realPath(initialCwd);
   const nodeModules = `${path.sep}node_modules${path.sep}`;
   return yield* Effect.acquireRelease(

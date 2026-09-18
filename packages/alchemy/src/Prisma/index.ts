@@ -27,5 +27,6 @@ export * from "./ReadWriteBucket.ts";
 export * from "./Providers.ts";
 export * from "./SourceRepository.ts";
 export * from "./WriteBucket.ts";
+export * as Website from "./Website/index.ts";
 export { KNOWN_REGION_IDS, REGIONS } from "./Types.ts";
 export type * as Types from "./Types.ts";

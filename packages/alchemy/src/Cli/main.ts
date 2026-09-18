@@ -13,9 +13,9 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import { routeCacheLayer } from "alchemy/Alchemist/Session";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import { moduleExtension } from "alchemy/Util/Node";
 import packageJson from "../../package.json" with { type: "json" };
 
 import * as CliKit from "./CliKit/index.ts";
@@ -109,8 +109,8 @@ const commands = await Promise.all(
  * (capability detection runs while the service layers are built, before flag
  * parsing); this registration exists so the parser accepts the flag.
  */
-const NoInput = GlobalFlag.setting("no-input")({
-  flag: Flag.boolean("no-input").pipe(
+const NoInput = GlobalFlag.Setting("no-input")({
+  flag: Flag.Boolean("no-input").pipe(
     Flag.withDescription(
       "Disable prompts and the interactive TUI (plain output; commands needing input fail)",
     ),
@@ -153,7 +153,7 @@ const devRunMode = import.meta.url.includes("/node_modules/")
       typeof globalThis.Bun !== "undefined"
         ? `bun ${globalThis.Bun.version}`
         : `node ${process.versions.node}`
-    }, ${import.meta.url.endsWith(".ts") ? "src" : "lib"}`;
+    }, ${moduleExtension(import.meta.url) === ".ts" ? "src" : "lib"}`;
 
 const cli = Command.run(root, {
   version:
@@ -180,7 +180,6 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  routeCacheLayer,
   Layer.provide(
     Layer.provideMerge(
       Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
@@ -226,7 +225,7 @@ const mainEffect = program.pipe(
 );
 
 /** Fully wired CLI program. */
-export const main: Effect.Effect<
+export const main = mainEffect as Effect.Effect<
   void,
   Effect.Error<typeof mainEffect>
-> = mainEffect;
+>;

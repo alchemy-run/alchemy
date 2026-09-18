@@ -23,45 +23,45 @@ import {
 } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
-const includeFlag = Flag.string("include").pipe(
+const includeFlag = Flag.String("include").pipe(
   Flag.withDescription("Glob of provider IDs to include (repeatable)"),
   Flag.atLeast(0),
 );
-const excludeFlag = Flag.string("exclude").pipe(
+const excludeFlag = Flag.String("exclude").pipe(
   Flag.withDescription("Glob of provider IDs to exclude (repeatable)"),
   Flag.atLeast(0),
 );
-const filterFlag = Flag.string("filter").pipe(
+const filterFlag = Flag.String("filter").pipe(
   Flag.withDescription(
     "JavaScript expression evaluated with resource in scope; matching resources are excluded from deletion (repeatable)",
   ),
   Flag.atLeast(0),
 );
-const concurrencyFlag = Flag.integer("concurrency").pipe(
+const concurrencyFlag = Flag.Int("concurrency").pipe(
   Flag.withDescription(
     "Maximum providers processed in parallel; 0 is unbounded",
   ),
   Flag.withDefault(16),
   Flag.map((value): number | "unbounded" => (value <= 0 ? "unbounded" : value)),
 );
-const timeoutFlag = Flag.integer("timeout").pipe(
+const timeoutFlag = Flag.Int("timeout").pipe(
   Flag.withDescription("Per-provider timeout in seconds"),
   Flag.withDefault(120),
   Flag.map(Duration.seconds),
 );
-const independentFlag = Flag.boolean("independent").pipe(
+const independentFlag = Flag.Boolean("independent").pipe(
   Flag.withDescription("Retry each resource independently"),
   Flag.withDefault(false),
 );
-const retriesFlag = Flag.integer("retries").pipe(
+const retriesFlag = Flag.Int("retries").pipe(
   Flag.withDescription("Independent retries per resource"),
   Flag.withDefault(10),
 );
-const localFlag = Flag.boolean("local").pipe(
+const localFlag = Flag.Boolean("local").pipe(
   Flag.withDescription("Target only locally emulated providers"),
   Flag.withDefault(false),
 );
-const dryRunFlag = Flag.boolean("dry-run").pipe(
+const dryRunFlag = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Scan and show targets without deleting"),
   Flag.withDefault(false),
 );

@@ -2,13 +2,14 @@
  * Scripted terminal demo of the Alchemy CLI, recorded with tcut
  * (https://github.com/AmanVarshney01/tcut).
  *
- *   tcut demo.video.ts                 # record + render out/alchemy-cli.{mp4,gif}
+ *   tcut demo.video.ts                 # record + render out/alchemy-cli.mp4
  *   tcut test demo.video.ts            # replay fast, assertions only (no video)
  *   tcut render out/alchemy-cli.cast … # re-render the last recording, no shell
  *
  * The run never touches your real `~/.alchemy`: it starts from an EMPTY
  * throwaway `ALCHEMY_HOME` and follows a brand-new user in order, one title
- * card per step: connect Cloudflare through the `alchemy profile` TUI (OAuth,
+ * card (`t.slide`, tcut ≥ 1.3) and mp4 chapter per step: connect Cloudflare
+ * through the `alchemy profile` TUI (OAuth,
  * granted in tcut's browser pane), `alchemy dev`, `alchemy deploy`, an
  * out-of-band edit caught and fixed by `alchemy drift`, and `alchemy destroy`.
  * Stack state stays in this directory's `.alchemy/`; everything the demo
@@ -16,8 +17,8 @@
  *
  * Inputs (environment):
  *   CLOUDFLARE_ACCOUNT_NAME  (env or ./.env, optional)
- *       Typed into the account picker when the login sees several accounts;
- *       defaults to the account id, which the picker also matches on.
+ *       The account to arrow down to in the picker when the login sees
+ *       several accounts; defaults to the account id.
  *   CLOUDFLARE_LOGIN_EMAIL / CLOUDFLARE_LOGIN_PASSWORD  (env or ./.env)
  *       Dashboard login for the Cloudflare account used on camera. If unset,
  *       the script waits (up to 4 min) for you to sign in by hand in the
@@ -212,7 +213,7 @@ const seedOpenShim = () => {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** The authorization URL the CLI asked `open` to launch. */
-const waitForOAuthUrl = async (attempts = 120) => {
+const waitForOAuthUrl = async (attempts = 240) => {
   for (let i = 0; i < attempts; i++) {
     if (existsSync(oauthUrlFile)) return readFileSync(oauthUrlFile, "utf8");
     await sleep(250);
@@ -276,14 +277,14 @@ const VIDEO = { width: 1368, height: 816 };
 
 export default defineVideo(
   {
-    output: ["out/alchemy-cli.mp4", "out/alchemy-cli.gif"],
+    output: ["out/alchemy-cli.mp4"],
     shell: "zsh",
     cols: 110,
     rows: 32,
     width: VIDEO.width,
     height: VIDEO.height,
     theme: "catppuccin-mocha",
-    typingSpeed: "35ms",
+    typingSpeed: "15ms",
     typingJitter: 0.3,
     waitTimeout: "180s",
     endPause: "2s",
@@ -300,23 +301,41 @@ export default defineVideo(
     const originalApi = readFileSync(apiFile, "utf8");
 
     /**
-     * A title card between steps. tcut has no video-level transitions (it
-     * renders what the terminal shows), so the card is made in the terminal
-     * itself: clear the screen, park the cursor mid-frame, render the
-     * caption, hold, and clear again so the next command starts on a fresh
-     * screen. Every card is also an mp4 chapter (`--chapters`, `--split-chapters`).
+     * A full-screen transition card between steps (`t.slide`, tcut ≥ 1.3),
+     * drawn at render time in real typography and faded in and out. It also
+     * records an mp4 chapter of the same name (`--chapters`,
+     * `--split-chapters`), and the screen is cleared behind the card so the
+     * next step starts fresh.
      */
     let step = 0;
-    const slide = async (chapter: string, heading: string, body: string) => {
+    const slide = async (heading: string, subtitle: string) => {
       step += 1;
-      await t.chapter(chapter);
-      await t.hide(() =>
-        t.run(`clear && tput cup ${Math.floor(t.rows / 2) - 3} 0`),
-      );
-      await t.print(`## ${step} · ${heading}\n\n${body}`);
-      await t.sleep("3s");
-      await t.hide(() => t.run("clear"));
+      await t.caption(null);
+      await t.slide(heading, {
+        eyebrow: String(step),
+        subtitle,
+        duration: "2.2s",
+        fade: "400ms",
+        during: async () => {
+          // `run` waits for a fresh prompt, which never comes when the screen
+          // is already just a prompt (clear redraws nothing new).
+          const lines = t
+            .screen()
+            .split("\n")
+            .filter((l) => l.trim());
+          if (lines.length > 1) await t.run("clear");
+        },
+      });
     };
+
+    /**
+     * A subtitle over the bottom of the terminal (`t.caption`, tcut ≥ 1.4) for
+     * the moments where the screen alone doesn't say what is happening. Drawn
+     * at render time, never typed into the PTY; stays up until the next
+     * caption, `caption(null)`, or the next slide.
+     */
+    const caption = (text: string, duration?: string) =>
+      t.caption(text, { style: "classic", fontSize: 26, duration });
 
     try {
       // Off-camera: point the CLI at the empty home, put the `open` shim and
@@ -333,6 +352,11 @@ export default defineVideo(
         await t.run(
           "unset CI CURSOR_AGENT CLAUDECODE CLAUDE_CODE NO_COLOR FORCE_COLOR; export ALCHEMY_TUI=1",
         );
+        // tcut's pty has no TERM_PROGRAM, so terminal-capability detection
+        // assumes OSC 8 hyperlinks are unsupported and the CLI falls back to
+        // printing every URL in full after its label (the OAuth URL is ~1KB).
+        // Real terminals (Ghostty, iTerm2, kitty, …) render the link inline.
+        await t.run("export FORCE_HYPERLINK=1");
         // A previous take may have left a live stack behind: tear it down with
         // a temporary profile before the home is wiped for the on-camera setup.
         await t.run(`${connectCloudflare("default")} --no-input`);
@@ -345,17 +369,17 @@ export default defineVideo(
       });
 
       // ── 1. Connect to Cloudflare ─────────────────────────────────────────
-      await slide(
-        "connect",
-        "Connect to Cloudflare",
-        "A fresh machine, no profile yet. `alchemy profile` signs in once; every stack uses it.",
-      );
+      await slide("Connect Cloudflare", "alchemy profile · sign in with OAuth");
       await t.type("alchemy profile");
       await t.enter();
       await t.wait(/e edit/, { scope: "screen" });
+      await caption(
+        "A fresh machine: one empty profile, no providers connected yet",
+      );
       await t.sleep("2.5s");
 
       // Nothing is connected yet — add Cloudflare from the edit screen.
+      await caption("e edits the profile — space marks a provider to add");
       await t.type("e");
       await t.wait(/esc back/, { scope: "screen" });
       await t.sleep("2s");
@@ -368,9 +392,11 @@ export default defineVideo(
 
       // OAuth (the recommended method), basic scopes.
       await t.wait(/Cloudflare authentication method/, { scope: "screen" });
+      await caption("OAuth is the recommended method — no API token to paste");
       await t.sleep("2s");
       await t.enter();
       await t.wait(/Cloudflare OAuth scopes/, { scope: "screen" });
+      await caption("Pick the scopes the token should have");
       await t.sleep("1.5s");
       await t.down();
       await t.sleep("600ms");
@@ -379,8 +405,14 @@ export default defineVideo(
       // The CLI hands the grant URL to `open` — our shim catches it and the
       // grant happens in the browser pane, exactly as it would in a real tab.
       await t.wait(/waiting for browser authorization/, { scope: "screen" });
-      const oauthUrl = await waitForOAuthUrl();
+      await caption("The CLI opens Cloudflare's consent page in the browser");
+      const oauthUrl = await waitForOAuthUrl().catch((error) => {
+        throw new Error(`${error.message}\n--- screen ---\n${t.screen()}`);
+      });
       await t.sleep("2s");
+      await caption(
+        "Sign in and authorize — the grant is handed back to the CLI",
+      );
       await t.browser.goto(oauthUrl);
       await t.focus("browser");
       const consentPage = /Select account\(s\)|Authorize/i;
@@ -487,18 +519,31 @@ export default defineVideo(
         scope: "screen",
       });
       if (/Select a Cloudflare account/.test(t.screen())) {
-        await t.sleep("1.5s");
-        // The picker filters on name and id alike; the name reads better.
-        await t.type(
-          env("CLOUDFLARE_ACCOUNT_NAME") ??
-            process.env.CLOUDFLARE_ACCOUNT_ID ??
-            "",
+        await caption(
+          "The login can see several accounts — pick the one this profile is for",
         );
+        await t.sleep("1.5s");
+        // Arrow down to the configured account (the focused row starts with
+        // ❯) instead of typing into the filter; the first row is the default.
+        const wanted =
+          env("CLOUDFLARE_ACCOUNT_NAME") ?? process.env.CLOUDFLARE_ACCOUNT_ID;
+        const focused = () =>
+          t
+            .screen()
+            .split("\n")
+            .find((line) => /^\s*❯/.test(line)) ?? "";
+        for (let i = 0; i < 8 && wanted && !focused().includes(wanted); i++) {
+          await t.down();
+          await t.sleep("400ms");
+        }
         await t.sleep("600ms");
         await t.enter();
         await t.wait(/Cloudflare added/, { scope: "screen" });
       }
       // Hold on the dashboard: one profile, one connected provider.
+      await caption(
+        "Connected — auth method, token expiry and account id, stored under ~/.alchemy/profiles",
+      );
       await t.sleep("3.5s");
       await t.type("q");
       await t.wait();
@@ -506,28 +551,38 @@ export default defineVideo(
 
       // ── 2. Launch alchemy dev ────────────────────────────────────────────
       await slide(
-        "dev",
-        "Launch `alchemy dev`",
-        "The Worker, KV and R2 run locally, with live reload on every save. `←/→` flips the widget between the stack's output and the plan.",
+        "Launch alchemy dev",
+        "local emulation · plan view · live reload",
       );
       await t.type("alchemy dev");
       await t.enter();
       await t.wait(STARTED, { scope: "screen" });
+      await caption(
+        "The Worker, KV and R2 all run locally — the widget shows the stack's outputs",
+      );
       await t.sleep("2s");
 
       // The widget opens on the stack's output; ←/→ flips it to the plan
       // that was just applied. Show the plan — three local resources, all
       // created — then come back to the output.
-      const showDevPlan = async (pattern: RegExp) => {
+      const showDevPlan = async (pattern: RegExp, text: string) => {
+        await caption("→ flips the widget to the plan that was just applied");
+        await t.sleep("1s");
         await t.right();
         await t.wait(/show output/, { scope: "screen" });
         await t.expect(pattern, { scope: "screen" });
+        await caption(text);
         await t.sleep("4s");
+        await caption("← back to the outputs");
+        await t.sleep("800ms");
         await t.left();
         await t.wait(/show plan/, { scope: "screen" });
         await t.sleep("1.5s");
       };
-      await showDevPlan(/Cloudflare\.KV\.Namespace\).*created/);
+      await showDevPlan(
+        /Cloudflare\.KV\.Namespace\).*created/,
+        "Three resources created, all emulated locally",
+      );
 
       // Hit the local worker in a browser — at the URL the CLI actually
       // printed, never a guess (another dev server may own the default port).
@@ -535,6 +590,8 @@ export default defineVideo(
       if (devUrl === undefined) {
         throw new Error("local dev URL not found in the terminal output");
       }
+      await caption("Open the local URL");
+      await t.sleep("800ms");
       await t.browser.goto(devUrl);
       await t.focus("browser");
       await t.sleep("3s");
@@ -543,6 +600,10 @@ export default defineVideo(
 
       // Change the greeting while dev is running — the stack reloads and the
       // worker restarts.
+      await caption(
+        "Editing src/Api.ts while dev runs — the stack reloads and the Worker restarts",
+      );
+      await t.sleep("1.2s");
       writeFileSync(
         apiFile,
         originalApi.replace(
@@ -559,8 +620,13 @@ export default defineVideo(
       }
       await t.sleep("1.5s");
       // The reload's plan: only the Worker changed, KV and R2 untouched.
-      await showDevPlan(/Cloudflare\.Worker\)/);
+      await showDevPlan(
+        /Cloudflare\.Worker\)/,
+        "Only the Worker was updated — KV and R2 untouched",
+      );
 
+      await caption("Reload the page: the new greeting");
+      await t.sleep("800ms");
       await t.browser.reload();
       await t.focus("browser");
       await t.sleep("3s");
@@ -568,6 +634,8 @@ export default defineVideo(
       await t.sleep("1.5s");
 
       // alchemy dev parks forever — Ctrl+C shuts it down.
+      await caption("Ctrl+C stops dev and tears the local resources down");
+      await t.sleep("800ms");
       await t.ctrl("c");
       await t.wait();
       // Put the source back so the deploy ships the original greeting.
@@ -576,17 +644,25 @@ export default defineVideo(
 
       // ── 3. Deploy to the cloud ───────────────────────────────────────────
       await slide(
-        "deploy",
         "Deploy to the cloud",
-        "`alchemy deploy` shows the plan, asks once, then converges the account to it.",
+        "alchemy deploy · review the plan · confirm",
       );
       await t.type("alchemy deploy");
       await t.enter();
       await t.wait(/Deploy\?/, { scope: "screen" });
+      await caption(
+        "The same stack, now against the real Cloudflare account — review the plan, Enter to confirm",
+      );
       await t.sleep("3.5s");
       await t.enter();
+      await caption(
+        "Creating the Worker, the KV namespace and the R2 bucket for real",
+      );
       await t.wait();
       await t.expect(/Stack deployed/, { scope: "scrollback" });
+      await caption(
+        "Deployed — the outputs are the live workers.dev URL and the bucket name",
+      );
       await t.sleep("2.5s");
 
       const url = t
@@ -600,6 +676,7 @@ export default defineVideo(
       // recorded shell — on a route that leaves the visit counter alone, so
       // the visible curls read 1 and 2.
       await waitForWorker(`${url}/favicon.ico`);
+      await caption("Hit the live Worker — the visit counter is backed by KV");
       await t.run(`curl -s ${url}`);
       await t.expect(/"visits":1/);
       await t.sleep("1s");
@@ -613,39 +690,51 @@ export default defineVideo(
       const visitsApi = kvNamespaceApi(credentials, visits.namespaceId);
       await visitsApi.rename("renamed-in-the-dashboard");
       await slide(
-        "drift",
         "Detect and repair drift",
-        "Meanwhile, a teammate renamed the KV namespace in the dashboard. `alchemy drift` re-reads the account and shows what moved.",
+        "alchemy drift · a namespace renamed in the dashboard",
       );
+      await caption(
+        "Meanwhile, someone renamed the KV namespace in the Cloudflare dashboard…",
+      );
+      await t.sleep("2.5s");
       await t.type("alchemy drift");
       await t.enter();
       await t.wait(/Drift detected/, { scope: "screen" });
       await t.expect(/renamed-in-the-dashboard/, { scope: "screen" });
+      await caption(
+        "drift re-reads the cloud and diffs it against the stack: the title changed",
+      );
       await t.sleep("4s");
       // Cancel is preselected; ← moves to Repair.
+      await caption(
+        "Repair puts the resource back the way the code declares it",
+      );
       await t.left();
       await t.sleep("1s");
       await t.enter();
+      await caption("Applying the repair");
       await t.wait();
       await t.expect(/Stack deployed/, { scope: "screen" });
+      await caption("Repaired — one update, nothing else touched");
       await t.sleep("2.5s");
       if ((await visitsApi.title()) !== visits.title) {
         throw new Error("drift repair did not restore the namespace title");
       }
 
       // ── 5. Tear down ─────────────────────────────────────────────────────
-      await slide(
-        "destroy",
-        "Tear down",
-        "`alchemy destroy` removes everything the stack created.",
-      );
+      await slide("Tear it down", "alchemy destroy");
       await t.type("alchemy destroy");
       await t.enter();
       await t.wait(/Destroy\?/, { scope: "screen" });
+      await caption(
+        "destroy shows everything it is about to delete before asking",
+      );
       await t.sleep("2.5s");
       await t.type("y");
+      await caption("Deleting the Worker, the KV namespace and the R2 bucket");
       await t.wait();
       await t.expect(/Stack destroyed/, { scope: "scrollback" });
+      await caption("All gone — the account is back to where it started");
       await t.sleep("2s");
     } finally {
       writeFileSync(apiFile, originalApi);

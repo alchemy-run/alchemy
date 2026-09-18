@@ -1,12 +1,19 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStore, ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import * as Command from "../Command/index.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
+import { Server, ServerProvider } from "../Website/Server.ts";
+import {
+  WebsiteArtifact,
+  WebsiteArtifactProvider,
+} from "./Website/Artifact.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { App, AppProvider } from "./App.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
@@ -18,6 +25,8 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
+import { Retry } from "@distilled.cloud/prisma";
+import * as Credentials from "./Credentials.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
@@ -50,10 +59,18 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 /**
  * Standalone operation helpers own a private auth registry because they run
  * outside a Stack. Credential resolution stays eager here so constructing
- * `managementApi()` preserves its existing fail-fast behavior.
+ * `managementApi()` preserves its existing fail-fast behavior — which also
+ * lets the distilled `Credentials` service read the already-resolved
+ * {@link PrismaEnvironment} rather than building its own.
  */
 const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Credentials.fromEnvironment(),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
@@ -108,6 +125,12 @@ const stackManagementApiLayer = () =>
       return proxyChain(cached) as PrismaManagementClient;
     }),
   ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Credentials.fromAuthProvider(),
+        Layer.succeed(Retry.Retry, Retry.makeDefault),
+      ),
+    ),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -134,9 +157,26 @@ const stackManagementApiLayer = () =>
  *   Effect.provide(Prisma.managementApi()),
  * );
  * ```
+ *
+ * This layer covers the operation helpers. The lifecycle helpers
+ * (`destroyApp`, `destroyDeployment`, `destroyProjectApps`,
+ * `waitForDeploymentStatus`, `syncComputeEnvironment`) also need an
+ * `HttpClient` from the caller, because the Prisma-scoped node transport is
+ * `Layer.provide`d privately here — see the comment on the private provide
+ * above for why it must not reach the surrounding stack. Add one, e.g.:
+ *
+ * ```typescript
+ * yield* Prisma.destroyApp(appId).pipe(
+ *   Effect.provide(Prisma.managementApi()),
+ *   Effect.provide(FetchHttpClient.layer),
+ * );
+ * ```
  */
 export const managementApi = () =>
-  standaloneManagementApiLayer().pipe(Layer.orDie);
+  standaloneManagementApiLayer().pipe(
+    Layer.provide(FetchHttpClient.layer),
+    Layer.orDie,
+  );
 
 /**
  * Build a layer that registers all Prisma resource providers, the Prisma
@@ -196,6 +236,8 @@ export const providers = () =>
       SourceRepository,
       Contract,
       Migrate,
+      Server,
+      WebsiteArtifact,
     ]),
   ).pipe(
     Layer.provideMerge(
@@ -212,11 +254,10 @@ export const providers = () =>
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
-        // The ORM providers (Contract, Migrate) are mode-agnostic local
-        // resources — they emit contracts and shell the Prisma CLI
-        // regardless of dev/live mode.
         ContractProvider(),
         MigrateProvider(),
+        ServerProvider(),
+        WebsiteArtifactProvider(),
       ),
     ),
     // The management client layer is shared by every live variant. It is
@@ -224,5 +265,7 @@ export const providers = () =>
     // auth registers without resolving credentials, so `alchemy dev` never
     // needs a Prisma token.
     Layer.provideMerge(stackManagementApiLayer()),
+    Layer.provideMerge(Command.providers()),
+    Layer.provide(FetchHttpClient.layer),
     Layer.orDie,
   );

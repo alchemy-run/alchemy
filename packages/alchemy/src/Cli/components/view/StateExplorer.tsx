@@ -1,11 +1,11 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import {
   useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
-  type JSX,
-} from "react";
+} from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";

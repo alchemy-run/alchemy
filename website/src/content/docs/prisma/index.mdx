@@ -10,7 +10,9 @@ them — all as resources in one Stack. In dev mode the same Stack
 runs against a local `@prisma/dev` Postgres with nothing to
 provision.
 
-New here? [Set up credentials](/prisma/setup) first.
+New here? [Set up credentials](/prisma/setup), then follow the
+[four-part tutorial](/prisma/tutorial/part-1) to deploy a Project, an
+Effect-native API, Postgres, and a Vite frontend.
 
 ## Resources
 
@@ -53,6 +55,20 @@ The connection exposes ready-to-use outputs — a conventional
 [Branches](/prisma/data/branches) group databases and apps under
 git-style names. A standalone `Prisma.Branch` has Prisma's `preview`
 role even when promoted to be the project's default branch.
+
+## Websites
+
+Use [`Prisma.Website`](/prisma/frontend/websites) for Vite, Astro
+(SSR or static), Next.js, Nuxt, SvelteKit, React Router, SolidStart,
+TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build.
+The framework's Node-target output runs on Bun in Prisma Compute,
+uploaded as `tar.gz` — no Docker image or registry. Even static sites
+run a Compute static-file server.
+
+Omit `project` for a database-less project created only on live deploy.
+`alchemy dev` runs the native framework dev server without creating
+Prisma resources for the Website. Start with the
+[Vite guide](/prisma/frontend/vite) or [framework overview](/prisma/frontend/websites).
 
 ## Compute
 

@@ -191,19 +191,19 @@ export const fromDurableObjectTransaction = (
   txn: cf.DurableObjectTransaction,
 ): DurableObjectTransaction => ({
   get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
-    Effect.tryPromise(() => txn.get(keyOrKeys as any, options))) as any,
+    Effect.promise(() => txn.get(keyOrKeys as any, options))) as any,
   list: (options?: cf.DurableObjectListOptions) =>
-    Effect.tryPromise(() => txn.list(options)),
+    Effect.promise(() => txn.list(options)),
   put: ((
     keyOrEntries: string | Record<string, unknown>,
     valueOrOptions?: unknown,
     maybeOptions?: cf.DurableObjectPutOptions,
   ) =>
     typeof keyOrEntries === "string"
-      ? Effect.tryPromise(() =>
+      ? Effect.promise(() =>
           txn.put(keyOrEntries, valueOrOptions, maybeOptions),
         )
-      : Effect.tryPromise(() =>
+      : Effect.promise(() =>
           txn.put(
             keyOrEntries,
             valueOrOptions as cf.DurableObjectPutOptions | undefined,
@@ -212,35 +212,35 @@ export const fromDurableObjectTransaction = (
   delete: ((
     keyOrKeys: string | string[],
     options?: cf.DurableObjectPutOptions,
-  ) => Effect.tryPromise(() => txn.delete(keyOrKeys as any, options))) as any,
+  ) => Effect.promise(() => txn.delete(keyOrKeys as any, options))) as any,
   rollback: () => Effect.sync(() => txn.rollback()),
   getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-    Effect.tryPromise(() => txn.getAlarm(options)),
+    Effect.promise(() => txn.getAlarm(options)),
   setAlarm: (
     scheduledTime: number | Date,
     options?: cf.DurableObjectSetAlarmOptions,
-  ) => Effect.tryPromise(() => txn.setAlarm(scheduledTime, options)),
+  ) => Effect.promise(() => txn.setAlarm(scheduledTime, options)),
   deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-    Effect.tryPromise(() => txn.deleteAlarm(options)),
+    Effect.promise(() => txn.deleteAlarm(options)),
 });
 
 export const fromDurableObjectStorage = (
   storage: cf.DurableObjectStorage,
 ): DurableObjectStorage => ({
   get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
-    Effect.tryPromise(() => storage.get(keyOrKeys as any, options))) as any,
+    Effect.promise(() => storage.get(keyOrKeys as any, options))) as any,
   list: (options?: cf.DurableObjectListOptions) =>
-    Effect.tryPromise(() => storage.list(options)),
+    Effect.promise(() => storage.list(options)),
   put: ((
     keyOrEntries: string | Record<string, unknown>,
     valueOrOptions?: unknown,
     maybeOptions?: cf.DurableObjectPutOptions,
   ) =>
     typeof keyOrEntries === "string"
-      ? Effect.tryPromise(() =>
+      ? Effect.promise(() =>
           storage.put(keyOrEntries, valueOrOptions, maybeOptions),
         )
-      : Effect.tryPromise(() =>
+      : Effect.promise(() =>
           storage.put(
             keyOrEntries,
             valueOrOptions as cf.DurableObjectPutOptions | undefined,
@@ -249,10 +249,9 @@ export const fromDurableObjectStorage = (
   delete: ((
     keyOrKeys: string | string[],
     options?: cf.DurableObjectPutOptions,
-  ) =>
-    Effect.tryPromise(() => storage.delete(keyOrKeys as any, options))) as any,
+  ) => Effect.promise(() => storage.delete(keyOrKeys as any, options))) as any,
   deleteAll: (options?: cf.DurableObjectPutOptions) =>
-    Effect.tryPromise(() => storage.deleteAll(options)),
+    Effect.promise(() => storage.deleteAll(options)),
   transaction: <T, R = never>(
     closure: (txn: DurableObjectTransaction) => Effect.Effect<T, never, R>,
   ) =>
@@ -260,7 +259,7 @@ export const fromDurableObjectStorage = (
       const context = yield* Effect.context<R>();
       // The failure is typed away as before: a rejected transaction has
       // rolled back, and the rejection reaches the caller as a defect.
-      return yield* Effect.tryPromise<T, never>(() =>
+      return yield* Effect.promise(() =>
         storage.transaction((txn) =>
           Effect.runPromise(
             closure(fromDurableObjectTransaction(txn)).pipe(
@@ -271,20 +270,19 @@ export const fromDurableObjectStorage = (
       );
     }),
   getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-    Effect.tryPromise(() => storage.getAlarm(options)),
+    Effect.promise(() => storage.getAlarm(options)),
   setAlarm: (
     scheduledTime: number | Date,
     options?: cf.DurableObjectSetAlarmOptions,
-  ) => Effect.tryPromise(() => storage.setAlarm(scheduledTime, options)),
+  ) => Effect.promise(() => storage.setAlarm(scheduledTime, options)),
   deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-    Effect.tryPromise(() => storage.deleteAlarm(options)),
-  sync: () => Effect.tryPromise(() => storage.sync()),
+    Effect.promise(() => storage.deleteAlarm(options)),
+  sync: () => Effect.promise(() => storage.sync()),
   sql: fromSqlStorage(storage.sql),
   kv: storage.kv,
-  getCurrentBookmark: () =>
-    Effect.tryPromise(() => storage.getCurrentBookmark()),
+  getCurrentBookmark: () => Effect.promise(() => storage.getCurrentBookmark()),
   getBookmarkForTime: (timestamp: number | Date) =>
-    Effect.tryPromise(() => storage.getBookmarkForTime(timestamp)),
+    Effect.promise(() => storage.getBookmarkForTime(timestamp)),
   onNextSessionRestoreBookmark: (bookmark: string) =>
-    Effect.tryPromise(() => storage.onNextSessionRestoreBookmark(bookmark)),
+    Effect.promise(() => storage.onNextSessionRestoreBookmark(bookmark)),
 });
