@@ -9,6 +9,8 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 const tarball = process.env.ALCHEMY_CLI_PACKAGE;
+const tarballDirectory = process.env.ALCHEMY_CLI_PACKAGES;
+const enabled = !!(tarball || tarballDirectory);
 const selectedManager = process.env.ALCHEMY_CLI_PACKAGE_MANAGER;
 const managers = ["npm", "pnpm", "bun"] as const;
 type Manager = (typeof managers)[number];
@@ -78,16 +80,13 @@ const canary = (manager: Manager) =>
       new URL("../../", import.meta.url),
     );
     const checkout = yield* fs.realPath(path.resolve(packageDir, "../.."));
-    const packed = path.resolve(tarball!);
-    expect(packed.endsWith(".tgz")).toBe(true);
-    expect((yield* fs.stat(packed)).type).toBe("File");
     const project = yield* fs.makeTempDirectoryScoped({
       prefix: `alchemy-package-${manager}-`,
     });
     const projectRoot = yield* fs.realPath(project);
     expect(projectRoot.startsWith(`${checkout}${path.sep}`)).toBe(false);
 
-    const dependencies: Record<string, string> = { alchemy: `file:${packed}` };
+    const dependencies: Record<string, string> = {};
     for (const name of [
       "effect",
       "@effect/platform-bun",
@@ -100,22 +99,6 @@ const canary = (manager: Manager) =>
         Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
       )(manifest);
       dependencies[name] = version;
-    }
-    yield* fs.writeFileString(
-      path.join(project, "package.json"),
-      JSON.stringify({
-        name: "alchemy-cli-package-canary",
-        private: true,
-        type: "module",
-        scripts: { cli: "alchemy" },
-        dependencies,
-      }),
-    );
-    if (manager === "pnpm") {
-      yield* fs.writeFileString(
-        path.join(project, "pnpm-workspace.yaml"),
-        "allowBuilds:\n  workerd: true\n",
-      );
     }
     yield* fs.copyFile(
       path.join(packageDir, "test/Cli/fixtures/package-stack.ts"),
@@ -181,6 +164,52 @@ const canary = (manager: Manager) =>
         Effect.timeout(installing ? "90 seconds" : "20 seconds"),
       );
 
+    const packedFiles = tarballDirectory
+      ? (yield* fs.readDirectory(path.resolve(tarballDirectory)))
+          .filter((name) => name.endsWith(".tgz"))
+          .map((name) => path.resolve(tarballDirectory, name))
+      : [path.resolve(tarball!)];
+    const overrides: Record<string, string> = {};
+    for (const packed of packedFiles) {
+      expect((yield* fs.stat(packed)).type).toBe("File");
+      const manifest = yield* run("tar", [
+        "-xOf",
+        packed,
+        "package/package.json",
+      ]);
+      expect(manifest.exitCode).toBe(0);
+      const { name } = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(Schema.Struct({ name: Schema.String })),
+      )(manifest.stdout);
+      dependencies[name] = `file:${packed}`;
+      if (name !== "alchemy") overrides[name] = dependencies[name];
+    }
+    expect(dependencies.alchemy).toBeDefined();
+    yield* fs.writeFileString(
+      path.join(project, "package.json"),
+      JSON.stringify({
+        name: "alchemy-cli-package-canary",
+        private: true,
+        type: "module",
+        scripts: { cli: "alchemy" },
+        dependencies,
+        overrides:
+          manager === "npm"
+            ? Object.fromEntries(
+                Object.keys(overrides).map((name) => [name, `$${name}`]),
+              )
+            : overrides,
+      }),
+    );
+    if (manager === "pnpm") {
+      yield* fs.writeFileString(
+        path.join(project, "pnpm-workspace.yaml"),
+        JSON.stringify({
+          allowBuilds: { esbuild: true, workerd: true },
+          overrides,
+        }),
+      );
+    }
     const installed = yield* run(
       manager,
       manager === "npm"
@@ -191,6 +220,9 @@ const canary = (manager: Manager) =>
       undefined,
       true,
     );
+    if (installed.exitCode !== 0) {
+      yield* Console.error(installed.stdout + installed.stderr);
+    }
     expect({
       code: installed.exitCode,
       output:
@@ -287,7 +319,7 @@ const canary = (manager: Manager) =>
 
 describe.sequential("packed CLI outside the checkout", () => {
   if (
-    tarball &&
+    enabled &&
     selectedManager !== undefined &&
     !managers.some((manager) => manager === selectedManager)
   ) {
@@ -295,7 +327,7 @@ describe.sequential("packed CLI outside the checkout", () => {
   }
   for (const manager of managers) {
     it.live.skipIf(
-      !tarball ||
+      !enabled ||
         (selectedManager !== undefined && selectedManager !== manager),
     )(
       `installs with ${manager} and runs production CLI across runtimes and entrypoints`,
