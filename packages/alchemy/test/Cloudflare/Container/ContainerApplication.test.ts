@@ -744,6 +744,173 @@ describe.concurrent("ContainerApplication", () => {
     { timeout: 120_000, exclusive: true },
   );
 
+  registryCacheTest.provider(
+    "caches default publications and imports repository layers in a fresh builder",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const docker = yield* Docker;
+        const context = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-default-cache-",
+        });
+        yield* fs.writeFileString(
+          path.join(context, "Dockerfile"),
+          'FROM alpine:3.19\nRUN cat /proc/sys/kernel/random/uuid > /layer\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
+        );
+        yield* fs.writeFileString(path.join(context, "payload"), "first");
+        const program = sharedApplication(context);
+        const first = yield* stack.deploy(program);
+        expect(first.app.configuration.image).toContain(
+          `/${first.app.applicationName}@sha256:`,
+        );
+        const firstHistory = yield* buildHistory;
+        expect(
+          firstHistory.filter((build) => build.status === "Completed"),
+        ).toHaveLength(1);
+
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId: first.app.accountId,
+            registryId: "registry.cloudflare.com",
+            permissions: ["pull"],
+            expirationMinutes: 15,
+          });
+        const username = credentials.username ?? credentials.user;
+        assert(username);
+        const client = yield* HttpClient.HttpClient;
+        const cacheDigest = Effect.gen(function* () {
+          const response = yield* client.execute(
+            HttpClientRequest.head(
+              `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/manifests/buildcache`,
+            ).pipe(
+              HttpClientRequest.basicAuth(username, credentials.password),
+              HttpClientRequest.setHeader(
+                "Accept",
+                "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+              ),
+            ),
+          );
+          expect(response.status).toBe(200);
+          return response.headers["docker-content-digest"];
+        });
+        expect(yield* cacheDigest).toBe(first.app.hash?.digest);
+        const layersOf = Effect.fn(function* (digest: string) {
+          const response = yield* client.execute(
+            HttpClientRequest.get(
+              `https://registry.cloudflare.com/v2/${first.app.accountId}/${first.app.applicationName}/manifests/${digest}`,
+            ).pipe(
+              HttpClientRequest.basicAuth(username, credentials.password),
+              HttpClientRequest.setHeader(
+                "Accept",
+                "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+              ),
+            ),
+          );
+          expect(response.status).toBe(200);
+          const manifest = yield* response.json.pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.Struct({
+                  layers: Schema.Array(
+                    Schema.Struct({ digest: Schema.String }),
+                  ),
+                }),
+              ),
+            ),
+          );
+          return manifest.layers.map((layer) => layer.digest);
+        });
+        const firstLayers = yield* layersOf(first.app.hash!.digest!);
+        expect(firstLayers.length).toBeGreaterThanOrEqual(2);
+
+        yield* fs.writeFileString(path.join(context, "payload"), "changed");
+        const changed = yield* Effect.gen(function* () {
+          // A new BuildKit instance cannot reuse the first builder's local layers.
+          expect(yield* buildHistory).toHaveLength(0);
+          const changed = yield* stack.deploy(program);
+          const completed = (yield* buildHistory).filter(
+            (build) => build.status === "Completed",
+          );
+          expect(completed).toHaveLength(1);
+          const log = yield* docker.run([
+            "buildx",
+            "history",
+            "logs",
+            completed[0]!.ref.split("/").at(-1)!,
+            "--progress",
+            "plain",
+          ]);
+          const text = `${log.stdout}\n${log.stderr}`;
+          expect(text).toContain(
+            `importing cache manifest from registry.cloudflare.com/${first.app.accountId}/${first.app.applicationName}:buildcache`,
+          );
+          const changedLayers = yield* layersOf(changed.app.hash!.digest!);
+          // Re-executing RUN would create a different UUID and therefore a different layer.
+          expect(changedLayers.slice(0, -1)).toEqual(firstLayers.slice(0, -1));
+          expect(changedLayers.at(-1)).not.toBe(firstLayers.at(-1));
+          return changed;
+        }).pipe(
+          withBuilder("alchemy-default-cache-changed", { attestations: false }),
+        );
+        expect(changed.app.applicationId).toBe(first.app.applicationId);
+        expect(changed.app.applicationName).toBe(first.app.applicationName);
+        expect(changed.app.configuration.image).not.toBe(
+          first.app.configuration.image,
+        );
+        expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
+
+        yield* fs.writeFileString(path.join(context, "payload"), "first");
+        const restored = yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const previous = process.env.BUILDX_BUILDER;
+            process.env.BUILDX_BUILDER = "alchemy-default-cache-must-not-build";
+            return previous;
+          }),
+          () => stack.deploy(program),
+          (previous) =>
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env.BUILDX_BUILDER;
+              else process.env.BUILDX_BUILDER = previous;
+            }),
+        );
+        expect(restored.app.applicationId).toBe(first.app.applicationId);
+        expect(restored.app.configuration.image).toBe(
+          first.app.configuration.image,
+        );
+        expect(yield* buildHistory).toEqual(firstHistory);
+        // Reusing a finished image leaves the latest exported layer cache in place.
+        expect(yield* cacheDigest).toBe(changed.app.hash?.digest);
+        expect(
+          (yield* waitForImage(
+            restored.app.accountId,
+            restored.app.applicationId,
+            restored.app.configuration.image!,
+          )).image,
+        ).toBe(first.app.configuration.image);
+        yield* stack.destroy();
+        const gone = yield* Containers.getContainerApplication({
+          accountId: first.app.accountId,
+          applicationId: first.app.applicationId,
+        }).pipe(
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            until: (app) => app === undefined,
+            schedule: Schedule.spaced("1 second"),
+            times: 8,
+          }),
+        );
+        expect(gone).toBeUndefined();
+      }).pipe(
+        withBuilder("alchemy-default-cache", { attestations: false }),
+        logLevel,
+      ),
+    { timeout: 120_000, exclusive: true },
+  );
+
   // Publication reuse was confined to a provider instance in:
   // https://github.com/alchemy-run/alchemy/commit/275361dfe8358684439e42120298723305175d39
   registryCacheTest.provider(
@@ -1094,6 +1261,21 @@ describe.concurrent("ContainerApplication", () => {
           );
           expect(manifest.status).toBe(200);
           expect(manifest.headers["docker-content-digest"]).toBe(
+            deployed.app.hash!.digest,
+          );
+          const cache = yield* client.execute(
+            HttpClientRequest.head(
+              `https://registry.cloudflare.com/v2/${repository}/manifests/buildcache`,
+            ).pipe(
+              HttpClientRequest.basicAuth(username, credentials.password),
+              HttpClientRequest.setHeader(
+                "Accept",
+                "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json",
+              ),
+            ),
+          );
+          expect(cache.status).toBe(200);
+          expect(cache.headers["docker-content-digest"]).toBe(
             deployed.app.hash!.digest,
           );
           if (exported) {

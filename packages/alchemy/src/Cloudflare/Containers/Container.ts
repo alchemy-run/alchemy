@@ -328,6 +328,14 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
+ * Builds are cached by default at
+ * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
+ * The generated physical name includes the stage and resource instance, so
+ * subsequent updates in that stage can reuse matching images. Replacement or
+ * destroy/recreate can change the name and start a new cache. This does not
+ * automatically share one repository across every container in the stage.
+ * The same defaults apply to inline Dockerfiles and Effect-native `main` builds.
+ *
  * **Example:** Reuse builds across stages
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
@@ -351,10 +359,16 @@ export type Container<Id extends string = string> = Named<Id> & {
  * The build hash identifies the inputs; the manifest digest identifies the
  * published artifact. Applications and stages in the same account can use
  * `publish: { repository: "web" }` to reuse matching published builds. Changed
- * inputs produce another hash tag in the same repository and use its inline
- * layer cache. Pin base images and downloaded dependencies when opting in.
- * Omitting `publish` uses the application's physical name without shared
- * registry caching.
+ * inputs produce another hash tag in the same repository. Builds targeting
+ * that repository import reusable layers from its shared `:buildcache` tag,
+ * including when full input hashes differ. This mutable tag points to the
+ * latest exported inline cache, not a combined cache of every historical
+ * image. Reusing a finished image does not move the layer-cache tag.
+ *
+ * Pin base images and downloaded dependencies: changes outside the build
+ * context cannot invalidate the input hash. Each stage still has its own
+ * Container application, runtime settings, and instances; only images and
+ * build layers are shared.
  *
  * **Example:** Publish an existing image into a named repository
  * ```typescript

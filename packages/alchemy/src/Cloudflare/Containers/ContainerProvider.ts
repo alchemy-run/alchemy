@@ -566,10 +566,7 @@ export const LiveContainerProvider = () =>
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
 
-        if (
-          props.publish?.repository !== undefined &&
-          build.kind !== "remote"
-        ) {
+        if (build.kind !== "remote") {
           const digest = yield* resolveRegistryDigest(
             imageRef,
             credentials,
@@ -594,13 +591,10 @@ export const LiveContainerProvider = () =>
           }
         }
         const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
-        const cacheOptions =
-          props.publish?.repository === undefined
-            ? {}
-            : {
-                "cache-from": [`type=registry,ref=${cacheRef}`],
-                "cache-to": ["type=inline"],
-              };
+        const cacheOptions = {
+          "cache-from": [`type=registry,ref=${cacheRef}`],
+          "cache-to": ["type=inline"],
+        };
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -637,10 +631,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag:
-                  props.publish?.repository === undefined
-                    ? imageRef
-                    : [imageRef, cacheRef],
+                tag: [imageRef, cacheRef],
                 context: build.context,
                 platform,
                 file: build.dockerfile,
@@ -682,10 +673,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag:
-                  props.publish?.repository === undefined
-                    ? imageRef
-                    : [imageRef, cacheRef],
+                tag: [imageRef, cacheRef],
                 context: contextDir,
                 platform,
               },
