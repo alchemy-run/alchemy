@@ -43,7 +43,7 @@ const looksWorld = (script: Partial<Record<Agent, string>>) => {
           posts.push({
             id,
             ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
-            author: input.author ?? "swarm",
+            author: input.author ?? "manager",
             text: input.text,
           });
           return id;

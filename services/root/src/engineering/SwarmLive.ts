@@ -22,10 +22,13 @@ const clip = (value: string) =>
   value.length > 8_000 ? `${value.slice(0, 8_000)}…` : value;
 
 /**
- * The walkers' deps, LIVE: posts land in the real channel (author
- * `swarm` for scaffolding), and a dispatch is the proven
- * per-invocation pattern — the agent answers in its own session, the
- * reply lands in the walker's thread under the agent's name.
+ * The walkers' deps, LIVE. Scaffolding posts (burst roots, stream
+ * cards, join summaries) and dispatch envelopes speak as the MANAGER —
+ * intake and coordination are its role, and the org chart defines who
+ * exists: a walker is machinery acting for a member, never a fifth
+ * colleague. A dispatch is the proven per-invocation pattern — the
+ * agent answers in its own session, the reply lands in the walker's
+ * thread under the agent's own name.
  */
 export const swarmDeps = Effect.gen(function* () {
   const posts = yield* Posts;
@@ -43,7 +46,7 @@ export const swarmDeps = Effect.gen(function* () {
           id,
           ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
           channel,
-          author: input.author ?? "swarm",
+          author: input.author ?? "manager",
           text: input.text,
           status: "settled",
           ...(input.mode !== undefined ? { mode: input.mode } : {}),
@@ -58,7 +61,7 @@ export const swarmDeps = Effect.gen(function* () {
         const outcome = yield* sessions.dispatch(
           address.term,
           invocationKey(address.key, id),
-          { id, author: "swarm", content: input.ask },
+          { id, author: "manager", content: input.ask },
         );
         const answer = typeof outcome === "string" ? outcome.trim() : "";
         if (answer.length > 0) {

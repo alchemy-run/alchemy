@@ -43,7 +43,7 @@ const clusterWorld = () => {
           posts.push({
             id,
             ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
-            author: input.author ?? "swarm",
+            author: input.author ?? "manager",
             text: input.text,
           });
           return id;
@@ -127,7 +127,7 @@ describe("swarm: issue cluster", () => {
       // exactly two root causes → two sub-threads
       const clusters = world
         .childrenOf(roots[0]!.id)
-        .filter((post) => post.author === "swarm")
+        .filter((post) => post.author === "manager")
         .filter((post) => /#\d{4}/.test(post.text));
       expect(clusters).toHaveLength(2);
 

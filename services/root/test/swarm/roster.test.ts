@@ -28,8 +28,7 @@ const nodes = [
   {
     kind: "Group" as const,
     name: "Engineering",
-    template: (EngineeringChart as { template: TemplateStringsArray })
-      .template,
+    template: (EngineeringChart as { template: TemplateStringsArray }).template,
     refs: (EngineeringChart as { refs: ReadonlyArray<unknown> }).refs,
   },
   {
