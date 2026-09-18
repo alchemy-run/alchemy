@@ -8,7 +8,7 @@ Deploy native handler A, then native handler B to the same function slug using o
 
 Each response echoes a unique request nonce and exposes a module-initialization UUID and request counter. The same UUIDs seen before the update continue serving new nonces with advancing counters afterward. This is old code executing new requests, not replay of a cached HTTP response.
 
-Three separate disposable-project experiments produced:
+The initial three disposable-project experiments produced:
 
 | Deployment path | Previously invoked function, 16 post-update responses | Function not invoked by the probe before update, 16 responses |
 | --- | --- | --- |
@@ -34,6 +34,23 @@ The warmed URL was `https://br-floral-silence-b5qa86au-probewarm.compute.c-7.us-
 The other function served both `artifact-a` / `environment-a` and `artifact-b` / `environment-b`. A previously unseen A module UUID appeared in the final round. Module boot timestamps are diagnostic observations, not proof of the underlying VM's creation time or a synchronized clock across instances.
 
 The CLI returned exit 0 and deployment 2 `completed` for both updates. Independent management GETs confirmed deployment 2 active both before sampling and after all eight rounds. Final cleanup confirmed project `morning-king-38511533` absent. Selected structured observations are preserved in [function-update-evidence.json](./function-update-evidence.json).
+
+## Skeptical follow-up: current CLI and fresh connections
+
+The original CLI was pinned to 2.45.0. npm listed 5.0.0 as current, published on 2026-09-18 at 01:08:50 UTC. Two additional disposable-project controls used **5.0.0**:
+
+| Control | Previously invoked function | Previously uninvoked function |
+| --- | --- | --- |
+| Same probe, current CLI | 16 A / 0 B | 8 A / 8 B |
+| Current CLI, 30 seconds without invocation traffic after readiness, fresh curl process for every request | 16 A / 0 B | 9 A / 7 B |
+
+The final control used HTTP/1.1, `Connection: close`, `--noproxy '*'`, fresh request nonces, and separate curl processes for warmup and every GET/POST. Thus Bun fetch connection reuse and a configured curl HTTP proxy are not necessary to reproduce the failure. This is still one client network vantage point; IP-based affinity or server-side routing caches are not excluded.
+
+For the final control, project `dry-wind-02772059`, branch `br-bitter-rice-b4plgolw`, both deployments were confirmed active/completed at **09:14:14.763 UTC**. The probe then sent no invocation requests for 30 seconds. Fresh-connection sampling continued through **09:15:22.487 UTC**, approximately 68 seconds after that readiness observation, and still returned A. Final management GETs explicitly recorded `current = active = 2`, `completed` for both functions. Both follow-up projects were normally destroyed and independently confirmed absent. See [follow-up structured evidence](./function-update-followup-evidence.json).
+
+An independent skeptical audit found no wrong-file, wrong-branch, missing-await, or missing-activation error. The final control also parses the CLI's returned deployment ID and URL and compares them with management state instead of relying only on log inspection. The exact published 5.0.0 implementation bundles the supplied file, submits ZIP/runtime/environment, and polls the newer current deployment; it adds no separate activation operation.
+
+These controls establish stale execution after reported readiness even with new connections and a 30-second idle interval. They **do not establish that updates never converge**, that all accounts or regions are affected, or that a longer rollout/drain window cannot explain the observation. The idle interval tests a hypothesis; it is not an acceptance delay or a workaround. The precise serving-side cause and the intended exclusive-cutover guarantee require Neon-side confirmation.
 
 ## Minimal official-CLI reproduction
 
@@ -112,6 +129,7 @@ References:
 
 - [Deploy Functions](https://neon.com/docs/compute/functions/deploy)
 - [Runtime and limits](https://neon.com/docs/compute/functions/reference/runtime-limits)
-- [Official CLI deploy command](https://github.com/neondatabase/neonctl/blob/main/src/commands/functions.ts)
+- [Published CLI 2.45.0 deploy implementation](https://unpkg.com/neon@2.45.0/dist/commands/functions.js)
+- [Published CLI 5.0.0 deploy implementation](https://unpkg.com/neon@5.0.0/dist/commands/functions.js)
 
 The existing Function and Website regressions remain failing and unchanged. Do not accept one B response as convergence, silently recreate the function to change its URL, or add an arbitrary delay and call the update fixed. Platform investigation should correlate the project/branch/deployment IDs above with the serving instances and routing decisions.
