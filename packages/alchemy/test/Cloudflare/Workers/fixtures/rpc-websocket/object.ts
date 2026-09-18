@@ -1,0 +1,131 @@
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { Greeting, Rejected, SocketRpcs } from "./rpcs.ts";
+
+export class SocketObject extends Cloudflare.RpcDurableObject<SocketObject>()(
+  "SocketObject",
+  { schema: SocketRpcs, transport: "websocket" },
+) {}
+
+export const SocketObjectLive = SocketObject.make(
+  Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+    return Effect.gen(function* () {
+      const boots = ((yield* state.storage.get<number>("boots")) ?? 0) + 1;
+      yield* state.storage.put("boots", boots);
+      const opened: string[] = [];
+      const closed: string[] = [];
+      const cleanupStarted: string[] = [];
+      const cleanups = new Map<string, Deferred.Deferred<void>>();
+      return SocketRpcs.toLayer({
+        greet: ({ name }) =>
+          Effect.succeed(new Greeting({ message: `Hello, ${name}!` })),
+        increment: () =>
+          state.storage
+            .transaction(
+              Effect.gen(function* () {
+                const count =
+                  ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+                yield* state.storage.put("count", count);
+                return count;
+              }),
+            )
+            .pipe(Effect.orDie),
+        reject: () =>
+          Effect.fail(new Rejected({ message: "rejected by handler" })),
+        numbers: ({ count }) => Stream.range(1, count),
+        watch: ({ key }) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              yield* state.storage
+                .transaction(
+                  Effect.gen(function* () {
+                    const invocations =
+                      (yield* state.storage.get<Record<string, number>>(
+                        "invocations",
+                      )) ?? {};
+                    yield* state.storage.put("invocations", {
+                      ...invocations,
+                      [key]: (invocations[key] ?? 0) + 1,
+                    });
+                  }),
+                )
+                .pipe(Effect.orDie);
+              yield* Effect.sync(() => opened.push(key));
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => closed.push(key)),
+              );
+              return Stream.concat(
+                Stream.make(1),
+                Stream.fromEffect(Effect.never),
+              );
+            }),
+          ),
+        cleanup: ({ key, waitForDisconnect }) =>
+          Effect.gen(function* () {
+            const release = yield* Deferred.make<void>();
+            yield* Effect.addFinalizer(() =>
+              Effect.gen(function* () {
+                yield* Effect.sync(() => cleanupStarted.push(key));
+                // No timer or I/O keeps the activation alive while cleanup waits.
+                yield* Deferred.await(release);
+                yield* state.storage
+                  .transaction(
+                    Effect.gen(function* () {
+                      const completed =
+                        (yield* state.storage.get<Record<string, number>>(
+                          "cleanupCompleted",
+                        )) ?? {};
+                      yield* state.storage.put("cleanupCompleted", {
+                        ...completed,
+                        [key]: boots,
+                      });
+                    }),
+                  )
+                  .pipe(Effect.orDie);
+                yield* Effect.sync(() => cleanups.delete(key));
+              }),
+            );
+            yield* Effect.sync(() => {
+              cleanups.set(key, release);
+              opened.push(key);
+            });
+            return yield* waitForDisconnect
+              ? Effect.never
+              : Effect.succeed(boots);
+          }),
+        releaseCleanup: ({ key }) =>
+          Effect.suspend(() => {
+            const release = cleanups.get(key);
+            return release === undefined
+              ? Effect.succeed(false)
+              : Deferred.succeed(release, undefined);
+          }),
+        abort: Effect.fn(function* () {
+          // Native abort discards buffered storage writes.
+          yield* state.storage.sync();
+          yield* state.abort("RPC WebSocket test abort", { retryAlarm: false });
+        }),
+        stats: Effect.fn(function* () {
+          return {
+            boots,
+            count: (yield* state.storage.get<number>("count")) ?? 0,
+            opened: [...opened],
+            closed: [...closed],
+            invocations:
+              (yield* state.storage.get<Record<string, number>>(
+                "invocations",
+              )) ?? {},
+            cleanupStarted: [...cleanupStarted],
+            cleanupCompleted:
+              (yield* state.storage.get<Record<string, number>>(
+                "cleanupCompleted",
+              )) ?? {},
+          };
+        }),
+      });
+    });
+  }),
+);

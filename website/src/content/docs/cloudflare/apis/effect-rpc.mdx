@@ -481,20 +481,43 @@ argument — `RpcWorker<Self, Deps>()` mirrors
 
 The same shape applies to Durable Objects.
 `Cloudflare.RpcDurableObject<Self>()(...)` mirrors the
-regular DO class but the inner Effect returns the piped
-`RpcServer.toHttpEffect(schema)` Effect directly:
+regular DO class. Return the RPC handler Layer from the inner Effect;
+Alchemy supplies the server and serialization. This example uses a shared
+`CounterRpcs` group:
 
 ```typescript
+// rpcs.ts
+import * as Schema from "effect/Schema";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+
+export class CounterRpcs extends RpcGroup.make(
+  Rpc.make("setTitle", {
+    payload: { title: Schema.String },
+    success: Schema.Void,
+  }),
+  Rpc.make("getTitle", { payload: {}, success: Schema.String }),
+) {}
+```
+
+Return its handler Layer from the per-instance Effect:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { CounterRpcs } from "./rpcs.ts";
+
 export default class Counter extends Cloudflare.RpcDurableObject<Counter>()(
   "Counter",
   { schema: CounterRpcs },
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const handlers = CounterRpcs.toLayer({ /* ... */ });
-      return RpcServer.toHttpEffect(CounterRpcs).pipe(
-        Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
-      );
+      return CounterRpcs.toLayer({
+        setTitle: ({ title }) => state.storage.put("title", title),
+        getTitle: () => state.storage.get<string>("title").pipe(
+          Effect.map((title) => title ?? ""),
+        ),
+      });
     });
   }),
 ) {}
@@ -526,10 +549,12 @@ export default Counter.make(
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
-      const handlers = CounterRpcs.toLayer({ /* ... */ });
-      return RpcServer.toHttpEffect(CounterRpcs).pipe(
-        Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
-      );
+      return CounterRpcs.toLayer({
+        setTitle: ({ title }) => state.storage.put("title", title),
+        getTitle: () => state.storage.get<string>("title").pipe(
+          Effect.map((title) => title ?? ""),
+        ),
+      });
     });
   }),
 );
@@ -546,6 +571,89 @@ yield* stub.setTitle({ title: "hi" });
 
 For internal DO calls that don't need a schema, see
 [Schemaless RPC on Durable Objects](/cloudflare/compute/durable-objects#schemaless-rpc).
+
+## Enable WebSocket RPC
+
+Opt in on the same class:
+
+```diff lang="typescript"
+-{ schema: CounterRpcs },
++{ schema: CounterRpcs, transport: "websocket" },
+```
+
+WebSockets use Effect RPC's JSON protocol. HTTP remains available with
+NDJSON, so existing `getByName` clients continue to work. The inner
+Effect must return a handler Layer for WebSocket support. Existing
+implementations returning `RpcServer.toHttpEffect(...)` remain supported
+for HTTP.
+
+## Forward browser connections
+
+Forward an incoming request to a named object from the hosting Worker:
+
+```typescript
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+
+const counters = yield* Counter;
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    return yield* counters.fetch("shared", request);
+  }),
+};
+```
+
+The namespace's `fetch` forwards HTTP requests and WebSocket upgrades;
+it is not an application RPC method. Authenticate and authorize the
+request before forwarding it. Use application-controlled object names
+when access must be restricted to a particular instance.
+
+## Connect over a WebSocket
+
+Use Effect's existing WebSocket RPC client in the browser:
+
+```typescript
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as Socket from "effect/unstable/socket/Socket";
+import { CounterRpcs } from "./rpcs.ts";
+
+const Connection = RpcClient.layerProtocolSocket().pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      Socket.layerWebSocket("wss://example.com/rpc").pipe(
+        Layer.provide(Socket.layerWebSocketConstructorGlobal),
+      ),
+      RpcSerialization.layerJson,
+    ),
+  ),
+);
+
+const program = Effect.gen(function* () {
+  const counter = yield* RpcClient.make(CounterRpcs);
+  yield* counter.setTitle({ title: "Hello over WebSockets" });
+  return yield* counter.getTitle({});
+}).pipe(Effect.scoped, Effect.provide(Connection));
+```
+
+Keep the connection layer around the entire program that uses the client,
+not just `RpcClient.make`. Concurrent calls and streams share the socket;
+Effect handles typed errors, backpressure, and cancellation.
+
+## WebSocket RPC and hibernation
+
+Idle connections can survive Durable Object hibernation and accept new
+calls after the instance wakes. Alchemy restores connection metadata
+from socket attachments and handles protocol heartbeats internally.
+
+In-flight calls and streams are not replayed. If the instance is
+reconstructed with unfinished work, the affected socket closes with
+code `1012`; clients must handle the interruption. A platform reset can
+close the connection before Alchemy restores it, so other transport errors
+are also possible. Durable checkpoints and resumable subscriptions are
+not part of this API. Application RPC methods do not need acknowledgment
+or lifecycle methods.
 
 ## Under the hood: the manual DO bridge
 

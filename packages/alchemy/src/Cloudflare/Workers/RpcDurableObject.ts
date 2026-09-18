@@ -1,14 +1,23 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import type { HttpServerResponse } from "effect/unstable/http/HttpServerResponse";
+import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import type { Rpc, RpcGroup } from "effect/unstable/rpc";
+import * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Input } from "../../Input.ts";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import {
   DurableObject,
@@ -18,9 +27,47 @@ import {
   type DurableObject as DurableObjectType,
   type DurableObjectServices,
 } from "./DurableObject.ts";
-import type { DurableObjectState } from "./DurableObjectState.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 import { bindEffectRpc } from "./Rpc.ts";
+import * as RpcWebSocket from "./RpcWebSocket.ts";
 import type { Worker as WorkerService } from "./Worker.ts";
+
+export interface RpcDurableObjectProps<Rpcs extends Rpc.Any> {
+  /** The RPC schema shared by the Durable Object and its clients. */
+  readonly schema: RpcGroup.RpcGroup<Rpcs>;
+  /**
+   * Enable hibernating WebSocket RPC alongside HTTP. WebSockets use JSON;
+   * HTTP and `getByName` clients continue to use NDJSON. Requires returning
+   * the RPC handler Layer from the inner Effect.
+   * @default "http"
+   */
+  readonly transport?: "http" | "websocket";
+}
+
+type HandlerImplementation<
+  Rpcs extends Rpc.Any,
+  Provided,
+  InnerR,
+  InitReq,
+> = Effect.Effect<
+  Effect.Effect<
+    Layer.Layer<Rpc.ToHandler<Rpcs> | Provided, never, InnerR | RuntimeContext>,
+    never,
+    DurableObjectServices | RuntimeContext
+  >,
+  ConfigError,
+  InitReq
+>;
+
+type HandlerRequirements<Rpcs extends Rpc.Any, Provided, InnerR, InitReq> =
+  | WorkerService
+  | Exclude<
+      | InitReq
+      | InnerR
+      | Exclude<Rpc.Middleware<Rpcs>, Provided>
+      | Rpc.ServicesServer<Rpcs>,
+      DurableObjectServices | RuntimeContext
+    >;
 
 /**
  * The runtime value bound to a typed rpc Durable Object namespace.
@@ -38,6 +85,12 @@ export interface RpcDurableObject<
 > {
   /** @internal phantom — keeps `Self` reachable through the inferred type */
   Self?: Self;
+  /** Forward an HTTP request or WebSocket upgrade to a named instance. */
+  readonly fetch: (
+    id: string,
+    request: HttpServerRequest,
+    options?: DurableObjectGetDurableObjectOptions,
+  ) => Effect.Effect<HttpServerResponse, HttpServerError>;
   readonly getByName: (
     id: string,
     options?: DurableObjectGetDurableObjectOptions,
@@ -85,9 +138,12 @@ export interface RpcDurableObjectClass extends Effect.Effect<
    */
   <Self>(): {
     /** Modular form: separate `static make(impl)` + `static from(scriptName | Worker)`. */
-    <Rpcs extends Rpc.Any>(
+    <
+      Rpcs extends Rpc.Any,
+      Transport extends "http" | "websocket" | undefined = undefined,
+    >(
       name: string,
-      props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
+      props: RpcDurableObjectProps<Rpcs> & { readonly transport?: Transport },
     ): Effect.Effect<
       RpcDurableObject<Self, Rpcs>,
       never,
@@ -106,26 +162,49 @@ export interface RpcDurableObjectClass extends Effect.Effect<
         never,
         WorkerService | Req
       >;
+      make<Provided = never, InnerR = never, InitReq = never>(
+        impl: HandlerImplementation<Rpcs, Provided, InnerR, InitReq>,
+      ): Layer.Layer<
+        Self,
+        never,
+        HandlerRequirements<Rpcs, Provided, InnerR, InitReq>
+      >;
       make<InnerR = never, InitReq = never>(
-        impl: Effect.Effect<
-          Effect.Effect<
-            Effect.Effect<HttpEffect<InnerR>, never, InnerR | RuntimeContext>,
-            never,
-            DurableObjectServices | RuntimeContext
-          >,
-          ConfigError,
-          InitReq
-        >,
+        impl: [Transport] extends ["http" | undefined]
+          ? Effect.Effect<
+              Effect.Effect<
+                Effect.Effect<
+                  HttpEffect<InnerR>,
+                  never,
+                  InnerR | RuntimeContext
+                >,
+                never,
+                DurableObjectServices | RuntimeContext
+              >,
+              ConfigError,
+              InitReq
+            >
+          : never,
       ): Layer.Layer<
         Self,
         never,
         WorkerService | Exclude<InitReq | InnerR, DurableObjectServices>
       >;
     };
+    /** Inline handler Layer; the runtime supplies the RPC transports. */
+    <Rpcs extends Rpc.Any, Provided = never, InnerR = never, InitReq = never>(
+      name: string,
+      props: RpcDurableObjectProps<Rpcs>,
+      impl: HandlerImplementation<Rpcs, Provided, InnerR, InitReq>,
+    ): Effect.Effect<
+      RpcDurableObject<Self, Rpcs>,
+      never,
+      HandlerRequirements<Rpcs, Provided, InnerR, InitReq>
+    > & { new (_: never): {} };
     /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       name: string,
-      props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
+      props: RpcDurableObjectProps<Rpcs> & { readonly transport?: "http" },
       impl: Effect.Effect<
         Effect.Effect<
           Effect.Effect<HttpEffect<InnerR>, never, InnerR | RuntimeContext>,
@@ -150,10 +229,20 @@ export interface RpcDurableObjectClass extends Effect.Effect<
       readonly schema: RpcGroup.RpcGroup<Rpcs>;
     } & Partial<DurableObjectProps>,
   ): DurableObjectLike<{ fetch: HttpEffect<DurableObjectState> }>;
+  /** Bare handler-Layer form. */
+  <Rpcs extends Rpc.Any, Provided = never, InnerR = never, InitReq = never>(
+    name: string,
+    props: RpcDurableObjectProps<Rpcs>,
+    impl: HandlerImplementation<Rpcs, Provided, InnerR, InitReq>,
+  ): Effect.Effect<
+    RpcDurableObject<unknown, Rpcs>,
+    never,
+    HandlerRequirements<Rpcs, Provided, InnerR, InitReq>
+  >;
   /** Bare form: `(name, { schema }, impl)` */
   <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
     name: string,
-    props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
+    props: RpcDurableObjectProps<Rpcs> & { readonly transport?: "http" },
     impl: Effect.Effect<
       Effect.Effect<
         Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
@@ -173,9 +262,11 @@ export interface RpcDurableObjectClass extends Effect.Effect<
 /**
  * `RpcDurableObject` is sugar over {@link DurableObject}
  * for Durable Objects whose surface is a typed Effect `RpcGroup`. The
- * DO serves an `RpcServer.toHttpEffect(group)` on its own `fetch`, and
- * consumers see `namespace.getByName(id)` as a typed `RpcClient`
- * directly — no manual client wiring.
+ * inner Effect returns the group's handler Layer. HTTP clients use NDJSON;
+ * `transport: "websocket"` also enables hibernating WebSocket RPC using JSON.
+ * Consumers see `namespace.getByName(id)` as a typed HTTP `RpcClient`.
+ * Existing implementations returning `RpcServer.toHttpEffect(group)` remain
+ * supported for HTTP.
  *
  * Use this over alchemy's built-in DO method bridge whenever values
  * crossing the DO boundary contain `Schema.Class` instances. The
@@ -212,13 +303,10 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * **Example:** Class form (recommended)
  * Mirrors `Cloudflare.DurableObject<Self>()(...)` — same
  * outer/inner Effect pattern. The outer Effect resolves shared deps;
- * the per-instance inner Effect returns the
- * `RpcServer.toHttpEffect(schema)`-piped Effect directly.
+ * the per-instance inner Effect returns the RPC handler Layer.
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- * import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
  * import { CounterRpcs } from "./rpcs.ts";
  *
  * export default class Counter extends Cloudflare.RpcDurableObject<Counter>()(
@@ -230,14 +318,11 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *     return Effect.gen(function* () {
  *       // inner (runtime): state.storage is RuntimeContext-colored, so
  *       // the handler closures that call it live here
- *       const handlers = CounterRpcs.toLayer({
+ *       return CounterRpcs.toLayer({
  *         setTitle: ({ title }) => state.storage.put("title", title),
  *         getTitle: () =>
  *           Effect.map(state.storage.get<string>("title"), (t) => t ?? ""),
  *       });
- *       return RpcServer.toHttpEffect(CounterRpcs).pipe(
- *         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
- *       );
  *     });
  *   }),
  * ) {}
@@ -262,6 +347,33 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * }).pipe(Effect.scoped);
  * ```
  *
+ * ### WebSocket RPC
+ * **Example:** Enable WebSocket upgrades
+ * Add `transport: "websocket"` to the class props and keep returning the
+ * handler Layer from its inner Effect. HTTP remains available.
+ * ```typescript
+ * const props = { schema: CounterRpcs, transport: "websocket" } as const;
+ * ```
+ *
+ * **Example:** Forward a browser connection from the Worker
+ * ```typescript
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ *
+ * const counters = yield* Counter;
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const request = yield* HttpServerRequest;
+ *     return yield* counters.fetch("shared", request);
+ *   }),
+ * };
+ * ```
+ * Authenticate and authorize requests before forwarding. Clients use
+ * Effect's `RpcClient.layerProtocolSocket` with JSON serialization. Idle
+ * connections survive hibernation. Restored sockets with unfinished requests
+ * close with code `1012`; platform resets can also cause transport errors.
+ * Requests and streams are never replayed. No application acknowledgment
+ * methods or checkpoints are required.
+ *
  * ### Modular form: separate the class from its runtime
  * **Example:** Class declaration with no impl + `static make(impl)`
  * The inline class form above bundles the runtime into the class
@@ -273,8 +385,6 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
- * import * as Layer from "effect/Layer";
- * import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
  * import { CounterRpcs } from "./rpcs.ts";
  *
  * export class Counter extends Cloudflare.RpcDurableObject<Counter>()(
@@ -287,14 +397,11 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  *   Effect.gen(function* () {
  *     const state = yield* Cloudflare.DurableObjectState;
  *     return Effect.gen(function* () {
- *       const handlers = CounterRpcs.toLayer({
+ *       return CounterRpcs.toLayer({
  *         setTitle: ({ title }) => state.storage.put("title", title),
  *         getTitle: () =>
  *           Effect.map(state.storage.get<string>("title"), (t) => t ?? ""),
  *       });
- *       return RpcServer.toHttpEffect(CounterRpcs).pipe(
- *         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
- *       );
  *     });
  *   }),
  * );
@@ -388,15 +495,12 @@ export const RpcDurableObject: RpcDurableObjectClass = taggedFunction(
     if (args.length === 0) {
       return (...inner: any[]) => {
         if (inner.length === 2) {
-          const [name, props] = inner as [
-            string,
-            { readonly schema: RpcGroup.RpcGroup<any> },
-          ];
-          return buildModular(name, props.schema);
+          const [name, props] = inner as [string, RpcDurableObjectProps<any>];
+          return buildModular(name, props);
         }
         const [name, props, impl] = inner as [
           string,
-          { readonly schema: RpcGroup.RpcGroup<any> },
+          RpcDurableObjectProps<any>,
           Effect.Effect<Effect.Effect<any>>,
         ];
         return build(name, props, impl);
@@ -419,7 +523,7 @@ export const RpcDurableObject: RpcDurableObjectClass = taggedFunction(
     // Bare form: `(name, { schema }, impl)`.
     const [name, props, impl] = args as [
       string,
-      { readonly schema: RpcGroup.RpcGroup<any> },
+      RpcDurableObjectProps<any>,
       Effect.Effect<Effect.Effect<any>>,
     ];
     return build(name, props, impl);
@@ -437,23 +541,117 @@ const rpcWrap = (
   const rpcView = bindEffectRpc(rawNs as any, schema);
   return Object.assign({}, rawNs, {
     getByName: rpcView.getByName,
+    fetch: (
+      id: string,
+      request: HttpServerRequest,
+      options?: DurableObjectGetDurableObjectOptions,
+    ) => rawNs.getByName(id, options).fetch(request),
   }) as unknown as RpcDurableObject<any>;
 };
 
-// The user's inner Effect resolves to `Effect<HttpEffect>`; the
-// underlying `DurableObject` expects `Effect<{ fetch:
-// HttpEffect }>` (a `DurableObjectShape`). Map through both layers to
-// box the http effect in the `{ fetch }` shape.
-const wrapImpl = (impl: Effect.Effect<Effect.Effect<any>>) =>
+const wrapImpl = (
+  impl: Effect.Effect<Effect.Effect<any>>,
+  props: RpcDurableObjectProps<any>,
+) =>
   impl.pipe(
     Effect.map((inner) =>
-      inner.pipe(Effect.map((fetch: HttpEffect<any>) => ({ fetch }))),
+      inner.pipe(
+        Effect.flatMap((value) => {
+          if (Layer.isLayer(value)) {
+            return makeHandlers(props, value as Layer.Layer<any, never, any>);
+          }
+          if (props.transport === "websocket") {
+            return Effect.die(
+              new Error(
+                "WebSocket RPC requires a handler Layer from the inner Effect",
+              ),
+            );
+          }
+          return Effect.succeed({ fetch: value });
+        }),
+      ),
     ),
   ) as Effect.Effect<Effect.Effect<any>>;
 
+class RpcRequestLifetime extends RpcMiddleware.Service<RpcRequestLifetime>()(
+  "Cloudflare.RpcDurableObject.RequestLifetime",
+) {}
+
+const makeHandlers = Effect.fn(function* (
+  props: RpcDurableObjectProps<any>,
+  handlers: Layer.Layer<any, never, any>,
+) {
+  // The protocol outlives the constructor's temporary layer scope.
+  return yield* Effect.acquireUseRelease(
+    Scope.make(),
+    (instanceScope) =>
+      Effect.gen(function* () {
+        const memoMap = Layer.makeMemoMapUnsafe();
+        const context = yield* Layer.buildWithMemoMap(
+          handlers,
+          memoMap,
+          instanceScope,
+        );
+        const services = Layer.succeedContext(context);
+        const http = Effect.gen(function* () {
+          const handler = yield* RpcServer.toHttpEffect(props.schema).pipe(
+            Effect.provide(
+              Layer.mergeAll(services, RpcSerialization.layerNdjson),
+            ),
+          );
+          return yield* handler;
+        });
+        if (props.transport !== "websocket") return { fetch: http };
+
+        const state = yield* DurableObjectState;
+        const runtime = yield* RuntimeContext;
+        const lifetime = Layer.succeed(RpcRequestLifetime, (effect) =>
+          Effect.withFiber((fiber) =>
+            // RpcServer sends Exit before finalization and drops sends after disconnect.
+            state
+              .waitUntil(Fiber.await(fiber))
+              .pipe(
+                Effect.provideService(RuntimeContext, runtime),
+                Effect.andThen(effect),
+              ),
+          ),
+        );
+        const transport = yield* RpcWebSocket.make.pipe(
+          Effect.provide(RpcSerialization.layerJson),
+        );
+        yield* Layer.buildWithMemoMap(
+          RpcServer.layer(props.schema.middleware(RpcRequestLifetime)).pipe(
+            Layer.provide(
+              Layer.mergeAll(
+                services,
+                lifetime,
+                Layer.succeed(RpcServer.Protocol, transport.protocol),
+              ),
+            ),
+          ),
+          memoMap,
+          instanceScope,
+        );
+        return {
+          webSocketMessage: transport.webSocketMessage,
+          webSocketClose: transport.webSocketClose,
+          webSocketError: transport.webSocketError,
+          fetch: Effect.gen(function* () {
+            const request = yield* HttpServerRequest;
+            return yield* request.headers.upgrade?.toLowerCase() === "websocket"
+              ? transport.fetch
+              : http;
+          }),
+        };
+      }),
+    (instanceScope, exit) =>
+      Exit.isFailure(exit) ? Scope.close(instanceScope, exit) : Effect.void,
+  );
+});
+
 const build = (
   name: string,
-  props: { readonly schema: RpcGroup.RpcGroup<any> },
+  props: RpcDurableObjectProps<any>,
   impl: Effect.Effect<Effect.Effect<any>>,
 ) => {
   // Inline-impl class form: delegate to `DurableObject`'s
@@ -461,7 +659,7 @@ const build = (
   // time. No `static from`/`static make` because the impl is provided
   // eagerly here (consumers wanting cross-script binding use the
   // modular form below).
-  const underlying = (DurableObject as any)()(name, wrapImpl(impl));
+  const underlying = (DurableObject as any)()(name, wrapImpl(impl, props));
   // `underlying` is itself an Effect now, no `.asEffect()` hop required.
   const underlyingEff = underlying as Effect.Effect<
     DurableObjectType<any>,
@@ -474,7 +672,8 @@ const build = (
   return effectClass(rpcBound);
 };
 
-const buildModular = (name: string, schema: RpcGroup.RpcGroup<any>) => {
+const buildModular = (name: string, props: RpcDurableObjectProps<any>) => {
+  const { schema } = props;
   // Delegate to `DurableObject<Self>()(name)` (no-impl class
   // form) so we inherit its Self-tag plumbing for free:
   //   - yielding the class resolves to the live namespace via the tag
@@ -496,7 +695,7 @@ const buildModular = (name: string, schema: RpcGroup.RpcGroup<any>) => {
     ) as unknown as Effect.Effect<RpcDurableObject<any>>,
   ) {
     static make = (impl: Effect.Effect<Effect.Effect<any>>) =>
-      Underlying.make(wrapImpl(impl));
+      Underlying.make(wrapImpl(impl, props));
 
     static from = (
       worker: string | object | Effect.Effect<any, any, any>,
