@@ -106,7 +106,13 @@ All 13 constructors and examples exist. The full 13-framework live matrix has no
 
 ### Cleanup
 
-Parent/preview tutorial stacks were recovered through ordinary lifecycle operations. A prior scratch test discarded its in-memory state while leaving project `spring-term-76599638`, branch `br-green-frog-b53f8s5d`, a Function, an enabled storage trigger, and a bucket. Ordinary lifecycle recovery cannot proceed without retained state. No ownership bypass, adoption, reconstructed state, direct API deletion, or account-wide nuke was used to hide this leak. The final bounded read-only census at 2026-09-18 00:01:55 UTC found exactly two visible projects: that tutorial scratch project and `fragrant-fog-27766379`, the earlier interrupted Next feasibility project. The latter has its default branch/endpoint/database/role but no Functions, storage, triggers, domains or Auth. Its historical destroy refused ownership, and no recovery state remains. No additional active Website projects were visible. Zero leaks is not claimed; cleanup needs an explicitly authorized recovery path.
+Parent/preview tutorial stacks were recovered through ordinary lifecycle operations. Two historical projects then remained without recoverable state: `spring-term-76599638` (scratch upload Function, trigger and storage) and `fragrant-fog-27766379` (interrupted Next feasibility deployment).
+
+With explicit user authorization, `pnpm nuke --include 'Neon.*' --profile testing --yes` removed both projects and their dependent resources. The command reported **seven targets deleted in one pass**, with no failures or held resources. No other provider was selected; billing, organization membership and management API keys were retained.
+
+The initial dry run exposed a shared SDK cursor bug: Neon's final empty project page repeats its cursor, so Function, trigger and domain enumeration never finished. Core cursor pagination now stops on previously requested cursors while preserving empty pages with advancing cursors. The fix has 19 targeted regressions; the combined core/Neon SDK run passed **355 tests / 679 assertions**, and the full workspace typecheck passed.
+
+The post-delete `pnpm nuke --include 'Neon.*' --profile testing --dry-run` reported **Nothing to delete**. Independent API calls found **zero projects** both account-wide and in the visible organization, **zero organization private endpoints**, and typed `NotFound` responses for both historical project IDs. This clears the historical cleanup blocker; it is not a substitute for the still-pending two complete leak-free test rounds.
 
 ## Reproduction
 
