@@ -142,7 +142,7 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
       never,
       WorkflowStepContext | Scope.Scope
     >;
-    const config = toWorkflowStepConfig(options);
+    const config = definedStepConfig(options);
     const rollbackEffect = options.rollback;
     const rollback = rollbackEffect
       ? {
@@ -156,7 +156,7 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
                 }) as Effect.Effect<void, never, Scope.Scope>,
               ),
             ),
-          rollbackConfig: options.rollbackConfig,
+          rollbackConfig: definedStepConfig(options.rollbackConfig),
         }
       : undefined;
     return Effect.scoped(
@@ -197,11 +197,13 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
     ),
 });
 
-const toWorkflowStepConfig = (
-  options: WorkflowTaskOptions<any, any, any>,
+// Own undefined properties overwrite the engine's defaults for steps and rollbacks.
+const definedStepConfig = (
+  options: WorkflowStepConfig | undefined,
 ): WorkflowStepConfig | undefined => {
+  if (options === undefined) return undefined;
   const config: WorkflowStepConfig = {};
-  if (options.retries) config.retries = options.retries;
+  if (options.retries !== undefined) config.retries = options.retries;
   if (options.timeout !== undefined) config.timeout = options.timeout;
   return Object.keys(config).length > 0 ? config : undefined;
 };

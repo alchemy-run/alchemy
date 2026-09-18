@@ -45,6 +45,7 @@ import { SignHttp } from "./SignHttp.ts";
 import { Sprite, SpriteProvider } from "./Sprite.ts";
 import { VerifyHttp } from "./VerifyHttp.ts";
 import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
+import { WriteCertificatesHttp } from "./WriteCertificatesHttp.ts";
 import { WriteSecretHttp } from "./WriteSecretHttp.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -138,6 +139,7 @@ export const providers = () =>
         GetSecretHttp,
         ListSecretsHttp,
         WriteSecretHttp,
+        WriteCertificatesHttp,
         EncryptHttp,
         DecryptHttp,
         SignHttp,
