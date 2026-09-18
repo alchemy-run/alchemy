@@ -502,6 +502,7 @@ export class CounterRpcs extends RpcGroup.make(
 Return its handler Layer from the per-instance Effect:
 
 ```typescript
+// counter.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { CounterRpcs } from "./rpcs.ts";
@@ -588,28 +589,54 @@ transports.
 
 ## Forward browser connections
 
-Forward an incoming request to a named object from the hosting Worker:
+The hosting Worker maps a URL to a named Durable Object. This Worker
+forwards `/counters/alice` to `"alice"` and `/counters/bob` to `"bob"`:
 
 ```typescript
+// worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Counter from "./counter.ts";
 
-const counters = yield* Counter;
-return {
-  fetch: Effect.gen(function* () {
-    const request = yield* HttpServerRequest;
-    return yield* counters.fetch("shared", request);
+export default class CounterWorker extends Cloudflare.Worker<CounterWorker>()(
+  "CounterWorker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = new URL(request.url, "https://worker").pathname;
+        const name = /^\/counters\/([a-zA-Z0-9_-]+)$/.exec(path)?.[1];
+        if (!name) return HttpServerResponse.empty({ status: 404 });
+        return yield* counters.fetch(name, request);
+      }),
+    };
   }),
-};
+) {}
 ```
 
-The namespace's `fetch` forwards HTTP requests and WebSocket upgrades;
-it is not an application RPC method. Authenticate and authorize the
-request before forwarding it. Use application-controlled object names
-when access must be restricted to a particular instance.
+`counters.fetch(name, request)` selects that name in the `Counter` namespace
+and forwards the HTTP request or WebSocket upgrade. It is not an application
+RPC method, and `/counters/:name` is an application route, not a built-in
+Alchemy endpoint.
+
+Once upgraded, every RPC on that socket goes to the selected object; method
+payloads do not need an object ID. Connections to the same name in the same
+namespace share the object's state. Different names select different objects.
+A socket cannot switch objects: open another connection to target another name.
+
+This routing-only example accepts any name matching the route. For a private
+API, authenticate the request and authorize access to the selected name before
+calling `fetch`, or derive the name from the authenticated user or tenant.
+Knowing an object's URL must not grant access by itself.
 
 ## Connect over a WebSocket
 
-Create the browser's Effect RPC client in a Layer:
+Connect to the Worker's `/counters/alice` route and create the browser's
+Effect RPC client in a Layer. This client talks only to the `"alice"` object:
 
 ```typescript
 import * as Context from "effect/Context";
@@ -622,7 +649,7 @@ import { CounterRpcs } from "./rpcs.ts";
 const Connection = RpcClient.layerProtocolSocket().pipe(
   Layer.provide(
     Layer.mergeAll(
-      Socket.layerWebSocket("wss://example.com/rpc").pipe(
+      Socket.layerWebSocket("wss://example.com/counters/alice").pipe(
         Layer.provide(Socket.layerWebSocketConstructorGlobal),
       ),
       RpcSerialization.layerJson,

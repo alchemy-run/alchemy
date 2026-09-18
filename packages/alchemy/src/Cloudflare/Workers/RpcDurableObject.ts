@@ -78,7 +78,10 @@ export interface RpcDurableObject<
 > {
   /** @internal phantom — keeps `Self` reachable through the inferred type */
   Self?: Self;
-  /** Forward an HTTP request or WebSocket upgrade to a named instance. */
+  /**
+   * Select a named instance and forward an HTTP request or WebSocket upgrade.
+   * Every RPC on the upgraded socket targets that same instance.
+   */
   readonly fetch: (
     id: string,
     request: HttpServerRequest,
@@ -338,16 +341,26 @@ export interface RpcDurableObjectClass extends Effect.Effect<
  * ordinary HTTP RPC remains available on the same object.
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * const counters = yield* Counter;
  * return {
  *   fetch: Effect.gen(function* () {
  *     const request = yield* HttpServerRequest;
- *     return yield* counters.fetch("shared", request);
+ *     const path = new URL(request.url, "https://worker").pathname;
+ *     const name = /^\/counters\/([a-zA-Z0-9_-]+)$/.exec(path)?.[1];
+ *     if (!name) return HttpServerResponse.empty({ status: 404 });
+ *     return yield* counters.fetch(name, request);
  *   }),
  * };
  * ```
- * Authenticate and authorize requests before forwarding. Clients use
+ * A client connecting to `wss://example.com/counters/alice` targets the
+ * `"alice"` instance. Every RPC on that socket stays on that object; RPC
+ * payloads do not need an object ID. Another name selects another object.
+ * The Worker defines this URL mapping, not Alchemy.
+ * Authenticate and authorize access to the selected name before forwarding.
+ * See the [Effect RPC guide](/cloudflare/apis/effect-rpc#connect-over-a-websocket)
+ * for a browser client whose Layer owns the connection lifetime. Clients use
  * Effect's `RpcClient.layerProtocolSocket` with JSON serialization. Idle
  * connections survive hibernation. Restored sockets with unfinished requests
  * close with code `1012`; platform resets can also cause transport errors.
