@@ -26,18 +26,40 @@ let bust = 0;
 const getJson = <T>(
   client: HttpClient.HttpClient,
   url: string,
+  phase: "before abort" | "after abort",
 ): Effect.Effect<T, unknown> =>
   Effect.sync(() => `${url}?cb=${Date.now()}-${bust++}`).pipe(
     Effect.flatMap((url) => client.get(url)),
     Effect.flatMap(HttpClientResponse.filterStatusOk),
+    Effect.tapError((error) =>
+      Effect.gen(function* () {
+        if (error.reason._tag === "StatusCodeError") {
+          const response = error.reason.response;
+          const body = yield* response.text.pipe(
+            Effect.catch(() => Effect.succeed("<unreadable response body>")),
+          );
+          yield* (response.status === 404 ? Effect.logDebug : Effect.logError)(
+            `${phase}: GET ${response.request.url} returned ${response.status}`,
+            body,
+          );
+        } else {
+          yield* Effect.logError(`${phase}: GET ${url} failed`, error);
+        }
+      }),
+    ),
     Effect.retry({
-      // Retry the edge's HTML 404, not application errors or JSON decoding.
-      while: (error) =>
-        error.reason._tag === "StatusCodeError" &&
-        error.reason.response.status === 404 &&
-        (error.reason.response.headers["content-type"] ?? "").includes(
-          "text/html",
-        ),
+      while: (error) => {
+        if (error.reason._tag !== "StatusCodeError") return false;
+        const response = error.reason.response;
+        return (
+          (response.status === 404 &&
+            (response.headers["content-type"] ?? "").includes("text/html")) ||
+          // Only initial readiness may retry a platform-marked transient RPC failure.
+          (phase === "before abort" &&
+            response.status === 500 &&
+            response.headers["x-do-retryable"] === "true")
+        );
+      },
       schedule: Schedule.spaced("1 second"),
       times: 10,
     }),
@@ -56,18 +78,25 @@ describe.skipIf(!!process.env.FAST)(
         const before = yield* getJson<{ boots: number; ok: true }>(
           client,
           `${url}/ping`,
+          "before abort",
         );
+        yield* Effect.logInfo("before abort", before);
         expect(before.ok).toBe(true);
         expect(before.boots).toBeGreaterThanOrEqual(1);
 
-        yield* expectUrlContains(`${url}/abort`, "aborted", {
+        const aborted = yield* expectUrlContains(`${url}/abort`, "aborted", {
           label: "abort RPC",
         });
+        yield* Effect.logInfo("abort RPC", aborted);
+        expect(aborted).toContain("test abort");
 
         const after = yield* getJson<{ boots: number; ok: true }>(
           client,
           `${url}/ping`,
+          "after abort",
         );
+        yield* Effect.logInfo("after abort", after);
+        expect(after.ok).toBe(true);
         expect(after.boots).toBe(before.boots + 1);
       }).pipe(logLevel),
       { timeout: 180_000 },
