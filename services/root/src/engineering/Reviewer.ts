@@ -33,9 +33,7 @@ import {
  * this very charter: the loop that improves the company is the same
  * loop that ships its code.
  */
-export class Reviewer extends AI.Agent<Reviewer>(import.meta)(
-  "Reviewer",
-) {}
+export class Reviewer extends AI.Agent<Reviewer>(import.meta)("Reviewer") {}
 
 export const GeneralReviewer = Reviewer.make`
   You are the REVIEWER of this company's engineering group — the

@@ -465,7 +465,7 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
   },
 ];
 
-describe.skipIf(!process.env.TYPESAFE_API_KEY)("the gate", () => {
+describe("the gate", () => {
   test(
     "routes every scenario the way a human would",
     async () => {
@@ -732,7 +732,7 @@ const SCOUT_SCENARIOS: ReadonlyArray<ScoutScenario> = [
   },
 ];
 
-describe.skipIf(!process.env.TYPESAFE_API_KEY)("the scout", () => {
+describe("the scout", () => {
   test(
     "walks the graph and routes with evidence",
     async () => {
@@ -800,7 +800,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)("the scout", () => {
 
 // ─── stability: the same message must route the same way ────────────
 
-describe.skipIf(!process.env.TYPESAFE_API_KEY)("stability", () => {
+describe("stability", () => {
   const CANONICAL = [
     "hey manager",
     "start me a thread on something",

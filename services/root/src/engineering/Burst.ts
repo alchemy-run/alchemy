@@ -1,33 +1,12 @@
 import * as TypeSafe from "alchemy/TypeSafe";
-import type { RuntimeContext } from "alchemy";
 import * as Effect from "effect/Effect";
+import { tryQuery, type SwarmDeps } from "./Swarm.ts";
 
-/** One inbound thing a burst is made of. */
-export interface InboundEvent {
-  readonly repo: string;
-  readonly number: number;
-  readonly title: string;
-  readonly kind: "pull" | "issue";
-}
+export type { Agent, InboundEvent, SwarmDeps } from "./Swarm.ts";
+import type { Agent, InboundEvent } from "./Swarm.ts";
 
-export type Agent = "head" | "manager" | "engineer" | "reviewer";
-
-/** What a walker needs from the world — narrow, test-stubbable. */
-export interface BurstDeps {
-  readonly query: typeof TypeSafe.SystemOne.Service;
-  readonly post: (input: {
-    readonly replyTo?: string;
-    readonly author?: string;
-    readonly text: string;
-    readonly mode?: "thread" | "inline";
-  }) => Effect.Effect<string, never, RuntimeContext>;
-  /** Dispatch one agent into a thread; answers the agent's reply text. */
-  readonly dispatch: (
-    agent: Agent,
-    input: { readonly thread: string; readonly ask: string },
-  ) => Effect.Effect<string, never, RuntimeContext>;
-  readonly budget: { readonly maxDispatches: number };
-}
+/** @deprecated the shared name is {@link SwarmDeps} */
+export type BurstDeps = SwarmDeps;
 
 /** The streams a burst can sort into — rubrics, judged per event. */
 const STREAM = TypeSafe.Choice(
@@ -94,7 +73,7 @@ export const handleBurst = Effect.fn("root/Burst.handleBurst")(function* (
           { stream: STREAM },
           { state: { title: event.title, repo: event.repo } },
         )
-        .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+        .pipe(tryQuery);
       const sure = (verdict?.answers.stream?.confidence ?? 0) >= 0.6;
       return { event, stream: sure ? verdict!.value.stream : "other" };
     }),
@@ -137,7 +116,7 @@ export const handleBurst = Effect.fn("root/Burst.handleBurst")(function* (
           });
           const wants = yield* deps
             .query({ changes: CHANGES }, { state: { review } })
-            .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+            .pipe(tryQuery);
           if ((wants?.answers.changes?.noul ?? 0) >= 0.6) {
             const fixed = yield* dispatch("engineer", {
               thread: itemRoot,

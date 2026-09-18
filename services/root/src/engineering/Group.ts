@@ -85,9 +85,7 @@ export const ColleaguesLive: Layer.Layer<Colleagues> = Layer.suspend(() =>
                   : ROOT,
             };
           }
-          const member = members.find(
-            (candidate) => candidate.slug === slug,
-          );
+          const member = members.find((candidate) => candidate.slug === slug);
           if (member === undefined) {
             return yield* new TeammateUnknown({ member: name, roster });
           }

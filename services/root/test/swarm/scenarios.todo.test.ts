@@ -8,13 +8,7 @@ import { test } from "bun:test";
 
 const todo = (name: string) => test.todo(name, () => {});
 
-// P2 — engineering/Cluster.ts
-todo(
-  "issue-cluster: six near-duplicate issues cluster into one thread with a sub-thread per distinct root cause (emergent buckets — wide 'which group or new?' pass)",
-);
-todo(
-  "fork-join: 'have the engineer and reviewer look independently' forks both in parallel; contradictory answers make the join dispatch the manager to reconcile",
-);
+// P2 — promoted: issue-cluster.test.ts, fork-join.test.ts
 todo(
   "series: five PRs stacking on each other are reviewed in order, each review carrying the previous verdict",
 );

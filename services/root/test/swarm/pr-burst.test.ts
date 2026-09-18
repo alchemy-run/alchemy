@@ -116,7 +116,7 @@ const burstWorld = () => {
   };
 };
 
-describe.skipIf(!process.env.TYPESAFE_API_KEY)("swarm: pr burst", () => {
+describe("swarm: pr burst", () => {
   test(
     "a mixed burst becomes stream threads with parallel reviews and judged chains",
     async () => {

@@ -3,10 +3,7 @@ import { OrgGuidance } from "../OrgGuidance.ts";
 import { ReadOutput } from "../artifacts/ReadOutput.ts";
 import { Ask, Tell } from "../chat/Ask.ts";
 import { Explore } from "../chat/Explore.ts";
-import {
-  listWorkspaces,
-  workspace,
-} from "../sandbox/WorkspaceTools.ts";
+import { listWorkspaces, workspace } from "../sandbox/WorkspaceTools.ts";
 import { Bash } from "../coding/Bash.ts";
 import { EditFile } from "../coding/EditFile.ts";
 import { Glob } from "../coding/Glob.ts";
@@ -33,9 +30,7 @@ import { Verification } from "../process/Verification.ts";
  * anything — and improving this agent is editing this file and
  * redeploying.
  */
-export class Engineer extends AI.Agent<Engineer>(import.meta)(
-  "Engineer",
-) {}
+export class Engineer extends AI.Agent<Engineer>(import.meta)("Engineer") {}
 
 export const GeneralEngineer = Engineer.make`
   You are a coding agent working in checkouts of the alchemy
