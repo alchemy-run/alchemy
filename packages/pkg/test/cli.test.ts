@@ -41,6 +41,7 @@ describe("registry", () => {
       run.headSha,
       "abcdef0",
       "pr:7",
+      "pr:7:abcdef0",
       "branch:feat/x",
     ]);
     expect(tagsFor({ ...run, pr: null, headBranch: "main" })).toEqual([
@@ -48,21 +49,24 @@ describe("registry", () => {
       "abcdef0",
       "branch:main",
     ]);
-    expect(installTag(run)).toBe("abcdef0");
+    expect(installTag(run)).toBe("pr:7:abcdef0");
+    expect(installTag({ ...run, pr: null, headBranch: "main" })).toBe(
+      "abcdef0",
+    );
   });
 
-  test("runs from forks get only their pull request tag", () => {
+  test("runs from forks get only their pull request revision tag", () => {
     const fork = { ...run, headRepo: "someone/alchemy" };
-    expect(tagsFor(fork)).toEqual(["pr:7"]);
-    expect(installTag(fork)).toBe("pr:7");
+    expect(tagsFor(fork)).toEqual(["pr:7:abcdef0"]);
+    expect(installTag(fork)).toBe("pr:7:abcdef0");
     expect(tagsFor({ ...fork, pr: null })).toEqual([]);
   });
 
   test("install paths", () => {
-    expect(parseInstallPath("/alchemy/pr:7", undefined)).toEqual({
+    expect(parseInstallPath("/alchemy/pr:7:abcdef0", undefined)).toEqual({
       kind: "tag",
       name: "alchemy",
-      tag: "pr:7",
+      tag: "pr:7:abcdef0",
     });
     expect(
       parseInstallPath("/@alchemy.run/pkg/branch:feat/x", undefined),
