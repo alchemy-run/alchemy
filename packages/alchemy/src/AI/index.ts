@@ -1,6 +1,7 @@
 export * from "./Agent.ts";
 export * from "./CodeMode.ts";
 export * from "./Compaction.ts";
+export * from "./CompactionObservational.ts";
 export * from "./CodeModeAsync.ts";
 export * from "./CodeModeEffect.ts";
 export * from "./Dispatch.ts";
@@ -18,6 +19,7 @@ export * from "./Fragment.ts";
 export * from "./Message.ts";
 export * from "./Model.ts";
 export * from "./OrgRegistry.ts";
+export * from "./Recall.ts";
 export * from "./Thing.ts";
 export * from "./Sandbox.ts";
 export * from "./SandboxHttp.ts";

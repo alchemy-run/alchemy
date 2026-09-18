@@ -4,6 +4,10 @@ import * as Layer from "effect/Layer";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as Result from "effect/Result";
+import {
+  observational,
+  type ObservationalOptions,
+} from "./CompactionObservational.ts";
 import type { CompactPlan, ThreadService } from "./Thread.ts";
 
 /**
@@ -50,6 +54,10 @@ export class Compaction extends Context.Service<Compaction, CompactionPolicy>()(
   /** Reset-with-handoff at a token threshold — see {@link reset}. */
   static readonly reset = (options: ResetOptions): Layer.Layer<Compaction> =>
     reset(options);
+  /** Two-tier observer/reflector memory — see {@link observational}. */
+  static readonly observational = (
+    options?: ObservationalOptions,
+  ): Layer.Layer<Compaction> => observational(options);
 }
 
 /**

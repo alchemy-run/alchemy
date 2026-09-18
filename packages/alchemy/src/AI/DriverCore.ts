@@ -874,7 +874,8 @@ const estimateTokens = (rows: ReadonlyArray<Prompt.MessageEncoded>): number =>
  * every host because it operates purely on the {@link ThreadHandle}.
  * The system prompt is untouched; drops leave an archived marker
  * (restorable eviction — nothing is silently rewritten); reset
- * restarts the thread from one summary note. The mutation is
+ * restarts the thread from one summary note; observe re-heads the
+ * thread with an observation-log note plus a verbatim tail. The mutation is
  * LEDGERED (`advanceGeneration`): the shadowed rows stay addressable
  * under the closed generation. Answers the new {@link
  * GenerationRecord}, or `undefined` when nothing changed (a drop
@@ -897,6 +898,28 @@ export const applyCompactionPlan = Effect.fn(function* (
       kind: "reset",
       doc: plan.reset.summary,
       dropped: rows.length,
+      tokensBefore: estimateTokens(rows),
+      tokensAfter: estimateTokens(surface),
+      surface,
+    });
+  }
+  if ("observe" in plan) {
+    // observational advance: the log note heads the new surface, the
+    // freshest rows ride verbatim behind it — everything older is
+    // shadowed under the closed generation
+    const tail =
+      plan.observe.keepTail > 0 ? rows.slice(-plan.observe.keepTail) : [];
+    const surface = [
+      noteMessage(
+        `Observation log — the distilled memory of this thread's earlier work (raw messages are archived):\n${plan.observe.log}`,
+      ),
+      ...tail,
+    ];
+    return yield* handle.advanceGeneration({
+      author,
+      kind: plan.observe.kind,
+      doc: plan.observe.log,
+      dropped: rows.length - tail.length,
       tokensBefore: estimateTokens(rows),
       tokensAfter: estimateTokens(surface),
       surface,

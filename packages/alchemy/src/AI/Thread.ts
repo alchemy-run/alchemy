@@ -32,6 +32,23 @@ export type CompactPlan =
        * is delivered whole at every sampling.
        */
       readonly reset: { readonly summary: string };
+    }
+  | {
+      /**
+       * Advance to an OBSERVATIONAL generation: the new surface opens
+       * with one note carrying `log` (the observation log — the
+       * distilled memory) followed by the last `keepTail` messages
+       * verbatim. `kind` records which tier authored the log: an
+       * observer distilling fresh history (`"observe"`) or a
+       * reflector rewriting the whole log more densely (`"reflect"`).
+       * The log doubles as the generation's `doc`.
+       */
+      readonly observe: {
+        readonly log: string;
+        /** Messages of the current surface kept verbatim after the log note. */
+        readonly keepTail: number;
+        readonly kind: "observe" | "reflect";
+      };
     };
 
 /**
