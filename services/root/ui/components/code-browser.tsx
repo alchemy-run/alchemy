@@ -71,7 +71,7 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   const { repo, ref, path } = place;
   const [repos, setRepos] = useState<ReadonlyArray<SeedStatus>>([]);
   const [branches, setBranches] = useState<ReadonlyArray<string>>([]);
-  const [full, setFull] = useState<FullTree | undefined>();
+  const [trees, setTrees] = useState<Record<string, FullTree>>({});
   const [file, setFile] = useState<string | undefined>();
   const [log, setLog] = useState<ReadonlyArray<CommitInfo>>([]);
 
@@ -81,9 +81,33 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
       .catch(() => {});
   }, []);
 
+  // ONE tree for the whole org: every ready repository is a top-level
+  // folder (a multi-root workspace), its files nested beneath it
   useEffect(() => {
     let alive = true;
-    setFull(undefined);
+    for (const entry of repos) {
+      if (entry.status !== "ready") continue;
+      const name = entry.repo.split("/")[1] ?? entry.repo;
+      const wanted = name === repo ? ref : "main";
+      fetchFullTree(name, wanted)
+        .then((tree) => {
+          if (!alive) return;
+          setTrees((current) =>
+            current[name]?.commit === tree.commit &&
+            current[name]?.ref === tree.ref
+              ? current
+              : { ...current, [name]: tree },
+          );
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [repos, repo, ref]);
+
+  useEffect(() => {
+    let alive = true;
     fetchBranches(repo)
       .then((body) =>
         setBranches(
@@ -96,28 +120,33 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
         if (alive) setLog(items);
       })
       .catch(() => {});
-    fetchFullTree(repo, ref)
-      .then((tree) => {
-        if (alive) setFull(tree);
-      })
-      .catch(() => {});
     return () => {
       alive = false;
     };
   }, [repo, ref]);
 
+  const full = trees[repo];
   const paths = useMemo(
-    () => (full?.files ?? []).map((entry) => entry.path),
-    [full],
+    () =>
+      Object.entries(trees).flatMap(([name, tree]) =>
+        tree.files.map((entry) => `${name}/${entry.path}`),
+      ),
+    [trees],
   );
-  const isFile = useMemo(() => new Set(paths), [paths]).has(path);
+  const isFile = useMemo(
+    () => new Set(full?.files.map((entry) => entry.path) ?? []),
+    [full],
+  ).has(path);
 
   const { model } = useFileTree({
     initialExpansion: "closed",
     paths: [],
     onSelectionChange: (selected: ReadonlyArray<string>) => {
       const chosen = selected[0];
-      if (chosen !== undefined) showCode(repo, ref, chosen);
+      if (chosen === undefined) return;
+      const [root, ...rest] = chosen.split("/");
+      if (root === undefined || rest.length === 0) return;
+      showCode(root, root === repo ? ref : "main", rest.join("/"));
     },
   });
   useEffect(() => {
@@ -148,44 +177,21 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
     <div className="flex min-h-0 flex-1">
       {/* repos + the whole tree, one request */}
       <aside className="flex w-72 shrink-0 flex-col border-r border-border">
-        <div className="shrink-0 p-2">
-          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            repositories
-          </div>
-          {repos.map((entry) => {
-            const name = entry.repo.split("/")[1] ?? entry.repo;
-            return (
-              <button
-                key={entry.repo}
-                type="button"
-                onClick={() => showCode(name)}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-[13px]",
-                  name === repo
-                    ? "bg-accent font-medium"
-                    : "text-muted-foreground hover:bg-accent/60",
-                )}
-              >
-                <FolderGit2 className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {name}
-                </span>
-                {entry.status !== "ready" && (
-                  <span className="text-[9px] text-muted-foreground">
-                    {entry.status}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="flex shrink-0 items-center gap-2 px-3 pt-2 pb-1">
+          <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            org
+          </span>
+          {repos.some((entry) => entry.status !== "ready") && (
+            <span className="text-[9px] text-muted-foreground">
+              (some repositories still importing)
+            </span>
+          )}
         </div>
-        <div
-          ref={treeHost}
-          className="min-h-0 flex-1 overflow-y-auto border-t border-border/60"
-        >
-          {full === undefined ? (
+        <div ref={treeHost} className="min-h-0 flex-1 overflow-y-auto">
+          {paths.length === 0 ? (
             <div className="px-3 py-4 text-[12px] text-muted-foreground">
-              loading the tree…
+              loading the trees…
             </div>
           ) : (
             <FileTree
@@ -196,7 +202,6 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
                   // VS Code posture: flat square rows, tight leading
                   "--trees-border-radius-override": "0px",
                   "--trees-row-height": "24px",
-                  "--trees-item-row-gap-override": "0px",
                   ...treeStyles,
                 } as React.CSSProperties
               }
