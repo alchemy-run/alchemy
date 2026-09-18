@@ -3,13 +3,10 @@
  * celld and Rivet: one frozen set of behaviors, driven over HTTP against a
  * deployed worker (or a caller that fronts it).
  *
- * The point of the portable surface is that the SAME Durable Object code
- * runs on all three engines. This file is how that claim is kept honest:
- * each engine's live suite deploys the shared fixture (`counter.ts` + its
- * own target layer) and runs {@link conformanceTests} against the
- * resulting URL. Every engine is asserted against the full spec — a
- * capability that only works on one engine is a bug in that engine's
- * adapter, not a property of the fixture.
+ * Each suite deploys its provider-local Durable Object declaration and
+ * state implementation, then runs {@link conformanceTests} against the
+ * resulting URL. The shared RPC shape and routes cover common behavior;
+ * provider-specific capabilities stay in their own suites.
  *
  * Routes the fixture worker must expose (see `routes.ts`):
  *

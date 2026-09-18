@@ -12,13 +12,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 /**
  * The Celld provider layer: the {@link Fleet} and `Celld.Worker`
  * providers. The fleet *host* is a separate Layer composed alongside —
- * targeting AWS ECS is `Celld.Ecs()`, which also needs `AWS.providers()`
+ * targeting AWS ECS is `Celld.EcsFleet()`, which also needs `AWS.providers()`
  * in the same stack (it contributes the `Random` provider the per-worker
  * gateway secret is minted with):
  *
  * ```ts
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet()),
  *   state: AWS.state(),
  * });
  * ```

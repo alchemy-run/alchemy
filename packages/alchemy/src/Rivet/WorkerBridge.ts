@@ -21,7 +21,7 @@
  *
  * `rivetkit` is imported dynamically: it ships wasm/napi engine sidecars
  * that cannot be bundled, so the runner bundle keeps it external and the
- * image environment installs it (see `EcsHost.ts`).
+ * image environment installs it (see `EcsCluster.ts`).
  *
  * @internal consumed by the generated runner entry, not by user code.
  */
@@ -190,15 +190,7 @@ export const bootstrap = async (
       // Rivet reads an actor's `actions` map once at registration, so the
       // RPC surface must be complete up front: a startup probe of the
       // built shape.
-      const methods = await discoverDurableObjectMethods(build).catch(
-        (error: unknown) => {
-          console.warn(
-            `method discovery failed for Durable Object '${className}'`,
-            error,
-          );
-          return [];
-        },
-      );
+      const methods = await discoverDurableObjectMethods(build);
       use[className] = makeRivetActor(actor as unknown as RivetActorFactory, {
         build,
         methods,

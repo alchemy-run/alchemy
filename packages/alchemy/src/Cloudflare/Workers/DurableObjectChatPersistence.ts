@@ -7,7 +7,7 @@ import {
   type BackingPersistenceStore,
 } from "effect/unstable/persistence/Persistence";
 import { RuntimeContext } from "../../RuntimeContext.ts";
-import { DurableObjectState } from "../../Workers/DurableObject.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 
 /**
  * A `BackingPersistence` layer (Effect AI persistence module) backed

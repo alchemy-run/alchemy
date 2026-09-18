@@ -12,10 +12,11 @@ import * as Artifacts from "../Artifacts.ts";
 import * as Binding from "../Binding.ts";
 import type { WorkerBuildOptions } from "../Cloudflare/Workers/Sources/Rolldown.ts";
 import { WorkerBundle } from "../Cloudflare/Workers/Sources/Rolldown.ts";
-import type {
-  WorkerServices,
-  WorkerShape,
-} from "../Cloudflare/Workers/Worker.ts";
+import type { Request } from "../Cloudflare/Workers/Request.ts";
+import type { WorkerExecutionContext } from "../Cloudflare/Workers/WorkerRuntime.ts";
+import type { Main, MainRpc } from "../Platform.ts";
+import type { Self } from "../Self.ts";
+import type { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { WorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { isResolved } from "../Diff.ts";
@@ -50,6 +51,14 @@ import {
   type FleetDurableObjectBinding,
 } from "./Wrangler.ts";
 
+type WorkerServices =
+  | CelldWorker
+  | WorkerEnvironment
+  | WorkerExecutionContext
+  | Request
+  | Self;
+type WorkerShape = Main<WorkerServices> & MainRpc<WorkerServices>;
+
 export const CelldWorkerTypeId = "Celld.Worker";
 export type CelldWorkerTypeId = typeof CelldWorkerTypeId;
 
@@ -64,7 +73,7 @@ export interface CelldWorkerProps {
   main: string;
   /**
    * Expose the worker beyond the fleet's private network through
-   * host-composed public ingress (an internet-facing ALB on `Celld.Ecs()`).
+   * host-composed public ingress (an internet-facing ALB on `Celld.EcsFleet()`).
    * The worker's `url` attribute becomes the ingress URL. Implied by
    * {@link domain}.
    * @default undefined — no ingress; the worker stays private to the fleet network
@@ -348,10 +357,9 @@ export type CelldWorkerClass = Platform<
 >;
 
 /**
- * A **Celld worker**: user code deployed onto a {@link Fleet}, authored
- * against the same native surface a Cloudflare Worker uses — the same
- * props-and-impl constructor forms, the same `Cloudflare.DurableObject`
- * hosting, the same Effect worker artifact. The fleet serves it behind the
+ * A **Celld worker**: user code deployed onto a {@link Fleet}, hosting
+ * `Celld.DurableObject` declarations whose implementations use
+ * `Celld.DurableObjectState`. The fleet serves the worker behind the
  * gateway in `Celld/WorkerBridge.ts` (Durable Object routing, the guarded
  * RPC surface `bindWorker` stubs call, the readiness probe).
  *
@@ -361,35 +369,43 @@ export type CelldWorkerClass = Platform<
  * load the new version.
  *
  * ### Deploying a Worker to a Fleet
- * **Example:** Inline worker hosting a Durable Object
+ * **Example:** Worker hosting a Celld Durable Object
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import * as AWS from "alchemy/AWS";
  * import * as Celld from "alchemy/Celld";
- * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export class Cells extends Celld.Fleet<Cells>()("Cells") {}
+ * export class Api extends Celld.Worker<Api>()("Api") {}
  *
- * export class Counter extends Cloudflare.DurableObject<Counter>()(
+ * export interface CounterShape {
+ *   increment: () => Effect.Effect<number, never, Alchemy.RuntimeContext>;
+ * }
+ *
+ * export class Counter extends Celld.DurableObject<Counter, CounterShape>()(
  *   "Counter",
- *   Effect.gen(function* () {
- *     const state = yield* Cloudflare.DurableObjectState;
- *     return Effect.gen(function* () ({
- *       increment: () =>
- *         Effect.gen(function* () {
- *           const next = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
- *           yield* state.storage.put("count", next);
- *           return next;
- *         }),
- *     }));
- *   }),
  * ) {}
  *
- * export default class Api extends Celld.Worker<Api>()(
- *   "Api",
+ * export const CounterLive = Counter.make(
+ *   Effect.gen(function* () {
+ *     const state = yield* Celld.DurableObjectState;
+ *     return Effect.gen(function* () {
+ *       return {
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const next = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *             yield* state.storage.put("count", next);
+ *             return next;
+ *           }),
+ *       } satisfies CounterShape;
+ *     });
+ *   }),
+ * );
+ *
+ * const ApiLive = Api.make(
  *   { fleet: Cells, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
@@ -399,13 +415,26 @@ export type CelldWorkerClass = Platform<
  *         return yield* HttpServerResponse.json({ value });
  *       }),
  *     };
- *   }),
- * ) {}
+ *   }).pipe(Effect.provide(CounterLive)),
+ * );
+ * export default ApiLive;
  *
- * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
- *   state: AWS.state(),
- * });
+ * export const stack = Alchemy.Stack(
+ *   "app",
+ *   {
+ *     providers: Layer.mergeAll(
+ *       AWS.providers(),
+ *       Celld.providers(),
+ *       Celld.EcsFleet(),
+ *     ),
+ *     state: AWS.state(),
+ *   },
+ *   Effect.gen(function* () {
+ *     yield* Cells;
+ *     const api = yield* Api;
+ *     return { url: api.url };
+ *   }).pipe(Effect.provide(ApiLive)),
+ * );
  * ```
  *
  * **Example:** Tag + deploy module (acyclic multi-file form)
@@ -418,7 +447,12 @@ export type CelldWorkerClass = Platform<
  *   { fleet: Cells, main: import.meta.url },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
- *     return { fetch: serveCounters(counters) };
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const value = yield* counters.getByName("lobby").increment();
+ *         return yield* HttpServerResponse.json({ value });
+ *       }),
+ *     };
  *   }).pipe(Effect.provide(CounterLive)),
  * );
  * ```
@@ -426,6 +460,8 @@ export type CelldWorkerClass = Platform<
  * ### Exposing a Worker
  * **Example:** Public HTTPS on a custom domain, DNS on Cloudflare
  * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ *
  * export default Api.make(
  *   {
  *     fleet: Cells,
@@ -435,7 +471,12 @@ export type CelldWorkerClass = Platform<
  *   },
  *   Effect.gen(function* () {
  *     const counters = yield* Counter;
- *     return { fetch: serveCounters(counters) };
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const value = yield* counters.getByName("lobby").increment();
+ *         return yield* HttpServerResponse.json({ value });
+ *       }),
+ *     };
  *   }).pipe(Effect.provide(Layer.mergeAll(CounterLive, Cloudflare.CloudflareDns()))),
  * );
  * // api.url === "https://api.example.com"

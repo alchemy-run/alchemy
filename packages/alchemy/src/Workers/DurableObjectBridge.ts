@@ -12,7 +12,7 @@
  * @internal
  */
 import * as Cause from "effect/Cause";
-import type * as Context from "effect/Context";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -26,7 +26,6 @@ import type {
   DurableObjectExport,
   DurableObjectShape,
 } from "./DurableObject.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { toRpcEffect } from "./WorkerBridge.ts";
 
@@ -56,8 +55,8 @@ export interface BuiltDurableObject {
 export interface DurableObjectInstanceOptions {
   /** The class export resolved against the shared build. */
   readonly build: (pin: Pin) => Promise<WorkerBuild<DurableObjectExport>>;
-  /** The engine's `DurableObjectState` service for this instance. */
-  readonly state: DurableObjectState["Service"];
+  /** Provider services available during construction and every call. */
+  readonly services: Context.Context<never>;
   /** Keep the instance alive until `promise` settles (`state.waitUntil`). */
   readonly waitUntil: Pin;
   /**
@@ -89,6 +88,13 @@ export interface DurableObjectInstanceOptions {
   ) => Promise<BuiltDurableObject>;
 }
 
+export interface DurableObjectInvocation {
+  /** Native services belonging to this invocation, overriding activation services. */
+  readonly services?: Context.Context<never>;
+  /** Track cleanup with the native invocation that owns it. */
+  readonly waitUntil?: Pin;
+}
+
 export interface DurableObjectInstance {
   /**
    * The instance, built once per in-memory activation: the export's
@@ -107,6 +113,7 @@ export interface DurableObjectInstance {
   readonly execute: <T = unknown>(
     fn: (instance: DurableObjectInstanceShape) => Effect.Effect<any, any, any>,
     onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<T>,
+    invocation?: DurableObjectInvocation,
   ) => Promise<T>;
   /** An RPC method: run the named member of the shape and encode its exit for the wire. */
   readonly dispatch: (
@@ -126,21 +133,16 @@ export interface DurableObjectInstance {
 
 export const makeDurableObjectInstance = ({
   build,
-  state,
+  services: providerServices,
   waitUntil,
   dispatch: mode,
   target,
   gate,
 }: DurableObjectInstanceOptions): DurableObjectInstance => {
-  const stateLayer = Layer.succeed(DurableObjectState, state);
-
   const instance: Promise<BuiltDurableObject> = (gate ?? ((run) => run()))(() =>
     build(waitUntil).then(({ context, export: exported, telemetry }) => {
       const { constructor, services } = exported;
-      const doContext = stateLayer.pipe(
-        Layer.provideMerge(Layer.succeedContext(services)),
-        Layer.provideMerge(Layer.succeedContext(context)),
-      );
+      const doContext = Context.mergeAll(context, services, providerServices);
       return constructor.pipe(
         Effect.provide(doContext),
         Effect.flatMap((instance) => instance.pipe(Effect.provide(doContext))),
@@ -158,15 +160,22 @@ export const makeDurableObjectInstance = ({
   const execute = <T = unknown>(
     fn: (instance: DurableObjectInstanceShape) => Effect.Effect<any, any, any>,
     onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<T>,
+    invocation?: DurableObjectInvocation,
   ): Promise<T> => {
     const scope = Scope.makeUnsafe();
+    const pin = invocation?.waitUntil ?? waitUntil;
     return instance
       .then(({ instance, services, context, telemetry }) =>
         fn(instance).pipe(
           Effect.provide(
             Layer.mergeAll(
-              stateLayer,
-              Layer.succeed(Scope.Scope, scope),
+              Layer.succeedContext(
+                Context.mergeAll(
+                  providerServices,
+                  invocation?.services ?? Context.empty(),
+                  Context.make(Scope.Scope, scope),
+                ),
+              ),
               // The configured telemetry exporters, attached to the *call*
               // scope by `buildEventTelemetry` so buffered telemetry
               // flushes when the scope closes into `waitUntil` below (the
@@ -192,7 +201,7 @@ export const makeDurableObjectInstance = ({
       .finally(() =>
         isScopeEjected(scope)
           ? undefined
-          : waitUntil(
+          : pin(
               // Match `processEvent`: yield one macrotask so the
               // HttpMiddleware tracer's late span-end reaches the telemetry
               // exporter before the scope's flush finalizer.

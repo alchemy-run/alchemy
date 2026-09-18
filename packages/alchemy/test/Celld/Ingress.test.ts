@@ -22,7 +22,7 @@ const testOptions = {
   providers: Layer.mergeAll(
     AWS.providers(),
     Celld.providers(),
-    Celld.Ecs(),
+    Celld.EcsFleet(),
     Cloudflare.providers(),
   ),
 };

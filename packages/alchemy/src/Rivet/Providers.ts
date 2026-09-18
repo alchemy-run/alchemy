@@ -16,13 +16,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
 /**
  * The Rivet provider layer: the {@link Cluster} and `Rivet.Worker`
  * providers. The platform the engine and runners run on is a separate
- * `Rivet.Host` layer merged alongside — `Rivet.Ecs()` for AWS ECS, which
+ * `Rivet.Host` layer merged alongside — `Rivet.EcsCluster()` for AWS ECS, which
  * also needs `AWS.providers()` in the same stack (it composes AWS
  * resources and mints the admin token through its `Random` provider):
  *
  * ```ts
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+ *   providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.EcsCluster()),
  *   state: AWS.state(),
  * });
  * ```

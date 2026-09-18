@@ -1,16 +1,7 @@
-/**
- * The conformance worker's deploy module — the native `Celld.Worker`
- * tag + `.make(props, impl)` form. The Durable Object is the SAME
- * `Cloudflare.DurableObject` fixture every engine hosts. Alongside the
- * shared `fetch` surface it exposes one worker-level RPC method, which the
- * Lambda caller reaches through `Celld.bindWorker`'s schemaless stub.
- */
+/** Celld conformance routes and worker-level RPC for the Lambda caller. */
 import * as Effect from "effect/Effect";
-import {
-  Counter,
-  CounterLive,
-} from "../../Cloudflare/Workers/conformance/counter.ts";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
+import { Counter, CounterLive } from "./counter.ts";
 import { ConformanceCells, ConformanceWorker } from "./fleet.ts";
 
 /** The worker-level RPC surface (the impl shape minus `fetch`). */

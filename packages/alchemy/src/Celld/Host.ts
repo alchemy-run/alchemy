@@ -101,6 +101,6 @@ export interface HostService {
  * The platform a fleet's nodes run on — the celld analog of
  * `Kubernetes.ClusterAdapter`. `Celld.Fleet` yields this service to
  * compose its infrastructure; provide an implementation Layer alongside
- * the providers (`Celld.Ecs()` for AWS ECS Fargate).
+ * the providers (`Celld.EcsFleet()` for AWS ECS Fargate).
  */
 export class Host extends Context.Service<Host, HostService>()("Celld.Host") {}

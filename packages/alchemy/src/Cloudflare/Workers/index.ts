@@ -9,8 +9,18 @@ export * from "./Cache.ts";
 export * from "./ConfigProvider.ts";
 export * from "./CronEventSource.ts";
 export * from "./DurableObject.ts";
-export * from "./DurableObjectBridge.ts";
-export * from "../../Workers/DurableObjectStorage.ts";
+export {
+  makeDurableObjectBridge,
+  type DurableObjectBridgeOptions,
+} from "./DurableObjectBridge.ts";
+export {
+  getWorkerExport,
+  handleRpcExit,
+  makeWorkerBridge,
+  type WorkerBuild,
+} from "./WorkerBridge.ts";
+export * from "./DurableObjectState.ts";
+export * from "./DurableObjectStorage.ts";
 export * from "./EmailEventSource.ts";
 export * from "./Fetch.ts";
 export * from "./GitHubRepositoryEventSource.ts";
@@ -38,7 +48,6 @@ export * from "./WebSocket.ts";
 export * from "./Worker.ts";
 export * from "./WorkerAccess.ts";
 export * from "./WorkerBinding.ts";
-export * from "./WorkerBridge.ts";
 export * from "./WorkerEntrypoint.ts";
 export * from "./WorkerLoader.ts";
 export * from "./WorkerProvider.ts";

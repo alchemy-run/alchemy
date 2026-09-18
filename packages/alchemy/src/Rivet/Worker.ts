@@ -13,10 +13,8 @@ import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
 import { asEffect } from "../Util/types.ts";
 import { isDurableObjectHost } from "../Workers/DurableObject.ts";
-import type {
-  WorkerServices,
-  WorkerShape,
-} from "../Cloudflare/Workers/Worker.ts";
+import type { Self } from "../Self.ts";
+import type { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { WorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { makeWorkerRuntimeContext } from "../Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { requireHost, type Cluster } from "./Cluster.ts";
@@ -31,6 +29,9 @@ import {
 import type { CpuArchitecture, RunnerNames, RunnerSource } from "./Host.ts";
 import type { Providers } from "./Providers.ts";
 import { makeRivetRunnerEntry } from "./RunnerEntry.ts";
+
+type WorkerServices = RivetWorker | WorkerEnvironment | Self;
+type WorkerShape = void | Record<string, never>;
 
 export const RivetWorkerTypeId = "Rivet.Worker";
 export type RivetWorkerTypeId = typeof RivetWorkerTypeId;
@@ -247,9 +248,9 @@ export type RivetWorkerClass = Platform<
 
 /**
  * A **Rivet worker**: user code deployed against a {@link Cluster},
- * authored with the same props-and-impl constructor forms a Cloudflare
- * Worker uses and hosting the same `Cloudflare.DurableObject` classes
- * (served as Rivet actors).
+ * hosting `Rivet.DurableObject` declarations as native Rivet actors.
+ * Implementations use `Rivet.DurableObjectState` for actor identity,
+ * persisted KV, SQLite, and alarms.
  *
  * Nothing is uploaded to the engine: the worker's `main` (plus the
  * generated runner entry) is built into a container image the host keeps
@@ -258,11 +259,10 @@ export type RivetWorkerClass = Platform<
  * which only callers inside the engine's private network can reach.
  *
  * ### Deploying a Worker to a Cluster
- * **Example:** Tag + deploy module
+ * **Example:** Worker hosting a Rivet Durable Object
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import * as AWS from "alchemy/AWS";
- * import * as Cloudflare from "alchemy/Cloudflare";
  * import * as Rivet from "alchemy/Rivet";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
@@ -270,35 +270,62 @@ export type RivetWorkerClass = Platform<
  * export class Actors extends Rivet.Cluster<Actors>()("Actors") {}
  * export class Api extends Rivet.Worker<Api>()("Api") {}
  *
- * export class Counter extends Cloudflare.DurableObject<Counter, CounterShape>()(
+ * export interface CounterShape {
+ *   increment: () => Effect.Effect<number, never, Alchemy.RuntimeContext>;
+ * }
+ *
+ * export class Counter extends Rivet.DurableObject<Counter, CounterShape>()(
  *   "Counter",
  * ) {}
  *
- * export default Api.make(
+ * export const CounterLive = Counter.make(
+ *   Effect.gen(function* () {
+ *     const state = yield* Rivet.DurableObjectState;
+ *     return Effect.gen(function* () {
+ *       return {
+ *         increment: () =>
+ *           Effect.gen(function* () {
+ *             const next = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
+ *             yield* state.storage.put("count", next);
+ *             return next;
+ *           }),
+ *       } satisfies CounterShape;
+ *     });
+ *   }),
+ * );
+ *
+ * const ApiLive = Api.make(
  *   { cluster: Actors, main: import.meta.url },
  *   Effect.gen(function* () {
  *     yield* Counter;
  *     return {};
  *   }).pipe(Effect.provide(CounterLive)),
  * );
+ * export default ApiLive;
  *
  * export const stack = Alchemy.Stack(
  *   "app",
  *   {
- *     providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+ *     providers: Layer.mergeAll(
+ *       AWS.providers(),
+ *       Rivet.providers(),
+ *       Rivet.EcsCluster(),
+ *     ),
  *     state: AWS.state(),
  *   },
  *   Effect.gen(function* () {
  *     yield* Actors;
  *     const api = yield* Api;
  *     return { endpoint: api.endpoint };
- *   }),
+ *   }).pipe(Effect.provide(ApiLive)),
  * );
  * ```
  *
  * ### Calling a Worker's actors from another host
  * **Example:** RPC from a Lambda through the engine gateway
  * ```typescript
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
  * export default class Caller extends AWS.Lambda.Function<Caller>()(
  *   "Caller",
  *   { main: import.meta.url },
@@ -327,7 +354,10 @@ export type RivetWorkerClass = Platform<
  *     desiredCount: 3,
  *     cpuArchitecture: "ARM64",
  *   },
- *   impl,
+ *   Effect.gen(function* () {
+ *     yield* Counter;
+ *     return {};
+ *   }).pipe(Effect.provide(CounterLive)),
  * );
  * ```
  *

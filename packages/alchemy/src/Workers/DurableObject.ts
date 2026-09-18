@@ -1,72 +1,35 @@
-/**
- * The engine-invariant Durable Object core shared by the Cloudflare, Celld
- * and Rivet bridges: the per-instance `DurableObjectState` contract, the
- * shape an instance exports, the export record a hosting worker publishes
- * for each class, and the hosting core that registers a class on its host
- * (binding + runtime-namespace resolution + class export).
- *
- * Per-engine variation rides on the host (see {@link DurableObjectHostLike});
- * nothing here imports an engine runtime.
- *
- * @internal
- */
+/** Shared Durable Object registration and export mechanics. @internal */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { RpcErrorClass } from "../Rpc.ts";
 import * as Option from "effect/Option";
 import * as Binding from "../Binding.ts";
-import type { HttpEffect } from "../Http.ts";
 import type { Input } from "../Input.ts";
 import { ALCHEMY_PHASE } from "../Phase.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import {
-  DurableObjectState,
-  fromDurableObjectState,
-  type AlarmInvocationInfo,
-} from "./DurableObjectState.ts";
-import type { WebSocket } from "./WebSocket.ts";
+import { effectClass, taggedFunction } from "../Util/effect.ts";
 import { WorkerEnvironment } from "./Worker.ts";
-
-export {
-  DurableObjectState,
-  fromDurableObjectState,
-  type AlarmInvocationInfo,
-  type DurableObjectAbortOptions,
-} from "./DurableObjectState.ts";
 
 // ---------------------------------------------------------------------------
 // The instance shape and the export record a host publishes per class
 // ---------------------------------------------------------------------------
 
+/** Erased only at the heterogeneous export/dispatch boundary. */
 export interface DurableObjectShape {
-  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
-  alarm?: (
-    alarmInfo?: AlarmInvocationInfo,
-  ) => Effect.Effect<void, never, RuntimeContext>;
-  webSocketMessage?: (
-    socket: WebSocket,
-    message: string | ArrayBuffer,
-  ) => Effect.Effect<void>;
-  webSocketClose?: (
-    socket: WebSocket,
-    code: number,
-    reason: string,
-    wasClean: boolean,
-  ) => Effect.Effect<void>;
-  /**
-   * Called when a hibernatable WebSocket errors. The runtime closes the
-   * socket after this handler; use it to drop the peer's session state.
-   */
-  webSocketError?: (socket: WebSocket, error: unknown) => Effect.Effect<void>;
+  fetch?: Effect.Effect<any, any, any>;
+  alarm?: (...args: any[]) => Effect.Effect<any, any, any>;
+  webSocketMessage?: (...args: any[]) => Effect.Effect<any, any, any>;
+  webSocketClose?: (...args: any[]) => Effect.Effect<any, any, any>;
+  webSocketError?: (...args: any[]) => Effect.Effect<any, any, any>;
 }
 
-export interface DurableObjectExport {
+export interface DurableObjectExport<Shape = any> {
   readonly kind: "durableObject";
+  readonly provider: string;
   readonly constructor: Effect.Effect<
-    Effect.Effect<DurableObjectShape, never, RuntimeContext>,
+    Effect.Effect<Shape, never, any>,
     never,
-    DurableObjectState
+    any
   >;
   readonly services: Context.Context<never>;
 }
@@ -121,6 +84,7 @@ export interface DurableObjectNamespaceLike {
  * an engine's `createRuntimeContext`.
  */
 export interface DurableObjectHostLike {
+  readonly Type: string;
   readonly LogicalId: string;
   readonly bind: (
     template: TemplateStringsArray,
@@ -186,7 +150,10 @@ export const isDurableObjectHost = (
  * engine-invariant; the binding data shape and the stub flavor come from
  * the host.
  */
-export const makeDurableObjectHosting = (namespace: string) => {
+export const makeDurableObjectHosting = (
+  namespace: string,
+  provider: string,
+) => {
   const register = (
     host: DurableObjectHostLike,
     decl: Omit<DurableObjectBindingDeclaration, "name">,
@@ -247,11 +214,8 @@ export const makeDurableObjectHosting = (namespace: string) => {
 
   const exportClass = (
     host: DurableObjectHostLike,
-    constructor: Effect.Effect<
-      Effect.Effect<DurableObjectShape, never, any>,
-      never,
-      DurableObjectState
-    >,
+    constructor: DurableObjectExport["constructor"],
+    planContext: Context.Context<any>,
   ) =>
     Effect.gen(function* () {
       const phase = yield* ALCHEMY_PHASE;
@@ -259,19 +223,13 @@ export const makeDurableObjectHosting = (namespace: string) => {
         // Evaluate the init phase with a mock state at plan time so
         // transitive bindings the object depends on are discovered and
         // registered on the worker.
-        yield* constructor.pipe(
-          Effect.provide(
-            Layer.succeed(
-              DurableObjectState,
-              fromDurableObjectState({ storage: {} } as any),
-            ),
-          ),
-        );
+        yield* constructor.pipe(Effect.provide(planContext));
       }
       // `export` lives on the runtime context assigned onto the instance —
       // present at both plan and runtime, but not part of the resource type.
       yield* host.export(namespace, {
         kind: "durableObject",
+        provider,
         // initialize the object's constructor (apply infra dependencies)
         constructor,
         // grab the object's infra dependencies so we can apply them when
@@ -283,15 +241,115 @@ export const makeDurableObjectHosting = (namespace: string) => {
   return { register, exportClass };
 };
 
-/** Resolve the ambient hosting worker, whatever its engine. */
-export const requireDurableObjectHost = (namespace: string) =>
+/** Resolve the ambient hosting worker and reject cross-provider declarations. */
+export const requireDurableObjectHost = (namespace: string, provider: string) =>
   Effect.flatMap(Binding.Host, (host) =>
-    isDurableObjectHost(host)
+    isDurableObjectHost(host) && host.Type === provider
       ? Effect.succeed(host)
       : Effect.die(
           new Error(
-            `DurableObject '${namespace}' must be declared inside a Worker — ` +
-              "provide its layer on a hosting worker's impl.",
+            `DurableObject '${namespace}' requires a ${provider} host; ` +
+              `received ${host?.Type ?? "no Worker"}.`,
           ),
         ),
   );
+
+/** Planning may compose deferred state Effects, but cannot execute state operations. */
+export const durableObjectPlanContext = <I, S>(
+  tag: Context.Service<I, S>,
+  effectProperties: readonly (keyof S)[] = [],
+): Context.Context<I> => {
+  const reference = (path: string): unknown =>
+    new Proxy(() => {}, {
+      get: (_target, key) =>
+        path === tag.key && effectProperties.includes(key as keyof S)
+          ? Effect.die(
+              new Error(`${path}.${String(key)} can only be called at runtime`),
+            )
+          : reference(`${path}.${String(key)}`),
+      apply: () => {
+        const error = new Error(`${path} can only be called at runtime`);
+        if (
+          path
+            .split(".")
+            .some((key) => ["raw", "kv", "id", "container"].includes(key))
+        ) {
+          throw error;
+        }
+        return Effect.die(error);
+      },
+    });
+  return Context.make(tag, reference(tag.key) as S);
+};
+
+/** Class/layer mechanics for providers with local, named namespaces. */
+export const makeDurableObjectDeclaration = (
+  scope: Context.ServiceClass<any, any, any>,
+  options: {
+    kind: string;
+    provider: string;
+    planContext: Context.Context<any>;
+  },
+) => {
+  const declaration = taggedFunction(
+    scope,
+    function (
+      name?: string,
+      propsOrImpl?: DurableObjectStubOptions | Effect.Effect<any, never, any>,
+      classForm = false,
+    ): any {
+      if (name === undefined) {
+        return (
+          name: string,
+          propsOrImpl?:
+            | DurableObjectStubOptions
+            | Effect.Effect<any, never, any>,
+        ) => declaration(name, propsOrImpl, true);
+      }
+      const tag = Context.Service(`${options.kind}.${name}`);
+      const hosting = makeDurableObjectHosting(name, options.provider);
+      const props = Effect.isEffect(propsOrImpl) ? undefined : propsOrImpl;
+      const make = (constructor: DurableObjectExport["constructor"]) =>
+        Effect.gen(function* () {
+          const host = yield* requireDurableObjectHost(name, options.provider);
+          const { native, stub } = yield* hosting.register(host, {
+            className: name,
+          });
+          const self = {
+            kind: options.kind,
+            Type: options.kind,
+            name,
+            getByName: (key: string) => {
+              if (native === undefined) {
+                throw new Error(
+                  `DurableObject '${name}' can only be called at runtime`,
+                );
+              }
+              return stub(native.getByName(key), props);
+            },
+          };
+          yield* hosting.exportClass(
+            host,
+            constructor.pipe(Effect.provideService(scope, self)),
+            options.planContext,
+          );
+          return self;
+        });
+
+      if (Effect.isEffect(propsOrImpl)) {
+        return effectClass(
+          make(
+            classForm
+              ? propsOrImpl
+              : propsOrImpl.pipe(Effect.map(Effect.succeed)),
+          ),
+        );
+      }
+      return class extends effectClass(tag as Effect.Effect<any, never, any>) {
+        static make = (constructor: DurableObjectExport["constructor"]) =>
+          Layer.effect(tag, make(constructor));
+      };
+    },
+  );
+  return declaration;
+};

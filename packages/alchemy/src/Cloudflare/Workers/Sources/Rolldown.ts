@@ -15,7 +15,7 @@ import {
 import {
   isDurableObjectExport,
   type DurableObjectExport,
-} from "../DurableObject.ts";
+} from "../../../Workers/DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";

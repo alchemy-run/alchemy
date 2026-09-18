@@ -4,7 +4,7 @@
  * once (rivetkit mints a fresh per-call context for every action, so a
  * bridge keyed on that context would re-run init on every call).
  */
-import * as Cloudflare from "@/Cloudflare";
+import * as Rivet from "@/Rivet";
 import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
 
@@ -13,20 +13,19 @@ export interface InitProbeShape {
   inits: () => Effect.Effect<number, never, RuntimeContext>;
 }
 
-export class InitProbe extends Cloudflare.DurableObject<
-  InitProbe,
-  InitProbeShape
->()("InitProbe") {}
+export class InitProbe extends Rivet.DurableObject<InitProbe, InitProbeShape>()(
+  "InitProbe",
+) {}
 
 /** Per-instance init counts, keyed by the instance name (runner-process memory). */
 const initCounts = new Map<string, number>();
 
 export const InitProbeLive = InitProbe.make(
   Effect.gen(function* () {
-    const state = yield* Cloudflare.DurableObjectState;
+    const state = yield* Rivet.DurableObjectState;
     return Effect.gen(function* () {
       // The per-instance effect: runs once per built instance.
-      const id = String(state.id);
+      const id = state.actorId;
       yield* Effect.sync(() =>
         initCounts.set(id, (initCounts.get(id) ?? 0) + 1),
       );

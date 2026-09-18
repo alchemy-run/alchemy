@@ -16,7 +16,11 @@ import { ConformanceActors, ConformanceWorker } from "./fixtures/cluster.ts";
 import ConformanceWorkerLive from "./fixtures/worker.ts";
 
 const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+  providers: Layer.mergeAll(
+    AWS.providers(),
+    Rivet.providers(),
+    Rivet.EcsCluster(),
+  ),
 };
 const { test } = Test.make(testOptions);
 const scratch = Core.scratchStack(testOptions, "RivetPlan", import.meta.url);

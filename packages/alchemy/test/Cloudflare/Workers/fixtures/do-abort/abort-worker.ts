@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
+import * as Cause from "effect/Cause";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -49,7 +50,30 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
         const task = tasks.getByName("default");
 
         if (url.pathname === "/ping") {
-          return yield* HttpServerResponse.json(yield* task.ping());
+          return yield* task.ping().pipe(
+            Effect.flatMap(HttpServerResponse.json),
+            Effect.catchCause((cause) => {
+              const error = Cause.squash(cause);
+              const native =
+                error instanceof Cloudflare.RpcCallError
+                  ? error.cause
+                  : undefined;
+              return HttpServerResponse.json(
+                {
+                  error: Cause.pretty(cause),
+                  retryable:
+                    native instanceof Error &&
+                    "retryable" in native &&
+                    native.retryable === true,
+                  overloaded:
+                    native instanceof Error &&
+                    "overloaded" in native &&
+                    native.overloaded === true,
+                },
+                { status: 500 },
+              );
+            }),
+          );
         }
 
         if (url.pathname === "/abort") {

@@ -1,19 +1,11 @@
-/**
- * The shared conformance HTTP surface — the `fetch` handler every engine's
- * conformance worker serves. Routes map 1:1 onto the spec in `spec.ts`.
- *
- * Like `counter.ts`, this file must stay engine-neutral: the namespace it
- * takes is typed against {@link CounterShape} alone, so a native
- * `Cloudflare.DurableObject` namespace, a `Celld.bindWorker` stub and a
- * `Rivet.bindWorker` stub all satisfy it.
- */
+/** Provider-neutral HTTP routes for the behavior specified in `spec.ts`. */
 import type { HttpEffect } from "@/Http";
 import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import type { Counter, CounterShape } from "./counter.ts";
+import type { CounterShape } from "./counter-shape.ts";
 
 /** Any namespace whose stubs mirror {@link CounterShape}. */
 export interface CounterNamespace {
@@ -99,5 +91,3 @@ export const conformanceFetch = (
     }
     return HttpServerResponse.text("Not Found", { status: 404 });
   });
-
-export type { Counter };

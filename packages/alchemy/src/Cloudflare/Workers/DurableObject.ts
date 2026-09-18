@@ -8,42 +8,51 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { Dependencies } from "../../Dependencies.ts";
 import type { Input } from "../../Input.ts";
+import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import {
-  DurableObjectState,
-  fromDurableObjectState,
+  durableObjectPlanContext,
   makeDurableObjectHosting,
   requireDurableObjectHost,
-  type DurableObjectShape,
 } from "../../Workers/DurableObject.ts";
+import {
+  DurableObjectState,
+  type AlarmInvocationInfo,
+} from "./DurableObjectState.ts";
+import type { WebSocket } from "./WebSocket.ts";
 import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import type { Container } from "../Containers/Container.ts";
 import { isWorker, type Worker, type WorkerServices } from "./Worker.ts";
 import { type RpcErrorClass } from "./Rpc.ts";
 
-// The engine-invariant Durable Object core (state contract, export record,
-// hosting seam) lives in `src/Workers/DurableObject.ts`; re-exported here so
-// `Cloudflare.*` consumers keep working.
 export {
   DurableObjectState,
   fromDurableObjectState,
-  isDurableObjectExport,
-  isDurableObjectHost,
-  makeDurableObjectHosting,
-  requireDurableObjectHost,
   type AlarmInvocationInfo,
-  type DurableObjectBindingDeclaration,
-  type DurableObjectExport,
-  type DurableObjectHostLike,
-  type DurableObjectNamespaceLike,
-  type DurableObjectShape,
-  type DurableObjectStubLike,
   type DurableObjectAbortOptions,
-} from "../../Workers/DurableObject.ts";
+} from "./DurableObjectState.ts";
+
+export interface DurableObjectShape {
+  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
+  alarm?: (
+    alarmInfo?: AlarmInvocationInfo,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  webSocketMessage?: (
+    socket: WebSocket,
+    message: string | ArrayBuffer,
+  ) => Effect.Effect<void>;
+  webSocketClose?: (
+    socket: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean,
+  ) => Effect.Effect<void>;
+  webSocketError?: (socket: WebSocket, error: unknown) => Effect.Effect<void>;
+}
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
@@ -272,6 +281,8 @@ export interface DurableObjectClass extends Effect.Effect<
       new (_: never): Shape & {
         /** @internal */
         "~alchemy/name": Name;
+        /** @internal */
+        readonly "~alchemy/provider": "Cloudflare";
       };
       from(
         scriptName: Input<string>,
@@ -299,10 +310,7 @@ export interface DurableObjectClass extends Effect.Effect<
     };
   };
   <Self>(): {
-    <
-      Shape extends MainRpc<DurableObjectState>,
-      Req extends DurableObjectServices | Container.Application<any> = never,
-    >(
+    <Shape extends MainRpc<DurableObjectState>, Req = never>(
       name: string,
       impl: Effect.Effect<
         Effect.Effect<
@@ -316,9 +324,11 @@ export interface DurableObjectClass extends Effect.Effect<
     ): Effect.Effect<
       DurableObject<Self>,
       never,
-      Worker | Extract<Req, Container.Application<any>>
+      | Worker
+      | Exclude<Req, DurableObjectServices>
+      | Extract<Req, Container.Application<any>>
     > & {
-      new (_: never): Shape;
+      new (_: never): Shape & { readonly "~alchemy/provider": "Cloudflare" };
     };
   };
   <Shape>(name: string, props?: DurableObjectProps): DurableObjectLike<Shape>;
@@ -1182,7 +1192,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const propsOrImpl = args[1];
     const tag = Context.Service(namespace);
 
-    const hosting = makeDurableObjectHosting(namespace);
+    const hosting = makeDurableObjectHosting(namespace, "Cloudflare.Worker");
 
     const binding = (
       scriptName?: Input<string>,
@@ -1192,10 +1202,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       errors?: ReadonlyArray<RpcErrorClass>,
     ) =>
       Effect.gen(function* () {
-        // The ambient host is whatever NATIVE worker resource is being
-        // built (Cloudflare / Celld / Rivet) — the engine-generalized
-        // successor of the former `yield* Worker`.
-        const worker = yield* requireDurableObjectHost(namespace);
+        const worker = yield* requireDurableObjectHost(
+          namespace,
+          "Cloudflare.Worker",
+        );
 
         const { native, stub } = yield* hosting.register(worker, {
           className: namespace,
@@ -1207,8 +1217,6 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Type: TypeId,
           LogicalId: namespace,
           name: namespace,
-          // `durableObjectNamespaces` is a Cloudflare Worker attribute: on a
-          // Celld / Rivet host the accessor resolves to `undefined`.
           namespaceId: (
             worker as unknown as Worker
           ).durableObjectNamespaces.pipe(
@@ -1261,7 +1269,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // `DurableObjectScope` to the user's constructor effect
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
-      const worker = yield* requireDurableObjectHost(namespace);
+      const worker = yield* requireDurableObjectHost(
+        namespace,
+        "Cloudflare.Worker",
+      );
       const self = yield* binding(
         undefined,
         classProps?.transferredFrom,
@@ -1270,7 +1281,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
       );
-      yield* hosting.exportClass(worker, constructor);
+      yield* hosting.exportClass(
+        worker,
+        constructor,
+        durableObjectPlanContext(DurableObjectState),
+      );
       return self;
     });
 
@@ -1286,18 +1301,10 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     } else if (Effect.isEffect(propsOrImpl)) {
       // inline Effect DO
       return effectClass(
-        Effect.tap(binding(), () =>
-          make(propsOrImpl as any).pipe(
-            Effect.provideService(
-              DurableObjectState,
-              fromDurableObjectState(
-                // everything is lazy, so this should build a proper mock
-                {
-                  storage: {},
-                } as any,
-              ),
-            ),
-          ),
+        make(
+          (isClassForm
+            ? propsOrImpl
+            : propsOrImpl.pipe(Effect.map(Effect.succeed))) as any,
         ),
       );
     } else {

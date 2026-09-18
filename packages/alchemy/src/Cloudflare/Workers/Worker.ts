@@ -45,7 +45,7 @@ import {
   WorkerExecutionContext,
   WorkerTypeId,
 } from "./WorkerRuntime.ts";
-import { type DurableObjectExport } from "./DurableObject.ts";
+import { type DurableObjectExport } from "../../Workers/DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";

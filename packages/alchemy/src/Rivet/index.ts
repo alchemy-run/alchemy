@@ -11,10 +11,10 @@ export {
 export {
   DEFAULT_RIVET_VERSION,
   DEFAULT_RIVETKIT_VERSION,
-  Ecs,
+  EcsCluster,
   RivetHostStateIncomplete,
   RivetSingleNodeStorage,
-} from "./EcsHost.ts";
+} from "./EcsCluster.ts";
 export {
   RivetGatewayError,
   RIVET_ACTOR_NAMESPACE,
@@ -34,6 +34,20 @@ export {
   type RunnerNames,
   type RunnerSource,
 } from "./Host.ts";
+export {
+  DurableObject,
+  type DurableObjectClass,
+  type DurableObjectProps,
+  type DurableObjectShape,
+  type DurableObjectStub,
+} from "./DurableObject.ts";
+export { DurableObjectState } from "./DurableObjectState.ts";
+export type {
+  DurableObjectStorage,
+  DurableObjectListOptions,
+  SqlStorage,
+} from "./DurableObjectStorage.ts";
+export type { WebSocket, RawWebSocket } from "./WebSocket.ts";
 export { providers, Providers } from "./Providers.ts";
 export {
   RivetWorkerExposureRefused,
@@ -50,7 +64,7 @@ export {
   type RivetWorkerProps,
   type RivetWorkerResourceProps,
 } from "./Worker.ts";
-// The runtime bridges (WorkerBridge, DurableObjectBridge, DurableObject),
+// The runtime bridges (WorkerBridge, DurableObjectBridge),
 // RunnerEntry, and the Gateway stub internals stay un-exported: they are
 // consumed by the generated runner entry through
 // `alchemy/Runtime/Bootstrap/RivetRunner`, not by user code.

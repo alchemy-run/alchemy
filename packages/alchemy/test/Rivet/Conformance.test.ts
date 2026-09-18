@@ -15,7 +15,11 @@ import { ConformanceActors, ConformanceWorker } from "./fixtures/cluster.ts";
 import ConformanceWorkerLive from "./fixtures/worker.ts";
 
 const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+  providers: Layer.mergeAll(
+    AWS.providers(),
+    Rivet.providers(),
+    Rivet.EcsCluster(),
+  ),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 // File-backed scratch state: the leading `destroy()` below really drains

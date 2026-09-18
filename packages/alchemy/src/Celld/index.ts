@@ -4,14 +4,28 @@ export {
   CelldDownloadError,
   EsbuildNotFoundError,
 } from "./CelldCli.ts";
-export { DurableObjectState } from "./DurableObject.ts";
+export {
+  DurableObject,
+  type DurableObjectClass,
+  type DurableObjectProps,
+  type DurableObjectShape,
+  type DurableObjectStub,
+} from "./DurableObject.ts";
+export {
+  DurableObjectState,
+  type DurableObjectStateService,
+  type DurableObjectId,
+  type AlarmInvocationInfo,
+} from "./DurableObjectState.ts";
 export type {
   DurableObjectStorage,
   DurableObjectTransaction,
   SqlCursor,
   SqlStorage,
-} from "./DurableObject.ts";
-export { Ecs } from "./EcsHost.ts";
+  SqlStorageValue,
+} from "./DurableObjectStorage.ts";
+export { upgrade, type WebSocket, type RawWebSocket } from "./WebSocket.ts";
+export { EcsFleet } from "./EcsFleet.ts";
 export {
   Fleet,
   FleetNotComposed,

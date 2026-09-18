@@ -16,7 +16,11 @@ import { ConformanceCells, ConformanceWorker } from "./fixtures/fleet.ts";
 import ConformanceWorkerLive from "./fixtures/worker.ts";
 
 const testOptions = {
-  providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
+  providers: Layer.mergeAll(
+    AWS.providers(),
+    Celld.providers(),
+    Celld.EcsFleet(),
+  ),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 // File-backed scratch state: the leading `destroy()` below really drains

@@ -307,7 +307,7 @@ const awsEnvironment = Layer.mergeAll(
  * import * as Layer from "effect/Layer";
  *
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet()),
  *   state: AWS.state(),
  * });
  * ```
@@ -316,7 +316,7 @@ const awsEnvironment = Layer.mergeAll(
  * @provides Celld.Host
  * @product Celld
  */
-export const Ecs = (): Layer.Layer<Host, never, StackServices> =>
+export const EcsFleet = (): Layer.Layer<Host, never, StackServices> =>
   Layer.effect(
     Host,
     Effect.gen(function* () {

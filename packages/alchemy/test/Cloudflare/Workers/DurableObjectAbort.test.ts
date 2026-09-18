@@ -26,21 +26,51 @@ let bust = 0;
 const getJson = <T>(
   client: HttpClient.HttpClient,
   url: string,
+  phase: "before abort" | "after abort",
 ): Effect.Effect<T, unknown> =>
   Effect.sync(() => `${url}?cb=${Date.now()}-${bust++}`).pipe(
     Effect.flatMap((url) => client.get(url)),
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.retry({
-      // Retry the edge's HTML 404, not application errors or JSON decoding.
-      while: (error) =>
-        error.reason._tag === "StatusCodeError" &&
-        error.reason.response.status === 404 &&
-        (error.reason.response.headers["content-type"] ?? "").includes(
-          "text/html",
-        ),
+      while: (error) => {
+        if (error.reason._tag !== "StatusCodeError")
+          return Effect.succeed(false);
+        const response = error.reason.response;
+        if (
+          response.status === 404 &&
+          (response.headers["content-type"] ?? "").includes("text/html")
+        ) {
+          return Effect.succeed(true);
+        }
+        // Only initial readiness honors the native RPC retry flag; abort failures remain failures.
+        if (phase !== "before abort" || response.status !== 500)
+          return Effect.succeed(false);
+        return response.json.pipe(
+          Effect.flatMap((body) => {
+            const retryable =
+              typeof body === "object" &&
+              body !== null &&
+              "retryable" in body &&
+              body.retryable === true &&
+              "overloaded" in body &&
+              body.overloaded === false;
+            return Effect.logInfo({ phase, retryable, body }).pipe(
+              Effect.as(retryable),
+            );
+          }),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+      },
       schedule: Schedule.spaced("1 second"),
       times: 10,
     }),
+    Effect.tapError((error) =>
+      error.reason._tag === "StatusCodeError"
+        ? error.reason.response.text.pipe(
+            Effect.flatMap((body) => Effect.logError({ phase, url, body })),
+          )
+        : Effect.void,
+    ),
     Effect.flatMap((res) => res.json as Effect.Effect<T>),
   );
 
@@ -56,6 +86,7 @@ describe.skipIf(!!process.env.FAST)(
         const before = yield* getJson<{ boots: number; ok: true }>(
           client,
           `${url}/ping`,
+          "before abort",
         );
         expect(before.ok).toBe(true);
         expect(before.boots).toBeGreaterThanOrEqual(1);
@@ -67,6 +98,7 @@ describe.skipIf(!!process.env.FAST)(
         const after = yield* getJson<{ boots: number; ok: true }>(
           client,
           `${url}/ping`,
+          "after abort",
         );
         expect(after.boots).toBe(before.boots + 1);
       }).pipe(logLevel),

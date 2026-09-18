@@ -111,7 +111,7 @@ export const requireHost = (
               message:
                 `Celld.Fleet '${id}' has no host — provide one alongside the ` +
                 "providers, e.g. " +
-                "`Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs())`.",
+                "`Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet())`.",
             }),
           ),
       }),
@@ -180,7 +180,7 @@ export type FleetClass = {
  *
  * The fleet is platform-agnostic: WHERE the nodes run (and which bucket
  * backs them) is owned by the `Celld.Host` Layer composed alongside the
- * providers — `Celld.Ecs()` runs them as an ECS Fargate service. The fleet
+ * providers — `Celld.EcsFleet()` runs them as an ECS Fargate service. The fleet
  * carries no code; deploy a `Celld.Worker` onto it.
  *
  * ### Creating a Fleet
@@ -196,7 +196,7 @@ export type FleetClass = {
  * }) {}
  *
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.Ecs()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet()),
  *   state: AWS.state(),
  * });
  * ```

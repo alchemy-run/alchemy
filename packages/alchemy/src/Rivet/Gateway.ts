@@ -1,6 +1,6 @@
 /**
  * The Rivet **gateway client**: the runtime transport both sides of a Rivet
- * deployment use to reach an actor (a hosted `Cloudflare.DurableObject`)
+ * deployment use to reach an actor (a hosted `Rivet.DurableObject`)
  * through the Rivet Engine's guard service.
  *
  * One protocol, verified against the engine

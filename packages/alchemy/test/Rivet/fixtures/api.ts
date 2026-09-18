@@ -21,7 +21,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { type CounterShape } from "../../Cloudflare/Workers/conformance/counter.ts";
+import { type CounterShape } from "../../Cloudflare/Workers/conformance/counter-shape.ts";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
 import { ConformanceWorker } from "./cluster.ts";
 import type { InitProbeShape } from "./probe.ts";

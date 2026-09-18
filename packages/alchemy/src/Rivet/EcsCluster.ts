@@ -622,7 +622,7 @@ const deleteRunner = ({ output }: { output: Record<string, any> }) =>
  * **Example:** Stack providers
  * ```typescript
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+ *   providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.EcsCluster()),
  *   state: AWS.state(),
  * });
  * ```
@@ -631,7 +631,7 @@ const deleteRunner = ({ output }: { output: Record<string, any> }) =>
  * @provides Rivet.Host
  * @product Rivet
  */
-export const Ecs = (): Layer.Layer<Host> =>
+export const EcsCluster = (): Layer.Layer<Host> =>
   Layer.succeed(Host, {
     compose: composeEcsCluster,
     deployRunner,

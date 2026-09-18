@@ -46,7 +46,7 @@ export const requireHost = (
               message:
                 `'${resourceId}' needs a Rivet host but none is provided — merge ` +
                 "one into the stack's providers, e.g. " +
-                "`providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs())`.",
+                "`providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.EcsCluster())`.",
             }),
           ),
     ),
@@ -183,12 +183,12 @@ export type ClusterClass = {
 /**
  * A **Rivet cluster**: the [Rivet Engine](https://rivet.dev) (the actor
  * orchestrator) a {@link Worker} runs against — infrastructure only, no
- * user code. Runners (the processes executing `Cloudflare.DurableObject`
+ * user code. Runners (the processes executing `Rivet.DurableObject`
  * actors) connect OUT to the engine; deploying a `Rivet.Worker` composes
  * a runner deployment against this cluster.
  *
  * WHERE the engine runs is owned by the `Rivet.Host` layer merged into the
- * stack's providers (`Rivet.Ecs()` runs it on AWS ECS Fargate); the
+ * stack's providers (`Rivet.EcsCluster()` runs it on AWS ECS Fargate); the
  * cluster persists the connection material the host composes.
  *
  * ### Creating a Cluster
@@ -205,7 +205,7 @@ export type ClusterClass = {
  * export const stack = Alchemy.Stack(
  *   "app",
  *   {
- *     providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs()),
+ *     providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.EcsCluster()),
  *     state: AWS.state(),
  *   },
  *   Effect.gen(function* () {

@@ -2,7 +2,7 @@
  * The seam between the platform-agnostic `Rivet.*` resources and the
  * platform the Rivet **engine** and its **runners** run on: a plain
  * `Context.Service` a cloud provider implements as a Layer
- * ({@link ../Rivet/EcsHost.ts Rivet.Ecs} for AWS ECS) and the user merges
+ * ({@link ../Rivet/EcsCluster.ts Rivet.EcsCluster} for AWS ECS) and the user merges
  * into the stack's providers alongside `Rivet.providers()`.
  *
  * A host owns everything platform-specific:
@@ -155,7 +155,7 @@ export interface HostService {
  * into the stack's providers:
  *
  * ```ts
- * providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.Ecs())
+ * providers: Layer.mergeAll(AWS.providers(), Rivet.providers(), Rivet.EcsCluster())
  * ```
  */
 export class Host extends Context.Service<Host, HostService>()("Rivet.Host") {}

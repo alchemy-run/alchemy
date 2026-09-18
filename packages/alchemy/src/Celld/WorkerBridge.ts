@@ -31,7 +31,29 @@
  * Bundled into the fleet worker: keep it free of node-only APIs.
  */
 import type { WorkerEntrypoint } from "cloudflare:workers";
-import { makeWorkerBridge } from "../Cloudflare/Workers/WorkerBridge.ts";
+import * as Layer from "effect/Layer";
+import {
+  ExportedHandlerMethods,
+  WorkerExecutionContext,
+  deferredExecutionContext,
+  fromExecutionContext,
+} from "../Cloudflare/Workers/WorkerRuntime.ts";
+import { getWorkerExport, type SharedBuildOptions } from "../Workers/Worker.ts";
+import {
+  makeWorkerBridge,
+  workerdBuildOptions,
+} from "../Workers/Workerd/WorkerBridge.ts";
+
+const buildOptions: SharedBuildOptions = {
+  ...workerdBuildOptions,
+  extra: () => Layer.succeed(WorkerExecutionContext, deferredExecutionContext),
+};
+
+export const getCelldWorkerExport = <Export = any>(options: {
+  entrypoint: any;
+  stack: { name: string; stage: string };
+  exportName: string;
+}) => getWorkerExport<Export>(options, buildOptions);
 import { rpcMethodOf } from "../Rpc.ts";
 
 /** The wrangler `vars` key carrying the per-worker gateway secret. */
@@ -86,6 +108,10 @@ export const makeCelldWorkerBridge = (
   const WorkerBridge = makeWorkerBridge(WorkerEntrypointClass, {
     entrypoint,
     stack: { name: options.stack.name, stage: options.stack.stage },
+    buildOptions,
+    handlers: ExportedHandlerMethods,
+    services: (context, env) =>
+      Layer.succeed(WorkerExecutionContext, fromExecutionContext(context, env)),
   });
 
   return {
