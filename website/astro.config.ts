@@ -25,6 +25,8 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "Cloudflare", link: "/cloudflare" },
+      { label: "Celld", link: "/providers/celld/fleet" },
+      { label: "Rivet", link: "/providers/rivet/cluster" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
@@ -1342,6 +1344,14 @@ export default defineConfig({
             { label: "Troubleshooting", link: "/acme/troubleshooting" },
             providerResourcesEntry("ACME"),
           ],
+        },
+        {
+          label: "Celld",
+          items: [providerResourcesEntry("Celld")],
+        },
+        {
+          label: "Rivet",
+          items: [providerResourcesEntry("Rivet")],
         },
         providersSidebarEntry(),
       ],
