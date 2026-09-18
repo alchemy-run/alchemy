@@ -2,6 +2,8 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
+import type { TimeoutError } from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -14,6 +16,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import * as Socket from "effect/unstable/socket/Socket";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import {
@@ -35,6 +38,30 @@ const Stack = Alchemy.Stack(
     return { url: worker.url.as<string>() };
   }),
 );
+
+class SocketClient extends Context.Service<SocketClient>()("SocketClient", {
+  make: RpcClient.make(SocketRpcs),
+}) {}
+
+const socketClientLayer = (url: string) =>
+  Layer.effect(SocketClient, SocketClient.make).pipe(
+    Layer.provide(
+      RpcClient.layerProtocolSocket().pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.effect(
+              Socket.Socket,
+              Effect.gen(function* () {
+                const { socket } = yield* rawConnect(url);
+                return yield* Socket.fromWebSocket(Effect.succeed(socket));
+              }),
+            ),
+            RpcSerialization.layerJson,
+          ),
+        ),
+      ),
+    ),
+  );
 
 const connect = Effect.fn(function* (url: string) {
   const { socket: raw } = yield* rawConnect(url);
@@ -204,6 +231,28 @@ describe.concurrent.each([
       expect(response.status).toBe(200);
       expect(yield* response.json).toMatchObject({ count: 1 });
     }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  test(
+    "a Layer owns the client lifetime without a caller scope",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const program: Effect.Effect<
+        readonly number[],
+        RpcClientError | WebSocketHandshakeFailed | TimeoutError
+      > = Effect.gen(function* () {
+        const client = yield* SocketClient;
+        const first = yield* client.increment();
+        const second = yield* client.increment();
+        expect(
+          yield* client.numbers({ count: 3 }).pipe(Stream.runCollect),
+        ).toEqual([1, 2, 3]);
+        return [first, second];
+      }).pipe(Effect.provide(socketClientLayer(`${url}/rpc/layer-client`)));
+      expect(yield* program).toEqual([1, 2]);
+      expect((yield* readStats(`${url}/stats/layer-client`)).count).toBe(2);
+    }),
     { timeout: 30_000 },
   );
 

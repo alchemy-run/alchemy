@@ -609,9 +609,10 @@ when access must be restricted to a particular instance.
 
 ## Connect over a WebSocket
 
-Use Effect's existing WebSocket RPC client in the browser:
+Create the browser's Effect RPC client in a Layer:
 
 ```typescript
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
@@ -629,16 +630,27 @@ const Connection = RpcClient.layerProtocolSocket().pipe(
   ),
 );
 
+class CounterClient extends Context.Service<CounterClient>()("CounterClient", {
+  make: RpcClient.make(CounterRpcs),
+}) {}
+
+const CounterClientLive = Layer.effect(CounterClient, CounterClient.make).pipe(
+  Layer.provide(Connection),
+);
+
 const program = Effect.gen(function* () {
-  const counter = yield* RpcClient.make(CounterRpcs);
+  const counter = yield* CounterClient;
   yield* counter.setTitle({ title: "Hello over WebSockets" });
   return yield* counter.getTitle({});
-}).pipe(Effect.scoped, Effect.provide(Connection));
+}).pipe(Effect.provide(CounterClientLive));
 ```
 
-Keep the connection layer around the entire program that uses the client,
-not just `RpcClient.make`. Concurrent calls and streams share the socket;
-Effect handles typed errors, backpressure, and cancellation.
+The Layer owns the client and connection lifetime, so callers do not need
+an explicit `Effect.scoped`. Provide it around the application or component
+program that shares the client, rather than constructing it for each call.
+Concurrent calls and streams share the socket; Effect handles typed errors,
+backpressure, and cancellation. Client cleanup is separate from server-side
+Durable Object hibernation.
 
 ## WebSocket RPC and hibernation
 
