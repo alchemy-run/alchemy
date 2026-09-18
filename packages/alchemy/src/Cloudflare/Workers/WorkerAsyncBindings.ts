@@ -75,6 +75,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
+  if (globalThis.__ALCHEMY_RUNTIME__) return;
+
   // Access enrollment (`access` prop): push this Worker's
   // `worker`/`preview_worker` destinations onto the application's binding
   // contract. The application deploys with — and converges on — every
@@ -128,10 +130,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       ],
     });
   }
-  // The declared `env` as exposed on the resource (`worker.env`): each entry
-  // is the resolved binding value, except Workflow bindings, which surface
-  // their identity as Outputs of this deploy (see `WorkflowBinding`).
-  const env: Record<string, unknown> = {};
+  const env: Record<string, unknown> = props.assets
+    ? { ASSETS: { kind: "Cloudflare.Workers.Assets" } }
+    : {};
   if (props.env) {
     for (const bindingName in props.env) {
       // @ts-expect-error
@@ -232,11 +233,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
                 schedules: binding.schedules,
               });
 
-          // Expose the binding's identity on `worker.env`. A locally-hosted
-          // Workflow resolves through the registered resource's attributes,
-          // so a consumer (e.g. a Queue subscription to this Workflow's
-          // events) deploys after `putWorkflow`; a cross-script reference
-          // has no local resource and derives from the declared host script.
+          // Local outputs depend on registration, not just Worker precreation.
           env[bindingName] = {
             kind: binding.kind,
             name: binding.name,
@@ -272,10 +269,9 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       }
     }
   }
-  // Assigned through the resource proxy's `set` trap onto the underlying
-  // target, so `worker.env` reads back this record rather than an attribute
-  // `Output` (the proxy's fallback for unknown properties).
-  (resource as { env: Record<string, unknown> }).env = env;
+  if (resource.Props?.isExternal === true) {
+    Object.assign(resource, { env });
+  }
 });
 
 /**

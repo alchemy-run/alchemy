@@ -18,7 +18,9 @@ If you don't pass `--stage`, **`alchemy deploy`** uses **`live_$USER`**
 `dev_sam`). Each developer gets a personal cloud sandbox and a
 separate local-dev sandbox without any config — so a bare `alchemy
 dev` cannot replace resources you deployed. Existing default `alchemy
-dev` stacks keep the `dev_$USER` name.
+dev` stacks keep the `dev_$USER` name. **`Test.make`** uses
+**`test_$USER`** the same way, so two people running the suite
+against one account don't collide.
 
 ```sh
 $ whoami
@@ -52,6 +54,7 @@ The resolution order is:
 | ----------------- | ---------------------------------------------------- |
 | `live_<user>`     | Per-developer cloud sandbox (`alchemy deploy` default) |
 | `dev_<user>`      | Per-developer local-dev sandbox (`alchemy dev` default) |
+| `test_<user>`     | Per-developer test sandbox (`Test.make` default)     |
 | `pr-<n>`          | Per-pull-request preview environment                 |
 | `staging`         | Shared pre-production                                |
 | `prod`            | Production                                           |

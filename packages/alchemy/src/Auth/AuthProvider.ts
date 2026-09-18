@@ -1,3 +1,4 @@
+import { cachedFunction } from "../Util/cached-function.ts";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -148,7 +149,7 @@ export const presentEnvironment = (
     for (const variable of environment) {
       let found: string | undefined;
       for (const name of [variable.name, ...(variable.alternatives ?? [])]) {
-        const value = yield* Config.option(Config.string(name));
+        const value = yield* Config.option(Config.String(name));
         if (Option.isSome(value) && value.value !== "") {
           found = name;
           break;
@@ -313,6 +314,10 @@ export interface AuthProvider<
 > extends AuthProviderImpl<Config, Credentials> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /** Log each environment contract once per built provider layer. */
+  readonly logEnvironmentCredentials: (
+    used: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
   /**
    * The provider's declared CI environment contract. Empty when the
    * provider does not support environment credentials.
@@ -391,6 +396,13 @@ export const AuthProvider =
       }
 
       const provider: AuthProvider<Config, Credentials> = {
+        logEnvironmentCredentials: yield* cachedFunction(
+          (used: ReadonlyArray<string>) =>
+            Effect.logInfo(
+              `${name}: using environment variables (${used.join(", ")}) instead of the profile.`,
+            ),
+          { key: ([used]) => JSON.stringify(used.toSorted()) },
+        ),
         kind: "AuthProvider",
         name,
         // configure/login can wait minutes on a browser grant, so they hold

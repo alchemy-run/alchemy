@@ -1,5 +1,6 @@
-/** @jsxImportSource react */
-import { useMemo, useState, type JSX } from "react";
+/** @jsxImportSource @alchemy.run/sigil */
+import { useMemo, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
 import type { Plan } from "../../../Plan.ts";
 import {
   PromptFrame,
@@ -9,6 +10,7 @@ import {
 } from "../ui/index.ts";
 import { Screen, type ScreenController } from "../../CliKit/index.ts";
 import { Plan as PlanComponent, PlanTree } from "./PlanView.tsx";
+import type { PlanTreeData } from "./PlanTree.ts";
 
 export interface PlanDecisionChoice<Value> {
   readonly value: Value;
@@ -16,7 +18,7 @@ export interface PlanDecisionChoice<Value> {
 }
 
 function PlanDecision<Value>(props: {
-  readonly plan: Plan;
+  readonly plan: Plan | PlanTreeData;
   readonly label?: string;
   readonly message: string;
   readonly choices: ReadonlyArray<PlanDecisionChoice<Value>>;
@@ -68,7 +70,7 @@ function PlanDecision<Value>(props: {
 }
 
 export const planDecisionScreen = <Value,>(options: {
-  readonly plan: Plan;
+  readonly plan: Plan | PlanTreeData;
   readonly label?: string;
   readonly message: string;
   readonly choices: ReadonlyArray<PlanDecisionChoice<Value>>;

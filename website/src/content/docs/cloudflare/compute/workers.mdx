@@ -181,7 +181,7 @@ boundary, where payloads need schema validation before they touch your
 code, reach for [Effect RPC](/cloudflare/apis/effect-rpc) instead.
 
 :::note
-[Runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-one)
+[Runtime](/infrastructure-as-effects/runtime#three-ways-to-declare-a-runtime)
 covers the three declaration forms, and
 [Schemaless RPC](/apis/schemaless) the calling convention.
 :::
@@ -379,17 +379,67 @@ drift from the infrastructure that produced it.
 [Python Workers](/cloudflare/compute/python-workers) are async Workers
 whose `main` is a `.py` file.
 
-Binding another Worker on `env` targets its default entrypoint. A
-Worker can export additional
-[`WorkerEntrypoint` classes](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/),
-and `Cloudflare.WorkerEntrypoint` binds one by name. `InferEnv` types
-it as a `Fetcher` stub whose RPC methods are called directly:
+### Named entrypoints
+
+Binding another Worker on `env` targets its default entrypoint. To expose a
+named RPC entrypoint, export a class extending Cloudflare's native
+[`WorkerEntrypoint`](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/)
+from the target Worker's module:
 
 ```typescript
-env: {
-  API: Cloudflare.WorkerEntrypoint(target, "Api"), // env.API.greet("alice")
-},
+// src/target.ts
+import { WorkerEntrypoint } from "cloudflare:workers";
+
+export class Api extends WorkerEntrypoint {
+  async greet(name: string): Promise<string> {
+    return `hello ${name}`;
+  }
+}
+
+export default {
+  async fetch() {
+    return new Response("ok");
+  },
+};
 ```
+
+Import that `Api` class as a type in your infrastructure code.
+`Cloudflare.WorkerEntrypoint<Api>(target, "Api")` binds the named `Api`
+export on the target Worker. The type argument is the class's instance
+type (`Api`, not `typeof Api`):
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { Api } from "./src/target.ts";
+
+const target = yield* Cloudflare.Worker("Target", {
+  main: "./src/target.ts",
+});
+
+const caller = yield* Cloudflare.Worker("Caller", {
+  main: "./src/caller.ts",
+  env: {
+    API: Cloudflare.WorkerEntrypoint<Api>(target, "Api"),
+  },
+});
+```
+
+`InferEnv` maps the binding to Cloudflare's native `Service<Api>` type,
+which checks method arguments and converts return values to promises:
+
+```typescript
+import type { CallerEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: CallerEnv) {
+    return new Response(await env.API.greet("alice"));
+  },
+};
+```
+
+Without the type argument the entry is a bare `Fetcher` service stub
+(`fetch` + `connect` only) and RPC calls do not type-check.
 
 The options form attaches properties the target reads from
 `this.ctx.props`, workerd's per-binding configuration channel. `Output`
@@ -541,10 +591,13 @@ yield* Cloudflare.Worker("Api", {
 });
 ```
 
-Set `version.parent` to upload the code as a preview version or
-canary of another stage's Worker instead. Ramping, rollback, smoke
-testing with version overrides, and pinning users to a version are
-covered in [Gradual deployments](/cloudflare/compute/gradual-deployments).
+Set `preview.of` to deploy this Worker as a
+[Preview](/cloudflare/compute/previews) of another stage's Worker
+(branch and pull-request testing, isolated Durable Objects). Set
+`version.parent` to upload a canary version of another stage's
+Worker. Ramping, rollback, smoke testing with version overrides, and
+pinning users to a version are covered in
+[Gradual deployments](/cloudflare/compute/gradual-deployments).
 
 The `version_metadata` binding tells a running Worker which version
 it is, so responses and logs can say exactly which deploy produced

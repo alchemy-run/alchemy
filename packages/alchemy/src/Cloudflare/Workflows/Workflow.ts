@@ -2,7 +2,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { Scope } from "effect/Scope";
+import { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -22,33 +22,20 @@ import {
   type WorkerServices,
 } from "../Workers/Worker.ts";
 import { makeWorkflowName } from "./WorkflowName.ts";
+import {
+  type WorkflowEvent,
+  WorkflowStep,
+  WorkflowStepContext,
+} from "./WorkflowRuntime.ts";
+
+export {
+  WorkflowEvent,
+  WorkflowStep,
+  WorkflowStepContext,
+} from "./WorkflowRuntime.ts";
 
 type TypeId = "Cloudflare.Workflow";
 const TypeId = "Cloudflare.Workflow" as const;
-
-// ---------------------------------------------------------------------------
-// Runtime services -- provided by the bridge when the workflow executes
-// ---------------------------------------------------------------------------
-
-/**
- * Service that carries the current workflow event payload.
- * `yield* WorkflowEvent` inside a workflow body to access it.
- */
-export class WorkflowEvent extends Context.Service<
-  WorkflowEvent,
-  {
-    payload: unknown;
-    timestamp: Date;
-    instanceId: string;
-    workflowName: string;
-    /**
-     * Present when Cloudflare created this instance from a native
-     * {@link WorkflowProps.schedules} cron expression. Absent for
-     * instances started with `create` / `createBatch`.
-     */
-    schedule?: WorkflowCronSchedule;
-  }
->()("Cloudflare.Workflows.WorkflowEvent") {}
 
 /**
  * Cron trigger metadata on a Workflow instance created by a native
@@ -84,14 +71,6 @@ export interface WorkflowStepContextData {
   attempt: number;
   config: WorkflowStepConfig;
 }
-
-/**
- * Runtime information for the current `task` attempt.
- */
-export class WorkflowStepContext extends Context.Service<
-  WorkflowStepContext,
-  WorkflowStepContextData
->()("Cloudflare.WorkflowStepContext") {}
 
 export interface WorkflowRollbackContext<Output = unknown> {
   error: Error;
@@ -153,24 +132,6 @@ type ExcludeWorkflowStepContext<R> = R extends {
   ? never
   : R;
 
-/**
- * Internal service that wraps the Cloudflare `WorkflowStep` object.
- * Not accessed directly by users -- use `task`, `sleep`, `sleepUntil`, and
- * `waitForEvent` instead.
- */
-export class WorkflowStep extends Context.Service<
-  WorkflowStep,
-  {
-    do<T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T>;
-    sleep(name: string, duration: string | number): Effect.Effect<void>;
-    sleepUntil(name: string, timestamp: Date | number): Effect.Effect<void>;
-    waitForEvent<T>(
-      name: string,
-      options: WorkflowWaitForEventOptions,
-    ): Effect.Effect<WorkflowStepEvent<T>>;
-  }
->()("Cloudflare.Workflows.WorkflowStep") {}
-
 // ---------------------------------------------------------------------------
 // User-facing step primitives
 // ---------------------------------------------------------------------------
@@ -187,6 +148,9 @@ export class WorkflowStep extends Context.Service<
  *
  * The step name comes first, followed by the Effect. Retry config, timeout,
  * and a rollback handler can be passed in the optional third `options` arg.
+ * Each attempt and rollback handler has a fresh Scope; its resources close
+ * before that callback completes. Interrupting a task waits for the active
+ * attempt's cleanup without waiting for Cloudflare's native retry delays.
  */
 export function task<T, R = never, RollbackReq = never>(
   name: string,
@@ -195,12 +159,13 @@ export function task<T, R = never, RollbackReq = never>(
 ): Effect.Effect<
   T,
   never,
-  WorkflowStep | ExcludeWorkflowStepContext<R | RollbackReq>
+  WorkflowStep | ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>
 > {
   return Effect.gen(function* () {
     const step = yield* WorkflowStep;
-    const context =
-      yield* Effect.context<ExcludeWorkflowStepContext<R | RollbackReq>>();
+    const context = (yield* Effect.context<
+      ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>
+    >()).pipe(Context.omit(Scope, WorkflowStepContext));
     const rollbackEffect = options?.rollback;
     return yield* step.do({
       ...options,
@@ -398,8 +363,9 @@ export interface WorkflowLike<Params = unknown> {
 }
 
 /**
- * A Workflow bound on a Worker's `env`, as exposed on `worker.env.<name>`
- * once the Worker is declared. Carries the binding's identity as `Output`s
+ * A Workflow bound on an external/async Worker's `env`, exposed on
+ * `worker.env.<name>` at declaration time, not on persisted Worker references
+ * or Effect-native Workers. Carries the binding's identity as `Output`s
  * of the current deploy pass, so a sibling resource in the same stack — a
  * Queue subscription to the Workflow's lifecycle events, for instance — can
  * consume the Workflow's physical name on its very first deployment without
@@ -853,7 +819,7 @@ export class WorkflowScope extends Context.Service<
  * ```
  *
  * ### Consuming the Workflow's Physical Name
- * The declared Worker exposes each Workflow binding on `worker.env` with
+ * An external/async Worker declaration exposes each Workflow binding on `worker.env` with
  * the Workflow's account-global `workflowName` as an `Output` of the
  * current deploy. A Queue subscription to the Workflow's lifecycle events
  * can therefore live in the same stack and deploys after the Workflow is
