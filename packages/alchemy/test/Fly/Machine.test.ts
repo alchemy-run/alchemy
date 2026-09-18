@@ -1,11 +1,14 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Fly from "@/Fly";
+import { ensureStarted } from "@/Fly/replicas";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Result from "effect/Result";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -105,7 +108,7 @@ test.provider(
                     gracePeriod: "6s",
                     method: "HEAD",
                     path: "/",
-                    protocol: "https",
+                    protocol: "http",
                     headers: [
                       {
                         name: "X-Alchemy-Check",
@@ -151,7 +154,7 @@ test.provider(
       expect(check?.grace_period).toEqual("6s");
       expect(check?.method).toEqual("HEAD");
       expect(check?.path).toEqual("/");
-      expect(check?.protocol).toEqual("https");
+      expect(check?.protocol).toEqual("http");
       expect(check?.headers?.[0]?.name).toEqual("X-Alchemy-Check");
       expect(check?.headers?.[0]?.values).toEqual(["ready", "routing"]);
       expect(check?.tls_server_name).toEqual("example.com");
@@ -161,6 +164,104 @@ test.provider(
 
       const gone = yield* waitUntilGone(created.appName, created.machineId);
       expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "starts an unlaunched machine and recovers from stale state",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (skipLaunch: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("LaunchSite");
+            return yield* Fly.Machine("LaunchWeb", {
+              app,
+              region: "iad",
+              image: "nginx:alpine",
+              guest: { cpus: 1, memoryMb: 256 },
+              skipLaunch,
+              services: [
+                {
+                  protocol: "tcp",
+                  internalPort: 80,
+                  checks: [
+                    {
+                      type: "http",
+                      port: 80,
+                      path: skipLaunch ? "/missing" : "/",
+                      interval: "5s",
+                      timeout: "2s",
+                      gracePeriod: "1s",
+                    },
+                  ],
+                },
+              ],
+            });
+          }),
+        );
+      const created = yield* deploy(true);
+      const target = {
+        app_name: created.appName,
+        machine_id: created.machineId,
+      };
+      const unlaunched = yield* machines.getMachine(target);
+      expect(["created", "stopped"]).toContain(unlaunched.state);
+      yield* ensureStarted(created.appName, unlaunched, true);
+      expect(["created", "stopped"]).toContain(
+        (yield* machines.getMachine(target)).state,
+      );
+
+      const waitError = yield* machines
+        .waitMachine({ ...target, state: "started", timeout: 1 })
+        .pipe(Retry.none, Effect.flip);
+      expect(["MachineWaitTimeout", "GatewayTimeout"]).toContain(
+        waitError._tag,
+      );
+
+      const launched = yield* deploy(false);
+      expect(launched.machineId).toBe(created.machineId);
+      expect(launched.state).toBe("started");
+      const running = yield* machines.getMachine(target);
+
+      const alreadyStarted = yield* ensureStarted(
+        created.appName,
+        unlaunched,
+        false,
+      );
+      expect(alreadyStarted.state).toBe("started");
+      expect(alreadyStarted.instance_id).toBe(running.instance_id);
+
+      yield* machines.stopMachine({ ...target, signal: "SIGTERM" });
+      yield* machines
+        .waitMachine({
+          ...target,
+          instance_id: running.instance_id,
+          state: "stopped",
+          timeout: 8,
+        })
+        .pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "GatewayTimeout" ||
+              error._tag === "MachineWaitTimeout",
+            schedule: Schedule.spaced("1 second"),
+            times: 3,
+          }),
+        );
+      expect((yield* machines.getMachine(target)).state).toBe("stopped");
+
+      const restarted = yield* ensureStarted(created.appName, running, false);
+      expect(restarted.state).toBe("started");
+      expect((yield* machines.getMachine(target)).state).toBe("started");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(created.appName, created.machineId)).toBe(
+        "gone",
+      );
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -260,4 +361,180 @@ test.provider(
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider(
+  "destroy recovers a machine whose initial service checks failed",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = yield* stack.deploy(Fly.App("UnhealthySite"));
+      const result = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("UnhealthySite");
+            return yield* Fly.Machine("UnhealthyWeb", {
+              app,
+              region: "iad",
+              image: "nginx:alpine",
+              guest: { cpus: 1, memoryMb: 256 },
+              count: 2,
+              services: [
+                {
+                  protocol: "tcp",
+                  internalPort: 80,
+                  checks: [
+                    {
+                      type: "http",
+                      port: 80,
+                      path: "/missing",
+                      interval: "5s",
+                      timeout: "2s",
+                      gracePeriod: "1s",
+                    },
+                  ],
+                },
+              ],
+            });
+          }),
+        )
+        .pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure).toMatchObject({
+          _tag: "Fly.ReplicaChecksNotPassing",
+        });
+      }
+      const live = yield* machines.listMachines({ app_name: app.appName });
+      expect(
+        live.filter((machine) => machine.state !== "destroyed"),
+      ).toHaveLength(1);
+      yield* stack.destroy();
+      for (const machine of live) {
+        expect(yield* waitUntilGone(app.appName, machine.id!)).toBe("gone");
+      }
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "count 2 waits for checks and leaves the next replica unchanged on failure",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (path: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* Fly.App("CheckSite");
+            return yield* Fly.Machine("CheckWeb", {
+              app,
+              region: "iad",
+              image: "nginx:alpine",
+              guest: { cpus: 1, memoryMb: 256 },
+              count: 2,
+              services: [
+                {
+                  protocol: "tcp",
+                  internalPort: 80,
+                  ports: [{ port: 80, handlers: ["http"] }],
+                  checks: [
+                    {
+                      type: "http",
+                      port: 80,
+                      method: "GET",
+                      path,
+                      protocol: "http",
+                      interval: "5s",
+                      timeout: "2s",
+                      gracePeriod: "5s",
+                    },
+                    {
+                      type: "tcp",
+                      port: 80,
+                      interval: "5s",
+                      timeout: "2s",
+                      gracePeriod: "5s",
+                    },
+                  ],
+                },
+              ],
+            });
+          }),
+        );
+
+      const deployed = yield* deploy("/");
+      expect(deployed.count).toEqual(2);
+      expect(deployed.machineIds).toHaveLength(2);
+      expect(deployed.replicas).toHaveLength(2);
+      expect(deployed.state).toEqual("started");
+      expect(deployed.replicas[0]?.state).toEqual("started");
+      expect(deployed.replicas[1]?.state).toEqual("started");
+
+      for (const machineId of deployed.machineIds) {
+        const live = yield* machines.getMachine({
+          app_name: deployed.appName,
+          machine_id: machineId,
+        });
+        expect(live.state).toEqual("started");
+        const serviceChecks =
+          live.checks?.filter((check) =>
+            check.name?.startsWith("servicecheck-"),
+          ) ?? [];
+        expect(serviceChecks).toHaveLength(2);
+        expect(
+          serviceChecks.every((check) => check.status === "passing"),
+        ).toEqual(true);
+      }
+
+      const secondBefore = yield* machines.getMachine({
+        app_name: deployed.appName,
+        machine_id: deployed.machineIds[1]!,
+      });
+      const failed = yield* deploy("/missing").pipe(Effect.result);
+      expect(Result.isFailure(failed)).toBe(true);
+      if (Result.isFailure(failed)) {
+        expect(failed.failure).toMatchObject({
+          _tag: "Fly.ReplicaChecksNotPassing",
+        });
+      }
+      const first = yield* machines.getMachine({
+        app_name: deployed.appName,
+        machine_id: deployed.machineIds[0]!,
+      });
+      const second = yield* machines.getMachine({
+        app_name: deployed.appName,
+        machine_id: deployed.machineIds[1]!,
+      });
+      expect(first.config?.services?.[0]?.checks?.[0]?.path).toBe("/missing");
+      expect(first.checks?.some((check) => check.status !== "passing")).toBe(
+        true,
+      );
+      expect(second.config?.services?.[0]?.checks?.[0]?.path).toBe("/");
+      expect(second.instance_id).toBe(secondBefore.instance_id);
+
+      const recovered = yield* deploy("/");
+      expect(recovered.machineIds).toEqual(deployed.machineIds);
+      for (const machineId of recovered.machineIds) {
+        const live = yield* machines.getMachine({
+          app_name: recovered.appName,
+          machine_id: machineId,
+        });
+        expect(
+          live.checks?.filter((check) =>
+            check.name?.startsWith("servicecheck-"),
+          ),
+        ).toEqual([
+          expect.objectContaining({ status: "passing" }),
+          expect.objectContaining({ status: "passing" }),
+        ]);
+      }
+      yield* stack.destroy();
+
+      for (const machineId of deployed.machineIds) {
+        const gone = yield* waitUntilGone(deployed.appName, machineId);
+        expect(gone).toEqual("gone");
+      }
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );

@@ -123,27 +123,11 @@ const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 await bootstrap(entrypoint);
 `;
 
-/** Flatten a binding/env leaf into a machine env string. Unwraps Redacted. */
+/** Unwrap env inputs while preserving serialized RuntimeContext markers. */
 export const plainEnvValue = (value: unknown): string | undefined => {
   if (value === undefined || value === null) return undefined;
   if (Redacted.isRedacted(value)) return plainEnvValue(Redacted.value(value));
   if (typeof value === "string") {
-    if (value.startsWith("{")) {
-      try {
-        const parsed: unknown = JSON.parse(value);
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          (parsed as { _tag?: unknown })._tag === "Redacted" &&
-          typeof (parsed as { value?: unknown }).value === "string"
-        ) {
-          const inner = (parsed as { value: string }).value;
-          return inner.length > 0 ? inner : undefined;
-        }
-      } catch {
-        // plain string that happens to start with `{`
-      }
-    }
     return value.length > 0 ? value : undefined;
   }
   if (typeof value === "number" || typeof value === "boolean") {
@@ -213,11 +197,6 @@ export const collectBindingState = (
           name?: unknown;
           id?: unknown;
           addOnId?: unknown;
-          accessKeyId?: unknown;
-          secretAccessKey?: unknown;
-          endpoint?: unknown;
-          region?: unknown;
-          bucketName?: unknown;
         }
       | undefined;
     const bucketName = coerceBindingName(bucket?.name);
@@ -228,19 +207,6 @@ export const collectBindingState = (
         name: bucketName ?? "",
         id: bucketId,
       });
-    }
-    if (bucket !== undefined) {
-      Object.assign(
-        env,
-        toEnvRecord({
-          AWS_ACCESS_KEY_ID: bucket.accessKeyId,
-          AWS_SECRET_ACCESS_KEY: bucket.secretAccessKey,
-          AWS_ENDPOINT_URL_S3: bucket.endpoint,
-          AWS_ENDPOINT_URL: bucket.endpoint,
-          AWS_REGION: bucket.region,
-          BUCKET_NAME: bucket.bucketName ?? bucket.name,
-        }),
-      );
     }
     const pg = binding?.data?.postgres;
     const clusterId = coerceBindingName(pg?.clusterId);

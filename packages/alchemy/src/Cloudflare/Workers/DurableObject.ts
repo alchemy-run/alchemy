@@ -20,7 +20,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { makeRpcStub } from "./Rpc.ts";
+import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import {
   isWorker,
@@ -125,6 +125,7 @@ export interface DurableObjectShape {
 export type DurableObjectServices =
   | DurableObject
   | DurableObjectState
+  | DurableObjectScope
   | WorkerServices
   | WorkerEnvironment
   | PlatformServices;
@@ -258,6 +259,24 @@ export interface DurableObjectProps {
     | DurableObjectTransferSource
     | DurableObjectTransferSource[]
     | undefined;
+  /**
+   * Tagged-error classes this Durable Object's RPC methods can fail with.
+   *
+   * Effect failures crossing the Worker↔DO RPC boundary are serialized to
+   * plain `{ _tag, ...fields }` objects; declaring the classes here lets
+   * the calling side reconstruct real instances (both sides import this
+   * same class declaration, so the schema is shared by construction) —
+   * `Effect.catchTag`, `instanceof`, and schema encoders (e.g. HttpApi
+   * error responses) then all see the class the DO actually failed with.
+   *
+   * ```typescript
+   * export class Repo extends Cloudflare.DurableObject<Repo, RepoShape>()(
+   *   "Repo",
+   *   { errors: [RepoNotFound, StoreError] },
+   * ) {}
+   * ```
+   */
+  errors?: ReadonlyArray<RpcErrorClass> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -271,7 +290,7 @@ export interface DurableObjectClass extends Effect.Effect<
   <Self, Shape>(): {
     <Name extends string>(
       name: Name,
-      props?: Pick<DurableObjectProps, "transferredFrom">,
+      props?: Pick<DurableObjectProps, "transferredFrom" | "errors">,
     ): Effect.Effect<DurableObject<Self>, never, Worker | Self> & {
       new (_: never): Shape & {
         /** @internal */
@@ -293,9 +312,13 @@ export interface DurableObjectClass extends Effect.Effect<
             RuntimeContext | DurableObjectState | Scope
           >,
           never,
-          DurableObjectServices | Req
+          Req
         >,
-      ): Layer.Layer<Self, never, Worker | Req>;
+        // `Exclude` (rather than `DurableObjectServices | Req` inference)
+        // so ambient DO services resolved in the outer init effect never
+        // leak into the host Worker's requirements — mirrors Worker.make's
+        // `Exclude<InitReq, Self | WorkerServices>`.
+      ): Layer.Layer<Self, never, Worker | Exclude<Req, DurableObjectServices>>;
     };
   };
   <Self>(): {
@@ -807,6 +830,56 @@ export class DurableObjectScope extends Context.Service<
  * });
  * ```
  *
+ * ### Durable Callbacks
+ * Register `Alchemy.makeCallback` handlers in the inner, per-instance Effect.
+ * Durable Objects supply callback registration on their instance RuntimeContext
+ * using SQLite and native alarms. Scheduling participates in the current storage
+ * transaction, and each job is acknowledged only after its handler succeeds.
+ * No explicit `alarm` handler is needed.
+ *
+ * **Example:** Save state and schedule a typed callback atomically
+ * ```typescript
+ * const state = yield* Cloudflare.DurableObjectState;
+ * return Effect.gen(function* () {
+ *   const onArchive = yield* Alchemy.makeCallback(
+ *     "archive",
+ *     Effect.fn(function* (payload: { key: string; body: string }) {
+ *       yield* archive.put(payload.key, payload.body);
+ *     }),
+ *   );
+ *   return {
+ *     save: Effect.fn(function* (id: string, body: string) {
+ *       yield* state.storage.transaction(
+ *         Effect.gen(function* () {
+ *           yield* state.storage.put(id, body);
+ *           yield* onArchive.schedule(id, {
+ *             after: "30 seconds",
+ *             payload: { key: id, body },
+ *           });
+ *         }),
+ *       );
+ *     }),
+ *   };
+ * });
+ * ```
+ *
+ * Callbacks receive JSON-serializable payloads and deliver at least once, so
+ * external writes must be idempotent. A recovery wake is persisted before each
+ * attempt; configure its delay with the third argument, `{ retry: { delay:
+ * "1 minute" } }`. Scheduling the same callback name and ID replaces the pending
+ * job; `onArchive.cancel(id)` cancels it. Retain handlers for old callback names
+ * while their jobs are pending. Each native alarm processes up to 100 due jobs;
+ * direct `setAlarm`/`deleteAlarm` calls bypass the scheduler's coordination.
+ * Leave native alarm retries enabled when aborting an instance. Passing
+ * `{ retryAlarm: false }` removes the automatic-recovery guarantee: Cloudflare
+ * can suppress a replacement wake even after its timestamp is persisted. Jobs
+ * remain stored, but may need an explicitly rearmed native alarm.
+ *
+ * The scheduler migrates its original unversioned SQLite schema to version 1
+ * atomically, preserving existing events. Old events still use the explicit
+ * `alarm` handler below; their rows have no callback name to infer. Both APIs
+ * coordinate the same native alarm. Unknown newer schema versions fail closed.
+ *
  * ### Scheduled Alarms
  * Each Durable Object can have a single alarm timestamp. Alchemy
  * layers a small SQLite-backed scheduler on top via
@@ -1187,6 +1260,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       transferredFrom?:
         | DurableObjectTransferSource
         | DurableObjectTransferSource[],
+      errors?: ReadonlyArray<RpcErrorClass>,
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1241,7 +1315,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           getByName: (
             name: string,
             options?: DurableObjectGetDurableObjectOptions,
-          ) => makeRpcStub(binding.getByName(name, options)),
+          ) => makeRpcStub(binding.getByName(name, options), { errors }),
           // newUniqueId: () => use((ns) => ns.newUniqueId()),
           // idFromName: (name: string) => use((ns) => ns.idFromName(name)),
           // idFromString: (id: string) => use((ns) => ns.idFromString(id)),
@@ -1260,7 +1334,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
     const classProps =
       isClassForm && !Effect.isEffect(propsOrImpl)
         ? (propsOrImpl as
-            | Pick<DurableObjectProps, "transferredFrom">
+            | Pick<DurableObjectProps, "transferredFrom" | "errors">
             | undefined)
         : undefined;
 
@@ -1276,7 +1350,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // `DurableObjectScope` to the user's constructor effect
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
-      const self = yield* binding(undefined, classProps?.transferredFrom);
+      const self = yield* binding(
+        undefined,
+        classProps?.transferredFrom,
+        classProps?.errors,
+      );
       const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(
         Effect.provide(Layer.succeed(DurableObjectScope, self as any)),
@@ -1368,7 +1446,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
 
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(typeof w === "string" ? w : w.workerName),
+              binding(
+                typeof w === "string" ? w : w.workerName,
+                undefined,
+                classProps?.errors,
+              ),
             ),
           );
         };
