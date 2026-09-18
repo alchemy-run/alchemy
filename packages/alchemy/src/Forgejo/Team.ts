@@ -1,11 +1,10 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Team as ApiTeam } from "@distilled.cloud/forgejo/organization";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listAccessibleOrganizations } from "./Lists.ts";
-import { paginate } from "./Pagination.ts";
+import { listManageableTeams, listOrganizationTeams } from "./Lists.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -115,19 +114,6 @@ const attributesOf = (team: ApiTeam): TeamAttributes => ({
 });
 
 /**
- * Every team of an organization, or none when the credential cannot read
- * the organization: account-wide enumeration walks organizations the
- * credential may not be able to inspect, and a single inaccessible one must
- * not abort the whole sweep.
- */
-const listTeams = (organization: string) =>
-  paginate(Services.organization.orgListTeams, { org: organization }).pipe(
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as readonly ApiTeam[]),
-    ),
-  );
-
-/**
  * Locate the live team, by ID when one is already known and otherwise by name
  * within the organization. The name lookup is what lets an existing team be
  * adopted, and what makes a re-run after a partially-persisted create
@@ -143,7 +129,10 @@ const observe = Effect.fn(function* (
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (byId !== undefined) return byId;
   }
-  const teams = yield* listTeams(props.organization);
+  // Unfiltered on purpose: the Owners team is excluded from *enumeration*
+  // (see `list`), but a resource that names it explicitly still adopts it
+  // rather than trying to create a second team under a taken name.
+  const teams = yield* listOrganizationTeams(props.organization);
   return teams.find((team) => team.name === props.name);
 });
 
@@ -153,22 +142,11 @@ const observe = Effect.fn(function* (
 export const TeamProvider = () =>
   Provider.succeed(Team, {
     stables: ["teamId"],
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) &&
-          olds !== undefined &&
-          news.organization !== olds.organization
-          ? { action: "replace" as const }
-          : undefined,
-      ),
+    // A team belongs to the organization it was created in; Forgejo offers
+    // no way to move one, so a changed `organization` names a different team.
+    diff: replaceWhenChanged<TeamProps>("organization"),
     list: Effect.fn(function* () {
-      const organizations = yield* listAccessibleOrganizations();
-      const teams = yield* Effect.forEach(
-        organizations,
-        (organization) => listTeams(organization.username),
-        { concurrency: 8 },
-      );
-      return teams.flat().map(attributesOf);
+      return (yield* listManageableTeams()).map(attributesOf);
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observe(olds, output?.teamId);
@@ -198,7 +176,6 @@ export const TeamProvider = () =>
       return attributesOf(updated);
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (output === undefined) return;
       yield* Services.organization
         .orgDeleteTeam({ id: output.teamId })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));

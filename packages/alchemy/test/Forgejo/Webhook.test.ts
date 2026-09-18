@@ -1,8 +1,6 @@
-import { Webhook, providers } from "@/Forgejo/index.ts";
-import * as Test from "@/Test/Alchemy";
+import { Webhook } from "@/Forgejo/index.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   json,
   jsonList,
@@ -10,6 +8,7 @@ import {
   noContent,
   status,
 } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 interface StoredHook {
   readonly id: number;
@@ -82,12 +81,7 @@ const server = mockForgejo((request) => {
   return undefined;
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const { test } = forgejoTest(server);
 
 test.provider(
   "adopts an existing hook with the same delivery URL instead of duplicating it",

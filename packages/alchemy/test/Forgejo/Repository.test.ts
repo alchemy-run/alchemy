@@ -1,10 +1,9 @@
-import { Repository, providers } from "@/Forgejo/index.ts";
+import { Repository } from "@/Forgejo/index.ts";
 import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 interface StoredRepository {
   readonly id: number;
@@ -106,12 +105,7 @@ const server = mockForgejo(({ method, path, body }) => {
   return undefined;
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const { test } = forgejoTest(server);
 
 test.provider(
   "renames a repository in place, keeping its numeric ID",
@@ -183,9 +177,9 @@ test.provider(
       server.reset();
       yield* stack.deploy(Repository("Repo", props));
 
-      // Nothing changed, so neither write should be re-issued — Forgejo rejects
-      // edits to an archived repository, which an unconditional PATCH would
-      // turn into a permanent deploy failure.
+      // Nothing changed, so neither write should be re-issued: a no-op PATCH
+      // still counts as a write, bumping the repository's timestamps and
+      // reporting an update on a deploy that had nothing to do.
       expect(server.count("PATCH", "/repos/alice/alchemy")).toBe(0);
       expect(server.count("PUT", "/repos/alice/alchemy/topics")).toBe(0);
     }),

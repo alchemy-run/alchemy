@@ -5,17 +5,26 @@
  * the provider's public surface.
  */
 
-const sameArray = (
-  observed: readonly unknown[],
-  desired: readonly unknown[],
+/**
+ * Order-insensitive comparison of two lists, treating a missing list as
+ * empty.
+ *
+ * Order is not meaningful for any of the lists Forgejo accepts here
+ * (permission units, status-check contexts, push whitelists, topics, token
+ * scopes, token repository restrictions), so compare them as sets rather
+ * than sequences. Duplicates still count: the entries are sorted and
+ * compared pairwise, not deduplicated.
+ */
+export const sameSet = (
+  observed: readonly unknown[] | undefined,
+  desired: readonly unknown[] | undefined,
 ): boolean => {
-  if (observed.length !== desired.length) return false;
-  // Order is not meaningful for any of the lists Forgejo accepts here
-  // (permission units, status-check contexts, push whitelists, topics), so
-  // compare them as sets rather than sequences.
-  const left = [...observed].map(String).sort();
-  const right = [...desired].map(String).sort();
-  return left.every((value, index) => value === right[index]);
+  const left = [...(observed ?? [])].map(String).sort();
+  const right = [...(desired ?? [])].map(String).sort();
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 };
 
 /**
@@ -41,7 +50,7 @@ export const matchesDesired = (
     if (value === undefined) return true;
     const current = live[key];
     if (Array.isArray(value)) {
-      return Array.isArray(current) && sameArray(current, value);
+      return Array.isArray(current) && sameSet(current, value);
     }
     return current === value;
   });

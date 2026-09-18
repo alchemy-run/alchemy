@@ -1,14 +1,7 @@
-import {
-  BranchProtection,
-  Label,
-  Webhook,
-  providers,
-} from "@/Forgejo/index.ts";
+import { BranchProtection, Label, Webhook } from "@/Forgejo/index.ts";
 import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import {
   json,
   jsonList,
@@ -16,6 +9,7 @@ import {
   noContent,
   status,
 } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 /**
  * Account-wide teardown (`alchemy nuke`) enumerates straight from the cloud,
@@ -126,12 +120,7 @@ const server = mockForgejo((request) => {
   return undefined;
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const { test } = forgejoTest(server);
 
 /** The argument shape `Nuke.ts` builds: Attributes stand in for props. */
 const nukeDelete = <A>(attributes: A) => ({

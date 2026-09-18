@@ -1,10 +1,10 @@
 import { Services } from "@distilled.cloud/forgejo";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { listAccessibleOrganizations } from "./Lists.ts";
+import { listManageableTeams } from "./Lists.ts";
 import { paginate } from "./Pagination.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -76,32 +76,17 @@ export const TeamMember = Resource<TeamMember>("Forgejo.TeamMember");
  */
 export const TeamMemberProvider = () =>
   Provider.succeed(TeamMember, {
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) &&
-          olds !== undefined &&
-          (news.teamId !== olds.teamId || news.username !== olds.username)
-          ? { action: "replace" as const }
-          : undefined,
-      ),
+    // The team and the member are the whole resource: changing either names
+    // a different membership.
+    diff: replaceWhenChanged<TeamMemberProps>("teamId", "username"),
     list: Effect.fn(function* () {
-      const organizations = yield* listAccessibleOrganizations();
-      // An organization or team the credential cannot read is skipped rather
-      // than failing the whole sweep.
-      const teams = yield* Effect.forEach(
-        organizations,
-        (organization) =>
-          paginate(Services.organization.orgListTeams, {
-            org: organization.username,
-          }).pipe(
-            Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
-            ),
-          ),
-        { concurrency: 8 },
-      );
+      // A team the credential cannot read is skipped rather than failing the
+      // whole sweep, and the Owners team is excluded outright — its members
+      // are the organization's administrators. Both live in
+      // `listManageableTeams`.
+      const teams = yield* listManageableTeams();
       const members = yield* Effect.forEach(
-        teams.flat(),
+        teams,
         (team) =>
           paginate(Services.organization.orgListTeamMembers, {
             id: team.id,

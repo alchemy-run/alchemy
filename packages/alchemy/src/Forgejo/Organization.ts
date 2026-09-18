@@ -3,11 +3,11 @@ import type { Organization as ApiOrganization } from "@distilled.cloud/forgejo/o
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { originOf } from "./Credentials.ts";
 import { listAccessibleOrganizations } from "./Lists.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -201,14 +201,7 @@ export const OrganizationProvider = () =>
     // account the create was issued under, and Forgejo exposes no ownership
     // transfer, so replacing on it would tear down and re-adopt the very same
     // organization — see the guard in `reconcile`.
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) &&
-          olds !== undefined &&
-          news.username !== olds.username
-          ? { action: "replace" as const }
-          : undefined,
-      ),
+    diff: replaceWhenChanged<OrganizationProps>("username"),
     list: Effect.fn(function* () {
       const origin = yield* instanceOrigin;
       const organizations = yield* listAccessibleOrganizations();

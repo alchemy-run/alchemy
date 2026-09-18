@@ -4,13 +4,11 @@ import {
   Organization,
   Team,
   TeamMember,
-  providers,
 } from "@/Forgejo/index.ts";
+import * as Provider from "@/Provider.ts";
 import { destroy } from "@/RemovalPolicy";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import {
   json,
@@ -19,6 +17,7 @@ import {
   noContent,
   status,
 } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 interface StoredOrganization {
   readonly id: number;
@@ -32,6 +31,8 @@ interface StoredTeam {
   readonly organization: string;
   name: string;
   description?: string;
+  /** `"owner"` marks the team Forgejo creates with every organization. */
+  permission?: string;
 }
 
 interface StoredLabel {
@@ -74,6 +75,7 @@ const teamPayload = (team: StoredTeam) => ({
   id: team.id,
   name: team.name,
   description: team.description,
+  permission: team.permission,
 });
 
 const labelPayload = (label: StoredLabel) => ({
@@ -286,12 +288,7 @@ const server = mockForgejo((request) => {
   return undefined;
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const { test } = forgejoTest(server);
 
 test.provider("creates and then updates an organization", (stack) =>
   Effect.gen(function* () {
@@ -511,6 +508,75 @@ test.provider("adopts a team that already exists by name", (stack) =>
     // The adopted team already matches what was declared, so adoption issues
     // no write at all.
     expect(server.count("PATCH", "/teams/7")).toBe(0);
+  }),
+);
+
+/**
+ * Enumeration feeds `alchemy unsafe nuke` straight into `delete`, and the
+ * `Owners` team Forgejo creates with every organization is both something
+ * Alchemy never provisioned and what grants the organization its
+ * administrators. Leaving it in a listing points teardown at an object that
+ * either refuses to be deleted — failing every pass, so a nuke never reports
+ * clean — or takes the organization's admin access with it.
+ */
+test.provider("omits the built-in Owners team from enumeration", () =>
+  Effect.gen(function* () {
+    reset();
+    organizations.set("acme", {
+      id: 1,
+      username: "acme",
+      html_url: "https://forge.example/acme",
+    });
+    teams.set(1, {
+      id: 1,
+      organization: "acme",
+      name: "Owners",
+      permission: "owner",
+    });
+    teams.set(2, {
+      id: 2,
+      organization: "acme",
+      name: "reviewers",
+      permission: "write",
+    });
+    members.add("1:admin");
+    members.add("2:bob");
+
+    const teamProvider = yield* Provider.findProvider(Team);
+    expect(yield* teamProvider.list()).toEqual([
+      { teamId: 2, name: "reviewers" },
+    ]);
+
+    // The Owners team's members are the organization's administrators, so
+    // skipping the team has to skip its roster too.
+    const memberProvider = yield* Provider.findProvider(TeamMember);
+    expect(yield* memberProvider.list()).toEqual([
+      { teamId: 2, username: "bob" },
+    ]);
+  }),
+);
+
+/**
+ * Adoption is deliberately *not* filtered: a resource that names the Owners
+ * team explicitly takes it over rather than trying to create a second team
+ * under a name Forgejo has already taken.
+ */
+test.provider("still adopts the Owners team when named explicitly", (stack) =>
+  Effect.gen(function* () {
+    reset();
+    teams.set(4, {
+      id: 4,
+      organization: "acme",
+      name: "Owners",
+      permission: "owner",
+    });
+
+    const output = yield* stack.deploy(
+      Team("Owners", { organization: "acme", name: "Owners" }),
+    );
+
+    expect(output).toMatchObject({ teamId: 4 });
+    expect(server.count("POST", "/orgs/acme/teams")).toBe(0);
   }),
 );
 

@@ -1,4 +1,5 @@
 import { Services } from "@distilled.cloud/forgejo";
+import type { Team as ApiTeam } from "@distilled.cloud/forgejo/organization";
 import * as Effect from "effect/Effect";
 import { paginate } from "./Pagination.ts";
 
@@ -34,4 +35,52 @@ export const listAccessibleRepositories = Effect.fn(function* () {
  */
 export const listAccessibleOrganizations = Effect.fn(function* () {
   return yield* paginate(Services.organization.orgListCurrentUserOrgs, {});
+});
+
+/**
+ * Every team of an organization, or none when the credential cannot read it:
+ * account-wide enumeration walks organizations the credential may not be able
+ * to inspect, and a single inaccessible one must not abort the whole sweep.
+ */
+export const listOrganizationTeams = (organization: string) =>
+  paginate(Services.organization.orgListTeams, { org: organization }).pipe(
+    Effect.catchTag(["NotFound", "Forbidden"], () =>
+      Effect.succeed([] as readonly ApiTeam[]),
+    ),
+  );
+
+/**
+ * Whether a team is the `Owners` team Forgejo creates with every organization.
+ *
+ * It is never something Alchemy provisioned, and it is what grants the
+ * organization its administrators. Enumeration feeds `alchemy unsafe nuke`
+ * directly — see {@link listAccessibleOrganizations} — so leaving it in a
+ * listing points teardown at an object that either refuses to be deleted
+ * (failing every pass, so a nuke never reports clean) or takes the
+ * organization's administrative access with it.
+ *
+ * Keyed on the `owner` permission rather than the literal name, which a
+ * renamed team could otherwise shed.
+ */
+export const isOwnersTeam = (team: ApiTeam): boolean =>
+  team.permission === "owner";
+
+/**
+ * Every team Alchemy may act on across the credential's organizations.
+ *
+ * This is the enumeration half of the team resources — what `alchemy unsafe
+ * nuke` deletes through — so the {@link isOwnersTeam} exclusion belongs here,
+ * once, rather than at each call site where forgetting it is silent. Lookups
+ * that address a team by name go through the unfiltered
+ * {@link listOrganizationTeams} instead, so naming the Owners team explicitly
+ * still adopts it.
+ */
+export const listManageableTeams = Effect.fn(function* () {
+  const organizations = yield* listAccessibleOrganizations();
+  const teams = yield* Effect.forEach(
+    organizations,
+    (organization) => listOrganizationTeams(organization.username),
+    { concurrency: 8 },
+  );
+  return teams.flat().filter((team) => !isOwnersTeam(team));
 });

@@ -1,10 +1,10 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { BranchProtection as ApiBranchProtection } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -237,16 +237,13 @@ const edit = (props: BranchProtectionProps) =>
 export const BranchProtectionProvider = () =>
   Provider.succeed(BranchProtection, {
     stables: ["ruleName", "owner", "repository"],
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) &&
-          olds !== undefined &&
-          (news.owner !== olds.owner ||
-            news.repository !== olds.repository ||
-            news.ruleName !== olds.ruleName)
-          ? { action: "replace" as const }
-          : undefined,
-      ),
+    // The rule name is the endpoint's identity, alongside the repository it
+    // protects, so a change to any of the three names a different rule.
+    diff: replaceWhenChanged<BranchProtectionProps>(
+      "owner",
+      "repository",
+      "ruleName",
+    ),
     list: Effect.fn(function* () {
       const repositories = yield* listAccessibleRepositories();
       const rules = yield* Effect.forEach(
@@ -295,8 +292,18 @@ export const BranchProtectionProvider = () =>
             // A concurrent create wins the race; converge onto the rule that
             // is already there. This endpoint declares 403/422/423 for an
             // existing rule, not 409, so the conflict arrives under those.
-            Effect.catchTag(["Forbidden", "UnprocessableEntity"], () =>
-              edit(news),
+            //
+            // Those tags also cover genuine failures — a credential without
+            // admin rights on the repository gets the same 403 — so converge
+            // only if the rule actually turned up. Otherwise re-fail with the
+            // original error: editing a rule that does not exist replaces the
+            // clearest diagnosis with a misleading not-found.
+            Effect.catchTag(["Forbidden", "UnprocessableEntity"], (cause) =>
+              Effect.gen(function* () {
+                const existing = yield* observe(news);
+                if (existing === undefined) return yield* Effect.fail(cause);
+                return yield* edit(news);
+              }),
             ),
           );
         return attributesOf(news, created);
@@ -309,7 +316,6 @@ export const BranchProtectionProvider = () =>
       return attributesOf(news, updated);
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (output === undefined) return;
       // Address the rule from `output` alone: account-wide teardown has no
       // state row, so it passes the Attributes shape as `olds` too.
       yield* Services.repository

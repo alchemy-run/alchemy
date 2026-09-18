@@ -1,12 +1,14 @@
 import { Services } from "@distilled.cloud/forgejo";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { toRedacted } from "../Util/redacted.ts";
 import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
+import { sameSet } from "./Settings.ts";
 
 /**
  * Repository restriction for a Forgejo API token.
@@ -126,18 +128,13 @@ export interface ApiToken extends Resource<
  */
 export const ApiToken = Resource<ApiToken>("Forgejo.ApiToken");
 
-/** Order-insensitive comparison of two optional string lists. */
-const sameSet = (
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-): boolean => {
-  const left = [...(a ?? [])].sort();
-  const right = [...(b ?? [])].sort();
-  return (
-    left.length === right.length &&
-    left.every((value, index) => value === right[index])
-  );
-};
+/**
+ * Flatten repository restrictions into comparable `owner/name` slugs.
+ */
+const repositorySlugs = (
+  repositories: readonly ApiTokenRepository[] | undefined,
+): readonly string[] | undefined =>
+  repositories?.map((repository) => `${repository.owner}/${repository.name}`);
 
 const listTokens = (username: string) =>
   paginate(Services.admin.adminListUserAccessTokens, { username });
@@ -212,20 +209,14 @@ export const ApiTokenProvider = () =>
       // (Forgejo rejects a duplicate token name), so every consumer of the
       // old value breaks in between. The trigger must therefore fire on a
       // genuine change only, never on a cosmetic reorder.
-      const sameScopes = sameSet(news.scopes, olds.scopes);
-      const sameRepositories = sameSet(
-        news.repositories?.map(
-          (repository) => `${repository.owner}/${repository.name}`,
-        ),
-        olds.repositories?.map(
-          (repository) => `${repository.owner}/${repository.name}`,
-        ),
-      );
       return Effect.succeed(
         news.username !== olds.username ||
           news.name !== olds.name ||
-          !sameScopes ||
-          !sameRepositories
+          !sameSet(news.scopes, olds.scopes) ||
+          !sameSet(
+            repositorySlugs(news.repositories),
+            repositorySlugs(olds.repositories),
+          )
           ? { action: "replace" as const, deleteFirst: true }
           : undefined,
       );
@@ -274,15 +265,7 @@ export const ApiTokenProvider = () =>
             ? undefined
             : news.repositories.map(({ owner, name }) => ({ owner, name })),
       });
-      // The SDK hands the generated secret out Redacted; a plain string is
-      // only ever seen from a mock that bypasses the protocol's wrapping.
-      const secret =
-        created.sha1 === undefined
-          ? undefined
-          : Redacted.isRedacted(created.sha1)
-            ? created.sha1
-            : Redacted.make(created.sha1);
-      if (secret === undefined) {
+      if (created.sha1 === undefined) {
         return yield* new MissingGeneratedToken({
           username: news.username,
           name: news.name,
@@ -290,13 +273,14 @@ export const ApiTokenProvider = () =>
       }
       return {
         tokenId: created.id,
-        token: secret,
+        // The SDK hands the generated secret out Redacted; a plain string is
+        // only ever seen from a mock that bypasses the protocol's wrapping.
+        token: toRedacted(created.sha1),
         tokenLastEight: created.token_last_eight,
         createdAt: created.created_at,
       };
     }),
     delete: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return;
       yield* Services.admin
         .adminDeleteUserAccessToken({
           username: olds.username,

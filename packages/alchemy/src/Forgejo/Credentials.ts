@@ -17,10 +17,13 @@ import {
   type ForgejoResolvedCredentials,
 } from "./AuthProvider.ts";
 
+// `CredentialsFromEnv` is deliberately not re-exported: it reads the same
+// `FORGEJO_URL` / `FORGEJO_TOKEN` pair as `fromEnv` below but dies on a
+// missing value instead of failing with `MissingForgejoEnvironment`. Two
+// env-backed credential layers on one public surface is one too many.
 export {
   API_PATH,
   Credentials,
-  CredentialsFromEnv,
   credentials,
   normalizeBaseUrl,
   type Config as CredentialsConfig,
@@ -85,14 +88,24 @@ export const fromEnv = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const baseUrl = yield* Effect.sync(() => process.env.FORGEJO_URL);
-      const token = yield* Effect.sync(() => process.env.FORGEJO_TOKEN);
-      const missing = [
-        ...(baseUrl === undefined ? ["FORGEJO_URL"] : []),
-        ...(token === undefined ? ["FORGEJO_TOKEN"] : []),
-      ];
+      // An empty variable counts as missing. `normalizeBaseUrl("")` yields
+      // the relative `/api/v1`, and an empty token authenticates as nobody —
+      // both surface far from here as an opaque transport or 401 failure,
+      // rather than the message this error exists to give.
+      const read = (name: string) =>
+        Effect.sync(() => {
+          const value = process.env[name];
+          return value === undefined || value === "" ? undefined : value;
+        });
+      const baseUrl = yield* read("FORGEJO_URL");
+      const token = yield* read("FORGEJO_TOKEN");
       if (baseUrl === undefined || token === undefined) {
-        return yield* new MissingForgejoEnvironment({ missing });
+        return yield* new MissingForgejoEnvironment({
+          missing: [
+            ...(baseUrl === undefined ? ["FORGEJO_URL"] : []),
+            ...(token === undefined ? ["FORGEJO_TOKEN"] : []),
+          ],
+        });
       }
       return Effect.succeed<Config>({
         token: Redacted.make(token),
@@ -100,6 +113,25 @@ export const fromEnv = () =>
       });
     }),
   );
+
+/**
+ * Raised when a stored profile resolves but leaves a required field blank.
+ */
+export class IncompleteForgejoProfile extends Data.TaggedError(
+  "IncompleteForgejoProfile",
+)<{
+  /**
+   * Names of the credential fields that resolved empty.
+   */
+  readonly missing: readonly string[];
+}> {
+  /**
+   * Human-readable description of the incomplete credential.
+   */
+  override get message(): string {
+    return `Forgejo profile is missing ${this.missing.join(" and ")}.`;
+  }
+}
 
 /**
  * Raised when neither the selected profile nor the CI environment yields a
@@ -160,6 +192,20 @@ export const fromAuthProvider = () =>
       > = resolve;
 
       return yield* resolved.pipe(
+        // A stored profile missing either field resolves to an empty string
+        // rather than failing — `toResolved` is a total function, so it has
+        // no error channel to report that through. Reject it here instead of
+        // letting `/api/v1` and an anonymous token surface as a transport
+        // error or a 401 far from the profile that caused them.
+        Effect.flatMap((creds) => {
+          const missing = [
+            ...(creds.baseUrl === "" ? ["baseUrl"] : []),
+            ...(Redacted.value(creds.token) === "" ? ["token"] : []),
+          ];
+          return missing.length === 0
+            ? Effect.succeed(creds)
+            : Effect.fail(new IncompleteForgejoProfile({ missing }));
+        }),
         Effect.map((creds): Config => ({
           token: creds.token,
           apiBaseUrl: normalizeBaseUrl(creds.baseUrl),
