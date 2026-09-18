@@ -196,19 +196,6 @@
   ::selection {
     background: color-mix(in srgb, var(--moss) 25%, transparent);
   }
-  /* Everything interactable answers the hand. Tailwind v4 reset
-     buttons to `cursor: default`; the app's buttons, links, tabs,
-     rows and toggles are all click targets and should say so. */
-  a,
-  button:not(:disabled),
-  [role="button"],
-  [role="tab"],
-  label:has(> input[type="checkbox"]),
-  input[type="checkbox"],
-  summary,
-  select {
-    cursor: pointer;
-  }
 }
 
 /* ============================================================
