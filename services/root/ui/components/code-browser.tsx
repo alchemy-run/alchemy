@@ -28,6 +28,7 @@ import {
   GitBranch,
   GitCommitHorizontal,
 } from "lucide-react";
+import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 
 const short = (oid: string): string => oid.slice(0, 7);
@@ -142,13 +143,25 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
             );
           })}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border/60 px-1 py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border/60">
           {full === undefined ? (
             <div className="px-3 py-4 text-[12px] text-muted-foreground">
               loading the tree…
             </div>
           ) : (
-            <FileTree model={model} style={{ height: "100%", ...treeStyles }} />
+            <FileTree
+              model={model}
+              style={
+                {
+                  height: "100%",
+                  // VS Code posture: flat square rows, tight leading
+                  "--trees-border-radius-override": "0px",
+                  "--trees-row-height": "24px",
+                  "--trees-item-row-gap-override": "0px",
+                  ...treeStyles,
+                } as React.CSSProperties
+              }
+            />
           )}
         </div>
       </aside>
@@ -203,16 +216,15 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {file !== undefined ? (
-            <div className="p-4">
-              <FileCard
-                path={path}
-                contents={
-                  file.length > 200_000
-                    ? `${file.slice(0, 200_000)}\n… (truncated)`
-                    : file
-                }
-              />
-            </div>
+            <FileCard
+              flush
+              path={path}
+              contents={
+                file.length > 200_000
+                  ? `${file.slice(0, 200_000)}\n… (truncated)`
+                  : file
+              }
+            />
           ) : (
             <div className="mx-auto flex w-full max-w-3xl flex-col p-4">
               <div className="rounded-md border border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">

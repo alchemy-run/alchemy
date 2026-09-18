@@ -210,7 +210,16 @@ CodeCard.displayName = "CodeCard";
  * breadcrumb header, so the renderer's is off.
  */
 export const FileCard = memo(
-  ({ path, contents }: { path: string; contents: string }) => {
+  ({
+    path,
+    contents,
+    flush = false,
+  }: {
+    path: string;
+    contents: string;
+    /** VS Code-style: square, borderless, filling the pane. */
+    flush?: boolean;
+  }) => {
     const base = useBaseOptions();
     const file = useMemo(
       // the name carries the extension — how Shiki picks the grammar
@@ -227,7 +236,13 @@ export const FileCard = memo(
     );
     return (
       <CodeBoundary fallback={contents}>
-        <div className={cn(CARD, "group/code relative")}>
+        <div
+          className={cn(
+            flush
+              ? "code-surface group/code relative min-h-full text-[13px]"
+              : cn(CARD, "group/code relative"),
+          )}
+        >
           <File file={file} options={options} />
           <CopyButton
             text={contents}
