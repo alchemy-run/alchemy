@@ -714,6 +714,24 @@ export const threadsOf = (
  */
 export const ThreadCard = ({ thread }: { thread: Thread }) => {
   const replies = thread.posts.filter((post) => post.id !== thread.root.id);
+
+  // an INLINE exchange is conversation, not a workroom: the answer
+  // renders as ordinary rows in the stream, its reply-arc pointing at
+  // the message it answers — the graph edge is real either way
+  if (thread.root.mode === "inline") {
+    return (
+      <MessageContext.Provider value={{ id: thread.root.id }}>
+        <div className="min-w-0">
+          <PostRow post={thread.root} header />
+          {replies.length > 0 && (
+            <div className="mt-3">
+              <PostList posts={replies} context={[thread.root]} />
+            </div>
+          )}
+        </div>
+      </MessageContext.Provider>
+    );
+  }
   const live = thread.posts.some((post) => post.status === "running");
   const last = replies[replies.length - 1];
   const open = () => showThread(thread.root.channel ?? "root", thread.root.id);

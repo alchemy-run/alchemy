@@ -99,6 +99,8 @@ export interface ScoutDeps {
     string,
     { what: string; notFor?: string; examples?: ReadonlyArray<string> }
   >;
+  /** Extra questions to fan into the first judgment (same call). */
+  readonly extra?: Record<string, TypeSafe.Questions[string]>;
 }
 
 /** `#123`, `owner/repo#123` and `#p-…` — extraction is code, not judgment. */
@@ -246,7 +248,7 @@ export const scout = Effect.fn("root/Scout.scout")(function* (
   const first = yield* judge(
     deps.query,
     state,
-    { needsContext: needsContextQuestion },
+    { ...deps.extra, needsContext: needsContextQuestion },
     deps.roles,
   );
   if (first === undefined) return undefined;

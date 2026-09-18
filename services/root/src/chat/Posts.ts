@@ -72,6 +72,9 @@ export class Posts extends Context.Service<
       id: string,
       answering: string,
       mode: NonNullable<Post["mode"]>,
+      /** A JUDGED reply edge — stamped when the gate is sure the
+       *  message piles onto an earlier one. */
+      replyTo?: string,
     ) => Effect.Effect<void>;
     /** Move a post's status once its replies land (or break). */
     readonly settle: (

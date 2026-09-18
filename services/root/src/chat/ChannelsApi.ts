@@ -13,7 +13,7 @@ import { lineage, nameOfKey, ROOT } from "../Lineage.ts";
 import { Issues } from "../forge/Issues.ts";
 import { mentionsOf } from "./Ask.ts";
 import { Posts } from "./Posts.ts";
-import type { Respondent } from "./Gate.ts";
+import { repliesToQuestion, type Respondent } from "./Gate.ts";
 import { Roster } from "./Roster.ts";
 import { scout } from "./Scout.ts";
 
@@ -213,6 +213,25 @@ export const ChannelsApi = Effect.gen(function* () {
             issues: { get: (repo, number) => issues.get(repo, number) },
             defaultRepo: "org/alchemy",
             roles: roster.rolesFor([...channel.members]),
+            // the reply EDGE, judged in the same call: does this
+            // message pile onto one of the recent messages?
+            extra:
+              conversation.length === 0
+                ? {}
+                : {
+                    repliesTo: repliesToQuestion(
+                      Object.fromEntries([
+                        ...conversation
+                          .filter((candidate) => candidate.id !== postId)
+                          .slice(-10)
+                          .map((candidate) => [
+                            candidate.id,
+                            `${candidate.author}: ${candidate.text.slice(0, 140)}`,
+                          ]),
+                        ["none", "The message stands on its own"],
+                      ]) as Record<string, string>,
+                    ),
+                  },
           },
           {
             channel: channel.name,
@@ -255,10 +274,22 @@ export const ChannelsApi = Effect.gen(function* () {
     // stamp the routing outcome: `answering` names who the exchange
     // waits on ("engineer is typing…"), `mode` tells the UI whether to
     // open a thread shell right away or keep the reply in the stream
+    const piled = judged?.extras.repliesTo;
+    const pileConfidence =
+      (judged?.extraAnswers.repliesTo as { confidence?: number } | undefined)
+        ?.confidence ?? 0;
+    const arcTo =
+      replyTo === undefined &&
+      typeof piled === "string" &&
+      piled !== "none" &&
+      pileConfidence >= 0.7
+        ? piled
+        : undefined;
     yield* posts.route(
       postId,
       agent,
       inline || channel.dm === true ? "inline" : "thread",
+      arcTo,
     );
 
     // dispatch rides the post's id (idempotent delivery; the agent's
@@ -313,7 +344,7 @@ export const ChannelsApi = Effect.gen(function* () {
               return Effect.andThen(
                 posts.post({
                   id: `${postId}-${agent}`,
-                  ...(inline ? {} : { replyTo: postId }),
+                  replyTo: postId,
                   channel: channel.name,
                   author: agent,
                   text: clip(answer),

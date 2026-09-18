@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import {
   judge,
+  repliesToQuestion,
   type Disposition,
   type Line,
   type Respondent,
@@ -840,4 +841,47 @@ describe("stability", () => {
     },
     { timeout: 90_000 },
   );
+});
+
+// ─── the judged reply edge (extras riding the same call) ────────────
+
+describe("the reply edge", () => {
+  const conversation = {
+    "p-bug-1": "sam: the pack ingest OOM is back, third time this week",
+    "p-ans-1":
+      "engineer: Confirmed — same buffering path. I'll sketch a streaming fix.",
+    "p-greet-1": "manager: morning all",
+    none: "The message stands on its own",
+  };
+
+  // the state's `recent` and the question's candidates are the SAME
+  // conversation — the live path feeds both from one list, and the
+  // model rightly disbelieves candidates the state says don't exist
+  const recent = [
+    line("p-bug-1", "sam", "the pack ingest OOM is back, third time this week"),
+    line(
+      "p-ans-1",
+      "engineer",
+      "Confirmed — same buffering path. I'll sketch a streaming fix.",
+    ),
+    line("p-greet-1", "manager", "morning all"),
+  ];
+  const ask = (message: string) =>
+    Effect.runPromise(
+      judge(
+        query,
+        { channel: "engineering", message, roster: ENGINEERING, recent },
+        { repliesTo: repliesToQuestion(conversation) },
+      ).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+  test("a pile-on joins the message it piles onto", async () => {
+    const verdict = await ask("+1 same here, hit it twice today");
+    expect(verdict?.extras.repliesTo).toBe("p-bug-1");
+  });
+
+  test("a new topic stands on its own", async () => {
+    const verdict = await ask("what port does the dev server run on?");
+    expect(verdict?.extras.repliesTo).toBe("none");
+  });
 });

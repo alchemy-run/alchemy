@@ -139,6 +139,7 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
     id: string,
     answering: string,
     mode: NonNullable<Post["mode"]>,
+    replyTo?: string,
   ) => Effect.Effect<void, never, RuntimeContext>;
   readonly postGet: (
     id: string,
@@ -344,11 +345,12 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           );
         }),
 
-        postRoute: Effect.fn(function* (id, answering, mode) {
+        postRoute: Effect.fn(function* (id, answering, mode, replyTo) {
           yield* sql.exec(
-            "UPDATE posts SET answering = ?, mode = ? WHERE id = ?",
+            "UPDATE posts SET answering = ?, mode = ?, reply_to = COALESCE(?, reply_to) WHERE id = ?",
             answering,
             mode,
+            replyTo ?? null,
             id,
           );
         }),
@@ -553,8 +555,8 @@ export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
       return Posts.of({
         post: (input) => inWorker(stub().postWrite(input)),
         settle: (id, status) => inWorker(stub().postSettle(id, status)),
-        route: (id, answering, mode) =>
-          inWorker(stub().postRoute(id, answering, mode)),
+        route: (id, answering, mode, replyTo) =>
+          inWorker(stub().postRoute(id, answering, mode, replyTo)),
         get: (id) => inWorker(stub().postGet(id)),
         replies: (id) => inWorker(stub().postReplies(id)),
         ancestors: (id) => inWorker(stub().postAncestors(id)),
