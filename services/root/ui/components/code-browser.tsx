@@ -27,11 +27,39 @@ import {
   FolderGit2,
   GitBranch,
   GitCommitHorizontal,
+  X,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const short = (oid: string): string => oid.slice(0, 7);
+
+/**
+ * EDITOR TABS, the VS Code contract: a single click opens a file as
+ * the PREVIEW tab (italic, at most one — the next preview replaces it
+ * in place); a double click, on the tree row or the tab itself, PINS
+ * it. X closes one; the context menu closes all, or everything to one
+ * side; tabs drag to reorder. The set persists across reloads.
+ */
+interface EditorTab {
+  readonly repo: string;
+  readonly ref: string;
+  readonly path: string;
+  readonly pinned: boolean;
+}
+
+const TAB_KEY = (tab: { repo: string; path: string }) =>
+  `${tab.repo}:${tab.path}`;
+const TABS_STORE = "root:code-tabs";
+
+const loadTabs = (): EditorTab[] => {
+  try {
+    const raw = localStorage.getItem(TABS_STORE);
+    return raw === null ? [] : (JSON.parse(raw) as EditorTab[]);
+  } catch {
+    return [];
+  }
+};
 
 /** VS Code-size expand chevrons — the built-ins render at full icon
  *  size (svg width/height attributes); CSS in the shadow root wins
@@ -74,6 +102,109 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
   const [trees, setTrees] = useState<Record<string, FullTree>>({});
   const [file, setFile] = useState<string | undefined>();
   const [log, setLog] = useState<ReadonlyArray<CommitInfo>>([]);
+  const [tabs, setTabs] = useState<EditorTab[]>(loadTabs);
+  const [dragging, setDragging] = useState<string | undefined>();
+  const [menu, setMenu] = useState<
+    { key: string; x: number; y: number } | undefined
+  >();
+
+  useEffect(() => {
+    localStorage.setItem(TABS_STORE, JSON.stringify(tabs));
+  }, [tabs]);
+
+  /** A file arrived (tree click or deep link): preview it. */
+  const openPreview = (next: Omit<EditorTab, "pinned">) =>
+    setTabs((current) => {
+      if (current.some((tab) => TAB_KEY(tab) === TAB_KEY(next))) return current;
+      const preview = current.findIndex((tab) => !tab.pinned);
+      const opened = { ...next, pinned: false };
+      if (preview === -1) return [...current, opened];
+      return current.map((tab, index) => (index === preview ? opened : tab));
+    });
+
+  const pin = (key: string) =>
+    setTabs((current) =>
+      current.map((tab) =>
+        TAB_KEY(tab) === key ? { ...tab, pinned: true } : tab,
+      ),
+    );
+
+  const closeTabs = (keys: ReadonlySet<string>) => {
+    setMenu(undefined);
+    setTabs((current) => {
+      const kept = current.filter((tab) => !keys.has(TAB_KEY(tab)));
+      // closing the ACTIVE tab moves focus to its neighbor
+      const activeKey = TAB_KEY({ repo, path });
+      if (keys.has(activeKey)) {
+        const index = current.findIndex((tab) => TAB_KEY(tab) === activeKey);
+        const next = kept[Math.min(index, kept.length - 1)];
+        if (next !== undefined) showCode(next.repo, next.ref, next.path);
+        else showCode(repo, ref);
+      }
+      return kept;
+    });
+  };
+
+  const moveTab = (from: string, to: string) =>
+    setTabs((current) => {
+      const a = current.findIndex((tab) => TAB_KEY(tab) === from);
+      const b = current.findIndex((tab) => TAB_KEY(tab) === to);
+      if (a === -1 || b === -1 || a === b) return current;
+      const next = [...current];
+      const [moved] = next.splice(a, 1);
+      next.splice(b, 0, moved!);
+      return next;
+    });
+
+  // the open file always has a tab — deep links included
+  useEffect(() => {
+    if (path.length > 0) openPreview({ repo, ref, path });
+  }, [repo, ref, path]);
+
+  // pin on tree double-click: dblclick is composed, so it crosses the
+  // shadow boundary and carries the row in its path
+  useEffect(() => {
+    const host = treeHost.current;
+    if (host === null) return;
+    const onDouble = (event: MouseEvent) => {
+      for (const node of event.composedPath()) {
+        const el = node as HTMLElement;
+        if (el?.getAttribute?.("data-item-type") === "file") {
+          const itemPath = el.getAttribute("data-item-path");
+          if (itemPath !== null) {
+            const [root, ...rest] = itemPath.split("/");
+            if (root !== undefined && rest.length > 0) {
+              const tabRepo = root;
+              const tabPath = rest.join("/");
+              setTabs((current) =>
+                current.some(
+                  (tab) =>
+                    TAB_KEY(tab) === TAB_KEY({ repo: tabRepo, path: tabPath }),
+                )
+                  ? current.map((tab) =>
+                      TAB_KEY(tab) === TAB_KEY({ repo: tabRepo, path: tabPath })
+                        ? { ...tab, pinned: true }
+                        : tab,
+                    )
+                  : [
+                      ...current,
+                      {
+                        repo: tabRepo,
+                        ref: tabRepo === repo ? ref : "main",
+                        path: tabPath,
+                        pinned: true,
+                      },
+                    ],
+              );
+            }
+          }
+          return;
+        }
+      }
+    };
+    host.addEventListener("dblclick", onDouble);
+    return () => host.removeEventListener("dblclick", onDouble);
+  }, [repo, ref]);
 
   useEffect(() => {
     fetchRepos()
@@ -211,6 +342,130 @@ export const CodeBrowser = ({ place }: { place: CodePlace }) => {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {tabs.length > 0 && (
+          <div className="flex shrink-0 items-stretch overflow-x-auto border-b border-border bg-muted/20">
+            {tabs.map((tab) => {
+              const key = TAB_KEY(tab);
+              const active = tab.repo === repo && tab.path === path;
+              const name = tab.path.split("/").pop() ?? tab.path;
+              return (
+                <div
+                  key={key}
+                  draggable
+                  onDragStart={() => setDragging(key)}
+                  onDragEnd={() => setDragging(undefined)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (dragging !== undefined && dragging !== key) {
+                      moveTab(dragging, key);
+                    }
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setMenu({ key, x: event.clientX, y: event.clientY });
+                  }}
+                  className={cn(
+                    "group/tab flex max-w-52 shrink-0 cursor-pointer items-center gap-1.5 border-r border-border/60 px-3 text-[12px]",
+                    active
+                      ? "bg-background text-foreground shadow-[inset_0_1px_0_var(--color-primary)]"
+                      : "text-muted-foreground hover:bg-accent/40",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => showCode(tab.repo, tab.ref, tab.path)}
+                    onDoubleClick={() => pin(key)}
+                    className={cn(
+                      "min-w-0 cursor-pointer truncate py-1.5",
+                      !tab.pinned && "italic",
+                    )}
+                    title={`${tab.repo}/${tab.path}`}
+                  >
+                    {name}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`close ${name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeTabs(new Set([key]));
+                    }}
+                    className={cn(
+                      "shrink-0 cursor-pointer rounded p-0.5 hover:bg-accent",
+                      active
+                        ? "opacity-70"
+                        : "opacity-0 group-hover/tab:opacity-70",
+                    )}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              );
+            })}
+            <div className="min-w-4 flex-1" />
+            <button
+              type="button"
+              title="close all tabs"
+              onClick={() => closeTabs(new Set(tabs.map(TAB_KEY)))}
+              className="shrink-0 cursor-pointer px-2 text-muted-foreground opacity-60 hover:opacity-100"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+        {menu !== undefined && (
+          <>
+            <button
+              type="button"
+              aria-label="dismiss"
+              className="fixed inset-0 z-40 cursor-default"
+              onClick={() => setMenu(undefined)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setMenu(undefined);
+              }}
+            />
+            <div
+              className="fixed z-50 min-w-44 rounded-md border border-border bg-popover py-1 text-[12px] shadow-md"
+              style={{ left: menu.x, top: menu.y }}
+            >
+              {(() => {
+                const index = tabs.findIndex(
+                  (tab) => TAB_KEY(tab) === menu.key,
+                );
+                const item = (
+                  label: string,
+                  keys: ReadonlyArray<string>,
+                  disabled = keys.length === 0,
+                ) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => closeTabs(new Set(keys))}
+                    className={cn(
+                      "block w-full cursor-pointer px-3 py-1 text-left",
+                      disabled
+                        ? "cursor-default text-muted-foreground/50"
+                        : "hover:bg-accent",
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+                return [
+                  item("Close", [menu.key]),
+                  item("Close to the Left", tabs.slice(0, index).map(TAB_KEY)),
+                  item(
+                    "Close to the Right",
+                    tabs.slice(index + 1).map(TAB_KEY),
+                  ),
+                  item("Close All", tabs.map(TAB_KEY)),
+                ];
+              })()}
+            </div>
+          </>
+        )}
         <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
           <GitBranch className="size-3.5 text-muted-foreground" />
           <select
