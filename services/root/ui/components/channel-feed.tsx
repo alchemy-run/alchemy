@@ -45,10 +45,19 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 const isLive = (post: Post): boolean => post.status === "running";
 
 /** The channel's stored stream, polled — fast while anything runs. */
+export interface Association {
+  readonly from: string;
+  readonly to: string;
+  readonly label: string;
+  readonly confidence: number;
+  readonly provenance: string;
+}
+
 const useChannelPosts = (channel: string) => {
   const [posts, setPosts] = useState<ReadonlyArray<Post> | undefined>(
     undefined,
   );
+  const [edges, setEdges] = useState<ReadonlyArray<Association>>([]);
   useEffect(() => {
     let open = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -58,6 +67,11 @@ const useChannelPosts = (channel: string) => {
           if (!open || !response.ok) return;
           const body = (await response.json()) as { posts: Post[] };
           setPosts(body.posts);
+          fetch(`/api/edges?channel=${encodeURIComponent(channel)}`)
+            .then(async (r) => {
+              if (open && r.ok) setEdges((await r.json()) as Association[]);
+            })
+            .catch(() => {});
           timer = setTimeout(load, body.posts.some(isLive) ? 1_500 : 5_000);
         })
         .catch(() => {
@@ -79,7 +93,7 @@ const useChannelPosts = (channel: string) => {
       })
       .catch(() => {});
   };
-  return { posts, refresh };
+  return { posts, edges, refresh };
 };
 
 /** The message box — a new thread root, or (with `replyTo`) a
@@ -158,7 +172,7 @@ export const ChannelFeed = ({
   /** A DM — the empty state speaks to the agent, not a room. */
   dm?: boolean;
 }) => {
-  const { posts, refresh } = useChannelPosts(channel);
+  const { posts, edges, refresh } = useChannelPosts(channel);
   const live = posts !== undefined && posts.some(isLive);
   const logRef = useRef<HTMLDivElement | null>(null);
   // pin-to-bottom: follow new rows unless the reader scrolled up
@@ -184,6 +198,7 @@ export const ChannelFeed = ({
               `${post.author}\n${post.text}`.toLowerCase().includes(needle),
             ),
           );
+  const byId = new Map((posts ?? []).map((post) => [post.id, post]));
 
   return (
     <>
@@ -213,7 +228,25 @@ export const ChannelFeed = ({
         ) : (
           <div className="space-y-6 py-3">
             {shown.map((thread) => (
-              <ThreadCard key={thread.root.id} thread={thread} />
+              <ThreadCard
+                key={thread.root.id}
+                thread={thread}
+                judgedRef={(() => {
+                  // an inferred reply, or an `about` edge that points
+                  // at another MESSAGE (evidence refs post ids as
+                  // `#p-…`) — both are arcs a reader wants
+                  const edge = edges.find(
+                    (candidate) =>
+                      candidate.from === thread.root.id &&
+                      (candidate.label === "answers" ||
+                        (candidate.label === "about" &&
+                          candidate.to.startsWith("#p-"))),
+                  );
+                  return edge === undefined
+                    ? undefined
+                    : byId.get(edge.to.replace(/^#/, ""));
+                })()}
+              />
             ))}
           </div>
         )}

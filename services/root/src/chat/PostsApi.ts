@@ -22,6 +22,18 @@ export const PostsApi = Effect.gen(function* () {
   return Layer.mergeAll(
     HttpRouter.add(
       "GET",
+      "/api/edges",
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://x");
+        const channel = url.searchParams.get("channel") ?? "root";
+        return yield* HttpServerResponse.json(
+          yield* posts.edgesInChannel(channel),
+        );
+      }),
+    ),
+    HttpRouter.add(
+      "GET",
       "/api/posts/:id/edges",
       Effect.gen(function* () {
         const { id } = (yield* HttpRouter.params) as { id: string };

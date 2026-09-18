@@ -77,6 +77,16 @@ export class Posts extends Context.Service<
         provenance: string;
       }>,
     ) => Effect.Effect<void>;
+    /** The association edges of a channel's posts (from-side). */
+    readonly edgesInChannel: (channel: string) => Effect.Effect<
+      ReadonlyArray<{
+        from: string;
+        to: string;
+        label: string;
+        confidence: number;
+        provenance: string;
+      }>
+    >;
     /** Every edge touching a post, either direction. */
     readonly edgesOf: (id: string) => Effect.Effect<
       ReadonlyArray<{

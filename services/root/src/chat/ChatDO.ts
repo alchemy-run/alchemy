@@ -154,6 +154,17 @@ interface ChatRpc extends MainRpc<Cloudflare.DurableObjectState> {
       provenance: string;
     }>,
   ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly edgesInChannel: (channel: string) => Effect.Effect<
+    ReadonlyArray<{
+      from: string;
+      to: string;
+      label: string;
+      confidence: number;
+      provenance: string;
+    }>,
+    never,
+    RuntimeContext
+  >;
   readonly edgesOf: (id: string) => Effect.Effect<
     ReadonlyArray<{
       from: string;
@@ -397,6 +408,32 @@ const ChatDOLive = Cloudflare.DurableObject<ChatRpc>()(
           }
         }),
 
+        edgesInChannel: Effect.fn(function* (channel) {
+          const rows = yield* (yield* sql.exec<
+            {
+              from_id: string;
+              to_id: string;
+              label: string;
+              confidence: number;
+              provenance: string;
+            } & Record<string, Cloudflare.SqlStorageValue>
+          >(
+            `SELECT edges.* FROM edges
+             JOIN posts ON posts.id = edges.from_id
+             WHERE posts.channel = ? ORDER BY edges.at ASC LIMIT 500`
+              .trim()
+              .replaceAll(/\s+/g, " "),
+            channel,
+          )).toArray();
+          return rows.map((row) => ({
+            from: row.from_id,
+            to: row.to_id,
+            label: row.label,
+            confidence: row.confidence,
+            provenance: row.provenance,
+          }));
+        }),
+
         edgesOf: Effect.fn(function* (id) {
           const rows = yield* (yield* sql.exec<
             {
@@ -634,6 +671,7 @@ export const PostsLive: Layer.Layer<Posts, never, Cloudflare.Worker> =
           inWorker(stub().postRoute(id, answering, mode, replyTo)),
         edgesAdd: (rows) => inWorker(stub().edgesAdd(rows)),
         edgesOf: (id) => inWorker(stub().edgesOf(id)),
+        edgesInChannel: (channel) => inWorker(stub().edgesInChannel(channel)),
         get: (id) => inWorker(stub().postGet(id)),
         replies: (id) => inWorker(stub().postReplies(id)),
         ancestors: (id) => inWorker(stub().postAncestors(id)),

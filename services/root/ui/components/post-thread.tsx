@@ -170,12 +170,26 @@ export const revealPost = (id: string, tries = 8) => {
 /** Discord's reply header — the message this one answers: ╭─
  *  connector, tiny avatar, name, first line. Clicking reveals the
  *  referenced message. */
-const ReplyRef = ({ target }: { target: Post }) => (
+const ReplyRef = ({
+  target,
+  soft = false,
+}: {
+  target: Post;
+  /** An INFERRED reply — judged, not authored. Rendered quieter. */
+  soft?: boolean;
+}) => (
   <button
     type="button"
     onClick={() => revealPost(target.id)}
-    title="jump to the message this replies to"
-    className="relative mb-0.5 flex min-w-0 cursor-pointer items-center gap-1.5 pl-8 text-[11px] text-muted-foreground hover:text-foreground"
+    title={
+      soft
+        ? "inferred reply (judged) — jump to the message"
+        : "jump to the message this replies to"
+    }
+    className={cn(
+      "relative mb-0.5 flex min-w-0 cursor-pointer items-center gap-1.5 pl-8 text-[11px] text-muted-foreground hover:text-foreground",
+      soft && "opacity-70",
+    )}
   >
     {/* the connector: down-left toward the avatar underneath */}
     <span
@@ -316,12 +330,15 @@ export const TypingRow = ({
 export const PostRow = ({
   post,
   reference,
+  judgedRef,
   header = true,
   refHidden = false,
 }: {
   post: Post;
   /** The message this one answers, when it should be shown. */
   reference?: Post;
+  /** The judged overlay's target — an inferred reply, shown softly. */
+  judgedRef?: Post;
   /** Show the author header (off when the enclosing context already
    *  named the author). */
   header?: boolean;
@@ -337,6 +354,9 @@ export const PostRow = ({
   >
     <div data-post-id={post.id} className="min-w-0">
       {reference !== undefined && !refHidden && <ReplyRef target={reference} />}
+      {reference === undefined && judgedRef !== undefined && (
+        <ReplyRef target={judgedRef} soft />
+      )}
       {header && (
         <div className="flex items-center gap-2">
           <AuthorAvatar name={post.author} />
@@ -712,7 +732,15 @@ export const threadsOf = (
  * while agents work. Threads are CLICKED INTO — the card opens the
  * thread as the main view; nothing expands inline.
  */
-export const ThreadCard = ({ thread }: { thread: Thread }) => {
+export const ThreadCard = ({
+  thread,
+  judgedRef,
+}: {
+  thread: Thread;
+  /** The judged overlay's inferred-reply target for this root — the
+   *  human never right-clicked, the gate judged it. */
+  judgedRef?: Post;
+}) => {
   const replies = thread.posts.filter((post) => post.id !== thread.root.id);
 
   // an INLINE exchange is conversation, not a workroom: the answer
@@ -722,7 +750,7 @@ export const ThreadCard = ({ thread }: { thread: Thread }) => {
     return (
       <MessageContext.Provider value={{ id: thread.root.id }}>
         <div className="min-w-0">
-          <PostRow post={thread.root} header />
+          <PostRow post={thread.root} header judgedRef={judgedRef} />
           {replies.length > 0 && (
             <div className="mt-3">
               <PostList posts={replies} context={[thread.root]} />
