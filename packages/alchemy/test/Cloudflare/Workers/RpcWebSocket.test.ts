@@ -1,14 +1,17 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as RpcWebSocketClient from "@/Cloudflare/Workers/RpcWebSocketClient.ts";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
-import type { TimeoutError } from "effect/Cause";
+import type { Done, TimeoutError } from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -43,25 +46,65 @@ class SocketClient extends Context.Service<SocketClient>()("SocketClient", {
   make: RpcClient.make(SocketRpcs),
 }) {}
 
-const socketClientLayer = (url: string) =>
-  Layer.effect(SocketClient, SocketClient.make).pipe(
-    Layer.provide(
-      RpcClient.layerProtocolSocket().pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            Layer.effect(
-              Socket.Socket,
-              Effect.gen(function* () {
-                const { socket } = yield* rawConnect(url);
-                return yield* Socket.fromWebSocket(Effect.succeed(socket));
-              }),
+const observeSockets = Effect.sync(() => {
+  const sockets: {
+    socket: WebSocket;
+    closeCodes: (number | undefined)[];
+    closed: Deferred.Deferred<{ code: number; reason: string }>;
+  }[] = [];
+  const constructor = (url: string) =>
+    Layer.effect(
+      Socket.WebSocketConstructor,
+      Effect.gen(function* () {
+        // Retry only the native handshake, before constructing the RPC client.
+        const { socket: ready } = yield* rawConnect(url);
+        let consumed = false;
+        return (url: string) => {
+          const socket = consumed ? new WebSocket(url) : ready;
+          consumed = true;
+          const closeCodes: (number | undefined)[] = [];
+          const close = socket.close.bind(socket);
+          socket.close = (code, reason) => {
+            closeCodes.push(code);
+            close(code, reason);
+          };
+          const closed = Deferred.makeUnsafe<{
+            code: number;
+            reason: string;
+          }>();
+          socket.addEventListener("close", (event) =>
+            Deferred.doneUnsafe(
+              closed,
+              Exit.succeed({ code: event.code, reason: event.reason }),
             ),
-            RpcSerialization.layerJson,
-          ),
-        ),
-      ),
-    ),
-  );
+          );
+          sockets.push({ socket, closeCodes, closed });
+          return socket;
+        };
+      }),
+    );
+  return {
+    sockets,
+    layer: (url: string) =>
+      RpcWebSocketClient.layer(
+        SocketClient,
+        SocketRpcs,
+        url.replace(/^http/, "ws"),
+        { protocol: { retryTransientErrors: false } },
+      ).pipe(Layer.provide(constructor(url))),
+    assertClosed: Effect.gen(function* () {
+      expect(sockets).toHaveLength(1);
+      const { socket, closeCodes, closed } = sockets[0]!;
+      // The RPC Layer must close before rawConnect's fallback finalizer.
+      expect(closeCodes[0]).toBe(1000);
+      expect(
+        (yield* Deferred.await(closed).pipe(Effect.timeout("10 seconds"))).code,
+      ).toBe(1000);
+      expect(socket.readyState).toBe(WebSocket.CLOSED);
+      expect(sockets).toHaveLength(1);
+    }),
+  };
+});
 
 const connect = Effect.fn(function* (url: string) {
   const { socket: raw } = yield* rawConnect(url);
@@ -85,6 +128,11 @@ class WebSocketHandshakeFailed extends Data.TaggedError(
 )<{
   readonly message: string;
 }> {}
+
+type ClientLayerError =
+  | RpcClientError
+  | WebSocketHandshakeFailed
+  | TimeoutError;
 
 const rawConnect = Effect.fn(
   function* (url: string) {
@@ -235,23 +283,163 @@ describe.concurrent.each([
   );
 
   test(
-    "a Layer owns the client lifetime without a caller scope",
+    "a Layer shares one actual socket for concurrent callers without a caller scope and closes normally",
     Effect.gen(function* () {
       const { url } = yield* stack;
-      const program: Effect.Effect<
-        readonly number[],
-        RpcClientError | WebSocketHandshakeFailed | TimeoutError
-      > = Effect.gen(function* () {
-        const client = yield* SocketClient;
-        const first = yield* client.increment();
-        const second = yield* client.increment();
-        expect(
-          yield* client.numbers({ count: 3 }).pipe(Stream.runCollect),
-        ).toEqual([1, 2, 3]);
-        return [first, second];
-      }).pipe(Effect.provide(socketClientLayer(`${url}/rpc/layer-client`)));
-      expect(yield* program).toEqual([1, 2]);
-      expect((yield* readStats(`${url}/stats/layer-client`)).count).toBe(2);
+      const endpoint = `${url}/rpc/layer-client`;
+      const observed = yield* observeSockets;
+      const program: Effect.Effect<readonly number[], ClientLayerError> =
+        Effect.gen(function* () {
+          const results = yield* Effect.all(
+            Array.from({ length: 40 }, () =>
+              Effect.gen(function* () {
+                const client = yield* SocketClient;
+                return yield* client.increment();
+              }),
+            ),
+            { concurrency: "unbounded" },
+          );
+          const client = yield* SocketClient;
+          expect(
+            yield* client.numbers({ count: 3 }).pipe(Stream.runCollect),
+          ).toEqual([1, 2, 3]);
+          expect(observed.sockets).toHaveLength(1);
+          expect(observed.sockets[0]!.socket.readyState).toBe(WebSocket.OPEN);
+          return results;
+        }).pipe(Effect.provide(observed.layer(endpoint)));
+      expect((yield* program).toSorted((a, b) => a - b)).toEqual(
+        Array.from({ length: 40 }, (_, i) => i + 1),
+      );
+      yield* observed.assertClosed;
+      expect((yield* readStats(`${url}/stats/layer-client`)).count).toBe(40);
+    }),
+    { timeout: 30_000 },
+  );
+
+  test(
+    "a Layer closes its actual socket with code 1000 on application failure",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const endpoint = `${url}/rpc/layer-failure`;
+      const observed = yield* observeSockets;
+      const program: Effect.Effect<never, Rejected | ClientLayerError> =
+        Effect.gen(function* () {
+          const client = yield* SocketClient;
+          yield* client.increment();
+          return yield* client.reject();
+        }).pipe(Effect.provide(observed.layer(endpoint)));
+      expect(yield* program.pipe(Effect.flip)).toBeInstanceOf(Rejected);
+      yield* observed.assertClosed;
+      expect((yield* readStats(`${url}/stats/layer-failure`)).count).toBe(1);
+    }),
+    { timeout: 30_000 },
+  );
+
+  test(
+    "interrupting a Layer closes its actual socket with code 1000 and releases the handler",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const endpoint = `${url}/rpc/layer-interruption`;
+      const observed = yield* observeSockets;
+      const started = yield* Deferred.make<void>();
+      const program: Effect.Effect<void, ClientLayerError> = Effect.gen(
+        function* () {
+          const client = yield* SocketClient;
+          yield* client
+            .watch({ key: "layer-interruption" })
+            .pipe(
+              Stream.runForEach(() => Deferred.succeed(started, undefined)),
+            );
+        },
+      ).pipe(Effect.provide(observed.layer(endpoint)));
+      const fiber = yield* program.pipe(Effect.forkScoped);
+      yield* Deferred.await(started).pipe(Effect.timeout("10 seconds"));
+      expect(observed.sockets).toHaveLength(1);
+      yield* Fiber.interrupt(fiber);
+      expect(Exit.hasInterrupts(yield* Fiber.await(fiber))).toBe(true);
+      yield* observed.assertClosed;
+      const status = yield* readStats(`${url}/stats/layer-interruption`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          times: 10,
+          until: (state) => state.closed.includes("layer-interruption"),
+        }),
+      );
+      expect(status.closed).toEqual(["layer-interruption"]);
+      expect(status.invocations).toEqual({ "layer-interruption": 1 });
+    }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  test(
+    "ManagedRuntime.dispose closes the shared actual socket with code 1000",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const endpoint = `${url}/rpc/layer-managed`;
+      const observed = yield* observeSockets;
+      const runtime = yield* Effect.acquireRelease(
+        Effect.sync(() => ManagedRuntime.make(observed.layer(endpoint))),
+        (runtime) => Effect.promise(() => runtime.dispose()),
+      );
+      const call: Effect.Effect<number, RpcClientError, SocketClient> =
+        Effect.gen(function* () {
+          const client = yield* SocketClient;
+          return yield* client.increment();
+        });
+      const results = yield* Effect.all(
+        Array.from({ length: 8 }, () =>
+          Effect.sync(() => runtime.runFork(call)).pipe(
+            Effect.flatMap(Fiber.join),
+          ),
+        ),
+        { concurrency: "unbounded" },
+      );
+      expect(results.toSorted((a, b) => a - b)).toEqual([
+        1, 2, 3, 4, 5, 6, 7, 8,
+      ]);
+      expect(observed.sockets).toHaveLength(1);
+      expect(observed.sockets[0]!.socket.readyState).toBe(WebSocket.OPEN);
+      yield* Effect.promise(() => runtime.dispose());
+      yield* observed.assertClosed;
+      expect((yield* readStats(`${url}/stats/layer-managed`)).count).toBe(8);
+    }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  test(
+    "a queue subscription owns a separate scope without closing the Layer socket",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const endpoint = `${url}/rpc/layer-queue`;
+      const observed = yield* observeSockets;
+      const program: Effect.Effect<void, ClientLayerError | Done> = Effect.gen(
+        function* () {
+          const client = yield* SocketClient;
+          yield* Effect.gen(function* () {
+            const queue = yield* client.watch(
+              { key: "queue" },
+              { asQueue: true },
+            );
+            expect(yield* Queue.take(queue)).toBe(1);
+          }).pipe(Effect.scoped);
+          expect(observed.sockets).toHaveLength(1);
+          expect(observed.sockets[0]!.socket.readyState).toBe(WebSocket.OPEN);
+          expect((yield* client.greet({ name: "still open" })).message).toBe(
+            "Hello, still open!",
+          );
+        },
+      ).pipe(Effect.provide(observed.layer(endpoint)));
+      yield* program;
+      yield* observed.assertClosed;
+      const status = yield* readStats(`${url}/stats/layer-queue`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("100 millis"),
+          times: 10,
+          until: (state) => state.closed.includes("queue"),
+        }),
+      );
+      expect(status.closed).toEqual(["queue"]);
+      expect(status.invocations).toEqual({ queue: 1 });
     }),
     { timeout: 30_000 },
   );
@@ -442,25 +630,72 @@ describe.concurrent.each([
   }
 
   test(
-    "idle connection survives hibernation and serves a new RPC",
+    "the same Layer-owned socket survives real hibernation and serves a new RPC",
     Effect.gen(function* () {
       const { url } = yield* stack;
-      const { client, raw } = yield* connect(`${url}/rpc/idle`);
-      const before = yield* client.stats();
+      const endpoint = `${url}/rpc/idle`;
+      const observed = yield* observeSockets;
+      yield* Effect.gen(function* () {
+        const client = yield* SocketClient;
+        const before = yield* client.stats();
+        expect(observed.sockets).toHaveLength(1);
+        const socket = observed.sockets[0]!.socket;
+        const after = yield* Effect.gen(function* () {
+          yield* Effect.sleep("15 seconds");
+          return yield* client.stats().pipe(Effect.timeout("5 seconds"));
+        }).pipe(
+          Effect.repeat({
+            times: 2,
+            until: (state) => state.boots > before.boots,
+          }),
+        );
+        expect(after.boots).toBeGreaterThan(before.boots);
+        expect(socket.readyState).toBe(WebSocket.OPEN);
+        expect((yield* client.greet({ name: "awake" })).message).toBe(
+          "Hello, awake!",
+        );
+        expect((yield* client.stats()).boots).toBe(after.boots);
+        expect(observed.sockets).toHaveLength(1);
+        expect(observed.sockets[0]!.socket).toBe(socket);
+      }).pipe(Effect.provide(observed.layer(endpoint)));
+      yield* observed.assertClosed;
+    }),
+    { timeout: 110_000 },
+  );
+
+  test(
+    "hibernation resets an actual socket with an incompatible serializer attachment",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const connection = yield* rawConnect(`${url}/rpc/serialization-reset`);
+      const before = yield* readStats(`${url}/stats/serialization-reset`);
+      const response = yield* requestWorker(
+        HttpClientRequest.post(`${url}/serialization/serialization-reset`),
+      );
+      expect(response.status).toBe(200);
+      expect(yield* response.json).toEqual({ changed: 1 });
+      expect(connection.socket.readyState).toBe(WebSocket.OPEN);
       const after = yield* Effect.gen(function* () {
-        yield* Effect.sleep("20 seconds");
-        return yield* client.stats().pipe(Effect.timeout("5 seconds"));
+        yield* Effect.sleep("15 seconds");
+        return yield* readStats(`${url}/stats/serialization-reset`);
       }).pipe(
         Effect.repeat({
-          times: 3,
+          times: 2,
           until: (state) => state.boots > before.boots,
         }),
       );
       expect(after.boots).toBeGreaterThan(before.boots);
-      expect(raw.readyState).toBe(WebSocket.OPEN);
-      expect((yield* client.greet({ name: "awake" })).message).toBe(
-        "Hello, awake!",
-      );
+      expect(yield* connection.closed).toEqual({
+        code: 1012,
+        reason: "Durable Object RPC activation reset",
+      });
+      expect(connection.socket.readyState).toBe(WebSocket.CLOSED);
+      expect(yield* connection.buffered).toBe(0);
+      const replacement = yield* connect(`${url}/rpc/serialization-reset`);
+      expect(
+        (yield* replacement.client.greet({ name: "compatible" })).message,
+      ).toBe("Hello, compatible!");
+      expect((yield* replacement.client.stats()).boots).toBe(after.boots);
     }).pipe(Effect.scoped),
     { timeout: 110_000 },
   );

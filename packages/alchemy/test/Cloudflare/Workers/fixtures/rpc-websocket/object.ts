@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Greeting, Rejected, SocketRpcs } from "./rpcs.ts";
 
@@ -103,6 +104,36 @@ export const SocketObjectLive = SocketObject.make(
               ? Effect.succeed(false)
               : Deferred.succeed(release, undefined);
           }),
+        invalidateSocketSerialization: Effect.fn(function* () {
+          const sockets = yield* state.getWebSockets("alchemy:rpc");
+          const attachmentSchema = Schema.Struct({
+            __alchemyRpcWebSocket: Schema.Struct({
+              version: Schema.Literal(1),
+              clientId: Schema.Number,
+              pending: Schema.Boolean,
+              serialization: Schema.String,
+            }),
+          });
+          for (const socket of sockets) {
+            yield* Effect.sync(() => {
+              const attachment = socket.deserializeAttachment<unknown>();
+              if (!Schema.is(attachmentSchema)(attachment)) {
+                throw new Error("Missing RPC WebSocket attachment");
+              }
+              if (attachment.__alchemyRpcWebSocket.pending) {
+                throw new Error("Cannot change serialization during an RPC");
+              }
+              socket.serializeAttachment({
+                ...attachment,
+                __alchemyRpcWebSocket: {
+                  ...attachment.__alchemyRpcWebSocket,
+                  serialization: "application/x-incompatible-rpc",
+                },
+              });
+            });
+          }
+          return sockets.length;
+        }),
         abort: Effect.fn(function* () {
           // Native abort discards buffered storage writes.
           yield* state.storage.sync();

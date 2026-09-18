@@ -41,6 +41,7 @@ export class SocketRpcs extends RpcGroup.make(
     payload: { key: Schema.String },
     success: Schema.Boolean,
   }),
+  Rpc.make("invalidateSocketSerialization", { success: Schema.Number }),
   Rpc.make("abort", { success: Schema.Void }),
   Rpc.make("stats", { success: SocketStats }),
 ) {}

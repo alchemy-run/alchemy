@@ -31,6 +31,14 @@ export default class SocketWorker extends Cloudflare.Worker<SocketWorker>()(
             released: yield* client.releaseCleanup({ key }).pipe(Effect.orDie),
           });
         }
+        if (action === "serialization" && request.method === "POST") {
+          const client = yield* objects.getByName(name);
+          return yield* HttpServerResponse.json({
+            changed: yield* client
+              .invalidateSocketSerialization()
+              .pipe(Effect.orDie),
+          });
+        }
         if (action === "abort" && request.method === "POST") {
           const client = yield* objects.getByName(name);
           return yield* client.abort().pipe(

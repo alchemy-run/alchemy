@@ -639,31 +639,25 @@ Connect to the Worker's `/counters/alice` route and create the browser's
 Effect RPC client in a Layer. This client talks only to the `"alice"` object:
 
 ```typescript
+import * as RpcWebSocketClient from "alchemy/Cloudflare/RpcWebSocketClient";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import * as Socket from "effect/unstable/socket/Socket";
 import { CounterRpcs } from "./rpcs.ts";
 
-const Connection = RpcClient.layerProtocolSocket().pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      Socket.layerWebSocket("wss://example.com/counters/alice").pipe(
-        Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      ),
-      RpcSerialization.layerJson,
-    ),
-  ),
-);
+class CounterClient extends Context.Service<
+  CounterClient,
+  RpcClient.FromGroup<typeof CounterRpcs, RpcClientError>
+>()("CounterClient") {}
 
-class CounterClient extends Context.Service<CounterClient>()("CounterClient", {
-  make: RpcClient.make(CounterRpcs),
-}) {}
-
-const CounterClientLive = Layer.effect(CounterClient, CounterClient.make).pipe(
-  Layer.provide(Connection),
-);
+const CounterClientLive = RpcWebSocketClient.layer(
+  CounterClient,
+  CounterRpcs,
+  "wss://example.com/counters/alice",
+).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
 
 const program = Effect.gen(function* () {
   const counter = yield* CounterClient;
@@ -672,18 +666,90 @@ const program = Effect.gen(function* () {
 }).pipe(Effect.provide(CounterClientLive));
 ```
 
-The Layer owns the client and connection lifetime, so callers do not need
-an explicit `Effect.scoped`. Provide it around the application or component
-program that shares the client, rather than constructing it for each call.
-Concurrent calls and streams share the socket; Effect handles typed errors,
-backpressure, and cancellation. Client cleanup is separate from server-side
-Durable Object hibernation.
+The dedicated `alchemy/Cloudflare/RpcWebSocketClient` entrypoint imports only
+Effect modules and is safe to bundle for browsers. The wrapper is optional;
+it composes Effect's RPC client, socket protocol, WebSocket, and JSON serializer.
+Client middleware remains an explicit Layer dependency. Its `socket`, `protocol`,
+and `client` options pass through to Effect; `serialization` defaults to JSON
+and must match the server. See the
+[`RpcWebSocketClient.layer` API reference](/providers/cloudflare/workers/layer).
+
+The Layer owns the client and connection lifetime, so ordinary calls do not need
+an explicit `Effect.scoped`. It closes the connection when the provided program
+finishes, fails, or is interrupted. Provide it around the whole application or
+component program that shares the client, rather than constructing it for each
+call. Concurrent calls and streams share the socket; Effect handles typed errors,
+backpressure, and cancellation.
+
+### Keep a client for a browser session
+
+For a UI driven by callbacks, keep one managed runtime for the session:
+
+```typescript
+import * as ManagedRuntime from "effect/ManagedRuntime";
+
+const runtime = ManagedRuntime.make(CounterClientLive);
+
+const getTitle = () => runtime.runPromise(
+  Effect.gen(function* () {
+    const counter = yield* CounterClient;
+    return yield* counter.getTitle({});
+  }),
+);
+```
+
+On application or component teardown, release that runtime:
+
+```typescript
+await runtime.dispose();
+```
+
+Your application wires teardown to its UI lifecycle; the Layer does not detect
+component unmounts. Keeping the browser connection open does not prevent
+Cloudflare from hibernating an idle Durable Object. When calling from another
+Cloudflare Worker rather than a browser, provide the client Layer inside each
+request; Worker sockets cannot be shared across request contexts.
+
+### Subscription scopes
+
+Ordinary streaming RPCs return an Effect `Stream`; consume them with stream
+operators while the client Layer is alive. Requesting `{ asQueue: true }`
+returns a queue acquisition that still requires a consumer `Scope`. The Layer
+owns the shared connection, not the lifetime of each subscription. Scope those
+queue consumers separately so ending one subscription does not close the client.
+
+### Compose the built-in Effect layers directly
+
+The convenience wrapper is equivalent to this composition, using the same
+`CounterClient` service and RPC group:
+
+```typescript
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+
+const CounterClientLive = Layer.effect(
+  CounterClient,
+  RpcClient.make(CounterRpcs),
+).pipe(
+  Layer.provide(
+    RpcClient.layerProtocolSocket().pipe(
+      Layer.provide([
+        Socket.layerWebSocket("wss://example.com/counters/alice"),
+        RpcSerialization.layerJson,
+      ]),
+      Layer.provide(Socket.layerWebSocketConstructorGlobal),
+    ),
+  ),
+);
+```
 
 ## WebSocket RPC and hibernation
 
 Idle connections can survive Durable Object hibernation and accept new
 calls after the instance wakes. Alchemy restores connection metadata
-from socket attachments and handles protocol heartbeats internally.
+from socket attachments and handles protocol heartbeats internally. A restored
+socket with a different recorded serializer content type is reset. This is not
+a schema-version check: changes that keep the same content type are not detected,
+so coordinate incompatible schema or codec changes with clients.
 
 In-flight calls and streams are not replayed. If the instance is
 reconstructed with unfinished work, the affected socket closes with
