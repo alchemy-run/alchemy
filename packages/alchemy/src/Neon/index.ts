@@ -37,6 +37,50 @@ export * from "./WriteObjectHttp.ts";
 export * from "./Credentials.ts";
 export * from "./PostgresOrigin.ts";
 export * from "./Project.ts";
+export {
+  OrganizationApiKey,
+  OrganizationApiKeyProvider,
+  OrganizationApiKeyRecoveryError,
+  type OrganizationApiKeyProps,
+  type OrganizationApiKeyAttributes,
+} from "./OrganizationApiKey.ts";
+export {
+  OrganizationMemberRole,
+  OrganizationMemberRoleProvider,
+  GovernanceRoleSafetyError,
+  type OrganizationMemberRoleProps,
+  type OrganizationMemberRoleAttributes,
+  type OrganizationRole,
+  type GovernanceRoleBaseline,
+} from "./OrganizationMemberRole.ts";
+export {
+  ProjectMemberRole,
+  ProjectMemberRoleProvider,
+  type ProjectMemberRoleProps,
+  type ProjectMemberRoleAttributes,
+  type ProjectGovernanceRole,
+} from "./ProjectMemberRole.ts";
+export {
+  OrganizationSpendingLimit,
+  OrganizationSpendingLimitProvider,
+  InvalidOrganizationSpendingLimit,
+  type OrganizationSpendingLimitProps,
+  type OrganizationSpendingLimitAttributes,
+} from "./OrganizationSpendingLimit.ts";
+export {
+  OrganizationVPCEndpoint,
+  OrganizationVPCEndpointProvider,
+  InvalidOrganizationVPCEndpoint,
+  type OrganizationVPCEndpointProps,
+  type OrganizationVPCEndpointAttributes,
+} from "./OrganizationVPCEndpoint.ts";
+export {
+  ProjectVPCEndpoint,
+  ProjectVPCEndpointProvider,
+  InvalidProjectVPCEndpoint,
+  type ProjectVPCEndpointProps,
+  type ProjectVPCEndpointAttributes,
+} from "./ProjectVPCEndpoint.ts";
 export * from "./Providers.ts";
 export * as Website from "./Website/index.ts";
 export * from "./Function.ts";

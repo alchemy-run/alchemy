@@ -6,7 +6,7 @@
   "statusBasis": "Coordinator integration snapshot: all required source contracts exist; complete acceptance remains outstanding. Historical preflight retained separately.",
   "verificationReport": "../verification.md",
   "latestVerification": {
-    "distilledRevision": "ed08017b3",
+    "distilledRevision": "5661366be",
     "workspaceTypecheck": "passed",
     "focusedAlchemyTestsPassed": 97,
     "combinedLiveStorageTestsPassed": 5,
@@ -39,6 +39,32 @@
     "partial": 38,
     "missing": 0,
     "accepted": 0
+  },
+  "governance": {
+    "requestedOn": "2026-09-17",
+    "resources": [
+      "Neon.OrganizationApiKey",
+      "Neon.OrganizationMemberRole",
+      "Neon.ProjectMemberRole",
+      "Neon.OrganizationSpendingLimit",
+      "Neon.OrganizationVPCEndpoint",
+      "Neon.ProjectVPCEndpoint"
+    ],
+    "sourcePresent": 6,
+    "status": "partial",
+    "liveLifecycleVerified": false,
+    "livePrerequisites": "Explicit dedicated organization, authorized existing member, spending mutation opt-in, and entitled AWS endpoint fixtures; irreversible organization-endpoint removal needs an additional opt-in.",
+    "scope": "Existing organizations only; no membership invitations, organization creation/deletion, hard spending caps, or AWS endpoint provisioning.",
+    "sdkRevision": "5661366be2a70f3510d864f2e1d94f99e3b2f895",
+    "sdkRegressionTestsPassed": 377,
+    "sdkStrictTypecheck": "passed",
+    "workspaceTypecheck": "passed",
+    "safetyTestsPassed": 31,
+    "liveTestsGated": 7,
+    "existingRegressionsPassed": 81,
+    "docsDesktopNavigationChecks": 82,
+    "docsMobileNavigationChecks": 82,
+    "notes": "Role and spending controls require resolved initial properties and retained baseline state. Restore/remove the control before changing its organization, member or project identity. API keys are reveal-once, Redacted outputs and never name-adopted. Live mutation tests are gated, not accepted."
   },
   "preflight": {
     "node": "v24.10.0",

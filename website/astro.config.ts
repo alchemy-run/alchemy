@@ -1044,6 +1044,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/neon" },
             { label: "Setup", link: "/neon/setup" },
+            { label: "Organization governance", link: "/neon/governance" },
             {
               label: "Frontend",
               items: [

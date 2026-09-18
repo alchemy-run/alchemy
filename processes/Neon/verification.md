@@ -4,14 +4,40 @@ Integration snapshot, 2026-09-17. All 38 required source contracts are present, 
 
 ## Coordinator verification
 
-- Distilled companion: https://github.com/alchemy-run/distilled/pull/617. Latest revision `ed08017b3` includes the unstructured REST-XML server-error correction and strictly checked parser assertions.
-- Published SDK revision: the combined core, Neon, spec-fetcher and REST-XML run passed 372 tests across 11 files, with 725 assertions and no failures. Regeneration retains 163 operations and 748 shapes. Source/scripts and shared-core checks passed.
+- Distilled companion: https://github.com/alchemy-run/distilled/pull/617. Latest revision `5661366be` adds API-key secret redaction alongside the existing unstructured REST-XML server-error correction and strictly checked parser assertions.
+- Before the governance additions, the combined core, Neon, spec-fetcher and REST-XML run passed 372 tests across 11 files, with 725 assertions and no failures. Regeneration retains 163 operations and 748 shapes. Source/scripts and shared-core checks passed.
 - REST-XML follow-up: 34 tests, 95 assertions passed. Code-less HTTP 5xx responses become the existing retryable `InternalError`, without retaining their bodies. Recognized codes and malformed 4xx behavior are preserved. The original Neon storage PUT HTTP 500 cause remains unknown.
 - Final focused Alchemy regression run: 97 tests across 11 files passed, including typed objects, Effect LanguageModel, Function cancellation/ZIP checks, Website artifact safety, constructor props, and provider composition.
 - AI example: 17 tests and 55 assertions passed, including native/Effect request validation, explicit inference gating, request-scoped streaming, sanitization, and cancellation.
 - Full workspace `pnpm exec tsc -b` passed after restoring declarations removed by a JavaScript-only frontend bundler invocation. The package's normal build already restores those declarations.
 - Frontend framework regressions: 111 tests across 20 files passed earlier. After integrating current main and repairing merged dependency snapshots, all 72 core tests across nine files passed, including actual Vite/Astro/Next builds and Fetch invocation; the 97 focused Alchemy tests and workspace typecheck also passed again. This is not the full live Website matrix.
 - JSDoc validation, generated API references, and website `docs:check` passed. Documentation browser checks traversed all 19 Neon overview/tutorial/frontend routes at desktop 1440x1000 and mobile 390x844, including opening the mobile menu, following navigation links, and visiting an API reference and returning. No overflow or browser page errors were observed.
+
+## Organization governance additions
+
+Six additional source resources are registered: `OrganizationApiKey`, `OrganizationMemberRole`, `ProjectMemberRole`, `OrganizationSpendingLimit`, `OrganizationVPCEndpoint`, and `ProjectVPCEndpoint`.
+
+- The combined six-file governance run passed **31 non-live safety tests**, with **seven live fixture cases gated** and no failures. These are guard, validation, recovery, and type-surface tests, not completed real-cloud lifecycles.
+- An additional **81 existing Neon regressions** across 11 files passed, covering runtime scopes, typed objects, AI adapters, Website artifacts and provider composition.
+- Full workspace typecheck passed. Distilled's strict Neon package typecheck and the combined **377 SDK tests / 753 assertions** passed; the companion revision is `5661366be2a70f3510d864f2e1d94f99e3b2f895`, with green CI.
+- Organization and personal API-key creation secrets are sensitive in the upstream OpenAPI patch and regenerated SDK. Alchemy exposes a Redacted reveal-once key, retains it only for the observed numeric ID and scope, and refuses name-only recovery or silent rotation.
+- Role controls preserve the original role/direct grant and never remove memberships. Organization `member` and `editor` are compared as equivalent legacy/current spellings. Self mutations and ambiguous interrupted role changes fail closed. Successful bounded listings, with organization-admin visibility where necessary, establish missing parents during cleanup; an ambiguous 404 alone never discards state.
+- Spending thresholds are alert-only, not hard budget caps. The original threshold, including null, is captured before mutation. Role and spending controls require resolved initial properties, and must be restored/removed before their organization, member or project identity changes.
+- Private-network resources manage Neon associations only, never AWS endpoints. Existing associations need scoped adoption and preserve their prior labels. Organization endpoint unregistration is irreversible for that endpoint in the same organization and has its own additional test opt-in.
+- Source JSDoc, generated references and the governance guide were added. Browser checks traversed 82 navigation destinations at each desktop/mobile size, including all Neon sidebar destinations, each of the six new reference links, reference anchors and browser-back navigation; no overflow or page errors were observed.
+
+No real governance mutation or entitlement probe was performed: no designated fixtures were supplied. Live prerequisites are:
+
+| Cases | Explicit fixture configuration |
+| --- | --- |
+| Project-restricted organization keys | `NEON_GOVERNANCE_TEST_ORG_ID` |
+| Project member grants | Organization plus `NEON_GOVERNANCE_TEST_MEMBER_ID` for an authorized active non-admin member |
+| Organization role changes | Member fixtures plus `NEON_GOVERNANCE_TEST_ALLOW_ORG_ROLE_CHANGE=1` |
+| Spending alerts | Organization plus `NEON_GOVERNANCE_TEST_SPENDING=1` and positive `NEON_GOVERNANCE_TEST_SPENDING_LIMIT_CENTS` |
+| Existing private endpoint adoption and project associations | Organization plus `NEON_GOVERNANCE_TEST_NETWORK=1`, `NEON_GOVERNANCE_TEST_VPC_ENDPOINT_ID`, and `NEON_GOVERNANCE_TEST_VPC_ENDPOINT_REGION` |
+| Irreversible organization-endpoint unregistration | Network configuration plus `NEON_GOVERNANCE_TEST_VPC_UNREGISTER=1` and a fresh disposable endpoint |
+
+All fixtures need the corresponding Neon authorization/entitlement. Invitations remain out of scope because the public API has no corresponding revoke lifecycle. These additions do not resolve the pre-existing Function, AI, Website or historical cleanup acceptance blockers below.
 
 ## Focused live verification
 

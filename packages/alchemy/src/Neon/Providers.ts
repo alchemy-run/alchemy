@@ -22,6 +22,30 @@ import { Credential, CredentialProvider } from "./Credential.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { Object, ObjectProvider } from "./Object.ts";
 import { Project, ProjectProvider } from "./Project.ts";
+import {
+  OrganizationApiKey,
+  OrganizationApiKeyProvider,
+} from "./OrganizationApiKey.ts";
+import {
+  OrganizationMemberRole,
+  OrganizationMemberRoleProvider,
+} from "./OrganizationMemberRole.ts";
+import {
+  ProjectMemberRole,
+  ProjectMemberRoleProvider,
+} from "./ProjectMemberRole.ts";
+import {
+  OrganizationSpendingLimit,
+  OrganizationSpendingLimitProvider,
+} from "./OrganizationSpendingLimit.ts";
+import {
+  OrganizationVPCEndpoint,
+  OrganizationVPCEndpointProvider,
+} from "./OrganizationVPCEndpoint.ts";
+import {
+  ProjectVPCEndpoint,
+  ProjectVPCEndpointProvider,
+} from "./ProjectVPCEndpoint.ts";
 import { Function } from "./Function.ts";
 import { FunctionProvider } from "./FunctionProvider.ts";
 import { FunctionTrigger, FunctionTriggerProvider } from "./FunctionTrigger.ts";
@@ -67,6 +91,12 @@ export const providers = () =>
     Providers,
     Provider.collection([
       Project,
+      OrganizationApiKey,
+      OrganizationMemberRole,
+      ProjectMemberRole,
+      OrganizationSpendingLimit,
+      OrganizationVPCEndpoint,
+      ProjectVPCEndpoint,
       Branch,
       Credential,
       Bucket,
@@ -85,6 +115,12 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         ProjectProvider(),
+        OrganizationApiKeyProvider(),
+        OrganizationMemberRoleProvider(),
+        ProjectMemberRoleProvider(),
+        OrganizationSpendingLimitProvider(),
+        OrganizationVPCEndpointProvider(),
+        ProjectVPCEndpointProvider(),
         BranchProvider(),
         CredentialProvider(),
         BucketProvider(),
