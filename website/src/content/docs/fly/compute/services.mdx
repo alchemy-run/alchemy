@@ -179,8 +179,15 @@ Override the base image with `image` (must still run bun). Pass
 If a Machine has service checks (the default TCP check, or your HTTP
 checks), reconcile waits until Fly reports them `passing` before it
 moves on to the next replica. `started` only means the VM booted.
+Missing or non-passing results keep polling for up to 60 seconds.
+If checks do not pass, deployment fails with
+`Fly.ReplicaChecksNotPassing`, including the last observed check
+results, and later replicas remain unchanged. Earlier updates are
+not automatically rolled back.
+
 Omitting `/health` does not fail the deploy unless you configured an
-HTTP check on that path.
+HTTP check on that path. A single replica still updates in place and
+can be unavailable during deployment; this is not blue/green deployment.
 :::
 
 ## Config

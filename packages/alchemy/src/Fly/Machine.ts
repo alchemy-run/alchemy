@@ -448,7 +448,11 @@ export type Machine = Resource<
  * Add HTTP or TCP `checks` to a service. Fly uses their results to
  * determine whether the service is ready to receive traffic. After a
  * Machine is `started`, reconcile waits until those checks are passing
- * before updating the next replica.
+ * before updating the next replica. Missing or non-passing results are
+ * polled for up to 60 seconds, then fail deployment with
+ * `Fly.ReplicaChecksNotPassing` and the last observed check results.
+ * Later replicas remain unchanged; earlier updates are not rolled back.
+ * A single replica still updates in place and can be unavailable.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -466,7 +470,7 @@ export type Machine = Resource<
  *           type: "http",
  *           port: 80,
  *           method: "GET",
- *           path: "/health",
+ *           path: "/",
  *           protocol: "http",
  *           interval: "15s",
  *           timeout: "2s",
@@ -507,12 +511,14 @@ export type Machine = Resource<
  * ```
  *
  * ### Scale up
- * Each Machine resource is one VM. Yield another Machine to add
- * capacity. Fly's proxy load-balances published `services` across
- * them.
+ * Each Machine resource runs one VM by default. Set `count` to manage
+ * several replicas together, or declare separate resources for Machines
+ * with different configuration. Fly's proxy load-balances published
+ * `services` across them.
  *
- * A {@link Service} still scales with `count`. That is one program,
- * many Machines.
+ * Both Machine and {@link Service} support `count`. Replicas within one
+ * resource update sequentially; separate resources do not share that
+ * update ordering.
  *
  * **Example:** Two Machines
  * ```typescript
@@ -1055,11 +1061,23 @@ export const MachineProvider = () =>
       return toAttrs(set);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ id, olds, output }) {
+      const appName = output.appName ?? appNameOf(olds.app);
+      if (appName === undefined) return;
+      const current =
+        machineIdsOf(output).length > 0
+          ? output
+          : yield* observeReplicaSet({
+              appName,
+              id,
+              type: "Fly.Machine",
+              baseName: yield* resolveMachineName(id, olds.name, output.name),
+            });
+      if (current === undefined) return;
       yield* deleteReplicaSet({
-        appName: output.appName,
-        machineIds: machineIdsOf(output),
-        volumeIds: volumeIdsOf(output),
+        appName,
+        machineIds: current.machineIds,
+        volumeIds: volumeIdsOf(current),
       });
     }),
   });

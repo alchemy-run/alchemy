@@ -8,6 +8,7 @@ import type {
   Volume as FlyVolume,
 } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
+import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -36,8 +37,8 @@ import {
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
-const CHECK_POLL = Schedule.spaced("2 seconds");
-const CHECK_WAIT = "2 minutes";
+const CHECK_POLL = Schedule.spaced("5 seconds");
+const CHECK_WAIT = "60 seconds";
 
 export class ReplicaNotCreated extends Data.TaggedError(
   "Fly.ReplicaNotCreated",
@@ -56,7 +57,15 @@ export class ReplicaChecksNotPassing extends Data.TaggedError(
     status: string | undefined;
     output: string | undefined;
   }>;
-}> {}
+}> {
+  get message() {
+    const checks = this.checks.map(
+      (check) =>
+        `${check.name ?? "unnamed"}: ${check.status ?? "unknown"}${check.output ? ` (${check.output})` : ""}`,
+    );
+    return `Service checks did not pass for ${this.appName}/${this.machineId}: ${checks.join("; ") || "no service check results"}`;
+  }
+}
 
 export interface Replica {
   machineId: string;
@@ -247,7 +256,8 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
+        while: (e) =>
+          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
       Effect.timeout("50 seconds"),
     );
@@ -260,10 +270,11 @@ const liveServiceChecks = (machine: FlyMachine) =>
     (check.name ?? "").startsWith(SERVICE_CHECK_NAME_PREFIX),
   );
 
-const allServiceChecksPassing = (machine: FlyMachine) => {
+const allServiceChecksPassing = (machine: FlyMachine, expected: number) => {
   const checks = liveServiceChecks(machine);
   return (
-    checks.length > 0 && checks.every((check) => check.status === "passing")
+    checks.length >= expected &&
+    checks.every((check) => check.status === "passing")
   );
 };
 
@@ -286,44 +297,40 @@ export const waitHealthy = Effect.fn(function* (
   machine: FlyMachine,
 ) {
   const machineId = machine.id;
-  if (
-    machineId === undefined ||
-    configuredServiceChecks(machine).length === 0
-  ) {
-    return machine;
-  }
-  yield* getMachineById(appName, machineId).pipe(
-    Effect.map(
-      (current) => current !== undefined && allServiceChecksPassing(current),
-    ),
-    // 429/5xx/504 on Get must not abort the wait. Forbidden still fails.
+  const expected = configuredServiceChecks(machine).length;
+  if (machineId === undefined || expected === 0) return machine;
+
+  let observed = machine;
+  const notPassing = () =>
+    new ReplicaChecksNotPassing({
+      appName,
+      machineId,
+      checks: liveServiceChecks(observed).map((check) => ({
+        name: check.name,
+        status: check.status,
+        output: check.output,
+      })),
+    });
+  const passing = yield* getMachineById(appName, machineId).pipe(
+    Retry.none,
+    Effect.map((current) => {
+      if (current === undefined) return false;
+      observed = current;
+      return allServiceChecksPassing(current, expected);
+    }),
     Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
     Effect.repeat({
       schedule: CHECK_POLL,
       until: (passing) => passing,
+      times: 10,
     }),
     Effect.timeoutOrElse({
       duration: CHECK_WAIT,
-      orElse: () =>
-        getMachineById(appName, machineId).pipe(
-          Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(undefined)),
-          Effect.flatMap((current) =>
-            Effect.fail(
-              new ReplicaChecksNotPassing({
-                appName,
-                machineId,
-                checks: liveServiceChecks(current ?? machine).map((check) => ({
-                  name: check.name,
-                  status: check.status,
-                  output: check.output,
-                })),
-              }),
-            ),
-          ),
-        ),
+      orElse: () => Effect.fail(notPassing()),
     }),
   );
-  return (yield* getMachineById(appName, machineId)) ?? machine;
+  if (!passing) return yield* notPassing();
+  return observed;
 });
 
 export const waitDestroyed = (appName: string, machineId: string) =>
@@ -340,7 +347,8 @@ export const waitDestroyed = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) => e._tag === "GatewayTimeout",
+        while: (e) =>
+          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
     );
 
@@ -351,20 +359,53 @@ export const ensureStarted = Effect.fn(function* (
 ) {
   const machineId = machine.id;
   if (machineId === undefined || skipLaunch) return machine;
-  const state = machine.state;
-  if (state !== "started" && state !== "starting") {
-    yield* machines
-      .startMachine({
+  const started = yield* Effect.gen(function* () {
+    // Create/update responses can lag Fly's automatic launch.
+    const current = yield* machines.getMachine({
+      app_name: appName,
+      machine_id: machineId,
+    });
+    yield* Effect.logDebug("Fly machine startup", {
+      appName,
+      machineId,
+      state: current.state,
+    });
+    if (
+      current.state === "stopped" ||
+      current.state === "suspended" ||
+      current.state === "failed"
+    ) {
+      yield* machines.startMachine({
         app_name: appName,
         machine_id: machineId,
+      });
+    }
+    // Re-observe state between waits instead of retrying the wait in the SDK.
+    yield* machines
+      .waitMachine({
+        app_name: appName,
+        machine_id: machineId,
+        state: "started",
+        timeout: WAIT_TIMEOUT_SECONDS,
       })
-      .pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
-  }
-  yield* waitStarted(appName, machineId);
-  const started = (yield* getMachineById(appName, machineId)) ?? machine;
-  const observed =
-    configuredServiceChecks(started).length > 0 ? started : machine;
-  return yield* waitHealthy(appName, observed);
+      .pipe(Retry.none);
+    return yield* machines.getMachine({
+      app_name: appName,
+      machine_id: machineId,
+    });
+  }).pipe(
+    Effect.retry({
+      times: 6,
+      schedule: waitBackoff,
+      while: (error) =>
+        error._tag === "MachineStartFromCreatedState" ||
+        error._tag === "MachineWaitTimeout" ||
+        error._tag === "Conflict" ||
+        error._tag === "GatewayTimeout",
+    }),
+    Effect.timeout("50 seconds"),
+  );
+  return yield* waitHealthy(appName, started);
 });
 
 export const deleteMachine = Effect.fn(function* (
@@ -752,7 +793,9 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     if (input.baseName === undefined) return true;
     const name = machine.name ?? "";
     if (name === input.baseName) return true;
-    return name.startsWith(`${input.baseName}-`);
+    return (
+      name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2)
+    );
   });
   if (listed.length > 0) {
     const volumesById = new Map<string, FlyVolume>();

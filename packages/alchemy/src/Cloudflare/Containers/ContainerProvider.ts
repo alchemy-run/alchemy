@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Schedule from "effect/Schedule";
@@ -39,6 +38,7 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
+import { retryContainerPublication } from "./ContainerPublication.ts";
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -543,25 +543,6 @@ export const LiveContainerProvider = () =>
         }
 
         const credentials = yield* registryCredentials(props, ["pull", "push"]);
-        // Registry blob HEAD probes can transiently fail during publication.
-        // Retry both BuildKit exports and Engine pushes with the same bound.
-        const retryPublication = <A, R>(
-          publication: Effect.Effect<A, PlatformError, R>,
-        ) =>
-          Effect.retry(publication, {
-            while: (error) => {
-              const message = String(error).toLowerCase();
-              return (
-                message.includes("500") ||
-                message.includes("internal server error") ||
-                message.includes("unexpected status")
-              );
-            },
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(5),
-            ]),
-          });
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -584,7 +565,7 @@ export const LiveContainerProvider = () =>
           // may also hold a host-architecture variant under this tag.
           yield* docker.image
             .push(imageRef, credentials, platform)
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -605,7 +586,7 @@ export const LiveContainerProvider = () =>
               undefined,
               credentials,
             )
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -645,7 +626,7 @@ export const LiveContainerProvider = () =>
               undefined,
               credentials,
             )
-            .pipe(retryPublication);
+            .pipe(retryContainerPublication);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather
@@ -1538,11 +1519,9 @@ export const LiveContainerProvider = () =>
           const name = yield* createApplicationName(id, olds?.name);
           attrs = yield* readByName(name);
           if (!attrs) return undefined;
-          // Cloudflare container applications carry no ownership signal that
-          // we can read back from the API, so a name match is not proof of
-          // ownership. Brand it `Unowned` so the engine surfaces
-          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
-          return Unowned(attrs);
+          // Generated names identify this instance by its random suffix.
+          // Explicit names alone do not establish ownership.
+          return olds?.name === undefined ? attrs : Unowned(attrs);
         }),
         list: () =>
           Effect.gen(function* () {

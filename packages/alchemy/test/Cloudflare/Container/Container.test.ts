@@ -28,14 +28,16 @@ import RemoteStack from "./fixtures/remote/stack.ts";
 describe.concurrent.each([
   {
     dev: true,
-    stage: "test-local",
+    stage: process.env.ALCHEMY_TEST_STAGE
+      ? `${process.env.ALCHEMY_TEST_STAGE}-local`
+      : "test-local",
     // Must cover the full readiness budget (readinessRetries × 3s ≈ 3 min)
     // when a saturated machine keeps the local container answering 500s.
     timeout: 300_000,
   },
   {
     dev: false,
-    stage: "test-live",
+    stage: process.env.ALCHEMY_TEST_STAGE ?? "test-live",
     timeout: 300_000,
   },
 ])("Container (dev: $dev)", ({ dev, stage, timeout }) => {
@@ -336,7 +338,7 @@ describe.concurrent.each([
 });
 
 describe.sequential("container attachment recovery (live)", () => {
-  const stage = "test-live";
+  const stage = process.env.ALCHEMY_TEST_STAGE ?? "test-live";
   const providers = Cloudflare.providers();
   const services = Layer.effectContext(
     AttachmentStack.pipe(Effect.map((stack) => stack.services)),
@@ -479,6 +481,121 @@ describe.sequential("container attachment recovery (live)", () => {
   );
 
   test(
+    "recovers an interrupted create with an unresolved Worker attachment",
+    Effect.gen(function* () {
+      const first = yield* stack;
+      const namespaceId = first.app.durableObjects?.namespaceId;
+      assert(namespaceId);
+      const state = yield* yield* State;
+      const workerRow = yield* state.get(workerKey);
+      const containerRow = yield* state.get(containerKey);
+      assert(
+        workerRow?.status === "created" || workerRow?.status === "updated",
+      );
+      assert(
+        containerRow?.status === "created" ||
+          containerRow?.status === "updated",
+      );
+      const interrupted = {
+        ...containerRow,
+        status: "creating" as const,
+        attr: undefined,
+      };
+      yield* Effect.gen(function* () {
+        yield* state.set({
+          ...workerKey,
+          value: {
+            ...workerRow,
+            attr: { ...workerRow.attr, durableObjectNamespaces: {} },
+          },
+        });
+        yield* state.set({ ...containerKey, value: interrupted });
+        const plan = yield* AttachmentStack.pipe(
+          Effect.flatMap((stack) =>
+            Plan.make(stack).pipe(Effect.provide(stack.services)),
+          ),
+        );
+        expect(plan.resources.AttachmentContainer).toMatchObject({
+          action: "create",
+          state: {
+            instanceId: containerRow.instanceId,
+            attr: {
+              applicationId: first.app.applicationId,
+              applicationName: first.app.applicationName,
+              durableObjects: { namespaceId },
+            },
+          },
+        });
+        expect(yield* state.get(containerKey)).toEqual(interrupted);
+        const recovered = yield* deploy(AttachmentStack);
+        expect(recovered.app.applicationId).toBe(first.app.applicationId);
+        expect(recovered.app.durableObjects).toEqual({ namespaceId });
+        expect(recovered.worker.durableObjectNamespaces).toEqual(
+          first.worker.durableObjectNamespaces,
+        );
+        const committed = yield* state.get(containerKey);
+        assert(
+          committed?.status === "created" || committed?.status === "updated",
+        );
+        expect(committed).toMatchObject({
+          instanceId: containerRow.instanceId,
+          attr: {
+            applicationId: first.app.applicationId,
+            durableObjects: { namespaceId },
+          },
+        });
+        const observed = yield* readAttachmentApplication(
+          first.app.accountId,
+          first.app.applicationId,
+        );
+        expect(observed.durableObjects).toEqual({ namespaceId });
+        const other = yield* readAttachmentApplication(
+          first.otherApp.accountId,
+          first.otherApp.applicationId,
+        );
+        expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
+        expect(recovered.otherApp.applicationId).toBe(
+          first.otherApp.applicationId,
+        );
+        const response = yield* fetchReady(
+          new URL("/hello", recovered.url),
+          "method",
+          8,
+        );
+        expect(JSON.parse(response).method).toBe("GET");
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            const current = yield* state.get(containerKey);
+            if (
+              current &&
+              "attr" in current &&
+              current.attr?.applicationId &&
+              current.attr.applicationId !== first.app.applicationId
+            ) {
+              yield* destroyStack({
+                stack: AttachmentStack,
+                stage,
+                dev: false,
+              });
+            }
+            yield* state
+              .set({ ...workerKey, value: workerRow })
+              .pipe(
+                Effect.ensuring(
+                  state
+                    .set({ ...containerKey, value: containerRow })
+                    .pipe(Effect.orDie),
+                ),
+              );
+          }).pipe(Effect.orDie),
+        ),
+      );
+    }).pipe(Effect.provide(services)),
+    { timeout: 120_000, retry: 0 },
+  );
+
+  test(
     "recovers a missing application only with its recorded exact attachment",
     Effect.gen(function* () {
       const first = yield* stack;
@@ -535,6 +652,26 @@ describe.sequential("container attachment recovery (live)", () => {
         expect(
           remaining.some((app) => app.id === first.app.applicationId),
         ).toBe(false);
+        // Reconcile observes by id first; list deletion can propagate earlier.
+        const deleted = yield* Containers.getContainerApplication({
+          accountId: first.app.accountId,
+          applicationId: first.app.applicationId,
+        }).pipe(
+          Effect.tap((app) =>
+            Effect.logInfo(
+              `Deleted container application ${app.id} is absent from list but still readable by id`,
+            ),
+          ),
+          Effect.catchTag("ContainerApplicationNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (app) => app === undefined,
+            times: 8,
+          }),
+        );
+        expect(deleted).toBeUndefined();
         for (const missing of [undefined, {}]) {
           yield* corruptProjection(missing);
           const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
