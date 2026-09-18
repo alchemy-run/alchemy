@@ -24,7 +24,7 @@ packages:
   - packages/frontend-frameworks/fixtures/*
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 catalog:
-  "@alchemy.run/sigil": "0.0.0-alpha.11"
+  "@alchemy.run/sigil": "0.1.0-alpha.1"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.10.1"
   "@astrojs/mdx": "8.0.0"
@@ -234,7 +234,7 @@ patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 minimumReleaseAgeExclude:
-  - "@alchemy.run/sigil@0.0.0-alpha.11"
+  - "@alchemy.run/sigil@0.1.0-alpha.1"
   - "@effect/atom-react@4.0.0-rc.115"
   - "@effect/platform-bun@4.0.0-rc.115"
   - "@effect/platform-node-shared@4.0.0-rc.115"

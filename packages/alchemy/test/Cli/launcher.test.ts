@@ -51,7 +51,7 @@ const runPublishedLauncher = (
       import.meta.url,
     ).href;
     yield* fs.writeFileString(
-      path.join(bin, "alchemy.ts"),
+      path.join(bin, "alchemy.js"),
       `await import(${JSON.stringify(fixture)});\n`,
     );
     if (jsx !== undefined) {
