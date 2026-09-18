@@ -1045,6 +1045,37 @@ export default defineConfig({
             { label: "Overview", link: "/neon" },
             { label: "Setup", link: "/neon/setup" },
             {
+              label: "Frontend",
+              items: [
+                { label: "Vite", link: "/neon/frontend/vite" },
+                { label: "Astro", link: "/neon/frontend/astro" },
+                { label: "Next.js", link: "/neon/frontend/nextjs" },
+                { label: "Nuxt", link: "/neon/frontend/nuxt" },
+                { label: "SvelteKit", link: "/neon/frontend/sveltekit" },
+                { label: "React Router", link: "/neon/frontend/react-router" },
+                { label: "SolidStart", link: "/neon/frontend/solidstart" },
+                {
+                  label: "TanStack Start",
+                  link: "/neon/frontend/tanstack-start",
+                },
+                { label: "Waku", link: "/neon/frontend/waku" },
+                { label: "Octane", link: "/neon/frontend/octane" },
+                { label: "Foldkit", link: "/neon/frontend/foldkit" },
+                { label: "Vocs", link: "/neon/frontend/vocs" },
+                { label: "Static Site", link: "/neon/frontend/static-site" },
+              ],
+            },
+            {
+              label: "Upload tutorial",
+              items: [
+                { label: "Overview", link: "/neon/tutorial" },
+                { label: "Backend", link: "/neon/tutorial/backend" },
+                { label: "Functions", link: "/neon/tutorial/functions" },
+                { label: "Browser", link: "/neon/tutorial/frontend" },
+                { label: "Preview branches", link: "/neon/tutorial/previews" },
+              ],
+            },
+            {
               label: "Data",
               items: [
                 { label: "Branching", link: "/neon/data/branching" },

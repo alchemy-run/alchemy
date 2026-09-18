@@ -3,10 +3,33 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
+import * as Command from "../Command/index.ts";
+import { Server, ServerProvider } from "../Website/Server.ts";
 import { NeonAuth } from "./AuthProvider.ts";
+import { Auth, AuthProvider } from "./Auth.ts";
+import {
+  AuthOAuthProvider,
+  AuthOAuthProviderProvider,
+} from "./AuthOAuthProvider.ts";
+import {
+  AuthTrustedDomain,
+  AuthTrustedDomainProvider,
+} from "./AuthTrustedDomain.ts";
+import { DataApi, DataApiProvider } from "./DataApi.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import * as Credentials from "./Credentials.ts";
+import { Credential, CredentialProvider } from "./Credential.ts";
+import { Bucket, BucketProvider } from "./Bucket.ts";
+import { Object, ObjectProvider } from "./Object.ts";
 import { Project, ProjectProvider } from "./Project.ts";
+import { Function } from "./Function.ts";
+import { FunctionProvider } from "./FunctionProvider.ts";
+import { FunctionTrigger, FunctionTriggerProvider } from "./FunctionTrigger.ts";
+import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
+import {
+  WebsiteArtifact,
+  WebsiteArtifactProvider,
+} from "./Website/Artifact.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Neon",
@@ -40,8 +63,44 @@ export class Providers extends Provider.ProviderCollection<Providers>()(
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Project, Branch])).pipe(
-    Layer.provide(Layer.mergeAll(ProjectProvider(), BranchProvider())),
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Project,
+      Branch,
+      Credential,
+      Bucket,
+      Object,
+      Auth,
+      AuthOAuthProvider,
+      AuthTrustedDomain,
+      DataApi,
+      Function,
+      FunctionTrigger,
+      CustomDomain,
+      WebsiteArtifact,
+      Server,
+    ]),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        ProjectProvider(),
+        BranchProvider(),
+        CredentialProvider(),
+        BucketProvider(),
+        ObjectProvider(),
+        AuthProvider(),
+        AuthOAuthProviderProvider(),
+        AuthTrustedDomainProvider(),
+        DataApiProvider(),
+        FunctionProvider(),
+        FunctionTriggerProvider(),
+        CustomDomainProvider(),
+        WebsiteArtifactProvider(),
+        ServerProvider(),
+      ),
+    ),
+    Layer.provideMerge(Command.providers()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(NeonAuth),
     Layer.provideMerge(ProfileStoreLive),

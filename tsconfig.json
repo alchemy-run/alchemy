@@ -322,6 +322,26 @@
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
     },
+    { "path": "./examples/neon-ai-gateway/tsconfig.json" },
+    { "path": "./examples/neon-auth/tsconfig.json" },
+    { "path": "./examples/neon-function/tsconfig.json" },
+    { "path": "./examples/neon-function-effect/tsconfig.json" },
+    { "path": "./examples/neon-storage/tsconfig.json" },
+    { "path": "./examples/neon-triggers/tsconfig.json" },
+    { "path": "./examples/neon-tutorial/tsconfig.json" },
+    { "path": "./examples/neon-website-astro/tsconfig.json" },
+    { "path": "./examples/neon-website-foldkit/tsconfig.json" },
+    { "path": "./examples/neon-website-nextjs/tsconfig.json" },
+    { "path": "./examples/neon-website-nuxt/tsconfig.json" },
+    { "path": "./examples/neon-website-octane/tsconfig.json" },
+    { "path": "./examples/neon-website-react-router/tsconfig.json" },
+    { "path": "./examples/neon-website-solidstart/tsconfig.json" },
+    { "path": "./examples/neon-website-static/tsconfig.json" },
+    { "path": "./examples/neon-website-sveltekit/tsconfig.json" },
+    { "path": "./examples/neon-website-tanstack-start/tsconfig.json" },
+    { "path": "./examples/neon-website-vite/tsconfig.json" },
+    { "path": "./examples/neon-website-vocs/tsconfig.json" },
+    { "path": "./examples/neon-website-waku/tsconfig.json" },
     {
       "path": "./benchmark/container/tsconfig.json"
     }

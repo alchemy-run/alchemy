@@ -1,15 +1,16 @@
 ---
 title: Neon
-description: Serverless Postgres with copy-on-write branching — projects and branches as Stack resources, with built-in SQL migrations.
+description: Declare Neon Postgres, Functions, storage, Auth, AI Gateway and websites together in an Alchemy Stack.
 ---
 
-Neon is serverless Postgres with copy-on-write branching. With
-alchemy you declare the project and its branches as resources in the
-same Stack as your Workers — each preview stage forks its own branch
-in seconds and destroys it just as fast, and SQL migrations run as
-part of the deploy.
+Declare Neon Postgres branches, Functions, object storage, managed Auth, Data API,
+and AI Gateway connections in the same Alchemy Stack. Functions accept native
+Fetch handlers or Effect applications; runtime bindings connect them to your
+backend without exposing the deployment API key.
 
-New here? [Set up credentials](/neon/setup) first.
+New here? [Set up credentials](/neon/setup), then follow the
+[authenticated upload tutorial](/neon/tutorial) to combine a Vite frontend,
+private files, managed sessions, SQL records, and an upload-triggered Function.
 
 ## Resources
 
@@ -43,6 +44,72 @@ const featureBranch = yield* Neon.Branch("feature", {
 Migrations are ordered, hashed, and tracked in Alchemy's
 `__alchemy_migrations` table so each file runs exactly once — see
 [Migrations](/neon/data/migrations).
+
+## Private storage and typed objects
+
+```typescript
+const uploads = yield* Neon.Bucket("Uploads", { branch });
+const settings = yield* Neon.Object("Settings", {
+  bucket: uploads,
+  key: "settings.json",
+  value: { theme: "dark", pageSize: 20 },
+});
+```
+
+`Neon.Object` infers the value type; it also accepts an explicit generic and an
+optional Effect Schema. Functions use `Neon.ReadObject(settings)` or
+`Neon.WriteObject(settings)` for typed access, and bucket bindings for arbitrary
+keys. External hosts receive managed, scoped credentials. Neon scopes apply to a
+branch and its descendants, not individual buckets or keys.
+
+## Native and Effect Functions
+
+```typescript
+const api = yield* Neon.Function("Api", {
+  branch,
+  main: "./src/api.ts",
+});
+```
+
+The native entrypoint exports a Fetch handler. The Effect form adds an
+initialization Effect to resolve runtime bindings, followed by request handlers.
+See [Functions in the tutorial](/neon/tutorial/functions) for both forms, event
+sources, and authentication. Function URLs are public; handlers must authorize
+callers before doing protected work.
+
+## Websites
+
+```typescript
+const web = yield* Neon.Website.Vite("Web", {
+  branch,
+  rootDir: "./web",
+});
+```
+
+The Website family includes Vite, Astro, Nextjs, Nuxt, SvelteKit, ReactRouter,
+SolidStart, TanStackStart, Waku, Octane, Foldkit, Vocs, and StaticSite. Production
+output is a Fetch application deployed as a Function, not S3 website hosting.
+Local development runs each framework's native server. Framework reference pages
+describe packaging requirements and limitations.
+
+## Effect AI
+
+```typescript
+const gateway = yield* Neon.AIGateway("AI", { branch });
+// Inside a Function's initialization Effect:
+const ai = yield* Neon.ConnectAIGateway(gateway);
+const model = ai.model({ model: "gpt-5-mini", parameters: { maxTokens: 128 } });
+// Inside its request handler:
+const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
+  Effect.provide(model),
+);
+```
+
+Import `LanguageModel` from `effect/unstable/ai`. Native and HTTP gateway bindings
+expose the same model layer, backed by Neon's OpenAI-compatible Chat Completions
+API. Model access and prepaid credits are separate account requirements; declaring
+a gateway never changes billing. See [AI Gateway bindings](/providers/neon/connectaigateway)
+for credentials, streaming, tools, structured output, and dialect URLs.
 
 ## Pooled vs direct
 
