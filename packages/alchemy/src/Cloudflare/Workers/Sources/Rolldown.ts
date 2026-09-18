@@ -21,10 +21,10 @@ import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
 
 /**
- * Bundler options for a Worker: the generic {@link Bundle.BundleExtraOptions}
- * plus rolldown output overrides merged over Alchemy's defaults.
+ * Bundler options for a Worker: Rolldown input/output overrides and
+ * {@link Bundle.BundleExtraOptions}, merged over Alchemy's defaults.
  */
-export interface WorkerBuildOptions extends Bundle.BundleExtraOptions {
+export interface WorkerBuildOptions extends Bundle.BundleConfig {
   /**
    * Rolldown output options merged over Alchemy's defaults. Use this to
    * control chunking (`codeSplitting`), minification, etc.
@@ -75,11 +75,32 @@ export interface WorkerBundleOptions {
  * actually invoke makes the identity check pass regardless of which copy the
  * plugin package resolved.
  */
-const rebindEsmExternalRequirePlugin = (
+const configureCloudflarePlugins = (
   plugins: Array<rolldown.Plugin | null>,
   esmExternalRequirePlugin: (typeof import("rolldown/plugins"))["esmExternalRequirePlugin"],
-): Array<rolldown.Plugin | null> =>
-  plugins.map((plugin) => {
+  aliases: NonNullable<rolldown.InputOptions["resolve"]>["alias"],
+): Array<rolldown.Plugin | null> => {
+  const aliasKeys = Object.entries(aliases ?? {})
+    .filter(([, value]) => !Array.isArray(value) || value.length > 0)
+    .map(([key]) => key);
+  const isAliased = (id: string) =>
+    aliasKeys.some((key) => {
+      if (key.endsWith("$")) return id === key.slice(0, -1);
+      const wildcard = key.indexOf("*");
+      if (wildcard !== -1) {
+        const prefix = key.slice(0, wildcard);
+        const suffix = key.slice(wildcard + 1);
+        return (
+          id.length >= prefix.length + suffix.length &&
+          id.startsWith(prefix) &&
+          id.endsWith(suffix)
+        );
+      }
+      return (
+        id === key || id.startsWith(`${key}/`) || id.startsWith(`${key}\\`)
+      );
+    });
+  return plugins.map((plugin) => {
     if (
       typeof plugin === "object" &&
       plugin !== null &&
@@ -87,12 +108,36 @@ const rebindEsmExternalRequirePlugin = (
       plugin.name === "builtin:esm-external-require" &&
       "_options" in plugin
     ) {
+      const options = plugin._options as Parameters<
+        typeof esmExternalRequirePlugin
+      >[0];
       return esmExternalRequirePlugin(
-        plugin._options as Parameters<typeof esmExternalRequirePlugin>[0],
+        options && {
+          ...options,
+          external: options.external.filter(
+            (id) => typeof id !== "string" || !isAliased(id),
+          ),
+        },
       ) as rolldown.Plugin;
+    }
+    // Let Rolldown resolve user aliases before compatibility polyfills.
+    if (plugin?.resolveId && aliasKeys.length > 0) {
+      const hook = plugin.resolveId;
+      const handler = typeof hook === "function" ? hook : hook.handler;
+      return {
+        ...plugin,
+        resolveId: {
+          ...(typeof hook === "function" ? {} : hook),
+          handler(source, importer, options) {
+            if (isAliased(source)) return null;
+            return handler.call(this, source, importer, options);
+          },
+        },
+      };
     }
     return plugin;
   });
+};
 
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -122,25 +167,31 @@ export const WorkerBundle = Effect.gen(function* () {
     );
     // The Cloudflare-flavored plugin set, shared by the parent build and
     // by every nested `?worker` module build (see WorkerModulePlugin.ts).
+    const overrides = options.extraOptions?.input;
     const cloudflarePlugins = () =>
-      rebindEsmExternalRequirePlugin(
+      configureCloudflarePlugins(
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,
         }),
         esmExternalRequirePlugin,
+        overrides?.resolve?.alias,
       );
     const workerModules: rolldown.Plugin = workerModulePlugin({
       loadRolldown: () => import("rolldown"),
       nested: async () => ({
         external: ["lightningcss", "fsevents"],
         cwd,
-        plugins: [cloudflarePlugins(), workerModules],
-        checks: { unresolvedImport: false, ineffectiveDynamicImport: false },
+        ...overrides,
+        plugins: [overrides?.plugins, cloudflarePlugins(), workerModules],
+        checks: {
+          unresolvedImport: false,
+          ineffectiveDynamicImport: false,
+          ...overrides?.checks,
+        },
       }),
     });
     const inputOptions: rolldown.InputOptions = {
-      input: realMain,
       preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
       // Forever-devtool native modules that vite/chokidar reference behind
       // runtime guards. Rolldown resolves before tree-shaking, so the dead
@@ -149,7 +200,10 @@ export const WorkerBundle = Effect.gen(function* () {
       // See rolldown/tsdown#212.
       external: ["lightningcss", "fsevents"],
       cwd,
+      ...overrides,
+      input: realMain,
       plugins: [
+        overrides?.plugins,
         cloudflarePlugins(),
         workerModules,
         options.entry.kind === "effect"
@@ -165,6 +219,7 @@ export const WorkerBundle = Effect.gen(function* () {
         unresolvedImport: false,
         // The shared platform boundary keeps guarded Node/Bun adapter imports.
         ineffectiveDynamicImport: false,
+        ...overrides?.checks,
       },
     };
     const outputOptions: rolldown.OutputOptions = {
