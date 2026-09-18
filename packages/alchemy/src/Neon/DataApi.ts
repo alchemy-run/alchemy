@@ -71,7 +71,7 @@ export interface DataApi extends Resource<
 /**
  * Own a branch/database Data API singleton. This resource never grants an
  * application the account deployment key. Configure RLS and forward the user's
- * token through ConnectDataApi. Authentication inputs are creation-only because
+ * token through QueryDataApi. Authentication inputs are creation-only because
  * the API only supports updating PostgREST settings.
  *
  * ### Expose a database through managed authentication

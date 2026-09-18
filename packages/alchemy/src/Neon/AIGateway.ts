@@ -50,7 +50,7 @@ export interface AIGateway {
 /**
  * Discover a branch AI Gateway endpoint without inventing gateway CRUD. The
  * construct never purchases credits or changes the account plan. Native Neon
- * Functions use injected credentials; ConnectAIGatewayHttp owns a scoped service
+ * Functions use injected credentials; QueryAIGatewayHttp owns a scoped service
  * credential when none is supplied. Model access and credits remain separate.
  *
  * ### Connect an existing branch
@@ -58,7 +58,7 @@ export interface AIGateway {
  * ```typescript
  * const gateway = yield* Neon.AIGateway("AI", { branch });
  * // In a Function init Effect:
- * const ai = yield* Neon.ConnectAIGateway(gateway);
+ * const ai = yield* Neon.QueryAIGateway(gateway);
  * const model = ai.model({ model: "gpt-5-mini" });
  * // Provide model to Effect AI generateText/generateObject/streamText in a handler.
  * ```

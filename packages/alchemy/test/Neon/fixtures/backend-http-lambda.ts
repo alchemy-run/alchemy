@@ -13,8 +13,8 @@ import {
 
 const bindings = Layer.mergeAll(
   Neon.ConnectAuthHttp,
-  Neon.ConnectDataApiHttp,
-  Neon.ConnectAIGatewayHttp,
+  Neon.QueryDataApiHttp,
+  Neon.QueryAIGatewayHttp,
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 export default class BackendHttpLambda extends Lambda.Function<BackendHttpLambda>()(
@@ -25,8 +25,8 @@ export default class BackendHttpLambda extends Lambda.Function<BackendHttpLambda
   },
   Effect.gen(function* () {
     const auth = yield* Neon.ConnectAuth(backendAuth);
-    const data = yield* Neon.ConnectDataApi(backendDataApi);
-    const ai = yield* Neon.ConnectAIGateway(backendGateway);
+    const data = yield* Neon.QueryDataApi(backendDataApi);
+    const ai = yield* Neon.QueryAIGateway(backendGateway);
     return {
       fetch: Effect.gen(function* () {
         return yield* HttpServerResponse.json({

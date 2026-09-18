@@ -1,9 +1,6 @@
 import type { AIGateway } from "@/Neon/AIGateway.ts";
 import { backendEnvKey } from "@/Neon/BackendConnection.ts";
-import {
-  ConnectAIGateway,
-  ConnectAIGatewayHttp,
-} from "@/Neon/ConnectAIGateway.ts";
+import { QueryAIGateway, QueryAIGatewayHttp } from "@/Neon/QueryAIGateway.ts";
 import { FunctionEnvironment } from "@/Neon/FunctionEnvironment.ts";
 import * as Output from "@/Output.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
@@ -41,7 +38,7 @@ const runtimeMode = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   });
 
 const services = (injected: boolean, environment?: Record<string, string>) =>
-  ConnectAIGatewayHttp.pipe(
+  QueryAIGatewayHttp.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         RuntimeContext.phantom,
@@ -70,7 +67,7 @@ for (const mode of ["injected", "managed", "managed-with-injection"] as const) {
     () =>
       runtimeMode(
         Effect.gen(function* () {
-          const client = yield* ConnectAIGateway(gateway);
+          const client = yield* QueryAIGateway(gateway);
           expect(Layer.isLayer(client.model({ model: "gpt-5-mini" }))).toBe(
             true,
           );
@@ -132,7 +129,7 @@ for (const [name, environment, message] of [
     () =>
       runtimeMode(
         Effect.gen(function* () {
-          const client = yield* ConnectAIGateway(gateway);
+          const client = yield* QueryAIGateway(gateway);
           const result = yield* Effect.result(Effect.sandbox(client.token));
           expect(Result.isFailure(result)).toBe(true);
           if (Result.isFailure(result)) {

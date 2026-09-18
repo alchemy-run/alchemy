@@ -21,7 +21,7 @@ export class DataApiRequestError extends Data.TaggedError(
   "DataApiRequestError",
 )<{ message: string }> {}
 
-export interface ConnectDataApiClient {
+export interface QueryDataApiClient {
   /** Bound public PostgREST endpoint. */
   baseUrl: Effect.Effect<string, never, RuntimeContext>;
   /** Execute a relative PostgREST request with this caller's token, never an admin key. */
@@ -36,37 +36,42 @@ export interface ConnectDataApiClient {
 }
 
 /**
- * Bind a Data API endpoint and forward an explicitly supplied end-user token.
+ * Query Neon Data API (PostgREST) over HTTP from a Function, Worker, or Lambda
+ * using an explicitly supplied caller token. Supports reads, writes and database
+ * function calls; this binding does not provision database grants or RLS policies.
+ *
+ * This is a low-level Effect HTTP client, not a SQL driver or a fluent query
+ * builder. Browser applications can use Neon's `@neondatabase/neon-js` or
+ * `@neondatabase/postgrest-js` SDK directly with the public Data API URL.
+ *
  * Relative URLs cannot redirect the authorization header to another origin.
  * Requests do not follow redirects, and response bodies remain request-scoped.
  *
  * ### Forward end-user authorization
  * **Example:** Query rows under the caller's RLS identity
  * ```typescript
- * const data = yield* Neon.ConnectDataApi(dataApi);
+ * const data = yield* Neon.QueryDataApi(dataApi);
  * // In the request handler, after obtaining the caller's token:
  * const response = yield* data.execute(HttpClientRequest.get("todos?select=*"), token);
  * ```
  *
  * @binding
  */
-export interface ConnectDataApi extends Binding.Service<
-  ConnectDataApi,
-  "Neon.ConnectDataApi",
-  (dataApi: DataApi) => Effect.Effect<ConnectDataApiClient>
+export interface QueryDataApi extends Binding.Service<
+  QueryDataApi,
+  "Neon.QueryDataApi",
+  (dataApi: DataApi) => Effect.Effect<QueryDataApiClient>
 > {}
-export const ConnectDataApi = Binding.Service<ConnectDataApi>(
-  "Neon.ConnectDataApi",
-);
+export const QueryDataApi = Binding.Service<QueryDataApi>("Neon.QueryDataApi");
 
 /** Data API transport, with the host and HTTP client encapsulated at initialization. */
-export const ConnectDataApiHttp = Layer.effect(
-  ConnectDataApi,
+export const QueryDataApiHttp = Layer.effect(
+  QueryDataApi,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     return Effect.fn(function* (dataApi: DataApi) {
       const key = backendEnvKey(dataApi.FQN, "DATA_API_URL");
-      yield* bindBackendEnvironment(`Neon.ConnectDataApi:${dataApi.FQN}`, {
+      yield* bindBackendEnvironment(`Neon.QueryDataApi:${dataApi.FQN}`, {
         [key]: dataApi.url,
       });
       const baseUrl = backendString(key);
@@ -112,7 +117,7 @@ export const ConnectDataApiHttp = Layer.effect(
               }),
             );
         }),
-      } satisfies ConnectDataApiClient;
+      } satisfies QueryDataApiClient;
     });
   }),
 );

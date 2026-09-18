@@ -67,10 +67,10 @@ project/branch IDs and an optional credential reference.
 Inside a Function's initialization Effect:
 
 ```typescript
-const ai = yield* Neon.ConnectAIGateway(gateway);
+const ai = yield* Neon.QueryAIGateway(gateway);
 ```
 
-Provide `Neon.ConnectAIGatewayHttp` on the application. It uses the injected
+Provide `Neon.QueryAIGatewayHttp` on the application. It uses the injected
 credential for a same-branch production Neon Function and manages a tracked
 `ai_gateway:invoke` credential for a Worker, Lambda, local Function, or cross-branch
 caller. An explicit credential on `Neon.AIGateway` overrides automatic injection.
@@ -106,7 +106,7 @@ Protect the route with authentication and rate limits before exposing it to user
 After basic inference works, exercise the actual features you need: streamed
 output, tools or structured results, and cancelling a stream. Endpoint discovery
 alone does not verify any of these behaviors. See
-[AI Gateway bindings](/providers/neon/connectaigateway) and the
+[AI Gateway bindings](/providers/neon/queryaigateway) and the
 [Effect model layer](/providers/neon/makelanguagemodellayer).
 
 ## Diagnose access failures

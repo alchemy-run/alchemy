@@ -13,7 +13,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 
-/** Runtime-only connection obtained from ConnectAIGateway, never an account API key. */
+/** Runtime-only connection obtained from QueryAIGateway, never an account API key. */
 export interface LanguageModelClient {
   /** OpenAI-compatible base URL ending in /v1. */
   readonly chatBaseUrl: Effect.Effect<string, never, RuntimeContext>;
@@ -59,7 +59,7 @@ export interface LanguageModelOptions {
  * ### Generate text
  * **Example:** A request-scoped Effect model
  * ```typescript
- * const ai = yield* Neon.ConnectAIGateway(gateway);
+ * const ai = yield* Neon.QueryAIGateway(gateway);
  * const model = ai.model({ model: "gpt-5-mini" });
  * // Inside the Function or Worker request handler:
  * const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(

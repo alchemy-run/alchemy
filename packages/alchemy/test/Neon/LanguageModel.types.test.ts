@@ -1,6 +1,6 @@
 import { AIGateway } from "@/Neon/AIGateway.ts";
 import type { Branch } from "@/Neon/Branch.ts";
-import { ConnectAIGateway } from "@/Neon/ConnectAIGateway.ts";
+import { QueryAIGateway } from "@/Neon/QueryAIGateway.ts";
 import type { Credential } from "@/Neon/Credential.ts";
 import type { Project } from "@/Neon/Project.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
@@ -29,7 +29,7 @@ const typeCases = (project: Project, branch: Branch, credential: Credential) =>
     yield* AIGateway("Both", { branch, project });
     // @ts-expect-error Scope cannot be omitted.
     yield* AIGateway("Neither", { credential });
-    const ai = yield* ConnectAIGateway(gateway);
+    const ai = yield* QueryAIGateway(gateway);
     const model: Layer.Layer<LanguageModel, never, RuntimeContext> = ai.model({
       model: "gpt-5-mini",
     });

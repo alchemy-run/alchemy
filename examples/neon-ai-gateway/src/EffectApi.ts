@@ -13,7 +13,7 @@ import { branch, gateway } from "./resources.ts";
 
 /** Authenticated, opt-in text streaming backed by the bound Effect model. */
 export const chat = (
-  ai: Pick<Neon.ConnectAIGatewayClient, "model">,
+  ai: Pick<Neon.QueryAIGatewayClient, "model">,
   environment: Readonly<Record<string, string | undefined>>,
 ) =>
   Effect.gen(function* () {
@@ -139,8 +139,8 @@ export default class EffectApi extends Neon.Function<EffectApi>()(
     };
   }),
   Effect.gen(function* () {
-    const ai = yield* Neon.ConnectAIGateway(gateway);
+    const ai = yield* Neon.QueryAIGateway(gateway);
     const environment = yield* Neon.FunctionEnvironment;
     return { fetch: chat(ai, environment) };
-  }).pipe(Effect.provide(Neon.ConnectAIGatewayHttp)),
+  }).pipe(Effect.provide(Neon.QueryAIGatewayHttp)),
 ) {}

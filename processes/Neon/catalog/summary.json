@@ -634,29 +634,29 @@
       "acceptance": "outstanding"
     },
     {
-      "name": "Neon.ConnectDataApi",
+      "name": "Neon.QueryDataApi",
       "kind": "binding",
       "status": "partial",
       "testability": "limited",
       "wave": 2,
       "spec": "bindings.md",
-      "implementations": ["ConnectDataApiHttp"],
+      "implementations": ["QueryDataApiHttp"],
       "sdkOperations": ["getProjectBranchDataAPI"],
       "runtimeTransport": "PostgREST with request-local end-user Authorization",
       "gates": ["G0", "G3", "G4", "G5", "G6", "G9", "G10"],
       "initialStatus": "missing",
-      "source": "packages/alchemy/src/Neon/ConnectDataApi.ts",
+      "source": "packages/alchemy/src/Neon/QueryDataApi.ts",
       "sourcePresent": true,
       "acceptance": "outstanding"
     },
     {
-      "name": "Neon.ConnectAIGateway",
+      "name": "Neon.QueryAIGateway",
       "kind": "binding",
       "status": "partial",
       "testability": "limited",
       "wave": 2,
       "spec": "bindings.md",
-      "implementations": ["ConnectAIGatewayHttp"],
+      "implementations": ["QueryAIGatewayHttp"],
       "sdkOperations": [
         "getProjectBranchAiGateway",
         "createCredential",
@@ -667,7 +667,7 @@
       "credentialScope": "ai_gateway:invoke",
       "gates": ["G0", "G3", "G4", "G5", "G6", "G9", "G10"],
       "initialStatus": "missing",
-      "source": "packages/alchemy/src/Neon/ConnectAIGateway.ts",
+      "source": "packages/alchemy/src/Neon/QueryAIGateway.ts",
       "sourcePresent": true,
       "acceptance": "outstanding"
     },

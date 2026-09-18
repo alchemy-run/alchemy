@@ -14,8 +14,8 @@ import {
 
 const bindings = Layer.mergeAll(
   Neon.ConnectAuthHttp,
-  Neon.ConnectDataApiHttp,
-  Neon.ConnectAIGatewayHttp,
+  Neon.QueryDataApiHttp,
+  Neon.QueryAIGatewayHttp,
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 export default class BackendHttpWorker extends Cloudflare.Worker<BackendHttpWorker>()(
@@ -25,9 +25,9 @@ export default class BackendHttpWorker extends Cloudflare.Worker<BackendHttpWork
   },
   Effect.gen(function* () {
     const auth = yield* Neon.ConnectAuth(backendAuth);
-    const data = yield* Neon.ConnectDataApi(backendDataApi);
-    const ai = yield* Neon.ConnectAIGateway(backendGateway);
-    const shared = yield* Neon.ConnectAIGateway(
+    const data = yield* Neon.QueryDataApi(backendDataApi);
+    const ai = yield* Neon.QueryAIGateway(backendGateway);
+    const shared = yield* Neon.QueryAIGateway(
       Effect.gen(function* () {
         return yield* Neon.AIGateway("SharedGateway", {
           branch: yield* backendBranch,

@@ -2,7 +2,7 @@
 
 A native streaming chat page and an Effect-native API. The native Function uses
 `@neon/ai-sdk-provider` and the Vercel AI SDK. The Effect Function uses
-a bound `Neon.ConnectAIGateway` client's `.model(...)` with
+a bound `Neon.QueryAIGateway` client's `.model(...)` with
 `effect/unstable/ai/LanguageModel`,
 not an SDK call wrapped in an Effect. The stack creates its own Neon project,
 branch, and two Functions. It does not buy credits or upgrade an account.
@@ -61,7 +61,7 @@ import * as Neon from "alchemy/Neon";
 import * as Effect from "effect/Effect";
 import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 
-const ai = yield* Neon.ConnectAIGateway(gateway);
+const ai = yield* Neon.QueryAIGateway(gateway);
 const model = ai.model({
   model: "gpt-5-mini",
   parameters: { maxTokens: 128 },

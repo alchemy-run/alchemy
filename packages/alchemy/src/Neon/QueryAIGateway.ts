@@ -23,7 +23,7 @@ import {
   type LanguageModelOptions,
 } from "./LanguageModel.ts";
 
-export interface ConnectAIGatewayClient {
+export interface QueryAIGatewayClient {
   /** Bare gateway root for SDKs that handle their own routing. */
   baseUrl: Effect.Effect<string, never, RuntimeContext>;
   /** OpenAI Chat Completions base URL, ending in /v1. */
@@ -42,7 +42,7 @@ export interface ConnectAIGatewayClient {
 
 /**
  * Obtain an Effect AI LanguageModel or SDK-compatible endpoint and credential
- * effects; no model calls happen during deployment. ConnectAIGatewayHttp uses
+ * effects; no model calls happen during deployment. QueryAIGatewayHttp uses
  * the same-branch Function's injected grant, otherwise a tracked branch credential.
  * An explicit credential overrides injection. The injected grant remains available
  * to the whole Function process; a binding is not a permission sandbox.
@@ -50,7 +50,7 @@ export interface ConnectAIGatewayClient {
  * ### Configure a model client
  * **Example:** OpenAI-compatible chat configuration
  * ```typescript
- * const ai = yield* Neon.ConnectAIGateway(gateway);
+ * const ai = yield* Neon.QueryAIGateway(gateway);
  * // Inside the request handler:
  * const baseURL = yield* ai.chatBaseUrl;
  * const apiKey = yield* ai.token;
@@ -59,7 +59,7 @@ export interface ConnectAIGatewayClient {
  * ### Use Effect AI
  * **Example:** Generate text in a request handler
  * ```typescript
- * const ai = yield* Neon.ConnectAIGateway(gateway);
+ * const ai = yield* Neon.QueryAIGateway(gateway);
  * const model = ai.model({ model: "gpt-5-mini" });
  * // Inside a Function or Worker handler:
  * const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
@@ -75,19 +75,19 @@ export interface ConnectAIGatewayClient {
  * @product AI Gateway
  * @category AI Gateway
  */
-export interface ConnectAIGateway extends Binding.Service<
-  ConnectAIGateway,
-  "Neon.ConnectAIGateway",
-  (gateway: AIGateway) => Effect.Effect<ConnectAIGatewayClient>
+export interface QueryAIGateway extends Binding.Service<
+  QueryAIGateway,
+  "Neon.QueryAIGateway",
+  (gateway: AIGateway) => Effect.Effect<QueryAIGatewayClient>
 > {}
-export const ConnectAIGateway = Binding.Service<ConnectAIGateway>(
-  "Neon.ConnectAIGateway",
+export const QueryAIGateway = Binding.Service<QueryAIGateway>(
+  "Neon.QueryAIGateway",
 );
 
 const client = (
-  baseUrl: ConnectAIGatewayClient["baseUrl"],
-  token: ConnectAIGatewayClient["token"],
-): ConnectAIGatewayClient => {
+  baseUrl: QueryAIGatewayClient["baseUrl"],
+  token: QueryAIGatewayClient["token"],
+): QueryAIGatewayClient => {
   const chatBaseUrl = baseUrl.pipe(
     Effect.map((base) => `${base.replace(/\/$/, "")}/v1`),
   );
@@ -110,8 +110,8 @@ const client = (
 };
 
 /** HTTP client with injected same-branch or managed scoped credentials. */
-export const ConnectAIGatewayHttp = Layer.effect(
-  ConnectAIGateway,
+export const QueryAIGatewayHttp = Layer.effect(
+  QueryAIGateway,
   Effect.gen(function* () {
     const environment = yield* Effect.serviceOption(FunctionEnvironment);
     const createCredential = yield* Credential;
@@ -123,9 +123,7 @@ export const ConnectAIGatewayHttp = Layer.effect(
         const host = yield* Binding.Host;
         if (!host)
           return yield* Effect.die(
-            new Error(
-              "ConnectAIGatewayHttp requires a Function or Worker host",
-            ),
+            new Error("QueryAIGatewayHttp requires a Function or Worker host"),
           );
         const mode = host.Mode ?? (yield* defaultProviderMode);
         const injected =
@@ -180,7 +178,7 @@ export const ConnectAIGatewayHttp = Layer.effect(
           );
         }
         yield* bindBackendEnvironment(
-          `Neon.ConnectAIGateway:${gateway.FQN}`,
+          `Neon.QueryAIGateway:${gateway.FQN}`,
           env,
         );
       }

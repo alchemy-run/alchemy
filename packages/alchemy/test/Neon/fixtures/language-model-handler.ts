@@ -18,7 +18,7 @@ const handlers = Tools.toLayer({ sum: ({ a, b }) => Effect.succeed(a + b) });
 
 export const languageModelHandler = (source = languageModelGateway) =>
   Effect.gen(function* () {
-    const gateway = yield* Neon.ConnectAIGateway(source);
+    const gateway = yield* Neon.QueryAIGateway(source);
     const model = gateway.model({ model: yield* Config.String("AI_MODEL") });
     return {
       fetch: Effect.gen(function* () {

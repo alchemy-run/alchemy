@@ -4,7 +4,7 @@ Initial status: **missing** for Neon.DataApi resource and Neon.AIGateway constru
 
 ## Files
 
-`packages/alchemy/src/Neon/{DataApi,AIGateway}.ts`, minimal resource/barrel registration as appropriate; tests `packages/alchemy/test/Neon/{DataApi,AIGateway}.test.ts`; ConnectDataApi/ConnectAIGateway bindings in `bindings.md`. Do not register an invented AIGateway CRUD provider.
+`packages/alchemy/src/Neon/{DataApi,AIGateway}.ts`, minimal resource/barrel registration as appropriate; tests `packages/alchemy/test/Neon/{DataApi,AIGateway}.test.ts`; QueryDataApi/QueryAIGateway bindings in `bindings.md`. Do not register an invented AIGateway CRUD provider.
 
 ## DataApi contract
 

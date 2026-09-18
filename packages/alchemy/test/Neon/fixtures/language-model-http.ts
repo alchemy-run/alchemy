@@ -16,6 +16,6 @@ export default class HttpLanguageModel extends Neon.Function<HttpLanguageModel>(
     };
   }),
   languageModelHandler(languageModelManagedGateway).pipe(
-    Effect.provide(Neon.ConnectAIGatewayHttp),
+    Effect.provide(Neon.QueryAIGatewayHttp),
   ),
 ) {}

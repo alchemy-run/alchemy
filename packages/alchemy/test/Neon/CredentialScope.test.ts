@@ -91,11 +91,15 @@ test("HTTP credentials preserve project scope and reject ambiguous unresolved id
 });
 
 test("Neon exposes only HTTP implementation layers", () => {
+  expect("ConnectDataApi" in Neon).toBe(false);
+  expect("ConnectDataApiHttp" in Neon).toBe(false);
+  expect("ConnectAIGateway" in Neon).toBe(false);
+  expect("ConnectAIGatewayHttp" in Neon).toBe(false);
   for (const name of [
     "Connect",
     "ConnectAuth",
-    "ConnectDataApi",
-    "ConnectAIGateway",
+    "QueryDataApi",
+    "QueryAIGateway",
     "ReadBucket",
     "WriteBucket",
     "ReadWriteBucket",

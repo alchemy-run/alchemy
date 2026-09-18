@@ -138,7 +138,7 @@ describe packaging requirements and limitations.
 ```typescript
 const gateway = yield* Neon.AIGateway("AI", { branch });
 // Inside a Function's initialization Effect:
-const ai = yield* Neon.ConnectAIGateway(gateway);
+const ai = yield* Neon.QueryAIGateway(gateway);
 const model = ai.model({ model: "gpt-5-mini", parameters: { maxTokens: 128 } });
 // Inside its request handler:
 const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
@@ -147,12 +147,12 @@ const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
 ```
 
 Import `LanguageModel` from `effect/unstable/ai` and provide
-`Neon.ConnectAIGatewayHttp` on the application. It selects injected or managed
+`Neon.QueryAIGatewayHttp` on the application. It selects injected or managed
 credentials automatically and exposes the model layer backed by Neon's
 OpenAI-compatible Chat Completions API. Model access and prepaid credits are separate account requirements; declaring
 a gateway never changes billing. Complete [AI Gateway setup](/neon/guides/ai-gateway)
 for access, credit purchase, and an inference check. See
-[AI Gateway bindings](/providers/neon/connectaigateway) for credentials, streaming,
+[AI Gateway bindings](/providers/neon/queryaigateway) for credentials, streaming,
 tools, structured output, and dialect URLs.
 
 ## Pooled vs direct

@@ -1,7 +1,4 @@
-import type {
-  ConnectAIGatewayClient,
-  LanguageModelOptions,
-} from "alchemy/Neon";
+import type { QueryAIGatewayClient, LanguageModelOptions } from "alchemy/Neon";
 import { FunctionRequest } from "alchemy/Neon";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -57,7 +54,7 @@ const mockModel = (
   const calls: Array<LanguageModelOptions> = [];
   const prompts: Array<LanguageModel.ProviderOptions["prompt"]> = [];
   const runtimeIds: Array<string> = [];
-  const ai: Pick<ConnectAIGatewayClient, "model"> = {
+  const ai: Pick<QueryAIGatewayClient, "model"> = {
     model: (options) => {
       calls.push(options);
       return Layer.effect(
@@ -80,7 +77,7 @@ const mockModel = (
   return { ai, calls, prompts, runtimeIds };
 };
 const invoke = (
-  ai: Pick<ConnectAIGatewayClient, "model">,
+  ai: Pick<QueryAIGatewayClient, "model">,
   env: Readonly<Record<string, string | undefined>> = environment,
   body = '{"prompt":"Hello"}',
   authorization: string | null | undefined = "Bearer example-secret",

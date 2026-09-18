@@ -12,5 +12,5 @@ export default class NativeLanguageModel extends Neon.Function<NativeLanguageMod
       env: { AI_MODEL: process.env.NEON_TEST_AI_MODEL ?? "gpt-5-mini" },
     };
   }),
-  languageModelHandler().pipe(Effect.provide(Neon.ConnectAIGatewayHttp)),
+  languageModelHandler().pipe(Effect.provide(Neon.QueryAIGatewayHttp)),
 ) {}

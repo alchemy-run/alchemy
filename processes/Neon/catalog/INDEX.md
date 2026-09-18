@@ -49,8 +49,8 @@ Each binding/layer pair is separately accepted, not a single contract counted tw
 | WriteObject<T> | WriteObjectHttp | Compile-safe value writes/raw fidelity; no per-key policy fiction |
 | InvokeFunction | InvokeFunctionHttp | Public HTTP streaming/cancellation; caller auth explicit, no admin token |
 | ConnectAuth | ConnectAuthHttp | Public base/JWKS URLs; real verified JWT/auth flow |
-| ConnectDataApi | ConnectDataApiHttp | Forward per-request end-user token; RLS/tenant isolation |
-| ConnectAIGateway | ConnectAIGatewayHttp | Native/model SDK configuration, correct dialect route, scoped token/credit gating |
+| QueryDataApi | QueryDataApiHttp | Forward per-request end-user token; RLS/tenant isolation |
+| QueryAIGateway | QueryAIGatewayHttp | Native/model SDK configuration, correct dialect route, scoped token/credit gating |
 | CronEventSource | CronEventSourceHttp | [Trigger spec](triggers-domains.md); HTTP dispatch + same FunctionTrigger lifecycle; real bounded cron delivery separate |
 | BucketEventSource | BucketEventSourceHttp | [Trigger spec](triggers-domains.md); real upload delivery, prefix filter, spoof rejection and idempotency |
 

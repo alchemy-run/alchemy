@@ -39,6 +39,16 @@ No real governance mutation or entitlement probe was performed: no designated fi
 
 All fixtures need the corresponding Neon authorization/entitlement. Invitations remain out of scope because the public API has no corresponding revoke lifecycle. These additions do not resolve the pre-existing Function, AI, Website or historical cleanup acceptance blockers below.
 
+## Query binding names
+
+`QueryDataApi` / `QueryDataApiHttp` replace `ConnectDataApi` / `ConnectDataApiHttp`. `QueryAIGateway` / `QueryAIGatewayHttp` replace the corresponding Connect names, aligning the AI binding's name and existing `.model(...)` interface with `Cloudflare.AI.QueryGateway`. Old aliases and source paths are removed. Caller-token forwarding, injected/managed credential selection and inference behavior are unchanged; permission provisioning remains out of scope.
+
+- Full workspace typecheck, JSDoc validation and generated documentation build passed.
+- **40 focused tests** passed, including three real deployments exercising Neon Functions, Cloudflare Workers and AWS Lambda with ordinary cleanup; the other cases cover public exports, AI transport, credential selection and type assertions.
+- **17 AI example tests** passed, covering input/auth checks, model selection, streaming, errors and cancellation. These use a mock model, not paid inference.
+- Browser checks passed with **92 navigation checks per desktop/mobile size**, 10 Setup-to-guide flows, 59 internal-link/back flows and six code-copy checks. Both renamed pages and their copied examples use the new names; navigation contains no obsolete Connect query pages.
+- No additional paid inference, permission lifecycle or full-provider acceptance was claimed.
+
 ## HTTP-only implementation layers
 
 Neon's 12 public runtime implementation layers now use only `*Http`, without `*Binding` aliases. Storage and AI Gateway reuse injected credentials for a known same-branch live Function, otherwise manage scoped credentials; explicit credentials override injection. The low-level `FunctionTrigger` remains available, while Effect handlers use `BucketEventSource` / `CronEventSource` with their HTTP layers.

@@ -68,17 +68,17 @@ No account `NEON_API_KEY` in any runtime, browser, artifact or log. `storage:wri
 - SDK mapping: Auth `getNeonAuth`; runtime auth endpoints/JWKS via established auth/JWT libraries.
 - Acceptance: signup/signin/signout + protected API; JWT issuer/signature/expiry validation, invalid signature/wrong issuer denial, child Auth endpoint isolation and trusted-origin resources. No decode-only JWT security or server key exposed to browser.
 
-## 9. ConnectDataApi
+## 9. QueryDataApi
 
-- Call: `Neon.ConnectDataApi(dataApi)` returns bound base URL/HTTP client requiring caller authorization for protected requests.
-- Implementation: `ConnectDataApiHttp`; same-branch NEON_DATA_API_URL when appropriate, otherwise namespaced URL from resource. No implicit branch/API credential grants.
+- Call: `Neon.QueryDataApi(dataApi)` returns bound base URL/HTTP client requiring caller authorization for protected requests.
+- Implementation: `QueryDataApiHttp`; same-branch NEON_DATA_API_URL when appropriate, otherwise namespaced URL from resource. No implicit branch/API credential grants.
 - SDK mapping: `getProjectBranchDataAPI` supplies URL/config; runtime PostgREST HTTP requests forward user's token exactly under intended authorization rules.
 - Acceptance: authorized SELECT/write and RLS, unauthorized/expired/wrong token response, independent tenants/branches do not bleed auth; no captured global request token in a cached isolate client and no silent admin-key replacement. URL updates/removal/deletion propagate.
 
-## 10. ConnectAIGateway
+## 10. QueryAIGateway
 
-- Call: `Neon.ConnectAIGateway(gateway)` returns redacted token and endpoint effects compatible with @neon/ai-sdk-provider/model SDK configuration.
-- Implementations: `ConnectAIGatewayHttp` selects injected same-branch NEON_AI_GATEWAY_TOKEN/BASE_URL or a managed ai_gateway:invoke credential for other hosts; an explicit credential overrides injection.
+- Call: `Neon.QueryAIGateway(gateway)` returns redacted token and endpoint effects compatible with @neon/ai-sdk-provider/model SDK configuration.
+- Implementations: `QueryAIGatewayHttp` selects injected same-branch NEON_AI_GATEWAY_TOKEN/BASE_URL or a managed ai_gateway:invoke credential for other hosts; an explicit credential overrides injection.
 - SDK mapping: `getProjectBranchAiGateway` discovery + Credential lifecycle for non-injected path. No gateway CRUD or infrastructure chat method.
 - Acceptance: native SDK streaming + Effect-wrapped call, configurable model, correct /v1 versus /openai/v1 routing, cancellation/failure propagation, target-branch token boundaries, Worker/Lambda configuration/invocation where permitted and credential revocation. Gate inference only on exact typed entitlement/credits errors; never purchase credits or mark a skip as a pass.
 
