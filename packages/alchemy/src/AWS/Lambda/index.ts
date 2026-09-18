@@ -17,8 +17,6 @@ export * from "./EventSourceMapping.ts";
 export * from "./FlociFunctionProvider.ts";
 export * from "./FlociMicrovmImageProvider.ts";
 export * from "./Function.ts";
-export * from "./ForgejoBindings.ts";
-export * from "./ForgejoRepositoryEventSource.ts";
 export * from "./GetAccountSettings.ts";
 export * from "./GetAccountSettingsHttp.ts";
 export * from "./GetFunction.ts";

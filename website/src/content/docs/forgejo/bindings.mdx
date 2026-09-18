@@ -1,13 +1,14 @@
 ---
-title: Worker & Lambda bindings
-description: Use Forgejo from Effect-native Workers and Lambda functions with automatically provisioned tokens and signed webhooks.
+title: HTTP bindings & repository events
+description: Use provider-independent Forgejo HTTP clients with automatically provisioned tokens, and receive signed repository events.
 ---
 
-Forgejo bindings provision the authentication infrastructure a runtime
-needs. Configure your [Forgejo profile](/forgejo/setup), declare a
-repository, and bind the capabilities your handler uses. Alchemy creates
-restricted API tokens, binds them to the host, and revokes managed
-tokens when their bindings are removed.
+Forgejo's `*Http` layers work across Alchemy runtime providers. Configure
+your [Forgejo profile](/forgejo/setup), declare a repository, and provide
+the HTTP layers for the capabilities your handler uses. Alchemy creates
+restricted API tokens, binds them through the shared runtime APIs, and
+revokes managed tokens when their bindings are removed. The same layers
+are used in Workers, Lambda functions, and other Alchemy runtime hosts.
 
 Repository event subscriptions also generate and persist their own
 signing secret. You do not need to create a token, set a webhook secret,
@@ -53,14 +54,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json(details);
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.ForgejoBindings)),
+  }).pipe(Effect.provide(Forgejo.ReadRepositoryHttp)),
 ) {}
 ```
 
 The binding is acquired during initialization. Its client methods run
 inside the handler and require `Alchemy.RuntimeContext`.
-`Cloudflare.ForgejoBindings` supplies the implementations; it creates
-credentials only for capabilities you actually bind. The example turns
+`Forgejo.ReadRepositoryHttp` supplies the read client implementation and
+creates credentials only when you bind a repository. The example turns
 SDK errors into handler failures with `Effect.orDie`; applications can
 instead handle the SDK's typed error tags.
 
@@ -98,14 +99,14 @@ own repository-restricted token.
 
 ## Choose an access level
 
-| Capability | Methods |
-| --- | --- |
-| `Forgejo.ReadRepository(repo)` | `get`, `getTopics`, `getContent` |
-| `Forgejo.WriteRepository(repo)` | `setTopics`, `createFile`, `updateFile`, `deleteFile` |
-| `Forgejo.ReadWriteRepository(repo)` | Repository read and write methods |
-| `Forgejo.ReadIssues(repo)` | `list`, `get`, `listComments` |
-| `Forgejo.WriteIssues(repo)` | `create`, `update`, `createComment` |
-| `Forgejo.ReadWriteIssues(repo)` | Issue read and write methods |
+| Capability | HTTP layer | Methods |
+| --- | --- | --- |
+| `Forgejo.ReadRepository(repo)` | `Forgejo.ReadRepositoryHttp` | `get`, `getTopics`, `getContent` |
+| `Forgejo.WriteRepository(repo)` | `Forgejo.WriteRepositoryHttp` | `setTopics`, `createFile`, `updateFile`, `deleteFile` |
+| `Forgejo.ReadWriteRepository(repo)` | `Forgejo.ReadWriteRepositoryHttp` | Repository read and write methods |
+| `Forgejo.ReadIssues(repo)` | `Forgejo.ReadIssuesHttp` | `list`, `get`, `listComments` |
+| `Forgejo.WriteIssues(repo)` | `Forgejo.WriteIssuesHttp` | `create`, `update`, `createComment` |
+| `Forgejo.ReadWriteIssues(repo)` | `Forgejo.ReadWriteIssuesHttp` | Issue read and write methods |
 
 Read clients use `read:repository` or `read:issue`; write clients use
 the corresponding write scope. Forgejo scopes are the server's
@@ -143,7 +144,8 @@ to avoid competing desired-state declarations.
 
 ## Use the same clients in Lambda
 
-Provide `Lambda.ForgejoBindings` on an Effect-native Lambda implementation:
+Provide the same `Forgejo.ReadRepositoryHttp` layer on an Effect-native
+Lambda implementation; the HTTP client has no Lambda-specific implementation:
 
 ```typescript
 import * as Lambda from "alchemy/AWS/Lambda";
@@ -166,7 +168,7 @@ export default Api.make(
         return yield* HttpServerResponse.json(details);
       }),
     };
-  }).pipe(Effect.provide(Lambda.ForgejoBindings)),
+  }).pipe(Effect.provide(Forgejo.ReadRepositoryHttp)),
 );
 ```
 
@@ -230,23 +232,34 @@ revoke it; automatic provisioning remains the default when `token` is omitted.
 
 ## Receive signed repository events
 
-Subscribe inside the Worker or Lambda initialization effect, before
-returning its handlers:
+Receiving webhooks is separate from the outbound HTTP clients. A receiver
+adapter registers the host's incoming request handler and public URL. For a
+Worker, yield this subscription effect during initialization, before returning
+its handlers:
 
 ```typescript
-yield* Forgejo.RepositoryEventSource(
-  repo,
-  { events: ["push", "issues"] },
-  (event) =>
-    Effect.gen(function* () {
-      if (event.name === "push") {
-        yield* Effect.log(`Push ${event.id}: ${event.payload.ref}`);
-      } else {
-        yield* Effect.log(`Issue event ${event.id}`);
-      }
-    }),
-);
+import { RepositoryEventSourceCloudflare } from "alchemy/Forgejo/RepositoryEventSourceCloudflare";
+
+const subscribe = Effect.gen(function* () {
+  const repo = yield* Repository;
+  yield* Forgejo.RepositoryEventSource(
+    repo,
+    { events: ["push", "issues"] },
+    (event) =>
+      Effect.gen(function* () {
+        if (event.name === "push") {
+          yield* Effect.log(`Push ${event.id}: ${event.payload.ref}`);
+        } else {
+          yield* Effect.log(`Issue event ${event.id}`);
+        }
+      }),
+  );
+}).pipe(Effect.provide(RepositoryEventSourceCloudflare));
 ```
+
+For Lambda, provide `RepositoryEventSourceLambda` from
+`alchemy/Forgejo/RepositoryEventSourceLambda` instead. These adapters only
+receive events; repository and issue clients still use the same `*Http` layers.
 
 The binding creates a signing secret and a Webhook targeting the host,
 then verifies signatures before invoking the handler. The generated

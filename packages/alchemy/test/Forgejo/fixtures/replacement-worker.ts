@@ -1,5 +1,7 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Forgejo from "@/Forgejo/index.ts";
+import { RepositoryEventSourceCloudflare } from "alchemy/Forgejo/RepositoryEventSourceCloudflare";
+import * as Layer from "effect/Layer";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -35,5 +37,13 @@ export default class ReplacementWorker extends Cloudflare.Worker<ReplacementWork
         .get()
         .pipe(Effect.orDie, Effect.flatMap(HttpServerResponse.json)),
     };
-  }).pipe(Effect.provide(Cloudflare.ForgejoBindings)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Forgejo.ReadRepositoryHttp,
+        Forgejo.WriteIssuesHttp,
+        RepositoryEventSourceCloudflare,
+      ),
+    ),
+  ),
 ) {}

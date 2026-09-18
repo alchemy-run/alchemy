@@ -1,17 +1,22 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { Repository } from "../../Forgejo/Repository.ts";
-import { RuntimeContext } from "../../RuntimeContext.ts";
+import { isWorkerEvent, Worker } from "../Cloudflare/Workers/Worker.ts";
+import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { Repository } from "./Repository.ts";
 import {
   RepositoryEventSource,
   type RepositoryEventSourceProps,
   type RepositoryEvent,
-} from "../../Forgejo/RepositoryEventSource.ts";
-import { makeForgejoSubscription } from "../../Forgejo/RuntimeEvents.ts";
-import { isWorkerEvent, Worker } from "./Worker.ts";
+} from "./RepositoryEventSource.ts";
+import { makeForgejoSubscription } from "./RuntimeEvents.ts";
 
-/** Cloudflare fetch listener for mandatory signed Forgejo repository events. */
-export const ForgejoRepositoryEventSourceLive = Layer.effect(
+/**
+ * Receives signed Forgejo webhooks through a Cloudflare Worker's fetch handler.
+ *
+ * @layer
+ * @provides Forgejo.RepositoryEventSource
+ */
+export const RepositoryEventSourceCloudflare = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
     const host = yield* Worker;

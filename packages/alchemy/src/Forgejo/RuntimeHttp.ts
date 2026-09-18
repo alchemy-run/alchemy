@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import * as Config from "effect/Config";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Binding from "../Binding.ts";
 import * as Namespace from "../Namespace.ts";
 import * as Output from "../Output.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
@@ -119,6 +120,25 @@ export const makeForgejoAuth = (
 export type ForgejoRuntimeAuth = Effect.Success<
   ReturnType<ReturnType<typeof makeForgejoAuth>>
 >;
+
+export const makeForgejoHttpBinding = <Client>(options: {
+  scope: string;
+  capability: string;
+  makeClient: (auth: ForgejoRuntimeAuth) => Client;
+}) =>
+  Effect.gen(function* () {
+    const host = yield* Binding.Host;
+    if (!host) {
+      return yield* Effect.die("Forgejo HTTP bindings require a runtime host.");
+    }
+    const auth = makeForgejoAuth(
+      `${host.Type}:${host.FQN}`,
+      options.scope,
+      options.capability,
+    );
+    return (repo: Repository, bindingOptions?: ForgejoBindingOptions) =>
+      auth(repo, bindingOptions).pipe(Effect.map(options.makeClient));
+  });
 
 export const makeForgejoReadRepositoryClient = ({
   run,

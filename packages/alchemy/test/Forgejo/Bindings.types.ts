@@ -1,7 +1,5 @@
 import * as Forgejo from "@/Forgejo/index.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Lambda from "@/AWS/Lambda/index.ts";
 import type * as API from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -65,5 +63,18 @@ const contracts = (repository: Forgejo.Repository) =>
     );
   });
 
-Layer.mergeAll(Cloudflare.ForgejoBindings);
-Layer.mergeAll(Lambda.ForgejoBindings);
+const http: Layer.Layer<
+  | Forgejo.ReadRepository
+  | Forgejo.WriteRepository
+  | Forgejo.ReadWriteRepository
+  | Forgejo.ReadIssues
+  | Forgejo.WriteIssues
+  | Forgejo.ReadWriteIssues
+> = Layer.mergeAll(
+  Forgejo.ReadRepositoryHttp,
+  Forgejo.WriteRepositoryHttp,
+  Forgejo.ReadWriteRepositoryHttp,
+  Forgejo.ReadIssuesHttp,
+  Forgejo.WriteIssuesHttp,
+  Forgejo.ReadWriteIssuesHttp,
+);

@@ -1282,7 +1282,7 @@ export default defineConfig({
             { label: "Overview", link: "/forgejo" },
             { label: "Setup", link: "/forgejo/setup" },
             { label: "Repositories", link: "/forgejo/repository" },
-            { label: "Worker & Lambda bindings", link: "/forgejo/bindings" },
+            { label: "HTTP bindings & events", link: "/forgejo/bindings" },
             {
               label: "Actions secrets & variables",
               link: "/forgejo/actions-config",

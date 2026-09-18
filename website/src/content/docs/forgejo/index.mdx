@@ -110,7 +110,7 @@ yield* Forgejo.BranchProtection("main", {
 
 ## Runtime bindings
 
-[Worker & Lambda bindings](/forgejo/bindings) give Effect-native handlers
+[HTTP bindings](/forgejo/bindings) give Effect-native handlers
 repository and issue clients. Alchemy provisions repository-restricted
 tokens from the deployment profile and binds them to the host:
 
@@ -119,8 +119,9 @@ const repository = yield* Forgejo.ReadRepository(repo);
 const issues = yield* Forgejo.WriteIssues(repo);
 ```
 
-Provide `Cloudflare.ForgejoBindings` or `Lambda.ForgejoBindings` on the
-host's implementation effect. The client methods run inside its handlers.
+Provide the matching layers, such as `Forgejo.ReadRepositoryHttp` and
+`Forgejo.WriteIssuesHttp`, on the host's implementation effect. These HTTP
+layers are provider-independent; the client methods run inside its handlers.
 `Forgejo.RepositoryEventSource` also provisions its webhook and signing
 secret automatically; no manually configured runtime credential is needed.
 
@@ -169,7 +170,7 @@ two APIs are not identical:
   rather than assuming a single host.
 - **Signed repository events.** `RepositoryEventSource` generates its
   signing secret and configures deliveries to an Effect-native Worker or
-  Lambda. See [Worker & Lambda bindings](/forgejo/bindings).
+  Lambda. See [HTTP bindings & events](/forgejo/bindings).
 
 ## Reference
 

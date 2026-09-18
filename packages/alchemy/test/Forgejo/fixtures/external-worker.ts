@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Forgejo from "@/Forgejo/index.ts";
+import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as Config from "effect/Config";
 import * as Redacted from "effect/Redacted";
@@ -69,5 +70,12 @@ export default class ExternalWorker extends Cloudflare.Worker<ExternalWorker>()(
         );
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.ForgejoBindings)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Forgejo.ReadRepositoryHttp,
+        Forgejo.ReadWriteRepositoryHttp,
+      ),
+    ),
+  ),
 ) {}
