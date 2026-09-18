@@ -14,8 +14,10 @@ import type {
   SecurityGroupRuleData,
 } from "./SecurityGroup.ts";
 import {
+  declaredSecurityGroupRuleIds,
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
+  resolveSecurityGroupRules,
   securityGroupRuleKey,
 } from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -62,16 +64,20 @@ export interface DefaultSecurityGroupProps {
   vpcId: VpcId;
 
   /**
-   * Complete desired inbound rule set. An empty list removes every inbound
-   * rule, including AWS's initial self-reference rule.
+   * Desired inline inbound rules. Omitted, undefined, and [] all remove inline
+   * inbound rules, including AWS's initial self-reference rule. Standalone
+   * rules owned by current declarations in this stack and stage are preserved.
+   * @default []
    */
-  ingress: SecurityGroupRuleData[];
+  ingress?: SecurityGroupRuleData[];
 
   /**
-   * Complete desired outbound rule set. An empty list removes every outbound
-   * rule, including AWS's initial allow-all rule.
+   * Desired inline outbound rules. Omitted or undefined restores IPv4
+   * allow-all outbound; [] removes inline outbound rules. Standalone rules
+   * owned by current declarations in this stack and stage are preserved.
+   * @default [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }]
    */
-  egress: SecurityGroupRuleData[];
+  egress?: SecurityGroupRuleData[];
 }
 
 export interface DefaultSecurityGroup extends Resource<
@@ -105,18 +111,43 @@ export interface DefaultSecurityGroup extends Resource<
  * VPC; Alchemy looks it up by VPC ID and name, never creates it, and never
  * deletes it.
  *
- * `ingress` and `egress` are required complete lists. Passing `[]` closes that
- * direction. Omitting either field is a type error, so this resource never
- * silently retains or restores AWS's permissive default rules. This resource
- * exclusively manages every rule on the group; do not combine it with inline
- * or standalone `SecurityGroupRule` management for the same group.
+ * Inline rules use the same defaults as `SecurityGroup`: omitted or undefined
+ * `ingress` means no inline inbound rules, and omitted or undefined `egress`
+ * means IPv4 allow-all outbound. Passing `[]` means no inline rules in that
+ * direction, not unmanaged rules. Defaults apply on initial management,
+ * property removal, adoption, and drift repair; AWS's initial self-ingress
+ * rule is removed, not restored.
+ *
+ * Current standalone `SecurityGroupRule` declarations in the same stack and
+ * stage retain ownership of their persisted physical rule IDs. Other rules
+ * are removed even if they carry Alchemy tags. This resource manages rules,
+ * not ownership of the AWS-created group; do not also manage this group with
+ * a `SecurityGroup` resource or a second `DefaultSecurityGroup` manager.
  *
  * Removing this Alchemy resource leaves both the default group and its last
  * applied rules unchanged. Deleting its VPC removes the group as part of AWS's
  * VPC lifecycle.
  *
+ * ### Default Inline Rules
+ * **Example:** Remove AWS self-ingress and allow outbound IPv4
+ * ```typescript
+ * const vpc = yield* AWS.EC2.Vpc("Vpc", { cidrBlock: "10.0.0.0/16" });
+ * const group = yield* AWS.EC2.DefaultSecurityGroup("DefaultSecurityGroup", {
+ *   vpcId: vpc.vpcId,
+ * });
+ * ```
+ *
+ * **Example:** Explicit undefined has the same meaning as omission
+ * ```typescript
+ * yield* AWS.EC2.DefaultSecurityGroup("DefaultSecurityGroup", {
+ *   vpcId: vpc.vpcId,
+ *   ingress: undefined,
+ *   egress: undefined,
+ * });
+ * ```
+ *
  * ### Closing the Default Security Group
- * **Example:** Deny all inbound and outbound traffic
+ * **Example:** Deny all traffic when there are no owned standalone rules
  * ```typescript
  * const vpc = yield* AWS.EC2.Vpc("Vpc", { cidrBlock: "10.0.0.0/16" });
  * yield* AWS.EC2.DefaultSecurityGroup("DefaultSecurityGroup", {
@@ -148,6 +179,49 @@ export interface DefaultSecurityGroup extends Resource<
  * canonical CIDRs, rule order, and duplicate rules do not cause rule churn.
  * Duplicates with conflicting descriptions are rejected before any writes.
  * A rule with several source fields expands into one AWS rule per source.
+ *
+ * ### Restoring Default Inline Rules
+ * **Example:** Remove explicit rule lists to restore defaults
+ * ```diff lang="typescript"
+ * yield* AWS.EC2.DefaultSecurityGroup("DefaultSecurityGroup", {
+ *   vpcId: vpc.vpcId,
+ * -  ingress: [],
+ * -  egress: [],
+ * });
+ * ```
+ *
+ * This still denies inline inbound access but restores IPv4 allow-all outbound.
+ * Removing these properties is different from removing the manager itself:
+ * deleting the manager leaves its last-applied rules, with no baseline restore.
+ *
+ * ### Composing Standalone Rules
+ * **Example:** Restrict outbound traffic with a standalone rule
+ * ```typescript
+ * const group = yield* AWS.EC2.DefaultSecurityGroup("DefaultSecurityGroup", {
+ *   vpcId: vpc.vpcId,
+ *   ingress: [],
+ *   egress: [],
+ * });
+ * yield* AWS.EC2.SecurityGroupRule("HttpsEgress", {
+ *   groupId: group.groupId,
+ *   type: "egress",
+ *   ipProtocol: "tcp",
+ *   fromPort: 443,
+ *   toPort: 443,
+ *   cidrIpv4: "10.0.0.0/16",
+ * });
+ * ```
+ *
+ * Pass the manager's `groupId` output to order rule creation and updates.
+ * The manager finishes its update before dependent rules execute, while its
+ * stable group ID remains available for replacement planning.
+ * Standalone ingress composes the same way. Omitting `egress` instead would
+ * retain the default allow-all rule alongside this standalone rule. A current
+ * declaration and its persisted physical ID establish ownership, not cloud
+ * tags. Removing a declaration ends that protection; its provider handles
+ * deletion. Cross-stack or cross-stage rule ownership is unsupported.
+ * Inline and standalone rules must have distinct identities. If a standalone
+ * rule owns IPv4 allow-all egress, set `egress: []` to disable the inline default.
  *
  * ### Changing VPCs
  * **Example:** Manage another VPC's default group
@@ -382,6 +456,7 @@ export const DefaultSecurityGroupProvider = () =>
       });
 
       return {
+        reconcileBeforeDependents: true,
         stables: ["groupId", "groupArn", "groupName", "ownerId"],
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -405,12 +480,18 @@ export const DefaultSecurityGroupProvider = () =>
             return { action: "replace" };
           }
           if (!isResolved(news.ingress) || !isResolved(news.egress)) return;
-          const ingress = yield* desiredRules(news.ingress);
-          const egress = yield* desiredRules(news.egress);
+          const ingress = yield* desiredRules(
+            resolveSecurityGroupRules(news.ingress, false),
+          );
+          const egress = yield* desiredRules(
+            resolveSecurityGroupRules(news.egress, true),
+          );
           const group = yield* describeGroup(news.vpcId);
           if (!group?.GroupId) return { action: "update", stables: [] };
-          const observed = yield* describeRules(
-            group.GroupId as SecurityGroupId,
+          const groupId = group.GroupId as SecurityGroupId;
+          const owned = yield* declaredSecurityGroupRuleIds(groupId);
+          const observed = (yield* describeRules(groupId)).filter(
+            (rule) => !owned.has(rule.SecurityGroupRuleId!),
           );
           if (!rulesMatch(observed, ingress, egress))
             return { action: "update" };
@@ -418,8 +499,12 @@ export const DefaultSecurityGroupProvider = () =>
 
         reconcile: Effect.fn(function* ({ news, session }) {
           // Validate both directions before changing either one.
-          const ingress = yield* desiredRules(news.ingress);
-          const egress = yield* desiredRules(news.egress);
+          const ingress = yield* desiredRules(
+            resolveSecurityGroupRules(news.ingress, false),
+          );
+          const egress = yield* desiredRules(
+            resolveSecurityGroupRules(news.egress, true),
+          );
           const group = yield* describeGroup(news.vpcId).pipe(
             Effect.flatMap((group) =>
               group?.GroupId
@@ -436,23 +521,27 @@ export const DefaultSecurityGroupProvider = () =>
             }),
           );
           const groupId = group.GroupId as SecurityGroupId;
+          const owned = yield* declaredSecurityGroupRuleIds(groupId);
+          const inlineRules = (rules: ec2.SecurityGroupRule[]) =>
+            rules.filter((rule) => !owned.has(rule.SecurityGroupRuleId!));
           const finalRules = yield* Effect.gen(function* () {
             const observed = yield* describeRules(groupId);
-            if (rulesMatch(observed, ingress, egress)) return observed;
+            const inline = inlineRules(observed);
+            if (rulesMatch(inline, ingress, egress)) return observed;
             yield* syncRules(
               groupId,
               false,
               ingress,
-              observed.filter((rule) => !rule.IsEgress),
+              inline.filter((rule) => !rule.IsEgress),
             );
             yield* syncRules(
               groupId,
               true,
               egress,
-              observed.filter((rule) => rule.IsEgress),
+              inline.filter((rule) => rule.IsEgress),
             );
             const final = yield* describeRules(groupId);
-            if (!rulesMatch(final, ingress, egress)) {
+            if (!rulesMatch(inlineRules(final), ingress, egress)) {
               return yield* new DefaultSecurityGroupRulesNotConverged({
                 groupId,
               });

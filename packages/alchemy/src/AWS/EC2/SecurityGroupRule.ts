@@ -8,6 +8,8 @@ import { isResolved } from "../../Diff.ts";
 import { canonicalCidr } from "../../Utils/ip-address.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { Stack } from "../../Stack.ts";
+import { State, isActionState } from "../../State/State.ts";
 import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import {
@@ -651,6 +653,44 @@ export const SecurityGroupRuleProvider = () =>
       };
     }),
   );
+
+// Only current declarations with persisted physical ownership are delegated.
+export const declaredSecurityGroupRuleIds = Effect.fn(function* (
+  groupId: string,
+) {
+  const stack = yield* Stack;
+  const state = yield* yield* State;
+  const ids = new Set<string>();
+  for (const resource of Object.values(stack.resources)) {
+    if (resource.Type !== "AWS.EC2.SecurityGroupRule" || !resource.Props)
+      continue;
+    const row = yield* state.get({
+      stack: stack.name,
+      stage: stack.stage,
+      fqn: resource.FQN,
+    });
+    if (
+      !row ||
+      isActionState(row) ||
+      row.resourceType !== "AWS.EC2.SecurityGroupRule"
+    )
+      continue;
+    const attrs = row.attr ?? ("old" in row ? row.old.attr : undefined);
+    if (
+      attrs?.groupId === groupId &&
+      typeof attrs.securityGroupRuleId === "string"
+    ) {
+      ids.add(attrs.securityGroupRuleId);
+    }
+  }
+  return ids;
+});
+
+export const resolveSecurityGroupRules = (
+  rules: SecurityGroupRuleData[] | undefined,
+  isEgress: boolean,
+): SecurityGroupRuleData[] =>
+  rules ?? (isEgress ? [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }] : []);
 
 const protocols: Record<string, string> = {
   "6": "tcp",

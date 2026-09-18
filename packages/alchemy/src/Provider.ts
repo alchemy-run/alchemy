@@ -271,6 +271,16 @@ export interface ProviderService<
    * Properties that are always stable across any update.
    */
   stables?: Extract<keyof Res["Attributes"], string>[];
+  /**
+   * Wait for this resource's reconciliation and state commit before executing
+   * its declared consumers, even when their referenced attributes are stable.
+   * Stable values remain available to consumer diffs. Applies transitively
+   * through props, bindings, and actions; noops do not wait. Edges within a
+   * dependency cycle keep the existing precreate/convergence semantics.
+   *
+   * @default false
+   */
+  reconcileBeforeDependents?: boolean;
   diff?(input: {
     id: string;
     /**

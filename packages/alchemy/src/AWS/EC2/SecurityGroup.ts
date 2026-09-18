@@ -8,8 +8,6 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
-import { Stack } from "../../Stack.ts";
-import { State, isActionState } from "../../State/State.ts";
 import {
   createAlchemyTagFilters,
   createInternalTags,
@@ -22,8 +20,10 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import {
+  declaredSecurityGroupRuleIds,
   expandSecurityGroupRules,
   observedSecurityGroupRuleKey,
+  resolveSecurityGroupRules,
   securityGroupRuleKey,
 } from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -344,6 +344,8 @@ export interface SecurityGroup extends Resource<
  * Removing a declaration ends that ownership; tags alone do not protect rules.
  * Cross-stack or cross-stage rule ownership is unsupported: this group removes
  * rules declared elsewhere when reconciling its authoritative configuration.
+ * Inline and standalone rules must have distinct identities. If a standalone
+ * rule owns IPv4 allow-all egress, set `egress: []` to disable the inline default.
  *
  * **Example:** Add a standalone rule in the group's stack
  * ```typescript
@@ -498,39 +500,6 @@ export const SecurityGroupProvider = () =>
             Effect.map((chunk) => Array.from(chunk)),
           );
 
-      const declaredRuleIds = Effect.fn(function* (groupId: string) {
-        const stack = yield* Stack;
-        const state = yield* yield* State;
-        const ids = new Set<string>();
-        for (const resource of Object.values(stack.resources)) {
-          if (resource.Type !== "AWS.EC2.SecurityGroupRule" || !resource.Props)
-            continue;
-          const row = yield* state.get({
-            stack: stack.name,
-            stage: stack.stage,
-            fqn: resource.FQN,
-          });
-          if (
-            !row ||
-            isActionState(row) ||
-            row.resourceType !== "AWS.EC2.SecurityGroupRule"
-          )
-            continue;
-          const attrs = row.attr ?? ("old" in row ? row.old.attr : undefined);
-          if (
-            attrs?.groupId === groupId &&
-            typeof attrs.securityGroupRuleId === "string"
-          ) {
-            ids.add(attrs.securityGroupRuleId);
-          }
-        }
-        return ids;
-      });
-
-      const desiredEgress = (
-        props: SecurityGroupProps,
-      ): SecurityGroupRuleData[] =>
-        props.egress ?? [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }];
       const rulesMatch = (
         observed: ec2.SecurityGroupRule[],
         desired: SecurityGroupRuleData[],
@@ -818,18 +787,18 @@ export const SecurityGroupProvider = () =>
               ),
             );
             if (group === undefined) return { action: "update", stables: [] };
-            const owned = yield* declaredRuleIds(output.groupId);
+            const owned = yield* declaredSecurityGroupRuleIds(output.groupId);
             const observed = (yield* describeSecurityGroupRules(
               output.groupId,
             )).filter((rule) => !owned.has(rule.SecurityGroupRuleId!));
             if (
               !rulesMatch(
                 observed.filter((rule) => !rule.IsEgress),
-                news.ingress ?? [],
+                resolveSecurityGroupRules(news.ingress, false),
               ) ||
               !rulesMatch(
                 observed.filter((rule) => rule.IsEgress),
-                desiredEgress(news),
+                resolveSecurityGroupRules(news.egress, true),
               )
             ) {
               return { action: "update" };
@@ -920,7 +889,7 @@ export const SecurityGroupProvider = () =>
           }
 
           // Only current declarations with persisted physical ownership are delegated.
-          const owned = yield* declaredRuleIds(groupId);
+          const owned = yield* declaredSecurityGroupRuleIds(groupId);
           const currentRules = yield* describeSecurityGroupRules(groupId);
           const currentIngress = currentRules.filter(
             (rule) => !rule.IsEgress && !owned.has(rule.SecurityGroupRuleId!),
@@ -931,14 +900,14 @@ export const SecurityGroupProvider = () =>
           yield* syncRules(
             groupId,
             false,
-            news.ingress ?? [],
+            resolveSecurityGroupRules(news.ingress, false),
             currentIngress,
             session,
           );
           yield* syncRules(
             groupId,
             true,
-            desiredEgress(news),
+            resolveSecurityGroupRules(news.egress, true),
             currentEgress,
             session,
           );
@@ -952,11 +921,11 @@ export const SecurityGroupProvider = () =>
             return (
               rulesMatch(
                 inline.filter((rule) => !rule.IsEgress),
-                news.ingress ?? [],
+                resolveSecurityGroupRules(news.ingress, false),
               ) &&
               rulesMatch(
                 inline.filter((rule) => rule.IsEgress),
-                desiredEgress(news),
+                resolveSecurityGroupRules(news.egress, true),
               )
             );
           };
