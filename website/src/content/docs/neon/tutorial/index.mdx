@@ -9,7 +9,7 @@ The complete source is in [`examples/neon-tutorial`](https://github.com/alchemy-
 
 ## Prerequisites
 
-Use Node.js 24, Bun, pnpm, and a Neon account with Object Storage and Functions available. Configure the Alchemy `testing` profile for Neon or supply `NEON_API_KEY` to the deployment process only. This tutorial selects `aws-us-east-2`, where the combined backend is available. Resources can incur normal Neon usage charges; no AI gateway, model call, credits, or plan purchase is required.
+Complete [Setup](/neon/setup) before deploying. Use Node.js 24, Bun, pnpm, and a Neon account with Object Storage and Functions available. Configure the Alchemy `testing` profile for Neon or supply `NEON_API_KEY` to the deployment process only. This tutorial selects `aws-us-east-2`, where the combined backend is available. Resources can incur normal Neon usage charges; no AI gateway, model call, credits, or plan purchase is required.
 
 Install the repository's workspace dependencies before running the example. Keep the local `.alchemy` state directory: it records which resources a later destroy command owns.
 
@@ -60,4 +60,4 @@ The example depends on the new Neon provider and Website integrations. The curre
 
 Processing verifies object size and content type; it does not scan for malware. The 10 MiB limit is an application check before signing and after delivery, not an S3-enforced upload quota. A signed URL is a temporary bearer capability and can be reused until expiry. Add rate limits, upload budgets, stronger content validation, and an appropriate download domain before exposing a production service.
 
-The example deliberately disables email verification and enables localhost. Turn verification on and localhost off before production. Signout revokes the managed session, but already issued JWTs can remain valid until their short expiry.
+The example deliberately disables email verification and enables localhost. Follow [Production Auth](/neon/guides/production-auth) to prepare SMTP, OAuth callbacks, trusted origins, email verification, and localhost restrictions before launch. Signout revokes the managed session, but already issued JWTs can remain valid until their short expiry.

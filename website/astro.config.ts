@@ -1091,6 +1091,23 @@ export default defineConfig({
                   label: "Preview branches per PR",
                   link: "/neon/guides/preview-branches",
                 },
+                { label: "AI Gateway setup", link: "/neon/guides/ai-gateway" },
+                {
+                  label: "Production Auth",
+                  link: "/neon/guides/production-auth",
+                },
+                {
+                  label: "Private networking",
+                  link: "/neon/guides/private-networking",
+                },
+                {
+                  label: "Custom domains",
+                  link: "/neon/guides/custom-domains",
+                },
+                {
+                  label: "State and recovery",
+                  link: "/neon/guides/state-recovery",
+                },
                 { label: "Drizzle ORM", link: "/neon/guides/drizzle" },
               ],
             },

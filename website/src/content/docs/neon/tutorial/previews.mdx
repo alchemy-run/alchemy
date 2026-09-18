@@ -124,7 +124,7 @@ Keep the parent identity environment variables available while destroying the co
 +pnpm destroy --profile testing --stage upload-journal
 ```
 
-Run this with the same stage and retained local state used for deployment. `forceDestroy: true` intentionally erases the tutorial bucket's files before removing its branch and project.
+Run this with the same stage and retained local state used for deployment. `forceDestroy: true` intentionally erases the tutorial bucket's files before removing its branch and project. If state is missing or ownership recovery fails, follow [State and recovery](/neon/guides/state-recovery) before making further changes.
 
 ## Destroy the native alternative
 

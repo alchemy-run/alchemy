@@ -1,0 +1,134 @@
+---
+title: AI Gateway setup
+description: Enable account access, purchase credits deliberately, select a model, and verify Neon AI Gateway inference.
+---
+
+`Neon.AIGateway` discovers a branch endpoint. Account access and model inference
+are separate: successfully deploying the construct does not prove your account
+can make a model request. Complete [Setup](/neon/setup) first.
+
+## Confirm plan and region
+
+Select the intended organization in the [Neon Console](https://console.neon.tech).
+Neon's [AI Gateway overview](https://neon.com/docs/ai-gateway/overview) lists the
+current paid-plan and region requirements. Use a project in a supported region;
+the Alchemy examples use `aws-us-east-2`.
+
+Plan changes can affect billing. Have the organization's billing owner approve
+any upgrade before making it. Alchemy does not upgrade the account.
+
+## Purchase credits deliberately
+
+For a directly card-billed organization, an organization admin can open
+**Billing → AI gateway credits → Add credits**, select an amount, and confirm
+the one-time purchase. Check the balance after the purchase completes. Follow
+[Neon's prepaid-credit instructions](https://neon.com/docs/ai-gateway/prepaid-credits)
+for the current minimum purchase, usable balance, expiration, and usage limits.
+
+Members, editors, and viewers cannot purchase credits. Marketplace, invoiced,
+trial, and other accounts outside the self-service flow need assistance from
+Neon's account team. A missing purchase control is not something a broader
+runtime token can fix.
+
+:::caution[Explicit billing action]
+Purchasing credits charges the organization's payment method. Alchemy neither
+buys credits nor configures automatic top-up. The public management API currently
+provides gateway discovery, not an enablement or credit-purchase operation.
+:::
+
+## Obtain model access
+
+Choose a model from the current [model catalog](https://neon.com/docs/ai-gateway/models).
+Paid accounts with credits can use the available open-weight models. Foundation
+models may require approval: open **AI Gateway → Apply for access** in the Neon
+Console and wait for access before testing that model.
+
+Choose a Chat Completions-compatible model for Alchemy's Effect AI adapter. A
+model appearing in documentation is not proof that your organization has access.
+For Responses-only or native Anthropic features, use the corresponding SDK with
+the bound dialect URL instead.
+
+## Declare the branch gateway
+
+Inside your stack, using an existing `branch`:
+
+```typescript
+import * as Neon from "alchemy/Neon";
+
+const gateway = yield* Neon.AIGateway("AI", { branch });
+```
+
+This discovers the endpoint without sending an inference request or changing
+billing. See the [resource reference](/providers/neon/aigateway) for explicit
+project/branch IDs and an optional credential reference.
+
+## Bind an Effect model
+
+Inside a Function's initialization Effect:
+
+```typescript
+const ai = yield* Neon.ConnectAIGateway(gateway);
+```
+
+Provide `Neon.ConnectAIGatewayBinding` on that application for a same-branch
+production Neon Function. Use `Neon.ConnectAIGatewayHttp` instead for a Worker,
+Lambda, local Function, or cross-branch caller. The HTTP implementation manages a
+tracked `ai_gateway:invoke` branch credential unless one is supplied. The
+deployment management key is never the inference credential.
+
+## Verify one small request
+
+Inside an authenticated request handler, use a Chat Completions model ID your
+organization can access. The following handler excerpt assumes `modelId` is that
+configured string:
+
+```typescript
+import * as Effect from "effect/Effect";
+import { LanguageModel } from "effect/unstable/ai";
+
+const reply = yield* LanguageModel.generateText({
+  prompt: "Reply with hello.",
+}).pipe(
+  Effect.provide(ai.model({
+    model: modelId,
+    parameters: { maxTokens: 16 },
+  })),
+);
+```
+
+Call the deployed route once, confirm it returns model text, and check the
+organization's usage. The request consumes credits; it is not a deployment-time
+probe. Some models use `maxCompletionTokens` or need a larger reasoning budget;
+use the catalog's supported settings rather than sending both token-limit fields.
+Protect the route with authentication and rate limits before exposing it to users.
+
+After basic inference works, exercise the actual features you need: streamed
+output, tools or structured results, and cancelling a stream. Endpoint discovery
+alone does not verify any of these behaviors. See
+[AI Gateway bindings](/providers/neon/connectaigateway) and the
+[Effect model layer](/providers/neon/makelanguagemodellayer).
+
+## Diagnose access failures
+
+| Symptom | Check | Action |
+| --- | --- | --- |
+| `403` with `ai gateway not enabled for account` | Correct organization, paid-plan access, and account enablement | Resolve access in the Console or with Neon Support before retrying; redeploying the Function does not enable the account |
+| Model access denied | Approval for that model, not just gateway access | Select an accessible model or request foundation-model access |
+| Authentication failure | Credential scope and target branch | Use an `ai_gateway:invoke` service credential or the same-branch native binding, not a management API key |
+| `429` / `REQUEST_LIMIT_EXCEEDED` | Token rate, daily cap, and credit balance | Inspect rate-limit headers and Billing; distinguish transient rate limiting from a quota requiring operator action |
+| Incompatible request or model | Chat Completions versus Responses/Anthropic API | Match the model to the adapter or use the appropriate bound SDK URL |
+
+Preserve request IDs and sanitized errors when contacting
+[Neon Support](https://neon.com/docs/introduction/support). Exclude bearer tokens,
+private prompts, and response data from public reports. Neon's
+[troubleshooting guide](https://neon.com/docs/ai-gateway/troubleshooting) covers
+current service limits.
+
+PrivateLink and IP Allow do not cover AI Gateway traffic. A private database
+connection does not make this model endpoint private.
+
+## Related guides
+
+- [Setup](/neon/setup) — management credentials and feature prerequisites.
+- [Private networking](/neon/guides/private-networking) — database-only network controls.
+- [State and recovery](/neon/guides/state-recovery) — retain managed credential state.

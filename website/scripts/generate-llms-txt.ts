@@ -374,6 +374,12 @@ const SECTIONS: Section[] = [
       slugs: [
         "neon/index",
         "neon/setup",
+        "neon/governance",
+        "neon/guides/ai-gateway",
+        "neon/guides/production-auth",
+        "neon/guides/private-networking",
+        "neon/guides/custom-domains",
+        "neon/guides/state-recovery",
         "neon/tutorial/index",
         "neon/tutorial/backend",
         "neon/tutorial/functions",

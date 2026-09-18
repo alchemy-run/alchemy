@@ -8,9 +8,16 @@ and AI Gateway connections in the same Alchemy Stack. Functions accept native
 Fetch handlers or Effect applications; runtime bindings connect them to your
 backend without exposing the deployment API key.
 
-New here? [Set up credentials](/neon/setup), then follow the
+New here? Complete [Setup](/neon/setup) for credentials, region selection, service
+access, and the manual prerequisites for each feature. Then follow the
 [authenticated upload tutorial](/neon/tutorial) to combine a Vite frontend,
 private files, managed sessions, SQL records, and an upload-triggered Function.
+
+Before launch, use the dedicated guides for [production Auth](/neon/guides/production-auth),
+[AI Gateway access](/neon/guides/ai-gateway),
+[private networking](/neon/guides/private-networking),
+[custom domains](/neon/guides/custom-domains), and
+[state preservation and recovery](/neon/guides/state-recovery).
 
 ## Resources
 
@@ -116,8 +123,10 @@ const reply = yield* LanguageModel.generateText({ prompt: "Say hello." }).pipe(
 Import `LanguageModel` from `effect/unstable/ai`. Native and HTTP gateway bindings
 expose the same model layer, backed by Neon's OpenAI-compatible Chat Completions
 API. Model access and prepaid credits are separate account requirements; declaring
-a gateway never changes billing. See [AI Gateway bindings](/providers/neon/connectaigateway)
-for credentials, streaming, tools, structured output, and dialect URLs.
+a gateway never changes billing. Complete [AI Gateway setup](/neon/guides/ai-gateway)
+for access, credit purchase, and an inference check. See
+[AI Gateway bindings](/providers/neon/connectaigateway) for credentials, streaming,
+tools, structured output, and dialect URLs.
 
 ## Pooled vs direct
 

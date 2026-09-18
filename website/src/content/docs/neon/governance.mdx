@@ -17,6 +17,63 @@ service credentials. Include `Neon.providers()` in your stack as described in
 | [OrganizationVPCEndpoint](/providers/neon/organizationvpcendpoint) | Registration of an existing AWS PrivateLink endpoint | Restore an adopted label, or unregister a new registration |
 | [ProjectVPCEndpoint](/providers/neon/projectvpcendpoint) | A project's association with an organization endpoint | Restore an adopted label, or remove a new association |
 
+## Prepare the deployment identity
+
+Choose an existing organization and have an administrator approve the specific
+access, spending, or network controls this stack will manage. For key creation
+and role controls, use a personal management API key belonging to an organization
+admin: key creation requires a personal admin key, and Alchemy's role safety
+checks must identify the authenticated actor. Avoid making the deployment actor
+the member whose role is being changed.
+
+An organization-wide key has broad administrative authority but is not accepted
+by every operation. A project-restricted key has Editor access to that project;
+it cannot manage project access or delete the project. Check Neon's
+[operation/key matrix](https://neon.com/docs/manage/orgs-api#matrix-of-operations-and-key-types)
+and [permissions model](https://neon.com/docs/manage/user-permissions) rather than
+assuming any valid key can administer the organization. Configure the deployment
+key using [Setup](/neon/setup), never as a Function environment variable.
+
+Use a separate non-admin test member for access experiments, and obtain explicit
+approval before changing a real member's role or a shared billing threshold.
+Plan and account entitlements remain Neon's responsibility; Alchemy does not
+upgrade the organization.
+
+## Find the organization and project IDs
+
+In the Neon Console, open **Organization Settings → General information** and
+copy the organization ID. Select the intended project and copy its ID from
+project settings, or use the `projectId` output of its completed Alchemy
+deployment. Verify it belongs to that organization.
+
+Role and spending controls need resolved properties on their first deployment so
+the original configuration can be persisted before mutation. Deploy a project
+first and then pass its resolved ID for an initial `ProjectMemberRole` control;
+do not use an unresolved project output to skip that checkpoint.
+
+## Find an existing membership ID
+
+Have the user join the organization through Neon's normal invitation process
+first. Alchemy's role resources do not invite users. With `NEON_API_KEY` supplied
+securely to this terminal and `NEON_ORG_ID` set to the selected organization,
+make a read-only request:
+
+```sh
+curl --fail-with-body --get \
+  "https://console.neon.tech/api/v2/organizations/$NEON_ORG_ID/members" \
+  --header "Authorization: Bearer $NEON_API_KEY" \
+  --data-urlencode "limit=100" \
+  --data-urlencode "sort_by=email" \
+  --data-urlencode "sort_order=asc"
+```
+
+Match the intended person's `user.email`, verify the account is active, and copy
+`members[].member.id`. This is the membership ID, not `member.user_id`. If the
+response includes `pagination.next`, repeat the request with
+`--data-urlencode "cursor=<returned cursor>"`, keeping the sort settings, until
+you find the member or exhaust the pages. Do not infer absence from the first
+page. These results contain personal information; keep them out of public logs.
+
 ## Issue a project-restricted management key
 
 ```typescript
@@ -116,7 +173,9 @@ const network = yield* Neon.OrganizationVPCEndpoint("PrivateNetwork", {
 Create the AWS endpoint separately. This resource registers it with Neon; it
 never provisions or deletes the AWS endpoint, configures DNS, or blocks public
 connections. Private networking requires an entitled organization and a
-supported AWS region.
+supported AWS region. Follow [Private networking](/neon/guides/private-networking)
+for entitlement, AWS endpoint creation, registration order, private DNS, and
+inside/outside-network connection checks.
 
 ## Associate a project with the endpoint
 
@@ -153,6 +212,17 @@ Serialize changes to each member, spending threshold, and endpoint association.
 These APIs do not provide conditional writes, so observe-before-write checks
 cannot prevent every concurrent edit. An ambiguous interrupted role change
 fails closed and needs operator reconciliation of the retained state.
+
+Before deployment, record the intended member/grant, alert threshold, or network
+association with the responsible administrator. After deployment, independently
+check the selected organization/project in the Console. After destroy, confirm
+the original role, grant, threshold, or adopted label was restored; deletion of a
+resource declaration is not proof that the expected access policy is in effect.
+A spending threshold can send notifications immediately if current spending is
+already above it, so coordinate that test with the billing owner.
+
+For missing state, reveal-once secrets, or conflicting external edits, follow
+[State and recovery](/neon/guides/state-recovery) before another mutation.
 
 Organization creation, membership invitations, and organization deletion are
 outside these resources. Invitations are deliberately excluded because the

@@ -143,8 +143,9 @@ Static files are served inside the Function, currently with
 `Cache-Control: no-cache`; this composition adds no CDN or durable framework cache.
 The `domain` prop registers a custom hostname and exposes `site.domain.cnameTarget` for a
 DNS-only CNAME. Registration and the returned URL do not establish DNS propagation
-or valid TLS; verify HTTPS separately. See
-[`CustomDomain`](/providers/neon/customdomain).
+or valid TLS; verify HTTPS separately. Follow [Custom domains](/neon/guides/custom-domains)
+for DNS, CAA, HTTPS checks, and safe retirement, or see the
+[`CustomDomain` reference](/providers/neon/customdomain).
 
 ## Reference
 
