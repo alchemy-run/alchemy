@@ -6,61 +6,27 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  listAccessibleOrganizations,
-  listAccessibleRepositories,
-} from "./Lists.ts";
+  type ActionsScope,
+  actionsScope,
+  listActionsEntries,
+  sameScope,
+} from "./ActionsScope.ts";
 import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 
-/**
- * Repository scope for an Actions secret or variable.
- */
-export interface RepositoryActionsScope {
-  /**
-   * Scope discriminator.
-   */
-  readonly kind: "repository";
-  /**
-   * Repository owner.
-   */
-  readonly owner: string;
-  /**
-   * Repository name.
-   */
-  readonly repository: string;
-}
+// The scope model is shared with the variable resource, so it lives in the
+// internal `ActionsScope` module rather than in either resource. It is part
+// of both resources' public props surface, so it is re-exported here — and
+// only here, since `index.ts` star-exports both files and would otherwise
+// see the same names twice.
+export {
+  type ActionsScope,
+  type OrganizationActionsScope,
+  type RepositoryActionsScope,
+  sameScope,
+  type UserActionsScope,
+} from "./ActionsScope.ts";
 
-/**
- * Organization scope for an Actions secret or variable.
- */
-export interface OrganizationActionsScope {
-  /**
-   * Scope discriminator.
-   */
-  readonly kind: "organization";
-  /**
-   * Organization login.
-   */
-  readonly organization: string;
-}
-
-/**
- * Authenticated-user scope for an Actions secret or variable.
- */
-export interface UserActionsScope {
-  /**
-   * Scope discriminator.
-   */
-  readonly kind: "user";
-}
-
-/**
- * Actions configuration scope.
- */
-export type ActionsScope =
-  | RepositoryActionsScope
-  | OrganizationActionsScope
-  | UserActionsScope;
 /**
  * Legacy repository-scoped secret properties.
  */
@@ -115,7 +81,12 @@ export interface SecretAttributes {
    */
   readonly name: string;
   /**
-   * Timestamp of reconciliation.
+   * When the value is known to have last been current.
+   *
+   * Forgejo's secret representation carries only `created_at` and never the
+   * value, so there is nothing to compare a stored secret against: a deploy
+   * stamps the time it wrote, while enumeration falls back to the instance's
+   * `created_at`. Useful as a freshness hint, not as an equality key.
    */
   readonly updatedAt: string;
 }
@@ -177,24 +148,7 @@ export const Secret = Resource<Secret>("Forgejo.Secret");
  * Resolve legacy and scoped secret properties into one scope.
  */
 export const secretScope = (props: SecretProps): ActionsScope =>
-  "scope" in props
-    ? props.scope
-    : { kind: "repository", owner: props.owner, repository: props.repository };
-/**
- * Structural equality for two Actions scopes.
- *
- * Comparing serialized scopes instead would be key-order sensitive, so
- * migrating a resource from the legacy repository props to the equivalent
- * explicit `scope` would plan a needless replacement — and replacing a secret
- * deletes it before recreating it, leaving CI without the value in between.
- */
-export const sameScope = (a: ActionsScope, b: ActionsScope): boolean => {
-  if (a.kind === "repository" && b.kind === "repository")
-    return a.owner === b.owner && a.repository === b.repository;
-  if (a.kind === "organization" && b.kind === "organization")
-    return a.organization === b.organization;
-  return a.kind === "user" && b.kind === "user";
-};
+  actionsScope(props);
 
 /**
  * Forgejo has one secret endpoint family per scope, so each lifecycle step
@@ -263,64 +217,32 @@ export const SecretProvider = () =>
           ? { action: "replace" as const }
           : undefined,
       ),
-    list: Effect.fn(function* () {
-      const repositories = yield* listAccessibleRepositories();
-      const organizations = yield* listAccessibleOrganizations();
-
-      // Enumeration spans everything the credential can see; a repository or
-      // organization whose Actions settings are not readable is skipped
-      // rather than failing the whole sweep.
-      const repositorySecrets = yield* Effect.forEach(
-        repositories,
-        (repository) => {
-          const scope: ActionsScope = {
-            kind: "repository",
-            owner: repository.owner.login,
-            repository: repository.name,
-          };
-          return paginate(Services.repository.repoListActionsSecrets, {
-            owner: repository.owner.login,
-            repo: repository.name,
+    // User-scoped secrets are deliberately absent from the sweep: Forgejo
+    // exposes `/user/actions/secrets/{name}` for PUT and DELETE but has no
+    // collection endpoint to enumerate them, unlike the repository,
+    // organization, and user-variable collections. A user-scoped secret
+    // therefore has to be destroyed through the stack that declared it.
+    list: () =>
+      listActionsEntries({
+        repository: (scope) =>
+          paginate(Services.repository.repoListActionsSecrets, {
+            owner: scope.owner,
+            repo: scope.repository,
           }).pipe(
             Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
+              Effect.succeed([] as readonly ApiSecret[]),
             ),
-            Effect.map((secrets) =>
-              secrets.map((secret) => toAttributes(scope, secret)),
-            ),
-          );
-        },
-        { concurrency: 8 },
-      );
-
-      const organizationSecrets = yield* Effect.forEach(
-        organizations,
-        (organization) => {
-          const scope: ActionsScope = {
-            kind: "organization",
-            organization: organization.username,
-          };
-          return paginate(Services.organization.orgListActionsSecrets, {
-            org: organization.username,
+          ),
+        organization: (scope) =>
+          paginate(Services.organization.orgListActionsSecrets, {
+            org: scope.organization,
           }).pipe(
             Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
+              Effect.succeed([] as readonly ApiSecret[]),
             ),
-            Effect.map((secrets) =>
-              secrets.map((secret) => toAttributes(scope, secret)),
-            ),
-          );
-        },
-        { concurrency: 8 },
-      );
-
-      // User-scoped secrets are deliberately absent: Forgejo exposes
-      // `/user/actions/secrets/{name}` for PUT and DELETE but has no
-      // collection endpoint to enumerate them, unlike the repository,
-      // organization, and user-variable collections. A user-scoped secret
-      // therefore has to be destroyed through the stack that declared it.
-      return [...repositorySecrets.flat(), ...organizationSecrets.flat()];
-    }),
+          ),
+        toAttributes,
+      }),
     reconcile: Effect.fn(function* ({ news }) {
       // Forgejo's secret endpoint is an upsert and the stored value can never
       // be read back, so there is nothing to observe or diff against.

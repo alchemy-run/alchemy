@@ -1,10 +1,9 @@
-import { Repository, Secrets, Variables, providers } from "@/Forgejo/index.ts";
-import * as Test from "@/Test/Alchemy";
+import { Repository, Secrets, Variables } from "@/Forgejo/index.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { json, mockForgejo, noContent, status } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 const secrets = new Map<string, string>();
 const variables = new Map<string, string>();
@@ -73,12 +72,7 @@ const server = mockForgejo(({ method, path, body }) => {
   return undefined;
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const { test } = forgejoTest(server);
 
 test.provider("writes every entry of a bulk secret map", (stack) =>
   Effect.gen(function* () {

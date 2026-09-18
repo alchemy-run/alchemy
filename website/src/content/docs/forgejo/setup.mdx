@@ -96,8 +96,10 @@ Effect.provide(Forgejo.fromToken({
 
 `Forgejo.fromEnv()` builds the same layer from `FORGEJO_URL` and
 `FORGEJO_TOKEN`, failing with `MissingForgejoEnvironment` when either
-is unset, and `Forgejo.fromAuthProvider()` is the profile-backed layer
-`providers()` uses by default. All three provide the `Credentials`
+is unset or empty, and `Forgejo.fromAuthProvider()` is the
+profile-backed layer `providers()` uses by default, failing with
+`IncompleteForgejoProfile` when the stored profile resolves but leaves
+the instance URL or token blank. All three provide the `Credentials`
 service of [`@distilled.cloud/forgejo`](https://github.com/alchemy-run/distilled),
 the generated SDK every resource calls through.
 
@@ -112,10 +114,11 @@ Forgejo.providers({ baseUrl, token }).pipe(Layer.provide(myHttpClient))
 
 ## Errors
 
-Every API failure is a tagged error from the generated SDK, so lifecycle
-code and your own stack code can branch on it without inspecting HTTP
-status codes. Each operation's error union carries exactly the failures
-its endpoint declares:
+Every failure is a tagged error, so lifecycle code and your own stack
+code can branch on it without inspecting HTTP status codes. Most come
+from the generated SDK, whose per-operation error unions carry exactly
+the failures each endpoint declares; the last four are raised by the
+provider for states Forgejo's API cannot express:
 
 | Tag | Meaning |
 | --- | --- |
@@ -129,6 +132,9 @@ its endpoint declares:
 | `InternalServerError`, `BadGateway`, … | Forgejo returned 5xx |
 | `UnknownForgejoError` | Any other unsuccessful status |
 | `HttpClientError` | Connection failure |
+| `UnsupportedOwnerChange` | A deployed organization's `owner` changed, and Forgejo has no ownership-transfer endpoint |
+| `UnrecoverableApiToken` | A token of that name already exists but no state records it, and Forgejo returns a token's secret only once |
+| `MissingGeneratedToken` | Forgejo accepted a token create but omitted the generated secret |
 | `ForgejoPaginationLimit` | A list ran past the page cap, so enumeration would be incomplete |
 
 ## Next steps

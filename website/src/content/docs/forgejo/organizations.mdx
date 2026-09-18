@@ -36,7 +36,12 @@ Like repositories, organizations default to the `retain` removal
 policy — `alchemy destroy` leaves them in place. Opt in with
 `destroy()` from `alchemy/RemovalPolicy` when the org is disposable.
 
-Changing `owner` or `username` replaces the organization.
+Changing `username` replaces the organization. Changing `owner` is
+refused with `UnsupportedOwnerChange`: an organization's login is
+globally unique, so the organization a replacement would "create" is
+the one that already exists, and Forgejo offers no ownership-transfer
+endpoint. Move it by editing the organization's Owners team in
+Forgejo, then restore the original `owner` here.
 
 ## Teams and members
 

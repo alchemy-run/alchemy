@@ -1,44 +1,27 @@
-import {
-  Repository,
-  Secret,
-  Variable,
-  Webhook,
-  providers,
-} from "@/Forgejo/index.ts";
-import * as Test from "@/Test/Alchemy";
+import { Repository, Secret, Variable, Webhook } from "@/Forgejo/index.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import {
+  json,
+  jsonList,
+  mockForgejo,
+  noContent,
+  status,
+} from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
-interface RecordedRequest {
-  readonly method: string;
-  readonly pathname: string;
-  readonly body: unknown;
-}
+const REPO = "/repos/alice/alchemy";
+const TOPICS = `${REPO}/topics`;
+const VARIABLE = `${REPO}/actions/variables/DEPLOY_ENV`;
+const SECRET = `${REPO}/actions/secrets/DEPLOY_TOKEN`;
+const HOOKS = `${REPO}/hooks`;
 
-const requests: RecordedRequest[] = [];
 let repository: Record<string, unknown> | undefined;
+let topics: string[] = [];
 let variable: string | undefined;
 let secret: string | undefined;
 let webhook: Record<string, unknown> | undefined;
-let topics: string[] = [];
-
-const record = (request: HttpClientRequest.HttpClientRequest) => {
-  const body =
-    request.body._tag === "Uint8Array"
-      ? (JSON.parse(new TextDecoder().decode(request.body.body)) as unknown)
-      : undefined;
-  requests.push({
-    method: request.method,
-    pathname: new URL(request.url).pathname,
-    body,
-  });
-  return body;
-};
 
 const repositoryResponse = (overrides: Record<string, unknown> = {}) => ({
   id: 7,
@@ -54,138 +37,110 @@ const repositoryResponse = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const route = (request: HttpClientRequest.HttpClientRequest): Response => {
-  const url = new URL(request.url);
-  const body = record(request);
+const server = mockForgejo((request) => {
+  const { method, path, body } = request;
 
-  if (request.method === "GET" && url.pathname === "/api/v1/user") {
-    return Response.json({ login: "alice" });
-  }
+  if (method === "GET" && path === "/user") return json({ login: "alice" });
 
-  if (url.pathname === "/api/v1/repos/alice/alchemy") {
-    if (request.method === "GET") {
-      return repository === undefined
-        ? new Response("not found", { status: 404 })
-        : Response.json(repository);
-    }
-    if (request.method === "PATCH") {
-      repository = repositoryResponse({ ...repository, ...(body as object) });
-      return Response.json(repository);
-    }
-    if (request.method === "DELETE") {
-      repository = undefined;
-      return new Response(null, { status: 204 });
-    }
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/v1/user/repos") {
+  if (method === "POST" && path === "/user/repos") {
     repository = repositoryResponse(body as Record<string, unknown>);
-    return Response.json(repository, { status: 201 });
+    return json(repository, 201);
   }
 
-  if (url.pathname === "/api/v1/repos/alice/alchemy/topics") {
-    if (request.method === "GET") {
-      return Response.json({ topics });
+  if (path === REPO || path === "/repositories/7") {
+    if (method === "GET") {
+      return repository === undefined
+        ? status(404, "not found")
+        : json(repository);
     }
-    if (request.method === "PUT") {
+    if (method === "PATCH") {
+      repository = repositoryResponse({ ...repository, ...(body as object) });
+      return json(repository);
+    }
+    if (method === "DELETE") {
+      repository = undefined;
+      return noContent();
+    }
+  }
+
+  if (path === TOPICS) {
+    if (method === "GET") return json({ topics });
+    if (method === "PUT") {
       topics = [...(body as { topics: string[] }).topics];
-      return new Response(null, { status: 204 });
+      return noContent();
     }
   }
 
-  if (url.pathname === "/api/v1/repositories/7") {
-    return repository === undefined
-      ? new Response("not found", { status: 404 })
-      : Response.json(repository);
-  }
-
-  const variablePath =
-    "/api/v1/repos/alice/alchemy/actions/variables/DEPLOY_ENV";
-  if (url.pathname === variablePath) {
-    if (request.method === "GET") {
+  if (path === VARIABLE) {
+    if (method === "GET") {
       // Forgejo returns the stored value under `data`, not `value`.
       return variable === undefined
-        ? new Response("not found", { status: 404 })
-        : Response.json({ name: "DEPLOY_ENV", data: variable });
+        ? status(404, "not found")
+        : json({ name: "DEPLOY_ENV", data: variable });
     }
-    if (request.method === "POST" || request.method === "PUT") {
+    if (method === "POST" || method === "PUT") {
       variable = (body as { value: string }).value;
-      return new Response(null, { status: 204 });
+      return noContent();
     }
-    if (request.method === "DELETE") {
+    if (method === "DELETE") {
       variable = undefined;
-      return new Response(null, { status: 204 });
+      return noContent();
     }
   }
 
-  const secretPath = "/api/v1/repos/alice/alchemy/actions/secrets/DEPLOY_TOKEN";
-  if (url.pathname === secretPath) {
-    if (request.method === "PUT") {
+  if (path === SECRET) {
+    if (method === "PUT") {
       secret = (body as { data: string }).data;
-      return new Response(null, { status: 204 });
+      return noContent();
     }
-    if (request.method === "DELETE") {
+    if (method === "DELETE") {
       secret = undefined;
-      return new Response(null, { status: 204 });
+      return noContent();
     }
   }
 
-  const hooksPath = "/api/v1/repos/alice/alchemy/hooks";
-  if (url.pathname === hooksPath && request.method === "GET") {
-    return Response.json(webhook === undefined ? [] : [webhook]);
-  }
-  if (url.pathname === hooksPath && request.method === "POST") {
-    webhook = {
-      id: 11,
-      url: "",
-      updated_at: "2026-01-03T00:00:00Z",
-      ...(body as object),
-    };
-    return Response.json(webhook, { status: 201 });
-  }
-  if (url.pathname === `${hooksPath}/11`) {
-    if (request.method === "GET") {
-      return webhook === undefined
-        ? new Response("not found", { status: 404 })
-        : Response.json(webhook);
+  if (path === HOOKS) {
+    if (method === "GET") {
+      return jsonList(request, webhook === undefined ? [] : [webhook]);
     }
-    if (request.method === "PATCH") {
+    if (method === "POST") {
+      webhook = {
+        id: 11,
+        url: "",
+        updated_at: "2026-01-03T00:00:00Z",
+        ...(body as object),
+      };
+      return json(webhook, 201);
+    }
+  }
+
+  if (path === `${HOOKS}/11`) {
+    if (method === "GET") {
+      return webhook === undefined ? status(404, "not found") : json(webhook);
+    }
+    if (method === "PATCH") {
       webhook = { ...webhook, ...(body as object) };
-      return Response.json(webhook);
+      return json(webhook);
     }
-    if (request.method === "DELETE") {
+    if (method === "DELETE") {
       webhook = undefined;
-      return new Response(null, { status: 204 });
+      return noContent();
     }
   }
 
-  return new Response(`unhandled: ${request.method} ${url.pathname}`, {
-    status: 500,
-  });
-};
-
-const httpClient = Layer.succeed(
-  HttpClient.HttpClient,
-  HttpClient.make((request) =>
-    Effect.sync(() => HttpClientResponse.fromWeb(request, route(request))),
-  ),
-);
+  return undefined;
+});
 
 const reset = () => {
-  requests.length = 0;
   repository = undefined;
   topics = [];
   variable = undefined;
   secret = undefined;
   webhook = undefined;
+  server.reset();
 };
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(httpClient)),
-});
+const { test } = forgejoTest(server);
 
 test.provider("uses the Forgejo repository create and edit schemas", (stack) =>
   Effect.gen(function* () {
@@ -222,12 +177,7 @@ test.provider("uses the Forgejo repository create and edit schemas", (stack) =>
       fullName: "alice/alchemy",
       defaultBranch: "main",
     });
-    expect(
-      requests.find(
-        ({ method, pathname }) =>
-          method === "POST" && pathname.endsWith("/user/repos"),
-      )?.body,
-    ).toEqual({
+    expect(server.find("POST", "/user/repos")?.body).toEqual({
       name: "alchemy",
       description: "Managed by Alchemy",
       private: true,
@@ -239,9 +189,7 @@ test.provider("uses the Forgejo repository create and edit schemas", (stack) =>
       template: false,
       object_format_name: "sha256",
     });
-    expect(
-      requests.find(({ method }) => method === "PATCH")?.body,
-    ).toMatchObject({
+    expect(server.find("PATCH", REPO)?.body).toMatchObject({
       website: "https://example.com/alchemy",
       has_issues: false,
       has_projects: true,
@@ -252,12 +200,7 @@ test.provider("uses the Forgejo repository create and edit schemas", (stack) =>
       has_actions: true,
       archived: false,
     });
-    expect(
-      requests.find(
-        ({ method, pathname }) =>
-          method === "PUT" && pathname.endsWith("/topics"),
-      )?.body,
-    ).toEqual({
+    expect(server.find("PUT", TOPICS)?.body).toEqual({
       topics: ["infrastructure", "forgejo"],
     });
   }),
@@ -284,17 +227,9 @@ test.provider("uses the Actions variable create and update schemas", (stack) =>
       }),
     );
 
-    expect(
-      requests.filter(({ pathname }) => pathname.endsWith("/DEPLOY_ENV")),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ method: "POST", body: { value: "staging" } }),
-        expect.objectContaining({
-          method: "PUT",
-          body: { value: "production" },
-        }),
-      ]),
-    );
+    // Forgejo splits the two: `POST` creates the variable, `PUT` updates it.
+    expect(server.find("POST", VARIABLE)?.body).toEqual({ value: "staging" });
+    expect(server.find("PUT", VARIABLE)?.body).toEqual({ value: "production" });
     expect(variable).toBe("production");
   }),
 );
@@ -312,7 +247,7 @@ test.provider("skips the write when a variable already matches", (stack) =>
       }),
     );
 
-    requests.length = 0;
+    server.reset();
     yield* stack.deploy(
       Variable("DeployEnvironment", {
         owner: "alice",
@@ -324,7 +259,9 @@ test.provider("skips the write when a variable already matches", (stack) =>
 
     // The observed value already matches, so reconciliation issues no write.
     expect(
-      requests.filter(({ method }) => method === "PUT" || method === "POST"),
+      server.requests.filter(
+        ({ method }) => method === "PUT" || method === "POST",
+      ),
     ).toEqual([]);
     expect(variable).toBe("staging");
   }),
@@ -345,10 +282,7 @@ test.provider(
         }),
       );
 
-      expect(
-        requests.find(({ pathname }) => pathname.endsWith("/DEPLOY_TOKEN"))
-          ?.body,
-      ).toEqual({
+      expect(server.find("PUT", SECRET)?.body).toEqual({
         data: "line one\nline two & symbols",
       });
       expect(secret).toBe("line one\nline two & symbols");
@@ -385,11 +319,7 @@ test.provider("uses the webhook create and edit schemas", (stack) =>
       }),
     );
 
-    const create = requests.find(
-      ({ method, pathname }) =>
-        method === "POST" && pathname.endsWith("/hooks"),
-    );
-    expect(create?.body).toEqual({
+    expect(server.find("POST", HOOKS)?.body).toEqual({
       type: "forgejo",
       active: false,
       events: ["push", "pull_request"],
@@ -401,13 +331,9 @@ test.provider("uses the webhook create and edit schemas", (stack) =>
         secret: "signing-secret",
       },
     });
-    const edit = requests.find(
-      ({ method, pathname }) =>
-        method === "PATCH" && pathname.endsWith("/hooks/11"),
-    );
     // `CreateHookOption` carries `type`; `EditHookOption` does not, so the
     // edit body must not send it.
-    expect(edit?.body).toEqual({
+    expect(server.find("PATCH", `${HOOKS}/11`)?.body).toEqual({
       active: true,
       events: ["push"],
       config: {

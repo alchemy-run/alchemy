@@ -1,10 +1,10 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Repository as ApiRepository } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -272,7 +272,7 @@ const settingsOf = (props: RepositoryProps) => ({
   template: props.template,
 });
 
-const toAttributes = (repository: ApiRepository): RepositoryAttributes => ({
+const attributesOf = (repository: ApiRepository): RepositoryAttributes => ({
   repoId: repository.id,
   fullName: repository.full_name,
   htmlUrl: repository.html_url,
@@ -318,28 +318,24 @@ const create = Effect.fn(function* (news: RepositoryProps) {
 export const RepositoryProvider = () =>
   Provider.succeed(Repository, {
     stables: ["repoId"],
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) && olds !== undefined && news.owner !== olds.owner
-          ? ({ action: "replace" } as const)
-          : undefined,
-      ),
+    // An edit cannot move a repository to a different owner, so a changed
+    // `owner` names a different repository.
+    diff: replaceWhenChanged<RepositoryProps>("owner"),
     list: Effect.fn(function* () {
       // `/user/repos` already returns the full repository representation, so
       // enumeration needs no per-repository follow-up request.
       const repositories = yield* listAccessibleRepositories();
-      return repositories.map(toAttributes);
+      return repositories.map(attributesOf);
     }),
     read: Effect.fn(function* ({ olds, output }) {
       // Prefer the numeric ID: `olds.name` goes stale the moment a rename's
       // state write fails, and a name lookup would then report the
       // repository as missing and re-create it.
-      if (output !== undefined) {
-        const byId = yield* observeById(output.repoId);
-        return byId === undefined ? undefined : toAttributes(byId);
-      }
-      const repository = yield* observe(olds.owner, olds.name);
-      return repository === undefined ? undefined : toAttributes(repository);
+      const observed =
+        output === undefined
+          ? yield* observe(olds.owner, olds.name)
+          : yield* observeById(output.repoId);
+      return observed === undefined ? undefined : attributesOf(observed);
     }),
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       // Observe by the numeric ID when one is known, so a rename survives
@@ -372,33 +368,29 @@ export const RepositoryProvider = () =>
             ...desired,
           });
 
+      // Topics live behind their own endpoint, so they are synced the same
+      // way but separately: observe the live list, replace it only when the
+      // declared set differs.
+      //
+      // The guard is what leaves an omitted `topics` unmanaged — it must stay
+      // outside the comparison. `matchesDesired` treats an `undefined` desired
+      // value as "unmanaged" too, but only per key, and reaching it would mean
+      // having already paid for the live read.
       if (news.topics !== undefined) {
         const target = { owner: updated.owner.login, repo: updated.name };
         const live = yield* Services.repository.repoListTopics(target);
-        const observedTopics = [...(live.topics ?? [])].sort();
-        const desiredTopics = [...news.topics].sort();
-        const matches =
-          observedTopics.length === desiredTopics.length &&
-          observedTopics.every(
-            (topic, index) => topic === desiredTopics[index],
-          );
-        if (!matches) {
-          yield* Services.repository.repoUpdateTopics({
-            ...target,
-            topics: [...news.topics],
-          });
+        const topics = [...news.topics];
+        if (!matchesDesired({ topics: live.topics ?? [] }, { topics })) {
+          yield* Services.repository.repoUpdateTopics({ ...target, topics });
         }
       }
-      return toAttributes(updated);
+      return attributesOf(updated);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       // Resolve the live name from the numeric ID first. Deleting by a stale
       // `olds.name` 404s, which is swallowed as success — the state row would
       // be dropped while the repository lived on.
-      const live =
-        output?.repoId === undefined
-          ? undefined
-          : yield* observeById(output.repoId);
+      const live = yield* observeById(output.repoId);
       yield* Services.repository
         .deleteRepo({
           owner: live?.owner.login ?? olds.owner,

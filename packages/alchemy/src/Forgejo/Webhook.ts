@@ -2,11 +2,12 @@ import { Services } from "@distilled.cloud/forgejo";
 import type { Hook as ApiHook } from "@distilled.cloud/forgejo/repository";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
 import { paginate } from "./Pagination.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
+import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
 /**
@@ -147,17 +148,17 @@ const attributesOf = (
   updatedAt: hook.updated_at,
 });
 
+/**
+ * Whether a live hook delivers exactly the declared events, in any order.
+ */
 const sameEvents = (
   hook: ApiHook,
   events: readonly string[] | undefined,
-): boolean => {
-  const observed = [...(hook.events ?? [])].sort();
-  const desired = [...(events ?? DEFAULT_EVENTS)].sort();
-  return (
-    observed.length === desired.length &&
-    observed.every((event, index) => event === desired[index])
+): boolean =>
+  matchesDesired(
+    { events: hook.events ?? [] },
+    { events: [...(events ?? DEFAULT_EVENTS)] },
   );
-};
 
 /**
  * Whether a live hook is the one this resource declares.
@@ -252,14 +253,9 @@ const bodyOf = (props: WebhookProps) => ({
 export const WebhookProvider = () =>
   Provider.succeed(Webhook, {
     stables: ["webhookId", "owner", "repository"],
-    diff: ({ news, olds }) => {
-      if (!isResolved(news) || olds === undefined) return Effect.void;
-      return Effect.succeed(
-        news.owner !== olds.owner || news.repository !== olds.repository
-          ? { action: "replace" as const }
-          : undefined,
-      );
-    },
+    // A hook belongs to one repository and cannot be moved, so a changed
+    // repository names a different hook. Every other prop is editable.
+    diff: replaceWhenChanged<WebhookProps>("owner", "repository"),
     list: Effect.fn(function* () {
       const repositories = yield* listAccessibleRepositories();
       const hooks = yield* Effect.forEach(
@@ -288,6 +284,11 @@ export const WebhookProvider = () =>
       // re-run after a failed state write both converge onto one hook.
       const observed = yield* observe(news, output?.webhookId);
 
+      // Unlike the other reconcilers there is no `matchesDesired` no-op skip:
+      // Forgejo never reads `secret` or `authorization_header` back, so a
+      // rotation of either is invisible in the observed hook. Skipping on an
+      // identity match would silently drop it, and the write is cheap.
+      //
       // `CreateHookOption` carries `type`; `EditHookOption` does not.
       const hook =
         observed === undefined
@@ -304,7 +305,6 @@ export const WebhookProvider = () =>
       return attributesOf(news, hook);
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (output === undefined) return;
       // Address the hook from `output` alone: account-wide teardown has no
       // state row, so it passes the Attributes shape as `olds` too.
       yield* Services.repository

@@ -5,12 +5,13 @@ import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  listAccessibleOrganizations,
-  listAccessibleRepositories,
-} from "./Lists.ts";
+  type ActionsScope,
+  actionsScope,
+  listActionsEntries,
+  sameScope,
+} from "./ActionsScope.ts";
 import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
-import { type ActionsScope, sameScope } from "./Secret.ts";
 
 /**
  * Legacy repository-scoped variable properties.
@@ -116,9 +117,7 @@ export const Variable = Resource<Variable>("Forgejo.Variable");
  * Resolve legacy and scoped variable properties into one scope.
  */
 export const variableScope = (props: VariableProps): ActionsScope =>
-  "scope" in props
-    ? props.scope
-    : { kind: "repository", owner: props.owner, repository: props.repository };
+  actionsScope(props);
 
 /**
  * Forgejo has one variable endpoint family per scope, so each lifecycle step
@@ -238,56 +237,29 @@ export const VariableProvider = () =>
           : undefined,
       ),
     list: Effect.fn(function* () {
-      const repositories = yield* listAccessibleRepositories();
-      const organizations = yield* listAccessibleOrganizations();
-
-      // Enumeration spans everything the credential can see; a repository or
-      // organization whose Actions settings are not readable is skipped
-      // rather than failing the whole sweep.
-      const repositoryVariables = yield* Effect.forEach(
-        repositories,
-        (repository) => {
-          const scope: ActionsScope = {
-            kind: "repository",
-            owner: repository.owner.login,
-            repository: repository.name,
-          };
-          return paginate(Services.repository.getRepoVariablesList, {
-            owner: repository.owner.login,
-            repo: repository.name,
+      const scopedVariables = yield* listActionsEntries({
+        repository: (scope) =>
+          paginate(Services.repository.getRepoVariablesList, {
+            owner: scope.owner,
+            repo: scope.repository,
           }).pipe(
             Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
+              Effect.succeed([] as readonly ApiVariable[]),
             ),
-            Effect.map((variables) =>
-              variables.map((variable) => toAttributes(scope, variable)),
-            ),
-          );
-        },
-        { concurrency: 8 },
-      );
-
-      const organizationVariables = yield* Effect.forEach(
-        organizations,
-        (organization) => {
-          const scope: ActionsScope = {
-            kind: "organization",
-            organization: organization.username,
-          };
-          return paginate(Services.organization.getOrgVariablesList, {
-            org: organization.username,
+          ),
+        organization: (scope) =>
+          paginate(Services.organization.getOrgVariablesList, {
+            org: scope.organization,
           }).pipe(
             Effect.catchTag(["NotFound", "Forbidden"], () =>
-              Effect.succeed([]),
+              Effect.succeed([] as readonly ApiVariable[]),
             ),
-            Effect.map((variables) =>
-              variables.map((variable) => toAttributes(scope, variable)),
-            ),
-          );
-        },
-        { concurrency: 8 },
-      );
+          ),
+        toAttributes,
+      });
 
+      // Unlike secrets, Forgejo does expose a user-level variable collection,
+      // so the authenticated user's own variables are enumerable too.
       const userScope: ActionsScope = { kind: "user" };
       const userVariables = yield* paginate(
         Services.user.getUserVariablesList,
@@ -299,11 +271,7 @@ export const VariableProvider = () =>
         ),
       );
 
-      return [
-        ...repositoryVariables.flat(),
-        ...organizationVariables.flat(),
-        ...userVariables,
-      ];
+      return [...scopedVariables, ...userVariables];
     }),
     read: Effect.fn(function* ({ olds }) {
       const scope = variableScope(olds);

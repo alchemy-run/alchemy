@@ -1,11 +1,11 @@
 import { Services } from "@distilled.cloud/forgejo";
 import type { Label as ApiLabel } from "@distilled.cloud/forgejo/issue";
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listAccessibleRepositories } from "./Lists.ts";
 import { paginate } from "./Pagination.ts";
+import { replaceWhenChanged } from "./Replacement.ts";
 import { matchesDesired } from "./Settings.ts";
 import type * as Forgejo from "./Providers.ts";
 
@@ -177,14 +177,9 @@ const observe = Effect.fn(function* (
 export const LabelProvider = () =>
   Provider.succeed(Label, {
     stables: ["labelId", "owner", "repository"],
-    diff: ({ news, olds }) =>
-      Effect.succeed(
-        isResolved(news) &&
-          olds !== undefined &&
-          (news.owner !== olds.owner || news.repository !== olds.repository)
-          ? { action: "replace" as const }
-          : undefined,
-      ),
+    // A label belongs to one repository and cannot be moved, so a changed
+    // repository names a different label. The name is editable in place.
+    diff: replaceWhenChanged<LabelProps>("owner", "repository"),
     list: Effect.fn(function* () {
       const repositories = yield* listAccessibleRepositories();
       const labels = yield* Effect.forEach(
@@ -233,7 +228,6 @@ export const LabelProvider = () =>
       return attributesOf(news, updated);
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (output === undefined) return;
       // Address the label from `output` alone: account-wide teardown has no
       // state row, so it passes the Attributes shape as `olds` too.
       yield* Services.issue

@@ -96,6 +96,13 @@ export const providers = (options?: ProvidersOptions) => {
       ),
     ),
     Layer.provideMerge(credentials),
+    // provideMerge, NOT provide: the generated operations resolve their
+    // `HttpClient` from the context they run in, which is the stack's merged
+    // services rather than this layer's build scope. Narrowing this to
+    // `Layer.provide` type-checks and then sends every request to the real
+    // network — the whole `Layer.provide(server.layer)` test topology stops
+    // working. The cost is that a stack merging Forgejo with another provider
+    // shares this client; today it is always the ambient one.
     Layer.provideMerge(httpClient),
     Layer.provideMerge(ForgejoAuth),
     Layer.provideMerge(ProfileStoreLive),

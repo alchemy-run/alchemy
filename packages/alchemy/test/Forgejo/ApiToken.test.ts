@@ -1,8 +1,6 @@
-import { ApiToken, providers } from "@/Forgejo/index.ts";
-import * as Test from "@/Test/Alchemy";
+import { ApiToken } from "@/Forgejo/index.ts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import {
@@ -12,6 +10,7 @@ import {
   noContent,
   status,
 } from "./support/mock.ts";
+import { forgejoTest } from "./support/stack.ts";
 
 interface StoredToken {
   readonly id: number;
@@ -70,19 +69,19 @@ const server = mockForgejo((request) => {
   return status(405, "method not allowed");
 });
 
-const { test } = Test.make({
-  providers: providers({
-    baseUrl: "https://forge.example",
-    token: "admin-token",
-  }).pipe(Layer.provide(server.layer)),
-});
+const reset = () => {
+  tokens.clear();
+  nextId = 1;
+  server.reset();
+};
+
+const { test } = forgejoTest(server);
 
 test.provider(
   "creates, preserves, replaces, and deletes an API token",
   (stack) =>
     Effect.gen(function* () {
-      tokens.clear();
-      nextId = 1;
+      reset();
 
       const created = yield* stack.deploy(
         ApiToken("Automation", {
@@ -123,9 +122,7 @@ test.provider(
 
 test.provider("refuses to mint a second token of the same name", (stack) =>
   Effect.gen(function* () {
-    tokens.clear();
-    nextId = 1;
-    server.reset();
+    reset();
     // A create that succeeded against Forgejo but whose state write never
     // landed: the token is live, and its secret went out in the create
     // response that was lost. It cannot be read back and Forgejo will not
