@@ -13,7 +13,12 @@ import * as Layer from "effect/Layer";
 import * as Output from "@/Output.ts";
 import { Branch } from "@/Neon/Branch.ts";
 import { Project } from "@/Neon/Project.ts";
+import { runSql, withPgClient } from "@/Neon/Migrations.ts";
+import { makePgMigrationExecutor } from "@/SQL/Migrations/index.ts";
 import { providers } from "@/Neon/Providers.ts";
+import * as Provider from "@/Provider.ts";
+import { Resource } from "@/Resource.ts";
+import { State } from "@/State/index.ts";
 import * as Test from "@/Test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
@@ -22,6 +27,7 @@ import * as Result from "effect/Result";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -445,6 +451,262 @@ test.provider(
         ),
       ).toBe(true);
       yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
+);
+
+interface PreviewScope extends Resource<
+  "Test.AuthPreviewScope",
+  {},
+  { projectId: string; branchId: string }
+> {}
+const PreviewScope = Resource<PreviewScope>("Test.AuthPreviewScope");
+const { test: retryTest } = Test.make({
+  providers: Layer.mergeAll(
+    AuthProvider(),
+    Provider.succeed(PreviewScope, {
+      reconcile: () =>
+        Effect.succeed({ projectId: "retry-project", branchId: "retry-child" }),
+      delete: () => Effect.void,
+    }),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.succeed(
+        SDK.Credentials,
+        Effect.succeed({
+          apiKey: Redacted.make("ownership-retry-test"),
+          apiBaseUrl: "https://neon.example.com",
+        }),
+      ),
+    ),
+  ),
+});
+
+retryTest.provider(
+  "actual Auth refusal retries scoped adoption with complete branch identity",
+  (stack) => {
+    const requests: string[] = [];
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        requests.push(request.method);
+        expect(request.url).toContain(
+          "/projects/retry-project/branches/retry-child/auth",
+        );
+        expect(["GET", "DELETE"]).toContain(request.method);
+        return HttpClientResponse.fromWeb(
+          request,
+          Response.json(
+            request.method === "DELETE"
+              ? {}
+              : {
+                  auth_provider: "better_auth",
+                  auth_provider_project_id: "inherited-auth",
+                  branch_id: "retry-child",
+                  db_name: "neondb",
+                  created_at: "2026-01-01T00:00:00Z",
+                  owned_by: "neon",
+                  jwks_url: "https://child.example.com/jwks",
+                  base_url: "https://child.example.com",
+                },
+          ),
+        );
+      }),
+    );
+    const app = (enabled: boolean) =>
+      Effect.gen(function* () {
+        const branch = yield* PreviewScope("Branch", {});
+        return yield* Auth("Auth", { branch }).pipe(adopt(enabled));
+      });
+    return Effect.gen(function* () {
+      yield* stack.destroy();
+      const refusal = yield* stack.deploy(app(false)).pipe(
+        Effect.as(false),
+        Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
+      );
+      expect(refusal).toBe(true);
+      expect(requests.every((method) => method === "GET")).toBe(true);
+      const state = yield* yield* State;
+      const refused = yield* state.get({
+        stack: stack.name,
+        stage: stack.stage,
+        fqn: "Auth",
+      });
+      if (!refused || refused.kind === "action")
+        return yield* Effect.fail(
+          new Error("Expected an Auth resource checkpoint"),
+        );
+      expect(refused.attr).toBeUndefined();
+      expect(
+        yield* stack.deploy(app(false)).pipe(
+          Effect.as(false),
+          Effect.catchTag("OwnedBySomeoneElse", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      const adopted = yield* stack.deploy(app(true));
+      expect(adopted.branchId).toBe("retry-child");
+      expect(adopted.baseUrl).toBe("https://child.example.com");
+      expect(refused?.props).toEqual({
+        branch: { projectId: "retry-project", branchId: "retry-child" },
+      });
+      expect(requests.every((method) => method === "GET")).toBe(true);
+      yield* stack.destroy();
+      expect(requests.filter((method) => method === "DELETE")).toHaveLength(1);
+    }).pipe(
+      Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
+      Effect.provideService(HttpClient.HttpClient, http),
+    );
+  },
+  { timeout: 10_000 },
+);
+
+const { test: previewTest } = Test.make({
+  providers: providers(),
+  stage: "test-neon-auth-deferred-adoption",
+});
+
+previewTest.provider(
+  "new child Auth explicitly adopts inherited integration and preserves parent identities and data",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const parent = Effect.gen(function* () {
+        const project = yield* Project("DeferredAuthProject", {
+          region: "aws-us-east-2",
+        });
+        const auth = yield* Auth("ParentAuth", {
+          project,
+          name: "Deferred adoption parent",
+          allowLocalhost: true,
+          emailAndPassword: {
+            enabled: true,
+            require_email_verification: false,
+            send_verification_email_on_sign_up: false,
+          },
+        });
+        return { project, auth };
+      });
+      const first = yield* stack.deploy(parent);
+      const parentRequest = {
+        project_id: first.auth.projectId,
+        branch_id: first.auth.branchId,
+      };
+      const parentUri = Redacted.make(first.project.connectionUri);
+      const query = (uri: Redacted.Redacted<string>, sql: string) =>
+        withPgClient(uri, (client) =>
+          makePgMigrationExecutor(client).query(sql),
+        );
+      yield* runSql(
+        parentUri,
+        "CREATE TABLE auth_preview_probe (id integer PRIMARY KEY, value text NOT NULL); INSERT INTO auth_preview_probe VALUES (1, 'parent');",
+      );
+      const http = yield* HttpClient.HttpClient;
+      const baseUrl = first.auth.baseUrl.replace(/\/$/, "");
+      const authPath = baseUrl.endsWith("/auth") ? baseUrl : `${baseUrl}/auth`;
+      const signup = yield* http.execute(
+        HttpClientRequest.post(`${authPath}/sign-up/email`).pipe(
+          HttpClientRequest.setHeader("origin", "http://localhost:4318"),
+          HttpClientRequest.bodyJsonUnsafe({
+            email: "parent-auth-preview@example.com",
+            password: "Alchemy-Auth-Preview-Test-Only-73!",
+            name: "Parent preview user",
+          }),
+        ),
+      );
+      expect(signup.status).toBe(200);
+      const usersSql = 'SELECT id, email FROM neon_auth."user" ORDER BY id';
+      const parentUsers = yield* query(parentUri, usersSql);
+      expect(parentUsers.length).toBe(1);
+      const parentAuth = yield* SDK.getNeonAuth(parentRequest);
+      const parentSettings =
+        yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest);
+      const parentLocalhost =
+        yield* SDK.getNeonAuthAllowLocalhost(parentRequest);
+      const verifyParent = Effect.gen(function* () {
+        const survivingAuth = yield* SDK.getNeonAuth(parentRequest);
+        expect(survivingAuth.base_url).toBe(parentAuth.base_url);
+        expect(survivingAuth.name).toBe(parentAuth.name);
+        expect(
+          yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest),
+        ).toEqual(parentSettings);
+        expect(yield* SDK.getNeonAuthAllowLocalhost(parentRequest)).toEqual(
+          parentLocalhost,
+        );
+        expect(yield* query(parentUri, usersSql)).toEqual(parentUsers);
+        expect(
+          yield* query(parentUri, "SELECT * FROM auth_preview_probe"),
+        ).toEqual([{ id: 1, value: "parent" }]);
+      });
+      const preview = Effect.gen(function* () {
+        const resources = yield* parent;
+        const branch = yield* Branch("AuthPreview", {
+          project: resources.project,
+          parentBranch: { branchId: resources.auth.branchId },
+          initSource: "parent-data",
+        });
+        const auth = yield* Auth("PreviewAuth", {
+          branch,
+          name: "Deferred adoption child",
+          allowLocalhost: false,
+        }).pipe(adopt());
+        return { branch, auth };
+      });
+      const child = yield* stack.deploy(preview);
+      expect(child.branch.parentBranchId).toBe(first.auth.branchId);
+      expect(child.auth.branchId).toBe(child.branch.branchId);
+      expect(child.auth.branchId).not.toBe(first.auth.branchId);
+      expect(child.auth.baseUrl).not.toBe(first.auth.baseUrl);
+      const childRequest = {
+        project_id: child.auth.projectId,
+        branch_id: child.auth.branchId,
+      };
+      expect((yield* SDK.getNeonAuth(childRequest)).name).toBe(
+        "Deferred adoption child",
+      );
+      expect(
+        (yield* SDK.getNeonAuthAllowLocalhost(childRequest)).allow_localhost,
+      ).toBe(false);
+      const childUri = Redacted.make(child.branch.connectionUri);
+      expect(yield* query(childUri, usersSql)).toEqual(parentUsers);
+      expect(
+        yield* query(childUri, "SELECT * FROM auth_preview_probe"),
+      ).toEqual([{ id: 1, value: "parent" }]);
+      yield* runSql(
+        childUri,
+        "UPDATE auth_preview_probe SET value = 'child' WHERE id = 1",
+      );
+      expect(
+        yield* query(childUri, "SELECT * FROM auth_preview_probe"),
+      ).toEqual([{ id: 1, value: "child" }]);
+      yield* verifyParent;
+      const unchanged = yield* stack.deploy(preview);
+      expect(unchanged.auth.baseUrl).toBe(child.auth.baseUrl);
+      yield* stack.deploy(parent);
+      expect(
+        yield* SDK.getNeonAuth(childRequest).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      expect(
+        yield* SDK.getProjectBranch(childRequest).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      yield* verifyParent;
+      yield* stack.destroy();
+      expect(
+        yield* SDK.getNeonAuth(parentRequest).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      expect(
+        yield* SDK.getProject({ project_id: first.project.projectId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
     }),
   { timeout: 120_000 },
 );

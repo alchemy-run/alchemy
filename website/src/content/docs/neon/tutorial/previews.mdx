@@ -53,8 +53,10 @@ The child starts from parent database and storage state. Forking is not a live r
 
 Adoption is deliberate and restricted to Auth on the newly owned child branch. Do not apply stack-wide adoption or retag the parent's integration.
 
-:::caution[Preview deployment verification]
-The current provider rejected inherited Auth with `OwnedBySomeoneElse: Existing Auth requires explicit adoption` even with this resource-scoped policy. The fork was created, but the child API, trigger, and website were not deployed. Recovery reads now treat incomplete, never-created Auth and trusted-origin entries as absent without relaxing ownership checks on existing resources. Normal destroy of the retained preview and parent was verified after this fix. Preserve stack state for cleanup; do not use global adoption, remove state, or delete the parent around a failed dependency. The isolation test checks forked data separately from the new child trigger, so passing data checks alone do not prove a working preview application.
+The engine checks ownership after the new branch identity resolves, so this scoped policy can adopt inherited Auth during the first deployment. The preview has passed live data/trigger isolation checks and complete desktop/mobile upload and download flows. Parent Auth, data and browser flows remained intact after preview destruction.
+
+:::caution[Keep ownership and cleanup explicit]
+Preserve stack state if deployment fails; do not use global adoption, remove state, or delete the parent around a failed dependency. The isolation test checks forked data separately from the new child trigger, so passing data checks alone do not prove a working preview application.
 :::
 
 ## Redeploy child-local API configuration

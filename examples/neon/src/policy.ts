@@ -19,6 +19,25 @@ export interface UploadRow {
   created_at: string;
 }
 
+// Effect Postgres decodes int8 as bigint and timestamps as epoch milliseconds.
+export interface UploadRecord extends Omit<
+  UploadRow,
+  "expected_bytes" | "actual_bytes" | "created_at"
+> {
+  expected_bytes: bigint;
+  actual_bytes: bigint | null;
+  created_at: number;
+}
+
+export function serializeUploadRow(row: UploadRecord): UploadRow {
+  return {
+    ...row,
+    expected_bytes: row.expected_bytes.toString(),
+    actual_bytes: row.actual_bytes?.toString() ?? null,
+    created_at: new Date(row.created_at).toISOString(),
+  };
+}
+
 export function parseUpload(value: unknown): UploadInput | undefined {
   if (typeof value !== "object" || value === null) return;
   const { filename, contentType, size } = value as Record<string, unknown>;

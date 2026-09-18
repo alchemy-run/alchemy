@@ -262,8 +262,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// Inherited PutBucketTagging returns NoSuchBucket: The specified bucket does not exist.
-test.provider.skipIf(!process.env.NEON_TEST_INHERITED_BUCKET_TAGGING)(
+test.provider(
   "child storage inherits files while writes and deletes remain branch-local",
   (stack) =>
     Effect.gen(function* () {
@@ -274,62 +273,142 @@ test.provider.skipIf(!process.env.NEON_TEST_INHERITED_BUCKET_TAGGING)(
         });
         const bucket = yield* Bucket("ParentBucket", {
           project,
+          tags: { lineage: "parent" },
+          cors: [
+            {
+              AllowedOrigins: ["https://parent.example.com"],
+              AllowedMethods: ["GET"],
+            },
+          ],
           forceDestroy: true,
         });
         return { project, bucket };
       });
       const parent = yield* stack.deploy(parentProgram);
-      const parentClient = yield* bucketStorageClient(parent.bucket);
-      yield* parentClient.put("inherited.txt", "parent");
-      const child = yield* stack.deploy(
-        Effect.gen(function* () {
-          const { project, bucket: parentBucket } = yield* parentProgram;
+      const outcome = yield* Effect.gen(function* () {
+        const parentClient = yield* bucketStorageClient(parent.bucket);
+        yield* parentClient.put("inherited.txt", "parent");
+        const parentTags = yield* parentClient.getTags();
+        const parentCors = yield* parentClient.getCors();
+        const branchProgram = Effect.gen(function* () {
+          const { project, bucket } = yield* parentProgram;
           const branch = yield* Branch("ChildBranch", { project });
-          const bucket = yield* Bucket("ChildBucket", {
-            branch,
-            name: parentBucket.bucketName,
-            forceDestroy: true,
-          }).pipe(adopt(true));
           return { branch, bucket };
-        }),
-      );
-      const childClient = yield* bucketStorageClient(child.bucket);
-      const inherited = yield* storageBodyBytes(
-        (yield* childClient.get("inherited.txt"))?.Body,
-      );
+        });
+        const { branch } = yield* stack.deploy(branchProgram);
+        const provider = yield* Provider.findProvider(Bucket);
+        expect(
+          Unowned.is(
+            yield* provider.read!({
+              id: "ChildBucket",
+              fqn: "ChildBucket",
+              instanceId: "inherited-child",
+              olds: {
+                branch,
+                name: parent.bucket.bucketName,
+                credential: parent.bucket.credential,
+              },
+              output: undefined,
+            }),
+          ),
+        ).toBe(true);
+        const deployChild = (updated: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const { branch, bucket: parentBucket } = yield* branchProgram;
+              const bucket = yield* Bucket("ChildBucket", {
+                branch,
+                name: parentBucket.bucketName,
+                tags: { lineage: updated ? "updated-child" : "child" },
+                cors: updated
+                  ? []
+                  : [
+                      {
+                        AllowedOrigins: ["https://child.example.com"],
+                        AllowedMethods: ["GET"],
+                      },
+                    ],
+                forceDestroy: true,
+              }).pipe(adopt(true));
+              return { branch, bucket };
+            }),
+          );
+        const child = yield* deployChild(false);
+        expect(child.bucket.tags["alchemy::branch"]).toBe(
+          child.branch.branchId,
+        );
+        expect(child.bucket.tags.lineage).toBe("child");
+        expect(child.bucket.cors).toEqual([
+          {
+            AllowedOrigins: ["https://child.example.com"],
+            AllowedMethods: ["GET"],
+          },
+        ]);
+        const childClient = yield* bucketStorageClient(child.bucket);
+        const inherited = yield* storageBodyBytes(
+          (yield* childClient.get("inherited.txt"))?.Body,
+        );
+        expect(
+          yield* Effect.sync(() => new TextDecoder().decode(inherited)),
+        ).toBe("parent");
+        expect(yield* parentClient.getTags()).toEqual(parentTags);
+        expect(yield* parentClient.getCors()).toEqual(parentCors);
+        const updated = yield* deployChild(true);
+        expect(updated.bucket.bucketName).toBe(child.bucket.bucketName);
+        expect(updated.bucket.tags.lineage).toBe("updated-child");
+        expect(updated.bucket.cors).toEqual([]);
+        expect(yield* parentClient.getTags()).toEqual(parentTags);
+        expect(yield* parentClient.getCors()).toEqual(parentCors);
+        const ancestorClient = yield* makeStorageClient(
+          {
+            endpoint: child.bucket.endpoint,
+            region: child.bucket.region,
+            accessKeyId: parent.bucket.credential.tokenId,
+            secretAccessKey: parent.bucket.credential.s3SecretAccessKey,
+          },
+          child.bucket.bucketName,
+        );
+        expect(
+          (yield* ancestorClient.head("inherited.txt"))?.ContentLength,
+        ).toBe(6);
+        yield* childClient.put("inherited.txt", "child");
+        const original = yield* storageBodyBytes(
+          (yield* parentClient.get("inherited.txt"))?.Body,
+        );
+        expect(
+          yield* Effect.sync(() => new TextDecoder().decode(original)),
+        ).toBe("parent");
+        yield* childClient.delete("inherited.txt");
+        expect(yield* childClient.get("inherited.txt")).toBeUndefined();
+        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
+          6,
+        );
+        yield* stack.deploy(parentProgram);
+        expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
+          6,
+        );
+        expect(yield* parentClient.getTags()).toEqual(parentTags);
+        expect(yield* parentClient.getCors()).toEqual(parentCors);
+        expect(
+          yield* SDK.getProjectBranch({
+            project_id: branch.projectId,
+            branch_id: branch.branchId,
+          }).pipe(
+            Effect.as(false),
+            Effect.catchTag("NotFound", () => Effect.succeed(true)),
+          ),
+        ).toBe(true);
+      }).pipe(Effect.result);
+      yield* stack.destroy();
       expect(
-        yield* Effect.sync(() => new TextDecoder().decode(inherited)),
-      ).toBe("parent");
-      const ancestorClient = yield* makeStorageClient(
-        {
-          endpoint: child.bucket.endpoint,
-          region: child.bucket.region,
-          accessKeyId: parent.bucket.credential.tokenId,
-          secretAccessKey: parent.bucket.credential.s3SecretAccessKey,
-        },
-        child.bucket.bucketName,
-      );
-      expect((yield* ancestorClient.head("inherited.txt"))?.ContentLength).toBe(
-        6,
-      );
-      yield* childClient.put("inherited.txt", "child");
-      const original = yield* storageBodyBytes(
-        (yield* parentClient.get("inherited.txt"))?.Body,
-      );
-      expect(yield* Effect.sync(() => new TextDecoder().decode(original))).toBe(
-        "parent",
-      );
-      yield* childClient.delete("inherited.txt");
-      expect(yield* childClient.get("inherited.txt")).toBeUndefined();
-      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-        6,
-      );
-      yield* stack.deploy(parentProgram);
-      expect((yield* parentClient.head("inherited.txt"))?.ContentLength).toBe(
-        6,
-      );
+        yield* SDK.getProject({ project_id: parent.project.projectId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      yield* Effect.log("Inherited storage fixture project is absent");
       yield* stack.destroy();
-      yield* stack.destroy();
+      if (Result.isFailure(outcome)) return yield* Effect.fail(outcome.failure);
     }),
   { timeout: 120_000 },
 );

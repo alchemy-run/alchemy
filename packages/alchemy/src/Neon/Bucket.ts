@@ -70,8 +70,8 @@ const BucketResource = Resource<Bucket>("Neon.Bucket");
  * Neon does not expose a supported visibility update API; changing access fails
  * explicitly instead of replacing a populated bucket. Policies and ACL writes are
  * not supported. A private bucket has no anonymously readable object URL.
- * The current service rejects tag updates on inherited buckets with NoSuchBucket;
- * adopting inherited bucket configuration is therefore not currently supported.
+ * Adopting an inherited bucket materializes its configuration on the child branch
+ * without changing ancestor tags, CORS, or object data.
  *
  * ### Creating a Bucket
  * **Example:** Private uploads with browser CORS
@@ -275,7 +275,19 @@ export const BucketProvider = () =>
       };
       const delta = diffTags(attrs.tags, tags);
       if (delta.removed.length || delta.upsert.length)
-        yield* client.putTags(tags);
+        yield* client.putTags(tags).pipe(
+          Effect.catchTag("NoSuchBucket", () =>
+            Effect.gen(function* () {
+              // Inherited buckets are readable before their branch-local configuration exists.
+              yield* Neon.createProjectBranchBucket({
+                ...apiScope(scope),
+                name,
+                access_level: news.access ?? "private",
+              });
+              yield* client.putTags(tags);
+            }),
+          ),
+        );
       const cors = news.cors ?? [];
       if (JSON.stringify(attrs.cors) !== JSON.stringify(cors)) {
         if (cors.length) yield* client.putCors(cors);

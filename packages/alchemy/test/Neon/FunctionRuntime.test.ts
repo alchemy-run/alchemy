@@ -1,4 +1,10 @@
 import * as Alchemy from "@/index";
+import { Function } from "@/Neon/Function";
+import { NeonAuth } from "@/Neon/AuthProvider";
+import { fromAuthProvider } from "@/Neon/Credentials";
+import * as Layer from "effect/Layer";
+import * as NeonApi from "@distilled.cloud/neon";
+import * as Exit from "effect/Exit";
 import { providers } from "@/Neon/Providers";
 import { FunctionLogs } from "@/Neon/FunctionProvider";
 import * as Test from "@/Test/Alchemy";
@@ -16,15 +22,59 @@ const Stack = Alchemy.Stack(
   { providers: providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
     const api = yield* RuntimeFunction;
-    return { url: api.url, api };
+    const main = yield* Effect.sync(
+      () =>
+        new URL("./fixtures/function-native-lifecycle.ts", import.meta.url)
+          .href,
+    );
+    const native = yield* Function("NativeLifecycle", {
+      branch: { projectId: api.projectId, branchId: api.branchId },
+      main,
+    });
+    return { url: api.url, api, native };
   }),
 );
 const stack = beforeAll(destroy(Stack).pipe(Effect.andThen(deploy(Stack))));
-afterAll(destroy(Stack));
+afterAll(
+  Effect.gen(function* () {
+    const outputs = yield* Effect.exit(stack);
+    yield* destroy(Stack);
+    if (Exit.isFailure(outputs) || !outputs.value) return;
+    const { api, native } = outputs.value;
+    for (const resource of [api, native]) {
+      expect(
+        yield* NeonApi.getProjectBranchFunction({
+          project_id: resource.projectId,
+          branch_id: resource.branchId,
+          slug: resource.slug,
+        }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+    }
+    expect(
+      yield* NeonApi.getProject({ project_id: api.projectId }).pipe(
+        Effect.as(false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+      ),
+    ).toBe(true);
+    yield* Effect.logInfo(
+      "Neon lifecycle cleanup: both functions and project independently absent",
+    );
+  }).pipe(Effect.provide(fromAuthProvider().pipe(Layer.provide(NeonAuth)))),
+);
 const reportRuntimeLogs = Effect.gen(function* () {
-  const { api } = yield* stack;
-  const lines = yield* FunctionLogs(api, { limit: 1000 });
-  yield* Effect.logInfo(JSON.stringify({ functionRuntimeLogs: lines }));
+  const { api, native } = yield* stack;
+  for (const resource of [api, native]) {
+    const lines = yield* FunctionLogs(resource, { limit: 1000 });
+    yield* Effect.logInfo(
+      JSON.stringify({
+        native: resource === native,
+        functionRuntimeLogs: lines,
+      }),
+    );
+  }
 });
 
 test(
@@ -95,44 +145,49 @@ test.provider(
   "WebSocket upgrade preserves native metadata and closes the request scope",
   () =>
     Effect.gen(function* () {
-      const { url } = yield* stack;
-      const echoed = yield* Effect.callback<string, Error>((resume) => {
-        const socket = new WebSocket(
-          `${url.replace(/^http/, "ws")}websocket?id=websocket`,
-        );
-        let message: string | undefined;
-        socket.addEventListener("open", () => socket.send("native-upgrade"));
-        socket.addEventListener(
-          "message",
-          (event) => {
-            message = String(event.data);
-            socket.close(1000);
-          },
-          { once: true },
-        );
-        socket.addEventListener(
-          "close",
-          (event) =>
-            resume(
-              message !== undefined && event.wasClean
-                ? Effect.succeed(message)
-                : Effect.fail(
-                    new Error(
-                      `Neon WebSocket closed unexpectedly (${event.code})`,
+      const { url, native } = yield* stack;
+      for (const [target, id] of [
+        [native.url, "native-websocket"],
+        [url, "websocket"],
+      ]) {
+        const echoed = yield* Effect.callback<string, Error>((resume) => {
+          const socket = new WebSocket(
+            `${target.replace(/^http/, "ws")}websocket?id=${id}`,
+          );
+          let message: string | undefined;
+          socket.addEventListener("open", () => socket.send("native-upgrade"));
+          socket.addEventListener(
+            "message",
+            (event) => {
+              message = String(event.data);
+              socket.close(1000);
+            },
+            { once: true },
+          );
+          socket.addEventListener(
+            "close",
+            (event) =>
+              resume(
+                message !== undefined && event.wasClean
+                  ? Effect.succeed(message)
+                  : Effect.fail(
+                      new Error(
+                        `Neon WebSocket closed unexpectedly (${event.code})`,
+                      ),
                     ),
-                  ),
-            ),
-          { once: true },
-        );
-        socket.addEventListener(
-          "error",
-          () =>
-            resume(Effect.fail(new Error("Neon WebSocket handshake failed"))),
-          { once: true },
-        );
-        return Effect.sync(() => socket.close());
-      }).pipe(Effect.timeout("15 seconds"));
-      expect(echoed).toBe("native-upgrade");
+              ),
+            { once: true },
+          );
+          socket.addEventListener(
+            "error",
+            () =>
+              resume(Effect.fail(new Error("Neon WebSocket handshake failed"))),
+            { once: true },
+          );
+          return Effect.sync(() => socket.close());
+        }).pipe(Effect.timeout("15 seconds"));
+        expect(echoed).toBe("native-upgrade");
+      }
       const client = yield* HttpClient.HttpClient;
       const completed = yield* client.get(`${url}finalized`).pipe(
         Effect.flatMap((response) => response.json),
@@ -140,6 +195,12 @@ test.provider(
           schedule: Schedule.spaced("500 millis"),
           times: 8,
           until: (body) => JSON.stringify(body).includes("websocket"),
+        }),
+      );
+      yield* Effect.logInfo(
+        JSON.stringify({
+          lifecycle: yield* (yield* client.get(`${native.url}diagnostics`))
+            .json,
         }),
       );
       expect(completed).toMatchObject({
@@ -153,18 +214,25 @@ test.provider(
   "cancelling a streamed response releases its request scope",
   () =>
     Effect.gen(function* () {
-      const { url } = yield* stack;
-      const controller = yield* Effect.sync(() => new AbortController());
-      const response = yield* Effect.tryPromise((signal) =>
-        fetch(`${url}stream-cancel?id=cancelled-stream`, {
-          signal: AbortSignal.any([signal, controller.signal]),
-        }),
-      );
-      const reader = yield* Effect.sync(() => response.body!.getReader());
-      const first = yield* Effect.tryPromise(() => reader.read());
-      expect(first.done).toBe(false);
-      yield* Effect.sync(() => controller.abort());
-      yield* Effect.tryPromise(() => reader.cancel()).pipe(Effect.ignore);
+      const { url, native } = yield* stack;
+      for (const [target, id, suffix] of [
+        [native.url, "native-stream", ""],
+        [url, "cancelled-stream", ""],
+        [native.url, "native-sse", "&sse"],
+        [url, "cancelled-sse", "&sse"],
+      ]) {
+        const controller = yield* Effect.sync(() => new AbortController());
+        const response = yield* Effect.tryPromise((signal) =>
+          fetch(`${target}stream-cancel?id=${id}${suffix}`, {
+            signal: AbortSignal.any([signal, controller.signal]),
+          }),
+        );
+        const reader = yield* Effect.sync(() => response.body!.getReader());
+        const first = yield* Effect.tryPromise(() => reader.read());
+        expect(first.done).toBe(false);
+        yield* Effect.sync(() => controller.abort());
+        yield* Effect.tryPromise(() => reader.cancel()).pipe(Effect.ignore);
+      }
       const client = yield* HttpClient.HttpClient;
       const completed = yield* client.get(`${url}finalized`).pipe(
         Effect.flatMap((response) => response.json),
@@ -172,6 +240,12 @@ test.provider(
           schedule: Schedule.spaced("500 millis"),
           times: 8,
           until: (body) => JSON.stringify(body).includes("cancelled-stream"),
+        }),
+      );
+      yield* Effect.logInfo(
+        JSON.stringify({
+          lifecycle: yield* (yield* client.get(`${native.url}diagnostics`))
+            .json,
         }),
       );
       expect(completed).toMatchObject({

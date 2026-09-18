@@ -123,9 +123,22 @@ test.provider.skipIf(!process.env.NEON_TEST_WRITE_IMPLIES_READ)(
             secretAccessKey: credential.s3SecretAccessKey,
           }),
         ),
+        Effect.result,
       );
-      expect(result.Buckets ?? []).toEqual([]);
+      yield* Effect.log(
+        `Neon storage:write ListBuckets: ${Result.isSuccess(result) ? "ok" : result.failure._tag}`,
+      );
       yield* stack.destroy();
+      expect(
+        yield* SDK.getProject({ project_id: credential.projectId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      yield* Effect.log("Write-only storage fixture project is absent");
+      yield* stack.destroy();
+      if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
+      expect(result.success.Buckets ?? []).toEqual([]);
     }),
   { timeout: 120_000 },
 );

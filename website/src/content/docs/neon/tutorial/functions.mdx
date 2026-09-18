@@ -54,13 +54,21 @@ The shared `makeAuthenticate` helper uses `jose` to verify EdDSA signatures agai
 ## Scope the journal to its owner
 
 ```diff lang="typescript"
-+const rows = yield* sql<UploadRow>`
++const rows = yield* sql<UploadRecord>`
 +  SELECT id, filename, object_key, content_type, expected_bytes, actual_bytes, status, created_at
 +  FROM uploads WHERE owner_id = ${owner} ORDER BY created_at DESC LIMIT 100
 +`;
 ```
 
-Every read filters by the verified JWT subject; the API does not accept an owner ID from the request body.
+Every read filters by the verified JWT subject; the API does not accept an owner ID from the request body. `UploadRecord` in `src/policy.ts` describes the native driver's database values.
+
+## Encode the journal response
+
+```diff lang="typescript"
++return yield* respond(yield* Effect.sync(() => rows.map(serializeUploadRow)));
+```
+
+The shared `serializeUploadRow` helper converts Postgres `bigint` byte counts to strings without losing precision and epoch-millisecond timestamps to ISO strings. Returning database rows directly fails once the journal contains a `bigint`, because JSON cannot encode it.
 
 ## Validate a proposed upload
 
@@ -141,7 +149,7 @@ This single atomic statement deduplicates the delivery and records `ready` or `r
 ## Authorize the download lookup
 
 ```diff lang="typescript"
-+const [row] = yield* sql<UploadRow>`SELECT * FROM uploads WHERE id = ${id} AND owner_id = ${owner}`;
++const [row] = yield* sql<UploadRecord>`SELECT * FROM uploads WHERE id = ${id} AND owner_id = ${owner}`;
 ```
 
 After validating the UUID, require the row's owner to match the caller. Return 404 when absent and 409 unless its status is `ready`.

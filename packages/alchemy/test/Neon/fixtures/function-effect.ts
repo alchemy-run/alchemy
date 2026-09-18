@@ -1,3 +1,7 @@
+import {
+  upgradeWebSocket,
+  waitUntil as nativeWaitUntil,
+} from "@neon/functions";
 import { Function } from "@/Neon/Function";
 import { FunctionRequest } from "@/Neon/FunctionEnvironment";
 import { waitUntil } from "@/Neon/waitUntil";
@@ -10,6 +14,99 @@ import * as Redacted from "effect/Redacted";
 import { Postgres } from "@/SQL/Postgres";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const diagnosticSql = Effect.gen(function* () {
+  return yield* Postgres({
+    url: Effect.sync(() => Redacted.make(process.env.DATABASE_URL!)),
+    maxConnections: 1,
+  });
+});
+
+const recordLifecycle = (id: string, phase: string) =>
+  Effect.gen(function* () {
+    const sql = yield* diagnosticSql;
+    yield* sql`INSERT INTO alchemy_function_lifecycle (id, phase) VALUES (${id}, ${phase}) ON CONFLICT DO NOTHING`;
+  }).pipe(Effect.scoped);
+
+const recordNativeLifecycle = (id: string, phase: string) => {
+  console.info(JSON.stringify({ nativeLifecycle: { id, phase } }));
+  nativeWaitUntil(Effect.runPromise(recordLifecycle(id, phase)));
+};
+
+// This handler bypasses makeFunctionBridge entirely.
+export const nativeDiagnosticFetch = (request: Request) =>
+  Effect.gen(function* () {
+    const sql = yield* diagnosticSql;
+    yield* sql`CREATE TABLE IF NOT EXISTS alchemy_function_lifecycle (id text, phase text, PRIMARY KEY (id, phase))`;
+    const url = yield* Effect.sync(() => new URL(request.url));
+    const id = url.searchParams.get("id") ?? "native";
+    if (url.pathname === "/diagnostics") {
+      const rows =
+        yield* sql`SELECT id, phase FROM alchemy_function_lifecycle ORDER BY id, phase`;
+      return yield* Effect.sync(() => Response.json(rows));
+    }
+    yield* recordLifecycle(id, "entered");
+    yield* Effect.sync(() =>
+      request.signal.addEventListener(
+        "abort",
+        () => recordNativeLifecycle(id, "abort"),
+        { once: true },
+      ),
+    );
+    if (url.pathname === "/websocket") {
+      return yield* Effect.sync(() => {
+        const { socket, response } = upgradeWebSocket(request);
+        socket.addEventListener("open", () =>
+          recordNativeLifecycle(id, "open"),
+        );
+        socket.addEventListener("message", (event) => socket.send(event.data));
+        socket.addEventListener(
+          "close",
+          () => recordNativeLifecycle(id, "close"),
+          { once: true },
+        );
+        socket.addEventListener(
+          "error",
+          () => recordNativeLifecycle(id, "error"),
+          { once: true },
+        );
+        return response;
+      });
+    }
+    return yield* Effect.sync(() => {
+      let count = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          return Effect.runPromise(
+            Effect.sleep("100 millis").pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  controller.enqueue(
+                    new TextEncoder().encode("data: tick\n\n"),
+                  );
+                  if (++count === 100) {
+                    controller.close();
+                    recordNativeLifecycle(id, "completed");
+                  }
+                }),
+              ),
+            ),
+          );
+        },
+        cancel() {
+          recordNativeLifecycle(id, "cancel");
+        },
+      });
+      return new Response(stream, {
+        headers: url.searchParams.has("sse")
+          ? {
+              "content-type": "text/event-stream",
+              "cache-control": "no-cache, no-transform",
+            }
+          : undefined,
+      });
+    });
+  }).pipe(Effect.scoped, Effect.runPromise);
 
 export default class RuntimeFunction extends Function<RuntimeFunction>()(
   "RuntimeFunction",
@@ -39,6 +136,16 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         yield* sql`CREATE TABLE IF NOT EXISTS alchemy_function_finalizers (id text PRIMARY KEY)`.pipe(
           Effect.orDie,
         );
+        yield* sql`CREATE TABLE IF NOT EXISTS alchemy_function_lifecycle (id text, phase text, PRIMARY KEY (id, phase))`.pipe(
+          Effect.orDie,
+        );
+        if (url.pathname === "/diagnostics") {
+          const rows =
+            yield* sql`SELECT id, phase FROM alchemy_function_lifecycle ORDER BY id, phase`.pipe(
+              Effect.orDie,
+            );
+          return yield* HttpServerResponse.json(rows);
+        }
         if (url.pathname === "/finalized") {
           const rows = yield* sql<{
             id: string;
@@ -52,10 +159,11 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         yield* Effect.sync(() => {
           active++;
         });
+        yield* recordLifecycle(id, "entered").pipe(Effect.orDie);
         const report = (phase: string) =>
           Effect.sync(() =>
             console.info(JSON.stringify({ functionFinalizer: { id, phase } })),
-          );
+          ).pipe(Effect.andThen(recordLifecycle(id, phase)), Effect.orDie);
         yield* Effect.addFinalizer(() =>
           report("started").pipe(
             Effect.andThen(
@@ -114,7 +222,16 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
                 Effect.sleep("100 millis").pipe(Effect.as("tick")),
               ),
               Stream.encodeText,
+              Stream.ensuring(report("stream-released")),
             ),
+            {
+              headers: url.searchParams.has("sse")
+                ? {
+                    "content-type": "text/event-stream",
+                    "cache-control": "no-cache, no-transform",
+                  }
+                : undefined,
+            },
           );
         if (url.pathname === "/error")
           return yield* Effect.die(

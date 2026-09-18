@@ -8,6 +8,8 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -207,48 +209,46 @@ test.provider(
           },
         }),
       );
-      const response = yield* client
-        .get(`${code.url}?deployment=${code.activeDeploymentId}`)
-        .pipe(
-          Effect.flatMap((response) =>
-            Effect.gen(function* () {
-              const text = yield* response.text;
-              yield* Effect.logInfo(
-                JSON.stringify({
-                  functionInvocation: {
-                    variant: "deployment-query",
-                    status: response.status,
-                    cacheControl: response.headers["cache-control"],
-                    age: response.headers.age,
-                    text,
-                  },
-                }),
-              );
-              return text;
-            }),
-          ),
-          Effect.repeat({
-            schedule: Schedule.spaced("5 seconds"),
-            times: 8,
-            until: (text) => text === "bare-v2",
-          }),
+      expect(code.functionId).toBe(first.functionId);
+      expect(code.url).toBe(first.url);
+      // A single fresh response can hide other instances still serving old code.
+      const samples: string[] = [];
+      for (let round = 0; round < 8; round++) {
+        if (round > 0) yield* Effect.sleep("5 seconds");
+        const response = yield* client.get(code.url);
+        expect(response.status).toBe(200);
+        const text = yield* response.text;
+        const proc = yield* ChildProcess.make("curl", [
+          "--silent",
+          "--show-error",
+          "--fail",
+          "--max-time",
+          "10",
+          code.url,
+        ]);
+        const [exit, fresh] = yield* Effect.all(
+          [proc.exitCode, proc.stdout.pipe(Stream.decodeText, Stream.mkString)],
+          { concurrency: "unbounded" },
         );
-      const plain = yield* client.get(code.url);
-      const plainText = yield* plain.text;
-      yield* Effect.logInfo(
-        JSON.stringify({
-          functionInvocation: {
-            variant: "plain",
-            status: plain.status,
-            cacheControl: plain.headers["cache-control"],
-            age: plain.headers.age,
-            text: plainText,
-          },
-        }),
+        expect(Number(exit)).toBe(0);
+        samples.push(text, fresh);
+        yield* Effect.logInfo(
+          JSON.stringify({ functionStableUrl: { round, text, fresh } }),
+        );
+      }
+      const noop = yield* deploy(
+        new URL("./fixtures/function-bare.ts", import.meta.url).href,
+        "two",
       );
-      expect(response).toBe("bare-v2");
-      expect(plainText).toBe("bare-v2");
+      expect(noop.activeDeploymentId).toBe(code.activeDeploymentId);
       yield* stack.destroy();
+      expect(
+        yield* NeonApi.getProject({ project_id: code.projectId }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        ),
+      ).toBe(true);
+      for (const text of samples) expect(text).toBe("bare-v2");
     }),
   { timeout: 120_000 },
 );

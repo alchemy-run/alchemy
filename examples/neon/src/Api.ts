@@ -8,8 +8,9 @@ import {
   corsHeaders,
   objectKey,
   parseUpload,
+  serializeUploadRow,
   UUID,
-  type UploadRow,
+  type UploadRecord,
 } from "./policy.ts";
 import { resources } from "./resources.ts";
 
@@ -106,11 +107,13 @@ export default class Api extends Neon.Function<Api>()(
         if (path === "/api/me" && request.method === "GET")
           return yield* respond({ userId: owner });
         if (path === "/api/uploads" && request.method === "GET") {
-          const rows = yield* sql<UploadRow>`
+          const rows = yield* sql<UploadRecord>`
             SELECT id, filename, object_key, content_type, expected_bytes, actual_bytes, status, created_at
             FROM uploads WHERE owner_id = ${owner} ORDER BY created_at DESC LIMIT 100
           `;
-          return yield* respond(rows);
+          return yield* respond(
+            yield* Effect.sync(() => rows.map(serializeUploadRow)),
+          );
         }
         if (path === "/api/uploads" && request.method === "POST") {
           const json = yield* Effect.tryPromise(() => request.json()).pipe(
@@ -145,7 +148,7 @@ export default class Api extends Neon.Function<Api>()(
           if (!UUID.test(match[1]!))
             return yield* respond({ error: "Not found" }, 404);
           const [row] =
-            yield* sql<UploadRow>`SELECT * FROM uploads WHERE id = ${match[1]!} AND owner_id = ${owner}`;
+            yield* sql<UploadRecord>`SELECT * FROM uploads WHERE id = ${match[1]!} AND owner_id = ${owner}`;
           if (!row) return yield* respond({ error: "Not found" }, 404);
           if (row.status !== "ready")
             return yield* respond(

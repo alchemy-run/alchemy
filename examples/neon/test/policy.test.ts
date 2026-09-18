@@ -1,11 +1,41 @@
 import { describe, expect, test } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   corsHeaders,
   MAX_BYTES,
   objectKey,
   parseUpload,
+  serializeUploadRow,
   UUID,
 } from "../src/policy.ts";
+
+describe("upload response serialization", () => {
+  for (const actualBytes of [null, 0n, 35n, 9007199254740993n]) {
+    test(`encodes Postgres bigint metadata with actual bytes ${actualBytes}`, () =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const row = yield* Effect.sync(() =>
+            serializeUploadRow({
+              id: "10000000-0000-4000-8000-000000000001",
+              filename: "report.txt",
+              object_key: "incoming/owner/file-id",
+              content_type: "text/plain",
+              expected_bytes: 35n,
+              actual_bytes: actualBytes,
+              status: actualBytes === null ? "awaiting_upload" : "ready",
+              created_at: Date.parse("2026-09-17T00:00:00.000Z"),
+            }),
+          );
+          const response = yield* HttpServerResponse.json([row]);
+          expect(response.status).toBe(200);
+          expect(row.expected_bytes).toBe("35");
+          expect(row.actual_bytes).toBe(actualBytes?.toString() ?? null);
+          expect(row.created_at).toBe("2026-09-17T00:00:00.000Z");
+        }),
+      ));
+  }
+});
 
 describe("upload request policy", () => {
   test("accepts valid metadata at the size limit", () => {
