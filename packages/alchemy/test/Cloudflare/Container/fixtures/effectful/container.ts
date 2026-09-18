@@ -24,7 +24,8 @@ export class MyContainer extends Cloudflare.Container<
 export default MyContainer.make(
   {
     main: import.meta.url,
-    image: "oven/bun:latest",
+    baseImage: "oven/bun:latest",
+    publish: { repository: "alchemy-effectful-test" },
   },
   Effect.gen(function* () {
     // The container reads R2 over a scoped HTTP API token (not the native

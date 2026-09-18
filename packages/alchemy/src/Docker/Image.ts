@@ -4,7 +4,6 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
-import type { InputProps, PropsInput } from "../Input.ts";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { prepareImageBuild, type DockerBuildOptions } from "./ImageBuild.ts";
 import {
@@ -51,51 +50,6 @@ export interface ImageProps {
   context?: Docker.ContextRef;
 }
 
-/** Build options for an unnamed image consumed by a parent resource. */
-export interface ImageOptions extends DockerBuildOptions {
-  /** Publication destination. Defaults to the consuming platform's registry. */
-  publish?: ImagePublish;
-  /** Docker daemon context name or context resource. */
-  dockerContext?: Docker.ContextRef;
-}
-
-/** Plain image data; the consuming resource registers the actual Docker.Image. */
-export interface ImageSource extends ImageOptions {
-  readonly _tag: "Docker.Image";
-}
-
-export const isImageSource = (value: unknown): value is ImageSource =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  value._tag === "Docker.Image";
-
-const ImageResource = Resource<Image>("Docker.Image");
-
-function image(
-  options: InputProps<ImageOptions>,
-): InputProps<ImageOptions> & { readonly _tag: "Docker.Image" };
-function image(
-  id: string,
-  props: PropsInput<ImageProps>,
-): Effect.Effect<Image, never, Providers>;
-function image<R>(
-  id: string,
-  props: Effect.Effect<InputProps<ImageProps>, never, R>,
-): Effect.Effect<Image, never, R | Providers>;
-function image<R>(
-  idOrOptions: string | InputProps<ImageOptions>,
-  props?:
-    | PropsInput<ImageProps>
-    | Effect.Effect<InputProps<ImageProps>, never, R>,
-) {
-  if (typeof idOrOptions !== "string")
-    return { ...idOrOptions, _tag: "Docker.Image" as const };
-  return Effect.isEffect(props)
-    ? ImageResource(idOrOptions, props)
-    : ImageResource(idOrOptions, props!);
-}
-
 export interface Image extends Resource<
   "Docker.Image",
   ImageProps,
@@ -134,13 +88,13 @@ export interface Image extends Resource<
  * **Example:** Let a container own the image resource
  * ```typescript
  * const container = yield* Cloudflare.Container("Web", {
- *   image: Docker.Image({ context: "./web" }),
+ *   image: { context: "./web", publish: { repository: "web" } },
  * }).Application;
  * ```
  *
- * The no-ID overload returns plain `ImageSource` data, not an Effect or a
- * resource. The consuming platform registers a child image resource; calling
- * the helper alone never builds, publishes, or registers anything.
+ * Embedded `ImageOptions` are plain objects. The consuming platform registers
+ * a child image resource and resolves relative publication repositories.
+ * Use the named resource below when explicitly sharing an image.
  *
  * ### Local Images
  * **Example:** Build in the selected Docker daemon
@@ -170,8 +124,7 @@ export interface Image extends Resource<
  *
  * @resource
  */
-export const Image: typeof image & Omit<typeof ImageResource, never> =
-  Object.assign(image, { ...ImageResource });
+export const Image = Resource<Image>("Docker.Image");
 
 export const ImageProvider = () =>
   ProviderLayer.dual(Image, {

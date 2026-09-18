@@ -5,12 +5,13 @@ import type * as Redacted from "effect/Redacted";
 import * as Output from "../../Output.ts";
 import * as Namespace from "../../Namespace.ts";
 import { Stack } from "../../Stack.ts";
-import { Image, isImageSource } from "../../Docker/Image.ts";
-import {
-  RemoteImage,
-  isRemoteImageSource,
-  type RemoteImageOptions,
-} from "../../Docker/RemoteImage.ts";
+import { Image } from "../../Docker/Image.ts";
+import { RemoteImage } from "../../Docker/RemoteImage.ts";
+import type {
+  ImageOptions,
+  RemoteImageOptions,
+} from "../../Docker/ImageOptions.ts";
+import type { ImagePublish } from "../../Docker/ImageRegistry.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import { repositoryFromImageRef } from "../../Docker/Registry.ts";
 import { sha256Object } from "../../Util/sha256.ts";
@@ -29,6 +30,19 @@ const imageInput = Effect.fn(function* (value: Input<string>) {
   return Output.asOutput(value);
 });
 
+const isImageOptions = (
+  image: AnyContainerApplicationProps["image"],
+): image is ImageOptions =>
+  typeof image === "object" &&
+  image !== null &&
+  !Output.isOutput(image) &&
+  !Effect.isEffect(image) &&
+  !Config.isConfig(image);
+
+const isRemoteImageOptions = (
+  image: ImageOptions,
+): image is RemoteImageOptions => "ref" in image;
+
 /** Compose image resources while registering the container, before planning. */
 export const composeContainerImage = Effect.fn(function* (
   id: string,
@@ -43,7 +57,7 @@ export const composeContainerImage = Effect.fn(function* (
   if (!props.main && (props.baseImage || props.bundle || props.publish))
     return yield* Effect.fail(
       new Error(
-        "baseImage, bundle, and publish configure a generated program image; use Docker.Image or Docker.RemoteImage for finished images",
+        "baseImage, bundle, and publish configure a generated program image; use image: { context, publish } or image: { ref, publish } for finished images",
       ),
     );
   if (props.baseImage && props.image)
@@ -75,31 +89,71 @@ export const composeContainerImage = Effect.fn(function* (
   const defaultName = `alchemy-${suffix}-containers`;
   const registry = props.registryId ?? "registry.cloudflare.com";
   const repository = `${registry}/${accountId}/${defaultName}`;
-  const publish = props.publish ?? { repository };
+  const qualifyRepository = (name: string) => {
+    const host = name.split("/")[0]!;
+    return name.includes("/") &&
+      (host.includes(".") || host.includes(":") || host === "localhost")
+      ? name
+      : `${registry}/${accountId}/${name}`;
+  };
+  const publication = Effect.fn(function* (destination?: ImagePublish) {
+    const name = yield* imageInput(destination?.repository ?? repository);
+    return {
+      ...destination,
+      repository: name.pipe(Output.map(qualifyRepository)),
+    };
+  });
+  const publish = yield* publication(props.publish);
 
   const image = yield* Namespace.push(
     id,
     Effect.gen(function* () {
       const imageSource = normalized.image;
-      if (
-        normalized.main &&
-        (isImageSource(imageSource) || isRemoteImageSource(imageSource))
-      )
-        return yield* Effect.fail(
-          new Error(
-            "Image descriptors describe finished images; use baseImage with main",
-          ),
-        );
-      if (isImageSource(imageSource)) {
-        const {
-          _tag,
-          publish: destination,
-          dockerContext,
-          ...build
-        } = imageSource;
+      if (isImageOptions(imageSource)) {
+        if (normalized.main)
+          return yield* Effect.fail(
+            new Error(
+              "image and main are mutually exclusive; use baseImage with main",
+            ),
+          );
+        if (isRemoteImageOptions(imageSource)) {
+          if (
+            [
+              "context",
+              "dockerfile",
+              "files",
+              "args",
+              "target",
+              "cacheFrom",
+              "cacheTo",
+              "options",
+              "extraHash",
+            ].some((key) => key in imageSource)
+          )
+            return yield* Effect.fail(
+              new Error(
+                "image.ref cannot be combined with Dockerfile build inputs",
+              ),
+            );
+        } else if (
+          !("context" in imageSource) &&
+          !("dockerfile" in imageSource)
+        ) {
+          return yield* Effect.fail(
+            new Error("image requires ref, context, or dockerfile"),
+          );
+        }
+      }
+      if (isImageOptions(imageSource) && !isRemoteImageOptions(imageSource)) {
+        const { publish: destination, dockerContext, ...build } = imageSource;
         return yield* Image("Image", {
-          build: { ...build, platform: build.platform ?? "linux/amd64" },
-          publish: destination ?? publish,
+          build: {
+            ...build,
+            platform: (yield* imageInput(build.platform ?? "linux/amd64")).pipe(
+              Output.map((platform) => platform ?? "linux/amd64"),
+            ),
+          },
+          publish: yield* publication(destination),
           dockerContext,
         }).pipe(
           Effect.map((image) => ({
@@ -124,7 +178,7 @@ export const composeContainerImage = Effect.fn(function* (
           normalized.dockerfile && isInlineDockerfile(normalized.dockerfile)
             ? yield* imageInput(normalized.dockerfile.content)
             : Output.asOutput(
-                (isRemoteImageSource(imageSource) ? undefined : imageSource) ??
+                (isImageOptions(imageSource) ? undefined : imageSource) ??
                   (runtime === "bun" ? "oven/bun:1" : "node:22-slim"),
               ).pipe(Output.map((base) => `FROM ${base}`));
         return yield* Image("Image", {
@@ -157,10 +211,10 @@ export const composeContainerImage = Effect.fn(function* (
         );
       }
       if (imageSource) {
-        const options: RemoteImageOptions = isRemoteImageSource(imageSource)
+        const options: RemoteImageOptions = isImageOptions(imageSource)
           ? imageSource
-          : { source: imageSource };
-        const source = Output.asOutput(options.source).pipe(
+          : { ref: imageSource };
+        const source = (yield* imageInput(options.ref)).pipe(
           Output.map((reference) => {
             if (
               registry !== "registry.cloudflare.com" ||
@@ -175,19 +229,20 @@ export const composeContainerImage = Effect.fn(function* (
         );
         return yield* RemoteImage("Image", {
           source,
-          platform: options.platform ?? "linux/amd64",
+          platform: (yield* imageInput(options.platform ?? "linux/amd64")).pipe(
+            Output.map((platform) => platform ?? "linux/amd64"),
+          ),
           dockerContext: options.dockerContext,
           alwaysPull: options.alwaysPull,
-          publish: options.publish ?? {
-            ...publish,
-            repository: source.pipe(
-              Output.map((reference) =>
-                reference.startsWith(`${registry}/`)
-                  ? repositoryFromImageRef(reference)
-                  : publish.repository,
+          publish: options.publish
+            ? yield* publication(options.publish)
+            : source.pipe(
+                Output.map((reference) => ({
+                  repository: reference.startsWith(`${registry}/`)
+                    ? repositoryFromImageRef(reference)
+                    : repository,
+                })),
               ),
-            ),
-          },
         }).pipe(Effect.map((image) => ({ ref: image.ref, hash: image.hash })));
       }
       return yield* Image("Image", {

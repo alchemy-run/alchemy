@@ -139,8 +139,29 @@ const patchRow = <A extends Record<string, any>>(
 // whole-process lock (they mutate `BUILDX_BUILDER`) and serialize among
 // themselves.
 describe.concurrent("ContainerApplication", () => {
+  test.provider("rejects ambiguous or empty embedded image options", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      for (const image of [
+        { ref: "alpine:3.19", context: "." },
+        { ref: "alpine:3.19", args: { VERSION: "1" } },
+        {},
+      ]) {
+        const application = Cloudflare.Container("Invalid", {
+          // @ts-expect-error JavaScript callers must receive the same validation as typed callers.
+          image,
+        }).Application;
+        const result = yield* stack.plan(application).pipe(Effect.exit);
+        assert(Exit.isFailure(result));
+        expect(Cause.pretty(result.cause)).toMatch(
+          /cannot be combined|requires ref, context, or dockerfile/,
+        );
+      }
+      yield* stack.destroy();
+    }),
+  );
   test.provider(
-    "turns unnamed image descriptors into managed child resources",
+    "composes plain image options into managed child resources",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -150,30 +171,31 @@ describe.concurrent("ContainerApplication", () => {
           prefix: "alchemy-image-descriptors-",
         });
         yield* fs.writeFileString(
-          path.join(context, "Dockerfile"),
+          path.join(context, "Dockerfile.custom"),
           'FROM alpine:3.19\nCOPY payload /payload\nCMD ["sleep", "3600"]\n',
         );
         yield* fs.writeFileString(path.join(context, "payload"), "first");
-        const descriptor = DockerResources.Image({ context });
-        const remoteDescriptor = DockerResources.RemoteImage({
-          source: "alpine:3.19",
-        });
-        expect(Effect.isEffect(descriptor)).toBe(false);
-        expect(Effect.isEffect(remoteDescriptor)).toBe(false);
-        expect("FQN" in descriptor).toBe(false);
-        expect("FQN" in remoteDescriptor).toBe(false);
-        expect("context" in DockerResources.Image).toBe(false);
-        expect("source" in DockerResources.RemoteImage).toBe(false);
         const first = yield* stack.deploy(descriptorApplications(context));
         expect(first.first?.configuration.image).toBe(
           first.second.configuration.image,
         );
         expect(first.remote.hash?.digest).toBe(first.second.hash?.digest);
+        for (const [app, repository] of [
+          [first.second, "alchemy-embedded-build"],
+          [first.remote, "alchemy-embedded-mirror"],
+          [first.generated, "alchemy-embedded-generated"],
+        ] as const)
+          expect(app.configuration.image).toMatch(
+            new RegExp(
+              `^registry.cloudflare.com/${app.accountId}/${repository}@sha256:`,
+            ),
+          );
         const unchanged = yield* stack.plan(descriptorApplications(context));
         for (const name of [
           "DescriptorFirst",
           "DescriptorSecond",
           "DescriptorRemote",
+          "DescriptorGenerated",
         ])
           expect(unchanged.resources[`${name}/Image`]).toMatchObject({
             action: "noop",
@@ -189,7 +211,11 @@ describe.concurrent("ContainerApplication", () => {
         );
         expect(changed.remote.hash?.digest).toBe(changed.second.hash?.digest);
         const retained = yield* stack.deploy(
-          descriptorApplications(context, false),
+          descriptorApplications(
+            context,
+            false,
+            `registry.cloudflare.com/${changed.remote.accountId}/alchemy-embedded-mirror`,
+          ),
         );
         expect(retained.second.applicationId).toBe(
           changed.second.applicationId,
@@ -886,10 +912,11 @@ describe.concurrent("ContainerApplication", () => {
         const deploy = (id: string, repository = imageName) =>
           stack.deploy(
             Effect.gen(function* () {
+              const { accountId } = yield* yield* CloudflareEnvironment;
               const image = yield* DockerResources.Image("Image", {
                 build: { context, platform: "linux/amd64" },
                 publish: {
-                  repository: yield* Cloudflare.containerRepository(repository),
+                  repository: `registry.cloudflare.com/${accountId}/${repository}`,
                 },
               });
               return {

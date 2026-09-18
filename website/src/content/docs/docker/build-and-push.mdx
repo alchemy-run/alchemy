@@ -8,9 +8,9 @@ resources resolve existing images. Both accept `publish` and return `ref`: a loc
 image ID when publication is omitted, or an immutable
 `registry/repository@sha256:…` reference when published.
 
-Called without an ID, these helpers return plain image descriptors instead.
-A consuming resource, such as Cloudflare Container, registers the child image
-resource and manages its lifecycle.
+Cloudflare Container also accepts plain `Docker.ImageOptions` objects inside
+`image`. It registers the appropriate child Docker resource and manages its
+lifecycle, without an extra resource name or wrapper call.
 
 Building and pulling need a Docker daemon. Reusing an already-published image
 only needs registry access; it does not require a daemon or builder.
@@ -136,26 +136,36 @@ Remote images and published manifests are retained on destroy.
 
 ```typescript
 const application = yield* Cloudflare.Container("Web", {
-  image: Docker.Image({ context: "./web" }),
+  image: {
+    context: "./web",
+    publish: { repository: "shared-web" },
+  },
 }).Application;
 ```
 
-`Docker.Image({ … })` is plain data, not a resource or an Effect. Build options
-are at the top level of this shorthand. Cloudflare creates the real
-`Web/Image` child resource and supplies its default platform and publication
-repository. No extra image name or `yield*` is needed.
+The image object is plain data. Cloudflare creates the real `Web/Image` child
+resource and supplies its default platform. The relative repository name
+`shared-web` resolves to `registry.cloudflare.com/<accountId>/shared-web`.
+Omit `publish` to use the stack's default repository. Fully qualified repository
+paths remain supported.
 
 To use an existing image:
 
 ```typescript
 const application = yield* Cloudflare.Container("Proxy", {
-  image: Docker.RemoteImage({ source: "nginx:alpine" }),
+  image: {
+    ref: "nginx:alpine",
+    publish: { repository: "shared-nginx" },
+  },
 }).Application;
 ```
 
-This descriptor creates a child `Docker.RemoteImage`. Both shorthand forms
-accept `publish` overrides and `dockerContext`. They do nothing when called on
-their own; the consuming container registers the managed resource.
+`ref` creates a child `Docker.RemoteImage`; it accepts a tag, digest, local image
+ID, or another resource's output. It is mutually exclusive with build inputs.
+`context` or `dockerfile` creates a child `Docker.Image`, including inline
+Dockerfiles and generated `files`. Both forms accept `platform`, `publish`, and
+`dockerContext`. Build arguments, targets, and cache settings stay inside `image`,
+separate from the Container's runtime environment and scaling configuration.
 
 ## Share a named image in Cloudflare
 
@@ -173,7 +183,7 @@ export default Alchemy.Stack(
     const image = yield* Docker.Image("WebImage", {
       build: { context: "./web", platform: "linux/amd64" },
       publish: {
-        repository: yield* Cloudflare.containerRepository("web"),
+        repository: "registry.cloudflare.com/<accountId>/web",
       },
     });
     const application = yield* Cloudflare.Container("Web", {
@@ -184,8 +194,9 @@ export default Alchemy.Stack(
 );
 ```
 
-`Cloudflare.containerRepository` supplies the managed registry's account prefix.
-`Cloudflare.providers()` supplies its registry authentication integration; tokens
+Standalone Docker resources use fully qualified destinations; replace
+`<accountId>` with your Cloudflare account ID. `Cloudflare.providers()` supplies
+the registry authentication integration; tokens
 are requested only when needed. A Durable Object and Worker provide the request
 entrypoint to the application; see [Cloudflare Containers](/cloudflare/compute/containers).
 
@@ -207,7 +218,7 @@ export default MyContainer.make(
     baseImage: "oven/bun:1",
     bundle: { output: { minify: true } },
     publish: {
-      repository: Cloudflare.containerRepository("my-program"),
+      repository: "my-program",
     },
   },
   implementation,

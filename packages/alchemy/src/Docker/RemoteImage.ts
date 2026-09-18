@@ -4,7 +4,6 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
-import type { InputProps, PropsInput } from "../Input.ts";
 import { sha256Object } from "../Util/sha256.ts";
 import { Docker, dockerContextName } from "./Docker.ts";
 import {
@@ -71,54 +70,6 @@ export type RemoteImageProps = RemoteImageSettings &
       }
   );
 
-/** Source and publication options for an unnamed remote image. */
-export interface RemoteImageOptions extends Omit<
-  RemoteImageSettings,
-  "context"
-> {
-  /** Complete source image reference, including a tag or digest. */
-  source: string;
-}
-
-/** Plain image data; the consuming resource registers the actual Docker.RemoteImage. */
-export interface RemoteImageSource extends RemoteImageOptions {
-  readonly _tag: "Docker.RemoteImage";
-}
-
-export const isRemoteImageSource = (
-  value: unknown,
-): value is RemoteImageSource =>
-  typeof value === "object" &&
-  value !== null &&
-  "_tag" in value &&
-  value._tag === "Docker.RemoteImage";
-
-const RemoteImageResource = Resource<RemoteImage>("Docker.RemoteImage");
-
-function remoteImage(
-  options: InputProps<RemoteImageOptions>,
-): InputProps<RemoteImageOptions> & { readonly _tag: "Docker.RemoteImage" };
-function remoteImage(
-  id: string,
-  props: PropsInput<RemoteImageProps>,
-): Effect.Effect<RemoteImage, never, Providers>;
-function remoteImage<R>(
-  id: string,
-  props: Effect.Effect<InputProps<RemoteImageProps>, never, R>,
-): Effect.Effect<RemoteImage, never, R | Providers>;
-function remoteImage<R>(
-  idOrOptions: string | InputProps<RemoteImageOptions>,
-  props?:
-    | PropsInput<RemoteImageProps>
-    | Effect.Effect<InputProps<RemoteImageProps>, never, R>,
-) {
-  if (typeof idOrOptions !== "string")
-    return { ...idOrOptions, _tag: "Docker.RemoteImage" as const };
-  return Effect.isEffect(props)
-    ? RemoteImageResource(idOrOptions, props)
-    : RemoteImageResource(idOrOptions, props!);
-}
-
 export interface RemoteImage extends Resource<
   "Docker.RemoteImage",
   RemoteImageProps,
@@ -156,13 +107,13 @@ export interface RemoteImage extends Resource<
  * **Example:** Let a container own the remote image resource
  * ```typescript
  * const container = yield* Cloudflare.Container("Web", {
- *   image: Docker.RemoteImage({ source: "nginx:alpine" }),
+ *   image: { ref: "nginx:alpine", publish: { repository: "nginx" } },
  * }).Application;
  * ```
  *
- * The no-ID overload returns plain `RemoteImageSource` data. The consuming
- * platform registers a child resource; the helper itself never pulls,
- * publishes, or registers anything.
+ * Embedded image options are plain objects with `ref` identifying the existing
+ * image. The consuming platform registers the child resource and resolves
+ * relative publication repositories. Named resources use `source` below.
  *
  * ### Local Images
  * **Example:** Pull an existing image
@@ -183,10 +134,7 @@ export interface RemoteImage extends Resource<
  *
  * @resource
  */
-export const RemoteImage: typeof remoteImage &
-  Omit<typeof RemoteImageResource, never> = Object.assign(remoteImage, {
-  ...RemoteImageResource,
-});
+export const RemoteImage = Resource<RemoteImage>("Docker.RemoteImage");
 
 const sourceOf = (props: RemoteImageProps) =>
   props.source ?? `${props.name}:${props.tag ?? "latest"}`;

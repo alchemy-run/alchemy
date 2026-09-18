@@ -12,8 +12,7 @@ import type { ProcessServices } from "../../Server/Process.ts";
 import type { Providers } from "../Providers.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
 import type { ImagePublish } from "../../Docker/ImageRegistry.ts";
-import type { ImageSource } from "../../Docker/Image.ts";
-import type { RemoteImageSource } from "../../Docker/RemoteImage.ts";
+import type { ImageOptions } from "../../Docker/ImageOptions.ts";
 import type { LocalImageBuild } from "../../Docker/LocalImage.ts";
 import { ContainerTypeId } from "./Container.ts";
 import { LiveContainerProvider } from "./ContainerProvider.ts";
@@ -296,6 +295,10 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  * bundled. The image is shipped as-is.
  */
 export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+  /** A Dockerfile build cannot also declare a program entrypoint. */
+  main?: never;
+  /** Use either embedded image options or legacy top-level build inputs. */
+  image?: never;
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -314,14 +317,21 @@ export interface ExternalContainerProps extends ContainerApplicationPropsBase {
 }
 
 /**
- * Deploy an image reference or an unnamed Docker image descriptor. Descriptors
- * become child Docker resources owned by the container's namespace.
+ * Deploy an image reference or embedded Docker image options. Plain image
+ * options become child Docker resources owned by the container's namespace.
  */
 export interface RemoteContainerProps extends ContainerApplicationPropsBase {
+  /** Finished image specifications cannot also declare a program entrypoint. */
+  main?: never;
+  /** Build context belongs inside `image` when using embedded image options. */
+  context?: never;
+  /** Dockerfile belongs inside `image` when using embedded image options. */
+  dockerfile?: never;
   /**
-   * An image reference, `Docker.Image({ context: "./app" })` build descriptor,
-   * or `Docker.RemoteImage({ source: "nginx:alpine" })` remote descriptor.
-   * Descriptors create a managed child resource without a separate image name.
+   * An image reference, `{ context: "./app" }` build specification, or
+   * `{ ref: "nginx:alpine" }` existing-image specification. Plain objects
+   * create managed child Docker resources without a separate image name.
+   * `publish.repository` may be relative to this account's container registry.
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
@@ -329,15 +339,13 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * by CI like `registry.cloudflare.com/<accountId>/app@sha256:...` — it is
    * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
-  image: string | ImageSource | RemoteImageSource;
+  image: string | ImageOptions;
 }
 
 /**
- * Container application props — the image comes from exactly one of three
- * sources, declared flat on the props: `main` (bundled Effect program,
- * composing with `image` / inline `dockerfile` as its environment),
- * `context`/`dockerfile` (user Dockerfile), or `image` (pre-built remote
- * image).
+ * Container application props — `main` bundles an Effect program, while
+ * `image` accepts a reference or plain Docker build/existing-image options.
+ * Legacy top-level `context`/`dockerfile` builds remain supported.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
@@ -355,7 +363,7 @@ export interface AnyContainerApplicationProps extends ContainerApplicationPropsB
   bundle?: Bundle.BundleConfig;
   publish?: ImagePublish;
   main?: string;
-  image?: string | ImageSource | RemoteImageSource;
+  image?: string | ImageOptions;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   handler?: string;

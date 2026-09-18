@@ -290,8 +290,8 @@ export type Container<Id extends string = string> = Named<Id> & {
  *
  * - `main` — bundle your Effect program into a generated image.
  * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
- * - `image` — consume a reference or a `Docker.Image` / `Docker.RemoteImage`
- *   descriptor, creating a managed child image without a separate image name.
+ * - `image` — consume a reference or plain build/existing-image options,
+ *   creating a managed child Docker resource without a separate image name.
  *
  * Only the `main` source bundles and injects an Effect runtime — so it
  * has a typed shape and a `.make(props, impl)` runtime. The other two
@@ -332,21 +332,22 @@ export type Container<Id extends string = string> = Named<Id> & {
  * **Example:** Build an unnamed image
  * ```typescript
  * const web = yield* Cloudflare.Container("Web", {
- *   image: Docker.Image({ context: "./web" }),
+ *   image: { context: "./web", publish: { repository: "shared-web" } },
  * }).Application;
  * ```
  *
- * The no-ID helper returns plain data, not an Effect or a resource. Container
- * creates the real `Web/Image` child resource, which performs the build and
- * publication. Use `Docker.RemoteImage({ source: "nginx:alpine" })` for an
- * existing image. The named overload remains useful for explicitly shared images.
+ * The image specification is plain data. Container creates the real `Web/Image`
+ * child resource, which performs the build and publication. Use
+ * `image: { ref: "nginx:alpine" }` for an existing image; `ref` is exclusive with
+ * build inputs. Relative publication repositories resolve inside the current
+ * account. Named Docker resources remain useful for explicitly shared images.
  *
  * **Example:** Share a Docker image across applications and stages
  * ```typescript
  * const image = yield* Docker.Image("WebImage", {
  *   build: { context: "./web", platform: "linux/amd64" },
  *   publish: {
- *     repository: yield* Cloudflare.containerRepository("web"),
+ *     repository: "registry.cloudflare.com/<accountId>/web",
  *   },
  * });
  * const web = yield* Cloudflare.Container("Web", { image: image.ref }).Application;

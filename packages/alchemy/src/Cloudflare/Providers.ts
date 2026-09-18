@@ -6,7 +6,7 @@ import { DockerLive } from "../Docker/Docker.ts";
 import { Image } from "../Docker/Image.ts";
 import { RemoteImage } from "../Docker/RemoteImage.ts";
 import { imageProviders } from "../Docker/Providers.ts";
-import { ContainerRegistryAuth } from "./Containers/ContainerRepository.ts";
+import { ContainerRegistryAuth } from "./Containers/ContainerRegistryAuth.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";

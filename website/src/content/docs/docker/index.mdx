@@ -91,13 +91,14 @@ For a Cloudflare Container that owns its image, omit the image ID:
 
 ```typescript
 const application = yield* Cloudflare.Container("Web", {
-  image: Docker.Image({ context: "./app" }),
+  image: { context: "./app", publish: { repository: "shared-web" } },
 }).Application;
 ```
 
-The no-ID form returns plain data. Cloudflare registers the real child image
-resource; the helper itself performs no build. `Docker.RemoteImage({ source:
-"nginx:alpine" })` provides the equivalent shorthand for an existing image.
+The image object is plain data. Cloudflare registers the real child image
+resource and resolves `shared-web` within the account's managed registry.
+Use `image: { ref: "nginx:alpine" }` for an existing image. `ref` is mutually
+exclusive with build inputs.
 
 `Docker.inspectContainer(name)` reads live runtime details for any
 container by name, including the bound host ports.

@@ -8,21 +8,6 @@ import {
 } from "../../Docker/ImageRegistry.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 
-/**
- * Resolve a repository in the current account's managed container registry.
- * Credentials are issued when Docker reads or publishes the image.
- *
- * @example
- * const image = yield* Docker.Image("WebImage", {
- *   build: { context: "./web", platform: "linux/amd64" },
- *   publish: { repository: yield* Cloudflare.containerRepository("web") },
- * });
- */
-export const containerRepository = Effect.fn(function* (name: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  return `registry.cloudflare.com/${accountId}/${name}`;
-});
-
 export const ContainerRegistryAuth = Layer.effect(
   RegistryAuth,
   Effect.gen(function* () {
