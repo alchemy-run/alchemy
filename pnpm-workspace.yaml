@@ -195,6 +195,9 @@ catalog:
   yaml: "^2.9.0"
   yauzl: "^3.4.0"
 catalogs:
+  # SvelteKit requires the TypeScript JavaScript compiler API.
+  typescript-classic:
+    typescript: "6.0.3"
   # Compatibility ranges used by published optional peer dependencies.
   frontend-peer:
     "@octanejs/vite-plugin": ">=0.1.22"
@@ -230,12 +233,6 @@ overrides:
   mysql2: 3.24.2
   zod: 4.4.3
   rolldown: 1.2.5
-  # SvelteKit's `write_tsconfig` step still depends on the classic TS
-  # compiler API (`ts.sys.readFile`) via its optional `typescript` peer.
-  # The workspace-wide `typescript` catalog entry is TS7/tsgo, whose root
-  # export is a version stub with no `ts.sys` — scope kit's own peer back
-  # to a classic release instead of overriding it repo-wide.
-  "@sveltejs/kit>typescript": "^6.0.0"
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
