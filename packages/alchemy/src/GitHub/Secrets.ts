@@ -1,9 +1,8 @@
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
 import type { Input } from "../Input.ts";
-import * as Output from "../Output.ts";
+import { liftRedacted } from "../Util/redacted.ts";
 import type { Environment } from "./Environment.ts";
 import { Secret } from "./Secret.ts";
 
@@ -65,32 +64,7 @@ export const Secrets = ({
         repository,
         environment,
         name,
-        value: liftValue(value),
+        value: liftRedacted(value),
       }),
     ),
   );
-
-// Accepts a plain string, an existing `Redacted<string>`, or a lazy `Input`
-// of either. We must lift through lazy inputs so the inner string gets wrapped
-// after the engine resolves it — otherwise `Redacted.make(input)` produces an
-// opaque `Redacted<Config | Effect | Output>` that the plan cannot resolve.
-const liftValue = (
-  value: Input<string | Redacted.Redacted<string>>,
-): Input<Redacted.Redacted<string>> =>
-  Config.isConfig(value)
-    ? Config.map(value, toRedacted)
-    : Effect.isEffect(value)
-      ? Effect.map(value, toRedacted)
-      : Output.isOutput(value)
-        ? Output.map(
-            value as Output.Output<string | Redacted.Redacted<string>>,
-            toRedacted,
-          )
-        : toRedacted(value as string | Redacted.Redacted<string>);
-
-const toRedacted = (
-  value: string | Redacted.Redacted<string>,
-): Redacted.Redacted<string> =>
-  Redacted.isRedacted(value)
-    ? (value as Redacted.Redacted<string>)
-    : Redacted.make(value);

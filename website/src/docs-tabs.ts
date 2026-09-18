@@ -111,6 +111,14 @@ export const DOCS_TABS: DocsTab[] = [
     hint: "self-hosted git · clone · push · pull requests",
   },
   {
+    label: "Forgejo",
+    href: "/forgejo",
+    prefixes: ["/forgejo", "/providers/forgejo"],
+    slot: "more",
+    category: "Source & CI",
+    hint: "repos · orgs · secrets",
+  },
+  {
     label: "Stripe",
     href: "/stripe",
     prefixes: ["/stripe", "/providers/stripe"],

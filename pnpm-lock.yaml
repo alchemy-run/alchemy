@@ -4963,6 +4963,9 @@ importers:
       '@distilled.cloud/fly-io':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/fly-io
+      '@distilled.cloud/forgejo':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/forgejo
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
