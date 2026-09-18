@@ -6,6 +6,7 @@ onlyBuiltDependencies:
   - workerd
 allowBuilds:
   "@parcel/watcher": true
+  core-js: false
   es5-ext: false
   esbuild: true
   msgpackr-extract: true
