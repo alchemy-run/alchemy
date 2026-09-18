@@ -29,10 +29,7 @@ export interface GetEnabledBaseline extends Binding.Service<
   (
     enabledBaseline: EnabledBaseline,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      controltower.GetEnabledBaselineOutput,
-      controltower.GetEnabledBaselineError
-    >
+    () => Effect.Effect<controltower.GetEnabledBaselineOutput, controltower.GetEnabledBaselineError>
   >
 > {}
 

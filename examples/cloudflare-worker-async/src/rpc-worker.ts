@@ -28,8 +28,7 @@ const httpEffect = RpcServer.toHttpEffect(API).pipe(
     Layer.mergeAll(
       API.toLayer({
         Ping: () => Effect.succeed("pong"),
-        Stream: ({ upto }) =>
-          Stream.fromIterable(Array.from({ length: upto }, (_, i) => i)),
+        Stream: ({ upto }) => Stream.fromIterable(Array.from({ length: upto }, (_, i) => i)),
       }),
       RpcSerialization.layerNdjson,
     ),

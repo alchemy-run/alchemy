@@ -36,34 +36,19 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
-import type {
-  WorkerAccessConfig,
-  WorkerAccessIdentity,
-} from "./WorkerAccess.ts";
-import {
-  WorkerEnvironment,
-  WorkerExecutionContext,
-  WorkerTypeId,
-} from "./WorkerRuntime.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
+import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type {
-  WorkerBinding,
-  WorkerBindingResource,
-  WorkerBindings,
-} from "./WorkerBinding.ts";
-import {
-  makeWorkerRuntimeContext,
-  type WorkerRuntimeContext,
-} from "./WorkerRuntimeContext.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { WorkerEnvironment, WorkerExecutionContext, WorkerTypeId } from "./WorkerRuntime.ts";
+import { makeWorkerRuntimeContext, type WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
 
 export * from "./WorkerRuntime.ts";
 
-export const isWorker = <T>(value: T): value is T & Worker =>
-  isResourceOfType(value, WorkerTypeId);
+export const isWorker = <T>(value: T): value is T & Worker => isResourceOfType(value, WorkerTypeId);
 
 /**
  * Assets configuration that includes a pre-computed hash.
@@ -93,10 +78,7 @@ export interface WorkerCache extends Exclude<
   undefined
 > {}
 
-export type WorkerPlacement = Exclude<
-  workers.PutScriptRequest["metadata"]["placement"],
-  undefined
->;
+export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
 
 export type WorkerServices =
   | Worker
@@ -107,8 +89,7 @@ export type WorkerServices =
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
-  MainRpc<WorkerServices | Req>;
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -122,9 +103,7 @@ export type WorkerEnv = Record<
 >;
 
 export type WorkerBindingProps = {
-  [bindingName in string]:
-    | WorkerBindingResource
-    | Effect.Effect<WorkerBindingResource, any, any>;
+  [bindingName in string]: WorkerBindingResource | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
 type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
@@ -505,9 +484,7 @@ export interface WorkerProps<
   // the `extends WorkerBindingProps` proof is expensive for generic mapped
   // types and the call-site overloads already constrain user input.
   Bindings = any,
-  Assets extends WorkerAssetsConfig | undefined =
-    | WorkerAssetsConfig
-    | undefined,
+  Assets extends WorkerAssetsConfig | undefined = WorkerAssetsConfig | undefined,
 > extends PlatformProps {
   /**
    * Worker name override. If omitted, Alchemy derives a deterministic physical
@@ -1301,11 +1278,7 @@ export type URLAccessor = Effect.Effect<string, never, RuntimeContext>;
  * value cycle with Worker.ts that the deploy bundler's scope hoisting turns
  * into a startup crash.
  */
-export interface URLEffect extends Effect.Effect<
-  URLAccessor,
-  never,
-  WorkerEnvironment | Worker
-> {
+export interface URLEffect extends Effect.Effect<URLAccessor, never, WorkerEnvironment | Worker> {
   "~alchemy/Kind": "Cloudflare.Workers.URL";
 }
 
@@ -2353,11 +2326,7 @@ export const isSelf = (value: unknown): value is Self =>
  */
 export const Worker: ResourceClassLike<Worker> &
   Pick<ResourceClass<Worker>, "ref"> &
-  Effect.Effect<
-    Worker & WorkerRuntimeContext & RuntimeContext,
-    never,
-    Worker
-  > & {
+  Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
         id: Id,
@@ -2367,9 +2336,7 @@ export const Worker: ResourceClassLike<Worker> &
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
         Named<Id> & {
-          new (
-            _: never,
-          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
+          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
           of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
           make<PropsReq = never, InitReq = never>(
             props:
@@ -2381,10 +2348,7 @@ export const Worker: ResourceClassLike<Worker> &
             never,
             | Extract<Deps, Container.Application<any>>
             | Providers
-            | Exclude<
-                PropsReq | InitReq,
-                Self | WorkerServices | Tag<WorkerTypeId>
-              >
+            | Exclude<PropsReq | InitReq, Self | WorkerServices | Tag<WorkerTypeId>>
           >;
         };
     };
@@ -2392,11 +2356,7 @@ export const Worker: ResourceClassLike<Worker> &
       <
         const Id extends string,
         Shape extends WorkerShape,
-        Req extends
-          | WorkerServices
-          | Container.Application<any>
-          | PlatformServices
-          | Tag,
+        Req extends WorkerServices | Container.Application<any> | PlatformServices | Tag,
         PropsReq = never,
       >(
         id: Id,
@@ -2432,11 +2392,7 @@ export const Worker: ResourceClassLike<Worker> &
         id: Id,
         props:
           | InputProps<WorkerProps<Bindings, Assets>>
-          | Effect.Effect<
-              InputProps<WorkerProps<Bindings, Assets>>,
-              ConfigError,
-              Req
-            >,
+          | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, ConfigError, Req>,
       ): Effect.Effect<
         Worker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
         never,
@@ -2446,10 +2402,7 @@ export const Worker: ResourceClassLike<Worker> &
           new (): Named<Id> &
             Tag<WorkerTypeId> & {
               /** @internal phantom */
-              readonly "~alchemy/WorkerEnv": NormalizedBindings<
-                Bindings,
-                Assets
-              >;
+              readonly "~alchemy/WorkerEnv": NormalizedBindings<Bindings, Assets>;
             };
         };
     };
@@ -2461,16 +2414,13 @@ export const Worker: ResourceClassLike<Worker> &
       id: string,
       props:
         | InputProps<WorkerProps<Bindings, Assets>>
-        | Effect.Effect<
-            InputProps<WorkerProps<Bindings, Assets>>,
-            ConfigError,
-            Req
-          >,
+        | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, ConfigError, Req>,
     ): Effect.Effect<
       Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, Assets>
-        ]: NormalizedBindings<Bindings, Assets>[binding];
+        [binding in keyof NormalizedBindings<Bindings, Assets>]: NormalizedBindings<
+          Bindings,
+          Assets
+        >[binding];
       }> &
         Rpc<{}>,
       never,
@@ -2479,10 +2429,7 @@ export const Worker: ResourceClassLike<Worker> &
     <
       const Id extends string,
       Shape extends WorkerShape,
-      Req extends
-        | WorkerServices
-        | Container.Application<any>
-        | PlatformServices,
+      Req extends WorkerServices | Container.Application<any> | PlatformServices,
     >(
       id: string,
       props: InputProps<WorkerProps>,
@@ -2504,8 +2451,7 @@ export const Worker: ResourceClassLike<Worker> &
   WorkerTypeId,
   {
     // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
-    onCreate: (resource, props) =>
-      bindWorkerAsyncBindings(resource as Worker, props),
+    onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
   },
   { URL },

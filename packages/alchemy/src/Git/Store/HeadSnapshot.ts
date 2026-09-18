@@ -35,8 +35,7 @@ export interface HeadSnapshot {
   readonly bundle?: BundleInfo | undefined;
 }
 
-export const encodeHeadSnapshot = (snapshot: HeadSnapshot): string =>
-  JSON.stringify(snapshot);
+export const encodeHeadSnapshot = (snapshot: HeadSnapshot): string => JSON.stringify(snapshot);
 
 /** `undefined` on malformed/foreign content — callers fall to the DO. */
 export const decodeHeadSnapshot = (raw: string): HeadSnapshot | undefined => {

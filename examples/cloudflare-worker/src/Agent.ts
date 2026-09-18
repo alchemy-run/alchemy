@@ -24,17 +24,13 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         hello: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
         increment: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.post("http://container/increment"),
-            );
+            const response = yield* fetch(HttpClientRequest.post("http://container/increment"));
             return yield* response.text;
           }).pipe(Effect.orDie),
         fetch: Effect.gen(function* () {
@@ -50,10 +46,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
           if (!session) return;
-          const text =
-            typeof message === "string"
-              ? message
-              : new TextDecoder().decode(message);
+          const text = typeof message === "string" ? message : new TextDecoder().decode(message);
           for (const peer of sessions.values()) {
             yield* peer.send(`[${session.id}] ${text}`);
           }

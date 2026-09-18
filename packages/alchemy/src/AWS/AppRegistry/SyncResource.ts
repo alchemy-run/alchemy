@@ -34,13 +34,8 @@ export interface SyncResource extends Binding.Service<
   () => Effect.Effect<
     (
       request: appregistry.SyncResourceRequest,
-    ) => Effect.Effect<
-      appregistry.SyncResourceResponse,
-      appregistry.SyncResourceError
-    >
+    ) => Effect.Effect<appregistry.SyncResourceResponse, appregistry.SyncResourceError>
   >
 > {}
 
-export const SyncResource = Binding.Service<SyncResource>(
-  "AWS.AppRegistry.SyncResource",
-);
+export const SyncResource = Binding.Service<SyncResource>("AWS.AppRegistry.SyncResource");

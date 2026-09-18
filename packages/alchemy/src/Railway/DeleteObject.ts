@@ -6,10 +6,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { RailwayS3CredentialsMissing } from "./BucketBinding.ts";
 
-export interface DeleteObjectRequest extends Omit<
-  S3.DeleteObjectRequest,
-  "Bucket"
-> {}
+export interface DeleteObjectRequest extends Omit<S3.DeleteObjectRequest, "Bucket"> {}
 
 /**
  * Runtime binding for Railway `DeleteObject` over the S3 API.
@@ -43,6 +40,4 @@ export interface DeleteObject extends Binding.Service<
   >
 > {}
 
-export const DeleteObject = Binding.Service<DeleteObject>(
-  "Railway.DeleteObject",
-);
+export const DeleteObject = Binding.Service<DeleteObject>("Railway.DeleteObject");

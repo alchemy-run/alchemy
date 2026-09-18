@@ -4,11 +4,7 @@ import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-  resolveMainPath,
-} from "../../Bundle/TempRoot.ts";
+import { findCwdForBundle, getStableContextDir, resolveMainPath } from "../../Bundle/TempRoot.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
 import * as Output from "../../Output.ts";
@@ -82,10 +78,7 @@ export const makeContainerEnv = (
  * Derive the physical name for a container application. Shared between the
  * live and local providers so they agree on the deterministic name.
  */
-export const createContainerApplicationName = (
-  id: string,
-  name: string | undefined,
-) =>
+export const createContainerApplicationName = (id: string, name: string | undefined) =>
   Effect.suspend(() => {
     if (name) return Effect.succeed(name);
     return createPhysicalName({
@@ -109,10 +102,7 @@ export const createContainerApplicationName = (
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
-  props: Pick<
-    AnyContainerApplicationProps,
-    "main" | "image" | "dockerfile" | "context"
-  >,
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
@@ -220,15 +210,11 @@ export const buildFinalDockerfile = (
   external: string[] = [],
   autoInstallExternals = true,
 ): string => {
-  const base =
-    envPreamble ??
-    (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
+  const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
   const runtimeBin = runtime === "bun" ? "bun" : "node";
   const installCmd = runtime === "bun" ? "bun add" : "npm install";
   const installStep =
-    autoInstallExternals && external.length > 0
-      ? `RUN ${installCmd} ${external.join(" ")}`
-      : "";
+    autoInstallExternals && external.length > 0 ? `RUN ${installCmd} ${external.join(" ")}` : "";
   return [
     base,
     "",
@@ -259,11 +245,7 @@ export const materializeInlineDockerfileContext = Effect.fn(function* (
   const { dotAlchemy } = yield* AlchemyContext;
   const docker = yield* Docker;
   const path = yield* Path.Path;
-  const context = yield* getStableContextDir(
-    dotAlchemy,
-    dotAlchemy,
-    `${id}-dockerfile`,
-  );
+  const context = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-dockerfile`);
   yield* docker.materialize({ context, dockerfile: content, files: [] });
   return { context, dockerfile: path.join(context, "Dockerfile") };
 });
@@ -301,10 +283,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
   const realMain = yield* resolveMainPath(main);
   const cwd = yield* findCwdForBundle(realMain);
 
-  const buildBundle = Effect.fn(function* (
-    entry: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ) {
+  const buildBundle = Effect.fn(function* (entry: string, plugins?: rolldown.RolldownPluginOption) {
     return yield* Bundle.build(
       {
         ...build?.input,
@@ -320,9 +299,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
         platform: "node",
         resolve: {
           conditionNames:
-            runtime === "bun"
-              ? [...Bundle.BUN_CONDITION_NAMES]
-              : [...Bundle.NODE_CONDITION_NAMES],
+            runtime === "bun" ? [...Bundle.BUN_CONDITION_NAMES] : [...Bundle.NODE_CONDITION_NAMES],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],
@@ -368,10 +345,7 @@ await bootstrap(entrypoint, ${JSON.stringify({
   // code runs).
   const files = bundleOutput.files.map((f) => ({
     path: f.path,
-    content:
-      typeof f.content === "string"
-        ? new TextEncoder().encode(f.content)
-        : f.content,
+    content: typeof f.content === "string" ? new TextEncoder().encode(f.content) : f.content,
   }));
 
   return { files, hash: bundleOutput.hash };
@@ -404,17 +378,11 @@ export const prepareContainerBuildContext = Effect.fn(function* (
 
   const main = news.main;
   if (!main) {
-    return yield* Effect.die(
-      new Error("Container requires a `main` entrypoint."),
-    );
+    return yield* Effect.die(new Error("Container requires a `main` entrypoint."));
   }
   yield* validateContainerImageProps(news);
   const runtime = news.runtime ?? "bun";
-  const context = yield* getStableContextDir(
-    process.cwd(),
-    dotAlchemy,
-    `${id}-container`,
-  );
+  const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
   const dockerfileContent = buildFinalDockerfile(
     yield* containerEnvPreamble(news),
     runtime,

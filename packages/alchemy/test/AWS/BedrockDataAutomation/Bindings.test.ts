@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import BdaTestFunctionLive, { BdaTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "BdaBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let profileArn: string | undefined;
@@ -30,14 +27,8 @@ let profileArn: string | undefined;
 const getProfileArn = Effect.gen(function* () {
   if (profileArn !== undefined) return profileArn;
   const { Account } = yield* sts.getCallerIdentity({});
-  const region = yield* Effect.sync(
-    () => process.env.AWS_REGION ?? "us-west-2",
-  );
-  const geo = region.startsWith("eu-")
-    ? "eu"
-    : region.startsWith("ap-")
-      ? "apac"
-      : "us";
+  const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
+  const geo = region.startsWith("eu-") ? "eu" : region.startsWith("ap-") ? "apac" : "us";
   profileArn = `arn:aws:bedrock:${region}:${Account}:data-automation-profile/${geo}.data-automation-v1`;
   return profileArn;
 });
@@ -57,19 +48,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -90,9 +76,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `BDA test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`BDA test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -100,9 +84,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `BDA test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`BDA test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -115,9 +97,9 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
   describe("binding registration", () => {
     test.provider("all 14 capabilities initialize in the runtime", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/bindings`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/bindings`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         expect((response as any).bound).toHaveLength(14);
       }),
     );
@@ -130,9 +112,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
         Effect.gen(function* () {
           const arn = yield* getProfileArn;
           const invoked = (yield* send(
-            HttpClientRequest.post(
-              `${baseUrl}/invoke-async?profileArn=${encodeURIComponent(arn)}`,
-            ),
+            HttpClientRequest.post(`${baseUrl}/invoke-async?profileArn=${encodeURIComponent(arn)}`),
           ).pipe(Effect.flatMap((r) => r.json))) as {
             invocationArn?: string;
             error?: string;
@@ -142,9 +122,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
           // the caller-permission S3 grants end-to-end. On failure the
           // fixture reports the typed tag + message here.
           expect(
-            invoked.error === undefined
-              ? "none"
-              : `${invoked.error}: ${invoked.message}`,
+            invoked.error === undefined ? "none" : `${invoked.error}: ${invoked.message}`,
           ).toBe("none");
           const invocationArn = invoked.invocationArn;
           expect(invocationArn).toContain(":data-automation-invocation/");
@@ -161,13 +139,9 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
               `${baseUrl}/status?invocationArn=${encodeURIComponent(invocationArn)}`,
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as { status: string };
-          expect([
-            "Created",
-            "InProgress",
-            "Success",
-            "ServiceError",
-            "ClientError",
-          ]).toContain(status.status);
+          expect(["Created", "InProgress", "Success", "ServiceError", "ClientError"]).toContain(
+            status.status,
+          );
         }),
       { timeout: 120_000 },
     );
@@ -180,17 +154,15 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
         Effect.gen(function* () {
           // InvokeDataAutomationLibraryIngestionJob — inline vocabulary
           // upsert against the bound library.
-          const ingested = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/library-ingest`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const ingested = (yield* send(HttpClientRequest.post(`${baseUrl}/library-ingest`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             jobArn?: string;
             error?: string;
             message?: string;
           };
           expect(
-            ingested.error === undefined
-              ? "none"
-              : `${ingested.error}: ${ingested.message}`,
+            ingested.error === undefined ? "none" : `${ingested.error}: ${ingested.message}`,
           ).toBe("none");
           expect(ingested.jobArn).toBeTruthy();
 
@@ -201,12 +173,9 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
               `${baseUrl}/library-ingestion-job?jobArn=${encodeURIComponent(ingested.jobArn!)}`,
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as { status?: string };
-          expect([
-            "IN_PROGRESS",
-            "COMPLETED",
-            "COMPLETED_WITH_ERRORS",
-            "FAILED",
-          ]).toContain(job.status);
+          expect(["IN_PROGRESS", "COMPLETED", "COMPLETED_WITH_ERRORS", "FAILED"]).toContain(
+            job.status,
+          );
 
           // ListDataAutomationLibraryIngestionJobs — the job we just
           // started must be visible.
@@ -218,9 +187,9 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
           // ListDataAutomationLibraryEntities — entity visibility lags the
           // async job, so only the successful (authorized) empty-or-more
           // page is asserted.
-          const entities = (yield* send(
-            HttpClientRequest.get(`${baseUrl}/library-entities`),
-          ).pipe(Effect.flatMap((r) => r.json))) as { count: number };
+          const entities = (yield* send(HttpClientRequest.get(`${baseUrl}/library-entities`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as { count: number };
           expect(entities.count).toBeGreaterThanOrEqual(0);
 
           // GetDataAutomationLibraryEntity — typed not-found path proves
@@ -228,10 +197,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
           const missing = (yield* send(
             HttpClientRequest.get(`${baseUrl}/library-entity-missing`),
           ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(missing.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(missing.tag);
         }),
       { timeout: 120_000 },
     );
@@ -243,17 +209,15 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
       (_stack) =>
         Effect.gen(function* () {
           // CreateBlueprintVersion — snapshots the fixture blueprint.
-          const version = (yield* send(
-            HttpClientRequest.post(`${baseUrl}/blueprint-version`),
-          ).pipe(Effect.flatMap((r) => r.json))) as {
+          const version = (yield* send(HttpClientRequest.post(`${baseUrl}/blueprint-version`)).pipe(
+            Effect.flatMap((r) => r.json),
+          )) as {
             version?: string;
             error?: string;
             message?: string;
           };
           expect(
-            version.error === undefined
-              ? "none"
-              : `${version.error}: ${version.message}`,
+            version.error === undefined ? "none" : `${version.error}: ${version.message}`,
           ).toBe("none");
           expect(version.version).toBeTruthy();
 
@@ -263,10 +227,7 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
           const copied = (yield* send(
             HttpClientRequest.post(`${baseUrl}/copy-stage-validation`),
           ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(copied.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(copied.tag);
         }),
       { timeout: 120_000 },
     );
@@ -291,19 +252,14 @@ describe.sequential("BedrockDataAutomation Bindings", () => {
           // GetBlueprintOptimizationStatus — typed not-found on a
           // well-formed but nonexistent invocation ARN.
           const { Account } = yield* sts.getCallerIdentity({});
-          const region = yield* Effect.sync(
-            () => process.env.AWS_REGION ?? "us-west-2",
-          );
+          const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
           const missingArn = `arn:aws:bedrock:${region}:${Account}:blueprint-optimization-invocation/00000000-0000-0000-0000-000000000000`;
           const status = (yield* send(
             HttpClientRequest.get(
               `${baseUrl}/optimization-status-missing?invocationArn=${encodeURIComponent(missingArn)}`,
             ),
           ).pipe(Effect.flatMap((r) => r.json))) as { tag: string };
-          expect([
-            "ResourceNotFoundException",
-            "ValidationException",
-          ]).toContain(status.tag);
+          expect(["ResourceNotFoundException", "ValidationException"]).toContain(status.tag);
         }),
       { timeout: 120_000 },
     );

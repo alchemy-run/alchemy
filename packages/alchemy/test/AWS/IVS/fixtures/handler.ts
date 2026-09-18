@@ -1,5 +1,3 @@
-import * as IVS from "@/AWS/IVS";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,12 +5,12 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IVS from "@/AWS/IVS";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class IvsTestFunction extends Lambda.Function<Lambda.Function>()(
-  "IvsTestFunction",
-) {}
+export class IvsTestFunction extends Lambda.Function<Lambda.Function>()("IvsTestFunction") {}
 
 export default IvsTestFunction.make(
   {
@@ -36,9 +34,7 @@ export default IvsTestFunction.make(
       { kinds: ["stream-state-change", "recording-state-change"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `ivs event: ${event.detail.channel_name} ${event.detail.event_name}`,
-          ),
+          Effect.log(`ivs event: ${event.detail.channel_name} ${event.detail.event_name}`),
         ),
     );
 
@@ -52,12 +48,10 @@ export default IvsTestFunction.make(
     const listStreamSessions = yield* IVS.ListStreamSessions(channel);
     const putMetadata = yield* IVS.PutMetadata(channel);
     const stopStream = yield* IVS.StopStream(channel);
-    const revokeViewerSession =
-      yield* IVS.StartViewerSessionRevocation(channel);
+    const revokeViewerSession = yield* IVS.StartViewerSessionRevocation(channel);
     const insertAdBreak = yield* IVS.InsertAdBreak(channel);
     const listStreams = yield* IVS.ListStreams();
-    const batchRevokeViewerSessions =
-      yield* IVS.BatchStartViewerSessionRevocation();
+    const batchRevokeViewerSessions = yield* IVS.BatchStartViewerSessionRevocation();
 
     const bound = {
       getStream,
@@ -149,9 +143,8 @@ export default IvsTestFunction.make(
         if (request.method === "POST" && pathname === "/stop") {
           const result = yield* stopStream().pipe(
             Effect.map(() => ({ stopped: true, tag: undefined })),
-            Effect.catchTag(
-              ["ChannelNotBroadcasting", "StreamUnavailable"],
-              (e) => Effect.succeed({ stopped: false, tag: e._tag }),
+            Effect.catchTag(["ChannelNotBroadcasting", "StreamUnavailable"], (e) =>
+              Effect.succeed({ stopped: false, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -167,13 +160,11 @@ export default IvsTestFunction.make(
               ok: true,
               tag: undefined as string | undefined,
             })),
-            Effect.catchTag(
-              ["ValidationException", "PendingVerification"],
-              (e) =>
-                Effect.succeed({
-                  ok: false,
-                  tag: e._tag as string | undefined,
-                }),
+            Effect.catchTag(["ValidationException", "PendingVerification"], (e) =>
+              Effect.succeed({
+                ok: false,
+                tag: e._tag as string | undefined,
+              }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -189,11 +180,7 @@ export default IvsTestFunction.make(
               tag: undefined as string | undefined,
             })),
             Effect.catchTag(
-              [
-                "ChannelNotBroadcasting",
-                "ValidationException",
-                "ConflictException",
-              ],
+              ["ChannelNotBroadcasting", "ValidationException", "ConflictException"],
               (e) =>
                 Effect.succeed({
                   inserted: false,

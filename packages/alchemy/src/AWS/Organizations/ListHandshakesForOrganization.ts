@@ -33,7 +33,6 @@ export interface ListHandshakesForOrganization extends Binding.Service<
     >
   >
 > {}
-export const ListHandshakesForOrganization =
-  Binding.Service<ListHandshakesForOrganization>(
-    "AWS.Organizations.ListHandshakesForOrganization",
-  );
+export const ListHandshakesForOrganization = Binding.Service<ListHandshakesForOrganization>(
+  "AWS.Organizations.ListHandshakesForOrganization",
+);

@@ -58,11 +58,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
 export interface ConnectRead extends Binding.Service<
   ConnectRead,
   "AWS.DAX.ConnectRead",
-  (
-    cluster: Cluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  (cluster: Cluster) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
 export const ConnectRead = Binding.Service<ConnectRead>("AWS.DAX.ConnectRead");
 
@@ -91,15 +87,9 @@ export const ConnectRead = Binding.Service<ConnectRead>("AWS.DAX.ConnectRead");
 export interface ConnectWrite extends Binding.Service<
   ConnectWrite,
   "AWS.DAX.ConnectWrite",
-  (
-    cluster: Cluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  (cluster: Cluster) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
-export const ConnectWrite = Binding.Service<ConnectWrite>(
-  "AWS.DAX.ConnectWrite",
-);
+export const ConnectWrite = Binding.Service<ConnectWrite>("AWS.DAX.ConnectWrite");
 
 /**
  * Full read-write runtime access to a DAX {@link Cluster}'s data plane.
@@ -125,12 +115,6 @@ export const ConnectWrite = Binding.Service<ConnectWrite>(
 export interface ConnectReadWrite extends Binding.Service<
   ConnectReadWrite,
   "AWS.DAX.ConnectReadWrite",
-  (
-    cluster: Cluster,
-  ) => Effect.Effect<
-    Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>
-  >
+  (cluster: Cluster) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
-export const ConnectReadWrite = Binding.Service<ConnectReadWrite>(
-  "AWS.DAX.ConnectReadWrite",
-);
+export const ConnectReadWrite = Binding.Service<ConnectReadWrite>("AWS.DAX.ConnectReadWrite");

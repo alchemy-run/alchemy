@@ -1,13 +1,13 @@
-import * as AuditManager from "@/AWS/AuditManager";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Output from "@/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AuditManager from "@/AWS/AuditManager";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import { Bucket } from "@/AWS/S3/Bucket.ts";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler-assessment.ts");
 
@@ -45,9 +45,7 @@ export default AuditManagerAssessmentTestFunction.make(
 
     const framework = yield* AuditManager.Framework("BindingsFramework", {
       description: "AuditManager bindings fixture framework",
-      controlSets: [
-        { name: "Operations", controls: [{ id: control.controlId }] },
-      ],
+      controlSets: [{ name: "Operations", controls: [{ id: control.controlId }] }],
     });
 
     const reports = yield* Bucket("BindingsReports", { forceDestroy: true });
@@ -76,38 +74,29 @@ export default AuditManagerAssessmentTestFunction.make(
 
     // --- reads ---
     const getEvidence = yield* AuditManager.GetEvidence(assessment);
-    const getEvidenceByEvidenceFolder =
-      yield* AuditManager.GetEvidenceByEvidenceFolder(assessment);
+    const getEvidenceByEvidenceFolder = yield* AuditManager.GetEvidenceByEvidenceFolder(assessment);
     const getEvidenceFolder = yield* AuditManager.GetEvidenceFolder(assessment);
     const getEvidenceFoldersByAssessment =
       yield* AuditManager.GetEvidenceFoldersByAssessment(assessment);
     const getEvidenceFoldersByAssessmentControl =
       yield* AuditManager.GetEvidenceFoldersByAssessmentControl(assessment);
     const getChangeLogs = yield* AuditManager.GetChangeLogs(assessment);
-    const getInsightsByAssessment =
-      yield* AuditManager.GetInsightsByAssessment(assessment);
+    const getInsightsByAssessment = yield* AuditManager.GetInsightsByAssessment(assessment);
     const listControlDomainInsightsByAssessment =
       yield* AuditManager.ListControlDomainInsightsByAssessment(assessment);
     const listAssessmentControlInsightsByControlDomain =
-      yield* AuditManager.ListAssessmentControlInsightsByControlDomain(
-        assessment,
-      );
+      yield* AuditManager.ListAssessmentControlInsightsByControlDomain(assessment);
 
     // --- evidence + reports ---
     const batchImportEvidenceToAssessmentControl =
       yield* AuditManager.BatchImportEvidenceToAssessmentControl(assessment);
-    const createAssessmentReport =
-      yield* AuditManager.CreateAssessmentReport(assessment);
-    const deleteAssessmentReport =
-      yield* AuditManager.DeleteAssessmentReport(assessment);
-    const getAssessmentReportUrl =
-      yield* AuditManager.GetAssessmentReportUrl(assessment);
+    const createAssessmentReport = yield* AuditManager.CreateAssessmentReport(assessment);
+    const deleteAssessmentReport = yield* AuditManager.DeleteAssessmentReport(assessment);
+    const getAssessmentReportUrl = yield* AuditManager.GetAssessmentReportUrl(assessment);
     const associateAssessmentReportEvidenceFolder =
       yield* AuditManager.AssociateAssessmentReportEvidenceFolder(assessment);
     const disassociateAssessmentReportEvidenceFolder =
-      yield* AuditManager.DisassociateAssessmentReportEvidenceFolder(
-        assessment,
-      );
+      yield* AuditManager.DisassociateAssessmentReportEvidenceFolder(assessment);
     const batchAssociateAssessmentReportEvidence =
       yield* AuditManager.BatchAssociateAssessmentReportEvidence(assessment);
     const batchDisassociateAssessmentReportEvidence =
@@ -118,12 +107,10 @@ export default AuditManagerAssessmentTestFunction.make(
       yield* AuditManager.BatchCreateDelegationByAssessment(assessment);
     const batchDeleteDelegationByAssessment =
       yield* AuditManager.BatchDeleteDelegationByAssessment(assessment);
-    const updateAssessmentControl =
-      yield* AuditManager.UpdateAssessmentControl(assessment);
+    const updateAssessmentControl = yield* AuditManager.UpdateAssessmentControl(assessment);
     const updateAssessmentControlSetStatus =
       yield* AuditManager.UpdateAssessmentControlSetStatus(assessment);
-    const updateAssessmentStatus =
-      yield* AuditManager.UpdateAssessmentStatus(assessment);
+    const updateAssessmentStatus = yield* AuditManager.UpdateAssessmentStatus(assessment);
 
     const bound = {
       getEvidence,
@@ -174,8 +161,7 @@ export default AuditManagerAssessmentTestFunction.make(
         if (request.method === "GET" && pathname === "/insights") {
           const result = yield* getInsightsByAssessment();
           return yield* HttpServerResponse.json({
-            totalAssessmentControlsCount:
-              result.insights?.totalAssessmentControlsCount ?? 0,
+            totalAssessmentControlsCount: result.insights?.totalAssessmentControlsCount ?? 0,
           });
         }
 

@@ -30,10 +30,7 @@ export interface ListTagSyncTasks extends Binding.Service<
   () => Effect.Effect<
     (
       request?: resourcegroups.ListTagSyncTasksInput,
-    ) => Effect.Effect<
-      resourcegroups.ListTagSyncTasksOutput,
-      resourcegroups.ListTagSyncTasksError
-    >
+    ) => Effect.Effect<resourcegroups.ListTagSyncTasksOutput, resourcegroups.ListTagSyncTasksError>
   >
 > {}
 export const ListTagSyncTasks = Binding.Service<ListTagSyncTasks>(

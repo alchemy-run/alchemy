@@ -36,10 +36,7 @@ export interface DescribeFirewallPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeFirewallPolicyRequest,
-    ) => Effect.Effect<
-      NFW.DescribeFirewallPolicyResponse,
-      NFW.DescribeFirewallPolicyError
-    >
+    ) => Effect.Effect<NFW.DescribeFirewallPolicyResponse, NFW.DescribeFirewallPolicyError>
   >
 > {}
 

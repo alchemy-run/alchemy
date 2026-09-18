@@ -3,8 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { PlatformApplication } from "./PlatformApplication.ts";
 
-export interface SetEndpointAttributesRequest
-  extends sns.SetEndpointAttributesInput {}
+export interface SetEndpointAttributesRequest extends sns.SetEndpointAttributesInput {}
 
 /**
  * Runtime binding for `sns:SetEndpointAttributes`.
@@ -32,10 +31,7 @@ export interface SetEndpointAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetEndpointAttributesRequest,
-    ) => Effect.Effect<
-      sns.SetEndpointAttributesResponse,
-      sns.SetEndpointAttributesError
-    >
+    ) => Effect.Effect<sns.SetEndpointAttributesResponse, sns.SetEndpointAttributesError>
   >
 > {}
 

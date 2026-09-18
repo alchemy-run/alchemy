@@ -46,9 +46,7 @@ export const syncIvsChatTags = Effect.fn(function* (
       .pipe(retryWhileThrottled);
   }
   if (removed.length > 0) {
-    yield* ivschat
-      .untagResource({ resourceArn: arn, tagKeys: removed })
-      .pipe(retryWhileThrottled);
+    yield* ivschat.untagResource({ resourceArn: arn, tagKeys: removed }).pipe(retryWhileThrottled);
   }
 });
 
@@ -79,8 +77,7 @@ export const retryWhileHandlerPermissionPropagating = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e): boolean =>
-      e instanceof ivschat.ValidationException &&
-      e.message.includes("invalid lambda permission"),
+      e instanceof ivschat.ValidationException && e.message.includes("invalid lambda permission"),
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
@@ -94,8 +91,5 @@ export const retryWhileThrottled = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ThrottlingException",
-    schedule: Schedule.max([
-      Schedule.exponential("1 second"),
-      Schedule.recurs(6),
-    ]),
+    schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
   });

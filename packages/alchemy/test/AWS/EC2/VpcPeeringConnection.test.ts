@@ -1,20 +1,17 @@
-import * as AWS from "@/AWS";
-import { Vpc, VpcPeeringConnection } from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import * as Test from "./VpcTest.ts";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Vpc, VpcPeeringConnection } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import * as Test from "./VpcTest.ts";
 
 const { test } = Test.make({ providers: AWS.providers() }, 2);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const DEAD = new Set(["deleted", "deleting", "rejected", "failed", "expired"]);
 
@@ -34,14 +31,8 @@ const assertDeleted = Effect.fn(function* (pcxId: string) {
       while: (e) => e instanceof PeeringStillLive,
       schedule: Schedule.max([Schedule.exponential(300), Schedule.recurs(8)]),
     }),
-    Effect.catchTag(
-      "InvalidVpcPeeringConnectionID.NotFound",
-      () => Effect.void,
-    ),
-    Effect.catchTag(
-      "InvalidVpcPeeringConnectionId.NotFound",
-      () => Effect.void,
-    ),
+    Effect.catchTag("InvalidVpcPeeringConnectionID.NotFound", () => Effect.void),
+    Effect.catchTag("InvalidVpcPeeringConnectionId.NotFound", () => Effect.void),
   );
 });
 
@@ -111,11 +102,9 @@ test.provider(
 
       const provider = yield* Provider.findProvider(VpcPeeringConnection);
       const all = yield* provider.list();
-      expect(
-        all.some(
-          (x) => x.vpcPeeringConnectionId === peering.vpcPeeringConnectionId,
-        ),
-      ).toBe(true);
+      expect(all.some((x) => x.vpcPeeringConnectionId === peering.vpcPeeringConnectionId)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
       yield* assertDeleted(peering.vpcPeeringConnectionId);

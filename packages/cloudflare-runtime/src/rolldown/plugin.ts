@@ -16,9 +16,7 @@ import { hasNodejsCompat } from "./utils.ts";
 
 export type RolldownPluginOptions = Omit<BasePluginOptions, "viteEnvironment">;
 
-export type RolldownPlugin = (
-  options?: RolldownPluginOptions,
-) => Array<rolldown.Plugin | null>;
+export type RolldownPlugin = (options?: RolldownPluginOptions) => Array<rolldown.Plugin | null>;
 
 const cloudflare: RolldownPlugin = (options = {}) => {
   return [

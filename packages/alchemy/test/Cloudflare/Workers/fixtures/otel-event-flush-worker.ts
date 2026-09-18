@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /**
  * Durable Object target whose events emit child spans — one HTTP fetch
@@ -20,9 +20,7 @@ export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlus
         Effect.withSpan("otel-event-flush.child"),
       ),
       ping: () =>
-        Effect.succeed("durable-object-rpc-ok").pipe(
-          Effect.withSpan("otel-event-flush.rpc"),
-        ),
+        Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
     }),
   ),
 ) {}
@@ -43,9 +41,7 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
           const pong = yield* targetNamespace.getByName("target").ping();
           return HttpServerResponse.text(`worker-saw:${pong}`);
         }
-        const targetClient = Cloudflare.toHttpClient(
-          targetNamespace.getByName("target"),
-        );
+        const targetClient = Cloudflare.toHttpClient(targetNamespace.getByName("target"));
         const response = yield* targetClient.execute(
           HttpClientRequest.get("http://otel-event-flush-target/"),
         );

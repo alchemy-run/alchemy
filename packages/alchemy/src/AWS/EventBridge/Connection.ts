@@ -188,10 +188,7 @@ export const ConnectionProvider = () =>
   Provider.effect(
     Connection,
     Effect.gen(function* () {
-      const createConnectionName = (
-        id: string,
-        props: { name?: string } = {},
-      ) =>
+      const createConnectionName = (id: string, props: { name?: string } = {}) =>
         props.name
           ? Effect.succeed(props.name)
           : createPhysicalName({
@@ -238,15 +235,10 @@ export const ConnectionProvider = () =>
           // Connections don't support tags; the deterministic physical name
           // is the ownership signal (it embeds app/stage/logical id).
           const connectionName =
-            output?.connectionName ??
-            (yield* createConnectionName(id, olds ?? {}));
+            output?.connectionName ?? (yield* createConnectionName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!described?.Name || !described.ConnectionArn) {
             return undefined;
           }
@@ -285,18 +277,13 @@ export const ConnectionProvider = () =>
             return attrs;
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const connectionName =
-            output?.connectionName ?? (yield* createConnectionName(id, news));
+          const connectionName = output?.connectionName ?? (yield* createConnectionName(id, news));
 
           // Observe — live cloud state is authoritative; a vanished
           // connection falls through to create.
           const observed = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!observed?.ConnectionArn) {
             // Ensure — create the connection; tolerate an AlreadyExists race
@@ -309,12 +296,7 @@ export const ConnectionProvider = () =>
                 AuthParameters: toCreateAuthParameters(news.authParameters),
                 KmsKeyIdentifier: news.kmsKeyIdentifier,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
             // Sync — updateConnection overwrites description, authorization
             // type/parameters, and KMS key in one shot. The update-parameter
@@ -330,8 +312,7 @@ export const ConnectionProvider = () =>
           }
 
           const settled = yield* awaitSettled(connectionName);
-          const connectionArn = (settled.ConnectionArn ??
-            observed?.ConnectionArn) as ConnectionArn;
+          const connectionArn = (settled.ConnectionArn ?? observed?.ConnectionArn) as ConnectionArn;
 
           yield* session.note(connectionArn);
           return {
@@ -345,17 +326,14 @@ export const ConnectionProvider = () =>
           // Deleting a connection that ApiDestinations still reference fails
           // until the destinations are gone; the engine deletes dependents
           // first, so a bounded retry absorbs eventual consistency.
-          yield* eventbridge
-            .deleteConnection({ Name: output.connectionName })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "ConcurrentModificationException",
-                schedule: Schedule.spaced("2 seconds"),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+          yield* eventbridge.deleteConnection({ Name: output.connectionName }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
         }),
       };
     }),

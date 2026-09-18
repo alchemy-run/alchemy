@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 // Bindings fixture: a standalone SQS→SQS pipe (no Lambda target, so no
 // circularity) plus a Lambda that exercises the four Pipes runtime bindings
@@ -13,10 +13,9 @@ export class PipesBindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Functi
   "PipesBindingsFunction",
 ) {}
 
-export class BoundPipe extends Context.Service<
-  BoundPipe,
-  { pipe: AWS.Pipes.Pipe }
->()("BoundPipe") {}
+export class BoundPipe extends Context.Service<BoundPipe, { pipe: AWS.Pipes.Pipe }>()(
+  "BoundPipe",
+) {}
 
 export const BoundPipeLive = Layer.effect(
   BoundPipe,
@@ -40,11 +39,7 @@ export const BoundPipeLive = Layer.effect(
           Statement: [
             {
               Effect: "Allow",
-              Action: [
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes",
-              ],
+              Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"],
               Resource: [source.queueArn],
             },
             {
@@ -112,9 +107,7 @@ export default PipesBindingsFunction.make(
             NamePrefix: yield* pipeName,
           });
           return yield* HttpServerResponse.json({
-            names: (Pipes ?? []).flatMap((p) =>
-              p.Name !== undefined ? [p.Name] : [],
-            ),
+            names: (Pipes ?? []).flatMap((p) => (p.Name !== undefined ? [p.Name] : [])),
           });
         }
 

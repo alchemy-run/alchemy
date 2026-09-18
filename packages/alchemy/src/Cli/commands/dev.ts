@@ -1,16 +1,18 @@
+import { fileURLToPath } from "node:url";
 import * as Floci from "@alchemy.run/floci";
+import { moduleExtension } from "alchemy/Util/Node";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
+import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
-import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
+import { suppressInterruptMessages } from "./errors.ts";
 import {
   configPath,
   envFile,
@@ -20,8 +22,6 @@ import {
   profile,
   resolveStackArgs,
 } from "./flags.ts";
-import { suppressInterruptMessages } from "./errors.ts";
-import { moduleExtension } from "alchemy/Util/Node";
 
 /**
  * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
@@ -88,16 +88,9 @@ export const devCommand = Command.make(
         // duplicate --import inherited via execArgv is harmless — the
         // second import of the same URL hits the module cache.
         const entry = fileURLToPath(
-          import.meta.resolve(
-            `alchemy/bin/exec${moduleExtension(import.meta.url)}`,
-          ),
+          import.meta.resolve(`alchemy/bin/exec${moduleExtension(import.meta.url)}`),
         );
-        command = [
-          process.execPath,
-          ...process.execArgv,
-          ...nodeLoaderArgs(entry),
-          entry,
-        ];
+        command = [process.execPath, ...process.execArgv, ...nodeLoaderArgs(entry), entry];
       }
       const runChild = ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",

@@ -50,7 +50,6 @@ export interface DescribeBudgetActionHistories extends Binding.Service<
   >
 > {}
 
-export const DescribeBudgetActionHistories =
-  Binding.Service<DescribeBudgetActionHistories>(
-    "AWS.Budgets.DescribeBudgetActionHistories",
-  );
+export const DescribeBudgetActionHistories = Binding.Service<DescribeBudgetActionHistories>(
+  "AWS.Budgets.DescribeBudgetActionHistories",
+);

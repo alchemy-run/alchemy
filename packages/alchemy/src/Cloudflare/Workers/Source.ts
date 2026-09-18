@@ -20,17 +20,13 @@ import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
-import type { DurableObjectExport } from "./DurableObject.ts";
 import { getToolingCompatibility } from "./Compatibility.ts";
+import type { DurableObjectExport } from "./DurableObject.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
 import { isPythonMain, makePythonSource } from "./Sources/Python.ts";
 import { makeRolldownSource } from "./Sources/Rolldown.ts";
-import type {
-  WorkerAssetsConfig,
-  WorkerProps,
-  WorkerSourceDescriptor,
-} from "./Worker.ts";
+import type { WorkerAssetsConfig, WorkerProps, WorkerSourceDescriptor } from "./Worker.ts";
 
 /**
  * The hash slots a Worker source contributes to
@@ -145,11 +141,7 @@ export interface DevContext extends SourceContext {
 export type SourceDevHandle =
   | {
       readonly mode: "bundle";
-      readonly bundles: Stream.Stream<
-        Bundle.BundleWatchEvent,
-        SourceError,
-        SourceDevServices
-      >;
+      readonly bundles: Stream.Stream<Bundle.BundleWatchEvent, SourceError, SourceDevServices>;
     }
   | {
       readonly mode: "server";
@@ -247,11 +239,7 @@ export interface SourceProvider {
    */
   readonly dev: (
     ctx: DevContext,
-  ) => Effect.Effect<
-    SourceDevHandle,
-    SourceError,
-    SourceDevServices | Scope.Scope
-  >;
+  ) => Effect.Effect<SourceDevHandle, SourceError, SourceDevServices | Scope.Scope>;
 }
 
 /**
@@ -374,9 +362,7 @@ export const resolveSource = (
     return Effect.succeed(makePythonSource(props.main));
   }
   if (props.bundle === false) {
-    return Effect.succeed(
-      makePrebuiltSource({ main: props.main!, rules: props.rules }),
-    );
+    return Effect.succeed(makePrebuiltSource({ main: props.main!, rules: props.rules }));
   }
   return Effect.succeed(makeRolldownSource({ main: props.main! }));
 };
@@ -397,10 +383,7 @@ export const makeSourceContext = (params: {
   id: params.id,
   fqn: params.fqn,
   workerName: params.workerName,
-  compatibility: getToolingCompatibility(
-    params.compatibility,
-    params.props.main,
-  ),
+  compatibility: getToolingCompatibility(params.compatibility, params.props.main),
   entry: params.props.isExternal
     ? { kind: "external" }
     : { kind: "effect", exports: params.props.exports ?? {} },

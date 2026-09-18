@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { RestartContainer } from "./container.ts";
 
 /**
@@ -28,9 +28,7 @@ export class RestartObject extends Cloudflare.DurableObject<RestartObject>()(
         crash: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/exit"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/exit"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -33,10 +33,7 @@ const adminIds = Effect.gen(function* () {
 });
 
 /** Raw (unfiltered) permission entries a principal holds on a database. */
-const principalDatabasePermissions = (
-  principal: string,
-  databaseName: string,
-) =>
+const principalDatabasePermissions = (principal: string, databaseName: string) =>
   Effect.gen(function* () {
     const pages = yield* lf.listPermissions
       .pages({ Resource: { Database: { Name: databaseName } } })
@@ -75,10 +72,9 @@ describe.sequential("LakeFormation", () => {
             const role = yield* AWS.IAM.Role("LfAdminRole", {
               assumeRolePolicyDocument: trustPolicy,
             });
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Settings",
-              { dataLakeAdmins: [role.roleArn] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Settings", {
+              dataLakeAdmins: [role.roleArn],
+            });
             return { role, settings };
           }),
         );
@@ -114,10 +110,9 @@ describe.sequential("LakeFormation", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
               assumeRolePolicyDocument: trustPolicy,
@@ -135,9 +130,7 @@ describe.sequential("LakeFormation", () => {
         );
 
         expect(created.grant.permissions).toEqual(["CREATE_TABLE", "DESCRIBE"]);
-        expect(created.grant.resource.Database?.Name).toEqual(
-          created.database.databaseName,
-        );
+        expect(created.grant.resource.Database?.Name).toEqual(created.database.databaseName);
 
         // out-of-band verification (raw entries, not principal-filtered)
         const observed = yield* principalDatabasePermissions(
@@ -149,10 +142,9 @@ describe.sequential("LakeFormation", () => {
         // update — swap CREATE_TABLE for ALTER (grant + revoke delta)
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
               assumeRolePolicyDocument: trustPolicy,
@@ -178,10 +170,9 @@ describe.sequential("LakeFormation", () => {
         // the database still exists, so we can verify out-of-band
         yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const database = yield* AWS.Glue.Database("LfDb", {});
             const role = yield* AWS.IAM.Role("LfAnalyst", {
               assumeRolePolicyDocument: trustPolicy,
@@ -210,24 +201,20 @@ describe.sequential("LakeFormation", () => {
 
         const created = yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const tag = yield* AWS.LakeFormation.LFTag("EnvTag", {
               catalogId: settings.catalogId,
               tagKey: "alchemy-lf-env",
               tagValues: ["dev", "prod"],
             });
             const database = yield* AWS.Glue.Database("LfTagDb", {});
-            const association = yield* AWS.LakeFormation.LFTagAssociation(
-              "DbEnv",
-              {
-                catalogId: settings.catalogId,
-                resource: { database: { name: database.databaseName } },
-                lfTags: [{ tagKey: tag.tagKey, tagValues: ["dev"] }],
-              },
-            );
+            const association = yield* AWS.LakeFormation.LFTagAssociation("DbEnv", {
+              catalogId: settings.catalogId,
+              resource: { database: { name: database.databaseName } },
+              lfTags: [{ tagKey: tag.tagKey, tagValues: ["dev"] }],
+            });
             return { settings, tag, database, association };
           }),
         );
@@ -237,61 +224,46 @@ describe.sequential("LakeFormation", () => {
 
         // out-of-band: tag definition + assignment on the database
         const observedTag = yield* lf.getLFTag({ TagKey: "alchemy-lf-env" });
-        expect([...(observedTag.TagValues ?? [])].sort()).toEqual([
-          "dev",
-          "prod",
-        ]);
+        expect([...(observedTag.TagValues ?? [])].sort()).toEqual(["dev", "prod"]);
         const observedAssignment = yield* lf.getResourceLFTags({
           Resource: {
             Database: { Name: created.database.databaseName },
           },
         });
         expect(
-          observedAssignment.LFTagOnDatabase?.find(
-            (t) => t.TagKey === "alchemy-lf-env",
-          )?.TagValues,
+          observedAssignment.LFTagOnDatabase?.find((t) => t.TagKey === "alchemy-lf-env")?.TagValues,
         ).toEqual(["dev"]);
 
         // update — add a tag value and move the assignment onto it
         yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const tag = yield* AWS.LakeFormation.LFTag("EnvTag", {
               catalogId: settings.catalogId,
               tagKey: "alchemy-lf-env",
               tagValues: ["dev", "prod", "staging"],
             });
             const database = yield* AWS.Glue.Database("LfTagDb", {});
-            const association = yield* AWS.LakeFormation.LFTagAssociation(
-              "DbEnv",
-              {
-                catalogId: settings.catalogId,
-                resource: { database: { name: database.databaseName } },
-                lfTags: [{ tagKey: tag.tagKey, tagValues: ["staging"] }],
-              },
-            );
+            const association = yield* AWS.LakeFormation.LFTagAssociation("DbEnv", {
+              catalogId: settings.catalogId,
+              resource: { database: { name: database.databaseName } },
+              lfTags: [{ tagKey: tag.tagKey, tagValues: ["staging"] }],
+            });
             return { settings, tag, database, association };
           }),
         );
 
         const updatedTag = yield* lf.getLFTag({ TagKey: "alchemy-lf-env" });
-        expect([...(updatedTag.TagValues ?? [])].sort()).toEqual([
-          "dev",
-          "prod",
-          "staging",
-        ]);
+        expect([...(updatedTag.TagValues ?? [])].sort()).toEqual(["dev", "prod", "staging"]);
         const updatedAssignment = yield* lf.getResourceLFTags({
           Resource: {
             Database: { Name: created.database.databaseName },
           },
         });
         expect(
-          updatedAssignment.LFTagOnDatabase?.find(
-            (t) => t.TagKey === "alchemy-lf-env",
-          )?.TagValues,
+          updatedAssignment.LFTagOnDatabase?.find((t) => t.TagKey === "alchemy-lf-env")?.TagValues,
         ).toEqual(["staging"]);
 
         // remove tag + association from the stack (settings stay, so the
@@ -299,20 +271,15 @@ describe.sequential("LakeFormation", () => {
         // GetLFTag as a non-admin is AccessDenied, not EntityNotFound)
         yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             return { settings };
           }),
         );
         const goneTag = yield* lf
           .getLFTag({ TagKey: "alchemy-lf-env" })
-          .pipe(
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
         expect(goneTag).toBeUndefined();
 
         yield* stack.destroy();
@@ -327,41 +294,30 @@ describe.sequential("LakeFormation", () => {
         yield* stack.destroy();
         const admin = yield* callerPrincipalArn;
 
-        const build = (options: {
-          expressionValues: string[];
-          rowFilterExpression?: string;
-        }) =>
+        const build = (options: { expressionValues: string[]; rowFilterExpression?: string }) =>
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             const tag = yield* AWS.LakeFormation.LFTag("ExprTag", {
               catalogId: settings.catalogId,
               tagKey: "alchemy-lf-expr",
               tagValues: ["a", "b"],
             });
-            const expression = yield* AWS.LakeFormation.LFTagExpression(
-              "Expr",
-              {
-                catalogId: settings.catalogId,
-                name: "alchemy-lf-expression",
-                description: "alchemy test expression",
-                expression: [
-                  { tagKey: tag.tagKey, tagValues: options.expressionValues },
-                ],
-              },
-            );
+            const expression = yield* AWS.LakeFormation.LFTagExpression("Expr", {
+              catalogId: settings.catalogId,
+              name: "alchemy-lf-expression",
+              description: "alchemy test expression",
+              expression: [{ tagKey: tag.tagKey, tagValues: options.expressionValues }],
+            });
             const database = yield* AWS.Glue.Database("FilterDb", {});
             const table = yield* AWS.Glue.Table("FilterTable", {
               databaseName: database.databaseName,
               tableType: "EXTERNAL_TABLE",
               storageDescriptor: {
                 location: "s3://example-bucket/lf-filter/",
-                inputFormat:
-                  "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
-                outputFormat:
-                  "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                inputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+                outputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
                 serdeInfo: {
                   serializationLibrary:
                     "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
@@ -429,9 +385,9 @@ describe.sequential("LakeFormation", () => {
           TableName: created.table.tableName,
           Name: "alchemy-no-email",
         });
-        expect(
-          observedFilter.DataCellsFilter?.ColumnWildcard?.ExcludedColumnNames,
-        ).toEqual(["email"]);
+        expect(observedFilter.DataCellsFilter?.ColumnWildcard?.ExcludedColumnNames).toEqual([
+          "email",
+        ]);
         const observedOptIns = yield* lf.listLakeFormationOptIns({
           Principal: {
             DataLakePrincipalIdentifier: created.role.roleArn,
@@ -440,14 +396,10 @@ describe.sequential("LakeFormation", () => {
             Database: { Name: created.database.databaseName },
           },
         });
-        expect(
-          observedOptIns.LakeFormationOptInsInfoList?.length,
-        ).toBeGreaterThanOrEqual(1);
+        expect(observedOptIns.LakeFormationOptInsInfoList?.length).toBeGreaterThanOrEqual(1);
 
         // update — swap the expression's tag values and add a row filter
-        yield* stack.deploy(
-          build({ expressionValues: ["b"], rowFilterExpression: "id='x'" }),
-        );
+        yield* stack.deploy(build({ expressionValues: ["b"], rowFilterExpression: "id='x'" }));
 
         const updatedExpr = yield* lf.getLFTagExpression({
           Name: "alchemy-lf-expression",
@@ -459,29 +411,22 @@ describe.sequential("LakeFormation", () => {
           TableName: created.table.tableName,
           Name: "alchemy-no-email",
         });
-        expect(
-          updatedFilter.DataCellsFilter?.RowFilter?.FilterExpression,
-        ).toEqual("id='x'");
+        expect(updatedFilter.DataCellsFilter?.RowFilter?.FilterExpression).toEqual("id='x'");
 
         // remove everything but the admin bootstrap so deletion can be
         // verified out-of-band while the caller is still an admin
         yield* stack.deploy(
           Effect.gen(function* () {
-            const settings = yield* AWS.LakeFormation.DataLakeSettings(
-              "Admin",
-              { dataLakeAdmins: [admin] },
-            );
+            const settings = yield* AWS.LakeFormation.DataLakeSettings("Admin", {
+              dataLakeAdmins: [admin],
+            });
             return { settings };
           }),
         );
 
         const goneExpr = yield* lf
           .getLFTagExpression({ Name: "alchemy-lf-expression" })
-          .pipe(
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
         expect(goneExpr).toBeUndefined();
         const goneOptIns = yield* lf.listLakeFormationOptIns({
           Principal: {

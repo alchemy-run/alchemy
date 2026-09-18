@@ -40,12 +40,7 @@ const grantOnQueue = (tag: string, queue: Queue, actions: readonly string[]) =>
  * `PurgeQueue`, …): the runtime callable injects the bound {@link Queue}'s
  * URL and the deploy-time half grants `actions` on the queue's ARN.
  */
-export const makeQueueUrlHttpBinding = <
-  I extends { QueueUrl?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeQueueUrlHttpBinding = <I extends { QueueUrl?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SQS.SendMessage`. */
   tag: string;
   /** The distilled operation; the queue URL is injected as `QueueUrl`. */
@@ -76,12 +71,7 @@ export const makeQueueUrlHttpBinding = <
  * (`ListMessageMoveTasks`): the runtime callable injects the bound
  * {@link Queue}'s ARN and the deploy-time half grants `actions` on it.
  */
-export const makeQueueArnHttpBinding = <
-  I extends { SourceArn?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeQueueArnHttpBinding = <I extends { SourceArn?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SQS.ListMessageMoveTasks`. */
   tag: string;
   /** The distilled operation; the queue ARN is injected as `SourceArn`. */
@@ -125,9 +115,7 @@ export const makeQueueGrantHttpBinding = <I, A, E, R>(options: {
 
     return Effect.fn(function* (queue: Queue) {
       yield* grantOnQueue(options.tag, queue, options.actions);
-      return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${queue.LogicalId})`)(function* (request: I) {
         return yield* op(request);
       });
     });

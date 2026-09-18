@@ -1,3 +1,10 @@
+import { spawn } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as pathe from "pathe";
 /**
  * Cross-version FQN-migration regression test for the beta.68 StaticSite
  * incident (#1053 / #1108).
@@ -13,17 +20,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { Credentials } from "@/Cloudflare/Credentials.ts";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import { spawn } from "node:child_process";
-import * as pathe from "pathe";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -60,9 +57,7 @@ const run = (options: {
         code === 0
           ? Effect.succeed(output)
           : Effect.fail(
-              new Error(
-                `${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`,
-              ),
+              new Error(`${options.cmd} ${options.args.join(" ")} exited ${code}:\n${output}`),
             ),
       ),
     );
@@ -112,9 +107,7 @@ test.provider.skipIf(!!process.env.FAST)(
           : {
               // An OAuth access token is a bearer token like an API token.
               CLOUDFLARE_API_TOKEN: Redacted.value(
-                credentials.type === "apiToken"
-                  ? credentials.apiToken
-                  : credentials.accessToken,
+                credentials.type === "apiToken" ? credentials.apiToken : credentials.accessToken,
               ),
             }),
       };
@@ -124,9 +117,7 @@ test.provider.skipIf(!!process.env.FAST)(
         // LocalState layout: .alchemy/state/<stack>/<stage>/<encodeFqn>.json
         path.join(dir, ".alchemy", "state", STACK, STAGE, `${fqn}.json`);
       const readRow = (fqn: string) =>
-        fs
-          .readFileString(stateFile(fqn))
-          .pipe(Effect.map((raw) => JSON.parse(raw)));
+        fs.readFileString(stateFile(fqn)).pipe(Effect.map((raw) => JSON.parse(raw)));
 
       // ── Fixture ─────────────────────────────────────────────────────────
       yield* fs.writeFileString(
@@ -158,10 +149,7 @@ test.provider.skipIf(!!process.env.FAST)(
           2,
         ),
       );
-      yield* fs.writeFileString(
-        path.join(dir, "index.html"),
-        "<h1>b67-migration</h1>",
-      );
+      yield* fs.writeFileString(path.join(dir, "index.html"), "<h1>b67-migration</h1>");
       yield* fs.writeFileString(
         path.join(dir, "build.sh"),
         "mkdir -p dist && cp index.html dist/index.html",
@@ -185,13 +173,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* run({ cmd: "bun", args: ["install"], cwd: dir });
       yield* run({
         cmd: "bun",
-        args: [
-          "node_modules/alchemy/bin/cli.js",
-          "deploy",
-          "--stage",
-          STAGE,
-          "--yes",
-        ],
+        args: ["node_modules/alchemy/bin/cli.js", "deploy", "--stage", STAGE, "--yes"],
         cwd: dir,
         env: legacyCliEnv,
       });
@@ -206,14 +188,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // ── Phase 2: re-deploy with the CURRENT workspace version ───────────
       const output = yield* run({
         cmd: "bun",
-        args: [
-          workspaceCli,
-          "deploy",
-          "./alchemy.current.run.ts",
-          "--stage",
-          STAGE,
-          "--yes",
-        ],
+        args: [workspaceCli, "deploy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
         cwd: dir,
       });
 
@@ -235,14 +210,7 @@ test.provider.skipIf(!!process.env.FAST)(
       // ── Cleanup ─────────────────────────────────────────────────────────
       yield* run({
         cmd: "bun",
-        args: [
-          workspaceCli,
-          "destroy",
-          "./alchemy.current.run.ts",
-          "--stage",
-          STAGE,
-          "--yes",
-        ],
+        args: [workspaceCli, "destroy", "./alchemy.current.run.ts", "--stage", STAGE, "--yes"],
         cwd: dir,
       });
       yield* waitForWorkerToBeDeleted(workerName, accountId);

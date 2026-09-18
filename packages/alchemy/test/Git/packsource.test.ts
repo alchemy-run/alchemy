@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 /**
  * The spilled-pack reader (src/Git/Store/PackSource.ts): windowed random
  * access over blob storage. Reads within a window must be VIEWS of the
@@ -5,34 +8,19 @@
  * a parse through tiny windows — many window boundaries, straddling
  * entries — must produce exactly what the in-memory parse produces.
  */
-import {
-  hashObject,
-  makeSha1,
-  encodeTypeSize,
-  type Oid,
-} from "@/Git/Protocol/ObjectCodec.ts";
-import {
-  bufferRandomAccess,
-  ingestPack,
-  SINK_BATCH,
-} from "@/Git/Protocol/PackParser.ts";
+import { hashObject, makeSha1, encodeTypeSize, type Oid } from "@/Git/Protocol/ObjectCodec.ts";
+import { bufferRandomAccess, ingestPack, SINK_BATCH } from "@/Git/Protocol/PackParser.ts";
 import { packHeader } from "@/Git/Protocol/PackWriter.ts";
 import * as Zlib from "@/Git/Protocol/Zlib.ts";
 import { makeObjectStore } from "@/Git/Store/ObjectStore.ts";
 import { blobRandomAccess, sliceRandomAccess } from "@/Git/Store/PackSource.ts";
 import { makeStreamingSource } from "@/Git/Store/StreamingSource.ts";
-import * as Fiber from "effect/Fiber";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { concat } from "./harness/pack.ts";
 import { makeMemoryBlobStore, makeTestSqlClient } from "./harness/store.ts";
 
 /** A synthetic non-delta pack of `n` blobs with sizes cycling 100..5000. */
-const buildPack = (
-  n: number,
-  options?: { readonly incompressible?: boolean },
-) =>
+const buildPack = (n: number, options?: { readonly incompressible?: boolean }) =>
   Effect.gen(function* () {
     const pieces: Array<Uint8Array> = [packHeader(n)];
     const oids: Array<Oid> = [];
@@ -140,10 +128,7 @@ describe("blobRandomAccess", () => {
         // relies on this): reading it back yields exactly zdata.
         for (const entry of windowed.offsets.slice(0, 50)) {
           expect(entry.fromDelta).toBe(false);
-          const span = yield* spilled.read(
-            entry.dataOffset,
-            entry.zdata.length,
-          );
+          const span = yield* spilled.read(entry.dataOffset, entry.zdata.length);
           expect(Array.from(span)).toEqual(Array.from(entry.zdata));
         }
         expect(windowed.seen).toEqual(memory.seen);
@@ -260,9 +245,7 @@ describe("parsing a pack while it streams in (DESIGN §22.6)", () => {
       Effect.gen(function* () {
         const { pack } = yield* buildPack(50);
         const feeder = makeStreamingSource({ slabBytes: 4096 });
-        const parse = yield* Effect.forkChild(
-          Effect.result(parseWith(feeder.source)),
-        );
+        const parse = yield* Effect.forkChild(Effect.result(parseWith(feeder.source)));
         yield* feeder.push(pack.subarray(0, Math.floor(pack.length / 2)));
         feeder.end();
         const r = yield* Fiber.join(parse);
@@ -279,8 +262,7 @@ describe("parsing a pack while it streams in (DESIGN §22.6)", () => {
         bad[bad.length - 1] ^= 0xff;
         const r = yield* Effect.result(parseWith(bufferRandomAccess(bad)));
         expect(r._tag).toBe("Failure");
-        if (r._tag === "Failure")
-          expect(String(r.failure._tag)).toBe("PackChecksumMismatch");
+        if (r._tag === "Failure") expect(String(r.failure._tag)).toBe("PackChecksumMismatch");
       }),
     );
   });

@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
 import { CounterRpcs } from "./group.ts";
 import { Counter, CounterLive } from "./object.ts";
 
@@ -14,12 +14,9 @@ import { Counter, CounterLive } from "./object.ts";
 // the DO — every call is proxied to `counter.getByName(key).method({...})`.
 // Consumers can therefore hit the counter over a service binding via
 // `Cloudflare.RpcWorker.bind(WorkerA)` without knowing about DO routing.
-export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()(
-  "WorkerA",
-  {
-    schema: CounterRpcs,
-  },
-) {}
+export class WorkerA extends Cloudflare.RpcWorker<WorkerA, Counter>()("WorkerA", {
+  schema: CounterRpcs,
+}) {}
 
 // Layer — yielding `Counter` resolves to WorkerA's local hosted
 // namespace (the `CounterLive` Layer below populates the tag).

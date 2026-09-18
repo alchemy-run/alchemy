@@ -89,17 +89,15 @@ export interface TaskEventSourceProps extends EventRouteProps {
  */
 export const consumeTaskEvents = <StreamReq = never, Req = never>(
   props: TaskEventSourceProps,
-  process: (
-    events: Stream.Stream<TaskEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<TaskEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "DataSyncTaskEvents",
     {
       source: ["aws.datasync"],
-      "detail-type": (
-        props.kinds ?? (["task-execution-state-change"] as const)
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (["task-execution-state-change"] as const)).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
       ...(props.taskArns !== undefined
         ? { resources: props.taskArns.map((arn) => ({ prefix: arn })) }
         : {}),

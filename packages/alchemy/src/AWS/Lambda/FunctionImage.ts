@@ -2,18 +2,11 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { hashDockerBuildInputs, resolveDockerBuildPaths } from "../../Docker/BuildHash.ts";
 import { Docker } from "../../Docker/Docker.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, hasAlchemyTags } from "../../Tags.ts";
 import { sha256Object } from "../../Util/sha256.ts";
-import {
-  hashDockerBuildInputs,
-  resolveDockerBuildPaths,
-} from "../../Docker/BuildHash.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
@@ -56,9 +49,7 @@ export interface FunctionEcrImageSource extends FunctionImageConfig {
  * Source values must be literal because Lambda's circular-dependency
  * pre-create phase needs the deployable image before normal Output resolution.
  */
-export type FunctionImageSource =
-  | FunctionDockerImageSource
-  | FunctionEcrImageSource;
+export type FunctionImageSource = FunctionDockerImageSource | FunctionEcrImageSource;
 
 // Instruction overrides ride along on the source object; they are function
 // configuration, not image identity, so they never enter the image hash.
@@ -80,10 +71,7 @@ const FunctionEcrImageSourceSchema = Schema.Struct({
   ...FunctionImageConfigFields,
 }) satisfies Schema.Schema<FunctionEcrImageSource>;
 
-const FunctionImageSourceRecordSchema = Schema.Record(
-  Schema.String,
-  Schema.Unknown,
-);
+const FunctionImageSourceRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
 
 export interface ParsedFunctionImageUri {
   uri: string;
@@ -96,92 +84,82 @@ export interface ParsedFunctionImageUri {
 }
 
 /** Parse and validate a tagged or digest-pinned private ECR image URI. */
-export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(
-  function* (id: string, uri: string) {
-    const slash = uri.indexOf("/");
-    if (slash <= 0 || slash === uri.length - 1) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image.uri must be a private ECR image URI including a tag or digest`,
-        ),
-      );
-    }
-
-    const registryHost = uri.slice(0, slash);
-    const registry = /^(\d{12})\.dkr\.ecr(-fips)?\.([a-z0-9-]+)\.(.+)$/.exec(
-      registryHost,
+export const parseFunctionImageUri = Effect.fn("AWS.Lambda.parseImageUri")(function* (
+  id: string,
+  uri: string,
+) {
+  const slash = uri.indexOf("/");
+  if (slash <= 0 || slash === uri.length - 1) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image.uri must be a private ECR image URI including a tag or digest`,
+      ),
     );
-    if (registry === null) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image.uri must use a private ECR registry such as 123456789012.dkr.ecr.us-east-1.amazonaws.com/repository:tag`,
-        ),
-      );
-    }
-    if (registry[2] !== undefined) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): Lambda container images do not support ECR FIPS endpoints`,
-        ),
-      );
-    }
+  }
 
-    const reference = uri.slice(slash + 1);
-    const digestSeparator = reference.lastIndexOf("@");
-    const tagSeparator = reference.lastIndexOf(
-      ":",
-      digestSeparator >= 0 ? digestSeparator : reference.length,
+  const registryHost = uri.slice(0, slash);
+  const registry = /^(\d{12})\.dkr\.ecr(-fips)?\.([a-z0-9-]+)\.(.+)$/.exec(registryHost);
+  if (registry === null) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image.uri must use a private ECR registry such as 123456789012.dkr.ecr.us-east-1.amazonaws.com/repository:tag`,
+      ),
     );
-    if (digestSeparator >= 0 && tagSeparator >= 0) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image.uri must identify the image by either tag or digest, not both`,
-        ),
-      );
-    }
-    const repositoryName = reference.slice(
-      0,
-      digestSeparator >= 0 ? digestSeparator : tagSeparator,
+  }
+  if (registry[2] !== undefined) {
+    return yield* Effect.fail(
+      new Error(`Function(${id}): Lambda container images do not support ECR FIPS endpoints`),
     );
-    if (repositoryName.length === 0) {
-      return yield* Effect.fail(
-        new Error(`Function(${id}): image.uri has no ECR repository name`),
-      );
-    }
+  }
 
-    const imageId = yield* Effect.gen(function* () {
-      if (digestSeparator >= 0) {
-        const imageDigest = reference.slice(digestSeparator + 1);
-        if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
-          return yield* Effect.fail(
-            new Error(
-              `Function(${id}): image.uri digest must be sha256 followed by 64 lowercase hexadecimal characters`,
-            ),
-          );
-        }
-        return { imageDigest } as const;
-      }
-      if (tagSeparator <= 0 || tagSeparator === reference.length - 1) {
+  const reference = uri.slice(slash + 1);
+  const digestSeparator = reference.lastIndexOf("@");
+  const tagSeparator = reference.lastIndexOf(
+    ":",
+    digestSeparator >= 0 ? digestSeparator : reference.length,
+  );
+  if (digestSeparator >= 0 && tagSeparator >= 0) {
+    return yield* Effect.fail(
+      new Error(
+        `Function(${id}): image.uri must identify the image by either tag or digest, not both`,
+      ),
+    );
+  }
+  const repositoryName = reference.slice(0, digestSeparator >= 0 ? digestSeparator : tagSeparator);
+  if (repositoryName.length === 0) {
+    return yield* Effect.fail(new Error(`Function(${id}): image.uri has no ECR repository name`));
+  }
+
+  const imageId = yield* Effect.gen(function* () {
+    if (digestSeparator >= 0) {
+      const imageDigest = reference.slice(digestSeparator + 1);
+      if (!/^sha256:[0-9a-f]{64}$/.test(imageDigest)) {
         return yield* Effect.fail(
           new Error(
-            `Function(${id}): image.uri must include an explicit ECR tag or digest`,
+            `Function(${id}): image.uri digest must be sha256 followed by 64 lowercase hexadecimal characters`,
           ),
         );
       }
-      return { imageTag: reference.slice(tagSeparator + 1) } as const;
-    });
+      return { imageDigest } as const;
+    }
+    if (tagSeparator <= 0 || tagSeparator === reference.length - 1) {
+      return yield* Effect.fail(
+        new Error(`Function(${id}): image.uri must include an explicit ECR tag or digest`),
+      );
+    }
+    return { imageTag: reference.slice(tagSeparator + 1) } as const;
+  });
 
-    return {
-      uri,
-      registryId: registry[1],
-      registryHost,
-      region: registry[3],
-      repositoryName,
-      repositoryUri: `${registryHost}/${repositoryName}`,
-      imageId,
-    } satisfies ParsedFunctionImageUri;
-  },
-);
+  return {
+    uri,
+    registryId: registry[1],
+    registryHost,
+    region: registry[3],
+    repositoryName,
+    repositoryUri: `${registryHost}/${repositoryName}`,
+    imageId,
+  } satisfies ParsedFunctionImageUri;
+});
 
 export interface FunctionImageAttributes {
   /** Image source kind used by the Function. */
@@ -258,66 +236,56 @@ export const hashFunctionImageBuild = Effect.fn(function* (
   source: FunctionDockerImageSource,
   architecture: "x86_64" | "arm64",
 ) {
-  const decoded = yield* Schema.decodeUnknownEffect(
-    FunctionDockerImageSourceSchema,
-  )(source);
+  const decoded = yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(source);
   return yield* hashDecodedFunctionImageBuild(decoded, architecture);
 });
 
-export const decodeFunctionImageSource = Effect.fn(
-  "AWS.Lambda.decodeFunctionImageSource",
-)(function* (id: string, source: unknown) {
-  const record = yield* Schema.decodeUnknownEffect(
-    FunctionImageSourceRecordSchema,
-  )(source).pipe(
-    Effect.mapError(
-      (error) =>
-        new Error(`Function(${id}): image must be an object`, { cause: error }),
-    ),
-  );
-  const hasUri = record.uri !== undefined;
-  const hasBuildSource =
-    record.context !== undefined ||
-    record.dockerfile !== undefined ||
-    record.buildArgs !== undefined;
-  if (hasUri && hasBuildSource) {
-    return yield* Effect.fail(
-      new Error(
-        `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, or image.buildArgs; declare exactly one image source`,
+export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionImageSource")(
+  function* (id: string, source: unknown) {
+    const record = yield* Schema.decodeUnknownEffect(FunctionImageSourceRecordSchema)(source).pipe(
+      Effect.mapError(
+        (error) => new Error(`Function(${id}): image must be an object`, { cause: error }),
       ),
     );
-  }
-  if (!hasUri && !hasBuildSource) {
-    return yield* Effect.fail(
+    const hasUri = record.uri !== undefined;
+    const hasBuildSource =
+      record.context !== undefined ||
+      record.dockerfile !== undefined ||
+      record.buildArgs !== undefined;
+    if (hasUri && hasBuildSource) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image.uri cannot be combined with image.context, image.dockerfile, or image.buildArgs; declare exactly one image source`,
+        ),
+      );
+    }
+    if (!hasUri && !hasBuildSource) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): image must declare either image.uri or both image.context and image.dockerfile`,
+        ),
+      );
+    }
+    const decodeError = (error: unknown) =>
       new Error(
-        `Function(${id}): image must declare either image.uri or both image.context and image.dockerfile`,
-      ),
-    );
-  }
-  const decodeError = (error: unknown) =>
-    new Error(
-      `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
-      { cause: error },
-    );
-  if (hasUri) {
-    return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(
-      source,
-    ).pipe(
-      Effect.map((decoded): FunctionEcrImageSource => decoded),
+        `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
+        { cause: error },
+      );
+    if (hasUri) {
+      return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(source).pipe(
+        Effect.map((decoded): FunctionEcrImageSource => decoded),
+        Effect.mapError(decodeError),
+      );
+    }
+    return yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(source).pipe(
+      Effect.map((decoded): FunctionDockerImageSource => decoded),
       Effect.mapError(decodeError),
     );
-  }
-  return yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(
-    source,
-  ).pipe(
-    Effect.map((decoded): FunctionDockerImageSource => decoded),
-    Effect.mapError(decodeError),
-  );
-});
+  },
+);
 
-const isFunctionEcrImageSource = (
-  source: FunctionImageSource,
-): source is FunctionEcrImageSource => source.uri !== undefined;
+const isFunctionEcrImageSource = (source: FunctionImageSource): source is FunctionEcrImageSource =>
+  source.uri !== undefined;
 
 /**
  * Lambda-specific image resolver. It deliberately stays separate from the
@@ -354,18 +322,11 @@ export const makeFunctionImage = Effect.gen(function* () {
     });
   });
 
-  const ensureRepository = Effect.fn(function* (
-    id: string,
-    repositoryName: string,
-  ) {
-    let repository = yield* ecr
-      .describeRepositories({ repositoryNames: [repositoryName] })
-      .pipe(
-        Effect.map((response) => response.repositories?.[0]),
-        Effect.catchTag("RepositoryNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+  const ensureRepository = Effect.fn(function* (id: string, repositoryName: string) {
+    let repository = yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
+      Effect.map((response) => response.repositories?.[0]),
+      Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+    );
 
     if (!repository?.repositoryArn || !repository.repositoryUri) {
       const tags = yield* createInternalTags(id);
@@ -388,9 +349,7 @@ export const makeFunctionImage = Effect.gen(function* () {
 
     if (!repository?.repositoryArn || !repository.repositoryUri) {
       return yield* Effect.die(
-        new Error(
-          `Failed to create or read Lambda image repository '${repositoryName}'`,
-        ),
+        new Error(`Failed to create or read Lambda image repository '${repositoryName}'`),
       );
     }
 
@@ -416,18 +375,13 @@ export const makeFunctionImage = Effect.gen(function* () {
     }
 
     const desiredPolicy = yield* desiredRepositoryPolicy();
-    const observedPolicy = yield* ecr
-      .getRepositoryPolicy({ repositoryName })
-      .pipe(
-        Effect.map((response) => response.policyText),
-        Effect.catchTag("RepositoryPolicyNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+    const observedPolicy = yield* ecr.getRepositoryPolicy({ repositoryName }).pipe(
+      Effect.map((response) => response.policyText),
+      Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
+    );
     if (
       observedPolicy === undefined ||
-      normalizePolicyDocument(observedPolicy) !==
-        normalizePolicyDocument(desiredPolicy)
+      normalizePolicyDocument(observedPolicy) !== normalizePolicyDocument(desiredPolicy)
     ) {
       yield* ecr.setRepositoryPolicy({
         repositoryName,
@@ -441,85 +395,74 @@ export const makeFunctionImage = Effect.gen(function* () {
     };
   });
 
-  const describeImage = Effect.fn(function* (
-    repositoryName: string,
-    imageTag: string,
-  ) {
+  const describeImage = Effect.fn(function* (repositoryName: string, imageTag: string) {
     const response = yield* ecr
       .describeImages({
         repositoryName,
         imageIds: [{ imageTag }],
       })
       .pipe(
-        Effect.catchTag(
-          ["ImageNotFoundException", "RepositoryNotFoundException"],
-          () => Effect.succeed(undefined),
+        Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+          Effect.succeed(undefined),
         ),
       );
     return response?.imageDetails?.[0];
   });
 
-  const resolveExternalImage = Effect.fn("AWS.Lambda.resolveExternalImage")(
-    function* (
-      id: string,
-      source: FunctionEcrImageSource,
-      previousImage?: Omit<FunctionImageAttributes, "hash">,
-    ) {
-      const parsed = yield* parseFunctionImageUri(id, source.uri);
-      const { region } = yield* AWSEnvironment.current;
-      if (parsed.region !== region) {
-        return yield* Effect.fail(
-          new Error(
-            `Function(${id}): ECR image region '${parsed.region}' must match Lambda region '${region}'`,
-          ),
-        );
-      }
-
-      const detail = yield* ecr
-        .describeImages({
-          registryId: parsed.registryId,
-          repositoryName: parsed.repositoryName,
-          imageIds: [parsed.imageId],
-        })
-        .pipe(
-          Effect.catchTag(
-            ["ImageNotFoundException", "RepositoryNotFoundException"],
-            () =>
-              Effect.fail(
-                new Error(
-                  `Function(${id}): ECR image '${source.uri}' does not exist or is not accessible`,
-                ),
-              ),
-          ),
-          Effect.map((response) => response.imageDetails?.[0]),
-        );
-      const digest = detail?.imageDigest;
-      if (digest === undefined) {
-        return yield* Effect.fail(
-          new Error(
-            `Function(${id}): ECR image '${source.uri}' did not resolve to a registry digest`,
-          ),
-        );
-      }
-
-      const hash = (yield* sha256Object({ uri: source.uri, digest })).slice(
-        0,
-        32,
+  const resolveExternalImage = Effect.fn("AWS.Lambda.resolveExternalImage")(function* (
+    id: string,
+    source: FunctionEcrImageSource,
+    previousImage?: Omit<FunctionImageAttributes, "hash">,
+  ) {
+    const parsed = yield* parseFunctionImageUri(id, source.uri);
+    const { region } = yield* AWSEnvironment.current;
+    if (parsed.region !== region) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): ECR image region '${parsed.region}' must match Lambda region '${region}'`,
+        ),
       );
-      return {
-        source: "uri",
-        hash,
-        imageUri: source.uri,
-        resolvedImageUri: `${parsed.repositoryUri}@${digest}`,
-        digest,
+    }
+
+    const detail = yield* ecr
+      .describeImages({
+        registryId: parsed.registryId,
         repositoryName: parsed.repositoryName,
-        repositoryUri: parsed.repositoryUri,
-        ownsRepository:
-          previousImage?.ownsRepository === true &&
-          previousImage.repositoryUri === parsed.repositoryUri,
-      } satisfies FunctionImageAttributes;
-    },
-  );
+        imageIds: [parsed.imageId],
+      })
+      .pipe(
+        Effect.catchTag(["ImageNotFoundException", "RepositoryNotFoundException"], () =>
+          Effect.fail(
+            new Error(
+              `Function(${id}): ECR image '${source.uri}' does not exist or is not accessible`,
+            ),
+          ),
+        ),
+        Effect.map((response) => response.imageDetails?.[0]),
+      );
+    const digest = detail?.imageDigest;
+    if (digest === undefined) {
+      return yield* Effect.fail(
+        new Error(
+          `Function(${id}): ECR image '${source.uri}' did not resolve to a registry digest`,
+        ),
+      );
+    }
+
+    const hash = (yield* sha256Object({ uri: source.uri, digest })).slice(0, 32);
+    return {
+      source: "uri",
+      hash,
+      imageUri: source.uri,
+      resolvedImageUri: `${parsed.repositoryUri}@${digest}`,
+      digest,
+      repositoryName: parsed.repositoryName,
+      repositoryUri: parsed.repositoryUri,
+      ownsRepository:
+        previousImage?.ownsRepository === true &&
+        previousImage.repositoryUri === parsed.repositoryUri,
+    } satisfies FunctionImageAttributes;
+  });
 
   const identity = Effect.fn(function* (
     id: string,
@@ -553,18 +496,11 @@ export const makeFunctionImage = Effect.gen(function* () {
   const resolve = Effect.fn(function* (options: ResolveFunctionImageOptions) {
     const source = yield* decodeFunctionImageSource(options.id, options.source);
     if (isFunctionEcrImageSource(source)) {
-      const image = yield* resolveExternalImage(
-        options.id,
-        source,
-        options.previousImage,
-      );
+      const image = yield* resolveExternalImage(options.id, source, options.previousImage);
       yield* options.session.note(image.imageUri);
       return image;
     }
-    const imageTag = yield* hashDecodedFunctionImageBuild(
-      source,
-      options.architecture,
-    );
+    const imageTag = yield* hashDecodedFunctionImageBuild(source, options.architecture);
     const repositoryName =
       options.previousImage?.ownsRepository === true
         ? options.previousImage.repositoryName
@@ -593,9 +529,7 @@ export const makeFunctionImage = Effect.gen(function* () {
           // only when ECR proves the desired content-addressed tag now exists.
           describeImage(repositoryName, imageTag).pipe(
             Effect.flatMap((image) =>
-              image?.imageDigest !== undefined
-                ? Effect.succeed(false)
-                : Effect.fail(buildError),
+              image?.imageDigest !== undefined ? Effect.succeed(false) : Effect.fail(buildError),
             ),
           ),
         ),
@@ -611,17 +545,13 @@ export const makeFunctionImage = Effect.gen(function* () {
         }),
       );
       yield* options.session.note(
-        pushed
-          ? `Pushed ${imageUri}`
-          : `Reused concurrently pushed ${imageUri}`,
+        pushed ? `Pushed ${imageUri}` : `Reused concurrently pushed ${imageUri}`,
       );
     }
 
     const digest = detail?.imageDigest;
     if (digest === undefined) {
-      return yield* Effect.fail(
-        new Error(`Image ${imageUri} has no registry digest after push`),
-      );
+      return yield* Effect.fail(new Error(`Image ${imageUri} has no registry digest after push`));
     }
     return {
       source: "build",
@@ -640,19 +570,11 @@ export const makeFunctionImage = Effect.gen(function* () {
       .deleteRepository({ repositoryName, force: true })
       .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.void));
 
-  const isReady = Effect.fn(function* (
-    id: string,
-    repositoryName: string,
-    imageTag: string,
-  ) {
-    const repository = yield* ecr
-      .describeRepositories({ repositoryNames: [repositoryName] })
-      .pipe(
-        Effect.map((response) => response.repositories?.[0]),
-        Effect.catchTag("RepositoryNotFoundException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+  const isReady = Effect.fn(function* (id: string, repositoryName: string, imageTag: string) {
+    const repository = yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
+      Effect.map((response) => response.repositories?.[0]),
+      Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+    );
     if (
       repository?.repositoryArn === undefined ||
       repository.repositoryUri === undefined ||
@@ -665,18 +587,11 @@ export const makeFunctionImage = Effect.gen(function* () {
       [
         ecr
           .listTagsForResource({ resourceArn: repository.repositoryArn })
-          .pipe(
-            Effect.catchTag("RepositoryNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          ),
+          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined))),
         ecr.getRepositoryPolicy({ repositoryName }).pipe(
           Effect.map((response) => response.policyText),
           Effect.catchTag(
-            [
-              "RepositoryNotFoundException",
-              "RepositoryPolicyNotFoundException",
-            ],
+            ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
             () => Effect.succeed(undefined),
           ),
         ),
@@ -691,8 +606,7 @@ export const makeFunctionImage = Effect.gen(function* () {
     const desiredPolicy = yield* desiredRepositoryPolicy();
     return (
       observedPolicy !== undefined &&
-      normalizePolicyDocument(observedPolicy) ===
-        normalizePolicyDocument(desiredPolicy) &&
+      normalizePolicyDocument(observedPolicy) === normalizePolicyDocument(desiredPolicy) &&
       image?.imageDigest !== undefined
     );
   });
@@ -700,6 +614,4 @@ export const makeFunctionImage = Effect.gen(function* () {
   return { hash, identity, resolve, isReady, deleteRepository };
 });
 
-export interface FunctionImage extends Effect.Success<
-  typeof makeFunctionImage
-> {}
+export interface FunctionImage extends Effect.Success<typeof makeFunctionImage> {}

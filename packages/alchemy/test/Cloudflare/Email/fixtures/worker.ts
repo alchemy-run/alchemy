@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { Email } from "./sender.ts";
 
 export default class SendEmailWorker extends Cloudflare.Worker<SendEmailWorker>()(

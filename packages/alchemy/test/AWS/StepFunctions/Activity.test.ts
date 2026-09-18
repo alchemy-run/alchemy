@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Activity } from "@/AWS/StepFunctions";
-import * as Test from "@/Test/Alchemy";
 import * as sfn from "@distilled.cloud/aws/sfn";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Activity } from "@/AWS/StepFunctions";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,10 +19,7 @@ const assertActivityDeleted = (activityArn: string) =>
     Effect.catchTag("ActivityDoesNotExist", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ActivityStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -50,9 +47,7 @@ test.provider(
       const tags = yield* sfn.listTagsForResource({
         resourceArn: activity.activityArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.tags ?? []).map((t) => [t.key, t.value]),
-      );
+      const tagRecord = Object.fromEntries((tags.tags ?? []).map((t) => [t.key, t.value]));
       expect(tagRecord.Environment).toBe("test");
       expect(tagRecord["alchemy::id"]).toBe("Worker");
 
@@ -68,11 +63,9 @@ test.provider(
       const afterUpdate = yield* sfn.listTagsForResource({
         resourceArn: activity.activityArn,
       });
-      expect(
-        Object.fromEntries(
-          (afterUpdate.tags ?? []).map((t) => [t.key, t.value]),
-        ).Extra,
-      ).toBe("1");
+      expect(Object.fromEntries((afterUpdate.tags ?? []).map((t) => [t.key, t.value])).Extra).toBe(
+        "1",
+      );
 
       yield* stack.destroy();
       yield* assertActivityDeleted(activity.activityArn);

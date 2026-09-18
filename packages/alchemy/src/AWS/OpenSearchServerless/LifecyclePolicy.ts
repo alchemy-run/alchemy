@@ -6,11 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalizePolicy,
-  retryWhileConflict,
-  stringifyPolicy,
-} from "./internal.ts";
+import { canonicalizePolicy, retryWhileConflict, stringifyPolicy } from "./internal.ts";
 import type { SecurityPolicyDocument } from "./SecurityPolicy.ts";
 
 /** The kind of lifecycle policy. OpenSearch Serverless only defines `retention`. */
@@ -130,8 +126,7 @@ export const LifecyclePolicyProvider = () =>
         props: { policyName?: string | undefined },
       ) {
         return (
-          props.policyName ??
-          (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
+          props.policyName ?? (yield* createPhysicalName({ id, maxLength: 32, lowercase: true }))
         );
       });
 
@@ -164,9 +159,7 @@ export const LifecyclePolicyProvider = () =>
               .flatMap((page) => page.lifecyclePolicySummaries ?? [])
               .filter(
                 (s) =>
-                  s.name !== undefined &&
-                  s.type !== undefined &&
-                  s.policyVersion !== undefined,
+                  s.name !== undefined && s.type !== undefined && s.policyVersion !== undefined,
               )
               .map((s) => ({
                 policyName: s.name!,
@@ -177,8 +170,7 @@ export const LifecyclePolicyProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.policyName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const detail = yield* observe(LIFECYCLE_POLICY_TYPE, name);
           if (detail?.name === undefined) {
             return undefined;
@@ -190,10 +182,7 @@ export const LifecyclePolicyProvider = () =>
 
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (olds.type ?? LIFECYCLE_POLICY_TYPE) !==
-            (news.type ?? LIFECYCLE_POLICY_TYPE)
-          ) {
+          if ((olds.type ?? LIFECYCLE_POLICY_TYPE) !== (news.type ?? LIFECYCLE_POLICY_TYPE)) {
             return { action: "replace" } as const;
           }
           const oldName = yield* createName(id, olds);
@@ -227,11 +216,9 @@ export const LifecyclePolicyProvider = () =>
               );
           } else {
             // 3. SYNC — update policy/description when observed drifts from desired
-            const policyDrift =
-              canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
+            const policyDrift = canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
             const descriptionDrift =
-              news.description !== undefined &&
-              news.description !== detail.description;
+              news.description !== undefined && news.description !== detail.description;
             if (policyDrift || descriptionDrift) {
               detail = yield* aoss
                 .updateLifecyclePolicy({
@@ -262,9 +249,7 @@ export const LifecyclePolicyProvider = () =>
               type: output.type,
               name: output.policyName,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

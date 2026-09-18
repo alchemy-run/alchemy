@@ -23,10 +23,7 @@ export interface CancelPolicyGeneration extends Binding.Service<
   () => Effect.Effect<
     (
       request: aa.CancelPolicyGenerationRequest,
-    ) => Effect.Effect<
-      aa.CancelPolicyGenerationResponse,
-      aa.CancelPolicyGenerationError
-    >
+    ) => Effect.Effect<aa.CancelPolicyGenerationResponse, aa.CancelPolicyGenerationError>
   >
 > {}
 

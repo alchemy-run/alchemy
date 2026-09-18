@@ -11,8 +11,7 @@ import type { WriteDomainClient } from "./DomainWrite.ts";
  * on {@link ReadDomainClient} and {@link WriteDomainClient} plus a raw
  * any-method escape hatch.
  */
-export interface ReadWriteDomainClient
-  extends ReadDomainClient, WriteDomainClient {
+export interface ReadWriteDomainClient extends ReadDomainClient, WriteDomainClient {
   /**
    * Raw escape hatch — a SigV4-signed request with any method against any
    * data-plane path (e.g. `PUT /my-index` to create an index with explicit
@@ -73,6 +72,4 @@ export interface DomainReadWrite extends Binding.Service<
   "AWS.OpenSearch.DomainReadWrite",
   (domain: Domain) => Effect.Effect<ReadWriteDomainClient>
 > {}
-export const DomainReadWrite = Binding.Service<DomainReadWrite>(
-  "AWS.OpenSearch.DomainReadWrite",
-);
+export const DomainReadWrite = Binding.Service<DomainReadWrite>("AWS.OpenSearch.DomainReadWrite");

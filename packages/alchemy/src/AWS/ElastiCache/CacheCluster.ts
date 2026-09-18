@@ -72,9 +72,7 @@ export interface CacheCluster extends Resource<
  *
  * @resource
  */
-export const CacheCluster = Resource<CacheCluster>(
-  "AWS.ElastiCache.CacheCluster",
-);
+export const CacheCluster = Resource<CacheCluster>("AWS.ElastiCache.CacheCluster");
 
 export const CacheClusterProvider = () =>
   Provider.effect(
@@ -90,11 +88,7 @@ export const CacheClusterProvider = () =>
             CacheClusterId: name,
             ShowCacheNodeInfo: true,
           })
-          .pipe(
-            Effect.catchTag("CacheClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("CacheClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.CacheClusters?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {
@@ -102,15 +96,10 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster?.CacheClusterStatus === "available"
               ? Effect.succeed(cluster)
-              : Effect.fail(
-                  new Error(`Cache cluster '${name}' is not available`),
-                ),
+              : Effect.fail(new Error(`Cache cluster '${name}' is not available`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("15 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -119,15 +108,10 @@ export const CacheClusterProvider = () =>
           Effect.flatMap((cluster) =>
             cluster === undefined
               ? Effect.void
-              : Effect.fail(
-                  new Error(`Cache cluster '${name}' is still deleting`),
-                ),
+              : Effect.fail(new Error(`Cache cluster '${name}' is still deleting`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("15 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
@@ -145,8 +129,7 @@ export const CacheClusterProvider = () =>
           engineVersion: cluster.EngineVersion,
           nodeType: cluster.CacheNodeType,
           endpoints: (cluster.CacheNodes ?? []).flatMap((node) =>
-            node.Endpoint?.Address !== undefined &&
-            node.Endpoint.Port !== undefined
+            node.Endpoint?.Address !== undefined && node.Endpoint.Port !== undefined
               ? [{ address: node.Endpoint.Address, port: node.Endpoint.Port }]
               : [],
           ),
@@ -154,10 +137,7 @@ export const CacheClusterProvider = () =>
           tags: yield* readElastiCacheTags(cluster.ARN),
         };
       });
-      const replaces = (
-        olds: Partial<CacheClusterProps>,
-        news: Partial<CacheClusterProps>,
-      ) =>
+      const replaces = (olds: Partial<CacheClusterProps>, news: Partial<CacheClusterProps>) =>
         olds.subnetGroupName !== news.subnetGroupName ||
         olds.port !== news.port ||
         olds.networkType !== news.networkType ||
@@ -167,13 +147,10 @@ export const CacheClusterProvider = () =>
         stables: ["cacheClusterId", "cacheClusterArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          if (replaces(olds ?? {}, news ?? {}))
-            return { action: "replace" } as const;
+          if (replaces(olds ?? {}, news ?? {})) return { action: "replace" } as const;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const cluster = yield* readCluster(
@@ -181,9 +158,7 @@ export const CacheClusterProvider = () =>
           );
           if (!cluster?.ARN) return undefined;
           const result = yield* attrs(cluster);
-          return (yield* hasAlchemyTags(id, result.tags))
-            ? result
-            : Unowned(result);
+          return (yield* hasAlchemyTags(id, result.tags)) ? result : Unowned(result);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const props = news ?? {};
@@ -213,12 +188,7 @@ export const CacheClusterProvider = () =>
                 IpDiscovery: props.ipDiscovery,
                 Tags: tagsToWire(desiredTags),
               })
-              .pipe(
-                Effect.catchTag(
-                  "CacheClusterAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("CacheClusterAlreadyExistsFault", () => Effect.void));
           }
           cluster = yield* waitForAvailable(name);
           const update: elasticache.ModifyCacheClusterMessage = {
@@ -288,36 +258,26 @@ export const CacheClusterProvider = () =>
           return yield* attrs(cluster);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* elasticache
-            .deleteCacheCluster({ CacheClusterId: output.cacheClusterId })
-            .pipe(
-              Effect.catchTag("CacheClusterNotFoundFault", () => Effect.void),
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "InvalidCacheClusterStateFault",
-                schedule: Schedule.max([
-                  Schedule.fixed("15 seconds"),
-                  Schedule.recurs(12),
-                ]),
-              }),
-            );
+          yield* elasticache.deleteCacheCluster({ CacheClusterId: output.cacheClusterId }).pipe(
+            Effect.catchTag("CacheClusterNotFoundFault", () => Effect.void),
+            Effect.retry({
+              while: (error) => error._tag === "InvalidCacheClusterStateFault",
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(12)]),
+            }),
+          );
           yield* waitForDeleted(output.cacheClusterId);
         }),
         list: () =>
-          elasticache.describeCacheClusters
-            .pages({ ShowCacheNodeInfo: true })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((pages) =>
-                Array.from(pages).flatMap((page) => page.CacheClusters ?? []),
-              ),
-              Effect.flatMap((clusters) =>
-                Effect.forEach(
-                  clusters.filter((cluster) => cluster.ARN),
-                  attrs,
-                ),
+          elasticache.describeCacheClusters.pages({ ShowCacheNodeInfo: true }).pipe(
+            Stream.runCollect,
+            Effect.map((pages) => Array.from(pages).flatMap((page) => page.CacheClusters ?? [])),
+            Effect.flatMap((clusters) =>
+              Effect.forEach(
+                clusters.filter((cluster) => cluster.ARN),
+                attrs,
               ),
             ),
+          ),
       };
     }),
   );

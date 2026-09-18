@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { describe, expect } from "alchemy-test";
@@ -8,6 +6,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import LogGroupEventSourceFunctionLive, {
   LogGroupEventSourceFunction,
 } from "./event-source-handler.ts";
@@ -32,29 +32,21 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
         yield* stack.destroy();
 
         const fn = yield* stack.deploy(
-          LogGroupEventSourceFunction.pipe(
-            Effect.provide(LogGroupEventSourceFunctionLive),
-          ),
+          LogGroupEventSourceFunction.pipe(Effect.provide(LogGroupEventSourceFunctionLive)),
         );
 
         const functionUrl = fn.functionUrl!;
 
         // First request rides out cold-start / URL propagation; keep polling
         // until the fixture reports its identifiers.
-        const { sourceLogGroupName, resultQueueUrl } = yield* HttpClient.get(
-          functionUrl,
-        ).pipe(
+        const { sourceLogGroupName, resultQueueUrl } = yield* HttpClient.get(functionUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? (response.json as Effect.Effect<{
                   sourceLogGroupName?: string;
                   resultQueueUrl?: string;
                 }>)
-              : Effect.fail(
-                  new FunctionNotReady(
-                    `Function not ready: ${response.status}`,
-                  ),
-                ),
+              : Effect.fail(new FunctionNotReady(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
             body.sourceLogGroupName && body.resultQueueUrl
@@ -64,15 +56,10 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
                     resultQueueUrl: string;
                   },
                 )
-              : Effect.fail(
-                  new FunctionNotReady("Function returned empty identifiers"),
-                ),
+              : Effect.fail(new FunctionNotReady("Function returned empty identifiers")),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("1 seconds"),
-              Schedule.recurs(60),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 seconds"), Schedule.recurs(60)]),
           }),
         );
 
@@ -97,12 +84,7 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
             logGroupName: sourceLogGroupName,
             logStreamName,
           })
-          .pipe(
-            Effect.catchTag(
-              "ResourceAlreadyExistsException",
-              () => Effect.void,
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
         const timestamp = yield* Clock.currentTimeMillis;
         yield* logs.putLogEvents({
           logGroupName: sourceLogGroupName,
@@ -119,9 +101,7 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
             MaxNumberOfMessages: 10,
             WaitTimeSeconds: 2,
           });
-          const match = (result.Messages ?? []).find(
-            (message) => message.Body === marker,
-          );
+          const match = (result.Messages ?? []).find((message) => message.Body === marker);
           if (!match?.ReceiptHandle) {
             return yield* Effect.fail(new MessageNotDelivered());
           }
@@ -133,10 +113,7 @@ describe.sequential("AWS.Logs.LogGroupEventSource", () => {
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "MessageNotDelivered",
-            schedule: Schedule.max([
-              Schedule.fixed("1 seconds"),
-              Schedule.recurs(30),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("1 seconds"), Schedule.recurs(30)]),
           }),
         );
 

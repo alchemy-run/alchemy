@@ -75,15 +75,10 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
       cronFires.getByName("default").record(controller.scheduledTime),
     );
 
-    yield* Cloudflare.Queues.consumeQueueMessages<Message["body"]>(
-      queue,
-      (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          queueMessages
-            .getByName("global")
-            .put({ id: msg.id, body: msg.body })
-            .pipe(Effect.asVoid),
-        ),
+    yield* Cloudflare.Queues.consumeQueueMessages<Message["body"]>(queue, (stream) =>
+      Stream.runForEach(stream, (msg) =>
+        queueMessages.getByName("global").put({ id: msg.id, body: msg.body }).pipe(Effect.asVoid),
+      ),
     );
 
     return {
@@ -105,10 +100,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
         } else if (url.pathname.startsWith("/workflow/start/")) {
           const roomId = url.pathname.split("/workflow/start/")[1];
           if (!roomId) {
-            return yield* HttpServerResponse.json(
-              { error: "roomId is required" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "roomId is required" }, { status: 400 });
           }
           const instance = yield* workflow.create({
             params: {
@@ -142,12 +134,8 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
           return yield* HttpServerResponse.json(snapshot);
         } else if (url.pathname.startsWith("/secret-key")) {
           const key = yield* hmacKey;
-          const data = new TextEncoder().encode(
-            url.searchParams.get("message") ?? "hello",
-          );
-          const signature = yield* Effect.promise(() =>
-            crypto.subtle.sign("HMAC", key, data),
-          );
+          const data = new TextEncoder().encode(url.searchParams.get("message") ?? "hello");
+          const signature = yield* Effect.promise(() => crypto.subtle.sign("HMAC", key, data));
           const verified = yield* Effect.promise(() =>
             crypto.subtle.verify("HMAC", key, signature, data),
           );
@@ -156,9 +144,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
             algorithm: key.algorithm.name,
             // Bound keys are never extractable — local lowering matches.
             extractable: key.extractable,
-            signatureBase64: btoa(
-              String.fromCharCode(...new Uint8Array(signature)),
-            ),
+            signatureBase64: btoa(String.fromCharCode(...new Uint8Array(signature))),
           });
         } else if (url.pathname.startsWith("/analytics")) {
           // A documented no-op in local dev — the write succeeding (not
@@ -220,9 +206,7 @@ export class QueueMessages extends Cloudflare.DurableObject<QueueMessages>()(
           yield* state.storage.put(message.id, message);
         }),
         list: Effect.fn(function* () {
-          const messages = new Map<string, Message>(
-            state.storage.kv.list<Message>(),
-          );
+          const messages = new Map<string, Message>(state.storage.kv.list<Message>());
           return Array.from(messages.values());
         }),
       };

@@ -36,6 +36,4 @@ export interface GetInsightEvents extends Binding.Service<
     ) => Effect.Effect<xray.GetInsightEventsResult, xray.GetInsightEventsError>
   >
 > {}
-export const GetInsightEvents = Binding.Service<GetInsightEvents>(
-  "AWS.XRay.GetInsightEvents",
-);
+export const GetInsightEvents = Binding.Service<GetInsightEvents>("AWS.XRay.GetInsightEvents");

@@ -1,19 +1,17 @@
-import * as IAM from "@/AWS/IAM";
-import * as Kendra from "@/AWS/Kendra";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Kendra from "@/AWS/Kendra";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class KendraTestFunction extends Lambda.Function<Lambda.Function>()(
-  "KendraTestFunction",
-) {}
+export class KendraTestFunction extends Lambda.Function<Lambda.Function>()("KendraTestFunction") {}
 
 /**
  * Every route answers `{ …fields }` on success or `{ errorTag }` when the
@@ -142,12 +140,10 @@ export default KendraTestFunction.make(
     const getSnapshots = yield* Kendra.GetSnapshots(index);
     const putPrincipalMapping = yield* Kendra.PutPrincipalMapping(index);
     const deletePrincipalMapping = yield* Kendra.DeletePrincipalMapping(index);
-    const describePrincipalMapping =
-      yield* Kendra.DescribePrincipalMapping(index);
+    const describePrincipalMapping = yield* Kendra.DescribePrincipalMapping(index);
     const listStaleGroups = yield* Kendra.ListGroupsOlderThanOrderingId(index);
     const clearSuggestions = yield* Kendra.ClearQuerySuggestions(index);
-    const suggestionsConfig =
-      yield* Kendra.DescribeQuerySuggestionsConfig(index);
+    const suggestionsConfig = yield* Kendra.DescribeQuerySuggestionsConfig(index);
     const updateSuggestions = yield* Kendra.UpdateQuerySuggestionsConfig(index);
     const createAcl = yield* Kendra.CreateAccessControlConfiguration(index);
     const describeAcl = yield* Kendra.DescribeAccessControlConfiguration(index);
@@ -211,9 +207,7 @@ export default KendraTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { failed: (result.FailedDocuments ?? []).length },
+            "errorTag" in result ? result : { failed: (result.FailedDocuments ?? []).length },
           );
         }
 
@@ -248,9 +242,7 @@ export default KendraTestFunction.make(
           const q = url.searchParams.get("q") ?? "zanzibar passphrase";
           const result = yield* errorTagged(retrieve({ QueryText: q }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.ResultItems ?? []).length },
+            "errorTag" in result ? result : { count: (result.ResultItems ?? []).length },
           );
         }
 
@@ -258,9 +250,7 @@ export default KendraTestFunction.make(
           const q = url.searchParams.get("q") ?? "zanzi";
           const result = yield* errorTagged(suggest({ QueryText: q }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.Suggestions ?? []).length },
+            "errorTag" in result ? result : { count: (result.Suggestions ?? []).length },
           );
         }
 
@@ -270,24 +260,16 @@ export default KendraTestFunction.make(
           const result = yield* errorTagged(
             submitFeedback({
               QueryId: queryId,
-              ClickFeedbackItems: [
-                { ResultId: resultId, ClickTime: new Date() },
-              ],
+              ClickFeedbackItems: [{ ResultId: resultId, ClickTime: new Date() }],
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/delete-documents") {
-          const result = yield* errorTagged(
-            deleteDocuments({ DocumentIdList: ["welcome"] }),
-          );
+          const result = yield* errorTagged(deleteDocuments({ DocumentIdList: ["welcome"] }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { failed: (result.FailedDocuments ?? []).length },
+            "errorTag" in result ? result : { failed: (result.FailedDocuments ?? []).length },
           );
         }
 
@@ -299,9 +281,7 @@ export default KendraTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { header: result.SnapshotsDataHeader ?? [] },
+            "errorTag" in result ? result : { header: result.SnapshotsDataHeader ?? [] },
           );
         }
 
@@ -330,20 +310,14 @@ export default KendraTestFunction.make(
         }
 
         if (pathname === "/delete-principal-mapping") {
-          const result = yield* errorTagged(
-            deletePrincipalMapping({ GroupId: "engineering" }),
-          );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          const result = yield* errorTagged(deletePrincipalMapping({ GroupId: "engineering" }));
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/stale-groups") {
           const result = yield* errorTagged(listStaleGroups({ OrderingId: 1 }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.GroupsSummaries ?? []).length },
+            "errorTag" in result ? result : { count: (result.GroupsSummaries ?? []).length },
           );
         }
 
@@ -361,16 +335,12 @@ export default KendraTestFunction.make(
               queryLogLookBackWindow: "14 days",
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/clear-suggestions") {
           const result = yield* errorTagged(clearSuggestions());
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/access-control") {
@@ -379,9 +349,7 @@ export default KendraTestFunction.make(
           const created = yield* errorTagged(
             createAcl({
               Name: "block-departed-users",
-              AccessControlList: [
-                { Name: "departed-user", Type: "USER", Access: "DENY" },
-              ],
+              AccessControlList: [{ Name: "departed-user", Type: "USER", Access: "DENY" }],
             }),
           );
           if ("errorTag" in created) {
@@ -405,9 +373,7 @@ export default KendraTestFunction.make(
           }
           const deleted = yield* errorTagged(deleteAcl({ Id: created.Id }));
           return yield* HttpServerResponse.json(
-            "errorTag" in deleted
-              ? deleted
-              : { id: created.Id, name: described.Name },
+            "errorTag" in deleted ? deleted : { id: created.Id, name: described.Name },
           );
         }
 
@@ -429,17 +395,13 @@ export default KendraTestFunction.make(
 
         if (pathname === "/stop-sync") {
           const result = yield* errorTagged(stopSync());
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/sync-jobs") {
           const result = yield* errorTagged(listSyncJobs());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.History ?? []).length },
+            "errorTag" in result ? result : { count: (result.History ?? []).length },
           );
         }
 

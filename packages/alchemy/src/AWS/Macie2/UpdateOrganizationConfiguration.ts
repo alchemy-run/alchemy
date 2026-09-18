@@ -33,7 +33,6 @@ export interface UpdateOrganizationConfiguration extends Binding.Service<
     >
   >
 > {}
-export const UpdateOrganizationConfiguration =
-  Binding.Service<UpdateOrganizationConfiguration>(
-    "AWS.Macie2.UpdateOrganizationConfiguration",
-  );
+export const UpdateOrganizationConfiguration = Binding.Service<UpdateOrganizationConfiguration>(
+  "AWS.Macie2.UpdateOrganizationConfiguration",
+);

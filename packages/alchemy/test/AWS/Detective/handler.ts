@@ -1,11 +1,11 @@
-import * as Detective from "@/AWS/Detective";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Detective from "@/AWS/Detective";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -27,9 +27,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -59,16 +57,12 @@ export default DetectiveTestFunction.make(
     const getInvestigation = yield* Detective.GetInvestigation(graph);
     const listInvestigations = yield* Detective.ListInvestigations(graph);
     const listIndicators = yield* Detective.ListIndicators(graph);
-    const updateInvestigationState =
-      yield* Detective.UpdateInvestigationState(graph);
+    const updateInvestigationState = yield* Detective.UpdateInvestigationState(graph);
 
     // Data source packages
-    const listDatasourcePackages =
-      yield* Detective.ListDatasourcePackages(graph);
-    const updateDatasourcePackages =
-      yield* Detective.UpdateDatasourcePackages(graph);
-    const batchGetGraphMemberDatasources =
-      yield* Detective.BatchGetGraphMemberDatasources(graph);
+    const listDatasourcePackages = yield* Detective.ListDatasourcePackages(graph);
+    const updateDatasourcePackages = yield* Detective.UpdateDatasourcePackages(graph);
+    const batchGetGraphMemberDatasources = yield* Detective.BatchGetGraphMemberDatasources(graph);
 
     // Member administration
     const listMembers = yield* Detective.ListMembers(graph);
@@ -82,20 +76,15 @@ export default DetectiveTestFunction.make(
     const acceptInvitation = yield* Detective.AcceptInvitation();
     const rejectInvitation = yield* Detective.RejectInvitation();
     const disassociateMembership = yield* Detective.DisassociateMembership();
-    const batchGetMembershipDatasources =
-      yield* Detective.BatchGetMembershipDatasources();
+    const batchGetMembershipDatasources = yield* Detective.BatchGetMembershipDatasources();
 
     // Organization administration
     const describeOrganizationConfiguration =
       yield* Detective.DescribeOrganizationConfiguration(graph);
-    const updateOrganizationConfiguration =
-      yield* Detective.UpdateOrganizationConfiguration(graph);
-    const listOrganizationAdminAccounts =
-      yield* Detective.ListOrganizationAdminAccounts();
-    const enableOrganizationAdminAccount =
-      yield* Detective.EnableOrganizationAdminAccount();
-    const disableOrganizationAdminAccount =
-      yield* Detective.DisableOrganizationAdminAccount();
+    const updateOrganizationConfiguration = yield* Detective.UpdateOrganizationConfiguration(graph);
+    const listOrganizationAdminAccounts = yield* Detective.ListOrganizationAdminAccounts();
+    const enableOrganizationAdminAccount = yield* Detective.EnableOrganizationAdminAccount();
+    const disableOrganizationAdminAccount = yield* Detective.DisableOrganizationAdminAccount();
 
     const bound = {
       startInvestigation,
@@ -162,10 +151,7 @@ export default DetectiveTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/graph-member-datasources"
-        ) {
+        if (request.method === "GET" && pathname === "/graph-member-datasources") {
           const result = yield* errorTagged(
             batchGetGraphMemberDatasources({
               AccountIds: [url.searchParams.get("account") ?? "123456789012"],
@@ -192,19 +178,14 @@ export default DetectiveTestFunction.make(
         if (request.method === "POST" && pathname === "/investigate") {
           const entity = url.searchParams.get("entity");
           if (!entity) {
-            return yield* HttpServerResponse.json(
-              { error: "missing entity" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing entity" }, { status: 400 });
           }
           const result = yield* errorTagged(
             startInvestigation({
               EntityArn: entity,
               ScopeStartTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
               ScopeEndTime: new Date(),
-            }).pipe(
-              Effect.map((r) => ({ investigationId: r.InvestigationId })),
-            ),
+            }).pipe(Effect.map((r) => ({ investigationId: r.InvestigationId }))),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -217,16 +198,10 @@ export default DetectiveTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/membership-datasources"
-        ) {
+        if (request.method === "GET" && pathname === "/membership-datasources") {
           const graphArn = url.searchParams.get("graphArn");
           if (!graphArn) {
-            return yield* HttpServerResponse.json(
-              { error: "missing graphArn" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing graphArn" }, { status: 400 });
           }
           const result = yield* errorTagged(
             batchGetMembershipDatasources({ GraphArns: [graphArn] }).pipe(

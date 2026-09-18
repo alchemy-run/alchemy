@@ -41,10 +41,7 @@ export interface BatchGetDocumentStatus extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchGetDocumentStatusRequest,
-    ) => Effect.Effect<
-      kendra.BatchGetDocumentStatusResponse,
-      kendra.BatchGetDocumentStatusError
-    >
+    ) => Effect.Effect<kendra.BatchGetDocumentStatusResponse, kendra.BatchGetDocumentStatusError>
   >
 > {}
 export const BatchGetDocumentStatus = Binding.Service<BatchGetDocumentStatus>(

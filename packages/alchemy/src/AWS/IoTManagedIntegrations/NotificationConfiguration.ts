@@ -95,11 +95,7 @@ export const NotificationConfigurationProvider = () =>
       const observe = (eventType: mi.EventType) =>
         mi
           .getNotificationConfiguration({ EventType: eventType })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // GetNotificationConfiguration does not return an ARN; the tag APIs
       // need one, so construct it from the ambient account/region (same
@@ -112,10 +108,7 @@ export const NotificationConfigurationProvider = () =>
       const toAttributes = Effect.fn(function* (
         configuration: mi.GetNotificationConfigurationResponse,
       ) {
-        if (
-          configuration.EventType === undefined ||
-          configuration.DestinationName === undefined
-        ) {
+        if (configuration.EventType === undefined || configuration.DestinationName === undefined) {
           return yield* Effect.fail(
             new Error(
               "notification configuration response is missing EventType or DestinationName",
@@ -125,9 +118,7 @@ export const NotificationConfigurationProvider = () =>
         return {
           eventType: configuration.EventType,
           destinationName: configuration.DestinationName,
-          notificationConfigurationArn: yield* configurationArn(
-            configuration.EventType,
-          ),
+          notificationConfigurationArn: yield* configurationArn(configuration.EventType),
           tags: toTagRecord(configuration.Tags),
         };
       });
@@ -146,9 +137,7 @@ export const NotificationConfigurationProvider = () =>
           const configuration = yield* observe(eventType);
           if (configuration === undefined) return undefined;
           const attrs = yield* toAttributes(configuration);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const internalTags = yield* createInternalTags(id);
@@ -170,9 +159,7 @@ export const NotificationConfigurationProvider = () =>
             configuration = yield* observe(news.eventType);
             if (configuration === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `notification configuration '${news.eventType}' vanished after create`,
-                ),
+                new Error(`notification configuration '${news.eventType}' vanished after create`),
               );
             }
           }
@@ -204,12 +191,10 @@ export const NotificationConfigurationProvider = () =>
         // resolve tags (summaries omit them).
         list: () =>
           Effect.gen(function* () {
-            const summaries = yield* mi.listNotificationConfigurations
-              .items({})
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) => Array.from(chunk)),
-              );
+            const summaries = yield* mi.listNotificationConfigurations.items({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
             const configurations = yield* Effect.forEach(
               summaries.filter(
                 (
@@ -223,8 +208,7 @@ export const NotificationConfigurationProvider = () =>
             );
             return yield* Effect.forEach(
               configurations.filter(
-                (c): c is mi.GetNotificationConfigurationResponse =>
-                  c !== undefined,
+                (c): c is mi.GetNotificationConfigurationResponse => c !== undefined,
               ),
               toAttributes,
             );
@@ -232,9 +216,7 @@ export const NotificationConfigurationProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* mi
             .deleteNotificationConfiguration({ EventType: output.eventType })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

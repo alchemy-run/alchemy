@@ -1,7 +1,7 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 import { isolatedProject } from "../../../IsolatedProject.ts";
 
 /**
@@ -10,10 +10,7 @@ import { isolatedProject } from "../../../IsolatedProject.ts";
  * bundle `cwd` resolves none of alchemy's dependencies and the bun
  * bootstrap's own imports must be anchored by the bundler.
  */
-export const project = isolatedProject(
-  "apprunner-service",
-  import.meta.filename,
-);
+export const project = isolatedProject("apprunner-service", import.meta.filename);
 
 /**
  * Minimal Effect-native `AWS.AppRunner.Service` served from an isolated

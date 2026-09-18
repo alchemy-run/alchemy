@@ -33,7 +33,6 @@ export interface DescribeServerlessCaches extends Binding.Service<
     >
   >
 > {}
-export const DescribeServerlessCaches =
-  Binding.Service<DescribeServerlessCaches>(
-    "AWS.ElastiCache.DescribeServerlessCaches",
-  );
+export const DescribeServerlessCaches = Binding.Service<DescribeServerlessCaches>(
+  "AWS.ElastiCache.DescribeServerlessCaches",
+);

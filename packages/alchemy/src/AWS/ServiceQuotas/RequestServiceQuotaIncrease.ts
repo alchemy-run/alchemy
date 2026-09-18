@@ -43,7 +43,6 @@ export interface RequestServiceQuotaIncrease extends Binding.Service<
     >
   >
 > {}
-export const RequestServiceQuotaIncrease =
-  Binding.Service<RequestServiceQuotaIncrease>(
-    "AWS.ServiceQuotas.RequestServiceQuotaIncrease",
-  );
+export const RequestServiceQuotaIncrease = Binding.Service<RequestServiceQuotaIncrease>(
+  "AWS.ServiceQuotas.RequestServiceQuotaIncrease",
+);

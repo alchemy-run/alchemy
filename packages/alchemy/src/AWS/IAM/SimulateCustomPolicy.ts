@@ -42,10 +42,7 @@ export interface SimulateCustomPolicy extends Binding.Service<
   () => Effect.Effect<
     (
       request: iam.SimulateCustomPolicyRequest,
-    ) => Effect.Effect<
-      iam.SimulatePolicyResponse,
-      iam.SimulateCustomPolicyError
-    >
+    ) => Effect.Effect<iam.SimulatePolicyResponse, iam.SimulateCustomPolicyError>
   >
 > {}
 export const SimulateCustomPolicy = Binding.Service<SimulateCustomPolicy>(

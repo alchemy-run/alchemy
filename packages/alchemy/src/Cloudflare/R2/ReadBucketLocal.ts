@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { makeLocalBucketBinding } from "./BucketLocal.ts";
-import { makeRead } from "./ReadBucketBinding.ts";
 import { ReadBucket } from "./ReadBucket.ts";
+import { makeRead } from "./ReadBucketBinding.ts";
 import { makeReadR2HttpClient } from "./ReadBucketHttp.ts";
 
 /**

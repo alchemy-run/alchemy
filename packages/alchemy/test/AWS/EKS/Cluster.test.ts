@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Cluster } from "@/AWS/EKS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,9 +36,7 @@ test.provider("list returns a well-formed array of clusters", (stack) =>
 // (AWS_TEST_EKS_SUBNET_IDS, comma-separated). An account with that standing
 // infrastructure runs this unchanged: it deploys a cluster, waits for ACTIVE,
 // asserts it appears in the exhaustively-paginated `list()`, then tears down.
-test.provider.skipIf(
-  !process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_EKS_ROLE_ARN || !process.env.AWS_TEST_EKS_SUBNET_IDS)(
   "list enumerates the deployed cluster",
   (stack) =>
     Effect.gen(function* () {

@@ -9,8 +9,8 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AddonProps {
   /**
@@ -111,9 +111,7 @@ export const Addon = Resource<Addon>("AWS.EKS.Addon");
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 const mapAddon = (addon: eks.Addon) => ({
@@ -144,11 +142,7 @@ const readAddon = Effect.fn(function* ({
       clusterName,
       addonName,
     })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
   const addon = response?.addon;
   if (!addon?.addonArn || !addon.addonName || !addon.clusterName) {
@@ -192,9 +186,7 @@ export const AddonProvider = () =>
           Effect.gen(function* () {
             const clusterNames = yield* eks.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusters ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusters ?? [])),
             );
 
             const perCluster = yield* Effect.forEach(
@@ -202,9 +194,7 @@ export const AddonProvider = () =>
               (clusterName) =>
                 eks.listAddons.pages({ clusterName }).pipe(
                   Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.addons ?? []),
-                  ),
+                  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.addons ?? [])),
                   Effect.flatMap((addonNames) =>
                     Effect.forEach(
                       addonNames,
@@ -218,10 +208,7 @@ export const AddonProvider = () =>
 
             return perCluster
               .flat()
-              .filter(
-                (addon): addon is NonNullable<typeof addon> =>
-                  addon !== undefined,
-              );
+              .filter((addon): addon is NonNullable<typeof addon> => addon !== undefined);
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
@@ -249,9 +236,7 @@ export const AddonProvider = () =>
             addonName: olds.addonName,
           });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const clusterName = news.clusterName as string;
@@ -276,9 +261,7 @@ export const AddonProvider = () =>
                 clusterName,
                 addonName,
                 addonVersion: news.addonVersion,
-                serviceAccountRoleArn: news.serviceAccountRoleArn as
-                  | string
-                  | undefined,
+                serviceAccountRoleArn: news.serviceAccountRoleArn as string | undefined,
                 resolveConflicts: news.resolveConflicts,
                 configurationValues: news.configurationValues,
                 podIdentityAssociations: news.podIdentityAssociations,
@@ -286,9 +269,7 @@ export const AddonProvider = () =>
                 tags: desiredTags,
                 clientRequestToken: yield* toClientRequestToken(id, "create"),
               })
-              .pipe(
-                Effect.catchTag("ResourceInUseException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
             state = yield* waitForAddonActive({
               clusterName,
@@ -303,10 +284,8 @@ export const AddonProvider = () =>
             JSON.stringify(state.podIdentityAssociations ?? []) !==
             JSON.stringify(news.podIdentityAssociations ?? []);
           if (
-            (news.addonVersion !== undefined &&
-              state.addonVersion !== news.addonVersion) ||
-            state.serviceAccountRoleArn !==
-              (news.serviceAccountRoleArn as string | undefined) ||
+            (news.addonVersion !== undefined && state.addonVersion !== news.addonVersion) ||
+            state.serviceAccountRoleArn !== (news.serviceAccountRoleArn as string | undefined) ||
             state.configurationValues !== news.configurationValues ||
             podIdentityChanged
           ) {
@@ -314,9 +293,7 @@ export const AddonProvider = () =>
               clusterName,
               addonName,
               addonVersion: news.addonVersion,
-              serviceAccountRoleArn: news.serviceAccountRoleArn as
-                | string
-                | undefined,
+              serviceAccountRoleArn: news.serviceAccountRoleArn as string | undefined,
               resolveConflicts: news.resolveConflicts,
               configurationValues: news.configurationValues,
               podIdentityAssociations: news.podIdentityAssociations,
@@ -333,9 +310,7 @@ export const AddonProvider = () =>
           if (upsert.length > 0) {
             yield* eks.tagResource({
               resourceArn: state.addonArn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value] as const),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value] as const)),
             });
           }
           if (removed.length > 0) {
@@ -355,9 +330,7 @@ export const AddonProvider = () =>
               addonName: output.addonName,
               preserve: olds.preserveOnDelete,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           if (!olds.preserveOnDelete) {
             yield* waitForAddonDeleted({
@@ -420,10 +393,7 @@ const waitForAddonActive = Effect.fn(function* ({
       // Node-bound addons (e.g. HyperPod task governance) stay DEGRADED
       // until nodes join and pull images, which can take most of the
       // budget when the addon installs alongside its node group.
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(240),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(240)]),
     }),
   );
 });
@@ -440,18 +410,13 @@ const waitForAddonDeleted = Effect.fn(function* ({
     addonName,
   }).pipe(
     Effect.flatMap((addon) =>
-      addon
-        ? Effect.fail(new AddonStillExists({ clusterName, addonName }))
-        : Effect.void,
+      addon ? Effect.fail(new AddonStillExists({ clusterName, addonName })) : Effect.void,
     ),
     Effect.retry({
       while: (error) => error instanceof AddonStillExists,
       // Flat 5s polls, ~10 min budget (uncapped exponential sleeps for
       // multi-minute stretches late in the wait — looks like a deadlock).
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(120),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]),
     }),
   );
 });

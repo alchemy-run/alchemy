@@ -129,9 +129,7 @@ export const consumeAnomalyEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.ce"],
       "detail-type": ["Anomaly Detected"],
-      ...(props.monitorArns !== undefined
-        ? { resources: [...props.monitorArns] }
-        : {}),
+      ...(props.monitorArns !== undefined ? { resources: [...props.monitorArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

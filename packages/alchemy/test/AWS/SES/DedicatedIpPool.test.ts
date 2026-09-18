@@ -1,13 +1,13 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { DedicatedIpPool } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy.ts";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { DedicatedIpPool } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -23,9 +23,7 @@ const getPool = (name: string) =>
 
 const assertPoolDeleted = (name: string) =>
   getPool(name).pipe(
-    Effect.flatMap((found) =>
-      found ? Effect.fail(new PoolStillExists({ name })) : Effect.void,
-    ),
+    Effect.flatMap((found) => (found ? Effect.fail(new PoolStillExists({ name })) : Effect.void)),
     Effect.retry({
       while: (e) => e._tag === "PoolStillExists",
       schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
@@ -223,11 +221,9 @@ test.provider(
       const { Tags: afterTags } = yield* sesv2.listTagsForResource({
         ResourceArn: `arn:aws:ses:${region}:${accountId}:dedicated-ip-pool/${FOREIGN_POOL}`,
       });
-      expect(
-        Object.fromEntries(afterTags.map((t) => [t.Key, t.Value]))[
-          "alchemy::id"
-        ],
-      ).toBe("Foreign");
+      expect(Object.fromEntries(afterTags.map((t) => [t.Key, t.Value]))["alchemy::id"]).toBe(
+        "Foreign",
+      );
 
       yield* stack.destroy();
       yield* assertPoolDeleted(FOREIGN_POOL);

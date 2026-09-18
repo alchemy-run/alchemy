@@ -125,8 +125,7 @@ export const AnomalySubscription = Resource<AnomalySubscription>(
 );
 
 const sameStringSets = (l: readonly string[], r: readonly string[]) =>
-  l.length === r.length &&
-  [...l].sort().join("\n") === [...r].sort().join("\n");
+  l.length === r.length && [...l].sort().join("\n") === [...r].sort().join("\n");
 
 export const AnomalySubscriptionProvider = () =>
   Provider.effect(
@@ -136,10 +135,7 @@ export const AnomalySubscriptionProvider = () =>
         id: string,
         props: { subscriptionName?: string | undefined },
       ) {
-        return (
-          props.subscriptionName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.subscriptionName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
       const getByArn = (subscriptionArn: string) =>
@@ -149,9 +145,7 @@ export const AnomalySubscriptionProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.AnomalySubscriptions[0]),
-          Effect.catchTag("UnknownSubscriptionException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("UnknownSubscriptionException", () => Effect.succeed(undefined)),
         );
 
       const findByName = (subscriptionName: string) =>
@@ -173,9 +167,7 @@ export const AnomalySubscriptionProvider = () =>
         };
       });
 
-      const toSubscribers = (
-        subscribers: AnomalySubscriber[],
-      ): ce.Subscriber[] =>
+      const toSubscribers = (subscribers: AnomalySubscriber[]): ce.Subscriber[] =>
         subscribers.map((s) => ({ Address: s.address, Type: s.type }));
 
       return AnomalySubscription.Provider.of({
@@ -197,9 +189,7 @@ export const AnomalySubscriptionProvider = () =>
             : yield* findByName(yield* createName(id, olds ?? {}));
           if (live?.SubscriptionArn === undefined) return undefined;
           const attrs = yield* toAttrs(live);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
@@ -300,9 +290,7 @@ export const AnomalySubscriptionProvider = () =>
             ce.deleteAnomalySubscription({
               SubscriptionArn: output.subscriptionArn,
             }),
-          ).pipe(
-            Effect.catchTag("UnknownSubscriptionException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("UnknownSubscriptionException", () => Effect.void));
         }),
       });
     }),

@@ -73,7 +73,5 @@ export const tokenPolicies = (
     seen.add(group.id);
     bucket.permissionGroups.push({ id: group.id });
   }
-  return Object.values(buckets).filter(
-    (policy) => policy.permissionGroups.length > 0,
-  );
+  return Object.values(buckets).filter((policy) => policy.permissionGroups.length > 0);
 };

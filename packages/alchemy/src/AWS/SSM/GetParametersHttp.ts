@@ -25,9 +25,7 @@ export const GetParametersHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // Sort by LogicalId so the binding identity (SID + ARN list) is
         // deterministic regardless of argument order.
-        const sorted = [...parameters].sort((a, b) =>
-          a.LogicalId.localeCompare(b.LogicalId),
-        );
+        const sorted = [...parameters].sort((a, b) => a.LogicalId.localeCompare(b.LogicalId));
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, AWS.SSM.GetParameters(${sorted}))`({
@@ -45,9 +43,7 @@ export const GetParametersHttp = Layer.effect(
                 Action: ["kms:Decrypt"],
                 Resource: sorted.map((parameter) =>
                   Output.all(parameter.parameterArn, parameter.keyArn).pipe(
-                    Output.map(
-                      ([parameterArn, keyArn]) => keyArn ?? parameterArn,
-                    ),
+                    Output.map(([parameterArn, keyArn]) => keyArn ?? parameterArn),
                   ),
                 ),
               },
@@ -58,10 +54,7 @@ export const GetParametersHttp = Layer.effect(
       return Effect.fn(`AWS.SSM.GetParameters(${parameters})`)(function* (
         request: GetParametersRequest = {},
       ) {
-        const names = yield* Effect.forEach(
-          NameAccessors,
-          (accessor) => accessor,
-        );
+        const names = yield* Effect.forEach(NameAccessors, (accessor) => accessor);
         return yield* getParameters({
           ...request,
           Names: names,

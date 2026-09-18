@@ -27,12 +27,7 @@ export interface RetryImage extends Binding.Service<
   () => Effect.Effect<
     (
       request: Omit<imagebuilder.RetryImageRequest, "clientToken">,
-    ) => Effect.Effect<
-      imagebuilder.RetryImageResponse,
-      imagebuilder.RetryImageError
-    >
+    ) => Effect.Effect<imagebuilder.RetryImageResponse, imagebuilder.RetryImageError>
   >
 > {}
-export const RetryImage = Binding.Service<RetryImage>(
-  "AWS.ImageBuilder.RetryImage",
-);
+export const RetryImage = Binding.Service<RetryImage>("AWS.ImageBuilder.RetryImage");

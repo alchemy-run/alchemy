@@ -23,9 +23,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
  * unmatched event fails the whole invocation ("No event handler found"),
  * which Secrets Manager records as a failed rotation attempt.
  */
-export const isSecretRotationEvent = (
-  event: any,
-): event is SecretRotationEvent =>
+export const isSecretRotationEvent = (event: any): event is SecretRotationEvent =>
   typeof event?.Step === "string" && typeof event?.SecretId === "string";
 
 /**
@@ -87,46 +85,40 @@ export const SecretRotationEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.SecretsManager.RotationEventSource(${secret}))`(
-              {
-                policyStatements: [
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "secretsmanager:DescribeSecret",
-                      "secretsmanager:GetSecretValue",
-                      "secretsmanager:PutSecretValue",
-                      "secretsmanager:UpdateSecretVersionStage",
-                    ],
-                    Resource: [secret.secretArn],
-                  },
-                  {
-                    Effect: "Allow",
-                    Action: ["secretsmanager:GetRandomPassword"],
-                    Resource: ["*"],
-                  },
-                ],
-              },
-            );
+            yield* host.bind`Allow(${host}, AWS.SecretsManager.RotationEventSource(${secret}))`({
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: [
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:UpdateSecretVersionStage",
+                  ],
+                  Resource: [secret.secretArn],
+                },
+                {
+                  Effect: "Allow",
+                  Action: ["secretsmanager:GetRandomPassword"],
+                  Resource: ["*"],
+                },
+              ],
+            });
 
             // Secrets Manager VALIDATES it can invoke the rotation function
             // when `RotateSecret` configures the schedule, so the Permission
             // must exist BEFORE the RotationSchedule. Rotation invocations
             // carry no SourceArn — scope by account per the Secrets Manager
             // confused-deputy guidance.
-            const { accountId } =
-              yield* AWSEnvironment.current as unknown as Effect.Effect<{
-                accountId: string;
-              }>;
-            const permission = yield* Permission(
-              `${secret.LogicalId}-Rotation-Permission`,
-              {
-                action: "lambda:InvokeFunction",
-                functionName: host.functionArn,
-                principal: "secretsmanager.amazonaws.com",
-                sourceAccount: accountId,
-              },
-            );
+            const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+              accountId: string;
+            }>;
+            const permission = yield* Permission(`${secret.LogicalId}-Rotation-Permission`, {
+              action: "lambda:InvokeFunction",
+              functionName: host.functionArn,
+              principal: "secretsmanager.amazonaws.com",
+              sourceAccount: accountId,
+            });
 
             // The Permission echoes the `functionName` prop (the function
             // ARN) as an attribute — threading it as the rotation Lambda ARN

@@ -129,9 +129,7 @@ const createTableName = (id: string, props: { name?: string | undefined }) =>
     return base.replaceAll("-", "_");
   });
 
-const buildMetadata = (
-  props: TableProps,
-): s3tables.TableMetadata | undefined =>
+const buildMetadata = (props: TableProps): s3tables.TableMetadata | undefined =>
   props.schema
     ? {
         iceberg: {
@@ -159,30 +157,25 @@ export const TableProvider = () =>
         return undefined;
       }
       const name = output?.name ?? (yield* createTableName(id, olds ?? {}));
-      return yield* s3tables
-        .getTable({ tableBucketARN: tableBucketArn, namespace, name })
-        .pipe(
-          Effect.map((t): Table["Attributes"] => ({
-            tableArn: t.tableARN,
-            name: t.name,
-            namespace: t.namespace[0] ?? namespace,
-            tableBucketArn,
-            versionToken: t.versionToken,
-            metadataLocation: t.metadataLocation,
-            warehouseLocation: t.warehouseLocation,
-            format: t.format,
-            type: t.type,
-            createdAt: t.createdAt,
-          })),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+      return yield* s3tables.getTable({ tableBucketARN: tableBucketArn, namespace, name }).pipe(
+        Effect.map((t): Table["Attributes"] => ({
+          tableArn: t.tableARN,
+          name: t.name,
+          namespace: t.namespace[0] ?? namespace,
+          tableBucketArn,
+          versionToken: t.versionToken,
+          metadataLocation: t.metadataLocation,
+          warehouseLocation: t.warehouseLocation,
+          format: t.format,
+          type: t.type,
+          createdAt: t.createdAt,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
-      if (
-        news.tableBucket !== olds?.tableBucket ||
-        news.namespace !== olds?.namespace
-      ) {
+      if (news.tableBucket !== olds?.tableBucket || news.namespace !== olds?.namespace) {
         return { action: "replace" } as const;
       }
       const oldName = yield* createTableName(id, olds ?? {});
@@ -230,17 +223,12 @@ export const TableProvider = () =>
           );
         // Eventual consistency: getTable can briefly 404 a table that
         // createTable just returned.
-        table = yield* s3tables
-          .getTable({ tableBucketARN: tableBucketArn, namespace, name })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "NotFoundException",
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
-            }),
-          );
+        table = yield* s3tables.getTable({ tableBucketARN: tableBucketArn, namespace, name }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NotFoundException",
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
+          }),
+        );
       }
 
       yield* session.note(table.tableARN);

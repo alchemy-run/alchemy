@@ -38,12 +38,7 @@ export interface DeleteArchive extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteArchiveRequest,
-    ) => Effect.Effect<
-      glacier.DeleteArchiveResponse,
-      glacier.DeleteArchiveError
-    >
+    ) => Effect.Effect<glacier.DeleteArchiveResponse, glacier.DeleteArchiveError>
   >
 > {}
-export const DeleteArchive = Binding.Service<DeleteArchive>(
-  "AWS.Glacier.DeleteArchive",
-);
+export const DeleteArchive = Binding.Service<DeleteArchive>("AWS.Glacier.DeleteArchive");

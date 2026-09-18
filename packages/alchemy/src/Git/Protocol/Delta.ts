@@ -32,10 +32,9 @@ import { decodeSizeVarint, ObjectParseError } from "./ObjectCodec.ts";
  * out-of-bounds copies, base size mismatch, or a result that does not match
  * the declared `result_size`.
  */
-export class DeltaFormatError extends Schema.TaggedError<DeltaFormatError>()(
-  "DeltaFormatError",
-  { reason: Schema.String },
-) {}
+export class DeltaFormatError extends Schema.TaggedError<DeltaFormatError>()("DeltaFormatError", {
+  reason: Schema.String,
+}) {}
 
 /**
  * The two size varints at the head of a delta payload, plus the offset of
@@ -85,9 +84,7 @@ export const applyDelta = (
       header = readDeltaHeader(delta);
     } catch (error) {
       return Effect.fail(
-        error instanceof DeltaFormatError
-          ? error
-          : new DeltaFormatError({ reason: String(error) }),
+        error instanceof DeltaFormatError ? error : new DeltaFormatError({ reason: String(error) }),
       );
     }
     if (header.baseSize !== base.length) {
@@ -104,9 +101,7 @@ export const applyDelta = (
       const opcode = delta[pos]!;
       pos += 1;
       if (opcode === 0) {
-        return Effect.fail(
-          new DeltaFormatError({ reason: "reserved delta opcode 0x00" }),
-        );
+        return Effect.fail(new DeltaFormatError({ reason: "reserved delta opcode 0x00" }));
       }
       if ((opcode & 0x80) !== 0) {
         // copy instruction
@@ -115,9 +110,7 @@ export const applyDelta = (
         for (let bit = 0; bit < 4; bit++) {
           if ((opcode & (1 << bit)) !== 0) {
             if (pos >= delta.length) {
-              return Effect.fail(
-                new DeltaFormatError({ reason: "truncated copy offset" }),
-              );
+              return Effect.fail(new DeltaFormatError({ reason: "truncated copy offset" }));
             }
             offset += delta[pos]! * 2 ** (8 * bit);
             pos += 1;
@@ -126,9 +119,7 @@ export const applyDelta = (
         for (let bit = 0; bit < 3; bit++) {
           if ((opcode & (1 << (4 + bit))) !== 0) {
             if (pos >= delta.length) {
-              return Effect.fail(
-                new DeltaFormatError({ reason: "truncated copy size" }),
-              );
+              return Effect.fail(new DeltaFormatError({ reason: "truncated copy size" }));
             }
             size += delta[pos]! * 2 ** (8 * bit);
             pos += 1;
@@ -155,9 +146,7 @@ export const applyDelta = (
         // insert instruction: opcode = literal byte count (1–127)
         const size = opcode;
         if (pos + size > delta.length) {
-          return Effect.fail(
-            new DeltaFormatError({ reason: "truncated insert data" }),
-          );
+          return Effect.fail(new DeltaFormatError({ reason: "truncated insert data" }));
         }
         if (outPos + size > out.length) {
           return Effect.fail(

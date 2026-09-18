@@ -1,11 +1,11 @@
-import * as GeoMaps from "@/AWS/GeoMaps";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as GeoMaps from "@/AWS/GeoMaps";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -82,8 +82,7 @@ export default GeoMapsTestFunction.make(
           const text = result.Blob ? new TextDecoder().decode(result.Blob) : "";
           let version: number | null = null;
           try {
-            version =
-              (JSON.parse(text) as { version?: number }).version ?? null;
+            version = (JSON.parse(text) as { version?: number }).version ?? null;
           } catch {
             version = null;
           }

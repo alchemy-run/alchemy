@@ -7,9 +7,7 @@ export const ListFailuresForLicenseConfigurationOperationsHttp = Layer.effect(
   ListFailuresForLicenseConfigurationOperations,
   makeLicenseConfigurationHttpBinding({
     capability: "ListFailuresForLicenseConfigurationOperations",
-    iamActions: [
-      "license-manager:ListFailuresForLicenseConfigurationOperations",
-    ],
+    iamActions: ["license-manager:ListFailuresForLicenseConfigurationOperations"],
     operation: licensemanager.listFailuresForLicenseConfigurationOperations,
   }),
 );

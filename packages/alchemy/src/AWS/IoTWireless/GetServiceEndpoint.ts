@@ -31,10 +31,7 @@ export interface GetServiceEndpoint extends Binding.Service<
   () => Effect.Effect<
     (
       request?: iotw.GetServiceEndpointRequest,
-    ) => Effect.Effect<
-      iotw.GetServiceEndpointResponse,
-      iotw.GetServiceEndpointError
-    >
+    ) => Effect.Effect<iotw.GetServiceEndpointResponse, iotw.GetServiceEndpointError>
   >
 > {}
 export const GetServiceEndpoint = Binding.Service<GetServiceEndpoint>(

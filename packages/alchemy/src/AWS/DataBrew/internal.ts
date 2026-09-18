@@ -18,14 +18,14 @@ export const databrewArn = (
  * Fetch the observed DataBrew tags for a resource ARN as a plain record.
  * Tolerate a missing/untaggable resource as `{}`.
  */
-export const fetchObservedTags = Effect.fn("AWS.DataBrew.fetchObservedTags")(
-  function* (resourceArn: string) {
-    const response = yield* databrew
-      .listTagsForResource({ ResourceArn: resourceArn })
-      .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
-    return cleanMap(response.Tags);
-  },
-);
+export const fetchObservedTags = Effect.fn("AWS.DataBrew.fetchObservedTags")(function* (
+  resourceArn: string,
+) {
+  const response = yield* databrew
+    .listTagsForResource({ ResourceArn: resourceArn })
+    .pipe(Effect.catch(() => Effect.succeed({ Tags: undefined })));
+  return cleanMap(response.Tags);
+});
 
 /**
  * Sync a DataBrew resource's tags: diff OBSERVED cloud tags against desired
@@ -86,9 +86,7 @@ export const retryWhileRoleNotAssumable = <A, E extends { _tag: string }, R>(
     // surfaces as AccessDeniedException ("Access denied to s3:GetObject for
     // arn:...:role/... Error: Forbidden") while DataBrew validates the
     // dataset source — retry both bounded.
-    while: (e) =>
-      e._tag === "DataBrewRoleNotAssumable" ||
-      e._tag === "AccessDeniedException",
+    while: (e) => e._tag === "DataBrewRoleNotAssumable" || e._tag === "AccessDeniedException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
   });
 
@@ -97,9 +95,7 @@ export const cleanMap = (
   map: Record<string, string | undefined> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(map ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(map ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -107,8 +103,7 @@ export const cleanMap = (
  * structure against the desired one so no-op updates can skip API calls
  * and recipe publishing only happens when the working copy actually changed.
  */
-export const canonicalJson = (value: unknown): string =>
-  JSON.stringify(sortKeys(value));
+export const canonicalJson = (value: unknown): string => JSON.stringify(sortKeys(value));
 
 const sortKeys = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(sortKeys);

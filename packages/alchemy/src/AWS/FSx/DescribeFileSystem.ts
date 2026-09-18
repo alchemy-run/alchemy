@@ -31,12 +31,7 @@ export interface DescribeFileSystem extends Binding.Service<
   (
     fileSystem: FileSystem,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      fsx.DescribeFileSystemsResponse,
-      fsx.DescribeFileSystemsError
-    >
+    () => Effect.Effect<fsx.DescribeFileSystemsResponse, fsx.DescribeFileSystemsError>
   >
 > {}
-export const DescribeFileSystem = Binding.Service<DescribeFileSystem>(
-  "AWS.FSx.DescribeFileSystem",
-);
+export const DescribeFileSystem = Binding.Service<DescribeFileSystem>("AWS.FSx.DescribeFileSystem");

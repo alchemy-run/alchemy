@@ -1,10 +1,10 @@
+import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "@/Auth/Credentials.ts";
 import { AwsAuth } from "@/AWS/AuthProvider.ts";
 import * as Credentials from "@/AWS/Credentials.ts";
 import * as Endpoint from "@/AWS/Endpoint.ts";
 import { Default as DefaultEnvironment } from "@/AWS/Environment.ts";
 import * as Region from "@/AWS/Region.ts";
-import * as Layer from "effect/Layer";
 
 /**
  * TEST-ONLY: the live AWS environment chain (profile/SSO credentials,

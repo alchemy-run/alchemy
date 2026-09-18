@@ -59,28 +59,18 @@ export interface DrizzleLayerConfig {
 export const Drizzle = (
   db:
     | Record<string, unknown>
-    | Effect.Effect<
-        Record<string, unknown>,
-        never,
-        RuntimeContext | Scope.Scope
-      >,
+    | Effect.Effect<Record<string, unknown>, never, RuntimeContext | Scope.Scope>,
   config: DrizzleLayerConfig,
 ): Layer.Layer<Database> =>
   Layer.sync(Database, () => ({
-    provider: (config.provider === "pg"
-      ? "postgres"
-      : config.provider) as Provider,
+    provider: (config.provider === "pg" ? "postgres" : config.provider) as Provider,
     runtime: Effect.gen(function* () {
       const database = Effect.isEffect(db) ? yield* db : db;
       return drizzleAdapter(database, {
         provider: config.provider,
         ...(config.schema !== undefined ? { schema: config.schema } : {}),
-        ...(config.usePlural !== undefined
-          ? { usePlural: config.usePlural }
-          : {}),
-        ...(config.camelCase !== undefined
-          ? { camelCase: config.camelCase }
-          : {}),
+        ...(config.usePlural !== undefined ? { usePlural: config.usePlural } : {}),
+        ...(config.camelCase !== undefined ? { camelCase: config.camelCase } : {}),
       }) as DatabaseInput;
     }),
   }));

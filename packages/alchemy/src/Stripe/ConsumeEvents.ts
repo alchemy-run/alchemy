@@ -30,11 +30,9 @@ export interface ConsumeEventsProps<
   path?: string;
 }
 
-export type SelectedStripeEvent<E extends readonly StripeEventClass[]> =
-  InstanceType<E[number]>;
+export type SelectedStripeEvent<E extends readonly StripeEventClass[]> = InstanceType<E[number]>;
 
-export const webhookPath = (path?: string): string =>
-  path ?? "/webhooks/stripe";
+export const webhookPath = (path?: string): string => path ?? "/webhooks/stripe";
 
 export const webhookSecretEnvName = (path?: string): string =>
   `STRIPE_WEBHOOK_SECRET_${webhookPath(path).replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
@@ -89,68 +87,48 @@ export const bindWebhookSecret = (
  *
  * @binding
  */
-export function consumeEvents<
-  const E extends readonly StripeEventClass[],
-  Req = never,
->(
+export function consumeEvents<const E extends readonly StripeEventClass[], Req = never>(
   props: ConsumeEventsProps<E>,
-  process: (
-    event: SelectedStripeEvent<E>,
-  ) => Effect.Effect<void, never, Req | RuntimeContext>,
+  process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req | RuntimeContext>,
 ): Effect.Effect<void, never, EventSource>;
-export function consumeEvents<
-  const E extends readonly StripeEventClass[],
-  Req = never,
->(
+export function consumeEvents<const E extends readonly StripeEventClass[], Req = never>(
   id: string,
   props: ConsumeEventsProps<E>,
-  process: (
-    event: SelectedStripeEvent<E>,
-  ) => Effect.Effect<void, never, Req | RuntimeContext>,
+  process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req | RuntimeContext>,
 ): Effect.Effect<void, never, EventSource>;
 export function consumeEvents(
   idOrProps: string | ConsumeEventsProps,
   propsOrProcess:
     | ConsumeEventsProps
     | ((event: StripeEventInstance) => Effect.Effect<void, never, any>),
-  maybeProcess?: (
-    event: StripeEventInstance,
-  ) => Effect.Effect<void, never, any>,
+  maybeProcess?: (event: StripeEventInstance) => Effect.Effect<void, never, any>,
 ): Effect.Effect<void, never, EventSource> {
   const [id, props, process] =
     typeof idOrProps === "string"
       ? [
           idOrProps,
           propsOrProcess as ConsumeEventsProps,
-          maybeProcess as (
-            event: StripeEventInstance,
-          ) => Effect.Effect<void, never, any>,
+          maybeProcess as (event: StripeEventInstance) => Effect.Effect<void, never, any>,
         ]
       : [
           undefined,
           idOrProps as ConsumeEventsProps,
-          propsOrProcess as (
-            event: StripeEventInstance,
-          ) => Effect.Effect<void, never, any>,
+          propsOrProcess as (event: StripeEventInstance) => Effect.Effect<void, never, any>,
         ];
   return EventSource.use((source) =>
     source(id ?? webhookEndpointLogicalId(props.path), props, process),
   );
 }
 
-export type EventSourceService = <
-  E extends readonly StripeEventClass[],
-  Req = never,
->(
+export type EventSourceService = <E extends readonly StripeEventClass[], Req = never>(
   id: string,
   props: ConsumeEventsProps<E>,
   process: (event: SelectedStripeEvent<E>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
-export class EventSource extends Context.Service<
-  EventSource,
-  EventSourceService
->()("Stripe.EventSource") {}
+export class EventSource extends Context.Service<EventSource, EventSourceService>()(
+  "Stripe.EventSource",
+) {}
 
 /**
  * Cloudflare Worker implementation of {@link consumeEvents}.
@@ -172,15 +150,11 @@ export const ConsumeEventsLive = Layer.effect(
     return Effect.fn(function* (
       id: string,
       props: ConsumeEventsProps,
-      process: (
-        event: StripeEventInstance,
-      ) => Effect.Effect<void, never, never>,
+      process: (event: StripeEventInstance) => Effect.Effect<void, never, never>,
     ) {
       const path = webhookPath(props.path);
       const secretKey = webhookSecretEnvName(path);
-      const byType = new Map(
-        props.events.map((event) => [event.type, event] as const),
-      );
+      const byType = new Map(props.events.map((event) => [event.type, event] as const));
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* Namespace.push(
@@ -212,9 +186,7 @@ export const ConsumeEventsLive = Layer.effect(
   }),
 );
 
-const asWebhookSecret = (
-  raw: unknown,
-): Redacted.Redacted<string> | undefined => {
+const asWebhookSecret = (raw: unknown): Redacted.Redacted<string> | undefined => {
   if (raw === undefined || raw === null || raw === "") return undefined;
   if (Redacted.isRedacted(raw)) {
     const value = Redacted.value(raw);
@@ -240,9 +212,7 @@ const handleDelivery = <Req>(
     if (request.method !== "POST") {
       return new Response("method not allowed", { status: 405 });
     }
-    const payload = yield* Effect.promise(() =>
-      (request as unknown as Request).text(),
-    );
+    const payload = yield* Effect.promise(() => (request as unknown as Request).text());
     const signature = request.headers.get("stripe-signature") ?? "";
     const resolved = asWebhookSecret(
       unpackEnvValue(env[secretKey] as string | undefined) ?? env[secretKey],
@@ -255,9 +225,8 @@ const handleDelivery = <Req>(
       signature,
       secret: Redacted.value(resolved),
     }).pipe(
-      Effect.catchTag(
-        ["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"],
-        () => Effect.succeed(undefined),
+      Effect.catchTag(["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"], () =>
+        Effect.succeed(undefined),
       ),
     );
     if (parsed === undefined) {
@@ -268,9 +237,7 @@ const handleDelivery = <Req>(
       return new Response(null, { status: 200 });
     }
     const data =
-      typeof parsed.data === "object" &&
-      parsed.data !== null &&
-      "object" in parsed.data
+      typeof parsed.data === "object" && parsed.data !== null && "object" in parsed.data
         ? (parsed.data as { object: unknown }).object
         : parsed.data;
     yield* process(new Ctor(data as never)).pipe(Effect.orDie);

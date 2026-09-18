@@ -43,10 +43,7 @@ export interface GetSampledRequests extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSampledRequestsRequest,
-    ) => Effect.Effect<
-      WAFV2.GetSampledRequestsResponse,
-      WAFV2.GetSampledRequestsError
-    >
+    ) => Effect.Effect<WAFV2.GetSampledRequestsResponse, WAFV2.GetSampledRequestsError>
   >
 > {}
 

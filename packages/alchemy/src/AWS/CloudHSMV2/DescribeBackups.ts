@@ -29,12 +29,7 @@ export interface DescribeBackups extends Binding.Service<
   () => Effect.Effect<
     (
       request?: cloudhsm.DescribeBackupsRequest,
-    ) => Effect.Effect<
-      cloudhsm.DescribeBackupsResponse,
-      cloudhsm.DescribeBackupsError
-    >
+    ) => Effect.Effect<cloudhsm.DescribeBackupsResponse, cloudhsm.DescribeBackupsError>
   >
 > {}
-export const DescribeBackups = Binding.Service<DescribeBackups>(
-  "AWS.CloudHSMV2.DescribeBackups",
-);
+export const DescribeBackups = Binding.Service<DescribeBackups>("AWS.CloudHSMV2.DescribeBackups");

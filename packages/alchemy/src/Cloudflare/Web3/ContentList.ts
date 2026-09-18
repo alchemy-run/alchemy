@@ -2,7 +2,6 @@ import * as web3 from "@distilled.cloud/cloudflare/web3";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -144,9 +143,7 @@ export const HostnameContentList = Resource<HostnameContentList>(TypeId, {
 /**
  * Returns true if the given value is a HostnameContentList resource.
  */
-export const isHostnameContentList = (
-  value: unknown,
-): value is HostnameContentList =>
+export const isHostnameContentList = (value: unknown): value is HostnameContentList =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const HostnameContentListProvider = () =>
@@ -176,9 +173,7 @@ export const HostnameContentListProvider = () =>
                 hostnames,
                 (h) =>
                   observeContentList(zone.id, h.id).pipe(
-                    Effect.catchTag("Forbidden", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 10 },
               ),
@@ -189,11 +184,7 @@ export const HostnameContentListProvider = () =>
           ),
         { concurrency: 10 },
       );
-      return rows
-        .flat()
-        .filter(
-          (row): row is HostnameContentListAttributes => row !== undefined,
-        );
+      return rows.flat().filter((row): row is HostnameContentListAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
@@ -203,11 +194,7 @@ export const HostnameContentListProvider = () =>
       // sides are concrete. The content list is a sub-singleton of the
       // hostname — pointing elsewhere replaces it.
       const oldZone = output?.zoneId ?? o.zoneId;
-      if (
-        typeof oldZone === "string" &&
-        typeof n.zoneId === "string" &&
-        oldZone !== n.zoneId
-      ) {
+      if (typeof oldZone === "string" && typeof n.zoneId === "string" && oldZone !== n.zoneId) {
         return { action: "replace" } as const;
       }
       const oldHostname = output?.hostnameId ?? o.hostnameId;
@@ -222,12 +209,9 @@ export const HostnameContentListProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostnameId =
-        output?.hostnameId ??
-        (typeof olds?.hostnameId === "string" ? olds.hostnameId : undefined);
+        output?.hostnameId ?? (typeof olds?.hostnameId === "string" ? olds.hostnameId : undefined);
       if (zoneId === undefined || hostnameId === undefined) return undefined;
       // Settings-singleton semantics: the list always exists for a
       // universal-path hostname (empty by default), so it is never
@@ -278,10 +262,7 @@ export const HostnameContentListProvider = () =>
           entries: [],
         })
         .pipe(
-          Effect.catchTag(
-            ["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"],
-            () => Effect.void,
-          ),
+          Effect.catchTag(["Web3HostnameNotFound", "InvalidWeb3HostnameTarget"], () => Effect.void),
         );
     }),
   });
@@ -298,9 +279,10 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       zoneId,
       identifier: hostnameId,
     });
-    const entries = yield* web3.listHostnameIpfsUniversalPathContentListEntries(
-      { zoneId, identifier: hostnameId },
-    );
+    const entries = yield* web3.listHostnameIpfsUniversalPathContentListEntries({
+      zoneId,
+      identifier: hostnameId,
+    });
     return {
       zoneId,
       hostnameId,
@@ -308,9 +290,7 @@ const observeContentList = (zoneId: string, hostnameId: string) =>
       entries: (entries.entries ?? []).map((entry): ContentListEntry => ({
         content: entry.content ?? "",
         type: (entry.type ?? "cid") as ContentListEntryType,
-        ...(entry.description != null
-          ? { description: entry.description }
-          : {}),
+        ...(entry.description != null ? { description: entry.description } : {}),
       })),
     } satisfies HostnameContentListAttributes;
   }).pipe(

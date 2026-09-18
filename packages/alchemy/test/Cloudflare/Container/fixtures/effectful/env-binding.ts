@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Binding from "@/Binding.ts";
 import type { Bucket } from "@/Cloudflare/R2/Bucket.ts";
 import type { Resource, ResourceLike } from "@/Resource.ts";
 import type { RuntimeContext } from "@/RuntimeContext.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 /**
  * The env var the binding injects into whichever host it is provided on.
@@ -25,23 +25,15 @@ export const PROBE_ENV_KEY = "ALCHEMY_TEST_BOUND_ENV";
 export interface ProbeEnv extends Binding.Service<
   ProbeEnv,
   "Test.ProbeEnv",
-  (
-    bucket: Bucket,
-  ) => Effect.Effect<Effect.Effect<string | undefined, never, RuntimeContext>>
+  (bucket: Bucket) => Effect.Effect<Effect.Effect<string | undefined, never, RuntimeContext>>
 > {}
 
 export const ProbeEnv = Binding.Service<ProbeEnv>("Test.ProbeEnv");
 
-type EnvBindingHost = Resource<
-  string,
-  object | undefined,
-  object,
-  { env?: Record<string, any> }
->;
+type EnvBindingHost = Resource<string, object | undefined, object, { env?: Record<string, any> }>;
 
-const acceptsEnvBinding = (
-  host: ResourceLike | undefined,
-): host is EnvBindingHost => host?.Type === "Cloudflare.Container";
+const acceptsEnvBinding = (host: ResourceLike | undefined): host is EnvBindingHost =>
+  host?.Type === "Cloudflare.Container";
 
 export const ProbeEnvBinding = Layer.effect(
   ProbeEnv,

@@ -2,7 +2,6 @@ import * as pages from "@distilled.cloud/cloudflare/pages";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -174,13 +173,7 @@ export interface ProjectAttributes {
   createdOn: string;
 }
 
-export type Project = Resource<
-  TypeId,
-  ProjectProps,
-  ProjectAttributes,
-  never,
-  Providers
->;
+export type Project = Resource<TypeId, ProjectProps, ProjectAttributes, never, Providers>;
 
 /**
  * A Cloudflare Pages project (direct-upload).
@@ -265,8 +258,7 @@ export const ProjectProvider = () =>
       }
       // The name is the project's identity (it forms the *.pages.dev
       // subdomain) — renames are a delete + create.
-      const oldName =
-        output?.name ?? (yield* createProjectName(id, olds?.name));
+      const oldName = output?.name ?? (yield* createProjectName(id, olds?.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -308,10 +300,7 @@ export const ProjectProvider = () =>
             name,
             productionBranch: news.productionBranch ?? "main",
             buildConfig: toApiBuildConfig(news.buildConfig),
-            deploymentConfigs: toApiDeploymentConfigs(
-              news.deploymentConfigs,
-              undefined,
-            ),
+            deploymentConfigs: toApiDeploymentConfigs(news.deploymentConfigs, undefined),
           })
           .pipe(
             Effect.catchTag("ProjectAlreadyExists", (originalError) =>
@@ -398,16 +387,10 @@ const getProject = (accountId: string, projectName: string) =>
  */
 const createProjectName = (id: string, name?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({ id, lowercase: true, maxLength: 58 }))
-    );
+    return name ?? (yield* createPhysicalName({ id, lowercase: true, maxLength: 58 }));
   });
 
-const toAttributes = (
-  project: ObservedProject,
-  accountId: string,
-): ProjectAttributes => ({
+const toAttributes = (project: ObservedProject, accountId: string): ProjectAttributes => ({
   projectId: project.id,
   accountId,
   name: project.name,
@@ -422,16 +405,11 @@ const toAttributes = (
 // ---------------------------------------------------------------------------
 
 type ApiBuildConfig = NonNullable<pages.CreateProjectRequest["buildConfig"]>;
-type ApiDeploymentConfigs = NonNullable<
-  pages.CreateProjectRequest["deploymentConfigs"]
->;
+type ApiDeploymentConfigs = NonNullable<pages.CreateProjectRequest["deploymentConfigs"]>;
 type ApiEnvConfig = NonNullable<ApiDeploymentConfigs["production"]>;
-type ObservedEnvConfig =
-  pages.GetProjectResponse["deploymentConfigs"]["production"];
+type ObservedEnvConfig = pages.GetProjectResponse["deploymentConfigs"]["production"];
 
-const toApiBuildConfig = (
-  config: BuildConfig | undefined,
-): ApiBuildConfig | undefined =>
+const toApiBuildConfig = (config: BuildConfig | undefined): ApiBuildConfig | undefined =>
   config === undefined
     ? undefined
     : {
@@ -469,14 +447,8 @@ const toApiEnvConfig = (
     mapBindingRecord(desired.kvNamespaces, "namespace_id"),
     observed?.kvNamespaces,
   ),
-  d1Databases: mergeRecord(
-    mapBindingRecord(desired.d1Databases, "id"),
-    observed?.d1Databases,
-  ),
-  r2Buckets: mergeRecord(
-    mapBindingRecord(desired.r2Buckets, "name"),
-    observed?.r2Buckets,
-  ),
+  d1Databases: mergeRecord(mapBindingRecord(desired.d1Databases, "id"), observed?.d1Databases),
+  r2Buckets: mergeRecord(mapBindingRecord(desired.r2Buckets, "name"), observed?.r2Buckets),
   compatibilityDate: desired.compatibilityDate,
   compatibilityFlags: desired.compatibilityFlags,
   failOpen: desired.failOpen,
@@ -490,10 +462,7 @@ const mapBindingRecord = (
   record === undefined
     ? undefined
     : Object.fromEntries(
-        Object.entries(record).map(([binding, id]) => [
-          binding,
-          { [idKey]: id as string },
-        ]),
+        Object.entries(record).map(([binding, id]) => [binding, { [idKey]: id as string }]),
       );
 
 /**
@@ -524,10 +493,7 @@ const toApiDeploymentConfigs = (
     configs.preview = toApiEnvConfig(desired.preview, observed?.preview);
   }
   if (desired.production !== undefined) {
-    configs.production = toApiEnvConfig(
-      desired.production,
-      observed?.production,
-    );
+    configs.production = toApiEnvConfig(desired.production, observed?.production);
   }
   return configs;
 };
@@ -559,10 +525,7 @@ const buildProjectPatch = (
     dirty = true;
   }
 
-  if (
-    news.buildConfig !== undefined &&
-    buildConfigDirty(news.buildConfig, observed.buildConfig)
-  ) {
+  if (news.buildConfig !== undefined && buildConfigDirty(news.buildConfig, observed.buildConfig)) {
     patch.buildConfig = toApiBuildConfig(news.buildConfig);
     dirty = true;
   }
@@ -599,9 +562,7 @@ const buildConfigDirty = (
     "rootDir",
   ];
   return fields.some(
-    (field) =>
-      desired[field] !== undefined &&
-      desired[field] !== (observed?.[field] ?? undefined),
+    (field) => desired[field] !== undefined && desired[field] !== (observed?.[field] ?? undefined),
   );
 };
 
@@ -609,10 +570,8 @@ const deploymentConfigsDirty = (
   desired: ApiDeploymentConfigs,
   observed: pages.GetProjectResponse["deploymentConfigs"] | undefined,
 ): boolean =>
-  (desired.preview !== undefined &&
-    envConfigDirty(desired.preview, observed?.preview)) ||
-  (desired.production !== undefined &&
-    envConfigDirty(desired.production, observed?.production));
+  (desired.preview !== undefined && envConfigDirty(desired.preview, observed?.preview)) ||
+  (desired.production !== undefined && envConfigDirty(desired.production, observed?.production));
 
 const envConfigDirty = (
   desired: ApiEnvConfig,
@@ -626,23 +585,14 @@ const envConfigDirty = (
   }
   if (
     desired.compatibilityFlags !== undefined &&
-    !arrayEqualsUnordered(
-      desired.compatibilityFlags,
-      observed?.compatibilityFlags ?? [],
-    )
+    !arrayEqualsUnordered(desired.compatibilityFlags, observed?.compatibilityFlags ?? [])
   ) {
     return true;
   }
-  if (
-    desired.failOpen !== undefined &&
-    desired.failOpen !== observed?.failOpen
-  ) {
+  if (desired.failOpen !== undefined && desired.failOpen !== observed?.failOpen) {
     return true;
   }
-  if (
-    desired.placement !== undefined &&
-    desired.placement.mode !== observed?.placement?.mode
-  ) {
+  if (desired.placement !== undefined && desired.placement.mode !== observed?.placement?.mode) {
     return true;
   }
   return (
@@ -681,10 +631,7 @@ const envVarEquals = (desired: unknown, observed: unknown): boolean => {
   const o = observed as { type?: string; value?: string } | undefined;
   if (o === undefined) return false;
   if (d.type === "secret_text") return o.type === "secret_text";
-  return (
-    (o.type ?? "plain_text") === (d.type ?? "plain_text") && o.value === d.value
-  );
+  return (o.type ?? "plain_text") === (d.type ?? "plain_text") && o.value === d.value;
 };
 
-const deepEquals = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const deepEquals = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);

@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { KeyGroup, PublicKey } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { KeyGroup, PublicKey } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -61,9 +61,7 @@ describe("AWS.CloudFront.KeyGroup", () => {
         });
         expect(initial.KeyGroup?.Id).toEqual(created.group.keyGroupId);
         expect(initial.KeyGroup?.KeyGroupConfig?.Comment).toEqual("initial");
-        expect(initial.KeyGroup?.KeyGroupConfig?.Items).toEqual([
-          created.primary.publicKeyId,
-        ]);
+        expect(initial.KeyGroup?.KeyGroupConfig?.Items).toEqual([created.primary.publicKeyId]);
 
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
@@ -88,22 +86,17 @@ describe("AWS.CloudFront.KeyGroup", () => {
         // `getKeyGroup` right after `updateKeyGroup` can serve the
         // pre-update config (control-plane reads are eventually
         // consistent) — poll until the update is visible, then assert.
-        const after = yield* cloudfront
-          .getKeyGroup({ Id: updated.group.keyGroupId })
-          .pipe(
-            Effect.repeat({
-              schedule: Schedule.fixed("2 seconds"),
-              until: (response) =>
-                response.KeyGroup?.KeyGroupConfig?.Items?.length === 2,
-              times: 15,
-            }),
-          );
+        const after = yield* cloudfront.getKeyGroup({ Id: updated.group.keyGroupId }).pipe(
+          Effect.repeat({
+            schedule: Schedule.fixed("2 seconds"),
+            until: (response) => response.KeyGroup?.KeyGroupConfig?.Items?.length === 2,
+            times: 15,
+          }),
+        );
         expect(after.KeyGroup?.KeyGroupConfig?.Comment).toEqual("updated");
         // CloudFront does not preserve the order of key-group items —
         // compare as sets.
-        expect(
-          [...(after.KeyGroup?.KeyGroupConfig?.Items ?? [])].sort(),
-        ).toEqual(
+        expect([...(after.KeyGroup?.KeyGroupConfig?.Items ?? [])].sort()).toEqual(
           [updated.primary.publicKeyId, updated.secondary.publicKeyId].sort(),
         );
 
@@ -138,9 +131,7 @@ describe("AWS.CloudFront.KeyGroup", () => {
         const provider = yield* Provider.findProvider(KeyGroup);
         const all = yield* provider.list();
 
-        expect(
-          all.some((g) => g.keyGroupId === deployed.group.keyGroupId),
-        ).toBe(true);
+        expect(all.some((g) => g.keyGroupId === deployed.group.keyGroupId)).toBe(true);
 
         yield* stack.destroy();
         yield* assertKeyGroupDeleted(deployed.group.keyGroupId);
@@ -155,12 +146,8 @@ const assertKeyGroupDeleted = (id: string) =>
     Effect.flatMap(() => Effect.fail(new Error("KeyGroupStillExists"))),
     Effect.catchTag("NoSuchResource", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "KeyGroupStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      while: (error) => error instanceof Error && error.message === "KeyGroupStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -169,11 +156,7 @@ const assertPublicKeyDeleted = (id: string) =>
     Effect.flatMap(() => Effect.fail(new Error("PublicKeyStillExists"))),
     Effect.catchTag("NoSuchPublicKey", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "PublicKeyStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      while: (error) => error instanceof Error && error.message === "PublicKeyStillExists",
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -58,9 +58,7 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
         // domain serves only at the distribution's own URL (its CloudFront
         // default domain live, a local edge port under the emulator), and
         // `url` is always `urls[0]`.
-        expect(deployed.router.urls).toEqual([
-          deployed.router.distribution.url,
-        ]);
+        expect(deployed.router.urls).toEqual([deployed.router.distribution.url]);
         expect(deployed.router.url).toBe(deployed.router.urls[0]);
         // A path-only attached site inherits the router's primary URL.
         expect(deployed.site.urls).toEqual([deployed.router.url]);
@@ -70,14 +68,11 @@ describe.skipIf(!runLive)("AWS.Website.Router", () => {
           Id: deployed.router.distribution.distributionId,
         });
         expect(
-          config.DistributionConfig?.DefaultCacheBehavior?.FunctionAssociations
-            ?.Quantity,
+          config.DistributionConfig?.DefaultCacheBehavior?.FunctionAssociations?.Quantity,
         ).toBeGreaterThanOrEqual(1);
 
         yield* stack.destroy();
-        yield* assertDistributionDeleted(
-          deployed.router.distribution.distributionId,
-        );
+        yield* assertDistributionDeleted(deployed.router.distribution.distributionId);
       }),
     // Create waits for Status === "Deployed" (~5 min) and destroy is
     // disable -> wait -> delete (~5-15 min more): 600s was measured too
@@ -96,11 +91,7 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
     Effect.catchTag("NoSuchDistribution", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      while: (error) => error instanceof Error && error.message === "DistributionStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

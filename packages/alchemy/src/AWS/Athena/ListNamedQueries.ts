@@ -30,13 +30,8 @@ export interface ListNamedQueries extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<athena.ListNamedQueriesInput, "WorkGroup">,
-    ) => Effect.Effect<
-      athena.ListNamedQueriesOutput,
-      athena.ListNamedQueriesError
-    >
+    ) => Effect.Effect<athena.ListNamedQueriesOutput, athena.ListNamedQueriesError>
   >
 > {}
 
-export const ListNamedQueries = Binding.Service<ListNamedQueries>(
-  "AWS.Athena.ListNamedQueries",
-);
+export const ListNamedQueries = Binding.Service<ListNamedQueries>("AWS.Athena.ListNamedQueries");

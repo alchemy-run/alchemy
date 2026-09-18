@@ -1,10 +1,10 @@
+import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DomainName } from "@/AWS/ApiGatewayV2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -13,19 +13,17 @@ const { test } = Test.make({ providers: AWS.providers() });
 // custom domain cannot be provisioned in CI (it needs a validated ACM
 // certificate for a domain we own — see the gated test below), but this
 // still verifies pagination + mapping against the live API.
-test.provider.skipIf(!!process.env.FAST)(
-  "list returns the account/region domain names",
-  () =>
-    Effect.gen(function* () {
-      const provider = yield* Provider.findProvider(DomainName);
-      const all = yield* provider.list();
+test.provider.skipIf(!!process.env.FAST)("list returns the account/region domain names", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(DomainName);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      for (const domain of all) {
-        expect(typeof domain.domainName).toBe("string");
-        expect(domain.tags).toBeDefined();
-      }
-    }),
+    expect(Array.isArray(all)).toBe(true);
+    for (const domain of all) {
+      expect(typeof domain.domainName).toBe("string");
+      expect(domain.tags).toBeDefined();
+    }
+  }),
 );
 
 // Full lifecycle. SKIPPED by default: an API Gateway v2 custom domain
@@ -99,9 +97,7 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
         })
         .pipe(
           Effect.map(() => "still-exists" as const),
-          Effect.catchTag("NotFoundException", () =>
-            Effect.succeed("deleted" as const),
-          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed("deleted" as const)),
         );
       expect(gone).toBe("deleted");
     }),

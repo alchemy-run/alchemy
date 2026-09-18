@@ -29,37 +29,24 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
             get: (key) =>
               storage
                 .get<object>(prefixed(key))
-                .pipe(
-                  Effect.mapError(wrapErr("get", key)),
-                  Effect.provide(RuntimeContext.phantom),
-                ),
+                .pipe(Effect.mapError(wrapErr("get", key)), Effect.provide(RuntimeContext.phantom)),
             getMany: (keys) =>
               storage.get<object>(keys.map(prefixed)).pipe(
                 Effect.mapError(wrapErr("getMany")),
                 Effect.map(
                   (map) =>
-                    keys.map((k) => map.get(prefixed(k))) as Arr.NonEmptyArray<
-                      object | undefined
-                    >,
+                    keys.map((k) => map.get(prefixed(k))) as Arr.NonEmptyArray<object | undefined>,
                 ),
                 Effect.provide(RuntimeContext.phantom),
               ),
             set: (key, value, _ttl) =>
               storage
                 .put(prefixed(key), value)
-                .pipe(
-                  Effect.mapError(wrapErr("set", key)),
-                  Effect.provide(RuntimeContext.phantom),
-                ),
+                .pipe(Effect.mapError(wrapErr("set", key)), Effect.provide(RuntimeContext.phantom)),
             setMany: (entries) =>
               storage
-                .put(
-                  Object.fromEntries(entries.map(([k, v]) => [prefixed(k), v])),
-                )
-                .pipe(
-                  Effect.mapError(wrapErr("setMany")),
-                  Effect.provide(RuntimeContext.phantom),
-                ),
+                .put(Object.fromEntries(entries.map(([k, v]) => [prefixed(k), v])))
+                .pipe(Effect.mapError(wrapErr("setMany")), Effect.provide(RuntimeContext.phantom)),
             remove: (key) =>
               storage
                 .delete(prefixed(key))

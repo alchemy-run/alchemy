@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 export const readyMarker = "http-server-worker-ready";
 
@@ -29,15 +29,11 @@ export default class HttpServerWorker extends Cloudflare.Worker<HttpServerWorker
         if (request.url.startsWith("/missing")) {
           // A Respondable error escaping as a defect must keep its intended
           // response (404), not be flattened into a generic 500.
-          return yield* Effect.die(
-            new HttpServerError.RouteNotFound({ request }),
-          );
+          return yield* Effect.die(new HttpServerError.RouteNotFound({ request }));
         }
         if (request.url.startsWith("/boom")) {
           return yield* Effect.fail(
-            new Error(
-              `Sensitive handler context: ${sensitiveContext.join(" ")}`,
-            ),
+            new Error(`Sensitive handler context: ${sensitiveContext.join(" ")}`),
           ).pipe(Effect.orDie);
         }
         return HttpServerResponse.text(readyMarker);

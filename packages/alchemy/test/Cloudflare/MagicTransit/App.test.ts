@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN custom apps are entitlement-gated. On the standard testing
 // account every app call fails with the typed `MagicWanUnauthorized`
@@ -29,9 +26,7 @@ const findApp = (accountId: string, appId: string) =>
     .listApps({ accountId })
     .pipe(
       Effect.map((r) =>
-        r.result.find(
-          (app) => "accountAppId" in app && app.accountAppId === appId,
-        ),
+        r.result.find((app) => "accountAppId" in app && app.accountAppId === appId),
       ),
     );
 
@@ -43,10 +38,7 @@ const expectGone = (accountId: string, appId: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "AppNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -60,22 +52,16 @@ test.provider(
 
       const canList = yield* magicTransit.listApps({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
-          Effect.succeed(false),
-        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () => Effect.succeed(false)),
       );
       if (canList) {
         // Entitled account — the gated lifecycle test covers real behavior.
-        yield* Effect.logInfo(
-          "account is Magic WAN-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is Magic WAN-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* magicTransit
-        .listApps({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* magicTransit.listApps({ accountId }).pipe(Effect.flip);
       expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
 
       const createError = yield* magicTransit
@@ -151,9 +137,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicApp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicApp);
       const all = yield* provider.list();
 
       expect(Array.isArray(all)).toBe(true);
@@ -183,9 +167,7 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicApp,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicApp);
       const all = yield* provider.list();
 
       expect(all.some((app) => app.appId === deployed.appId)).toBe(true);

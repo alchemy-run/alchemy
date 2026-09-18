@@ -1,4 +1,3 @@
-import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 /**
  * The fork alarm job (DESIGN.md §2.3 Fork).
  *
@@ -25,13 +24,8 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { StoreError } from "../Protocol/Store.ts";
-import type {
-  CommitParentRow,
-  CommitRow,
-  ObjectRow,
-  RefRow,
-  SqlClient,
-} from "../Store/Sql.ts";
+import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
+import type { CommitParentRow, CommitRow, ObjectRow, RefRow, SqlClient } from "../Store/Sql.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Snapshot wire shapes
@@ -101,15 +95,11 @@ export type SnapshotChunk =
     };
 
 /** Decodes a snapshot row's base64 `zdata` back into bytes. */
-const decodeZData = (
-  row: SnapshotObjectRow,
-): Effect.Effect<Uint8Array, StoreError> => {
+const decodeZData = (row: SnapshotObjectRow): Effect.Effect<Uint8Array, StoreError> => {
   const decoded = Encoding.decodeBase64(row.zdata ?? "");
   return Result.isSuccess(decoded)
     ? Effect.succeed(decoded.success)
-    : Effect.fail(
-        new StoreError({ reason: `fork: corrupt zdata for ${row.oid}` }),
-      );
+    : Effect.fail(new StoreError({ reason: `fork: corrupt zdata for ${row.oid}` }));
 };
 
 /** Config keys that transfer from parent to fork. */
@@ -135,9 +125,7 @@ const OBJECTS_PAGE_SIZE = 8;
  * page they observe, which is the same semantics as `git clone` during a
  * push.
  */
-export const snapshotStream = (
-  sql: SqlClient,
-): Stream.Stream<SnapshotChunk, StoreError> => {
+export const snapshotStream = (sql: SqlClient): Stream.Stream<SnapshotChunk, StoreError> => {
   const config: Stream.Stream<SnapshotChunk, StoreError> = Stream.fromEffect(
     Effect.gen(function* () {
       const rows = yield* sql.all<{ key: string; value: string }>(
@@ -148,79 +136,67 @@ export const snapshotStream = (
     }),
   );
 
-  const refs: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate(
-    "",
-    (after: string) =>
-      Effect.gen(function* () {
-        const rows = yield* sql.all<RefRow>(
-          `SELECT name, oid FROM refs WHERE name > ? ORDER BY name LIMIT ?`,
-          after,
-          PAGE_SIZE,
-        );
-        const chunk: SnapshotChunk = { table: "refs", rows };
-        const next =
-          rows.length < PAGE_SIZE
-            ? Option.none<string>()
-            : Option.some(rows[rows.length - 1]!.name);
-        return [rows.length > 0 ? [chunk] : [], next] as const;
-      }),
+  const refs: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate("", (after: string) =>
+    Effect.gen(function* () {
+      const rows = yield* sql.all<RefRow>(
+        `SELECT name, oid FROM refs WHERE name > ? ORDER BY name LIMIT ?`,
+        after,
+        PAGE_SIZE,
+      );
+      const chunk: SnapshotChunk = { table: "refs", rows };
+      const next =
+        rows.length < PAGE_SIZE ? Option.none<string>() : Option.some(rows[rows.length - 1]!.name);
+      return [rows.length > 0 ? [chunk] : [], next] as const;
+    }),
   );
 
-  const objects: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate(
-    "",
-    (after: string) =>
-      Effect.gen(function* () {
-        const rows = yield* sql.all<ObjectRow>(
-          `SELECT oid, type, size, zsize, location, zdata, r2_key, pack_id, pack_offset, staged_push
+  const objects: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate("", (after: string) =>
+    Effect.gen(function* () {
+      const rows = yield* sql.all<ObjectRow>(
+        `SELECT oid, type, size, zsize, location, zdata, r2_key, pack_id, pack_offset, staged_push
            FROM objects WHERE oid > ? AND ${LIVE_OBJECTS} ORDER BY oid LIMIT ?`,
-          after,
-          OBJECTS_PAGE_SIZE,
-        );
-        const chunk: SnapshotChunk = {
-          table: "objects",
-          rows: rows.map((row): SnapshotObjectRow => ({
-            oid: row.oid,
-            type: row.type,
-            size: row.size,
-            zsize: row.zsize,
-            location: row.location,
-            zdata:
-              row.zdata === null
-                ? null
-                : Encoding.encodeBase64(new Uint8Array(row.zdata)),
-            r2_key: row.r2_key,
-            pack_id: row.pack_id,
-            pack_offset: row.pack_offset,
-          })),
-        };
-        const next =
-          rows.length < OBJECTS_PAGE_SIZE
-            ? Option.none<string>()
-            : Option.some(rows[rows.length - 1]!.oid);
-        return [rows.length > 0 ? [chunk] : [], next] as const;
-      }),
+        after,
+        OBJECTS_PAGE_SIZE,
+      );
+      const chunk: SnapshotChunk = {
+        table: "objects",
+        rows: rows.map((row): SnapshotObjectRow => ({
+          oid: row.oid,
+          type: row.type,
+          size: row.size,
+          zsize: row.zsize,
+          location: row.location,
+          zdata: row.zdata === null ? null : Encoding.encodeBase64(new Uint8Array(row.zdata)),
+          r2_key: row.r2_key,
+          pack_id: row.pack_id,
+          pack_offset: row.pack_offset,
+        })),
+      };
+      const next =
+        rows.length < OBJECTS_PAGE_SIZE
+          ? Option.none<string>()
+          : Option.some(rows[rows.length - 1]!.oid);
+      return [rows.length > 0 ? [chunk] : [], next] as const;
+    }),
   );
 
-  const commits: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate(
-    "",
-    (after: string) =>
-      Effect.gen(function* () {
-        const rows = yield* sql.all<CommitRow>(
-          `SELECT oid, tree, gen, commit_time FROM commits WHERE oid > ? ORDER BY oid LIMIT ?`,
-          after,
-          PAGE_SIZE,
-        );
-        const chunk: SnapshotChunk = { table: "commits", rows };
-        const next =
-          rows.length < PAGE_SIZE
-            ? Option.none<string>()
-            : Option.some(rows[rows.length - 1]!.oid);
-        return [rows.length > 0 ? [chunk] : [], next] as const;
-      }),
+  const commits: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate("", (after: string) =>
+    Effect.gen(function* () {
+      const rows = yield* sql.all<CommitRow>(
+        `SELECT oid, tree, gen, commit_time FROM commits WHERE oid > ? ORDER BY oid LIMIT ?`,
+        after,
+        PAGE_SIZE,
+      );
+      const chunk: SnapshotChunk = { table: "commits", rows };
+      const next =
+        rows.length < PAGE_SIZE ? Option.none<string>() : Option.some(rows[rows.length - 1]!.oid);
+      return [rows.length > 0 ? [chunk] : [], next] as const;
+    }),
   );
 
-  const commitParents: Stream.Stream<SnapshotChunk, StoreError> =
-    Stream.paginate(["", ""] as readonly [string, string], (after) =>
+  const commitParents: Stream.Stream<SnapshotChunk, StoreError> = Stream.paginate(
+    ["", ""] as readonly [string, string],
+    (after) =>
       Effect.gen(function* () {
         const rows = yield* sql.all<CommitParentRow>(
           `SELECT oid, parent, ord FROM commit_parents
@@ -238,7 +214,7 @@ export const snapshotStream = (
             : Option.some([last.oid, last.parent] as const);
         return [rows.length > 0 ? [chunk] : [], next] as const;
       }),
-    );
+  );
 
   // Objects before refs: a partially-copied fork must never advertise a ref
   // whose closure is missing (the job is re-run from scratch anyway, but
@@ -261,20 +237,14 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.byteLength === bytes.buffer.byteLength &&
   bytes.buffer instanceof ArrayBuffer
     ? bytes.buffer
-    : (bytes.buffer.slice(
-        bytes.byteOffset,
-        bytes.byteOffset + bytes.byteLength,
-      ) as ArrayBuffer);
+    : (bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
 
 /**
  * Applies one snapshot chunk to the fork's own SQLite. All inserts are
  * `INSERT OR IGNORE` on the natural primary key — re-running the whole
  * snapshot after a crash converges without duplicating rows.
  */
-export const applySnapshotChunk = Effect.fn(function* (
-  sql: SqlClient,
-  chunk: SnapshotChunk,
-) {
+export const applySnapshotChunk = Effect.fn(function* (sql: SqlClient, chunk: SnapshotChunk) {
   switch (chunk.table) {
     case "config": {
       for (const row of chunk.rows) {
@@ -289,11 +259,7 @@ export const applySnapshotChunk = Effect.fn(function* (
     }
     case "refs": {
       for (const row of chunk.rows) {
-        yield* sql.run(
-          `INSERT OR IGNORE INTO refs (name, oid) VALUES (?, ?)`,
-          row.name,
-          row.oid,
-        );
+        yield* sql.run(`INSERT OR IGNORE INTO refs (name, oid) VALUES (?, ?)`, row.name, row.oid);
       }
       return;
     }
@@ -358,9 +324,7 @@ export interface ForkJobOptions {
  * chunks applied. Idempotent; the caller flips `status` to `ready` (and
  * clears the jobs row) on success, or re-arms the alarm on failure.
  */
-export const runForkJob = (
-  options: ForkJobOptions,
-): Effect.Effect<number, StoreError> =>
+export const runForkJob = (options: ForkJobOptions): Effect.Effect<number, StoreError> =>
   options.snapshot.pipe(
     Stream.mapError(
       (error) =>
@@ -370,7 +334,6 @@ export const runForkJob = (
     ),
     Stream.runFoldEffect(
       () => 0,
-      (count, chunk) =>
-        applySnapshotChunk(options.sql, chunk).pipe(Effect.as(count + 1)),
+      (count, chunk) => applySnapshotChunk(options.sql, chunk).pipe(Effect.as(count + 1)),
     ),
   );

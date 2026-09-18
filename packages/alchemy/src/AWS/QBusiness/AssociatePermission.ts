@@ -43,10 +43,7 @@ export interface AssociatePermission extends Binding.Service<
   ) => Effect.Effect<
     (
       request: AssociatePermissionRequest,
-    ) => Effect.Effect<
-      qbusiness.AssociatePermissionResponse,
-      qbusiness.AssociatePermissionError
-    >
+    ) => Effect.Effect<qbusiness.AssociatePermissionResponse, qbusiness.AssociatePermissionError>
   >
 > {}
 export const AssociatePermission = Binding.Service<AssociatePermission>(

@@ -62,9 +62,7 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
           });
         }
       }
-      return Effect.fn(`AWS.FMS.${options.capability}`)(function* (
-        request?: I,
-      ) {
+      return Effect.fn(`AWS.FMS.${options.capability}`)(function* (request?: I) {
         // The admin-region pin must also be applied at the call site: the
         // yield-time snapshot is only a fallback — the calling fiber's
         // ambient Region (the host Function's own region) wins over it.

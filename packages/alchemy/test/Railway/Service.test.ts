@@ -1,31 +1,24 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { withEnvironmentConfigLock } from "@/Railway/transient.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -90,9 +83,7 @@ test.provider(
       expect(created.api.serviceId).toEqual(expect.any(String));
       expect(created.api.serviceId.length).toBeGreaterThan(0);
       expect(created.api.projectId).toEqual(created.project.projectId);
-      expect(created.api.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.api.environmentId).toEqual(created.environment.environmentId);
       expect(created.api.name).toEqual(expect.any(String));
       expect(created.api.name.length).toBeGreaterThan(0);
       expect(created.api.name.length).toBeLessThanOrEqual(32);
@@ -129,9 +120,7 @@ test.provider(
       );
       expect(instance.serviceId).toEqual(created.api.serviceId);
       expect(instance.environmentId).toEqual(created.api.environmentId);
-      expect(instance.source?.image).toEqual(
-        expect.stringContaining("nginx:alpine"),
-      );
+      expect(instance.source?.image).toEqual(expect.stringContaining("nginx:alpine"));
       expect(instance.healthcheckPath).toEqual("/");
       expect(
         instance.preDeployCommand === "echo predeploy" ||
@@ -140,13 +129,9 @@ test.provider(
             instance.preDeployCommand[0] === "echo predeploy"),
       ).toEqual(true);
       // Railway omits numReplicas until you scale; default is one replica.
-      expect(
-        instance.numReplicas === null || instance.numReplicas === 1,
-      ).toEqual(true);
+      expect(instance.numReplicas === null || instance.numReplicas === 1).toEqual(true);
       expect(created.api.healthcheckPath).toEqual("/");
-      expect(
-        created.api.replicas === undefined || created.api.replicas === 1,
-      ).toEqual(true);
+      expect(created.api.replicas === undefined || created.api.replicas === 1).toEqual(true);
 
       const domains = yield* railway.domains(
         {
@@ -173,9 +158,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Railway.Service);
       const listed = yield* provider.list();
-      const found = listed.find(
-        (service) => service.serviceId === created.api.serviceId,
-      );
+      const found = listed.find((service) => service.serviceId === created.api.serviceId);
       expect(found).toBeDefined();
       expect(found?.name).toEqual(created.api.name);
       expect(found?.projectId).toEqual(created.api.projectId);
@@ -183,9 +166,7 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -195,9 +176,7 @@ test.provider(
       expect(typeof body).toEqual("string");
       expect(body.length).toBeGreaterThan(0);
 
-      const nextName =
-        created.api.name.slice(0, -1) +
-        (created.api.name.endsWith("z") ? "y" : "z");
+      const nextName = created.api.name.slice(0, -1) + (created.api.name.endsWith("z") ? "y" : "z");
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -290,9 +269,7 @@ test.provider(
 
       expect(publicUpdate.api.serviceId).toEqual(created.api.serviceId);
       expect(publicUpdate.api.domainId).toEqual(expect.any(String));
-      expect(publicUpdate.api.url).toEqual(
-        `https://${publicUpdate.api.domain}`,
-      );
+      expect(publicUpdate.api.url).toEqual(`https://${publicUpdate.api.domain}`);
       expect(publicUpdate.api.dnsName).toEqual(`${nextName}.railway.internal`);
 
       // Add a foreign generated domain. The config map key may not equal
@@ -376,8 +353,7 @@ test.provider(
             schedule: Schedule.spaced("1 second"),
             until: (ids) =>
               ids.includes(publicUpdate.api.domainId!) &&
-              (ids.includes(foreignPatchId) ||
-                ids.some((id) => !beforeForeign.has(id))),
+              (ids.includes(foreignPatchId) || ids.some((id) => !beforeForeign.has(id))),
             times: 10,
           }),
         );
@@ -406,9 +382,7 @@ test.provider(
           return { api };
         }),
       );
-      expect(publicWithForeignDomain.api.domainId).toEqual(
-        publicUpdate.api.domainId,
-      );
+      expect(publicWithForeignDomain.api.domainId).toEqual(publicUpdate.api.domainId);
 
       const privateWithForeignDomain = yield* stack.deploy(
         Effect.gen(function* () {
@@ -443,10 +417,7 @@ test.provider(
         },
       );
       const remainingIds = remainingDomains.serviceDomains
-        .filter(
-          (domain) =>
-            domain.deletedAt == null && domain.syncStatus !== "DELETED",
-        )
+        .filter((domain) => domain.deletedAt == null && domain.syncStatus !== "DELETED")
         .map((domain) => domain.id);
       expect(remainingIds).toContain(foreignDomainId);
       expect(remainingIds).not.toContain(publicUpdate.api.domainId);
@@ -480,9 +451,7 @@ test.provider(
       );
 
       expect(created.worker.serviceId).toEqual(expect.any(String));
-      expect(created.worker.dnsName).toEqual(
-        `${created.worker.name}.railway.internal`,
-      );
+      expect(created.worker.dnsName).toEqual(`${created.worker.name}.railway.internal`);
       expect(created.worker.url).toBeUndefined();
       expect(created.worker.domain).toBeUndefined();
       expect(created.worker.domainId).toBeUndefined();
@@ -559,9 +528,7 @@ test.provider(
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(created.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -593,15 +560,11 @@ test.provider(
         },
         { source: { image: true } },
       );
-      expect(fromImage.source?.image).toEqual(
-        expect.stringContaining("nginx:alpine"),
-      );
+      expect(fromImage.source?.image).toEqual(expect.stringContaining("nginx:alpine"));
 
       const afterImage = yield* client.get(updated.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.text
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.text : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -654,10 +617,7 @@ test.provider.skipIf(!githubEntitled)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const repos = yield* railway.githubRepos(
-        {},
-        { fullName: true, defaultBranch: true },
-      );
+      const repos = yield* railway.githubRepos({}, { fullName: true, defaultBranch: true });
       const repo = repos[0];
       expect(repo).toBeDefined();
       expect(repo!.fullName.length).toBeGreaterThan(0);

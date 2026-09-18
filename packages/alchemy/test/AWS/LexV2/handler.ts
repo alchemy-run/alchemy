@@ -1,6 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as LexV2 from "@/AWS/LexV2";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -8,16 +5,15 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as LexV2 from "@/AWS/LexV2";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class LexTestFunction extends Lambda.Function<Lambda.Function>()(
-  "LexTestFunction",
-) {}
+export class LexTestFunction extends Lambda.Function<Lambda.Function>()("LexTestFunction") {}
 
-const contentOf = (
-  content: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
+const contentOf = (content: string | Redacted.Redacted<string> | undefined): string | undefined =>
   content === undefined
     ? undefined
     : typeof content === "string"
@@ -39,9 +35,7 @@ const respond = <A, E extends { readonly _tag: string }>(
       return yield* HttpServerResponse.json(
         {
           error: result.failure._tag,
-          message: String(
-            (result.failure as { message?: string }).message ?? "",
-          ),
+          message: String((result.failure as { message?: string }).message ?? ""),
         },
         {
           status: result.failure._tag === "AccessDeniedException" ? 502 : 400,
@@ -139,9 +133,7 @@ export default LexTestFunction.make(
             (reply) => ({
               intent: reply.sessionState?.intent?.name ?? null,
               state: reply.sessionState?.intent?.state ?? null,
-              messages: (reply.messages ?? []).map((message) =>
-                contentOf(message.content),
-              ),
+              messages: (reply.messages ?? []).map((message) => contentOf(message.content)),
               interpretations: (reply.interpretations ?? []).map(
                 (interpretation) => interpretation.intent?.name,
               ),
@@ -184,9 +176,7 @@ export default LexTestFunction.make(
                 sessionAttributes: body.attributes,
               },
               // ElicitIntent requires a message to relay to the user.
-              messages: [
-                { contentType: "PlainText", content: "How can I help?" },
-              ],
+              messages: [{ contentType: "PlainText", content: "How can I help?" }],
               // Default is speech — the test locale has no voice configured.
               responseContentType: "text/plain; charset=utf-8",
             }),
@@ -195,20 +185,16 @@ export default LexTestFunction.make(
         }
 
         if (request.method === "GET" && url.pathname === "/session") {
-          return yield* respond(
-            getSession({ localeId: "en_US", sessionId }),
-            (reply) => ({
-              sessionId: reply.sessionId ?? null,
-              attributes: reply.sessionState?.sessionAttributes ?? {},
-            }),
-          );
+          return yield* respond(getSession({ localeId: "en_US", sessionId }), (reply) => ({
+            sessionId: reply.sessionId ?? null,
+            attributes: reply.sessionState?.sessionAttributes ?? {},
+          }));
         }
 
         if (request.method === "DELETE" && url.pathname === "/session") {
-          return yield* respond(
-            deleteSession({ localeId: "en_US", sessionId }),
-            (reply) => ({ sessionId: reply.sessionId ?? null }),
-          );
+          return yield* respond(deleteSession({ localeId: "en_US", sessionId }), (reply) => ({
+            sessionId: reply.sessionId ?? null,
+          }));
         }
 
         if (request.method === "GET" && url.pathname === "/health") {

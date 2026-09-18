@@ -15,23 +15,11 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
-import {
-  Worker,
-  WorkerEnvironment,
-  type WorkerServices,
-} from "../Workers/Worker.ts";
+import { Worker, WorkerEnvironment, type WorkerServices } from "../Workers/Worker.ts";
 import { makeWorkflowName } from "./WorkflowName.ts";
-import {
-  type WorkflowEvent,
-  WorkflowStep,
-  WorkflowStepContext,
-} from "./WorkflowRuntime.ts";
+import { type WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
 
-export {
-  WorkflowEvent,
-  WorkflowStep,
-  WorkflowStepContext,
-} from "./WorkflowRuntime.ts";
+export { WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
 
 type TypeId = "Cloudflare.Workflow";
 const TypeId = "Cloudflare.Workflow" as const;
@@ -77,9 +65,7 @@ export interface WorkflowRollbackContext<Output = unknown> {
 }
 
 export interface WorkflowRollbackOptions<Output = unknown, R = never> {
-  rollback: (
-    context: WorkflowRollbackContext<Output>,
-  ) => Effect.Effect<void, never, R>;
+  rollback: (context: WorkflowRollbackContext<Output>) => Effect.Effect<void, never, R>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -91,9 +77,7 @@ export interface WorkflowTaskConfig<
   Output = unknown,
   RollbackReq = never,
 > extends WorkflowStepConfig {
-  rollback?: (
-    context: WorkflowRollbackContext<Output>,
-  ) => Effect.Effect<void, never, RollbackReq>;
+  rollback?: (context: WorkflowRollbackContext<Output>) => Effect.Effect<void, never, RollbackReq>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -232,16 +216,9 @@ export const waitForEvent = <T = unknown>(
  * `Drizzle.Postgres`) resolve them inside workflow steps just as they do in
  * a Worker `fetch`/`queue` handler.
  */
-export type WorkflowRunServices =
-  | WorkflowEvent
-  | WorkflowStep
-  | WorkerServices
-  | Scope;
+export type WorkflowRunServices = WorkflowEvent | WorkflowStep | WorkerServices | Scope;
 
-export type WorkflowServices =
-  | WorkflowRunServices
-  | PlatformServices
-  | RuntimeContext;
+export type WorkflowServices = WorkflowRunServices | PlatformServices | RuntimeContext;
 
 /**
  * Metadata stored in the worker export map to distinguish workflow exports
@@ -365,9 +342,7 @@ export interface WorkflowLike<Params = unknown> {
  * Type guard for the reference (async) form of a Workflow.
  */
 export const isWorkflowLike = (value: unknown): value is WorkflowLike =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { kind?: unknown }).kind === TypeId;
+  typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === TypeId;
 
 /**
  * Type guard for workflow binding metadata in the Worker binding contract.
@@ -393,9 +368,7 @@ export interface WorkflowHandle<Input = unknown, Result = unknown> {
    * Start a workflow instance. Pass payload through `params`; omit `id` to let
    * Cloudflare generate an instance ID.
    */
-  create(
-    options?: WorkflowInstanceCreateOptions<Input>,
-  ): Effect.Effect<WorkflowInstance<Result>>;
+  create(options?: WorkflowInstanceCreateOptions<Input>): Effect.Effect<WorkflowInstance<Result>>;
   createBatch(
     batch: WorkflowInstanceCreateOptions<Input>[],
   ): Effect.Effect<WorkflowInstance<Result>[]>;
@@ -422,9 +395,7 @@ export interface WorkflowInstance<Result = unknown> {
   resume(): Effect.Effect<void>;
   restart(options?: WorkflowInstanceRestartOptions): Effect.Effect<void>;
   terminate(): Effect.Effect<void>;
-  sendEvent<Event = unknown>(
-    event: WorkflowInstanceEvent<Event>,
-  ): Effect.Effect<void>;
+  sendEvent<Event = unknown>(event: WorkflowInstanceEvent<Event>): Effect.Effect<void>;
 }
 
 export interface WorkflowInstanceRestartOptions {
@@ -460,11 +431,7 @@ export interface WorkflowInstanceStatus<Result = unknown> {
   } | null;
 }
 
-export interface WorkflowClass extends Effect.Effect<
-  WorkflowHandle,
-  never,
-  WorkflowHandle
-> {
+export interface WorkflowClass extends Effect.Effect<WorkflowHandle, never, WorkflowHandle> {
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
@@ -488,10 +455,7 @@ export interface WorkflowClass extends Effect.Effect<
       new (_: never): WorkflowImpl<Input, Result>;
     };
   };
-  <Params = unknown>(
-    name: string,
-    props?: WorkflowRefProps,
-  ): WorkflowLike<Params>;
+  <Params = unknown>(name: string, props?: WorkflowRefProps): WorkflowLike<Params>;
   <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
     impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
@@ -511,10 +475,9 @@ export interface WorkflowClass extends Effect.Effect<
   >;
 }
 
-export class WorkflowScope extends Context.Service<
-  WorkflowScope,
-  WorkflowHandle
->()("Cloudflare.Workflow") {}
+export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle>()(
+  "Cloudflare.Workflow",
+) {}
 
 /**
  * A Cloudflare Workflow that orchestrates durable, multi-step tasks with
@@ -851,22 +814,14 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
   ...args:
     | []
     | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
-    | [
-        name: string,
-        props: WorkflowProps,
-        impl: Effect.Effect<WorkflowImpl<any, any>>,
-      ]
+    | [name: string, props: WorkflowProps, impl: Effect.Effect<WorkflowImpl<any, any>>]
     | [name: string, props?: WorkflowRefProps]
 ) => {
   if (args.length === 0) {
     return Workflow;
   }
   const [name, second, third] = args;
-  const impl = Effect.isEffect(second)
-    ? second
-    : Effect.isEffect(third)
-      ? third
-      : undefined;
+  const impl = Effect.isEffect(second) ? second : Effect.isEffect(third) ? third : undefined;
   if (impl === undefined) {
     // Props-only (async) reference form: returns a plain `WorkflowLike` that an
     // async Worker binds via `env`. `WorkerAsyncBindings` emits the `workflow`
@@ -911,10 +866,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
 
       const services = yield* Effect.context<Effect.Services<typeof impl>>();
 
-      const binding = yield* Effect.all([
-        WorkerEnvironment,
-        ALCHEMY_PHASE,
-      ]).pipe(
+      const binding = yield* Effect.all([WorkerEnvironment, ALCHEMY_PHASE]).pipe(
         Effect.flatMap(([env, phase]) => {
           if (env === undefined || phase === "plan") {
             return Effect.succeed(undefined as any);
@@ -936,9 +888,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
             Effect.orDie,
           ),
         createBatch: (batch: WorkflowInstanceCreateOptions<any>[]) =>
-          Effect.tryPromise(
-            () => binding.createBatch(batch) as Promise<any[]>,
-          ).pipe(
+          Effect.tryPromise(() => binding.createBatch(batch) as Promise<any[]>).pipe(
             Effect.map((instances: any[]) => instances.map(wrapInstance)),
             Effect.orDie,
           ),
@@ -949,19 +899,14 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           ),
       };
 
-      const fn = yield* impl.pipe(
-        Effect.provideService(WorkflowScope, self as any),
-      );
+      const fn = yield* impl.pipe(Effect.provideService(WorkflowScope, self as any));
 
       yield* worker.export(name, {
         kind: "workflow",
         make: (env: unknown) =>
           Effect.succeed(((input: unknown) =>
             fn(input).pipe(
-              Effect.provideService(
-                WorkerEnvironment,
-                env as Record<string, any>,
-              ),
+              Effect.provideService(WorkerEnvironment, env as Record<string, any>),
             )) as WorkflowImpl<any, any>).pipe(Effect.provideContext(services)),
       } satisfies WorkflowExport);
 
@@ -1009,9 +954,7 @@ export interface WorkflowResource extends Resource<
   WorkflowResourceAttrs
 > {}
 
-export const WorkflowResource = Resource<WorkflowResource>(
-  WorkflowResourceTypeId,
-);
+export const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeId);
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {
@@ -1089,10 +1032,7 @@ export const ProviderLive = () =>
         // Same as `limits`: only send when the prop is set. `[]` clears
         // attached schedules; omitting the field leaves Cloudflare's
         // current list untouched.
-        schedules:
-          news.schedules === undefined
-            ? undefined
-            : toPutSchedules(news.schedules),
+        schedules: news.schedules === undefined ? undefined : toPutSchedules(news.schedules),
       });
       return {
         workflowId: result.id,
@@ -1104,9 +1044,7 @@ export const ProviderLive = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* Effect.logInfo(
-        `Cloudflare Workflow delete: ${output.workflowName}`,
-      );
+      yield* Effect.logInfo(`Cloudflare Workflow delete: ${output.workflowName}`);
       yield* workflows
         .deleteWorkflow({
           accountId: output.accountId,
@@ -1168,13 +1106,11 @@ export const WorkflowProvider = () =>
 // Helpers
 // ---------------------------------------------------------------------------
 
-const toPutSchedules = (
-  schedules: string[],
-): workflows.UpdateRequestSchedulesList => schedules.map((cron) => ({ cron }));
+const toPutSchedules = (schedules: string[]): workflows.UpdateRequestSchedulesList =>
+  schedules.map((cron) => ({ cron }));
 
-const fromObservedSchedules = (
-  schedules?: ReadonlyArray<{ cron: string }> | null,
-): string[] => (schedules ?? []).map((s) => s.cron);
+const fromObservedSchedules = (schedules?: ReadonlyArray<{ cron: string }> | null): string[] =>
+  (schedules ?? []).map((s) => s.cron);
 
 const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   id: raw.id,

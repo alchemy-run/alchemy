@@ -36,14 +36,9 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
                 ),
               );
               const healthBody = yield* health.text;
-              if (
-                health.status !== 200 ||
-                !healthBody.includes('"healthy":true')
-              ) {
+              if (health.status !== 200 || !healthBody.includes('"healthy":true')) {
                 return yield* Effect.fail(
-                  new Error(
-                    `opencode health ${health.status}: ${healthBody.slice(0, 120)}`,
-                  ),
+                  new Error(`opencode health ${health.status}: ${healthBody.slice(0, 120)}`),
                 );
               }
               // A real write through the app — proves the server is
@@ -57,14 +52,15 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
               const sessionBody = yield* session.text;
               if (session.status !== 200 || !sessionBody.includes('"id"')) {
                 return yield* Effect.fail(
-                  new Error(
-                    `opencode session ${session.status}: ${sessionBody.slice(0, 120)}`,
-                  ),
+                  new Error(`opencode session ${session.status}: ${sessionBody.slice(0, 120)}`),
                 );
               }
             }).pipe(
               Effect.retry({
-                schedule: Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
+                schedule: Schedule.min([
+                  Schedule.exponential("1 second"),
+                  Schedule.spaced("5 seconds"),
+                ]),
                 times: 40,
               }),
             );

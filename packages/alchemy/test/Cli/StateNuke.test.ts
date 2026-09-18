@@ -1,11 +1,5 @@
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,9 +37,7 @@ it("state unsafe nuke requires approval and clears every stack with --yes", () =
     const empty = run(args);
     expect(empty.status).toBe(0);
     expect(empty.stdout).toContain("Nothing to clear");
-    expect(
-      run(["state", "delete", "/", "--recursive", "--backend", "local"]).status,
-    ).toBe(1);
+    expect(run(["state", "delete", "/", "--recursive", "--backend", "local"]).status).toBe(1);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

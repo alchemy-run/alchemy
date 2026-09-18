@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import {
   assertReplicationGroupGone,
   getProvisionedNetwork,
@@ -33,19 +33,10 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             updatedVersion !== undefined &&
             initialVersion.split(".")[0] === updatedVersion.split(".")[0],
         );
-      const [initialVersion, updatedVersion] = sameMajorUpgrade ?? [
-        ordered[0],
-        ordered[1],
-      ];
-      if (
-        !initialVersion ||
-        !updatedVersion ||
-        initialVersion === updatedVersion
-      ) {
+      const [initialVersion, updatedVersion] = sameMajorUpgrade ?? [ordered[0], ordered[1]];
+      if (!initialVersion || !updatedVersion || initialVersion === updatedVersion) {
         return yield* Effect.fail(
-          new Error(
-            "AWS did not advertise two distinct Valkey engine versions",
-          ),
+          new Error("AWS did not advertise two distinct Valkey engine versions"),
         );
       }
 
@@ -68,25 +59,19 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
 
       const created = yield* stack.deploy(program(initialVersion));
       const updated = yield* stack.deploy(program(updatedVersion));
-      expect(updated.cache.replicationGroupId).toBe(
-        created.cache.replicationGroupId,
-      );
+      expect(updated.cache.replicationGroupId).toBe(created.cache.replicationGroupId);
       const group = yield* ElastiCache.describeReplicationGroups({
         ReplicationGroupId: updated.cache.replicationGroupId,
       });
       const memberId = group.ReplicationGroups?.[0]?.MemberClusters?.[0];
       if (!memberId)
-        return yield* Effect.fail(
-          new Error("replication group has no member cluster"),
-        );
+        return yield* Effect.fail(new Error("replication group has no member cluster"));
       const member = yield* ElastiCache.describeCacheClusters({
         CacheClusterId: memberId,
       });
       // The API accepts a major/minor target such as `9.1`, but reports the
       // fully resolved patch release (for example `9.1.0`).
-      expect(
-        member.CacheClusters?.[0]?.EngineVersion?.startsWith(updatedVersion),
-      ).toBe(true);
+      expect(member.CacheClusters?.[0]?.EngineVersion?.startsWith(updatedVersion)).toBe(true);
 
       yield* stack.destroy();
       yield* assertReplicationGroupGone(updated.cache.replicationGroupId);

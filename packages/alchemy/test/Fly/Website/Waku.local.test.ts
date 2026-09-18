@@ -1,25 +1,16 @@
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 
 const { test } = Test.make({ providers: Fly.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/waku-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/waku-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "tsconfig.json",
-  "src",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "tsconfig.json", "src", "public"];
 
 describe("Fly.Website.Waku local", () => {
   test.provider(
@@ -56,11 +47,9 @@ describe("Fly.Website.Waku local", () => {
           timeout: "180 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${origin}/echo?echo=roundtrip`,
-          "WAKU_AWS_API_MARKER",
-          { label: "api route (dev)" },
-        );
+        yield* expectUrlContains(`${origin}/echo?echo=roundtrip`, "WAKU_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
         yield* expectUrlContains(`${origin}/about`, "WAKU_AWS_STATIC_MARKER", {
           label: "extra route (dev)",
         });

@@ -30,10 +30,7 @@ export interface DescribeAccessEntry extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<eks.DescribeAccessEntryRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.DescribeAccessEntryResponse,
-      eks.DescribeAccessEntryError
-    >
+    ) => Effect.Effect<eks.DescribeAccessEntryResponse, eks.DescribeAccessEntryError>
   >
 > {}
 export const DescribeAccessEntry = Binding.Service<DescribeAccessEntry>(

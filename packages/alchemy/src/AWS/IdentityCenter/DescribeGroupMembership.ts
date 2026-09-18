@@ -32,10 +32,7 @@ export interface DescribeGroupMembership extends Binding.Service<
     instance: Instance,
   ) => Effect.Effect<
     (
-      request: Omit<
-        identitystore.DescribeGroupMembershipRequest,
-        "IdentityStoreId"
-      >,
+      request: Omit<identitystore.DescribeGroupMembershipRequest, "IdentityStoreId">,
     ) => Effect.Effect<
       identitystore.DescribeGroupMembershipResponse,
       identitystore.DescribeGroupMembershipError

@@ -34,7 +34,6 @@ export interface ListOrganizationAdminAccounts extends Binding.Service<
     >
   >
 > {}
-export const ListOrganizationAdminAccounts =
-  Binding.Service<ListOrganizationAdminAccounts>(
-    "AWS.Detective.ListOrganizationAdminAccounts",
-  );
+export const ListOrganizationAdminAccounts = Binding.Service<ListOrganizationAdminAccounts>(
+  "AWS.Detective.ListOrganizationAdminAccounts",
+);

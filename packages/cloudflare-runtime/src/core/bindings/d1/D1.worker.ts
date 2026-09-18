@@ -50,9 +50,7 @@ type D1ResultsFormat = "ARRAY_OF_OBJECTS" | "ROWS_AND_COLUMNS" | "NONE";
 
 function decodeResultsFormat(value: string | null): D1ResultsFormat {
   // Matches upstream's `z.enum([...]).catch("ARRAY_OF_OBJECTS")`
-  return value === "ROWS_AND_COLUMNS" || value === "NONE"
-    ? value
-    : "ARRAY_OF_OBJECTS";
+  return value === "ROWS_AND_COLUMNS" || value === "NONE" ? value : "ARRAY_OF_OBJECTS";
 }
 
 interface D1RowsAndColumns {
@@ -110,9 +108,7 @@ function convertParams(params: D1Query["params"]): Array<SqlStorageValue> {
   );
 }
 
-function convertRows(
-  rows: Array<Array<SqlStorageValue>>,
-): Array<Array<D1Value>> {
+function convertRows(rows: Array<Array<SqlStorageValue>>): Array<Array<D1Value>> {
   return rows.map((row) =>
     row.map((value) =>
       // If `value` is a buffer, convert it to a regular numeric array
@@ -125,9 +121,7 @@ function rowsToObjects(
   columns: Array<string>,
   rows: Array<Array<D1Value>>,
 ): Array<Record<string, D1Value>> {
-  return rows.map((row) =>
-    Object.fromEntries(columns.map((name, i) => [name, row[i]])),
-  );
+  return rows.map((row) => Object.fromEntries(columns.map((name, i) => [name, row[i]])));
 }
 
 export class D1DatabaseObject implements DurableObject {
@@ -190,23 +184,16 @@ export class D1DatabaseObject implements DurableObject {
     };
   };
 
-  #txn(
-    queries: Array<D1Query>,
-    format: D1ResultsFormat,
-  ): Array<D1SuccessResponse> {
+  #txn(queries: Array<D1Query>, format: D1ResultsFormat): Array<D1SuccessResponse> {
     // Filter out queries that are just comments
-    queries = queries.filter(
-      (query) => query.sql.replace(/^\s+--.*/gm, "").trim().length > 0,
-    );
+    queries = queries.filter((query) => query.sql.replace(/^\s+--.*/gm, "").trim().length > 0);
     if (queries.length === 0) {
       const error = new Error("No SQL statements detected.");
       throw new D1Error(error);
     }
 
     try {
-      return this.state.storage.transactionSync(() =>
-        queries.map(this.#query.bind(this, format)),
-      );
+      return this.state.storage.transactionSync(() => queries.map(this.#query.bind(this, format)));
     } catch (e) {
       throw new D1Error(e);
     }
@@ -215,10 +202,8 @@ export class D1DatabaseObject implements DurableObject {
   async fetch(req: Request): Promise<Response> {
     try {
       const url = new URL(req.url);
-      const isQueryPath =
-        url.pathname === "/query" || url.pathname === "/execute";
-      if (req.method !== "POST" || !isQueryPath)
-        return new Response(null, { status: 404 });
+      const isQueryPath = url.pathname === "/query" || url.pathname === "/execute";
+      if (req.method !== "POST" || !isQueryPath) return new Response(null, { status: 404 });
       return await this.#queryExecute(req, url);
     } catch (e) {
       if (e instanceof HttpError) return e.toResponse();
@@ -247,14 +232,11 @@ export class D1DatabaseObject implements DurableObject {
       return this.#doExportData(queries);
     }
 
-    const resultsFormat = decodeResultsFormat(
-      url.searchParams.get("resultsFormat"),
-    );
+    const resultsFormat = decodeResultsFormat(url.searchParams.get("resultsFormat"));
 
     return Response.json(this.#txn(queries, resultsFormat), {
       headers: {
-        [D1_SESSION_COMMIT_TOKEN_HTTP_HEADER]:
-          await this.state.storage.getCurrentBookmark(),
+        [D1_SESSION_COMMIT_TOKEN_HTTP_HEADER]: await this.state.storage.getCurrentBookmark(),
       },
     });
   }
@@ -328,9 +310,7 @@ function* dumpSql(
       // exactly so writing it immediately like they do.
       if (!noSchema) yield `ANALYZE sqlite_schema;`;
     } else if (sql.startsWith(`CREATE VIRTUAL TABLE`)) {
-      throw new Error(
-        `D1 Export error: cannot export databases with Virtual Tables (fts5)`,
-      );
+      throw new Error(`D1 Export error: cannot export databases with Virtual Tables (fts5)`);
     } else if (table.startsWith("_cf_") || table.startsWith("sqlite_")) {
       continue;
     } else {

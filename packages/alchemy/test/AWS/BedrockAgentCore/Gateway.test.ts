@@ -1,48 +1,39 @@
-import * as AWS from "@/AWS";
-import { Gateway } from "@/AWS/BedrockAgentCore";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Gateway } from "@/AWS/BedrockAgentCore";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe.
-test.provider(
-  "getGateway on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        control.getGateway({
-          gatewayIdentifier: "alchemy-nonexistent-probe-0000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getGateway on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      control.getGateway({
+        gatewayIdentifier: "alchemy-nonexistent-probe-0000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertGatewayGone = (gatewayIdentifier: string) =>
   Effect.gen(function* () {
     const status = yield* control.getGateway({ gatewayIdentifier }).pipe(
       Effect.map((r) => r.status as string),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("GONE" as string),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("GONE" as string)),
     );
     if (status !== "GONE") {
-      return yield* Effect.fail(
-        new Error(`gateway still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`gateway still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 

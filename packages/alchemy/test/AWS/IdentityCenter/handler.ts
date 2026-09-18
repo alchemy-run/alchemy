@@ -1,5 +1,3 @@
-import * as IdentityCenter from "@/AWS/IdentityCenter";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +6,8 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IdentityCenter from "@/AWS/IdentityCenter";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -36,15 +36,12 @@ export default IdentityCenterBindingsFunction.make(
       displayName: "alchemy-idc-bindings-group",
       description: "Group used by the IdentityCenter Bindings E2E fixture",
     });
-    const permissionSet = yield* IdentityCenter.PermissionSet(
-      "IdcBindingsPermissionSet",
-      {
-        instanceArn: instance.instanceArn,
-        name: "AlchemyIdcBindings",
-        description: "Permission set used by the Bindings E2E fixture",
-        sessionDuration: "1 hour",
-      },
-    );
+    const permissionSet = yield* IdentityCenter.PermissionSet("IdcBindingsPermissionSet", {
+      instanceArn: instance.instanceArn,
+      name: "AlchemyIdcBindings",
+      description: "Permission set used by the Bindings E2E fixture",
+      sessionDuration: "1 hour",
+    });
 
     // Identity Store data plane
     const createUser = yield* IdentityCenter.CreateUser(instance);
@@ -55,31 +52,23 @@ export default IdentityCenterBindingsFunction.make(
     const listUsers = yield* IdentityCenter.ListUsers(instance);
     const getGroupId = yield* IdentityCenter.GetGroupId(instance);
     const listGroups = yield* IdentityCenter.ListGroups(instance);
-    const createGroupMembership =
-      yield* IdentityCenter.CreateGroupMembership(instance);
-    const deleteGroupMembership =
-      yield* IdentityCenter.DeleteGroupMembership(instance);
-    const describeGroupMembership =
-      yield* IdentityCenter.DescribeGroupMembership(instance);
-    const getGroupMembershipId =
-      yield* IdentityCenter.GetGroupMembershipId(instance);
-    const listGroupMemberships =
-      yield* IdentityCenter.ListGroupMemberships(instance);
+    const createGroupMembership = yield* IdentityCenter.CreateGroupMembership(instance);
+    const deleteGroupMembership = yield* IdentityCenter.DeleteGroupMembership(instance);
+    const describeGroupMembership = yield* IdentityCenter.DescribeGroupMembership(instance);
+    const getGroupMembershipId = yield* IdentityCenter.GetGroupMembershipId(instance);
+    const listGroupMemberships = yield* IdentityCenter.ListGroupMemberships(instance);
     const listGroupMembershipsForMember =
       yield* IdentityCenter.ListGroupMembershipsForMember(instance);
     const isMemberInGroups = yield* IdentityCenter.IsMemberInGroups(instance);
 
     // sso-admin audit reads
-    const listAccountAssignments =
-      yield* IdentityCenter.ListAccountAssignments(instance);
+    const listAccountAssignments = yield* IdentityCenter.ListAccountAssignments(instance);
     const listAccountAssignmentsForPrincipal =
       yield* IdentityCenter.ListAccountAssignmentsForPrincipal(instance);
     const listAccountsForProvisionedPermissionSet =
       yield* IdentityCenter.ListAccountsForProvisionedPermissionSet(instance);
-    const listPermissionSets =
-      yield* IdentityCenter.ListPermissionSets(instance);
-    const describePermissionSet =
-      yield* IdentityCenter.DescribePermissionSet(instance);
+    const listPermissionSets = yield* IdentityCenter.ListPermissionSets(instance);
+    const describePermissionSet = yield* IdentityCenter.DescribePermissionSet(instance);
 
     const groupId = yield* group.groupId;
     const permissionSetArn = yield* permissionSet.permissionSetArn;
@@ -114,9 +103,7 @@ export default IdentityCenterBindingsFunction.make(
      * sensitive (`string | Redacted<string>`); unwrap before JSON-encoding
      * so the E2E assertions see the plain value.
      */
-    const unwrap = (
-      value: string | Redacted.Redacted<string> | undefined,
-    ): string | undefined =>
+    const unwrap = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
       Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
     /**
@@ -259,8 +246,7 @@ export default IdentityCenterBindingsFunction.make(
             memberCount: (members.GroupMemberships ?? []).length,
             memberOfCount: (groupsOfUser.GroupMemberships ?? []).length,
             isMember: check.Results?.[0]?.MembershipExists === true,
-            isMemberAfterDelete:
-              checkAfter.Results?.[0]?.MembershipExists === true,
+            isMemberAfterDelete: checkAfter.Results?.[0]?.MembershipExists === true,
           });
         }
 
@@ -272,11 +258,9 @@ export default IdentityCenterBindingsFunction.make(
           const { PermissionSet } = yield* describePermissionSet({
             PermissionSetArn: arn,
           });
-          const { AccountIds } = yield* listAccountsForProvisionedPermissionSet(
-            {
-              PermissionSetArn: arn,
-            },
-          );
+          const { AccountIds } = yield* listAccountsForProvisionedPermissionSet({
+            PermissionSetArn: arn,
+          });
           return yield* HttpServerResponse.json({
             containsFixturePermissionSet: (PermissionSets ?? []).includes(arn),
             name: PermissionSet?.Name,

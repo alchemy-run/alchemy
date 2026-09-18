@@ -30,13 +30,9 @@ export interface GetManagedThingCertificate extends Binding.Service<
   (
     thing: ManagedThing,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      mi.GetManagedThingCertificateResponse,
-      mi.GetManagedThingCertificateError
-    >
+    () => Effect.Effect<mi.GetManagedThingCertificateResponse, mi.GetManagedThingCertificateError>
   >
 > {}
-export const GetManagedThingCertificate =
-  Binding.Service<GetManagedThingCertificate>(
-    "AWS.IoTManagedIntegrations.GetManagedThingCertificate",
-  );
+export const GetManagedThingCertificate = Binding.Service<GetManagedThingCertificate>(
+  "AWS.IoTManagedIntegrations.GetManagedThingCertificate",
+);

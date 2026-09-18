@@ -19,12 +19,7 @@ import type { Collection } from "./Collection.ts";
  * callable injects the bound {@link Collection}'s ID as `id` and the
  * deploy-time half grants `actions` on the collection's ARN.
  */
-export const makeAossCollectionHttpBinding = <
-  I extends { id?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeAossCollectionHttpBinding = <I extends { id?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.OpenSearchServerless.CreateIndex`. */
   tag: string;
   /** The distilled operation; `id` is injected from the collection. */

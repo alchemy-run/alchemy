@@ -1,9 +1,9 @@
-import * as Alchemy from "@/index.ts";
 import { describe, expect, it } from "alchemy-test";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Alchemy from "@/index.ts";
 
 // These tests are compile-time assertions: they verify that the
 // `Alchemy.Stack` effect permits a `ConfigError` in its body without
@@ -28,9 +28,7 @@ describe("Alchemy.Stack error channel", () => {
     // The resulting effect surfaces `ConfigError` in its error channel rather
     // than `never` — the whole point of the change.
     type ErrorOf<T> = T extends Effect.Effect<any, infer E, any> ? E : never;
-    const _assertError: ErrorOf<typeof stack> extends ConfigError
-      ? true
-      : false = true;
+    const _assertError: ErrorOf<typeof stack> extends ConfigError ? true : false = true;
     expect(_assertError).toBe(true);
   });
 

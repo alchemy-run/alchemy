@@ -136,10 +136,7 @@ export const NotificationConfigurationProvider = () =>
   Provider.effect(
     NotificationConfiguration,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: NotificationConfigurationProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: NotificationConfigurationProps) {
         return props.name ?? (yield* createPhysicalName({ id }));
       });
 
@@ -160,11 +157,7 @@ export const NotificationConfigurationProvider = () =>
         return yield* pinNotificationsRegion(
           notifications
             .getNotificationConfiguration({ arn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
         );
       });
 
@@ -226,15 +219,9 @@ export const NotificationConfigurationProvider = () =>
                   aggregationDuration: news.aggregationDuration,
                   tags: news.tags,
                 })
-                .pipe(
-                  Effect.catchTag("ConflictException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                ),
+                .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined))),
             );
-            live = created
-              ? yield* getByArn(created.arn)
-              : yield* findByName(desiredName);
+            live = created ? yield* getByArn(created.arn) : yield* findByName(desiredName);
           }
           const arn = live!.arn;
 
@@ -280,9 +267,7 @@ export const NotificationConfigurationProvider = () =>
                 arn: output.notificationConfigurationArn,
               }),
             ),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

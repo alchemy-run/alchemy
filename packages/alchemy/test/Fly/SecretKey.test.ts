@@ -1,29 +1,20 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Fly from "@/Fly";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic HMAC material. Never logged.
-const HMAC_A: ReadonlyArray<number> = Array.from(
-  { length: 32 },
-  (_, i) => (i * 7 + 3) % 256,
-);
-const HMAC_B: ReadonlyArray<number> = Array.from(
-  { length: 32 },
-  (_, i) => (i * 11 + 5) % 256,
-);
+const HMAC_A: ReadonlyArray<number> = Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 256);
+const HMAC_B: ReadonlyArray<number> = Array.from({ length: 32 }, (_, i) => (i * 11 + 5) % 256);
 
 const waitUntilGone = (appName: string, secretName: string) =>
   machines
@@ -128,10 +119,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const keyGone = yield* waitUntilGone(
-        created.key.appName,
-        created.key.name,
-      );
+      const keyGone = yield* waitUntilGone(created.key.appName, created.key.name);
       expect(keyGone).toEqual("gone");
       const appGone = yield* waitAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
@@ -191,9 +179,7 @@ test.provider(
         }),
       );
 
-      const nextName =
-        created.key.name.slice(0, -1) +
-        (created.key.name.endsWith("z") ? "y" : "z");
+      const nextName = created.key.name.slice(0, -1) + (created.key.name.endsWith("z") ? "y" : "z");
 
       const replaced = yield* stack.deploy(
         Effect.gen(function* () {
@@ -217,18 +203,12 @@ test.provider(
       });
       expect(fetched.name).toEqual(replaced.key.name);
 
-      const oldGone = yield* waitUntilGone(
-        created.key.appName,
-        created.key.name,
-      );
+      const oldGone = yield* waitUntilGone(created.key.appName, created.key.name);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        replaced.key.appName,
-        replaced.key.name,
-      );
+      const gone = yield* waitUntilGone(replaced.key.appName, replaced.key.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },
@@ -254,19 +234,14 @@ test.provider(
       const provider = yield* Provider.findProvider(Fly.SecretKey);
       const all = yield* provider.list();
       const found = all.find(
-        (key) =>
-          key.appName === deployed.key.appName &&
-          key.name === deployed.key.name,
+        (key) => key.appName === deployed.key.appName && key.name === deployed.key.name,
       );
       expect(found).toBeDefined();
       expect(found?.type).toEqual(deployed.key.type);
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.key.appName,
-        deployed.key.name,
-      );
+      const gone = yield* waitUntilGone(deployed.key.appName, deployed.key.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 120_000 },

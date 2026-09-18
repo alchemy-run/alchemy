@@ -13,8 +13,8 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -35,23 +35,13 @@ export type TaxRegistrationExpiresAt = "now" | number | null;
 export type TaxRegistrationPlaceOfSupplyScheme = "inbound_goods" | "standard";
 
 /** Place of supply scheme used in an EU standard registration. */
-export type TaxRegistrationEuPlaceOfSupplyScheme =
-  | "inbound_goods"
-  | "small_seller"
-  | "standard";
+export type TaxRegistrationEuPlaceOfSupplyScheme = "inbound_goods" | "small_seller" | "standard";
 
 /** Type of registration in an EU country. */
-export type TaxRegistrationEuropeType =
-  | "ioss"
-  | "oss_non_union"
-  | "oss_union"
-  | "standard";
+export type TaxRegistrationEuropeType = "ioss" | "oss_non_union" | "oss_union" | "standard";
 
 /** Type of registration in Canada. */
-export type TaxRegistrationCanadaType =
-  | "province_standard"
-  | "simplified"
-  | "standard";
+export type TaxRegistrationCanadaType = "province_standard" | "simplified" | "standard";
 
 /** Type of registration in the US. */
 export type TaxRegistrationUnitedStatesType =
@@ -424,9 +414,7 @@ export type TaxRegistration = Resource<
  *
  * @resource
  */
-export const TaxRegistration = Resource<TaxRegistration>(
-  "Stripe.TaxRegistration",
-);
+export const TaxRegistration = Resource<TaxRegistration>("Stripe.TaxRegistration");
 
 export class TaxRegistrationNotResolved extends Data.TaggedError(
   "Stripe.TaxRegistrationNotResolved",
@@ -466,29 +454,21 @@ const renameDeep = (value: unknown, map: Record<string, string>): unknown => {
 const toWireCountryOptions = (
   options: TaxRegistrationCountryOptions,
 ): CreateTaxRegistrationRequestCountryOptions =>
-  renameDeep(
-    options,
-    CAMEL_TO_SNAKE,
-  ) as CreateTaxRegistrationRequestCountryOptions;
+  renameDeep(options, CAMEL_TO_SNAKE) as CreateTaxRegistrationRequestCountryOptions;
 
 const fromWireCountryOptions = (
   options: TaxProductRegistrationsResourceCountryOptions,
 ): TaxRegistrationCountryOptions =>
   renameDeep(options, SNAKE_TO_CAMEL) as TaxRegistrationCountryOptions;
 
-const identityKey = (
-  country: string,
-  options: TaxRegistrationCountryOptions,
-): string => {
+const identityKey = (country: string, options: TaxRegistrationCountryOptions): string => {
   const parts: string[] = [];
   for (const [code, option] of Object.entries(options)) {
     if (option == null || typeof option !== "object") continue;
     const record = option as unknown as Record<string, unknown>;
     const type = typeof record.type === "string" ? record.type : "";
     const state = typeof record.state === "string" ? record.state : "";
-    const provinceStandard = record.provinceStandard as
-      | { province?: string }
-      | undefined;
+    const provinceStandard = record.provinceStandard as { province?: string } | undefined;
     const province = provinceStandard?.province ?? "";
     parts.push(`${code}:${type}:${state}:${province}`);
   }
@@ -496,9 +476,7 @@ const identityKey = (
   return `${country.toUpperCase()}|${parts.join(",")}`;
 };
 
-const toAttrs = (
-  registration: StripeTaxRegistration,
-): TaxRegistrationAttributes => ({
+const toAttrs = (registration: StripeTaxRegistration): TaxRegistrationAttributes => ({
   id: registration.id,
   country: registration.country,
   countryOptions: fromWireCountryOptions(registration.country_options),
@@ -516,9 +494,7 @@ const getById = (id: string) =>
     Effect.catchIf(isMissingRegistration, () => Effect.succeed(undefined)),
   );
 
-const listByStatus = Effect.fn(function* (
-  status: "active" | "all" | "expired" | "scheduled",
-) {
+const listByStatus = Effect.fn(function* (status: "active" | "all" | "expired" | "scheduled") {
   const registrations: StripeTaxRegistration[] = [];
   let startingAfter: string | undefined;
   for (let page = 0; page < LIST_MAX_PAGES; page++) {
@@ -548,10 +524,8 @@ const findByIdentity = Effect.fn(function* (
   const matches = registrations.filter(
     (registration) =>
       registration.status !== "expired" &&
-      identityKey(
-        registration.country,
-        fromWireCountryOptions(registration.country_options),
-      ) === desired,
+      identityKey(registration.country, fromWireCountryOptions(registration.country_options)) ===
+        desired,
   );
   matches.sort((a, b) => b.created - a.created);
   return matches[0];
@@ -654,9 +628,7 @@ export const TaxRegistrationProvider = () =>
           country: news.country,
           country_options: countryOptions,
           active_from: desiredActiveFrom,
-          ...(typeof news.expiresAt === "number"
-            ? { expires_at: news.expiresAt }
-            : {}),
+          ...(typeof news.expiresAt === "number" ? { expires_at: news.expiresAt } : {}),
         }).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-tax-registration-${instanceId}`,
@@ -669,15 +641,12 @@ export const TaxRegistrationProvider = () =>
       }
 
       const activeFromChanged =
-        typeof desiredActiveFrom === "number" &&
-        current.active_from !== desiredActiveFrom;
-      const activateNow =
-        desiredActiveFrom === "now" && current.status === "scheduled";
+        typeof desiredActiveFrom === "number" && current.active_from !== desiredActiveFrom;
+      const activateNow = desiredActiveFrom === "now" && current.status === "scheduled";
 
       const expiresDesired = desiredExpiresAt(news.expiresAt);
       const expiresObserved = current.expires_at;
-      const expireNow =
-        news.expiresAt === "now" && current.status !== "expired";
+      const expireNow = news.expiresAt === "now" && current.status !== "expired";
       const expiresChanged =
         expiresDesired !== undefined &&
         !deepEqual(expiresDesired, expiresObserved, { stripNullish: true });
@@ -688,17 +657,12 @@ export const TaxRegistrationProvider = () =>
 
       const updated = yield* UpdateTaxRegistration({
         id: current.id,
-        ...(activeFromChanged || activateNow
-          ? { active_from: desiredActiveFrom }
-          : {}),
+        ...(activeFromChanged || activateNow ? { active_from: desiredActiveFrom } : {}),
         ...(expireNow
           ? { expires_at: "now" }
           : expiresChanged
             ? {
-                expires_at:
-                  expiresDesired === null
-                    ? ("" as const)
-                    : (expiresDesired as number),
+                expires_at: expiresDesired === null ? ("" as const) : (expiresDesired as number),
               }
             : {}),
       });

@@ -15,8 +15,6 @@ export const DescribeReplayHttp = Layer.effect(
     tag: "AWS.EventBridge.DescribeReplay",
     operation: eventbridge.describeReplay,
     actions: ["events:DescribeReplay"],
-    resources: ({ accountId, region }) => [
-      `arn:aws:events:${region}:${accountId}:replay/*`,
-    ],
+    resources: ({ accountId, region }) => [`arn:aws:events:${region}:${accountId}:replay/*`],
   }),
 );

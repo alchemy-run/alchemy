@@ -27,9 +27,7 @@ export interface SearchIndex extends Binding.Service<
   (index: Index) => Effect.Effect<SearchIndexClient>
 > {}
 
-export const SearchIndex = Binding.Service<SearchIndex>(
-  "Cloudflare.Vectorize.SearchIndex",
-);
+export const SearchIndex = Binding.Service<SearchIndex>("Cloudflare.Vectorize.SearchIndex");
 
 export interface SearchIndexClient {
   /**
@@ -50,13 +48,9 @@ export interface SearchIndexClient {
     options?: runtime.VectorizeQueryOptions,
   ) => Effect.Effect<runtime.VectorizeMatches>;
   /** Insert vectors. Throws if any provided id already exists. */
-  insert: (
-    vectors: runtime.VectorizeVector[],
-  ) => Effect.Effect<runtime.VectorizeAsyncMutation>;
+  insert: (vectors: runtime.VectorizeVector[]) => Effect.Effect<runtime.VectorizeAsyncMutation>;
   /** Upsert vectors, replacing any existing vectors with matching ids. */
-  upsert: (
-    vectors: runtime.VectorizeVector[],
-  ) => Effect.Effect<runtime.VectorizeAsyncMutation>;
+  upsert: (vectors: runtime.VectorizeVector[]) => Effect.Effect<runtime.VectorizeAsyncMutation>;
   /** Delete vectors by id. */
   deleteByIds: (ids: string[]) => Effect.Effect<runtime.VectorizeAsyncMutation>;
   /** Fetch vectors by id. */

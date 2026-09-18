@@ -1,8 +1,4 @@
-import {
-  WorkflowEntrypoint,
-  type WorkflowEvent,
-  type WorkflowStep,
-} from "cloudflare:workers";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import type { AsyncWorkflowEnv } from "./stack.ts";
 
 interface Params {
@@ -14,10 +10,7 @@ interface Params {
 // reference form — the analogue of binding a class-based Durable Object.
 export class MyWorkflow extends WorkflowEntrypoint<AsyncWorkflowEnv, Params> {
   async run(event: Readonly<WorkflowEvent<Params>>, step: WorkflowStep) {
-    const greeting = await step.do(
-      "greet",
-      async () => `Hello, ${event.payload.value}!`,
-    );
+    const greeting = await step.do("greet", async () => `Hello, ${event.payload.value}!`);
 
     await step.sleep("cooldown", "1 second");
 

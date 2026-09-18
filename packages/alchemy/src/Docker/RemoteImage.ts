@@ -148,18 +148,13 @@ export const RemoteImageProvider = () =>
               tag: output?.tag ?? targetTag(olds),
               repoDigest: output?.repoDigest,
             })),
-            Effect.catchReason(
-              "PlatformError",
-              "NotFound",
-              () => Effect.undefined,
-            ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
           );
         }),
         diff: Effect.fn(function* ({ output, news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
-            dockerContextName(olds.context) !==
-              dockerContextName(news.context) ||
+            dockerContextName(olds.context) !== dockerContextName(news.context) ||
             !output ||
             news.alwaysPull !== false ||
             output.imageRef !== targetImageRef(news)
@@ -175,24 +170,16 @@ export const RemoteImageProvider = () =>
 
           const finalRef = targetImageRef(news);
           if (finalRef !== sourceRef) {
-            yield* session.note(
-              `Tagging Docker image: ${sourceRef} -> ${finalRef}`,
-            );
+            yield* session.note(`Tagging Docker image: ${sourceRef} -> ${finalRef}`);
             yield* docker.image.tag(sourceRef, finalRef, context);
           }
 
           let repoDigest: string | undefined;
           if (news.registry && !news.skipPush) {
-            yield* session.note(
-              `Pushing image to registry "${news.registry.server}"`,
-            );
+            yield* session.note(`Pushing image to registry "${news.registry.server}"`);
             repoDigest = yield* docker.image
               .push(finalRef, news.registry, undefined, context)
-              .pipe(
-                Effect.map((result) =>
-                  parseRepoDigest(finalRef, result.stdout),
-                ),
-              );
+              .pipe(Effect.map((result) => parseRepoDigest(finalRef, result.stdout)));
           }
 
           const inspected = yield* docker.image.inspect(finalRef, context);
@@ -217,8 +204,7 @@ export const RemoteImageProvider = () =>
 const remoteImageRef = (props: RemoteImageProps): string =>
   `${props.name}:${props.tag ?? "latest"}`;
 
-const targetTag = (props: RemoteImageProps): string =>
-  props.targetTag ?? props.tag ?? "latest";
+const targetTag = (props: RemoteImageProps): string => props.targetTag ?? props.tag ?? "latest";
 
 /**
  * The final reference after re-tagging and registry-host prefixing. Equals the
@@ -226,7 +212,5 @@ const targetTag = (props: RemoteImageProps): string =>
  */
 const targetImageRef = (props: RemoteImageProps): string => {
   const local = `${props.targetName ?? props.name}:${targetTag(props)}`;
-  return props.registry && !props.skipPush
-    ? withRegistryHost(local, props.registry)
-    : local;
+  return props.registry && !props.skipPush ? withRegistryHost(local, props.registry) : local;
 };

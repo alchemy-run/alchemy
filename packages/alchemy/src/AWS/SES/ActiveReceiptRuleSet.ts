@@ -46,9 +46,7 @@ export interface ActiveReceiptRuleSet extends Resource<
  *
  * @resource
  */
-export const ActiveReceiptRuleSet = Resource<ActiveReceiptRuleSet>(
-  "AWS.SES.ActiveReceiptRuleSet",
-);
+export const ActiveReceiptRuleSet = Resource<ActiveReceiptRuleSet>("AWS.SES.ActiveReceiptRuleSet");
 
 const activeRuleSetName = Effect.fn(function* () {
   const response = yield* ses.describeActiveReceiptRuleSet({});

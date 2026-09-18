@@ -34,10 +34,7 @@ export interface CreateRotationOverride extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.CreateRotationOverrideRequest, "RotationId">,
-    ) => Effect.Effect<
-      ssm.CreateRotationOverrideResult,
-      ssm.CreateRotationOverrideError
-    >
+    ) => Effect.Effect<ssm.CreateRotationOverrideResult, ssm.CreateRotationOverrideError>
   >
 > {}
 export const CreateRotationOverride = Binding.Service<CreateRotationOverride>(

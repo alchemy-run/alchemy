@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Creating accounts is tenant/partner-entitled. The standard testing
 // account is NOT entitled, so by default only the read paths and the typed
@@ -48,9 +45,7 @@ test.provider("inaccessible account surfaces a typed tag", (stack) =>
     // (A tenant-owned account that has been deleted surfaces as
     // `InvalidRoute`, code 7003 — the tag the provider's `read` and
     // `delete` treat as "gone".)
-    const error = yield* accounts
-      .getAccount({ accountId: missingAccountId })
-      .pipe(Effect.flip);
+    const error = yield* accounts.getAccount({ accountId: missingAccountId }).pipe(Effect.flip);
     expect(error._tag).toEqual("Unauthorized");
 
     yield* stack.destroy();
@@ -140,16 +135,11 @@ test.provider.skipIf(!tenantEntitled)(
       // Deletion is queued on Cloudflare's side; the account becomes
       // unreadable (`InvalidRoute`) once it leaves the tenant.
       yield* accounts.getAccount({ accountId: account.accountId }).pipe(
-        Effect.flatMap(() =>
-          Effect.fail({ _tag: "AccountNotDeleted" } as const),
-        ),
+        Effect.flatMap(() => Effect.fail({ _tag: "AccountNotDeleted" } as const)),
         Effect.catchTag("InvalidRoute", () => Effect.void),
         Effect.retry({
           while: (e) => e._tag === "AccountNotDeleted",
-          schedule: Schedule.max([
-            Schedule.exponential("500 millis"),
-            Schedule.recurs(10),
-          ]),
+          schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
         }),
       );
     }).pipe(logLevel),

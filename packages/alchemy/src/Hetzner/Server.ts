@@ -338,9 +338,7 @@ export type Server = Resource<
  */
 export const Server = Resource<Server>("Hetzner.Server");
 
-export class ServerNotResolved extends Data.TaggedError(
-  "Hetzner.ServerNotResolved",
-)<{
+export class ServerNotResolved extends Data.TaggedError("Hetzner.ServerNotResolved")<{
   name: string;
 }> {}
 
@@ -348,9 +346,7 @@ export class ServerNotResolved extends Data.TaggedError(
  * The composed cloud-init document (Alchemy's bootstrap plus the Server's
  * `userData`) exceeds Hetzner's 32 KiB user-data limit.
  */
-export class ServerUserDataTooLarge extends Data.TaggedError(
-  "Hetzner.ServerUserDataTooLarge",
-)<{
+export class ServerUserDataTooLarge extends Data.TaggedError("Hetzner.ServerUserDataTooLarge")<{
   name: string;
   bytes: number;
   limit: number;
@@ -435,21 +431,14 @@ const deleteDeployKey = (id: number | undefined) =>
     ? Effect.void
     : Services.sshKeys.deleteSshKey({ id }).pipe(
         Effect.retry({
-          while: (e) =>
-            retryable(e) ||
-            e._tag === "UnprocessableEntity" ||
-            e._tag === "Conflict",
+          while: (e) => retryable(e) || e._tag === "UnprocessableEntity" || e._tag === "Conflict",
           times: 8,
           schedule: backoff,
         }),
         Effect.catchTag("NotFound", () => Effect.void),
       );
 
-const createServerName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createServerName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     return (
       name ??
@@ -556,10 +545,7 @@ export const composeUserData = (userData: string | undefined): string => {
   ]);
 };
 
-const buildUserData = Effect.fn(function* (input: {
-  name: string;
-  userData: string | undefined;
-}) {
+const buildUserData = Effect.fn(function* (input: { name: string; userData: string | undefined }) {
   const doc = yield* Effect.sync(() => composeUserData(input.userData));
   const bytes = yield* Effect.sync(() => Buffer.byteLength(doc, "utf8"));
   if (bytes > MAX_USER_DATA_BYTES) {
@@ -587,11 +573,7 @@ const sshString = (data: Buffer | string) => {
  * Encode an ed25519 keypair as OpenSSH public + private key files.
  * `ssh -i` on macOS rejects PKCS8 ed25519 PEMs with exit 255.
  */
-const encodeOpenSshEd25519 = (
-  publicRaw: Buffer,
-  seed: Buffer,
-  comment: string,
-) => {
+const encodeOpenSshEd25519 = (publicRaw: Buffer, seed: Buffer, comment: string) => {
   const algo = Buffer.from("ssh-ed25519");
   const pubBlob = Buffer.concat([sshString(algo), sshString(publicRaw)]);
   const publicKey = `ssh-ed25519 ${pubBlob.toString("base64")} ${comment}`;
@@ -652,8 +634,7 @@ const findDeployKeyId = Effect.fn(function* (id: string, name: string) {
     per_page: 50,
   });
   const key = ssh_keys.find((item) => item.name === keyName);
-  return key !== undefined &&
-    (yield* hasAlchemyLabels(id, tagRecord(key.labels)))
+  return key !== undefined && (yield* hasAlchemyLabels(id, tagRecord(key.labels)))
     ? key.id
     : undefined;
 });
@@ -689,9 +670,7 @@ const ensureDeployKey = Effect.fn(function* (input: {
     .pipe(
       Effect.catchTag("Conflict", () =>
         Services.sshKeys.listSshKeys({ name: keyName, per_page: 50 }).pipe(
-          Effect.map(({ ssh_keys }) =>
-            ssh_keys.find((item) => item.name === keyName),
-          ),
+          Effect.map(({ ssh_keys }) => ssh_keys.find((item) => item.name === keyName)),
           Effect.flatMap((hit) =>
             hit !== undefined
               ? Effect.succeed({ ssh_key: hit })
@@ -719,9 +698,7 @@ const getById = (id: number) =>
 const getByName = (name: string) =>
   Services.servers
     .listServers({ name, per_page: 50 })
-    .pipe(
-      Effect.map(({ servers }) => servers.find((item) => item.name === name)),
-    );
+    .pipe(Effect.map(({ servers }) => servers.find((item) => item.name === name)));
 
 const observe = Effect.fn(function* ({
   name,
@@ -780,16 +757,11 @@ const waitUntilGone = (serverId: number) =>
       times: 10,
     }),
     Effect.flatMap((gone) =>
-      gone
-        ? Effect.void
-        : Effect.fail(new ServerTimeout({ serverId, status: "deleting" })),
+      gone ? Effect.void : Effect.fail(new ServerTimeout({ serverId, status: "deleting" })),
     ),
   );
 
-const numericId = (
-  value: unknown,
-  keys: readonly string[],
-): number | undefined => {
+const numericId = (value: unknown, keys: readonly string[]): number | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as Record<string, unknown>;
   for (const key of keys) {
@@ -798,10 +770,7 @@ const numericId = (
   return undefined;
 };
 
-const idsOf = (
-  items: ReadonlyArray<unknown> | undefined,
-  keys: readonly string[],
-): number[] => {
+const idsOf = (items: ReadonlyArray<unknown> | undefined, keys: readonly string[]): number[] => {
   const ids = new Set<number>();
   for (const item of items ?? []) {
     const id = numericId(item, keys);
@@ -888,20 +857,18 @@ const syncFirewalls = Effect.fn(function* (input: {
   const desired = new Set(input.desired);
   for (const firewallId of input.observed) {
     if (desired.has(firewallId)) continue;
-    const { actions } =
-      yield* Services.firewallActions.removeFirewallFromResources({
-        id: firewallId,
-        remove_from: firewallApplyItems(input.serverId),
-      });
+    const { actions } = yield* Services.firewallActions.removeFirewallFromResources({
+      id: firewallId,
+      remove_from: firewallApplyItems(input.serverId),
+    });
     yield* waitForActions(actions);
   }
   for (const firewallId of input.desired) {
     if (observed.has(firewallId)) continue;
-    const { actions } =
-      yield* Services.firewallActions.applyFirewallToResources({
-        id: firewallId,
-        apply_to: firewallApplyItems(input.serverId),
-      });
+    const { actions } = yield* Services.firewallActions.applyFirewallToResources({
+      id: firewallId,
+      apply_to: firewallApplyItems(input.serverId),
+    });
     yield* waitForActions(actions);
   }
 });
@@ -913,10 +880,9 @@ const syncPlacementGroup = Effect.fn(function* (input: {
 }) {
   if (input.desired === input.observed) return;
   if (input.observed !== undefined) {
-    const { action } =
-      yield* Services.serverActions.removeServerFromPlacementGroup({
-        id: input.serverId,
-      });
+    const { action } = yield* Services.serverActions.removeServerFromPlacementGroup({
+      id: input.serverId,
+    });
     yield* waitForAction(action);
   }
   if (input.desired !== undefined) {
@@ -994,8 +960,7 @@ export const ServerProvider = () =>
       }
       return {
         ...attrs,
-        deploySshKeyId:
-          attrs.deploySshKeyId ?? (yield* findDeployKeyId(id, found.name)),
+        deploySshKeyId: attrs.deploySshKeyId ?? (yield* findDeployKeyId(id, found.name)),
       };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -1018,8 +983,7 @@ export const ServerProvider = () =>
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
       // generation live under the same logical id.
-      let current =
-        output?.id !== undefined ? yield* getById(output.id) : undefined;
+      let current = output?.id !== undefined ? yield* getById(output.id) : undefined;
       if (current === undefined) {
         current = yield* getByName(name);
       }
@@ -1032,9 +996,7 @@ export const ServerProvider = () =>
       });
       const sshKeyIds = [
         ...userSshKeyIds,
-        ...(deployKey.deploySshKeyId !== undefined
-          ? [deployKey.deploySshKeyId]
-          : []),
+        ...(deployKey.deploySshKeyId !== undefined ? [deployKey.deploySshKeyId] : []),
       ];
 
       // Ensure — create only when missing. A Conflict is a race with a
@@ -1051,9 +1013,7 @@ export const ServerProvider = () =>
             ssh_keys: sshKeyIds.length > 0 ? sshKeyIds : undefined,
             networks: networkIds.length > 0 ? networkIds : undefined,
             firewalls:
-              firewallIds.length > 0
-                ? firewallIds.map((firewall) => ({ firewall }))
-                : undefined,
+              firewallIds.length > 0 ? firewallIds.map((firewall) => ({ firewall })) : undefined,
             volumes: volumeIds.length > 0 ? volumeIds : undefined,
             placement_group: placementGroupId,
             user_data: userData,
@@ -1067,9 +1027,7 @@ export const ServerProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: (e) =>
-                e._tag === "ServerLimitExceeded" ||
-                e._tag === "ServerPlacementError",
+              while: (e) => e._tag === "ServerLimitExceeded" || e._tag === "ServerPlacementError",
               schedule: Schedule.spaced("5 seconds"),
               times: 8,
             }),
@@ -1077,9 +1035,7 @@ export const ServerProvider = () =>
             // The deploy key is a side-effect, not a stack resource. If
             // createServer fails after minting it (quota skip, timeout),
             // nothing is persisted for Server.delete to clean up.
-            Effect.tapError(() =>
-              deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore),
-            ),
+            Effect.tapError(() => deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore)),
           );
         if (created !== undefined) {
           if (created.action) {
@@ -1099,8 +1055,7 @@ export const ServerProvider = () =>
       // updateServer overwrites the full label set.
       const observedLabels = tagRecord(current.labels);
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
-      const needsMeta =
-        current.name !== name || upsert.length > 0 || removed.length > 0;
+      const needsMeta = current.name !== name || upsert.length > 0 || removed.length > 0;
       if (needsMeta) {
         yield* Services.servers.updateServer({
           id: current.id,
@@ -1111,13 +1066,11 @@ export const ServerProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } = yield* Services.serverActions.changeServerProtection(
-          {
-            id: current.id,
-            delete: desiredProtection,
-            rebuild: desiredProtection,
-          },
-        );
+        const { action } = yield* Services.serverActions.changeServerProtection({
+          id: current.id,
+          delete: desiredProtection,
+          rebuild: desiredProtection,
+        });
         yield* waitForAction(action);
         current = yield* refresh(current.id);
       }
@@ -1189,25 +1142,22 @@ export const ServerProvider = () =>
       const current = yield* getById(output.id);
       if (current !== undefined) {
         if (current.protection.delete) {
-          const { action } =
-            yield* Services.serverActions.changeServerProtection({
-              id: current.id,
-              delete: false,
-              rebuild: false,
-            });
+          const { action } = yield* Services.serverActions.changeServerProtection({
+            id: current.id,
+            delete: false,
+            rebuild: false,
+          });
           yield* waitForAction(action);
         }
 
-        const deleted = yield* Services.servers
-          .deleteServer({ id: current.id })
-          .pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            Effect.retry({
-              while: retryable,
-              times: 8,
-              schedule: backoff,
-            }),
-          );
+        const deleted = yield* Services.servers.deleteServer({ id: current.id }).pipe(
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.retry({
+            while: retryable,
+            times: 8,
+            schedule: backoff,
+          }),
+        );
         if (deleted?.action) {
           yield* waitForAction(deleted.action);
         }

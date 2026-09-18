@@ -7,10 +7,7 @@ import type { Application } from "./Application.ts";
  * Request accepted by the {@link GetSessionEndpoint} runtime callable. The
  * `applicationId` is injected from the bound {@link Application}.
  */
-export type GetSessionEndpointInput = Omit<
-  emr.GetSessionEndpointRequest,
-  "applicationId"
->;
+export type GetSessionEndpointInput = Omit<emr.GetSessionEndpointRequest, "applicationId">;
 
 /**
  * Runtime binding for `emr-serverless:GetSessionEndpoint`.
@@ -40,10 +37,7 @@ export interface GetSessionEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSessionEndpointInput,
-    ) => Effect.Effect<
-      emr.GetSessionEndpointResponse,
-      emr.GetSessionEndpointError
-    >
+    ) => Effect.Effect<emr.GetSessionEndpointResponse, emr.GetSessionEndpointError>
   >
 > {}
 export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>(

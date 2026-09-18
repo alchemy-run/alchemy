@@ -1,15 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
-import CloudTrailLakeTestFunctionLive, {
-  CloudTrailLakeTestFunction,
-} from "./lake-handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import CloudTrailLakeTestFunctionLive, { CloudTrailLakeTestFunction } from "./lake-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,19 +24,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(8),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
     }),
   );
 
@@ -74,10 +66,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
 
@@ -88,9 +77,7 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       // DescribeQuery — poll to a terminal status (an empty store finishes
       // fast; FAILED still proves IAM + typed wiring).
-      const terminal = yield* getJson(
-        `${baseUrl}/query/describe?id=${started.queryId}`,
-      ).pipe(
+      const terminal = yield* getJson(`${baseUrl}/query/describe?id=${started.queryId}`).pipe(
         Effect.flatMap((body: any) =>
           body.status === "QUEUED" || body.status === "RUNNING"
             ? Effect.fail(new QueryStillRunning())
@@ -98,20 +85,13 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
         ),
         Effect.retry({
           while: (e) => e._tag === "QueryStillRunning",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(20),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
         }),
       );
-      expect(["FINISHED", "FAILED", "CANCELLED", "TIMED_OUT"]).toContain(
-        (terminal as any).status,
-      );
+      expect(["FINISHED", "FAILED", "CANCELLED", "TIMED_OUT"]).toContain((terminal as any).status);
 
       // GetQueryResults — an empty store yields zero rows.
-      const results = (yield* getJson(
-        `${baseUrl}/query/results?id=${started.queryId}`,
-      )) as any;
+      const results = (yield* getJson(`${baseUrl}/query/results?id=${started.queryId}`)) as any;
       expect(results.rows).toBeGreaterThanOrEqual(0);
 
       // ListQueries — the injected EventDataStore scopes the listing.
@@ -132,9 +112,9 @@ test.provider.skipIf(!process.env.AWS_TEST_CLOUDTRAIL_LAKE)(
 
       // GenerateQuery — natural-language SQL generation; success or a
       // typed rejection both prove the wiring.
-      const generated = (yield* send(
-        HttpClientRequest.post(`${baseUrl}/query/generate`),
-      ).pipe(Effect.flatMap((r) => r.json))) as any;
+      const generated = (yield* send(HttpClientRequest.post(`${baseUrl}/query/generate`)).pipe(
+        Effect.flatMap((r) => r.json),
+      )) as any;
       if (generated.errorTag !== undefined) {
         expect(generated.errorTag.length).toBeGreaterThan(0);
       } else {

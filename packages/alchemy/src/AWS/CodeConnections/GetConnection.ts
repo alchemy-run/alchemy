@@ -32,13 +32,8 @@ export interface GetConnection extends Binding.Service<
   (
     connection: Connection,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      codeconnections.GetConnectionOutput,
-      codeconnections.GetConnectionError
-    >
+    () => Effect.Effect<codeconnections.GetConnectionOutput, codeconnections.GetConnectionError>
   >
 > {}
 
-export const GetConnection = Binding.Service<GetConnection>(
-  "AWS.CodeConnections.GetConnection",
-);
+export const GetConnection = Binding.Service<GetConnection>("AWS.CodeConnections.GetConnection");

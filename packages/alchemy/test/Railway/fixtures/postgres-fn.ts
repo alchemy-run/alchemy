@@ -1,11 +1,11 @@
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Drizzle from "@/Drizzle/Postgres.ts";
 import { ConnectPostgres } from "@/Railway/ConnectPostgres.ts";
 import { ConnectPostgresHttp } from "@/Railway/ConnectPostgresHttp.ts";
 import { Function } from "@/Railway/Function.ts";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Partition, Site } from "./suite-env.ts";
 import { Db } from "./postgres-shared.ts";
+import { Partition, Site } from "./suite-env.ts";
 
 export { Db, Site };
 
@@ -30,10 +30,7 @@ export default class PostgresFn extends Function<PostgresFn>()(
       fetch: db.execute("select 1 as ok", "objects").pipe(
         Effect.flatMap((rows) => HttpServerResponse.json({ rows })),
         Effect.catch((error) =>
-          HttpServerResponse.json(
-            { ok: false, error: String(error) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ ok: false, error: String(error) }, { status: 500 }),
         ),
       ),
     };

@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -51,21 +51,15 @@ export const SecretsTestFunctionLive = SecretsTestFunction.make(
     const configSecret = yield* Config.Redacted(CONFIG_SECRET_ENV_KEY);
 
     // Plain string variable — string round-trip.
-    const stringVar = yield* Config.String("STRING_VAR").pipe(
-      Config.withDefault(STRING_VAR_VALUE),
-    );
+    const stringVar = yield* Config.String("STRING_VAR").pipe(Config.withDefault(STRING_VAR_VALUE));
 
     // Number variable — non-string values JSON.stringify on `set` and
     // JSON.parse on the runtime accessor, so the accessor returns the
     // original number.
-    const numberVar = yield* Config.Number("NUMBER_VAR").pipe(
-      Config.withDefault(NUMBER_VAR_VALUE),
-    );
+    const numberVar = yield* Config.Number("NUMBER_VAR").pipe(Config.withDefault(NUMBER_VAR_VALUE));
 
     // Object variable — same JSON round-trip as above for nested data.
-    const objectVar = yield* Config.String("OBJECT_VAR").pipe(
-      Config.withDefault(OBJECT_VAR_VALUE),
-    );
+    const objectVar = yield* Config.String("OBJECT_VAR").pipe(Config.withDefault(OBJECT_VAR_VALUE));
 
     return {
       fetch: Effect.gen(function* () {

@@ -38,14 +38,10 @@ export interface GetAnalysisReportResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetAnalysisReportResultsRequest,
-    ) => Effect.Effect<
-      NFW.GetAnalysisReportResultsResponse,
-      NFW.GetAnalysisReportResultsError
-    >
+    ) => Effect.Effect<NFW.GetAnalysisReportResultsResponse, NFW.GetAnalysisReportResultsError>
   >
 > {}
 
-export const GetAnalysisReportResults =
-  Binding.Service<GetAnalysisReportResults>(
-    "AWS.NetworkFirewall.GetAnalysisReportResults",
-  );
+export const GetAnalysisReportResults = Binding.Service<GetAnalysisReportResults>(
+  "AWS.NetworkFirewall.GetAnalysisReportResults",
+);

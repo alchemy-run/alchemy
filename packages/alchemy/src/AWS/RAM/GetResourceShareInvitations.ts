@@ -35,7 +35,6 @@ export interface GetResourceShareInvitations extends Binding.Service<
     >
   >
 > {}
-export const GetResourceShareInvitations =
-  Binding.Service<GetResourceShareInvitations>(
-    "AWS.RAM.GetResourceShareInvitations",
-  );
+export const GetResourceShareInvitations = Binding.Service<GetResourceShareInvitations>(
+  "AWS.RAM.GetResourceShareInvitations",
+);

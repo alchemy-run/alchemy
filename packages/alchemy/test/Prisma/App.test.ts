@@ -1,15 +1,11 @@
-import * as Provider from "@/Provider";
-import { App as PrismaApp, AppProvider } from "@/Prisma/App";
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AlchemyContext } from "@/AlchemyContext";
-import {
-  dispatchTo,
-  makeFakeManagementApi,
-  unhandled,
-} from "./fixtures/FakeManagementApi.ts";
+import { App as PrismaApp, AppProvider } from "@/Prisma/App";
+import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import * as Provider from "@/Provider";
+import { dispatchTo, makeFakeManagementApi, unhandled } from "./fixtures/FakeManagementApi.ts";
 
 const app = (id: string, branchId: string | null = "branch-main") => ({
   id,
@@ -74,11 +70,7 @@ const clientBackedApi = (client: any) =>
       if (request.method === "PATCH") return call(client.updateApp, [id, body]);
       if (request.method === "DELETE") return callVoid(client.deleteApp, [id]);
     }
-    if (
-      head === "projects" &&
-      tail === "branches" &&
-      request.method === "GET"
-    ) {
+    if (head === "projects" && tail === "branches" && request.method === "GET") {
       return call(client.listBranches, [id, query], list);
     }
     return unhandled(request);
@@ -151,9 +143,7 @@ describe("Prisma App", () => {
       expect(defaultBranchDrift).toEqual({ action: "update" });
       expect(wrongRegion._tag).toBe("Failure");
       if (wrongRegion._tag === "Failure") {
-        expect(String(wrongRegion.failure)).toContain(
-          "cannot atomically move an App",
-        );
+        expect(String(wrongRegion.failure)).toContain("cannot atomically move an App");
       }
       expect(wrongProject).toEqual({ action: "replace" });
     }).pipe(provide(client));
@@ -190,61 +180,58 @@ describe("Prisma App", () => {
     }).pipe(provide(client));
   });
 
-  it.effect(
-    "inherits the project region and creates with a resolved branch ID",
-    () => {
-      const calls: Array<[string, unknown?]> = [];
-      const regionalApp = (id: string, branchId: string | null) => ({
-        ...app(id, branchId),
-        region: { id: "eu-west-3" as const, name: "Europe West" },
+  it.effect("inherits the project region and creates with a resolved branch ID", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const regionalApp = (id: string, branchId: string | null) => ({
+      ...app(id, branchId),
+      region: { id: "eu-west-3" as const, name: "Europe West" },
+    });
+    const client = {
+      listBranches: () => Effect.succeed([branch("branch-wanted")]),
+      createApp: (input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["createApp", input]);
+          return regionalApp("app-1", "branch-wrong");
+        }),
+      updateApp: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateApp", { id, input }]);
+          return regionalApp(id, "branch-wanted");
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaApp.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        fqn: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          displayName: "api",
+          branchGitName: "main",
+        },
+        olds: undefined,
+        output: undefined,
+        session: undefined as never,
+        bindings: [],
       });
-      const client = {
-        listBranches: () => Effect.succeed([branch("branch-wanted")]),
-        createApp: (input: unknown) =>
-          Effect.sync(() => {
-            calls.push(["createApp", input]);
-            return regionalApp("app-1", "branch-wrong");
-          }),
-        updateApp: (id: string, input: unknown) =>
-          Effect.sync(() => {
-            calls.push(["updateApp", { id, input }]);
-            return regionalApp(id, "branch-wanted");
-          }),
-      } as unknown as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaApp.Provider;
-        const output = yield* provider.reconcile({
-          id: "App",
-          fqn: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            displayName: "api",
-            branchGitName: "main",
-          },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        });
-
-        expect(output.branchId).toBe("branch-wanted");
-        expect(output.regionId).toBe("eu-west-3");
-        // JSON drops undefined members, so the wire body carries neither
-        // regionId nor branchGitName.
-        expect(calls[0]).toEqual([
-          "createApp",
-          {
-            projectId: "project-1",
-            displayName: "api",
-            branchId: "branch-wanted",
-          },
-        ]);
-        expect(calls.map(([name]) => name)).toEqual(["createApp", "updateApp"]);
-      }).pipe(provide(client));
-    },
-  );
+      expect(output.branchId).toBe("branch-wanted");
+      expect(output.regionId).toBe("eu-west-3");
+      // JSON drops undefined members, so the wire body carries neither
+      // regionId nor branchGitName.
+      expect(calls[0]).toEqual([
+        "createApp",
+        {
+          projectId: "project-1",
+          displayName: "api",
+          branchId: "branch-wanted",
+        },
+      ]);
+      expect(calls.map(([name]) => name)).toEqual(["createApp", "updateApp"]);
+    }).pipe(provide(client));
+  });
 
   it.effect("repairs externally drifted mutable App state", () => {
     const calls: Array<[string, unknown?]> = [];
@@ -324,58 +311,55 @@ describe("Prisma App", () => {
     }).pipe(provide(client));
   });
 
-  it.effect(
-    "refuses to patch an App with mismatched immutable identity",
-    () => {
-      let observed: Omit<ReturnType<typeof app>, "projectId" | "region"> & {
-        projectId: string;
-        region: { id: string; name: string };
-      } = { ...app("app-1"), projectId: "project-other" };
-      const client = {
-        getApp: () => Effect.succeed(observed),
-        updateApp: () => Effect.die("must not patch immutable identity drift"),
-      } as unknown as PrismaManagementClient;
+  it.effect("refuses to patch an App with mismatched immutable identity", () => {
+    let observed: Omit<ReturnType<typeof app>, "projectId" | "region"> & {
+      projectId: string;
+      region: { id: string; name: string };
+    } = { ...app("app-1"), projectId: "project-other" };
+    const client = {
+      getApp: () => Effect.succeed(observed),
+      updateApp: () => Effect.die("must not patch immutable identity drift"),
+    } as unknown as PrismaManagementClient;
 
-      return Effect.gen(function* () {
-        const provider = yield* PrismaApp.Provider;
-        const reconcile = () =>
-          provider.reconcile({
-            id: "App",
-            fqn: "App",
-            instanceId: "00000000000000000000000000000000",
-            news: {
-              project: "project-1",
-              displayName: "api",
-              regionId: "us-east-1",
-              branchId: "branch-main",
-            },
-            olds: undefined,
-            output: {
-              appId: "app-1",
-              name: "api",
-              projectId: "project-1",
-              regionId: "us-east-1",
-              branchId: "branch-main",
-              latestDeploymentId: null,
-              appEndpointDomain: "app-1.prisma.build",
-              createdAt: "2026-01-01T00:00:00Z",
-            },
-            session: undefined as never,
-            bindings: [],
-          });
+    return Effect.gen(function* () {
+      const provider = yield* PrismaApp.Provider;
+      const reconcile = () =>
+        provider.reconcile({
+          id: "App",
+          fqn: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            displayName: "api",
+            regionId: "us-east-1",
+            branchId: "branch-main",
+          },
+          olds: undefined,
+          output: {
+            appId: "app-1",
+            name: "api",
+            projectId: "project-1",
+            regionId: "us-east-1",
+            branchId: "branch-main",
+            latestDeploymentId: null,
+            appEndpointDomain: "app-1.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          session: undefined as never,
+          bindings: [],
+        });
 
-        const projectError = yield* reconcile().pipe(Effect.flip);
-        expect((projectError as Error).message).toContain("project-other");
-        expect((projectError as Error).message).toContain("Refusing to patch");
+      const projectError = yield* reconcile().pipe(Effect.flip);
+      expect((projectError as Error).message).toContain("project-other");
+      expect((projectError as Error).message).toContain("Refusing to patch");
 
-        observed = {
-          ...app("app-1"),
-          region: { id: "us-west-2", name: "US West" },
-        };
-        const regionError = yield* reconcile().pipe(Effect.flip);
-        expect((regionError as Error).message).toContain("us-west-2");
-        expect((regionError as Error).message).toContain("Refusing to patch");
-      }).pipe(provide(client));
-    },
-  );
+      observed = {
+        ...app("app-1"),
+        region: { id: "us-west-2", name: "US West" },
+      };
+      const regionError = yield* reconcile().pipe(Effect.flip);
+      expect((regionError as Error).message).toContain("us-west-2");
+      expect((regionError as Error).message).toContain("Refusing to patch");
+    }).pipe(provide(client));
+  });
 });

@@ -31,12 +31,7 @@ export interface UpdateProgram extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.UpdateProgramRequest,
-    ) => Effect.Effect<
-      mediatailor.UpdateProgramResponse,
-      mediatailor.UpdateProgramError
-    >
+    ) => Effect.Effect<mediatailor.UpdateProgramResponse, mediatailor.UpdateProgramError>
   >
 > {}
-export const UpdateProgram = Binding.Service<UpdateProgram>(
-  "AWS.MediaTailor.UpdateProgram",
-);
+export const UpdateProgram = Binding.Service<UpdateProgram>("AWS.MediaTailor.UpdateProgram");

@@ -1,7 +1,4 @@
-import type {
-  EmitterWebhookEvent,
-  EmitterWebhookEventName,
-} from "@octokit/webhooks";
+import type { EmitterWebhookEvent, EmitterWebhookEventName } from "@octokit/webhooks";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -28,10 +25,7 @@ export interface RepositoryRef {
  * from `@octokit/webhooks`. Excludes the `event.action` emitter variants
  * (e.g. `pull_request.opened`) — webhooks are configured by bare event name.
  */
-export type GitHubEventName = Exclude<
-  EmitterWebhookEventName,
-  `${string}.${string}`
->;
+export type GitHubEventName = Exclude<EmitterWebhookEventName, `${string}.${string}`>;
 
 /**
  * Names selectable in {@link RepositoryEventSourceProps.events}: every bare
@@ -56,8 +50,9 @@ export type WebhookEvent<Name extends GitHubEventName = GitHubEventName> =
  * selected. Selecting `"*"` (or omitting `events`) widens back to every
  * {@link GitHubEventName}; otherwise it's the union of the chosen literals.
  */
-export type SelectedEvent<E extends readonly WebhookEventName[]> =
-  "*" extends E[number] ? GitHubEventName : Exclude<E[number], "*">;
+export type SelectedEvent<E extends readonly WebhookEventName[]> = "*" extends E[number]
+  ? GitHubEventName
+  : Exclude<E[number], "*">;
 
 export interface RepositoryEventSourceProps<
   E extends readonly WebhookEventName[] = readonly WebhookEventName[],
@@ -131,9 +126,7 @@ export function consumeRepositoryEvents<
   Req = never,
 >(
   props: RepositoryEventSourceProps<E>,
-  process: (
-    event: WebhookEvent<SelectedEvent<E>>,
-  ) => Effect.Effect<void, never, Req | Providers>,
+  process: (event: WebhookEvent<SelectedEvent<E>>) => Effect.Effect<void, never, Req | Providers>,
 ): Effect.Effect<void, never, RepositoryEventSource>;
 export function consumeRepositoryEvents<
   const E extends readonly WebhookEventName[] = readonly WebhookEventName[],
@@ -141,9 +134,7 @@ export function consumeRepositoryEvents<
 >(
   propsOrProcess:
     | RepositoryEventSourceProps<E>
-    | ((
-        event: WebhookEvent<SelectedEvent<E>>,
-      ) => Effect.Effect<void, never, Req | Providers>),
+    | ((event: WebhookEvent<SelectedEvent<E>>) => Effect.Effect<void, never, Req | Providers>),
   maybeProcess?: (
     event: WebhookEvent<SelectedEvent<E>>,
   ) => Effect.Effect<void, never, Req | Providers>,
@@ -160,9 +151,7 @@ export type RepositoryEventSourceService = <
   Req = never,
 >(
   props: RepositoryEventSourceProps<E>,
-  process: (
-    event: WebhookEvent<SelectedEvent<E>>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (event: WebhookEvent<SelectedEvent<E>>) => Effect.Effect<void, never, Req>,
 ) => Effect.Effect<void, never, never>;
 
 export class RepositoryEventSource extends Context.Service<

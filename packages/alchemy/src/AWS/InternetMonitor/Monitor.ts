@@ -153,13 +153,10 @@ const toTagRecord = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-const sameJson = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(a) === JSON.stringify(b);
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export const MonitorProvider = () =>
   Provider.effect(
@@ -172,33 +169,20 @@ export const MonitorProvider = () =>
       const readMonitor = Effect.fn(function* (name: string) {
         return yield* im
           .getMonitor({ MonitorName: name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Bounded wait for the monitor to leave PENDING (create and updates
       // both transition PENDING -> ACTIVE/INACTIVE, typically in seconds).
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const policy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(8),
-        ]);
+        const policy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(8)]);
         return yield* readMonitor(name).pipe(
           Effect.flatMap((monitor) => {
             if (monitor === undefined) {
-              return Effect.fail(
-                new Error(`Internet Monitor monitor '${name}' not found`),
-              );
+              return Effect.fail(new Error(`Internet Monitor monitor '${name}' not found`));
             }
             if (monitor.Status === "PENDING") {
-              return Effect.fail(
-                new Error(
-                  `Internet Monitor monitor '${name}' is still PENDING`,
-                ),
-              );
+              return Effect.fail(new Error(`Internet Monitor monitor '${name}' is still PENDING`));
             }
             return Effect.succeed(monitor);
           }),
@@ -230,27 +214,20 @@ export const MonitorProvider = () =>
                   im.getMonitor({ MonitorName: monitor.MonitorName }).pipe(
                     Effect.map(toAttrs),
                     // Tolerate delete races between list and get.
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 4 },
               ),
             ),
-            Effect.map((attrs) =>
-              attrs.flatMap((a) => (a === undefined ? [] : [a])),
-            ),
+            Effect.map((attrs) => attrs.flatMap((a) => (a === undefined ? [] : [a]))),
           ),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.monitorName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.monitorName ?? (yield* createName(id, olds ?? {}));
           const monitor = yield* readMonitor(name);
           if (monitor === undefined) return undefined;
           const attrs = toAttrs(monitor);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -282,8 +259,7 @@ export const MonitorProvider = () =>
                 Resources: props.resources,
                 MaxCityNetworksToMonitor: props.maxCityNetworksToMonitor,
                 TrafficPercentageToMonitor: props.trafficPercentageToMonitor,
-                InternetMeasurementsLogDelivery:
-                  props.internetMeasurementsLogDelivery,
+                InternetMeasurementsLogDelivery: props.internetMeasurementsLogDelivery,
                 HealthEventsConfig: props.healthEventsConfig,
                 Tags: desiredTags,
               })
@@ -301,12 +277,8 @@ export const MonitorProvider = () =>
 
           if (props.resources !== undefined) {
             const observedResources = observed.Resources;
-            const toAdd = props.resources.filter(
-              (arn) => !observedResources.includes(arn),
-            );
-            const toRemove = observedResources.filter(
-              (arn) => !props.resources!.includes(arn),
-            );
+            const toAdd = props.resources.filter((arn) => !observedResources.includes(arn));
+            const toRemove = observedResources.filter((arn) => !props.resources!.includes(arn));
             if (toAdd.length > 0) {
               update.ResourcesToAdd = toAdd;
               mutated = true;
@@ -325,11 +297,9 @@ export const MonitorProvider = () =>
           }
           if (
             props.trafficPercentageToMonitor !== undefined &&
-            props.trafficPercentageToMonitor !==
-              observed.TrafficPercentageToMonitor
+            props.trafficPercentageToMonitor !== observed.TrafficPercentageToMonitor
           ) {
-            update.TrafficPercentageToMonitor =
-              props.trafficPercentageToMonitor;
+            update.TrafficPercentageToMonitor = props.trafficPercentageToMonitor;
             mutated = true;
           }
           if (
@@ -339,8 +309,7 @@ export const MonitorProvider = () =>
               observed.InternetMeasurementsLogDelivery,
             )
           ) {
-            update.InternetMeasurementsLogDelivery =
-              props.internetMeasurementsLogDelivery;
+            update.InternetMeasurementsLogDelivery = props.internetMeasurementsLogDelivery;
             mutated = true;
           }
           if (
@@ -393,9 +362,7 @@ export const MonitorProvider = () =>
           if (observed.Status !== "INACTIVE") {
             yield* im
               .updateMonitor({ MonitorName: name, Status: "INACTIVE" })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
             yield* readMonitor(name).pipe(
               Effect.flatMap((monitor) =>
                 monitor !== undefined && monitor.Status !== "INACTIVE"
@@ -407,18 +374,13 @@ export const MonitorProvider = () =>
                   : Effect.succeed(monitor),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
               }),
             );
           }
           yield* im
             .deleteMonitor({ MonitorName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Internet Monitor auto-creates per-monitor CloudWatch log groups
           // (/aws/internet-monitor/{name}/{byCity,byCountry,byMetro,
@@ -426,34 +388,27 @@ export const MonitorProvider = () =>
           // monitor leaves no orphans (same doctrine as the Lambda Function
           // /aws/lambda/{name} log-group reap).
           const logGroupPrefix = `/aws/internet-monitor/${name}`;
-          const reapLogGroups = logs
-            .describeLogGroups({ logGroupNamePrefix: logGroupPrefix })
-            .pipe(
-              Effect.map((r) => r.logGroups ?? []),
-              Effect.flatMap((groups) =>
-                Effect.forEach(
-                  groups.flatMap((g) =>
-                    // Exact-prefix guard: never reap a sibling monitor whose
-                    // name merely starts with ours.
-                    g.logGroupName !== undefined &&
-                    (g.logGroupName === logGroupPrefix ||
-                      g.logGroupName.startsWith(`${logGroupPrefix}/`))
-                      ? [g.logGroupName]
-                      : [],
-                  ),
-                  (logGroupName) =>
-                    logs
-                      .deleteLogGroup({ logGroupName })
-                      .pipe(
-                        Effect.catchTag(
-                          "ResourceNotFoundException",
-                          () => Effect.void,
-                        ),
-                      ),
-                  { concurrency: 4 },
+          const reapLogGroups = logs.describeLogGroups({ logGroupNamePrefix: logGroupPrefix }).pipe(
+            Effect.map((r) => r.logGroups ?? []),
+            Effect.flatMap((groups) =>
+              Effect.forEach(
+                groups.flatMap((g) =>
+                  // Exact-prefix guard: never reap a sibling monitor whose
+                  // name merely starts with ours.
+                  g.logGroupName !== undefined &&
+                  (g.logGroupName === logGroupPrefix ||
+                    g.logGroupName.startsWith(`${logGroupPrefix}/`))
+                    ? [g.logGroupName]
+                    : [],
                 ),
+                (logGroupName) =>
+                  logs
+                    .deleteLogGroup({ logGroupName })
+                    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+                { concurrency: 4 },
               ),
-            );
+            ),
+          );
           // Log-group creation/delivery is asynchronous — a group can
           // materialize shortly after the monitor is gone, so sweep again on
           // a short bounded schedule (t=0s / 10s / 20s, each sweep idempotent).

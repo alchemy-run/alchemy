@@ -42,9 +42,7 @@ export interface PutGroup extends Binding.Service<
   (
     index: Index,
   ) => Effect.Effect<
-    (
-      request: PutGroupRequest,
-    ) => Effect.Effect<qbusiness.PutGroupResponse, qbusiness.PutGroupError>
+    (request: PutGroupRequest) => Effect.Effect<qbusiness.PutGroupResponse, qbusiness.PutGroupError>
   >
 > {}
 export const PutGroup = Binding.Service<PutGroup>("AWS.QBusiness.PutGroup");

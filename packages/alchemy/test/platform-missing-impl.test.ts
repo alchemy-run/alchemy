@@ -1,3 +1,7 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 /**
  * A tagged platform resource declared as a bare tag — no props, no inline
  * impl — gets both from its `.make(props, impl)` Layer. Yielding it without
@@ -15,10 +19,6 @@ import * as Provider from "@/Provider.ts";
 import type { Resource } from "@/Resource.ts";
 import { InMemoryService, State } from "@/State/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 
 interface Widget extends Resource<
   "Test.PlatformWidget",
@@ -75,10 +75,7 @@ const MissingImplStack = Alchemy.Stack(
 );
 
 class ProvidedWidget extends Widget()("ProvidedWidget") {}
-const ProvidedWidgetLive = ProvidedWidget.make(
-  { name: "provided" },
-  Effect.succeed({}),
-);
+const ProvidedWidgetLive = ProvidedWidget.make({ name: "provided" }, Effect.succeed({}));
 
 const ProvidedStack = Alchemy.Stack(
   "PlatformProvidedStack",

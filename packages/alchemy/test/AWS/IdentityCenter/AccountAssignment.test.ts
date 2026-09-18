@@ -1,10 +1,10 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment";
 import { AccountAssignment, Group, PermissionSet } from "@/AWS/IdentityCenter";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -83,8 +83,7 @@ test.provider("read returns undefined when creating-state lost targetId", () =>
       fqn: "AccountAssignment",
       instanceId: "test-instance",
       olds: {
-        permissionSetArn:
-          "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
+        permissionSetArn: "arn:aws:sso:::permissionSet/ssoins-example/ps-example",
         principalId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         principalType: "GROUP",
       } as AccountAssignment["Props"],

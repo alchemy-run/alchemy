@@ -1,8 +1,8 @@
 import * as config from "@distilled.cloud/aws/config-service";
 import * as Layer from "effect/Layer";
 import { makeConfigResourceHttpBinding } from "./BindingHttp.ts";
-import type { DeliveryChannel } from "./DeliveryChannel.ts";
 import { DeliverConfigSnapshot } from "./DeliverConfigSnapshot.ts";
+import type { DeliveryChannel } from "./DeliveryChannel.ts";
 
 export const DeliverConfigSnapshotHttp = Layer.effect(
   DeliverConfigSnapshot,

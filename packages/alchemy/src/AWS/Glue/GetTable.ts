@@ -35,9 +35,7 @@ export interface GetTable extends Binding.Service<
   (
     table: Table,
   ) => Effect.Effect<
-    (
-      request?: GetTableRequest,
-    ) => Effect.Effect<glue.GetTableResponse, glue.GetTableError>
+    (request?: GetTableRequest) => Effect.Effect<glue.GetTableResponse, glue.GetTableError>
   >
 > {}
 

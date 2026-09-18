@@ -30,13 +30,9 @@ export interface UpdateKxClusterDatabases extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.UpdateKxClusterDatabasesRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.UpdateKxClusterDatabasesResponse,
-      SVC.UpdateKxClusterDatabasesError
-    >
+    ) => Effect.Effect<SVC.UpdateKxClusterDatabasesResponse, SVC.UpdateKxClusterDatabasesError>
   >
 > {}
-export const UpdateKxClusterDatabases =
-  Binding.Service<UpdateKxClusterDatabases>(
-    "AWS.FinSpace.UpdateKxClusterDatabases",
-  );
+export const UpdateKxClusterDatabases = Binding.Service<UpdateKxClusterDatabases>(
+  "AWS.FinSpace.UpdateKxClusterDatabases",
+);

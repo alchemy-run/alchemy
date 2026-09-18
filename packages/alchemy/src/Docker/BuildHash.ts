@@ -6,12 +6,12 @@
  * image packaging; NOT exported from the Docker barrel.
  */
 
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import * as crypto from "node:crypto";
 
 export interface DockerBuildSource {
   context: string;
@@ -33,11 +33,9 @@ interface DockerIgnore {
   rules: ReadonlyArray<DockerIgnoreRule>;
 }
 
-const normalizeRelativePath = (value: string) =>
-  value.replaceAll("\\", "/").replace(/^\.\/+/, "");
+const normalizeRelativePath = (value: string) => value.replaceAll("\\", "/").replace(/^\.\/+/, "");
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+const escapeRegExp = (value: string) => value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 
 /**
  * Compile Docker's ordered ignore-pattern form into a path matcher.
@@ -134,14 +132,9 @@ const compileDockerIgnoreRule = (raw: string): DockerIgnoreRule | undefined => {
   };
 };
 
-const isDockerIgnored = (
-  relativePath: string,
-  rules: ReadonlyArray<DockerIgnoreRule>,
-) => {
+const isDockerIgnored = (relativePath: string, rules: ReadonlyArray<DockerIgnoreRule>) => {
   const segments = normalizeRelativePath(relativePath).split("/");
-  const candidates = segments.map((_, index) =>
-    segments.slice(0, index + 1).join("/"),
-  );
+  const candidates = segments.map((_, index) => segments.slice(0, index + 1).join("/"));
   let ignored = false;
   for (const rule of rules) {
     if (candidates.some((candidate) => rule.expression.test(candidate))) {
@@ -167,14 +160,10 @@ export const resolveDockerBuildPaths = Effect.fn(function* (
     : path.resolve(context, source.dockerfile);
 
   if (!(yield* fs.exists(context))) {
-    return yield* Effect.fail(
-      new Error(`Docker build context does not exist: ${context}`),
-    );
+    return yield* Effect.fail(new Error(`Docker build context does not exist: ${context}`));
   }
   if (!(yield* fs.exists(dockerfile))) {
-    return yield* Effect.fail(
-      new Error(`Dockerfile does not exist: ${dockerfile}`),
-    );
+    return yield* Effect.fail(new Error(`Dockerfile does not exist: ${dockerfile}`));
   }
 
   return { context, dockerfile };
@@ -202,15 +191,11 @@ const resolveDockerIgnore = Effect.fn(function* ({
   }
 
   const content = yield* fs.readFileString(ignoreFile);
-  const relativePath = normalizeRelativePath(
-    path.relative(context, ignoreFile),
-  );
+  const relativePath = normalizeRelativePath(path.relative(context, ignoreFile));
   return {
     content,
     path:
-      relativePath === ".." ||
-      relativePath.startsWith("../") ||
-      path.isAbsolute(relativePath)
+      relativePath === ".." || relativePath.startsWith("../") || path.isAbsolute(relativePath)
         ? undefined
         : relativePath,
     rules: content
@@ -247,9 +232,7 @@ export const selectDockerBuildContext = Effect.fn(function* (
   const path = yield* Path.Path;
   const { context, dockerfile } = yield* resolveDockerBuildPaths(source);
   const dockerignore = yield* resolveDockerIgnore({ context, dockerfile });
-  const relativeDockerfile = normalizeRelativePath(
-    path.relative(context, dockerfile),
-  );
+  const relativeDockerfile = normalizeRelativePath(path.relative(context, dockerfile));
   const dockerfilePath =
     relativeDockerfile === ".." ||
     relativeDockerfile.startsWith("../") ||
@@ -285,9 +268,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
   const path = yield* Path.Path;
   const { context, dockerfile } = yield* resolveDockerBuildPaths(source);
   const dockerignore =
-    mode === "effective"
-      ? yield* resolveDockerIgnore({ context, dockerfile })
-      : undefined;
+    mode === "effective" ? yield* resolveDockerIgnore({ context, dockerfile }) : undefined;
   const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
 
   yield* Effect.sync(() =>

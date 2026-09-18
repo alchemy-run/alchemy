@@ -38,10 +38,7 @@ export interface StartSyncExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: StartSyncExecutionRequest,
-    ) => Effect.Effect<
-      sfn.StartSyncExecutionOutput,
-      sfn.StartSyncExecutionError
-    >
+    ) => Effect.Effect<sfn.StartSyncExecutionOutput, sfn.StartSyncExecutionError>
   >
 > {}
 export const StartSyncExecution = Binding.Service<StartSyncExecution>(

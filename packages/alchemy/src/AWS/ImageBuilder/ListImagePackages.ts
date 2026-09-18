@@ -30,10 +30,7 @@ export interface ListImagePackages extends Binding.Service<
   () => Effect.Effect<
     (
       request: imagebuilder.ListImagePackagesRequest,
-    ) => Effect.Effect<
-      imagebuilder.ListImagePackagesResponse,
-      imagebuilder.ListImagePackagesError
-    >
+    ) => Effect.Effect<imagebuilder.ListImagePackagesResponse, imagebuilder.ListImagePackagesError>
   >
 > {}
 export const ListImagePackages = Binding.Service<ListImagePackages>(

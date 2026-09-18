@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { EventBus } from "./EventBus.ts";
 
-export interface PutEventsRequest extends Omit<
-  eventbridge.PutEventsRequest,
-  "Entries"
-> {
+export interface PutEventsRequest extends Omit<eventbridge.PutEventsRequest, "Entries"> {
   Entries: Array<Omit<eventbridge.PutEventsRequestEntry, "EventBusName">>;
 }
 
@@ -68,12 +65,7 @@ export interface PutEvents extends Binding.Service<
   ) => Effect.Effect<
     (
       request: PutEventsRequest,
-    ) => Effect.Effect<
-      eventbridge.PutEventsResponse,
-      eventbridge.PutEventsError
-    >
+    ) => Effect.Effect<eventbridge.PutEventsResponse, eventbridge.PutEventsError>
   >
 > {}
-export const PutEvents = Binding.Service<PutEvents>(
-  "AWS.EventBridge.PutEvents",
-);
+export const PutEvents = Binding.Service<PutEvents>("AWS.EventBridge.PutEvents");

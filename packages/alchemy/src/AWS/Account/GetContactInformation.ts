@@ -30,10 +30,7 @@ export interface GetContactInformation extends Binding.Service<
   () => Effect.Effect<
     (
       request?: account.GetContactInformationRequest,
-    ) => Effect.Effect<
-      account.GetContactInformationResponse,
-      account.GetContactInformationError
-    >
+    ) => Effect.Effect<account.GetContactInformationResponse, account.GetContactInformationError>
   >
 > {}
 export const GetContactInformation = Binding.Service<GetContactInformation>(

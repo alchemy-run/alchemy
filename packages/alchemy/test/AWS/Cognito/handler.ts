@@ -1,6 +1,3 @@
-import * as Cognito from "@/AWS/Cognito";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,17 +5,14 @@ import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Cognito from "@/AWS/Cognito";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const PASSWORD = "Alchemy-Test-Passw0rd!";
 const NEW_PASSWORD = "Alchemy-Test-Passw0rd!2";
@@ -127,9 +121,7 @@ export default CognitoTestFunction.make(
             AuthParameters: { USERNAME: username, PASSWORD },
           });
           const accessToken = plain(signIn.AuthenticationResult?.AccessToken);
-          const me = accessToken
-            ? yield* auth.getUser({ AccessToken: accessToken })
-            : undefined;
+          const me = accessToken ? yield* auth.getUser({ AccessToken: accessToken }) : undefined;
           yield* admin.adminDeleteUser({ Username: username });
           return yield* HttpServerResponse.json({
             challengeName: signIn.ChallengeName,
@@ -148,13 +140,9 @@ export default CognitoTestFunction.make(
             .adminCreateUser({
               Username: username,
               MessageAction: "SUPPRESS",
-              UserAttributes: [
-                { Name: "email", Value: `${username}@example.com` },
-              ],
+              UserAttributes: [{ Name: "email", Value: `${username}@example.com` }],
             })
-            .pipe(
-              Effect.catchTag("UsernameExistsException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("UsernameExistsException", () => Effect.void));
           const created = yield* admin.adminGetUser({ Username: username });
           yield* admin.adminDisableUser({ Username: username });
           const disabled = yield* admin.adminGetUser({ Username: username });
@@ -177,9 +165,7 @@ export default CognitoTestFunction.make(
           yield* admin.adminDeleteUser({ Username: username });
           const gone = yield* admin.adminGetUser({ Username: username }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("UserNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("UserNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({
             createdStatus: created.UserStatus,
@@ -197,9 +183,7 @@ export default CognitoTestFunction.make(
             .signUp({
               Username: username,
               Password: PASSWORD,
-              UserAttributes: [
-                { Name: "email", Value: `${username}@example.com` },
-              ],
+              UserAttributes: [{ Name: "email", Value: `${username}@example.com` }],
             })
             .pipe(
               Effect.map((r) => ({
@@ -243,9 +227,7 @@ export default CognitoTestFunction.make(
                 { Name: "email_verified", Value: "true" },
               ],
             })
-            .pipe(
-              Effect.catchTag("UsernameExistsException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("UsernameExistsException", () => Effect.void));
           yield* admin.adminSetUserPassword({
             Username: username,
             Password: PASSWORD,
@@ -271,9 +253,7 @@ export default CognitoTestFunction.make(
             UserAttributes: [{ Name: "nickname", Value: "self-service" }],
           });
           const me = yield* auth.getUser({ AccessToken: accessToken });
-          const nickname = plain(
-            me.UserAttributes?.find((a) => a.Name === "nickname")?.Value,
-          );
+          const nickname = plain(me.UserAttributes?.find((a) => a.Name === "nickname")?.Value);
           yield* auth.deleteUserAttributes({
             AccessToken: accessToken,
             UserAttributeNames: ["nickname"],
@@ -288,17 +268,13 @@ export default CognitoTestFunction.make(
           yield* auth.deleteUser({ AccessToken: accessToken });
           const gone = yield* admin.adminGetUser({ Username: username }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("UserNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("UserNotFoundException", () => Effect.succeed(true)),
           );
           return yield* HttpServerResponse.json({
-            changedPasswordAuth:
-              reAuth.AuthenticationResult?.AccessToken !== undefined,
+            changedPasswordAuth: reAuth.AuthenticationResult?.AccessToken !== undefined,
             nickname,
             nicknameAfter: nicknameAfter ?? null,
-            refreshedHasAccessToken:
-              refreshed.AuthenticationResult?.AccessToken !== undefined,
+            refreshedHasAccessToken: refreshed.AuthenticationResult?.AccessToken !== undefined,
             deleted: gone,
           });
         }
@@ -310,13 +286,9 @@ export default CognitoTestFunction.make(
             .adminCreateUser({
               Username: username,
               MessageAction: "SUPPRESS",
-              UserAttributes: [
-                { Name: "email", Value: `${username}@example.com` },
-              ],
+              UserAttributes: [{ Name: "email", Value: `${username}@example.com` }],
             })
-            .pipe(
-              Effect.catchTag("UsernameExistsException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("UsernameExistsException", () => Effect.void));
           yield* admin.adminUpdateUserAttributes({
             Username: username,
             UserAttributes: [{ Name: "nickname", Value: "admin-extended" }],
@@ -340,20 +312,14 @@ export default CognitoTestFunction.make(
             Username: username,
           });
           const allGroups = yield* admin.listGroups();
-          const deviceCount = yield* admin
-            .adminListDevices({ Username: username })
-            .pipe(
-              Effect.map((r) => (r.Devices ?? []).length),
-              // device tracking is not configured on the fixture pool
-              Effect.catchTag("InvalidUserPoolConfigurationException", () =>
-                Effect.succeed(-1),
-              ),
-            );
+          const deviceCount = yield* admin.adminListDevices({ Username: username }).pipe(
+            Effect.map((r) => (r.Devices ?? []).length),
+            // device tracking is not configured on the fixture pool
+            Effect.catchTag("InvalidUserPoolConfigurationException", () => Effect.succeed(-1)),
+          );
           yield* admin.adminDeleteUser({ Username: username });
           const nicknameOf = (user: typeof withNickname): string | undefined =>
-            plain(
-              user.UserAttributes?.find((a) => a.Name === "nickname")?.Value,
-            );
+            plain(user.UserAttributes?.find((a) => a.Name === "nickname")?.Value);
           return yield* HttpServerResponse.json({
             nickname: nicknameOf(withNickname),
             nicknameAfter: nicknameOf(withoutNickname) ?? null,
@@ -410,9 +376,7 @@ export default CognitoTestFunction.make(
       }).pipe(
         // Surface typed operation failures in the 500 body so the test's
         // retry logging shows the real cause instead of a generic message.
-        Effect.catch((error) =>
-          HttpServerResponse.json({ error: String(error) }, { status: 500 }),
-        ),
+        Effect.catch((error) => HttpServerResponse.json({ error: String(error) }, { status: 500 })),
         Effect.orDie,
       ),
     };

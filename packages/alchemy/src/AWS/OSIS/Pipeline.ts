@@ -222,21 +222,14 @@ export const PipelineProvider = () =>
       const readPipeline = Effect.fn(function* (name: string) {
         return yield* osis.getPipeline({ PipelineName: name }).pipe(
           Effect.map((response) => response.Pipeline),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
       const waitForActive = Effect.fn(function* (name: string) {
-        const pipeline = yield* waitForPipelineSettled(
-          name,
-          readPipeline(name),
-        );
+        const pipeline = yield* waitForPipelineSettled(name, readPipeline(name));
         if (pipeline === undefined) {
-          return yield* Effect.fail(
-            new Error(`OSIS pipeline '${name}' not found while waiting`),
-          );
+          return yield* Effect.fail(new Error(`OSIS pipeline '${name}' not found while waiting`));
         }
         return pipeline;
       });
@@ -244,9 +237,7 @@ export const PipelineProvider = () =>
       const toAttrs = Effect.fn(function* (pipeline: osis.Pipeline) {
         if (!pipeline.PipelineName || !pipeline.PipelineArn) {
           return yield* Effect.fail(
-            new Error(
-              `OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`,
-            ),
+            new Error(`OSIS pipeline '${pipeline.PipelineName}' is missing its ARN`),
           );
         }
         return {
@@ -281,9 +272,7 @@ export const PipelineProvider = () =>
           const pipeline = yield* readPipeline(name);
           if (pipeline === undefined) return undefined;
           const attrs = yield* toAttrs(pipeline);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -303,14 +292,11 @@ export const PipelineProvider = () =>
                 MinUnits: props.minUnits,
                 MaxUnits: props.maxUnits,
                 PipelineConfigurationBody: props.pipelineConfigurationBody,
-                LogPublishingOptions: toLogPublishingOptions(
-                  props.logPublishingOptions,
-                ),
+                LogPublishingOptions: toLogPublishingOptions(props.logPublishingOptions),
                 BufferOptions:
                   props.bufferOptions !== undefined
                     ? {
-                        PersistentBufferEnabled:
-                          props.bufferOptions.persistentBufferEnabled,
+                        PersistentBufferEnabled: props.bufferOptions.persistentBufferEnabled,
                       }
                     : undefined,
                 EncryptionAtRestOptions:
@@ -330,12 +316,7 @@ export const PipelineProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           }
 
           // Creation and in-flight updates both surface as transitional
@@ -360,17 +341,13 @@ export const PipelineProvider = () =>
             update.PipelineConfigurationBody = props.pipelineConfigurationBody;
             mutated = true;
           }
-          const desiredLogging = toLogPublishingOptions(
-            props.logPublishingOptions,
-          );
+          const desiredLogging = toLogPublishingOptions(props.logPublishingOptions);
           if (
             desiredLogging !== undefined &&
             !jsonEquals(
               {
-                IsLoggingEnabled:
-                  observed.LogPublishingOptions?.IsLoggingEnabled,
-                CloudWatchLogDestination:
-                  observed.LogPublishingOptions?.CloudWatchLogDestination,
+                IsLoggingEnabled: observed.LogPublishingOptions?.IsLoggingEnabled,
+                CloudWatchLogDestination: observed.LogPublishingOptions?.CloudWatchLogDestination,
               },
               desiredLogging,
             )
@@ -384,15 +361,13 @@ export const PipelineProvider = () =>
               observed.BufferOptions?.PersistentBufferEnabled
           ) {
             update.BufferOptions = {
-              PersistentBufferEnabled:
-                props.bufferOptions.persistentBufferEnabled,
+              PersistentBufferEnabled: props.bufferOptions.persistentBufferEnabled,
             };
             mutated = true;
           }
           if (
             props.encryptionAtRestOptions !== undefined &&
-            props.encryptionAtRestOptions.kmsKeyArn !==
-              observed.EncryptionAtRestOptions?.KmsKeyArn
+            props.encryptionAtRestOptions.kmsKeyArn !== observed.EncryptionAtRestOptions?.KmsKeyArn
           ) {
             update.EncryptionAtRestOptions = {
               KmsKeyArn: props.encryptionAtRestOptions.kmsKeyArn,
@@ -440,9 +415,7 @@ export const PipelineProvider = () =>
           yield* retryWhilePipelineConflict(
             osis
               .deletePipeline({ PipelineName: name })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
 
@@ -461,17 +434,13 @@ export const PipelineProvider = () =>
                 (name) =>
                   osis.getPipeline({ PipelineName: name }).pipe(
                     Effect.map((response) => response.Pipeline),
-                    Effect.catchTag("ResourceNotFoundException", () =>
-                      Effect.succeed(undefined),
-                    ),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                   ),
                 { concurrency: 4 },
               ),
             ),
             Effect.map((pipelines) =>
-              pipelines.filter(
-                (pipeline): pipeline is osis.Pipeline => pipeline !== undefined,
-              ),
+              pipelines.filter((pipeline): pipeline is osis.Pipeline => pipeline !== undefined),
             ),
             Effect.flatMap(
               Effect.forEach((pipeline) => toAttrs(pipeline), {

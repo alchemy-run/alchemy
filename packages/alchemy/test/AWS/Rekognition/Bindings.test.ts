@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import RekognitionTestFunctionLive, {
   RekognitionTestFunction,
   TEST_COLLECTION_ID,
@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "RekognitionBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // Parsed from the deployed function's ARN; the /custom-labels route uses it
@@ -46,38 +43,27 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e): boolean => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe("Rekognition Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Rekognition test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Rekognition test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Rekognition test setup: deploying fixture");
@@ -93,9 +79,7 @@ describe("Rekognition Bindings", () => {
       accountId = functionArn.split(":")[4]!;
       const readinessUrl = `${baseUrl}/ping`;
 
-      yield* Effect.logInfo(
-        `Rekognition test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Rekognition test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -103,9 +87,7 @@ describe("Rekognition Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Rekognition test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Rekognition test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -145,10 +127,9 @@ describe("Rekognition Bindings", () => {
           // CompareFaces on a faceless source image surfaces its typed
           // InvalidParameterException.
           expect(result.compareTag).toBe("InvalidParameterException");
-          expect([
-            "ResourceNotFoundException",
-            "InvalidParameterException",
-          ]).toContain(result.celebrityInfoTag);
+          expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+            result.celebrityInfoTag,
+          );
         }),
       { timeout: 120_000 },
     );
@@ -183,43 +164,30 @@ describe("Rekognition Bindings", () => {
           expect(result.indexedFaceRecords).toBe(0);
           expect(result.listedFaces).toBe(0);
           expect(result.listedUsers).toContain("test-user");
-          expect([
-            "Success",
-            "InvalidParameterException",
-            "ResourceNotFoundException",
-          ]).toContain(result.searchUsersTag);
+          expect(["Success", "InvalidParameterException", "ResourceNotFoundException"]).toContain(
+            result.searchUsersTag,
+          );
           // Associate/Disassociate with a well-formed unknown face id either
           // succeed (reported via UnsuccessfulFaceAssociations) or reject
           // with a typed validation/not-found tag.
-          expect([
-            "Success",
-            "InvalidParameterException",
-            "ResourceNotFoundException",
-          ]).toContain(result.associateTag);
-          expect([
-            "Success",
-            "InvalidParameterException",
-            "ResourceNotFoundException",
-          ]).toContain(result.disassociateTag);
-          expect([
-            "InvalidParameterException",
-            "ResourceNotFoundException",
-          ]).toContain(result.searchFacesTag);
+          expect(["Success", "InvalidParameterException", "ResourceNotFoundException"]).toContain(
+            result.associateTag,
+          );
+          expect(["Success", "InvalidParameterException", "ResourceNotFoundException"]).toContain(
+            result.disassociateTag,
+          );
+          expect(["InvalidParameterException", "ResourceNotFoundException"]).toContain(
+            result.searchFacesTag,
+          );
           // A faceless probe image either succeeds with zero matches or is
           // rejected with the typed InvalidParameterException, depending on
           // the face model's detection outcome.
-          expect(["Success", "InvalidParameterException"]).toContain(
-            result.searchFacesByImageTag,
-          );
-          expect(["Success", "InvalidParameterException"]).toContain(
-            result.searchUsersByImageTag,
-          );
+          expect(["Success", "InvalidParameterException"]).toContain(result.searchFacesByImageTag);
+          expect(["Success", "InvalidParameterException"]).toContain(result.searchUsersByImageTag);
           // Deleting a well-formed nonexistent face id either succeeds with
           // an UnsuccessfulFaceDeletions entry or rejects with the typed
           // InvalidParameterException.
-          expect(["Success", "InvalidParameterException"]).toContain(
-            result.deleteFacesTag,
-          );
+          expect(["Success", "InvalidParameterException"]).toContain(result.deleteFacesTag);
         }),
       { timeout: 120_000 },
     );
@@ -248,10 +216,7 @@ describe("Rekognition Bindings", () => {
       "every start binding reaches Rekognition and surfaces the typed S3 validation error",
       (_stack) =>
         Effect.gen(function* () {
-          const tags = (yield* postJson("/video/start-all")) as Record<
-            string,
-            string
-          >;
+          const tags = (yield* postJson("/video/start-all")) as Record<string, string>;
           expect(Object.keys(tags).sort()).toEqual([
             "celebrityRecognition",
             "contentModeration",
@@ -289,10 +254,7 @@ describe("Rekognition Bindings", () => {
       "every get binding surfaces the typed not-found path for a bogus JobId",
       (_stack) =>
         Effect.gen(function* () {
-          const tags = (yield* getJson("/video/get-all")) as Record<
-            string,
-            string
-          >;
+          const tags = (yield* getJson("/video/get-all")) as Record<string, string>;
           expect(Object.keys(tags).sort()).toEqual([
             "celebrityRecognition",
             "contentModeration",
@@ -307,11 +269,7 @@ describe("Rekognition Bindings", () => {
           // surfaces the typed AccessDeniedException at the entitlement gate.
           for (const [family, tag] of Object.entries(tags)) {
             expect(
-              [
-                "ResourceNotFoundException",
-                "InvalidParameterException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
               `family ${family} returned ${tag}`,
             ).toContain(tag);
           }
@@ -337,10 +295,9 @@ describe("Rekognition Bindings", () => {
             "InvalidParameterException",
             "ResourceNotFoundException",
           ]).toContain(result.startTag);
-          expect([
-            "ResourceNotFoundException",
-            "InvalidParameterException",
-          ]).toContain(result.getTag);
+          expect(["ResourceNotFoundException", "InvalidParameterException"]).toContain(
+            result.getTag,
+          );
         }),
       { timeout: 120_000 },
     );
@@ -384,9 +341,7 @@ describe("Rekognition Bindings", () => {
       "lists projects for real and drives model ops through typed error paths",
       (_stack) =>
         Effect.gen(function* () {
-          const result = (yield* getJson(
-            `/custom-labels?account=${accountId}`,
-          )) as {
+          const result = (yield* getJson(`/custom-labels?account=${accountId}`)) as {
             projectCount: number;
             describeVersionsTag: string;
             detectTag: string;

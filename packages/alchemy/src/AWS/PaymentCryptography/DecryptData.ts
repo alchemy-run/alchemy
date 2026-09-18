@@ -44,6 +44,4 @@ export interface DecryptData extends Binding.Service<
   >
 > {}
 
-export const DecryptData = Binding.Service<DecryptData>(
-  "AWS.PaymentCryptography.DecryptData",
-);
+export const DecryptData = Binding.Service<DecryptData>("AWS.PaymentCryptography.DecryptData");

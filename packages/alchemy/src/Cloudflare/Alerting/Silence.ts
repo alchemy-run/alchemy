@@ -5,7 +5,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -56,13 +55,7 @@ export interface SilenceAttributes {
   updatedAt: string | undefined;
 }
 
-export type Silence = Resource<
-  TypeId,
-  SilenceProps,
-  SilenceAttributes,
-  never,
-  Providers
->;
+export type Silence = Resource<TypeId, SilenceProps, SilenceAttributes, never, Providers>;
 
 /**
  * A Cloudflare Notifications silence window.
@@ -149,8 +142,7 @@ export const SilenceProvider = () =>
       const o = olds as SilenceProps;
       const n = news as SilenceProps;
       const oldPolicyId =
-        output?.policyId ??
-        (typeof o.policyId === "string" ? o.policyId : undefined);
+        output?.policyId ?? (typeof o.policyId === "string" ? o.policyId : undefined);
       if (
         oldPolicyId !== undefined &&
         typeof n.policyId === "string" &&
@@ -178,12 +170,7 @@ export const SilenceProvider = () =>
       const o = olds as SilenceProps | undefined;
       const policyId = typeof o?.policyId === "string" ? o.policyId : undefined;
       if (policyId && o?.startTime && o?.endTime) {
-        const match = yield* findSilence(
-          acct,
-          policyId,
-          o.startTime,
-          o.endTime,
-        );
+        const match = yield* findSilence(acct, policyId, o.startTime, o.endTime);
         if (match) return Unowned(toSilenceAttributes(match, acct));
       }
       return undefined;
@@ -201,12 +188,7 @@ export const SilenceProvider = () =>
         observed = yield* observeSilence(accountId, output.silenceId);
       }
       if (!observed) {
-        observed = yield* findSilence(
-          accountId,
-          policyId,
-          news.startTime,
-          news.endTime,
-        );
+        observed = yield* findSilence(accountId, policyId, news.startTime, news.endTime);
       }
 
       // 2. Ensure — create when missing. The create response carries no
@@ -229,33 +211,18 @@ export const SilenceProvider = () =>
           })
           .pipe(
             Effect.catchTag("SilenceAlreadyExists", (error) =>
-              findSilence(
-                accountId,
-                policyId,
-                news.startTime,
-                news.endTime,
-              ).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.void : Effect.fail(error),
-                ),
+              findSilence(accountId, policyId, news.startTime, news.endTime).pipe(
+                Effect.flatMap((existing) => (existing ? Effect.void : Effect.fail(error))),
               ),
             ),
           );
-        observed = yield* findSilence(
-          accountId,
-          policyId,
-          news.startTime,
-          news.endTime,
-        ).pipe(
+        observed = yield* findSilence(accountId, policyId, news.startTime, news.endTime).pipe(
           Effect.flatMap((found) =>
             found ? Effect.succeed(found) : Effect.fail(new SilencePending()),
           ),
           Effect.retry({
             while: (e) => e._tag === "SilencePending",
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
           }),
         );
         return toSilenceAttributes(observed, accountId);
@@ -308,8 +275,7 @@ interface ObservedSilence {
   readonly updatedAt?: string;
 }
 
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
+const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowSilence = (raw: {
   id?: string | null;
@@ -341,12 +307,7 @@ const observeSilence = (accountId: string, silenceId: string) =>
  * Timestamps are compared as instants so formatting differences (trailing
  * `Z` vs `+00:00`, fractional seconds) don't defeat the match.
  */
-const findSilence = (
-  accountId: string,
-  policyId: string,
-  startTime: string,
-  endTime: string,
-) =>
+const findSilence = (accountId: string, policyId: string, startTime: string, endTime: string) =>
   alerting.listSilences.items({ accountId }).pipe(
     Stream.filter(
       (s) =>
@@ -369,10 +330,7 @@ const sameInstant = (a: string | undefined, b: string | undefined): boolean => {
   return ta === tb;
 };
 
-const toSilenceAttributes = (
-  observed: ObservedSilence,
-  accountId: string,
-): SilenceAttributes => ({
+const toSilenceAttributes = (observed: ObservedSilence, accountId: string): SilenceAttributes => ({
   silenceId: observed.id,
   accountId,
   policyId: observed.policyId ?? "",

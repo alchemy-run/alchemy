@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Queue } from "./Queue.ts";
 
-export interface SendMessageRequest extends Omit<
-  sqs.SendMessageRequest,
-  "QueueUrl"
-> {}
+export interface SendMessageRequest extends Omit<sqs.SendMessageRequest, "QueueUrl"> {}
 
 /**
  * Runtime binding for `sqs:SendMessage`.
@@ -56,9 +53,7 @@ export interface SendMessage extends Binding.Service<
   (
     queue: Queue,
   ) => Effect.Effect<
-    (
-      request: SendMessageRequest,
-    ) => Effect.Effect<sqs.SendMessageResult, sqs.SendMessageError>
+    (request: SendMessageRequest) => Effect.Effect<sqs.SendMessageResult, sqs.SendMessageError>
   >
 > {}
 

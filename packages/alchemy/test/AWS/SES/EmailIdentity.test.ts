@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { ConfigurationSet, EmailIdentity } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ConfigurationSet, EmailIdentity } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -63,9 +63,7 @@ test.provider(
         EmailIdentity: TEST_DOMAIN,
       });
       expect(observed.IdentityType).toBe("DOMAIN");
-      const tags = Object.fromEntries(
-        (observed.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tags = Object.fromEntries((observed.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("DomainIdentity");
 
@@ -149,9 +147,7 @@ test.provider(
       const observed = yield* sesv2.getEmailIdentity({
         EmailIdentity: identity.emailIdentity,
       });
-      expect(observed.ConfigurationSetName).toBe(
-        configSet.configurationSetName,
-      );
+      expect(observed.ConfigurationSetName).toBe(configSet.configurationSetName);
 
       // remove the association in place (keep the config set deployed so
       // the update never races a dependency removal)
@@ -257,9 +253,7 @@ test.provider.skipIf(!MAIL_FROM_DOMAIN || !MAIL_FROM_IDENTITY)(
         EmailIdentity: identity.emailIdentity,
       });
       expect(created.MailFromAttributes?.MailFromDomain).toBe(MAIL_FROM_DOMAIN);
-      expect(created.MailFromAttributes?.BehaviorOnMxFailure).toBe(
-        "USE_DEFAULT_VALUE",
-      );
+      expect(created.MailFromAttributes?.BehaviorOnMxFailure).toBe("USE_DEFAULT_VALUE");
 
       // change only the MX-failure behavior — applied in place
       yield* stack.deploy(
@@ -274,9 +268,7 @@ test.provider.skipIf(!MAIL_FROM_DOMAIN || !MAIL_FROM_IDENTITY)(
       const updated = yield* sesv2.getEmailIdentity({
         EmailIdentity: identity.emailIdentity,
       });
-      expect(updated.MailFromAttributes?.BehaviorOnMxFailure).toBe(
-        "REJECT_MESSAGE",
-      );
+      expect(updated.MailFromAttributes?.BehaviorOnMxFailure).toBe("REJECT_MESSAGE");
 
       yield* stack.destroy();
       yield* assertIdentityDeleted(identity.emailIdentity);

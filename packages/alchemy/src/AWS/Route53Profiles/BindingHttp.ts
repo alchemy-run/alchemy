@@ -21,12 +21,7 @@ import type { Profile } from "./Profile.ts";
  * common AWS List-action pattern of not supporting resource-level
  * permissions (a profile-ARN-scoped grant is rejected with AccessDenied).
  */
-export const makeProfilesHttpBinding = <
-  I extends { ProfileId?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Route53Profiles.ListProfileAssociations`. */
   tag: string;
   /** The distilled operation. */

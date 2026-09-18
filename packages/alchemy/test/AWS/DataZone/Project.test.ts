@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Domain, Project } from "@/AWS/DataZone";
-import * as Test from "@/Test/Alchemy";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { Domain, Project } from "@/AWS/DataZone";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,14 +15,10 @@ const unredact = (value: string | Redacted.Redacted<string>): string =>
 // AccessDeniedException rather than ResourceNotFoundException — DataZone
 // checks domain-scoped auth before existence. Both mean "absent".
 const findProject = (domainId: string, projectId: string) =>
-  datazone
-    .getProject({ domainIdentifier: domainId, identifier: projectId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+  datazone.getProject({ domainIdentifier: domainId, identifier: projectId }).pipe(
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
+  );
 
 test.provider(
   "create project in a domain, update description, delete",
@@ -57,11 +53,9 @@ test.provider(
       const created = yield* findProject(result.domainId, result.projectId);
       expect(created).toBeDefined();
       expect(unredact(created!.name)).toBe(result.projectName);
-      expect(
-        created!.description === undefined
-          ? undefined
-          : unredact(created!.description),
-      ).toBe("analytics project");
+      expect(created!.description === undefined ? undefined : unredact(created!.description)).toBe(
+        "analytics project",
+      );
 
       // 2. Update the description — converges via updateProject, same project.
       const updated = yield* stack.deploy(
@@ -80,17 +74,13 @@ test.provider(
 
       const observed = yield* findProject(result.domainId, result.projectId);
       expect(
-        observed!.description === undefined
-          ? undefined
-          : unredact(observed!.description),
+        observed!.description === undefined ? undefined : unredact(observed!.description),
       ).toBe("analytics project (updated)");
 
       // 3. Destroy — the project is deleted before its domain.
       yield* stack.destroy();
       const gone = yield* findProject(result.domainId, result.projectId);
-      expect(gone === undefined || gone.projectStatus === "DELETING").toBe(
-        true,
-      );
+      expect(gone === undefined || gone.projectStatus === "DELETING").toBe(true);
     }),
   { timeout: 480_000 },
 );

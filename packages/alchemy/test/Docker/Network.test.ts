@@ -1,11 +1,11 @@
+import { describe, expect } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -83,65 +83,51 @@ describe("Docker.Network", { concurrent: false }, () => {
     }),
   );
 
-  test.provider(
-    "refuses a pre-existing network unless explicitly adopted",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const networkName = "alchemy-test-network-adoption";
-        yield* Effect.addFinalizer(() =>
-          docker.network.remove(networkName).pipe(Effect.ignore),
-        );
-        yield* docker.network
-          .remove(networkName)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          );
-        yield* docker.network.create({ name: networkName, driver: "bridge" });
+  test.provider("refuses a pre-existing network unless explicitly adopted", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const networkName = "alchemy-test-network-adoption";
+      yield* Effect.addFinalizer(() => docker.network.remove(networkName).pipe(Effect.ignore));
+      yield* docker.network
+        .remove(networkName)
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
+      yield* docker.network.create({ name: networkName, driver: "bridge" });
 
-        const error = yield* stack
-          .deploy(Docker.Network("existing-network", { name: networkName }))
-          .pipe(
-            Effect.as(undefined),
-            Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
-          );
-        expect(error).toBeInstanceOf(OwnedBySomeoneElse);
-
-        const network = yield* stack.deploy(
-          Docker.Network("existing-network", { name: networkName }).pipe(
-            adopt(true),
-          ),
+      const error = yield* stack
+        .deploy(Docker.Network("existing-network", { name: networkName }))
+        .pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
         );
-        expect(network.name).toBe(networkName);
-        expect(network.id.length).toBeGreaterThan(0);
-      }),
+      expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+
+      const network = yield* stack.deploy(
+        Docker.Network("existing-network", { name: networkName }).pipe(adopt(true)),
+      );
+      expect(network.name).toBe(networkName);
+      expect(network.id.length).toBeGreaterThan(0);
+    }),
   );
 
-  test.provider(
-    "adopts an existing same-name network with stack adoption",
-    (stack) =>
-      Effect.gen(function* () {
-        const docker = yield* Docker.Docker;
-        const networkName = "alchemy-test-network-adopt-existing";
-        yield* Effect.addFinalizer(() =>
-          docker.network.remove(networkName).pipe(Effect.ignore),
-        );
-        yield* docker.network
-          .remove(networkName)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-          );
-        yield* docker.network.create({ name: networkName, driver: "bridge" });
+  test.provider("adopts an existing same-name network with stack adoption", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const networkName = "alchemy-test-network-adopt-existing";
+      yield* Effect.addFinalizer(() => docker.network.remove(networkName).pipe(Effect.ignore));
+      yield* docker.network
+        .remove(networkName)
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
+      yield* docker.network.create({ name: networkName, driver: "bridge" });
 
-        const network = yield* stack.deploy(
-          Docker.Network("existing-network", {
-            name: networkName,
-            driver: "bridge",
-          }).pipe(adopt(true)),
-        );
-        expect(network.name).toBe(networkName);
-        expect(network.id.length).toBeGreaterThan(0);
-      }),
+      const network = yield* stack.deploy(
+        Docker.Network("existing-network", {
+          name: networkName,
+          driver: "bridge",
+        }).pipe(adopt(true)),
+      );
+      expect(network.name).toBe(networkName);
+      expect(network.id.length).toBeGreaterThan(0);
+    }),
   );
 
   test.provider("replaces a network when its labels change", (stack) =>
@@ -150,9 +136,7 @@ describe("Docker.Network", { concurrent: false }, () => {
       const name = "alchemy-test-network-replace";
       yield* docker.network
         .remove(name)
-        .pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
       const first = yield* stack.deploy(
         Docker.Network("replaceable-network", {
           name,
@@ -171,9 +155,7 @@ describe("Docker.Network", { concurrent: false }, () => {
   );
 });
 
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -182,7 +164,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

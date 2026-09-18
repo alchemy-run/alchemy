@@ -91,9 +91,7 @@ export interface ContactChannel extends Resource<
  * });
  * ```
  */
-const ContactChannelResource = Resource<ContactChannel>(
-  "AWS.SSMContacts.ContactChannel",
-);
+const ContactChannelResource = Resource<ContactChannel>("AWS.SSMContacts.ContactChannel");
 
 export { ContactChannelResource as ContactChannel };
 
@@ -101,38 +99,24 @@ export const ContactChannelProvider = () =>
   Provider.effect(
     ContactChannelResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string },
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 200 }));
       });
 
       const getChannel = (arn: string) =>
         contacts
           .getContactChannel({ ContactChannelId: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // A channel's ARN embeds a generated UUID, so without cached output we
       // fall back to searching the owning contact's channels by name + type.
       const findChannel = (contactId: string, name: string, type: string) =>
         contacts.listContactChannels.items({ ContactId: contactId }).pipe(
-          Stream.filter(
-            (channel) =>
-              channel.Name === name && (channel.Type ?? type) === type,
-          ),
+          Stream.filter((channel) => channel.Name === name && (channel.Type ?? type) === type),
           Stream.take(1),
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)[0]),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       const buildAttrs = (channel: {
@@ -185,9 +169,7 @@ export const ContactChannelProvider = () =>
           const name = output?.name ?? (yield* createName(id, news));
 
           // 1. OBSERVE — by cached ARN first, then by (contact, name, type).
-          let channel = output
-            ? yield* getChannel(output.contactChannelArn)
-            : undefined;
+          let channel = output ? yield* getChannel(output.contactChannelArn) : undefined;
           if (channel === undefined) {
             const found = yield* findChannel(news.contactId, name, news.type);
             if (found !== undefined) {

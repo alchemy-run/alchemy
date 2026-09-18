@@ -1,28 +1,19 @@
-import * as AWS from "@/AWS";
-import {
-  amazonLinux2023,
-  Instance,
-  Subnet,
-  Vpc,
-  type InstanceProps,
-} from "@/AWS/EC2";
-import * as Provider from "@/Provider";
-import { State } from "@/State/State";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import * as Test from "./VpcTest.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { amazonLinux2023, Instance, Subnet, Vpc, type InstanceProps } from "@/AWS/EC2";
+import * as Provider from "@/Provider";
+import { State } from "@/State/State";
 import { assertInstanceTerminated, assertVpcGone } from "./Gone.ts";
+import * as Test from "./VpcTest.ts";
 
 // The fixed-IP fixture keeps two VPCs to verify allocation scope. Tests run
 // sequentially so the file holds at most these two VPCs.
 const { test } = Test.make({ providers: AWS.providers() }, 2);
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe.sequential("Instance", () => {
   // `list()` enumerates every non-terminated instance in the account/region via
@@ -61,9 +52,7 @@ describe.sequential("Instance", () => {
         const provider = yield* Provider.findProvider(Instance);
         const all = yield* provider.list();
 
-        expect(
-          all.some((x) => x.instanceId === deployed.instance.instanceId),
-        ).toBe(true);
+        expect(all.some((x) => x.instanceId === deployed.instance.instanceId)).toBe(true);
 
         yield* stack.destroy();
 
@@ -108,9 +97,7 @@ describe.sequential("Instance", () => {
             return { vpc, instance };
           });
 
-        const first = yield* stack.deploy(
-          program("#!/bin/bash\necho generation-one\n"),
-        );
+        const first = yield* stack.deploy(program("#!/bin/bash\necho generation-one\n"));
         const next = program("#!/bin/bash\necho generation-two\n");
         const automatic = yield* stack.plan(next);
         expect(automatic.resources.ReplaceInstance).toMatchObject({
@@ -118,10 +105,7 @@ describe.sequential("Instance", () => {
           deleteFirst: false,
         });
         const pinned = yield* stack.plan(
-          program(
-            "#!/bin/bash\necho generation-two\n",
-            first.instance.privateIpAddress,
-          ),
+          program("#!/bin/bash\necho generation-two\n", first.instance.privateIpAddress),
         );
         expect(pinned.resources.ReplaceInstance).toMatchObject({
           action: "replace",
@@ -138,8 +122,7 @@ describe.sequential("Instance", () => {
         const live = yield* ec2.describeInstances({
           InstanceIds: [second.instance.instanceId],
         });
-        const liveState =
-          live.Reservations?.[0]?.Instances?.[0]?.State?.Name ?? "unknown";
+        const liveState = live.Reservations?.[0]?.Instances?.[0]?.State?.Name ?? "unknown";
         expect(["pending", "running"]).toContain(liveState);
 
         // ...while the old generation was the one terminated.
@@ -257,25 +240,15 @@ describe.sequential("Instance", () => {
         };
         const first = yield* stack.deploy(fixedIpProgram());
         const firstState = yield* state.get(key);
-        if (
-          firstState?.status !== "created" &&
-          firstState?.status !== "updated"
-        ) {
-          return yield* Effect.die(
-            new Error("Expected a deployed original instance"),
-          );
+        if (firstState?.status !== "created" && firstState?.status !== "updated") {
+          return yield* Effect.die(new Error("Expected a deployed original instance"));
         }
 
         const next = fixedIpProgram({ privateIpAddress: "10.0.1.11" });
         const second = yield* stack.deploy(next);
         const secondState = yield* state.get(key);
-        if (
-          secondState?.status !== "created" &&
-          secondState?.status !== "updated"
-        ) {
-          return yield* Effect.die(
-            new Error("Expected a deployed replacement instance"),
-          );
+        if (secondState?.status !== "created" && secondState?.status !== "updated") {
+          return yield* Effect.die(new Error("Expected a deployed replacement instance"));
         }
         // Retain the real candidate's generation and tags, but simulate the
         // interrupted commit between its EC2 launch and persisting its output.

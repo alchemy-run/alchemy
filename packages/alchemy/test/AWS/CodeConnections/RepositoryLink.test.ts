@@ -1,10 +1,10 @@
+import * as codeconnections from "@distilled.cloud/aws/codeconnections";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Connection } from "@/AWS/CodeConnections/Connection.ts";
 import { RepositoryLink } from "@/AWS/CodeConnections/RepositoryLink.ts";
 import * as Test from "@/Test/Alchemy";
-import * as codeconnections from "@distilled.cloud/aws/codeconnections";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -14,8 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // the real service (the call reaches CodeConnections and returns its typed
 // domain error for a PENDING connection); the full lifecycle is gated on a
 // manually-completed connection.
-const AVAILABLE_CONNECTION_ARN =
-  process.env.AWS_TEST_CODECONNECTIONS_CONNECTION_ARN;
+const AVAILABLE_CONNECTION_ARN = process.env.AWS_TEST_CODECONNECTIONS_CONNECTION_ARN;
 const OWNER_ID = process.env.AWS_TEST_CODECONNECTIONS_OWNER_ID;
 const REPOSITORY_NAME = process.env.AWS_TEST_CODECONNECTIONS_REPOSITORY_NAME;
 
@@ -46,10 +45,7 @@ test.provider(
           RepositoryName: "alchemy-test-repo",
         })
         .pipe(
-          Effect.map(
-            (res) =>
-              ({ kind: "created", link: res.RepositoryLinkInfo }) as const,
-          ),
+          Effect.map((res) => ({ kind: "created", link: res.RepositoryLinkInfo }) as const),
           Effect.catchTag(
             [
               "InvalidInputException",
@@ -66,9 +62,7 @@ test.provider(
           .deleteRepositoryLink({
             RepositoryLinkId: result.link.RepositoryLinkId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       } else {
         expect(result.tag).toBeTruthy();
       }
@@ -78,9 +72,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider.skipIf(
-  !AVAILABLE_CONNECTION_ARN || !OWNER_ID || !REPOSITORY_NAME,
-)(
+test.provider.skipIf(!AVAILABLE_CONNECTION_ARN || !OWNER_ID || !REPOSITORY_NAME)(
   "lifecycle: create link on an AVAILABLE connection, destroy (gated: AWS_TEST_CODECONNECTIONS_CONNECTION_ARN)",
   (stack) =>
     Effect.gen(function* () {
@@ -104,9 +96,7 @@ test.provider.skipIf(
       const created = yield* codeconnections.getRepositoryLink({
         RepositoryLinkId: deployed.repositoryLinkId,
       });
-      expect(created.RepositoryLinkInfo.ConnectionArn).toBe(
-        AVAILABLE_CONNECTION_ARN,
-      );
+      expect(created.RepositoryLinkInfo.ConnectionArn).toBe(AVAILABLE_CONNECTION_ARN);
 
       // Destroy — link is deleted; verify it is gone out-of-band.
       yield* stack.destroy();
@@ -114,9 +104,7 @@ test.provider.skipIf(
         .getRepositoryLink({ RepositoryLinkId: deployed.repositoryLinkId })
         .pipe(
           Effect.map((res) => res.RepositoryLinkInfo),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       expect(after).toBeUndefined();
     }),

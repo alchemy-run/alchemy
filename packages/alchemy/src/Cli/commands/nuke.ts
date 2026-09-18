@@ -6,21 +6,10 @@ import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Nuke from "../../Alchemist/routes/nuke.ts";
 import * as CliKit from "../../Cli/CliKit/index.ts";
+import { renderNukeScan, renderNukeDelete, reviewNuke } from "../components/view/Nuke.tsx";
 import { formatElapsed } from "../Format.ts";
-import {
-  renderNukeScan,
-  renderNukeDelete,
-  reviewNuke,
-} from "../components/view/Nuke.tsx";
 import { exitDeclined, UserInputError } from "./errors.ts";
-import {
-  configPath,
-  envFile,
-  optionalConfig,
-  profile,
-  resolveConfig,
-  yes,
-} from "./flags.ts";
+import { configPath, envFile, optionalConfig, profile, resolveConfig, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const includeFlag = Flag.String("include").pipe(
@@ -38,9 +27,7 @@ const filterFlag = Flag.String("filter").pipe(
   Flag.atLeast(0),
 );
 const concurrencyFlag = Flag.Int("concurrency").pipe(
-  Flag.withDescription(
-    "Maximum providers processed in parallel; 0 is unbounded",
-  ),
+  Flag.withDescription("Maximum providers processed in parallel; 0 is unbounded"),
   Flag.withDefault(16),
   Flag.map((value): number | "unbounded" => (value <= 0 ? "unbounded" : value)),
 );
@@ -71,10 +58,9 @@ const dryRunFlag = Flag.Boolean("dry-run").pipe(
 const compileFilter = (expression: string) =>
   Effect.try({
     try: () =>
-      new Function(
-        "scope",
-        `with (scope) { return (${expression}); }`,
-      ) as (scope: { resource: Record<string, unknown> }) => unknown,
+      new Function("scope", `with (scope) { return (${expression}); }`) as (scope: {
+        resource: Record<string, unknown>;
+      }) => unknown,
     catch: (cause) =>
       new UserInputError({
         message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause}`,
@@ -113,13 +99,10 @@ const nukeCommand = Command.make(
   (args) =>
     resolveConfig(args).pipe(
       Effect.flatMap(
-        instrumentCommand(
-          "unsafe.nuke",
-          (args: { profile: string | undefined; main: string }) => ({
-            "alchemy.profile": args.profile ?? "",
-            "alchemy.main": args.main,
-          }),
-        )(
+        instrumentCommand("unsafe.nuke", (args: { profile: string | undefined; main: string }) => ({
+          "alchemy.profile": args.profile ?? "",
+          "alchemy.main": args.main,
+        }))(
           Effect.fn(function* (args) {
             const scan = yield* Nuke.scan({
               entrypoint: args.main,
@@ -131,10 +114,7 @@ const nukeCommand = Command.make(
               concurrency: args.concurrency,
               providerTimeoutSeconds: Duration.toSeconds(args.timeout),
             }).pipe(renderNukeScan());
-            const predicates = yield* Effect.forEach(
-              args.filter,
-              compileFilter,
-            );
+            const predicates = yield* Effect.forEach(args.filter, compileFilter);
             const targets: Array<(typeof scan.resources)[number]> = [];
             for (const resource of scan.resources) {
               const matches = yield* Effect.forEach(predicates, (predicate) =>
@@ -173,8 +153,7 @@ const nukeCommand = Command.make(
               concurrency: args.concurrency,
               providerTimeoutSeconds: Duration.toSeconds(args.timeout),
             }).pipe(renderNukeDelete(targets, scan.mode));
-            const deleteElapsed =
-              (yield* Clock.currentTimeMillis) - deleteStartedAt;
+            const deleteElapsed = (yield* Clock.currentTimeMillis) - deleteStartedAt;
             yield* CliKit.accessors.output.success(
               `Deleted ${result.deleted.length} resource(s) over ${result.passes} pass(es) (${formatElapsed(deleteElapsed)}).`,
             );
@@ -193,9 +172,7 @@ const nukeCommand = Command.make(
       ),
     ),
 ).pipe(
-  Command.withDescription(
-    "Enumerate resources across the stack providers and delete them",
-  ),
+  Command.withDescription("Enumerate resources across the stack providers and delete them"),
   Command.unlisted,
 );
 

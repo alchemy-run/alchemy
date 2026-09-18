@@ -1,5 +1,5 @@
-import * as Data from "effect/Data";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -87,9 +87,7 @@ export class PrismaApiError extends Data.TaggedError("PrismaApiError")<{
   body?: Redacted.Redacted<string>;
 }> {}
 
-export class PrismaApiDecodeError extends Data.TaggedError(
-  "PrismaApiDecodeError",
-)<{
+export class PrismaApiDecodeError extends Data.TaggedError("PrismaApiDecodeError")<{
   method: Method;
   path: string;
   /** Byte length is retained for diagnostics without retaining response data. */
@@ -102,39 +100,24 @@ interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   timeout?: Duration.Input;
-  onSuccessfulBodyLength?: (
-    bodyLength: number,
-  ) => Effect.Effect<void, PrismaApiDecodeError>;
+  onSuccessfulBodyLength?: (bodyLength: number) => Effect.Effect<void, PrismaApiDecodeError>;
 }
 
 export interface PrismaManagementClient {
   listWorkspaces(
     query?: PaginationQuery,
   ): Effect.Effect<Workspace[], PrismaApiError | PrismaApiDecodeError>;
-  getWorkspace(
-    id: string,
-  ): Effect.Effect<Workspace, PrismaApiError | PrismaApiDecodeError>;
-  getCurrentPrincipal(): Effect.Effect<
-    CurrentPrincipal,
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  getWorkspace(id: string): Effect.Effect<Workspace, PrismaApiError | PrismaApiDecodeError>;
+  getCurrentPrincipal(): Effect.Effect<CurrentPrincipal, PrismaApiError | PrismaApiDecodeError>;
   listRegions(
     query?: RegionListQuery,
   ): Effect.Effect<Region[], PrismaApiError | PrismaApiDecodeError>;
-  listPostgresRegions(): Effect.Effect<
-    PostgresRegion[],
-    PrismaApiError | PrismaApiDecodeError
-  >;
-  listAccelerateRegions(): Effect.Effect<
-    AccelerateRegion[],
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  listPostgresRegions(): Effect.Effect<PostgresRegion[], PrismaApiError | PrismaApiDecodeError>;
+  listAccelerateRegions(): Effect.Effect<AccelerateRegion[], PrismaApiError | PrismaApiDecodeError>;
   listProjects(
     query?: PaginationQuery,
   ): Effect.Effect<Project[], PrismaApiError | PrismaApiDecodeError>;
-  getProject(
-    id: string,
-  ): Effect.Effect<Project, PrismaApiError | PrismaApiDecodeError>;
+  getProject(id: string): Effect.Effect<Project, PrismaApiError | PrismaApiDecodeError>;
   createProject(
     input: ProjectCreateInput,
   ): Effect.Effect<ProjectCreateResult, PrismaApiError | PrismaApiDecodeError>;
@@ -142,9 +125,7 @@ export interface PrismaManagementClient {
     id: string,
     input: ProjectUpdateInput,
   ): Effect.Effect<Project, PrismaApiError | PrismaApiDecodeError>;
-  deleteProject(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteProject(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   transferProject(
     id: string,
     input: ProjectTransferInput,
@@ -156,26 +137,19 @@ export interface PrismaManagementClient {
     projectId: string,
     query?: PaginationQuery,
   ): Effect.Effect<Database[], PrismaApiError | PrismaApiDecodeError>;
-  getDatabase(
-    id: string,
-  ): Effect.Effect<Database, PrismaApiError | PrismaApiDecodeError>;
+  getDatabase(id: string): Effect.Effect<Database, PrismaApiError | PrismaApiDecodeError>;
   createDatabase(
     input: DatabaseCreateInput,
   ): Effect.Effect<DatabaseCreateResult, PrismaApiError | PrismaApiDecodeError>;
   createProjectDatabase(
     projectId: string,
     input: ProjectDatabaseCreateInput,
-  ): Effect.Effect<
-    ProjectDatabaseCreateResult,
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  ): Effect.Effect<ProjectDatabaseCreateResult, PrismaApiError | PrismaApiDecodeError>;
   updateDatabase(
     id: string,
     input: DatabaseUpdateInput,
   ): Effect.Effect<Database, PrismaApiError | PrismaApiDecodeError>;
-  deleteDatabase(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteDatabase(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   listBackups(
     databaseId: string,
     query?: BackupListQuery,
@@ -200,33 +174,20 @@ export interface PrismaManagementClient {
   ): Effect.Effect<DatabaseConnection, PrismaApiError | PrismaApiDecodeError>;
   createConnection(
     input: ConnectionCreateInput,
-  ): Effect.Effect<
-    DatabaseConnectionWithSecrets,
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  ): Effect.Effect<DatabaseConnectionWithSecrets, PrismaApiError | PrismaApiDecodeError>;
   createDatabaseConnection(
     databaseId: string,
     input: DatabaseConnectionCreateInput,
-  ): Effect.Effect<
-    DatabaseConnectionWithSecrets,
-    PrismaApiError | PrismaApiDecodeError
-  >;
-  deleteConnection(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  ): Effect.Effect<DatabaseConnectionWithSecrets, PrismaApiError | PrismaApiDecodeError>;
+  deleteConnection(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   rotateConnection(
     id: string,
-  ): Effect.Effect<
-    DatabaseConnectionWithSecrets,
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  ): Effect.Effect<DatabaseConnectionWithSecrets, PrismaApiError | PrismaApiDecodeError>;
   listBranches(
     projectId: string,
     query?: BranchListQuery,
   ): Effect.Effect<Branch[], PrismaApiError | PrismaApiDecodeError>;
-  getBranch(
-    id: string,
-  ): Effect.Effect<Branch, PrismaApiError | PrismaApiDecodeError>;
+  getBranch(id: string): Effect.Effect<Branch, PrismaApiError | PrismaApiDecodeError>;
   createBranch(
     projectId: string,
     input: BranchCreateInput,
@@ -235,21 +196,15 @@ export interface PrismaManagementClient {
     id: string,
     input: BranchUpdateInput,
   ): Effect.Effect<Branch, PrismaApiError | PrismaApiDecodeError>;
-  deleteBranch(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteBranch(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   listBuckets(
     query?: BucketListQuery,
   ): Effect.Effect<Bucket[], PrismaApiError | PrismaApiDecodeError>;
-  getBucket(
-    id: string,
-  ): Effect.Effect<Bucket, PrismaApiError | PrismaApiDecodeError>;
+  getBucket(id: string): Effect.Effect<Bucket, PrismaApiError | PrismaApiDecodeError>;
   createBucket(
     input: BucketCreateInput,
   ): Effect.Effect<Bucket, PrismaApiError | PrismaApiDecodeError>;
-  deleteBucket(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteBucket(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   listBucketKeys(
     bucketId: string,
     query?: PaginationQuery,
@@ -262,29 +217,17 @@ export interface PrismaManagementClient {
     bucketId: string,
     keyId: string,
   ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
-  getCustomDomain(
-    id: string,
-  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
-  deleteCustomDomain(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
-  retryCustomDomain(
-    id: string,
-  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
-  listApps(
-    query?: AppListQuery,
-  ): Effect.Effect<App[], PrismaApiError | PrismaApiDecodeError>;
+  getCustomDomain(id: string): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  deleteCustomDomain(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  retryCustomDomain(id: string): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  listApps(query?: AppListQuery): Effect.Effect<App[], PrismaApiError | PrismaApiDecodeError>;
   getApp(id: string): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
-  createApp(
-    input: AppCreateInput,
-  ): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
+  createApp(input: AppCreateInput): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
   updateApp(
     id: string,
     input: AppUpdateInput,
   ): Effect.Effect<App, PrismaApiError | PrismaApiDecodeError>;
-  deleteApp(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteApp(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   promoteApp(
     id: string,
     target: AppDeploymentTarget,
@@ -299,10 +242,7 @@ export interface PrismaManagementClient {
   createAppDomain(
     appId: string,
     input: CustomDomainCreateInput,
-  ): Effect.Effect<
-    CustomDomainCreateResult,
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  ): Effect.Effect<CustomDomainCreateResult, PrismaApiError | PrismaApiDecodeError>;
   listAppDeployments(
     appId: string,
     query?: PaginationQuery,
@@ -310,25 +250,13 @@ export interface PrismaManagementClient {
   createAppDeployment(
     appId: string,
     input?: DeploymentCreateInput,
-  ): Effect.Effect<
-    DeploymentCreateResult,
-    PrismaApiError | PrismaApiDecodeError
-  >;
-  getDeployment(
-    id: string,
-  ): Effect.Effect<Deployment, PrismaApiError | PrismaApiDecodeError>;
-  deleteDeployment(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  ): Effect.Effect<DeploymentCreateResult, PrismaApiError | PrismaApiDecodeError>;
+  getDeployment(id: string): Effect.Effect<Deployment, PrismaApiError | PrismaApiDecodeError>;
+  deleteDeployment(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   startDeployment(
     id: string,
-  ): Effect.Effect<
-    StartDeploymentResult,
-    PrismaApiError | PrismaApiDecodeError
-  >;
-  stopDeployment(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  ): Effect.Effect<StartDeploymentResult, PrismaApiError | PrismaApiDecodeError>;
+  stopDeployment(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   getDeploymentLogsRequest(
     id: string,
     query?: DeploymentLogsQuery,
@@ -339,10 +267,7 @@ export interface PrismaManagementClient {
   ): Effect.Effect<BuildLogsRequest, PrismaApiError>;
   listEnvironmentVariables(
     query?: EnvironmentVariableListQuery,
-  ): Effect.Effect<
-    EnvironmentVariable[],
-    PrismaApiError | PrismaApiDecodeError
-  >;
+  ): Effect.Effect<EnvironmentVariable[], PrismaApiError | PrismaApiDecodeError>;
   getEnvironmentVariable(
     id: string,
   ): Effect.Effect<EnvironmentVariable, PrismaApiError | PrismaApiDecodeError>;
@@ -353,9 +278,7 @@ export interface PrismaManagementClient {
     id: string,
     input: EnvironmentVariableUpdateInput,
   ): Effect.Effect<EnvironmentVariable, PrismaApiError | PrismaApiDecodeError>;
-  deleteEnvironmentVariable(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteEnvironmentVariable(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   listIntegrations(
     query: IntegrationListQuery,
   ): Effect.Effect<Integration[], PrismaApiError | PrismaApiDecodeError>;
@@ -363,12 +286,8 @@ export interface PrismaManagementClient {
     workspaceId: string,
     query?: PaginationQuery,
   ): Effect.Effect<Integration[], PrismaApiError | PrismaApiDecodeError>;
-  getIntegration(
-    id: string,
-  ): Effect.Effect<Integration, PrismaApiError | PrismaApiDecodeError>;
-  deleteIntegration(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  getIntegration(id: string): Effect.Effect<Integration, PrismaApiError | PrismaApiDecodeError>;
+  deleteIntegration(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
   revokeWorkspaceIntegration(
     workspaceId: string,
     clientId: string,
@@ -394,15 +313,12 @@ export interface PrismaManagementClient {
   createSourceRepository(
     input: SourceRepositoryCreateInput,
   ): Effect.Effect<SourceRepository, PrismaApiError | PrismaApiDecodeError>;
-  deleteSourceRepository(
-    id: string,
-  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  deleteSourceRepository(id: string): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
 }
 
-export class PrismaClient extends Context.Service<
-  PrismaClient,
-  PrismaManagementClient
->()("Prisma::PrismaClient") {}
+export class PrismaClient extends Context.Service<PrismaClient, PrismaManagementClient>()(
+  "Prisma::PrismaClient",
+) {}
 
 export interface PaginationQuery {
   cursor?: string | null;
@@ -449,12 +365,7 @@ export interface AppListQuery extends PaginationQuery {
   branchGitName?: string;
 }
 
-export type {
-  BuildLogsQuery,
-  BuildLogsRequest,
-  DeploymentLogsQuery,
-  DeploymentLogsRequest,
-};
+export type { BuildLogsQuery, BuildLogsRequest, DeploymentLogsQuery, DeploymentLogsRequest };
 
 export interface EnvironmentVariableListQuery extends PaginationQuery {
   projectId?: string;
@@ -485,10 +396,7 @@ export interface ProjectDatabaseCreateResult extends Omit<
   region: { id: string; name: string };
 }
 
-export interface ProjectCreateDatabaseResult extends Omit<
-  ProjectDatabaseCreateResult,
-  "project"
-> {}
+export interface ProjectCreateDatabaseResult extends Omit<ProjectDatabaseCreateResult, "project"> {}
 
 export interface ProjectCreateResult extends Project {
   database: ProjectCreateDatabaseResult | null;
@@ -500,9 +408,7 @@ export const isNotFound = (error: unknown): boolean =>
 export const isConflict = (error: unknown): boolean =>
   error instanceof PrismaApiError && error.status === 409;
 
-const redactedString = (
-  value: unknown,
-): Redacted.Redacted<string> | undefined =>
+const redactedString = (value: unknown): Redacted.Redacted<string> | undefined =>
   typeof value === "string" ? Redacted.make(value) : undefined;
 
 const decodeUrlComponent = (value: string) => {
@@ -519,9 +425,7 @@ export const extractConnectionSecrets = (
   if (!connection) return {};
   const direct = secretValue(connection.endpoints?.direct?.connectionString);
   const pooled = secretValue(connection.endpoints?.pooled?.connectionString);
-  const accelerate = secretValue(
-    connection.endpoints?.accelerate?.connectionString,
-  );
+  const accelerate = secretValue(connection.endpoints?.accelerate?.connectionString);
   const directUrl = (() => {
     if (!direct) return undefined;
     try {
@@ -588,21 +492,14 @@ const isRetryableRequest = (method: Method, path: string) =>
   method === "PATCH" ||
   (method === "POST" && isRetryablePost(path));
 
-const retryTransient = <A, E, R>(
-  method: Method,
-  path: string,
-  effect: Effect.Effect<A, E, R>,
-) =>
+const retryTransient = <A, E, R>(method: Method, path: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) =>
         e instanceof PrismaApiError &&
         isRetryableRequest(method, path) &&
         isRetryableStatus(e.status),
-      schedule: Schedule.max([
-        Schedule.exponential("100 millis"),
-        Schedule.recurs(4),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("100 millis"), Schedule.recurs(4)]),
     }),
   );
 
@@ -638,10 +535,7 @@ function makePrismaClient(): Effect.Effect<
       }
     }
 
-    const buildUrl = (
-      path: string,
-      query?: object,
-    ): Effect.Effect<string, PrismaApiError> => {
+    const buildUrl = (path: string, query?: object): Effect.Effect<string, PrismaApiError> => {
       if (!isValidApiPath(path)) {
         return Effect.fail(
           new PrismaApiError({
@@ -689,11 +583,7 @@ function makePrismaClient(): Effect.Effect<
       };
     };
 
-    const makeRequest = (
-      method: Method,
-      url: string,
-      options: RequestOptions | undefined,
-    ) => {
+    const makeRequest = (method: Method, url: string, options: RequestOptions | undefined) => {
       const init =
         method === "GET"
           ? HttpClientRequest.get(url)
@@ -719,10 +609,7 @@ function makePrismaClient(): Effect.Effect<
       method: Method,
       path: string,
       options?: RequestOptions,
-    ): Effect.Effect<
-      { status: number; body: T },
-      PrismaApiError | PrismaApiDecodeError
-    > => {
+    ): Effect.Effect<{ status: number; body: T }, PrismaApiError | PrismaApiDecodeError> => {
       if (!isValidApiPath(path)) {
         return Effect.fail(
           new PrismaApiError({
@@ -754,9 +641,7 @@ function makePrismaClient(): Effect.Effect<
             );
 
             const maxBodyBytes =
-              res.status >= 200 && res.status < 300
-                ? MAX_SUCCESS_BODY_BYTES
-                : MAX_ERROR_BODY_BYTES;
+              res.status >= 200 && res.status < 300 ? MAX_SUCCESS_BODY_BYTES : MAX_ERROR_BODY_BYTES;
             const bodyTooLarge = (bodyLength: number) =>
               res.status >= 200 && res.status < 300
                 ? new PrismaApiDecodeError({
@@ -772,10 +657,7 @@ function makePrismaClient(): Effect.Effect<
                     message: `Prisma Management API error response exceeded the ${maxBodyBytes} byte safety limit`,
                   });
             const declaredLength = Number(res.headers["content-length"]);
-            if (
-              Number.isSafeInteger(declaredLength) &&
-              declaredLength > maxBodyBytes
-            ) {
+            if (Number.isSafeInteger(declaredLength) && declaredLength > maxBodyBytes) {
               return yield* bodyTooLarge(declaredLength);
             }
 
@@ -793,10 +675,7 @@ function makePrismaClient(): Effect.Effect<
               },
             ).pipe(
               Effect.catch((error) => {
-                if (
-                  error instanceof PrismaApiError ||
-                  error instanceof PrismaApiDecodeError
-                ) {
+                if (error instanceof PrismaApiError || error instanceof PrismaApiDecodeError) {
                   return Effect.fail(error);
                 }
                 if (
@@ -885,20 +764,12 @@ function makePrismaClient(): Effect.Effect<
       path: string,
       options?: RequestOptions,
     ): Effect.Effect<T, PrismaApiError | PrismaApiDecodeError> =>
-      requestWithStatus<T>(method, path, options).pipe(
-        Effect.map(({ body }) => body),
-      );
+      requestWithStatus<T>(method, path, options).pipe(Effect.map(({ body }) => body));
 
-    const dataWithStatus = <T>(
-      method: Method,
-      path: string,
-      options?: RequestOptions,
-    ) =>
+    const dataWithStatus = <T>(method: Method, path: string, options?: RequestOptions) =>
       requestWithStatus<unknown>(method, path, options).pipe(
         Effect.flatMap(({ status, body: response }) =>
-          response !== null &&
-          typeof response === "object" &&
-          Object.hasOwn(response, "data")
+          response !== null && typeof response === "object" && Object.hasOwn(response, "data")
             ? Effect.succeed({
                 status,
                 data: requestBody(response as DataResponse<T>),
@@ -908,17 +779,14 @@ function makePrismaClient(): Effect.Effect<
                   method,
                   path,
                   bodyLength: 0,
-                  message:
-                    "Prisma Management API response did not contain a data envelope",
+                  message: "Prisma Management API response did not contain a data envelope",
                 }),
               ),
         ),
       );
 
     const data = <T>(method: Method, path: string, options?: RequestOptions) =>
-      dataWithStatus<T>(method, path, options).pipe(
-        Effect.map(({ data }) => data),
-      );
+      dataWithStatus<T>(method, path, options).pipe(Effect.map(({ data }) => data));
 
     const list = <T>(
       path: string,
@@ -939,10 +807,7 @@ function makePrismaClient(): Effect.Effect<
         return Effect.gen(function* () {
           const items: T[] = [];
           const queryRecord = query as { cursor?: unknown } | undefined;
-          let cursor =
-            typeof queryRecord?.cursor === "string"
-              ? queryRecord.cursor
-              : undefined;
+          let cursor = typeof queryRecord?.cursor === "string" ? queryRecord.cursor : undefined;
           const seenCursors = new Set<string>();
           if (cursor !== undefined) seenCursors.add(cursor);
           observedCursor = cursor !== undefined;
@@ -972,15 +837,9 @@ function makePrismaClient(): Effect.Effect<
 
           while (true) {
             if (observedPages >= MAX_PAGINATION_PAGES) {
-              return yield* protocolError(
-                `exceeded the ${MAX_PAGINATION_PAGES} page safety limit`,
-              );
+              return yield* protocolError(`exceeded the ${MAX_PAGINATION_PAGES} page safety limit`);
             }
-            const page = yield* list<T>(
-              path,
-              { ...query, cursor },
-              accountForBody,
-            );
+            const page = yield* list<T>(path, { ...query, cursor }, accountForBody);
             observedPages += 1;
 
             if (
@@ -991,14 +850,10 @@ function makePrismaClient(): Effect.Effect<
               typeof page.pagination !== "object" ||
               typeof page.pagination.hasMore !== "boolean"
             ) {
-              return yield* protocolError(
-                "expected data[] and pagination.hasMore",
-              );
+              return yield* protocolError("expected data[] and pagination.hasMore");
             }
             if (page.data.length > MAX_PAGINATION_ITEMS - items.length) {
-              return yield* protocolError(
-                `exceeded the ${MAX_PAGINATION_ITEMS} item safety limit`,
-              );
+              return yield* protocolError(`exceeded the ${MAX_PAGINATION_ITEMS} item safety limit`);
             }
             items.push(...page.data);
             observedItems = items.length;
@@ -1006,9 +861,7 @@ function makePrismaClient(): Effect.Effect<
             if (!page.pagination.hasMore) return items;
             const nextCursor = page.pagination.nextCursor;
             if (typeof nextCursor !== "string" || nextCursor.length === 0) {
-              return yield* protocolError(
-                "hasMore was true without a non-empty nextCursor",
-              );
+              return yield* protocolError("hasMore was true without a non-empty nextCursor");
             }
             if (seenCursors.has(nextCursor)) {
               return yield* protocolError("nextCursor repeated");
@@ -1035,18 +888,14 @@ function makePrismaClient(): Effect.Effect<
 
     const service = {
       listWorkspaces: (query) => paginate<Workspace>("/v1/workspaces", query),
-      getWorkspace: (id) =>
-        data<Workspace>("GET", `/v1/workspaces/${pathSegment(id)}`),
+      getWorkspace: (id) => data<Workspace>("GET", `/v1/workspaces/${pathSegment(id)}`),
       getCurrentPrincipal: () => data<CurrentPrincipal>("GET", "/v1/me"),
       listRegions: (query) => data<Region[]>("GET", "/v1/regions", { query }),
-      listPostgresRegions: () =>
-        data<PostgresRegion[]>("GET", "/v1/regions/postgres"),
-      listAccelerateRegions: () =>
-        data<AccelerateRegion[]>("GET", "/v1/regions/accelerate"),
+      listPostgresRegions: () => data<PostgresRegion[]>("GET", "/v1/regions/postgres"),
+      listAccelerateRegions: () => data<AccelerateRegion[]>("GET", "/v1/regions/accelerate"),
 
       listProjects: (query) => paginate<Project>("/v1/projects", query),
-      getProject: (id) =>
-        data<Project>("GET", `/v1/projects/${pathSegment(id)}`),
+      getProject: (id) => data<Project>("GET", `/v1/projects/${pathSegment(id)}`),
       createProject: (input) =>
         data<ProjectCreateResult>("POST", "/v1/projects", {
           body: input,
@@ -1067,12 +916,8 @@ function makePrismaClient(): Effect.Effect<
 
       listDatabases: (query) => paginate<Database>("/v1/databases", query),
       listProjectDatabases: (projectId, query) =>
-        paginate<Database>(
-          `/v1/projects/${pathSegment(projectId)}/databases`,
-          query,
-        ),
-      getDatabase: (id) =>
-        data<Database>("GET", `/v1/databases/${pathSegment(id)}`),
+        paginate<Database>(`/v1/projects/${pathSegment(projectId)}/databases`, query),
+      getDatabase: (id) => data<Database>("GET", `/v1/databases/${pathSegment(id)}`),
       createDatabase: (input) =>
         data<DatabaseCreateResult>("POST", "/v1/databases", {
           body: input,
@@ -1093,33 +938,21 @@ function makePrismaClient(): Effect.Effect<
           timeout: PROVISIONING_REQUEST_TIMEOUT,
         }),
       listBackups: (databaseId, query) =>
-        request<BackupListResponse>(
-          "GET",
-          `/v1/databases/${pathSegment(databaseId)}/backups`,
-          { query },
-        ),
-      restoreDatabase: (targetDatabaseId, input) =>
-        data<RestoredDatabase>(
-          "POST",
-          `/v1/databases/${pathSegment(targetDatabaseId)}/restore`,
-          { body: input, timeout: PROVISIONING_REQUEST_TIMEOUT },
-        ),
-      getDatabaseUsage: (databaseId, query) =>
-        request<DatabaseUsage>(
-          "GET",
-          `/v1/databases/${pathSegment(databaseId)}/usage`,
-          { query },
-        ),
-
-      listConnections: (query) =>
-        paginate<DatabaseConnection>("/v1/connections", query),
-      listDatabaseConnections: (databaseId, query) =>
-        paginate<DatabaseConnection>(
-          `/v1/databases/${pathSegment(databaseId)}/connections`,
+        request<BackupListResponse>("GET", `/v1/databases/${pathSegment(databaseId)}/backups`, {
           query,
-        ),
-      getConnection: (id) =>
-        data<DatabaseConnection>("GET", `/v1/connections/${pathSegment(id)}`),
+        }),
+      restoreDatabase: (targetDatabaseId, input) =>
+        data<RestoredDatabase>("POST", `/v1/databases/${pathSegment(targetDatabaseId)}/restore`, {
+          body: input,
+          timeout: PROVISIONING_REQUEST_TIMEOUT,
+        }),
+      getDatabaseUsage: (databaseId, query) =>
+        request<DatabaseUsage>("GET", `/v1/databases/${pathSegment(databaseId)}/usage`, { query }),
+
+      listConnections: (query) => paginate<DatabaseConnection>("/v1/connections", query),
+      listDatabaseConnections: (databaseId, query) =>
+        paginate<DatabaseConnection>(`/v1/databases/${pathSegment(databaseId)}/connections`, query),
+      getConnection: (id) => data<DatabaseConnection>("GET", `/v1/connections/${pathSegment(id)}`),
       createConnection: (input) =>
         data<DatabaseConnectionWithSecrets>("POST", "/v1/connections", {
           body: input,
@@ -1130,61 +963,39 @@ function makePrismaClient(): Effect.Effect<
           `/v1/databases/${pathSegment(databaseId)}/connections`,
           { body: input },
         ),
-      deleteConnection: (id) =>
-        request<void>("DELETE", `/v1/connections/${pathSegment(id)}`),
+      deleteConnection: (id) => request<void>("DELETE", `/v1/connections/${pathSegment(id)}`),
       rotateConnection: (id) =>
-        data<DatabaseConnectionWithSecrets>(
-          "POST",
-          `/v1/connections/${pathSegment(id)}/rotate`,
-        ),
+        data<DatabaseConnectionWithSecrets>("POST", `/v1/connections/${pathSegment(id)}/rotate`),
 
       listBranches: (projectId, query) =>
-        paginate<Branch>(
-          `/v1/projects/${pathSegment(projectId)}/branches`,
-          query,
-        ),
+        paginate<Branch>(`/v1/projects/${pathSegment(projectId)}/branches`, query),
       getBranch: (id) => data<Branch>("GET", `/v1/branches/${pathSegment(id)}`),
       createBranch: (projectId, input) =>
-        data<Branch>(
-          "POST",
-          `/v1/projects/${pathSegment(projectId)}/branches`,
-          {
-            body: input,
-          },
-        ),
+        data<Branch>("POST", `/v1/projects/${pathSegment(projectId)}/branches`, {
+          body: input,
+        }),
       updateBranch: (id, input) =>
         data<Branch>("PATCH", `/v1/branches/${pathSegment(id)}`, {
           body: input,
         }),
-      deleteBranch: (id) =>
-        request<void>("DELETE", `/v1/branches/${pathSegment(id)}`),
+      deleteBranch: (id) => request<void>("DELETE", `/v1/branches/${pathSegment(id)}`),
 
       listBuckets: (query) => paginate<Bucket>("/v1/buckets", query),
       getBucket: (id) => data<Bucket>("GET", `/v1/buckets/${pathSegment(id)}`),
-      createBucket: (input) =>
-        data<Bucket>("POST", "/v1/buckets", { body: input }),
-      deleteBucket: (id) =>
-        request<void>("DELETE", `/v1/buckets/${pathSegment(id)}`),
+      createBucket: (input) => data<Bucket>("POST", "/v1/buckets", { body: input }),
+      deleteBucket: (id) => request<void>("DELETE", `/v1/buckets/${pathSegment(id)}`),
       listBucketKeys: (bucketId, query) =>
         paginate<BucketKey>(`/v1/buckets/${pathSegment(bucketId)}/keys`, query),
       createBucketKey: (bucketId, input) =>
-        data<BucketKeyWithSecret>(
-          "POST",
-          `/v1/buckets/${pathSegment(bucketId)}/keys`,
-          { body: input },
-        ),
+        data<BucketKeyWithSecret>("POST", `/v1/buckets/${pathSegment(bucketId)}/keys`, {
+          body: input,
+        }),
       deleteBucketKey: (bucketId, keyId) =>
-        request<void>(
-          "DELETE",
-          `/v1/buckets/${pathSegment(bucketId)}/keys/${pathSegment(keyId)}`,
-        ),
+        request<void>("DELETE", `/v1/buckets/${pathSegment(bucketId)}/keys/${pathSegment(keyId)}`),
 
-      getCustomDomain: (id) =>
-        data<CustomDomain>("GET", `/v1/domains/${pathSegment(id)}`),
-      deleteCustomDomain: (id) =>
-        request<void>("DELETE", `/v1/domains/${pathSegment(id)}`),
-      retryCustomDomain: (id) =>
-        data<CustomDomain>("POST", `/v1/domains/${pathSegment(id)}/retry`),
+      getCustomDomain: (id) => data<CustomDomain>("GET", `/v1/domains/${pathSegment(id)}`),
+      deleteCustomDomain: (id) => request<void>("DELETE", `/v1/domains/${pathSegment(id)}`),
+      retryCustomDomain: (id) => data<CustomDomain>("POST", `/v1/domains/${pathSegment(id)}/retry`),
 
       listApps: (query) => paginate<App>("/v1/apps", query),
       getApp: (id) => data<App>("GET", `/v1/apps/${pathSegment(id)}`),
@@ -1193,8 +1004,7 @@ function makePrismaClient(): Effect.Effect<
           body: input,
           timeout: PROVISIONING_REQUEST_TIMEOUT,
         }),
-      updateApp: (id, input) =>
-        data<App>("PATCH", `/v1/apps/${pathSegment(id)}`, { body: input }),
+      updateApp: (id, input) => data<App>("PATCH", `/v1/apps/${pathSegment(id)}`, { body: input }),
       deleteApp: (id) =>
         request<void>("DELETE", `/v1/apps/${pathSegment(id)}`, {
           timeout: PROVISIONING_REQUEST_TIMEOUT,
@@ -1204,16 +1014,11 @@ function makePrismaClient(): Effect.Effect<
           body: target,
         }),
       rollbackApp: (id, target) =>
-        data<RollbackAppResult>(
-          "POST",
-          `/v1/apps/${pathSegment(id)}/rollback`,
-          {
-            body: target,
-            timeout: ROLLBACK_REQUEST_TIMEOUT,
-          },
-        ),
-      listAppDomains: (appId) =>
-        paginate<CustomDomain>(`/v1/apps/${pathSegment(appId)}/domains`),
+        data<RollbackAppResult>("POST", `/v1/apps/${pathSegment(id)}/rollback`, {
+          body: target,
+          timeout: ROLLBACK_REQUEST_TIMEOUT,
+        }),
+      listAppDomains: (appId) => paginate<CustomDomain>(`/v1/apps/${pathSegment(appId)}/domains`),
       createAppDomain: (appId, input) => {
         const path = `/v1/apps/${pathSegment(appId)}/domains`;
         return dataWithStatus<CustomDomain>("POST", path, {
@@ -1234,38 +1039,24 @@ function makePrismaClient(): Effect.Effect<
         );
       },
       listAppDeployments: (appId, query) =>
-        paginate<DeploymentListItem>(
-          `/v1/apps/${pathSegment(appId)}/deployments`,
-          query,
-        ),
+        paginate<DeploymentListItem>(`/v1/apps/${pathSegment(appId)}/deployments`, query),
       createAppDeployment: (appId, input) =>
         data<DeploymentCreateResult>(
           "POST",
           `/v1/apps/${pathSegment(appId)}/deployments`,
           input === undefined ? undefined : { body: input },
         ),
-      getDeployment: (id) =>
-        data<Deployment>("GET", `/v1/deployments/${pathSegment(id)}`),
-      deleteDeployment: (id) =>
-        request<void>("DELETE", `/v1/deployments/${pathSegment(id)}`),
+      getDeployment: (id) => data<Deployment>("GET", `/v1/deployments/${pathSegment(id)}`),
+      deleteDeployment: (id) => request<void>("DELETE", `/v1/deployments/${pathSegment(id)}`),
       startDeployment: (id) =>
-        data<StartDeploymentResult>(
-          "POST",
-          `/v1/deployments/${pathSegment(id)}/start`,
-        ),
-      stopDeployment: (id) =>
-        request<void>("POST", `/v1/deployments/${pathSegment(id)}/stop`),
+        data<StartDeploymentResult>("POST", `/v1/deployments/${pathSegment(id)}/start`),
+      stopDeployment: (id) => request<void>("POST", `/v1/deployments/${pathSegment(id)}/stop`),
       getDeploymentLogsRequest: (id, query) =>
-        buildWebSocketUrl(
-          `/v1/deployments/${pathSegment(id)}/logs`,
-          logsQuery(query),
-        ).pipe(
+        buildWebSocketUrl(`/v1/deployments/${pathSegment(id)}/logs`, logsQuery(query)).pipe(
           Effect.map((url): DeploymentLogsRequest => ({
             url,
             headers: {
-              Authorization: Redacted.make(
-                `Bearer ${Redacted.value(env.serviceToken)}`,
-              ),
+              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
             },
           })),
         ),
@@ -1274,9 +1065,7 @@ function makePrismaClient(): Effect.Effect<
           Effect.map((url): BuildLogsRequest => ({
             url,
             headers: {
-              Authorization: Redacted.make(
-                `Bearer ${Redacted.value(env.serviceToken)}`,
-              ),
+              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
               Accept: "application/x-ndjson",
             },
           })),
@@ -1285,50 +1074,34 @@ function makePrismaClient(): Effect.Effect<
       listEnvironmentVariables: (query) =>
         paginate<EnvironmentVariable>("/v1/environment-variables", query),
       getEnvironmentVariable: (id) =>
-        data<EnvironmentVariable>(
-          "GET",
-          `/v1/environment-variables/${pathSegment(id)}`,
-        ),
+        data<EnvironmentVariable>("GET", `/v1/environment-variables/${pathSegment(id)}`),
       createEnvironmentVariable: (input) =>
         data<EnvironmentVariable>("POST", "/v1/environment-variables", {
           body: input,
         }),
       updateEnvironmentVariable: (id, input) =>
-        data<EnvironmentVariable>(
-          "PATCH",
-          `/v1/environment-variables/${pathSegment(id)}`,
-          { body: input },
-        ),
+        data<EnvironmentVariable>("PATCH", `/v1/environment-variables/${pathSegment(id)}`, {
+          body: input,
+        }),
       deleteEnvironmentVariable: (id) =>
         request<void>("DELETE", `/v1/environment-variables/${pathSegment(id)}`),
 
-      listIntegrations: (query) =>
-        paginate<Integration>("/v1/integrations", query),
+      listIntegrations: (query) => paginate<Integration>("/v1/integrations", query),
       listWorkspaceIntegrations: (workspaceId, query) =>
-        paginate<Integration>(
-          `/v1/workspaces/${pathSegment(workspaceId)}/integrations`,
-          query,
-        ),
-      getIntegration: (id) =>
-        data<Integration>("GET", `/v1/integrations/${pathSegment(id)}`),
-      deleteIntegration: (id) =>
-        request<void>("DELETE", `/v1/integrations/${pathSegment(id)}`),
+        paginate<Integration>(`/v1/workspaces/${pathSegment(workspaceId)}/integrations`, query),
+      getIntegration: (id) => data<Integration>("GET", `/v1/integrations/${pathSegment(id)}`),
+      deleteIntegration: (id) => request<void>("DELETE", `/v1/integrations/${pathSegment(id)}`),
       revokeWorkspaceIntegration: (workspaceId, clientId) =>
         request<void>(
           "DELETE",
           `/v1/workspaces/${pathSegment(workspaceId)}/integrations/${pathSegment(clientId)}`,
         ),
 
-      listScmInstallations: (query) =>
-        paginate<ScmInstallation>("/v1/scm-installations", query),
+      listScmInstallations: (query) => paginate<ScmInstallation>("/v1/scm-installations", query),
       createScmInstallIntent: (input) =>
-        data<ScmInstallIntent>(
-          "POST",
-          "/v1/scm-installations/install-intents",
-          {
-            body: input,
-          },
-        ),
+        data<ScmInstallIntent>("POST", "/v1/scm-installations/install-intents", {
+          body: input,
+        }),
       listScmInstallationRepositories: (installationId, query) =>
         paginate<ScmRepository>(
           `/v1/scm-installations/${pathSegment(installationId)}/repositories`,
@@ -1338,10 +1111,7 @@ function makePrismaClient(): Effect.Effect<
       listSourceRepositories: (query) =>
         paginate<SourceRepository>("/v1/source-repositories", query),
       getSourceRepository: (id) =>
-        data<SourceRepository>(
-          "GET",
-          `/v1/source-repositories/${pathSegment(id)}`,
-        ),
+        data<SourceRepository>("GET", `/v1/source-repositories/${pathSegment(id)}`),
       createSourceRepository: (input) =>
         data<SourceRepository>("POST", "/v1/source-repositories", {
           body: input,
@@ -1367,9 +1137,7 @@ const parseErrorCode = (body: string): string | undefined => {
         ? (json.error as { code?: unknown }).code
         : undefined;
     const code = json.code ?? nested;
-    return typeof code === "string" && SAFE_ERROR_CODE.test(code)
-      ? code
-      : undefined;
+    return typeof code === "string" && SAFE_ERROR_CODE.test(code) ? code : undefined;
   } catch {
     return undefined;
   }
@@ -1377,9 +1145,7 @@ const parseErrorCode = (body: string): string | undefined => {
 
 const formatErrorMessage = (status: number, body: string): string => {
   const code = parseErrorCode(body);
-  return code === undefined
-    ? `HTTP ${status}`
-    : `Prisma Management API request failed (${code})`;
+  return code === undefined ? `HTTP ${status}` : `Prisma Management API request failed (${code})`;
 };
 
 export const PrismaClientLive = Layer.effect(PrismaClient, makePrismaClient());

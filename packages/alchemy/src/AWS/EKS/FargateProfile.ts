@@ -106,43 +106,27 @@ export interface FargateProfile extends Resource<
  *
  * @resource
  */
-export const FargateProfile = Resource<FargateProfile>(
-  "AWS.EKS.FargateProfile",
-);
+export const FargateProfile = Resource<FargateProfile>("AWS.EKS.FargateProfile");
 
-class FargateProfileNotReady extends Data.TaggedError(
-  "EKS.FargateProfileNotReady",
-)<{
+class FargateProfileNotReady extends Data.TaggedError("EKS.FargateProfileNotReady")<{
   status: eks.FargateProfileStatus | undefined;
 }> {}
 
-class FargateProfileStillExists extends Data.TaggedError(
-  "EKS.FargateProfileStillExists",
-)<{}> {}
+class FargateProfileStillExists extends Data.TaggedError("EKS.FargateProfileStillExists")<{}> {}
 
-class FargateProfileBusy extends Data.TaggedError(
-  "EKS.FargateProfileBusy",
-)<{}> {}
+class FargateProfileBusy extends Data.TaggedError("EKS.FargateProfileBusy")<{}> {}
 
 const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 // ~10 min at 5s spacing — Fargate profile transitions complete in 1–2 min.
-const waitSchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(120),
-]);
+const waitSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(120)]);
 
 // One profile per cluster may be creating/deleting at a time; back off on the
 // ResourceInUseException that peer operations raise (bounded).
-const busySchedule = Schedule.max([
-  Schedule.spaced("10 seconds"),
-  Schedule.recurs(30),
-]);
+const busySchedule = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(30)]);
 
 const mapFargateProfile = (
   profile: eks.FargateProfile,
@@ -162,10 +146,7 @@ export const FargateProfileProvider = () =>
   Provider.effect(
     FargateProfile,
     Effect.gen(function* () {
-      const toProfileName = (
-        id: string,
-        props: { fargateProfileName?: string } = {},
-      ) =>
+      const toProfileName = (id: string, props: { fargateProfileName?: string } = {}) =>
         props.fargateProfileName
           ? Effect.succeed(props.fargateProfileName)
           : createPhysicalName({ id, maxLength: 63 });
@@ -186,11 +167,7 @@ export const FargateProfileProvider = () =>
       }) {
         const described = yield* eks
           .describeFargateProfile({ clusterName, fargateProfileName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const profile = described?.fargateProfile;
         if (
           !profile?.fargateProfileArn ||
@@ -203,33 +180,21 @@ export const FargateProfileProvider = () =>
         return mapFargateProfile(profile, normalizeTags(profile.tags));
       });
 
-      const waitForProfileActive = (
-        clusterName: string,
-        fargateProfileName: string,
-      ) =>
+      const waitForProfileActive = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
           Effect.flatMap((state) => {
             if (!state) {
-              return Effect.fail(
-                new FargateProfileNotReady({ status: undefined }),
-              );
+              return Effect.fail(new FargateProfileNotReady({ status: undefined }));
             }
             if (state.status === "ACTIVE") {
               return Effect.succeed(state);
             }
-            if (
-              state.status === "CREATE_FAILED" ||
-              state.status === "DELETE_FAILED"
-            ) {
+            if (state.status === "CREATE_FAILED" || state.status === "DELETE_FAILED") {
               return Effect.fail(
-                new Error(
-                  `EKS Fargate profile '${fargateProfileName}' entered ${state.status}`,
-                ),
+                new Error(`EKS Fargate profile '${fargateProfileName}' entered ${state.status}`),
               );
             }
-            return Effect.fail(
-              new FargateProfileNotReady({ status: state.status }),
-            );
+            return Effect.fail(new FargateProfileNotReady({ status: state.status }));
           }),
           Effect.retry({
             while: (error) => error instanceof FargateProfileNotReady,
@@ -237,15 +202,10 @@ export const FargateProfileProvider = () =>
           }),
         );
 
-      const waitForProfileDeleted = (
-        clusterName: string,
-        fargateProfileName: string,
-      ) =>
+      const waitForProfileDeleted = (clusterName: string, fargateProfileName: string) =>
         readProfile({ clusterName, fargateProfileName }).pipe(
           Effect.flatMap((state) =>
-            state
-              ? Effect.fail(new FargateProfileStillExists())
-              : Effect.succeed(undefined),
+            state ? Effect.fail(new FargateProfileStillExists()) : Effect.succeed(undefined),
           ),
           Effect.retry({
             while: (error) => error instanceof FargateProfileStillExists,
@@ -263,9 +223,7 @@ export const FargateProfileProvider = () =>
           Effect.gen(function* () {
             const clusterNames = yield* eks.listClusters.pages({}).pipe(
               Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.clusters ?? []),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.clusters ?? [])),
             );
 
             const perCluster = yield* Effect.forEach(
@@ -274,15 +232,12 @@ export const FargateProfileProvider = () =>
                 eks.listFargateProfiles.pages({ clusterName }).pipe(
                   Stream.runCollect,
                   Effect.map((chunk) =>
-                    Array.from(chunk).flatMap(
-                      (page) => page.fargateProfileNames ?? [],
-                    ),
+                    Array.from(chunk).flatMap((page) => page.fargateProfileNames ?? []),
                   ),
                   Effect.flatMap((names) =>
                     Effect.forEach(
                       names,
-                      (fargateProfileName) =>
-                        readProfile({ clusterName, fargateProfileName }),
+                      (fargateProfileName) => readProfile({ clusterName, fargateProfileName }),
                       { concurrency: 5 },
                     ),
                   ),
@@ -292,21 +247,11 @@ export const FargateProfileProvider = () =>
 
             return perCluster
               .flat()
-              .filter(
-                (state): state is FargateProfile["Attributes"] =>
-                  state !== undefined,
-              );
+              .filter((state): state is FargateProfile["Attributes"] => state !== undefined);
           }),
-        diff: Effect.fn(function* ({
-          id,
-          olds = {} as FargateProfileProps,
-          news,
-        }) {
+        diff: Effect.fn(function* ({ id, olds = {} as FargateProfileProps, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toProfileName(id, olds)) !==
-            (yield* toProfileName(id, news ?? {}))
-          ) {
+          if ((yield* toProfileName(id, olds)) !== (yield* toProfileName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (olds.clusterName !== news.clusterName) {
@@ -315,33 +260,25 @@ export const FargateProfileProvider = () =>
           if (olds.podExecutionRoleArn !== news.podExecutionRoleArn) {
             return { action: "replace" } as const;
           }
-          if (
-            JSON.stringify(olds.subnets ?? []) !==
-            JSON.stringify(news.subnets ?? [])
-          ) {
+          if (JSON.stringify(olds.subnets ?? []) !== JSON.stringify(news.subnets ?? [])) {
             return { action: "replace" } as const;
           }
-          if (
-            JSON.stringify(olds.selectors ?? []) !==
-            JSON.stringify(news.selectors ?? [])
-          ) {
+          if (JSON.stringify(olds.selectors ?? []) !== JSON.stringify(news.selectors ?? [])) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const clusterName = (output?.clusterName ??
-            (olds?.clusterName as string | undefined)) as string | undefined;
+          const clusterName = (output?.clusterName ?? (olds?.clusterName as string | undefined)) as
+            | string
+            | undefined;
           if (!clusterName) return undefined;
           const fargateProfileName =
-            output?.fargateProfileName ??
-            (yield* toProfileName(id, olds ?? {}));
+            output?.fargateProfileName ?? (yield* toProfileName(id, olds ?? {}));
           const state = yield* readProfile({ clusterName, fargateProfileName });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const clusterName = news.clusterName as string;
           const fargateProfileName = yield* toProfileName(id, news);
           const desiredTags = {
@@ -380,13 +317,8 @@ export const FargateProfileProvider = () =>
                 ),
               );
 
-            yield* session.note(
-              `Creating EKS Fargate profile ${fargateProfileName}...`,
-            );
-            state = yield* waitForProfileActive(
-              clusterName,
-              fargateProfileName,
-            );
+            yield* session.note(`Creating EKS Fargate profile ${fargateProfileName}...`);
+            state = yield* waitForProfileActive(clusterName, fargateProfileName);
           }
 
           // Sync tags — the only mutable aspect. Diff observed cloud tags
@@ -395,9 +327,7 @@ export const FargateProfileProvider = () =>
           if (upsert.length > 0) {
             yield* eks.tagResource({
               resourceArn: state.fargateProfileArn,
-              tags: Object.fromEntries(
-                upsert.map((tag) => [tag.Key, tag.Value] as const),
-              ),
+              tags: Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value] as const)),
             });
           }
           if (removed.length > 0) {
@@ -441,10 +371,7 @@ export const FargateProfileProvider = () =>
                 () => Effect.void,
               ),
             );
-          yield* waitForProfileDeleted(
-            output.clusterName,
-            output.fargateProfileName,
-          );
+          yield* waitForProfileDeleted(output.clusterName, output.fargateProfileName);
         }),
       };
     }),

@@ -97,11 +97,7 @@ export const DiscovererProvider = () =>
       const describe = (discovererId: string) =>
         schemas
           .describeDiscoverer({ DiscovererId: discovererId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       const toAttrs = (d: {
         DiscovererId?: string;
@@ -125,10 +121,7 @@ export const DiscovererProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.Discoverers ?? [])
                   .filter(
-                    (d) =>
-                      d.DiscovererId != null &&
-                      d.DiscovererArn != null &&
-                      d.SourceArn != null,
+                    (d) => d.DiscovererId != null && d.DiscovererArn != null && d.SourceArn != null,
                   )
                   .map(toAttrs),
               ),
@@ -140,9 +133,7 @@ export const DiscovererProvider = () =>
             const found = yield* describe(output.discovererId);
             if (!found) return undefined;
             const attrs = toAttrs(found);
-            return (yield* hasAlchemyTags(id, found.Tags))
-              ? attrs
-              : Unowned(attrs);
+            return (yield* hasAlchemyTags(id, found.Tags)) ? attrs : Unowned(attrs);
           }
           // No cached id (the discoverer id is auto-assigned) — recover by
           // scanning for a discoverer branded with our ownership tags.

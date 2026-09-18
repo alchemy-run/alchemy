@@ -37,10 +37,7 @@ export interface GetRevocationStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: signer.GetRevocationStatusRequest,
-    ) => Effect.Effect<
-      signer.GetRevocationStatusResponse,
-      signer.GetRevocationStatusError
-    >
+    ) => Effect.Effect<signer.GetRevocationStatusResponse, signer.GetRevocationStatusError>
   >
 > {}
 export const GetRevocationStatus = Binding.Service<GetRevocationStatus>(

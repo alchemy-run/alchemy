@@ -29,10 +29,7 @@ export interface ContinueDeployment extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.ContinueDeploymentInput,
-    ) => Effect.Effect<
-      SVC.ContinueDeploymentResponse,
-      SVC.ContinueDeploymentError
-    >
+    ) => Effect.Effect<SVC.ContinueDeploymentResponse, SVC.ContinueDeploymentError>
   >
 > {}
 export const ContinueDeployment = Binding.Service<ContinueDeployment>(

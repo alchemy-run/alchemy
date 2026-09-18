@@ -264,9 +264,7 @@ export const IssueProvider = () =>
         (data.body ?? "") !== body ||
         data.state !== state ||
         !sameNames(
-          data.labels.map((label) =>
-            typeof label === "string" ? label : (label.name ?? ""),
-          ),
+          data.labels.map((label) => (typeof label === "string" ? label : (label.name ?? ""))),
           labels,
         ) ||
         !sameNames(
@@ -319,15 +317,12 @@ export const IssueProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const issues = await octokit.paginate(
-                  octokit.rest.issues.listForRepo,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    state: "all",
-                    per_page: 100,
-                  },
-                );
+                const issues = await octokit.paginate(octokit.rest.issues.listForRepo, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  state: "all",
+                  per_page: 100,
+                });
                 // Filter out pull requests (they appear in issues API)
                 return issues
                   .filter((issue) => !issue.pull_request)

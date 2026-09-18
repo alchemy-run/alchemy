@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import CodeDeployTestFunctionLive, { CodeDeployTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "CodeDeployBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -57,12 +49,11 @@ const getJson = (url: string) =>
   send(HttpClientRequest.get(url)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
-const post = (url: string) =>
-  send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
+const post = (url: string) => send(HttpClientRequest.post(url)).pipe(Effect.flatMap((r) => r.json));
 
 /**
  * A route answered with a typed error tag. The tag being present proves the
@@ -100,9 +91,7 @@ describe.sequential("CodeDeploy Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/deployment/list`;
 
-      yield* Effect.logInfo(
-        `CodeDeploy test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`CodeDeploy test setup: probing readiness at ${readinessUrl}`);
       // Ready = the function answers 200 AND the freshly attached codedeploy
       // policy has propagated (an AccessDeniedException errorTag means IAM
       // is still converging — keep probing).
@@ -128,16 +117,14 @@ describe.sequential("CodeDeploy Bindings", () => {
   });
 
   describe("CreateDeployment", () => {
-    test.provider(
-      "answers the typed RevisionRequiredException without a revision",
-      (_stack) =>
-        Effect.gen(function* () {
-          // No revision — CodeDeploy rejects with the TYPED
-          // RevisionRequiredException, which proves the name injection,
-          // the binding wiring, and the IAM grant all work.
-          const body = (yield* post(`${baseUrl}/deployment/create`)) as any;
-          expect(body.errorTag).toBe("RevisionRequiredException");
-        }),
+    test.provider("answers the typed RevisionRequiredException without a revision", (_stack) =>
+      Effect.gen(function* () {
+        // No revision — CodeDeploy rejects with the TYPED
+        // RevisionRequiredException, which proves the name injection,
+        // the binding wiring, and the IAM grant all work.
+        const body = (yield* post(`${baseUrl}/deployment/create`)) as any;
+        expect(body.errorTag).toBe("RevisionRequiredException");
+      }),
     );
   });
 
@@ -148,9 +135,7 @@ describe.sequential("CodeDeploy Bindings", () => {
         expect(listed.errorTag).toBeUndefined();
         expect(listed.deployments).toEqual([]);
 
-        const got = (yield* getJson(
-          `${baseUrl}/deployment/get?id=${FAKE_DEPLOYMENT_ID}`,
-        )) as any;
+        const got = (yield* getJson(`${baseUrl}/deployment/get?id=${FAKE_DEPLOYMENT_ID}`)) as any;
         expectTypedNonAuthz(got);
 
         const batch = (yield* getJson(
@@ -205,28 +190,22 @@ describe.sequential("CodeDeploy Bindings", () => {
   });
 
   describe("Revisions", () => {
-    test.provider(
-      "register + get + list + batch-get against the bound application",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Registering an S3 revision records metadata only — the bundle
-          // is not fetched until deployment, so this succeeds.
-          const registered = (yield* post(
-            `${baseUrl}/revision/register`,
-          )) as any;
-          expectAuthorized(registered);
+    test.provider("register + get + list + batch-get against the bound application", (_stack) =>
+      Effect.gen(function* () {
+        // Registering an S3 revision records metadata only — the bundle
+        // is not fetched until deployment, so this succeeds.
+        const registered = (yield* post(`${baseUrl}/revision/register`)) as any;
+        expectAuthorized(registered);
 
-          const got = (yield* getJson(`${baseUrl}/revision/get`)) as any;
-          expectAuthorized(got);
+        const got = (yield* getJson(`${baseUrl}/revision/get`)) as any;
+        expectAuthorized(got);
 
-          const listed = (yield* getJson(`${baseUrl}/revision/list`)) as any;
-          expect(listed.errorTag).toBeUndefined();
+        const listed = (yield* getJson(`${baseUrl}/revision/list`)) as any;
+        expect(listed.errorTag).toBeUndefined();
 
-          const batch = (yield* getJson(
-            `${baseUrl}/revision/batch-get`,
-          )) as any;
-          expectAuthorized(batch);
-        }),
+        const batch = (yield* getJson(`${baseUrl}/revision/batch-get`)) as any;
+        expectAuthorized(batch);
+      }),
     );
   });
 });

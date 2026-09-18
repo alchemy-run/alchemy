@@ -1,9 +1,9 @@
-import { fromDurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
-import { fromDurableObjectStorage } from "@/Cloudflare/Workers/DurableObjectStorage.ts";
-import { RuntimeContext } from "@/RuntimeContext.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { fromDurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
+import { fromDurableObjectStorage } from "@/Cloudflare/Workers/DurableObjectStorage.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 
 /**
  * `waitUntil` captures the caller's context and provides it to the Effect it
@@ -12,9 +12,7 @@ import * as Effect from "effect/Effect";
  * provided to the calling fiber (a request-scoped deadline, a tracer, an alarm
  * floor) must reach those closures the same way.
  */
-class Marker extends Context.Service<Marker, { readonly value: string }>()(
-  "test/Marker",
-) {}
+class Marker extends Context.Service<Marker, { readonly value: string }>()("test/Marker") {}
 
 const readMarker = Effect.map(Marker, (marker) => marker.value);
 

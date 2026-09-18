@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,8 +5,12 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import EffectfulStack from "./fixtures/microvm/stack.ts";
+import * as AWS from "@/AWS";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import ExternalStack from "./fixtures/microvm/external/stack.ts";
+import EffectfulStack from "./fixtures/microvm/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   // The effectful stack deploys an AWS Lambda AND a Cloudflare Worker driving
@@ -19,10 +19,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // MicroVM image builds run server-side (Firecracker snapshot) and can take
 // several minutes, so give deploy/destroy plenty of room.
@@ -46,9 +43,7 @@ const send = (req: HttpClientRequest.HttpClientRequest) =>
     const client = yield* HttpClient.HttpClient;
     return yield* client.execute(req).pipe(
       Effect.flatMap((r) =>
-        r.status === 200
-          ? Effect.succeed(r)
-          : Effect.fail(new Error(`not ready: ${r.status}`)),
+        r.status === 200 ? Effect.succeed(r) : Effect.fail(new Error(`not ready: ${r.status}`)),
       ),
       Effect.timeout("30 seconds"),
       Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),

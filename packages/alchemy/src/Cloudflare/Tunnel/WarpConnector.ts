@@ -4,7 +4,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -179,9 +178,7 @@ export const WarpConnectorProvider = () =>
       const name = yield* resolveName(id, news.name);
 
       // 1. Observe — the cached id is a hint, not a guarantee.
-      let observed = output?.tunnelId
-        ? yield* getConnector(accountId, output.tunnelId)
-        : undefined;
+      let observed = output?.tunnelId ? yield* getConnector(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
@@ -242,9 +239,7 @@ interface ObservedConnector {
  */
 const getConnector = (accountId: string, tunnelId: string) =>
   zeroTrust.getTunnelWarpConnector({ accountId, tunnelId }).pipe(
-    Effect.map((t): ObservedConnector | undefined =>
-      t.deletedAt ? undefined : t,
-    ),
+    Effect.map((t): ObservedConnector | undefined => (t.deletedAt ? undefined : t)),
     Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
   );
 
@@ -253,16 +248,14 @@ const getConnector = (accountId: string, tunnelId: string) =>
  * unique per account so at most one live tunnel can match.
  */
 const findByName = (accountId: string, name: string) =>
-  zeroTrust.listTunnelWarpConnectors
-    .items({ accountId, name, isDeleted: false })
-    .pipe(
-      Stream.filter(
-        (t): t is ObservedConnector & { id: string } =>
-          t.name === name && !t.deletedAt && typeof t.id === "string",
-      ),
-      Stream.runHead,
-      Effect.map(Option.getOrUndefined),
-    );
+  zeroTrust.listTunnelWarpConnectors.items({ accountId, name, isDeleted: false }).pipe(
+    Stream.filter(
+      (t): t is ObservedConnector & { id: string } =>
+        t.name === name && !t.deletedAt && typeof t.id === "string",
+    ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 
 const resolveName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -270,10 +263,7 @@ const resolveName = (id: string, name: string | undefined) =>
     return yield* createPhysicalName({ id, lowercase: true });
   });
 
-const toAttributes = Effect.fn(function* (
-  tunnel: ObservedConnector,
-  accountId: string,
-) {
+const toAttributes = Effect.fn(function* (tunnel: ObservedConnector, accountId: string) {
   const token = yield* zeroTrust.getTunnelWarpConnectorToken({
     accountId,
     tunnelId: tunnel.id!,

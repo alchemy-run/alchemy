@@ -1,5 +1,3 @@
-import * as CloudControl from "@/AWS/CloudControl";
-import * as Lambda from "@/AWS/Lambda";
 import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,6 +7,8 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CloudControl from "@/AWS/CloudControl";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -19,12 +19,8 @@ const SSM_PARAMETER = "AWS::SSM::Parameter";
 export const FIXTURE_PARAM = "/alchemy-test/cloudcontrol/bindings/fixture";
 export const RUNTIME_PARAM = "/alchemy-test/cloudcontrol/bindings/runtime";
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined || typeof value === "string"
-    ? value
-    : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined || typeof value === "string" ? value : Redacted.value(value);
 
 const readValue = (
   description: cloudcontrol.ResourceDescription | undefined,
@@ -94,8 +90,7 @@ export default CloudControlTestFunction.make(
     const deleteResource = yield* CloudControl.DeleteResource({
       handlerPolicyStatements: ssmHandlerPolicy,
     });
-    const getResourceRequestStatus =
-      yield* CloudControl.GetResourceRequestStatus();
+    const getResourceRequestStatus = yield* CloudControl.GetResourceRequestStatus();
     const listResourceRequests = yield* CloudControl.ListResourceRequests();
     const cancelResourceRequest = yield* CloudControl.CancelResourceRequest();
 
@@ -120,9 +115,7 @@ export default CloudControlTestFunction.make(
           until: (r): boolean => {
             const status = r.ProgressEvent?.OperationStatus;
             return (
-              status !== "PENDING" &&
-              status !== "IN_PROGRESS" &&
-              status !== "CANCEL_IN_PROGRESS"
+              status !== "PENDING" && status !== "IN_PROGRESS" && status !== "CANCEL_IN_PROGRESS"
             );
           },
           times: 40,
@@ -143,9 +136,7 @@ export default CloudControlTestFunction.make(
           ? waitSettled(r.ProgressEvent.RequestToken)
           : Effect.succeed(undefined),
       ),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     );
 
     return {
@@ -177,17 +168,14 @@ export default CloudControlTestFunction.make(
           let found = false;
           let count = 0;
           for (let page = 0; page < 5 && !found; page++) {
-            const result: cloudcontrol.ListResourcesOutput =
-              yield* listResources({
-                TypeName: SSM_PARAMETER,
-                MaxResults: 100,
-                NextToken: nextToken,
-              });
+            const result: cloudcontrol.ListResourcesOutput = yield* listResources({
+              TypeName: SSM_PARAMETER,
+              MaxResults: 100,
+              NextToken: nextToken,
+            });
             const descriptions = result.ResourceDescriptions ?? [];
             count += descriptions.length;
-            found = descriptions.some(
-              (description) => description.Identifier === FIXTURE_PARAM,
-            );
+            found = descriptions.some((description) => description.Identifier === FIXTURE_PARAM);
             nextToken = result.NextToken;
             if (nextToken === undefined) break;
           }
@@ -221,10 +209,7 @@ export default CloudControlTestFunction.make(
           }).pipe(
             Effect.map(() => "Cancelled"),
             Effect.catchTag(
-              [
-                "RequestTokenNotFoundException",
-                "ConcurrentModificationException",
-              ],
+              ["RequestTokenNotFoundException", "ConcurrentModificationException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -242,9 +227,7 @@ export default CloudControlTestFunction.make(
               Value: body.value,
             }),
           });
-          const settled = yield* waitSettled(
-            created.ProgressEvent!.RequestToken!,
-          );
+          const settled = yield* waitSettled(created.ProgressEvent!.RequestToken!);
           const result = yield* getResource({
             TypeName: SSM_PARAMETER,
             Identifier: RUNTIME_PARAM,
@@ -260,13 +243,9 @@ export default CloudControlTestFunction.make(
           const updated = yield* updateResource({
             TypeName: SSM_PARAMETER,
             Identifier: RUNTIME_PARAM,
-            PatchDocument: JSON.stringify([
-              { op: "replace", path: "/Value", value: body.value },
-            ]),
+            PatchDocument: JSON.stringify([{ op: "replace", path: "/Value", value: body.value }]),
           });
-          const settled = yield* waitSettled(
-            updated.ProgressEvent!.RequestToken!,
-          );
+          const settled = yield* waitSettled(updated.ProgressEvent!.RequestToken!);
           const result = yield* getResource({
             TypeName: SSM_PARAMETER,
             Identifier: RUNTIME_PARAM,
@@ -282,18 +261,14 @@ export default CloudControlTestFunction.make(
             TypeName: SSM_PARAMETER,
             Identifier: RUNTIME_PARAM,
           });
-          const settled = yield* waitSettled(
-            deleted.ProgressEvent!.RequestToken!,
-          );
+          const settled = yield* waitSettled(deleted.ProgressEvent!.RequestToken!);
           // Bounded read-until-gone to absorb eventual consistency.
           const gone = yield* getResource({
             TypeName: SSM_PARAMETER,
             Identifier: RUNTIME_PARAM,
           }).pipe(
             Effect.map(() => false),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(true),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
               until: (isGone): boolean => isGone,

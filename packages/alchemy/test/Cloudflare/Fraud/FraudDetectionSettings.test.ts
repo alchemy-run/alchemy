@@ -1,22 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as fraud from "@distilled.cloud/cloudflare/fraud";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Fraud Detection (User Profiles) is a beta, subscription-gated product.
 // On the standard testing zone any meaningful PUT (writing `user_profiles`,
@@ -30,9 +26,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -72,20 +66,14 @@ describe.sequential("DetectionSettings", () => {
         );
         expect(adopted.zoneId).toEqual(zoneId);
         // The snapshot captured the pre-management state.
-        expect(adopted.initialSettings.userProfiles ?? null).toEqual(
-          before.userProfiles ?? null,
-        );
+        expect(adopted.initialSettings.userProfiles ?? null).toEqual(before.userProfiles ?? null);
         expect(adopted.initialSettings.usernameExpressions ?? null).toEqual(
           before.usernameExpressions ?? null,
         );
 
         const afterDeploy = yield* getSettings(zoneId);
-        expect(afterDeploy.userProfiles ?? null).toEqual(
-          before.userProfiles ?? null,
-        );
-        expect(afterDeploy.usernameExpressions ?? null).toEqual(
-          before.usernameExpressions ?? null,
-        );
+        expect(afterDeploy.userProfiles ?? null).toEqual(before.userProfiles ?? null);
+        expect(afterDeploy.usernameExpressions ?? null).toEqual(before.usernameExpressions ?? null);
 
         // 2. In-place update — set `usernameExpressions` to the value the
         //    zone already has: reconcile diffs observed vs desired and
@@ -99,22 +87,16 @@ describe.sequential("DetectionSettings", () => {
           }),
         );
         expect(updated.zoneId).toEqual(zoneId);
-        expect(updated.usernameExpressions ?? []).toEqual(
-          before.usernameExpressions ?? [],
-        );
+        expect(updated.usernameExpressions ?? []).toEqual(before.usernameExpressions ?? []);
         // The initial snapshot stays sticky across updates.
-        expect(updated.initialSettings.userProfiles ?? null).toEqual(
-          before.userProfiles ?? null,
-        );
+        expect(updated.initialSettings.userProfiles ?? null).toEqual(before.userProfiles ?? null);
 
         // 3. Destroy — nothing was written, so nothing is restored and the
         //    live settings are untouched.
         yield* stack.destroy();
 
         const afterDestroy = yield* getSettings(zoneId);
-        expect(afterDestroy.userProfiles ?? null).toEqual(
-          before.userProfiles ?? null,
-        );
+        expect(afterDestroy.userProfiles ?? null).toEqual(before.userProfiles ?? null);
         expect(afterDestroy.usernameExpressions ?? null).toEqual(
           before.usernameExpressions ?? null,
         );
@@ -136,22 +118,18 @@ describe.sequential("DetectionSettings", () => {
         // detection subscription — the distilled PUT must fail with the
         // typed entitlement tag (Cloudflare error code 10400). Reads on the
         // same zone succeed, proving the gate is on writes, not the token.
-        const error = yield* fraud
-          .putFraud({ zoneId, userProfiles: "disabled" })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "Forbidden",
-              schedule: Schedule.exponential("500 millis"),
-              times: 8,
-            }),
-            Effect.flip,
-          );
+        const error = yield* fraud.putFraud({ zoneId, userProfiles: "disabled" }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: Schedule.exponential("500 millis"),
+            times: 8,
+          }),
+          Effect.flip,
+        );
         expect(error._tag).toEqual("FraudDetectionNotEntitled");
 
         const settings = yield* getSettings(zoneId);
-        expect(settings.userProfiles ?? "disabled").toEqual(
-          settings.userProfiles ?? "disabled",
-        );
+        expect(settings.userProfiles ?? "disabled").toEqual(settings.userProfiles ?? "disabled");
 
         yield* stack.destroy();
       }).pipe(logLevel),
@@ -170,8 +148,7 @@ describe.sequential("DetectionSettings", () => {
 
         const original = yield* getSettings(zoneId);
 
-        const expression =
-          'lookup_json_string(http.request.body.raw, "username")';
+        const expression = 'lookup_json_string(http.request.body.raw, "username")';
 
         yield* Effect.gen(function* () {
           // 1. Create — enable user profiles with one username expression.
@@ -222,27 +199,20 @@ describe.sequential("DetectionSettings", () => {
           );
 
           const live2 = yield* getSettings(zoneId);
-          expect(
-            live2.authenticationSettings?.successCriteria?.statusCodes,
-          ).toEqual([200]);
+          expect(live2.authenticationSettings?.successCriteria?.statusCodes).toEqual([200]);
 
           // 3. Destroy — the managed fields are restored to the snapshot.
           yield* stack.destroy();
 
           const after = yield* getSettings(zoneId);
-          expect(after.userProfiles ?? null).toEqual(
-            original.userProfiles ?? null,
-          );
-          expect(after.usernameExpressions ?? null).toEqual(
-            original.usernameExpressions ?? null,
-          );
+          expect(after.userProfiles ?? null).toEqual(original.userProfiles ?? null);
+          expect(after.usernameExpressions ?? null).toEqual(original.usernameExpressions ?? null);
         }).pipe(
           Effect.ensuring(
             fraud
               .putFraud({
                 zoneId,
-                userProfiles:
-                  original.userProfiles === "enabled" ? "enabled" : "disabled",
+                userProfiles: original.userProfiles === "enabled" ? "enabled" : "disabled",
                 usernameExpressions: [...(original.usernameExpressions ?? [])],
               })
               .pipe(Effect.ignore),
@@ -264,9 +234,7 @@ describe.sequential("DetectionSettings", () => {
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Fraud.DetectionSettings,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Fraud.DetectionSettings);
       const all = yield* provider.list();
 
       expect(all.length).toBeGreaterThan(0);

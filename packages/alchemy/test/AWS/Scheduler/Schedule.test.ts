@@ -1,11 +1,11 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
 import { Schedule } from "@/AWS/Scheduler/Schedule.ts";
 import { Queue } from "@/AWS/SQS/Queue.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -68,14 +68,10 @@ test.provider("list enumerates the deployed schedule", (stack) =>
     const provider = yield* Provider.findProvider(Schedule);
     const all = yield* provider.list();
 
-    expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(
-      true,
-    );
+    expect(all.some((s) => s.scheduleName === deployed.scheduleName)).toBe(true);
     expect(
       all.some(
-        (s) =>
-          s.scheduleName === deployed.scheduleName &&
-          s.scheduleArn === deployed.scheduleArn,
+        (s) => s.scheduleName === deployed.scheduleName && s.scheduleArn === deployed.scheduleArn,
       ),
     ).toBe(true);
 

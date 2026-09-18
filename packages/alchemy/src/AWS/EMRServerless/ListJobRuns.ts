@@ -34,11 +34,7 @@ export interface ListJobRuns extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request?: ListJobRunsInput,
-    ) => Effect.Effect<emr.ListJobRunsResponse, emr.ListJobRunsError>
+    (request?: ListJobRunsInput) => Effect.Effect<emr.ListJobRunsResponse, emr.ListJobRunsError>
   >
 > {}
-export const ListJobRuns = Binding.Service<ListJobRuns>(
-  "AWS.EMRServerless.ListJobRuns",
-);
+export const ListJobRuns = Binding.Service<ListJobRuns>("AWS.EMRServerless.ListJobRuns");

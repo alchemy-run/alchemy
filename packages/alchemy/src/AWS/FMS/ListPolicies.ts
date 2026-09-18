@@ -35,6 +35,4 @@ export interface ListPolicies extends Binding.Service<
   >
 > {}
 
-export const ListPolicies = Binding.Service<ListPolicies>(
-  "AWS.FMS.ListPolicies",
-);
+export const ListPolicies = Binding.Service<ListPolicies>("AWS.FMS.ListPolicies");

@@ -147,9 +147,7 @@ type GraphOutput = neptunegraph.GetGraphOutput;
  * The graph entered the terminal `FAILED` state during provisioning or a
  * modification. Not retried.
  */
-export class GraphProvisioningFailed extends Data.TaggedError(
-  "GraphProvisioningFailed",
-)<{
+export class GraphProvisioningFailed extends Data.TaggedError("GraphProvisioningFailed")<{
   readonly graphId: string;
   readonly reason: string;
 }> {}
@@ -202,11 +200,7 @@ export const GraphProvider = () =>
       const getGraph = Effect.fn(function* (graphId: string) {
         return yield* neptunegraph
           .getGraph({ graphIdentifier: graphId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       // Graph names are unique per account/region — resolve a graph by name
@@ -221,10 +215,7 @@ export const GraphProvider = () =>
         return yield* getGraph(summary.id);
       });
 
-      const observeGraph = Effect.fn(function* (
-        graphId: string | undefined,
-        name: string,
-      ) {
+      const observeGraph = Effect.fn(function* (graphId: string | undefined, name: string) {
         if (graphId !== undefined) {
           const graph = yield* getGraph(graphId);
           if (graph !== undefined) return graph;
@@ -235,11 +226,7 @@ export const GraphProvider = () =>
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* neptunegraph
           .listTagsForResource({ resourceArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return toTagRecord(response?.tags);
       });
 
@@ -247,19 +234,12 @@ export const GraphProvider = () =>
       // provider lifecycle op leaks `Retry.Return`'s conditional into
       // declaration emit and widens the provider layer to `unknown` R for
       // every consumer of `AWS.providers()`.
-      const retryWhileGraphNotReady = <
-        A,
-        E extends { readonly _tag: string },
-        R,
-      >(
+      const retryWhileGraphNotReady = <A, E extends { readonly _tag: string }, R>(
         self: Effect.Effect<A, E, R>,
       ): Effect.Effect<A, E, R> =>
         Effect.retry(self, {
           while: (e) => e._tag === "GraphNotReady",
-          schedule: Schedule.max([
-            Schedule.fixed("10 seconds"),
-            Schedule.recurs(90),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(90)]),
         });
 
       // Bounded readiness wait: graph creation/modification takes several
@@ -269,9 +249,7 @@ export const GraphProvider = () =>
           Effect.gen(function* () {
             const graph = yield* getGraph(graphId);
             if (graph === undefined) {
-              return yield* Effect.fail(
-                new GraphNotReady({ graphId, status: "missing" }),
-              );
+              return yield* Effect.fail(new GraphNotReady({ graphId, status: "missing" }));
             }
             if (graph.status === "FAILED") {
               return yield* Effect.fail(
@@ -323,10 +301,7 @@ export const GraphProvider = () =>
           ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? { provisionedMemory: 0 })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { provisionedMemory: 0 })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           // Immutable props — any change forces a fresh graph.
@@ -343,10 +318,7 @@ export const GraphProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.graphName ??
-            (yield* toName(
-              id,
-              olds ?? ({ provisionedMemory: 0 } as GraphProps),
-            ));
+            (yield* toName(id, olds ?? ({ provisionedMemory: 0 } as GraphProps)));
           const graph = yield* observeGraph(output?.graphId, name);
           if (graph === undefined) {
             return undefined;
@@ -376,16 +348,10 @@ export const GraphProvider = () =>
                 deletionProtection: news.deletionProtection,
                 tags: desiredTags,
               })
-              .pipe(
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
             const graphId = created?.id ?? (yield* findGraphByName(name))?.id;
             if (graphId === undefined) {
-              return yield* Effect.fail(
-                new Error(`Failed to create graph '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create graph '${name}'`));
             }
             observed = yield* waitForGraph(graphId);
           } else {
@@ -395,10 +361,7 @@ export const GraphProvider = () =>
 
             // Sync — single `updateGraph` carrying only the in-place fields
             // whose desired value differs from the observed cloud state.
-            const update: Omit<
-              neptunegraph.UpdateGraphInput,
-              "graphIdentifier"
-            > = {};
+            const update: Omit<neptunegraph.UpdateGraphInput, "graphIdentifier"> = {};
             let dirty = false;
             if (
               news.provisionedMemory !== undefined &&
@@ -436,9 +399,7 @@ export const GraphProvider = () =>
           if (upsert.length > 0) {
             yield* neptunegraph.tagResource({
               resourceArn: observed.arn,
-              tags: Object.fromEntries(
-                upsert.map(({ Key, Value }) => [Key, Value]),
-              ),
+              tags: Object.fromEntries(upsert.map(({ Key, Value }) => [Key, Value])),
             });
           }
           if (removed.length > 0) {
@@ -462,36 +423,23 @@ export const GraphProvider = () =>
                 graphIdentifier: output.graphId,
                 deletionProtection: false,
               })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
           yield* neptunegraph
             .deleteGraph({
               graphIdentifier: output.graphId,
               skipSnapshot: true,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(
             neptunegraph.getGraph({ graphIdentifier: output.graphId }).pipe(
               Effect.as(true),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(false),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
             ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(60),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

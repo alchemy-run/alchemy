@@ -1,31 +1,22 @@
 import * as addons from "@distilled.cloud/fly-io/addons";
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import BucketApi, {
-  BucketIp,
-  BucketSite,
-  Data,
-  OBJECT_BODY,
-} from "./fixtures/bucket-api.ts";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import BucketApi, { BucketIp, BucketSite, Data, OBJECT_BODY } from "./fixtures/bucket-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const listTigris = () =>
   Effect.gen(function* () {
-    const rows: Array<{ id: string; name: string | null; options: unknown }> =
-      [];
+    const rows: Array<{ id: string; name: string | null; options: unknown }> = [];
     let after: string | undefined;
     for (let i = 0; i < 8; i++) {
       const page = yield* addons.addOns({
@@ -47,16 +38,13 @@ const findAddOn = (addOnId: string, name: string) =>
   listTigris().pipe(
     Effect.map(
       (addOns) =>
-        addOns.find((addOn) => addOn.id === addOnId) ??
-        addOns.find((addOn) => addOn.name === name),
+        addOns.find((addOn) => addOn.id === addOnId) ?? addOns.find((addOn) => addOn.name === name),
     ),
   );
 
 const waitUntilBucketGone = (addOnId: string, name: string) =>
   findAddOn(addOnId, name).pipe(
-    Effect.map((addOn) =>
-      addOn === undefined ? ("gone" as const) : ("found" as const),
-    ),
+    Effect.map((addOn) => (addOn === undefined ? ("gone" as const) : ("found" as const))),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -82,9 +70,7 @@ const listedSecrets = (appName: string) =>
       show_secrets: false,
     })
     .pipe(
-      Effect.map(
-        (res) => new Set((res.secrets ?? []).map((secret) => secret.name)),
-      ),
+      Effect.map((res) => new Set((res.secrets ?? []).map((secret) => secret.name))),
       Effect.catchTag("NotFound", () => Effect.succeed(new Set<string>())),
     );
 
@@ -200,11 +186,7 @@ test.provider(
         Effect.flatMap((set) =>
           set.has("BUCKET_NAME") && set.has("AWS_ACCESS_KEY_ID")
             ? Effect.succeed(set)
-            : Effect.fail(
-                new Error(
-                  `missing Tigris secrets: ${[...set].join(",") || "(none)"}`,
-                ),
-              ),
+            : Effect.fail(new Error(`missing Tigris secrets: ${[...set].join(",") || "(none)"}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("2 seconds"),
@@ -225,9 +207,7 @@ test.provider(
       const put = yield* untilOk(
         HttpClient.get(`${out.api.url}/put`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json
-              : Effect.fail(new Error(`api returned ${res.status}`)),
+            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
           Effect.map((value) => value as { ok: boolean }),
         ),
@@ -237,9 +217,7 @@ test.provider(
       const got = yield* untilOk(
         HttpClient.get(`${out.api.url}/get`).pipe(
           Effect.flatMap((res) =>
-            res.status === 200
-              ? res.json
-              : Effect.fail(new Error(`api returned ${res.status}`)),
+            res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
           ),
           Effect.map((value) => value as { ok: boolean; text: string }),
         ),
@@ -249,10 +227,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const bucketGone = yield* waitUntilBucketGone(
-        out.bucket.addOnId,
-        out.bucket.name,
-      );
+      const bucketGone = yield* waitUntilBucketGone(out.bucket.addOnId, out.bucket.name);
       expect(bucketGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(out.app.appName);
       expect(appGone).toEqual("gone");

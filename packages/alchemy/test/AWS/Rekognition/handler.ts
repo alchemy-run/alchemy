@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Rekognition from "@/AWS/Rekognition";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Rekognition from "@/AWS/Rekognition";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -57,8 +57,7 @@ export default RekognitionTestFunction.make(
     const detectFaces = yield* Rekognition.DetectFaces();
     const detectLabels = yield* Rekognition.DetectLabels();
     const detectModerationLabels = yield* Rekognition.DetectModerationLabels();
-    const detectProtectiveEquipment =
-      yield* Rekognition.DetectProtectiveEquipment();
+    const detectProtectiveEquipment = yield* Rekognition.DetectProtectiveEquipment();
     const detectText = yield* Rekognition.DetectText();
     const recognizeCelebrities = yield* Rekognition.RecognizeCelebrities();
     const getCelebrityInfo = yield* Rekognition.GetCelebrityInfo();
@@ -84,16 +83,12 @@ export default RekognitionTestFunction.make(
     const searchUsersByImage = yield* Rekognition.SearchUsersByImage();
 
     // --- face liveness ---
-    const createFaceLivenessSession =
-      yield* Rekognition.CreateFaceLivenessSession();
-    const getFaceLivenessSessionResults =
-      yield* Rekognition.GetFaceLivenessSessionResults();
+    const createFaceLivenessSession = yield* Rekognition.CreateFaceLivenessSession();
+    const getFaceLivenessSessionResults = yield* Rekognition.GetFaceLivenessSessionResults();
 
     // --- video analysis ---
-    const startCelebrityRecognition =
-      yield* Rekognition.StartCelebrityRecognition();
-    const getCelebrityRecognition =
-      yield* Rekognition.GetCelebrityRecognition();
+    const startCelebrityRecognition = yield* Rekognition.StartCelebrityRecognition();
+    const getCelebrityRecognition = yield* Rekognition.GetCelebrityRecognition();
     const startContentModeration = yield* Rekognition.StartContentModeration();
     const getContentModeration = yield* Rekognition.GetContentModeration();
     const startFaceDetection = yield* Rekognition.StartFaceDetection();
@@ -117,15 +112,13 @@ export default RekognitionTestFunction.make(
     // --- stream processors ---
     const startStreamProcessor = yield* Rekognition.StartStreamProcessor();
     const stopStreamProcessor = yield* Rekognition.StopStreamProcessor();
-    const describeStreamProcessor =
-      yield* Rekognition.DescribeStreamProcessor();
+    const describeStreamProcessor = yield* Rekognition.DescribeStreamProcessor();
     const listStreamProcessors = yield* Rekognition.ListStreamProcessors();
 
     // --- custom labels ---
     const detectCustomLabels = yield* Rekognition.DetectCustomLabels();
     const describeProjects = yield* Rekognition.DescribeProjects();
-    const describeProjectVersions =
-      yield* Rekognition.DescribeProjectVersions();
+    const describeProjectVersions = yield* Rekognition.DescribeProjectVersions();
     const startProjectVersion = yield* Rekognition.StartProjectVersion();
     const stopProjectVersion = yield* Rekognition.StopProjectVersion();
 
@@ -164,17 +157,14 @@ export default RekognitionTestFunction.make(
             TargetImage: { Bytes: imageBytes },
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag("InvalidParameterException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("InvalidParameterException", (e) => Effect.succeed(e._tag)),
           );
           const celebrityInfoTag = yield* getCelebrityInfo({
             Id: "0000000000",
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({
@@ -202,9 +192,7 @@ export default RekognitionTestFunction.make(
             CollectionId: TEST_COLLECTION_ID,
           }).pipe(
             Effect.map((r) => r.StatusCode ?? 200),
-            Effect.catchTag("ResourceAlreadyExistsException", () =>
-              Effect.succeed(200),
-            ),
+            Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(200)),
           );
           const described = yield* describeCollection({
             CollectionId: TEST_COLLECTION_ID,
@@ -229,9 +217,8 @@ export default RekognitionTestFunction.make(
             UserId: "test-user",
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const associateTag = yield* associateFaces({
@@ -240,9 +227,8 @@ export default RekognitionTestFunction.make(
             FaceIds: [BOGUS_FACE_ID],
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const disassociateTag = yield* disassociateFaces({
@@ -251,9 +237,8 @@ export default RekognitionTestFunction.make(
             FaceIds: [BOGUS_FACE_ID],
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const searchFacesTag = yield* searchFaces({
@@ -261,9 +246,8 @@ export default RekognitionTestFunction.make(
             FaceId: BOGUS_FACE_ID,
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag(
-              ["InvalidParameterException", "ResourceNotFoundException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["InvalidParameterException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const searchFacesByImageTag = yield* searchFacesByImage({
@@ -271,41 +255,31 @@ export default RekognitionTestFunction.make(
             Image: { Bytes: imageBytes },
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag("InvalidParameterException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("InvalidParameterException", (e) => Effect.succeed(e._tag)),
           );
           const searchUsersByImageTag = yield* searchUsersByImage({
             CollectionId: TEST_COLLECTION_ID,
             Image: { Bytes: imageBytes },
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag("InvalidParameterException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("InvalidParameterException", (e) => Effect.succeed(e._tag)),
           );
           const deleteFacesTag = yield* deleteFaces({
             CollectionId: TEST_COLLECTION_ID,
             FaceIds: [BOGUS_FACE_ID],
           }).pipe(
             Effect.map(() => "Success"),
-            Effect.catchTag("InvalidParameterException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("InvalidParameterException", (e) => Effect.succeed(e._tag)),
           );
           yield* deleteUser({
             CollectionId: TEST_COLLECTION_ID,
             UserId: "test-user",
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* deleteCollection({ CollectionId: TEST_COLLECTION_ID });
           return yield* HttpServerResponse.json({
             createStatus: created,
             faceCountAtCreate: described.FaceCount ?? 0,
-            listedCollection: (collections.CollectionIds ?? []).includes(
-              TEST_COLLECTION_ID,
-            ),
+            listedCollection: (collections.CollectionIds ?? []).includes(TEST_COLLECTION_ID),
             indexedFaceRecords: (indexed.FaceRecords ?? []).length,
             listedFaces: (faces.Faces ?? []).length,
             listedUsers: (users.Users ?? []).map((u) => u.UserId),
@@ -330,9 +304,7 @@ export default RekognitionTestFunction.make(
             SessionId: BOGUS_SESSION_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("SessionNotFoundException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("SessionNotFoundException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({
             sessionId: session.SessionId,
@@ -410,88 +382,56 @@ export default RekognitionTestFunction.make(
             celebrityRecognition: yield* getCelebrityRecognition(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             contentModeration: yield* getContentModeration(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             faceDetection: yield* getFaceDetection(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             faceSearch: yield* getFaceSearch(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             labelDetection: yield* getLabelDetection(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             personTracking: yield* getPersonTracking(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             segmentDetection: yield* getSegmentDetection(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
             textDetection: yield* getTextDetection(probe).pipe(
               Effect.map(() => "Found"),
               Effect.catchTag(
-                [
-                  "ResourceNotFoundException",
-                  "InvalidParameterException",
-                  "AccessDeniedException",
-                ],
+                ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
                 (e) => Effect.succeed(e._tag),
               ),
             ),
@@ -502,8 +442,7 @@ export default RekognitionTestFunction.make(
         // Media analysis: list for real, start/get through typed error paths.
         if (request.method === "POST" && pathname === "/media-analysis") {
           const jobCount = (
-            (yield* listMediaAnalysisJobs({ MaxResults: 10 }))
-              .MediaAnalysisJobs ?? []
+            (yield* listMediaAnalysisJobs({ MaxResults: 10 })).MediaAnalysisJobs ?? []
           ).length;
           const startTag = yield* startMediaAnalysisJob({
             OperationsConfig: {
@@ -529,9 +468,8 @@ export default RekognitionTestFunction.make(
             JobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ jobCount, startTag, getTag });
@@ -544,9 +482,7 @@ export default RekognitionTestFunction.make(
         // still proves the binding reached the service.
         if (request.method === "GET" && pathname === "/stream-processors") {
           const listed = yield* listStreamProcessors({ MaxResults: 10 }).pipe(
-            Effect.map(
-              (r) => ({ count: (r.StreamProcessors ?? []).length }) as const,
-            ),
+            Effect.map((r) => ({ count: (r.StreamProcessors ?? []).length }) as const),
             Effect.catchTag("AccessDeniedException", (e) =>
               Effect.succeed({ count: -1, listTag: e._tag } as const),
             ),
@@ -555,27 +491,24 @@ export default RekognitionTestFunction.make(
             Name: "alchemy-nonexistent-processor",
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const startTag = yield* startStreamProcessor({
             Name: "alchemy-nonexistent-processor",
           }).pipe(
             Effect.map(() => "Started"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           const stopTag = yield* stopStreamProcessor({
             Name: "alchemy-nonexistent-processor",
           }).pipe(
             Effect.map(() => "Stopped"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "AccessDeniedException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "AccessDeniedException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({
@@ -594,25 +527,18 @@ export default RekognitionTestFunction.make(
         // AccessDeniedException instead — the test accepts both.
         if (request.method === "GET" && pathname === "/custom-labels") {
           const account = url.searchParams.get("account") ?? "123456789012";
-          const region = yield* Effect.sync(
-            () => process.env.AWS_REGION ?? "us-east-1",
-          );
+          const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-east-1");
           const projectArn = `arn:aws:rekognition:${region}:${account}:project/alchemy-nonexistent/1700000000000`;
           const projectVersionArn = `arn:aws:rekognition:${region}:${account}:project/alchemy-nonexistent/version/alchemy-nonexistent/1700000000000`;
           const projectCount = (
-            (yield* describeProjects({ MaxResults: 10 })).ProjectDescriptions ??
-            []
+            (yield* describeProjects({ MaxResults: 10 })).ProjectDescriptions ?? []
           ).length;
           const describeVersionsTag = yield* describeProjectVersions({
             ProjectArn: projectArn,
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "InvalidParameterException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -622,11 +548,7 @@ export default RekognitionTestFunction.make(
           }).pipe(
             Effect.map(() => "Detected"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "InvalidParameterException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -636,11 +558,7 @@ export default RekognitionTestFunction.make(
           }).pipe(
             Effect.map(() => "Started"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "InvalidParameterException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -649,11 +567,7 @@ export default RekognitionTestFunction.make(
           }).pipe(
             Effect.map(() => "Stopped"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "InvalidParameterException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "InvalidParameterException", "AccessDeniedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );

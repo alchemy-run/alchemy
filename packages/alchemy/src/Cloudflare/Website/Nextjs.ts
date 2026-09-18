@@ -22,9 +22,7 @@ import {
  */
 const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
-export interface NextjsProps<
-  Bindings extends WorkerBindingProps = {},
-> extends Omit<
+export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
   "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules" | "dev"
 > {
@@ -251,9 +249,10 @@ export const Nextjs: {
         | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): Worker<{
-        [
-          binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-        ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+        [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >[binding];
       }>;
     };
   };
@@ -264,9 +263,10 @@ export const Nextjs: {
       | Effect.Effect<InputProps<NextjsProps<Bindings>>, never, Req>,
   ): Effect.Effect<
     Worker<{
-      [
-        binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>
-      ]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      [binding in keyof NormalizedBindings<Bindings, WorkerAssetsConfig>]: NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >[binding];
     }>,
     never,
     Req | Providers
@@ -276,55 +276,47 @@ export const Nextjs: {
     ? (id: string, propsEff: any) => effectClass(Nextjs(id, propsEff))
     : Worker(
         id,
-        Effect.map(
-          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-          (props) => ({
-            ...props,
-            // `dev.mode` is the integration's dev behavior (routed through
-            // the source options below); only `port` maps onto the Worker's
-            // own local-dev config.
-            dev:
-              props?.dev?.port !== undefined
-                ? { port: props.dev.port }
-                : undefined,
-            // OpenNext's revalidation queues (memory-queue, do-queue) fetch
-            // the worker back through `WORKER_SELF_REFERENCE`. Always wire
-            // the self service binding — it's inert when unused, and its
-            // absence turns ISR revalidation into a silent no-op. An
-            // explicit user-provided `env.WORKER_SELF_REFERENCE` wins.
-            env: {
-              WORKER_SELF_REFERENCE: Self,
-              ...props?.env,
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          // `dev.mode` is the integration's dev behavior (routed through
+          // the source options below); only `port` maps onto the Worker's
+          // own local-dev config.
+          dev: props?.dev?.port !== undefined ? { port: props.dev.port } : undefined,
+          // OpenNext's revalidation queues (memory-queue, do-queue) fetch
+          // the worker back through `WORKER_SELF_REFERENCE`. Always wire
+          // the self service binding — it's inert when unused, and its
+          // absence turns ISR revalidation into a silent no-op. An
+          // explicit user-provided `env.WORKER_SELF_REFERENCE` wins.
+          env: {
+            WORKER_SELF_REFERENCE: Self,
+            ...props?.env,
+          },
+          // OpenNext requires Node.js APIs. The 2026-08-31 default date
+          // enables both nodejs_compat modes, so no redundant flag is sent.
+          compatibility: {
+            date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,
+            flags: props?.compatibility?.flags,
+          },
+          // The OpenNext server owns routing: run the worker first and
+          // leave asset-path rewriting off. Users can still override.
+          assets: {
+            runWorkerFirst: true,
+            htmlHandling: "none",
+            notFoundHandling: "none",
+            ...props?.assets,
+          },
+          source: {
+            provider: NEXTJS_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            // `next dev` (Turbopack) cold-starts broken under bun (every
+            // route 404s until `.next` is warm) — pin the dev child to node.
+            runtime: "node",
+            options: {
+              root: props?.rootDir,
+              memo: props?.memo,
+              ...(props?.dev?.mode !== undefined ? { dev: { mode: props.dev.mode } } : {}),
             },
-            // OpenNext requires Node.js APIs. The 2026-08-31 default date
-            // enables both nodejs_compat modes, so no redundant flag is sent.
-            compatibility: {
-              date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,
-              flags: props?.compatibility?.flags,
-            },
-            // The OpenNext server owns routing: run the worker first and
-            // leave asset-path rewriting off. Users can still override.
-            assets: {
-              runWorkerFirst: true,
-              htmlHandling: "none",
-              notFoundHandling: "none",
-              ...props?.assets,
-            },
-            source: {
-              provider: NEXTJS_SOURCE_PROVIDER,
-              devMode: "server",
-              rootDir: props?.rootDir,
-              // `next dev` (Turbopack) cold-starts broken under bun (every
-              // route 404s until `.next` is warm) — pin the dev child to node.
-              runtime: "node",
-              options: {
-                root: props?.rootDir,
-                memo: props?.memo,
-                ...(props?.dev?.mode !== undefined
-                  ? { dev: { mode: props.dev.mode } }
-                  : {}),
-              },
-            },
-          }),
-        ),
+          },
+        })),
       )) as any;

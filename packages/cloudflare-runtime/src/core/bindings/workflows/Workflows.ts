@@ -1,45 +1,35 @@
-import { loadInternalWorker } from "../../internal/internal-worker.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { loadInternalWorker } from "../../internal/internal-worker.ts";
 const WorkflowsBindingWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/workflows/binding.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/workflows/binding.worker"),
 };
 const WorkflowsWrappedBindingWorker = {
   worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/bindings/workflows/wrapped-binding.worker",
-    ),
+    loadInternalWorker("#cloudflare-runtime-core-worker/bindings/workflows/wrapped-binding.worker"),
 };
 import * as Storage from "../../globals/Storage.ts";
-import {
-  DEFAULT_COMPATIBILITY_DATE,
-  SERVICE_USER_WORKER,
-} from "../../internal/constants.ts";
+import { DEFAULT_COMPATIBILITY_DATE, SERVICE_USER_WORKER } from "../../internal/constants.ts";
 import {
   formatExtensionModule,
   formatInternalWorkerModules,
 } from "../../internal/internal-modules.ts";
+import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
 import { PluginContext } from "../../PluginContext.ts";
-import * as Plugin from "../../Plugin.ts";
 import { RegistryProxy } from "../../registry/RegistryProxy.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type { Workflow } from "../../RuntimeWorker.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
 
-const WORKFLOWS_WRAPPED_BINDING_MODULE =
-  "cloudflare-runtime:workflows-wrapped-binding";
+const WORKFLOWS_WRAPPED_BINDING_MODULE = "cloudflare-runtime:workflows-wrapped-binding";
 const WORKFLOWS_STORAGE_SERVICE_NAME = "workflows:storage";
 
-export class Workflows extends Plugin.Service<Workflows>()(
-  "cloudflare-runtime/plugin/Workflows",
-) {}
+export class Workflows extends Plugin.Service<Workflows>()("cloudflare-runtime/plugin/Workflows") {}
 
 export const WorkflowsLive = Layer.effect(
   Workflows,
@@ -49,13 +39,11 @@ export const WorkflowsLive = Layer.effect(
     const storage = yield* Storage.Storage;
 
     const makeStorageService = Effect.gen(function* () {
-      const storageDiskPath =
-        "disk" in storage ? storage.disk?.path : undefined;
+      const storageDiskPath = "disk" in storage ? storage.disk?.path : undefined;
       if (!storageDiskPath) {
         return yield* new ConfigError({
           subtag: "Workflows",
-          message:
-            "Cannot configure workflows persistence: the Storage service has no disk path.",
+          message: "Cannot configure workflows persistence: the Storage service has no disk path.",
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
@@ -116,9 +104,7 @@ export const WorkflowsLive = Layer.effect(
                 {
                   name: WORKFLOWS_WRAPPED_BINDING_MODULE,
                   internal: true,
-                  esModule: yield* formatExtensionModule(
-                    WorkflowsWrappedBindingWorker,
-                  ),
+                  esModule: yield* formatExtensionModule(WorkflowsWrappedBindingWorker),
                 },
               ],
             };
@@ -242,9 +228,7 @@ export const local = ({
             hint: `Make sure the workflow ${workflowName} is defined in the worker config`,
             detail: {
               workflowName,
-              registeredWorkflows: context.worker.workflows?.map(
-                (entry) => entry.workflowName,
-              ),
+              registeredWorkflows: context.worker.workflows?.map((entry) => entry.workflowName),
             },
           }),
         );

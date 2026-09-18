@@ -1,10 +1,8 @@
+import * as AI from "alchemy/AI";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
-
-import * as Cloudflare from "alchemy/Cloudflare";
-
-import * as AI from "alchemy/AI";
 import { DevBox } from "../DevBox.ts";
 
 export const path = AI.Parameter("path", S.String)`
@@ -23,8 +21,7 @@ export const WriteFileR2 = Layer.effect(
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);
 
-    return ({ path, contents }) =>
-      bucket.put(path, contents).pipe(Effect.orDie);
+    return ({ path, contents }) => bucket.put(path, contents).pipe(Effect.orDie);
   }),
 );
 

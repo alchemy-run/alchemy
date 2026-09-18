@@ -1,10 +1,10 @@
-import * as Effect from "effect/Effect";
 import { createWriteStream } from "node:fs";
 import { lstat, opendir } from "node:fs/promises";
 import { posix } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import * as Effect from "effect/Effect";
 import { verifiedFileChunks, type VerifiedFile } from "./ArtifactFile.ts";
 
 /**
@@ -38,9 +38,7 @@ interface CloseableDirectoryHandle {
   readonly close: () => void | Promise<void>;
 }
 
-export const closeDirectoryHandle = async (
-  handle: CloseableDirectoryHandle,
-) => {
+export const closeDirectoryHandle = async (handle: CloseableDirectoryHandle) => {
   try {
     await handle.close();
   } catch {
@@ -81,14 +79,9 @@ export const readDirectoryEntriesSecure = (options: {
           }
           const name = entry.name;
           if (name.length === 0) continue;
-          const relativeName = options.relativePrefix
-            ? `${options.relativePrefix}/${name}`
-            : name;
+          const relativeName = options.relativePrefix ? `${options.relativePrefix}/${name}` : name;
           observedEntries += 1;
-          if (
-            options.entriesAlreadyObserved + observedEntries >
-            options.maxEntries
-          ) {
+          if (options.entriesAlreadyObserved + observedEntries > options.maxEntries) {
             throw entryLimitError(options.maxEntries);
           }
           if (options.ignore.some((pattern) => pattern.test(relativeName))) {
@@ -122,14 +115,11 @@ export const readDirectoryEntriesSecure = (options: {
         );
       }
       return {
-        entries: entries.sort((a, b) =>
-          a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-        ),
+        entries: entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
         observedEntries,
       };
     },
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 
 export const writeCompressedArchiveSecure = (
@@ -163,8 +153,7 @@ export const writeCompressedArchiveSecure = (
         { signal },
       );
     },
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 
 export const isArchivedRegularFile = (
@@ -179,9 +168,7 @@ export const isArchivedRegularFile = (
     const entry = byName.get(currentName);
     if (entry?.type === "file") return true;
     if (entry?.type !== "symlink") return false;
-    const target = posix.normalize(
-      posix.join(posix.dirname(currentName), entry.linkname),
-    );
+    const target = posix.normalize(posix.join(posix.dirname(currentName), entry.linkname));
     if (target === ".." || target.startsWith("../") || target.startsWith("/")) {
       return false;
     }
@@ -248,9 +235,7 @@ const createHeader = (entry: {
   const header = new Uint8Array(512);
   const { name, prefix } = splitTarName(entry.name);
   if (entry.linkname && byteLength(entry.linkname) > 100) {
-    throw new Error(
-      `Archive symlink target is too long for tar header: ${entry.linkname}`,
-    );
+    throw new Error(`Archive symlink target is too long for tar header: ${entry.linkname}`);
   }
 
   writeString(header, 0, 100, name);
@@ -289,22 +274,12 @@ const splitTarName = (name: string): { name: string; prefix?: string } => {
 
 const byteLength = (value: string) => new TextEncoder().encode(value).length;
 
-const writeString = (
-  buffer: Uint8Array,
-  offset: number,
-  length: number,
-  value: string,
-) => {
+const writeString = (buffer: Uint8Array, offset: number, length: number, value: string) => {
   const bytes = new TextEncoder().encode(value);
   buffer.set(bytes.slice(0, length), offset);
 };
 
-const writeOctal = (
-  buffer: Uint8Array,
-  offset: number,
-  length: number,
-  value: number,
-) => {
+const writeOctal = (buffer: Uint8Array, offset: number, length: number, value: number) => {
   const text = value
     .toString(8)
     .padStart(length - 1, "0")

@@ -15,9 +15,6 @@ export const ExecuteStatementHttp = Layer.effect(
       "dynamodb:PartiQLSelect",
       "dynamodb:PartiQLUpdate",
     ],
-    resources: (table) => [
-      table.tableArn,
-      Output.interpolate`${table.tableArn}/index/*`,
-    ],
+    resources: (table) => [table.tableArn, Output.interpolate`${table.tableArn}/index/*`],
   }),
 );

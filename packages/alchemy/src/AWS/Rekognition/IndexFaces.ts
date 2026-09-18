@@ -34,12 +34,7 @@ export interface IndexFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.IndexFacesRequest,
-    ) => Effect.Effect<
-      rekognition.IndexFacesResponse,
-      rekognition.IndexFacesError
-    >
+    ) => Effect.Effect<rekognition.IndexFacesResponse, rekognition.IndexFacesError>
   >
 > {}
-export const IndexFaces = Binding.Service<IndexFaces>(
-  "AWS.Rekognition.IndexFaces",
-);
+export const IndexFaces = Binding.Service<IndexFaces>("AWS.Rekognition.IndexFaces");

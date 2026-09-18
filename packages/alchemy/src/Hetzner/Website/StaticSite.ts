@@ -4,7 +4,6 @@ import {
   writeNodeServeEntry,
 } from "@alchemy.run/frontend-frameworks/core";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -167,9 +166,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         cwd: props.dev.cwd ?? props.cwd,
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
-      const url = Output.map(
-        (detected: string | undefined) => detected ?? props.dev?.url,
-      )(dev.url);
+      const url = Output.map((detected: string | undefined) => detected ?? props.dev?.url)(dev.url);
       return {
         url,
         server: undefined,
@@ -185,14 +182,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
     }).pipe(Namespace.push(id));
 
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const cwd = path.resolve(initialCwd, props.cwd ?? ".");
     const outdir = path.resolve(cwd, props.outdir);
-    const servePath = path.join(
-      path.dirname(outdir),
-      NODE_SERVE_ENTRY_FILE_NAME,
-    );
+    const servePath = path.join(path.dirname(outdir), NODE_SERVE_ENTRY_FILE_NAME);
     yield* writeNodeServeEntry({
       output: {
         clientDirectory: outdir,
@@ -203,11 +196,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       serveModuleName: NODE_SERVE_ENTRY_FILE_NAME,
       clientDirExpression: relativeClientDirExpression(servePath, outdir),
       notFoundHandling:
-        props.errorPage !== undefined
-          ? "404-page"
-          : props.spa === true
-            ? "spa"
-            : "none",
+        props.errorPage !== undefined ? "404-page" : props.spa === true ? "spa" : "none",
       printUrl: isLocal,
       defaultPort: port,
       platform: "node",

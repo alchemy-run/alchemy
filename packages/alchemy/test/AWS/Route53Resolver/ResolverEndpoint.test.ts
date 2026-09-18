@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ResolverEndpoint } from "@/AWS/Route53Resolver";
-import * as Test from "@/Test/Alchemy";
 import * as r53r from "@distilled.cloud/aws/route53resolver";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ResolverEndpoint } from "@/AWS/Route53Resolver";
+import * as Test from "@/Test/Alchemy";
 import { assertEndpointDeleting, defaultNetwork } from "./helpers.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -26,9 +26,7 @@ test.provider(
           return { endpoint };
         });
 
-      const { endpoint } = yield* stack.deploy(
-        make({ fixture: "r53r-endpoint" }),
-      );
+      const { endpoint } = yield* stack.deploy(make({ fixture: "r53r-endpoint" }));
 
       expect(endpoint.resolverEndpointId).toMatch(/^rslvr-in-/);
       expect(endpoint.direction).toBe("INBOUND");
@@ -46,9 +44,7 @@ test.provider(
       const tags = yield* r53r.listTagsForResource({
         ResourceArn: endpoint.resolverEndpointArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("r53r-endpoint");
       expect(tagRecord["alchemy::id"]).toBe("Inbound");
 

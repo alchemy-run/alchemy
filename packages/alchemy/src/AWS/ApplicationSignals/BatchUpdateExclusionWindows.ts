@@ -56,7 +56,6 @@ export interface BatchUpdateExclusionWindows extends Binding.Service<
   >
 > {}
 
-export const BatchUpdateExclusionWindows =
-  Binding.Service<BatchUpdateExclusionWindows>(
-    "AWS.ApplicationSignals.BatchUpdateExclusionWindows",
-  );
+export const BatchUpdateExclusionWindows = Binding.Service<BatchUpdateExclusionWindows>(
+  "AWS.ApplicationSignals.BatchUpdateExclusionWindows",
+);

@@ -40,10 +40,7 @@ export interface ListBrowserSessions extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListBrowserSessionsRequest,
-    ) => Effect.Effect<
-      agentcore.ListBrowserSessionsResponse,
-      agentcore.ListBrowserSessionsError
-    >
+    ) => Effect.Effect<agentcore.ListBrowserSessionsResponse, agentcore.ListBrowserSessionsError>
   >
 > {}
 export const ListBrowserSessions = Binding.Service<ListBrowserSessions>(

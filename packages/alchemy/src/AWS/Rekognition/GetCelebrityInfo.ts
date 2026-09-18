@@ -30,10 +30,7 @@ export interface GetCelebrityInfo extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.GetCelebrityInfoRequest,
-    ) => Effect.Effect<
-      rekognition.GetCelebrityInfoResponse,
-      rekognition.GetCelebrityInfoError
-    >
+    ) => Effect.Effect<rekognition.GetCelebrityInfoResponse, rekognition.GetCelebrityInfoError>
   >
 > {}
 export const GetCelebrityInfo = Binding.Service<GetCelebrityInfo>(

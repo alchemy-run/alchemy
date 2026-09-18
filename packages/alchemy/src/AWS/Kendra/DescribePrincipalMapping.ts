@@ -45,7 +45,6 @@ export interface DescribePrincipalMapping extends Binding.Service<
     >
   >
 > {}
-export const DescribePrincipalMapping =
-  Binding.Service<DescribePrincipalMapping>(
-    "AWS.Kendra.DescribePrincipalMapping",
-  );
+export const DescribePrincipalMapping = Binding.Service<DescribePrincipalMapping>(
+  "AWS.Kendra.DescribePrincipalMapping",
+);

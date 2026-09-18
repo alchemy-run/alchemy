@@ -34,10 +34,7 @@ export interface BatchDeleteReadSet extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: BatchDeleteReadSetRequest,
-    ) => Effect.Effect<
-      omics.BatchDeleteReadSetResponse,
-      omics.BatchDeleteReadSetError
-    >
+    ) => Effect.Effect<omics.BatchDeleteReadSetResponse, omics.BatchDeleteReadSetError>
   >
 > {}
 

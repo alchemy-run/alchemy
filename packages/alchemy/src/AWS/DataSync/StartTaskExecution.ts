@@ -33,10 +33,7 @@ export interface StartTaskExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<datasync.StartTaskExecutionRequest, "TaskArn">,
-    ) => Effect.Effect<
-      datasync.StartTaskExecutionResponse,
-      datasync.StartTaskExecutionError
-    >
+    ) => Effect.Effect<datasync.StartTaskExecutionResponse, datasync.StartTaskExecutionError>
   >
 > {}
 export const StartTaskExecution = Binding.Service<StartTaskExecution>(

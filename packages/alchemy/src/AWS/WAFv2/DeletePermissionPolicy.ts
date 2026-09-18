@@ -29,10 +29,7 @@ export interface DeletePermissionPolicy extends Binding.Service<
   (
     ruleGroup: RuleGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      WAFV2.DeletePermissionPolicyResponse,
-      WAFV2.DeletePermissionPolicyError
-    >
+    () => Effect.Effect<WAFV2.DeletePermissionPolicyResponse, WAFV2.DeletePermissionPolicyError>
   >
 > {}
 

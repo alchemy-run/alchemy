@@ -1,8 +1,3 @@
-import * as Glue from "@/AWS/Glue";
-import { Role } from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import { Bucket } from "@/AWS/S3";
-import * as Output from "@/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -11,12 +6,15 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Glue from "@/AWS/Glue";
+import { Role } from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import { Bucket } from "@/AWS/S3";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class GlueTestFunction extends Lambda.Function<Lambda.Function>()(
-  "GlueTestFunction",
-) {}
+export class GlueTestFunction extends Lambda.Function<Lambda.Function>()("GlueTestFunction") {}
 
 export default GlueTestFunction.make(
   {
@@ -75,18 +73,14 @@ export default GlueTestFunction.make(
       role: role.roleArn,
       databaseName: database.databaseName,
       targets: {
-        s3Targets: [
-          { path: Output.interpolate`s3://${bucket.bucketName}/crawl/` },
-        ],
+        s3Targets: [{ path: Output.interpolate`s3://${bucket.bucketName}/crawl/` }],
       },
     });
 
     // Event sources: the deploys prove the EventBridge rule + invoke
     // permission wiring for both Glue detail types.
     yield* Glue.consumeJobEvents({ states: ["FAILED", "TIMEOUT"] }, (events) =>
-      Stream.runForEach(events, (event) =>
-        Effect.log(`glue job event: ${event.detail.jobName}`),
-      ),
+      Stream.runForEach(events, (event) => Effect.log(`glue job event: ${event.detail.jobName}`)),
     );
     yield* Glue.consumeCrawlerEvents({ states: ["Succeeded"] }, (events) =>
       Stream.runForEach(events, (event) =>
@@ -166,15 +160,11 @@ export default GlueTestFunction.make(
         if (request.method === "GET" && pathname === "/job-bookmark") {
           const bookmark = yield* getJobBookmark().pipe(
             Effect.map((r) => r.JobBookmarkEntry ?? "none"),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed("none" as const),
-            ),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed("none" as const)),
           );
           const reset = yield* resetJobBookmark().pipe(
             Effect.map(() => "reset" as const),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed("none" as const),
-            ),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed("none" as const)),
           );
           return yield* HttpServerResponse.json({ bookmark, reset });
         }
@@ -185,10 +175,7 @@ export default GlueTestFunction.make(
           const { JobRunId } = yield* startJobRun({}).pipe(
             Effect.retry({
               while: (e): boolean => e._tag === "GlueRoleNotAssumable",
-              schedule: Schedule.max([
-                Schedule.fixed("5 seconds"),
-                Schedule.recurs(6),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(6)]),
             }),
           );
           const { JobRun } = yield* getJobRun({ RunId: JobRunId! });
@@ -218,9 +205,7 @@ export default GlueTestFunction.make(
             Effect.catchTag("CrawlerNotRunningException", () =>
               Effect.succeed("not-running" as const),
             ),
-            Effect.catchTag("CrawlerStoppingException", () =>
-              Effect.succeed("stopping" as const),
-            ),
+            Effect.catchTag("CrawlerStoppingException", () => Effect.succeed("stopping" as const)),
           );
           return yield* HttpServerResponse.json({ result });
         }
@@ -239,9 +224,7 @@ export default GlueTestFunction.make(
             Effect.catchTag("CrawlerNotRunningException", () =>
               Effect.succeed("not-running" as const),
             ),
-            Effect.catchTag("CrawlerStoppingException", () =>
-              Effect.succeed("stopping" as const),
-            ),
+            Effect.catchTag("CrawlerStoppingException", () => Effect.succeed("stopping" as const)),
           );
           return yield* HttpServerResponse.json({ started, stopped });
         }
@@ -252,9 +235,7 @@ export default GlueTestFunction.make(
           const { TableList } = yield* getTables();
           return yield* HttpServerResponse.json({
             name: Table?.Name,
-            columns: (Table?.StorageDescriptor?.Columns ?? []).map(
-              (c) => c.Name,
-            ),
+            columns: (Table?.StorageDescriptor?.Columns ?? []).map((c) => c.Name),
             partitionKeys: (Table?.PartitionKeys ?? []).map((k) => k.Name),
             tables: (TableList ?? []).map((t) => t.Name),
           });
@@ -266,9 +247,7 @@ export default GlueTestFunction.make(
         if (request.method === "POST" && pathname === "/partitions") {
           yield* createPartition({
             PartitionInput: { Values: ["2026-01-01"] },
-          }).pipe(
-            Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})),
-          );
+          }).pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
           const created = yield* getPartition({
             PartitionValues: ["2026-01-01"],
           });
@@ -283,10 +262,7 @@ export default GlueTestFunction.make(
             PartitionValues: ["2026-01-01"],
           });
           const batch = yield* batchCreatePartition({
-            PartitionInputList: [
-              { Values: ["2026-01-02"] },
-              { Values: ["2026-01-03"] },
-            ],
+            PartitionInputList: [{ Values: ["2026-01-02"] }, { Values: ["2026-01-03"] }],
           });
           // Bulk update the batch-created partitions' parameters.
           const batchUpdated = yield* batchUpdatePartition({
@@ -309,10 +285,7 @@ export default GlueTestFunction.make(
           const all = yield* getPartitions();
           // Bulk delete two, single-delete the third.
           const batchDeleted = yield* batchDeletePartition({
-            PartitionsToDelete: [
-              { Values: ["2026-01-02"] },
-              { Values: ["2026-01-03"] },
-            ],
+            PartitionsToDelete: [{ Values: ["2026-01-02"] }, { Values: ["2026-01-03"] }],
           });
           yield* deletePartition({ PartitionValues: ["2026-01-01"] }).pipe(
             Effect.catchTag("EntityNotFoundException", () => Effect.void),

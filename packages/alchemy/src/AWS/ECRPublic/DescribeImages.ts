@@ -37,13 +37,8 @@ export interface DescribeImages extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeImagesRequest,
-    ) => Effect.Effect<
-      ecrpublic.DescribeImagesResponse,
-      ecrpublic.DescribeImagesError
-    >
+    ) => Effect.Effect<ecrpublic.DescribeImagesResponse, ecrpublic.DescribeImagesError>
   >
 > {}
 
-export const DescribeImages = Binding.Service<DescribeImages>(
-  "AWS.ECRPublic.DescribeImages",
-);
+export const DescribeImages = Binding.Service<DescribeImages>("AWS.ECRPublic.DescribeImages");

@@ -30,10 +30,7 @@ export interface ListFargateProfiles extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<eks.ListFargateProfilesRequest, "clusterName">,
-    ) => Effect.Effect<
-      eks.ListFargateProfilesResponse,
-      eks.ListFargateProfilesError
-    >
+    ) => Effect.Effect<eks.ListFargateProfilesResponse, eks.ListFargateProfilesError>
   >
 > {}
 export const ListFargateProfiles = Binding.Service<ListFargateProfiles>(

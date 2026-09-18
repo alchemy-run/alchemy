@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { LoginProfile, User } from "@/AWS/IAM";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { LoginProfile, User } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -35,9 +35,7 @@ describe("AWS.IAM.LoginProfile", () => {
       const provider = yield* Provider.findProvider(LoginProfile);
       const all = yield* provider.list();
 
-      const found = all.find(
-        (entry) => entry.userName === deployed.user.userName,
-      );
+      const found = all.find((entry) => entry.userName === deployed.user.userName);
       expect(found).toBeDefined();
       expect(found?.userName).toBe(deployed.user.userName);
 

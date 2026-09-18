@@ -1,11 +1,11 @@
-import * as Alchemy from "@/index.ts";
-import { Stage } from "@/Stage";
-import { Stack } from "@/Stack";
-import { InMemoryService, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Alchemy from "@/index.ts";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import { InMemoryService, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 // Regression coverage for https://github.com/alchemy-run/alchemy/issues/961:
@@ -29,16 +29,14 @@ describe("destroy clears the persisted stack output", () => {
       }).pipe(stack.deploy);
       expect(deployed).toEqual({ url: "test-string" });
 
-      expect(
-        yield* state.getOutput({ stack: stk.name, stage: stk.stage }),
-      ).toEqual({ url: "test-string" });
+      expect(yield* state.getOutput({ stack: stk.name, stage: stk.stage })).toEqual({
+        url: "test-string",
+      });
 
       yield* stack.destroy();
 
       // The output record must be removed, not overwritten with `{}`.
-      expect(
-        yield* state.getOutput({ stack: stk.name, stage: stk.stage }),
-      ).toBeUndefined();
+      expect(yield* state.getOutput({ stack: stk.name, stage: stk.stage })).toBeUndefined();
       // ... and `listStages` must agree the stage is gone.
       expect(yield* state.listStages(stk.name)).not.toContain(stk.stage);
     }),

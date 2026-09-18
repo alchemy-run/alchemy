@@ -166,8 +166,7 @@ export const FloatingIp = Resource<FloatingIp>("Hetzner.FloatingIp");
 
 type CloudFloatingIp = GetFloatingIpResponseFloatingIp;
 
-const asType = (type: string): FloatingIpType =>
-  type === "ipv6" ? "ipv6" : "ipv4";
+const asType = (type: string): FloatingIpType => (type === "ipv6" ? "ipv6" : "ipv4");
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -188,15 +187,9 @@ const toAttrs = (ip: CloudFloatingIp): FloatingIp["Attributes"] => ({
   serverId: ip.server,
 });
 
-const createFloatingIpName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createFloatingIpName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }));
   });
 
 const getById = (id: number) =>
@@ -276,9 +269,7 @@ const disableProtection = (id: number) =>
     .changeFloatingIpProtection({ id, delete: false })
     .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
 
-export class FloatingIpNotCreated extends Data.TaggedError(
-  "Hetzner.FloatingIpNotCreated",
-)<{
+export class FloatingIpNotCreated extends Data.TaggedError("Hetzner.FloatingIpNotCreated")<{
   name: string;
 }> {}
 
@@ -396,11 +387,10 @@ export const FloatingIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } =
-          yield* Services.floatingIpActions.changeFloatingIpProtection({
-            id: current.id,
-            delete: desiredProtection,
-          });
+        const { action } = yield* Services.floatingIpActions.changeFloatingIpProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
         yield* waitForAction(action);
       }
 
@@ -413,9 +403,7 @@ export const FloatingIpProvider = () =>
         yield* disableProtection(current.id);
       }
       if (current.server !== null) {
-        const { action } = yield* Services.floatingIpActions.unassignFloatingIp(
-          { id: current.id },
-        );
+        const { action } = yield* Services.floatingIpActions.unassignFloatingIp({ id: current.id });
         yield* waitForAction(action);
       }
       yield* Services.floatingIps

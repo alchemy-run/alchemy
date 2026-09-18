@@ -45,17 +45,13 @@ export default class Api extends Fly.Service<Api>()(
           return yield* json({ ok: true });
         }
         if (path === "/notes" && request.method === "GET") {
-          const notes = yield* db
-            .select()
-            .from(Notes)
-            .orderBy(desc(Notes.createdAt));
+          const notes = yield* db.select().from(Notes).orderBy(desc(Notes.createdAt));
           return yield* json({ notes });
         }
         if (path === "/notes" && request.method === "POST") {
           const raw = yield* request.text.pipe(Effect.orDie);
           const payload = JSON.parse(raw) as { body?: unknown };
-          const body =
-            typeof payload.body === "string" ? payload.body.trim() : "";
+          const body = typeof payload.body === "string" ? payload.body.trim() : "";
           if (body.length === 0) {
             return yield* json({ error: "body required" }, 400);
           }
@@ -64,9 +60,7 @@ export default class Api extends Fly.Service<Api>()(
         }
         return yield* json({ error: "not found" }, 404);
       }).pipe(
-        Effect.catch((cause: unknown) =>
-          json({ ok: false, error: String(cause) }, 500),
-        ),
+        Effect.catch((cause: unknown) => json({ ok: false, error: String(cause) }, 500)),
         Effect.orDie,
       ),
     };

@@ -41,7 +41,6 @@ export interface DescribeAutoScalingGroup extends Binding.Service<
   >
 > {}
 
-export const DescribeAutoScalingGroup =
-  Binding.Service<DescribeAutoScalingGroup>(
-    "AWS.AutoScaling.DescribeAutoScalingGroup",
-  );
+export const DescribeAutoScalingGroup = Binding.Service<DescribeAutoScalingGroup>(
+  "AWS.AutoScaling.DescribeAutoScalingGroup",
+);

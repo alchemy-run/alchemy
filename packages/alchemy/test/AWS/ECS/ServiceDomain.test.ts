@@ -1,8 +1,3 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
-import { HostedZone } from "@/AWS/Route53";
-import * as Test from "@/Test/Alchemy";
 import * as acm from "@distilled.cloud/aws/acm";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
@@ -11,6 +6,11 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import { Service } from "@/AWS/ECS/Service.ts";
+import { HostedZone } from "@/AWS/Route53";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -102,10 +102,7 @@ test.provider.skipIf(!!process.env.FAST)(
         acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceInUseException",
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(12),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
           }),
           Effect.ignore,
         ),
@@ -119,9 +116,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const program = (includeService: boolean) =>
@@ -170,14 +165,10 @@ test.provider.skipIf(!!process.env.FAST)(
       const listeners = yield* elbv2.describeListeners({
         LoadBalancerArn: deployed.loadBalancerArn,
       });
-      const httpsListener = (listeners.Listeners ?? []).find(
-        (l) => l.Port === 443,
-      );
+      const httpsListener = (listeners.Listeners ?? []).find((l) => l.Port === 443);
       expect(httpsListener?.Protocol).toBe("HTTPS");
       expect(
-        (httpsListener?.Certificates ?? []).some(
-          (c) => c.CertificateArn === certificateArn,
-        ),
+        (httpsListener?.Certificates ?? []).some((c) => c.CertificateArn === certificateArn),
       ).toBe(true);
 
       // Alias A + AAAA records for the domain point at the ALB.
@@ -194,11 +185,9 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(aliasRecords.map((r) => r.Type).sort()).toEqual(["A", "AAAA"]);
       for (const record of aliasRecords) {
-        expect(
-          record
-            .AliasTarget!.DNSName!.toLowerCase()
-            .includes(albDns.toLowerCase()),
-        ).toBe(true);
+        expect(record.AliasTarget!.DNSName!.toLowerCase().includes(albDns.toLowerCase())).toBe(
+          true,
+        );
       }
 
       // ── destroy + zero-orphan proofs ──────────────────────────────────
@@ -210,9 +199,7 @@ test.provider.skipIf(!!process.env.FAST)(
         })
         .pipe(
           Effect.map((r) => (r.LoadBalancers ?? []).length === 0),
-          Effect.catchTag("LoadBalancerNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(true)),
         );
       expect(lbGone).toBe(true);
 
@@ -232,10 +219,7 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
         Effect.retry({
           while: (e) => e._tag === "ResourceInUseException",
-          schedule: Schedule.max([
-            Schedule.spaced("5 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(60)]),
         }),
       );
     }),
@@ -252,8 +236,7 @@ test.provider(
         .deploy(
           Effect.gen(function* () {
             return yield* Service("ZonelessSvc", {
-              cluster:
-                "arn:aws:ecs:us-east-1:123456789012:cluster/never-created" as any,
+              cluster: "arn:aws:ecs:us-east-1:123456789012:cluster/never-created" as any,
               image: "busybox:stable",
               port: 80,
               desiredCount: 0,
@@ -294,9 +277,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DOMAIN)(
           ],
         })
         .pipe(
-          Effect.map((r) =>
-            (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : [])),
-          ),
+          Effect.map((r) => (r.Subnets ?? []).flatMap((s) => (s.SubnetId ? [s.SubnetId] : []))),
         );
 
       const deployed = yield* stack.deploy(
@@ -326,9 +307,7 @@ test.provider.skipIf(!process.env.AWS_TEST_DOMAIN)(
       const listeners = yield* elbv2.describeListeners({
         LoadBalancerArn: deployed.loadBalancerArn,
       });
-      const httpsListener = (listeners.Listeners ?? []).find(
-        (l) => l.Port === 443,
-      );
+      const httpsListener = (listeners.Listeners ?? []).find((l) => l.Port === 443);
       expect(httpsListener?.Protocol).toBe("HTTPS");
       expect((httpsListener?.Certificates ?? []).length).toBeGreaterThan(0);
 

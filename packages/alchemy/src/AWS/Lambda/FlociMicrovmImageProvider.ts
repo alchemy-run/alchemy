@@ -37,21 +37,18 @@
 
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Artifacts from "../../Artifacts.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
+import { hashDirectory } from "../../Command/Memo.ts";
 import { Docker, DockerLive } from "../../Docker/Docker.ts";
 import { isInlineDockerfile } from "../../Docker/Dockerfile.ts";
-import { hashDirectory } from "../../Command/Memo.ts";
 import { sha256 } from "../../Util/sha256.ts";
-import {
-  flociProvidersUrl,
-  makeDevWatchProvider,
-} from "../Local/DevWatchProvider.ts";
-import { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 import type { ImageSourceLike } from "../ECR/ImageSource.ts";
+import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
+import { imageSourceTrigger } from "../Local/ImageSourceTrigger.ts";
 import {
   buildMicrovmDockerfile,
   bundleMicrovmProgram,
@@ -68,8 +65,7 @@ import { MicrovmImageProvider } from "./MicrovmProvider.ts";
  * both paths produce the same image.
  */
 const LOCAL_MICROVM_BASE_IMAGE =
-  process.env.FLOCI_MICROVM_BASE_IMAGE ||
-  "public.ecr.aws/amazonlinux/amazonlinux:2023";
+  process.env.FLOCI_MICROVM_BASE_IMAGE || "public.ecr.aws/amazonlinux/amazonlinux:2023";
 
 const rewriteBaseImage = (dockerfile: string): string =>
   dockerfile
@@ -93,10 +89,7 @@ const rewriteBaseImage = (dockerfile: string): string =>
  * so an unchanged build is a pure cache hit AND the live reconcile's
  * artifact-hash comparison (`sha256(uri:propsId)`) sees content changes.
  */
-const buildLocalImage = Effect.fn(function* (
-  id: string,
-  news: MicrovmImageProps,
-) {
+const buildLocalImage = Effect.fn(function* (id: string, news: MicrovmImageProps) {
   const docker = yield* Docker;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -117,15 +110,9 @@ const buildLocalImage = Effect.fn(function* (
       news.dockerfile !== undefined && isInlineDockerfile(news.dockerfile)
         ? (news.dockerfile.content as string)
         : news.dockerfile;
-    const dockerfile = rewriteBaseImage(
-      buildMicrovmDockerfile(userDockerfile, runtime, port),
-    );
+    const dockerfile = rewriteBaseImage(buildMicrovmDockerfile(userDockerfile, runtime, port));
     const contentHash = yield* sha256(`${bundleHash}:${dockerfile}`);
-    const context = yield* getStableContextDir(
-      process.cwd(),
-      dotAlchemy,
-      `${id}-microvm`,
-    );
+    const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-microvm`);
     yield* docker.materialize({
       context,
       dockerfile,
@@ -148,11 +135,7 @@ const buildLocalImage = Effect.fn(function* (
     const contentHash = yield* sha256(`${contextHash}:${rewritten}`);
     // The rewritten Dockerfile lives OUTSIDE the user's context (never
     // touch their files); `docker build -f` accepts that.
-    const staging = yield* getStableContextDir(
-      process.cwd(),
-      dotAlchemy,
-      `${id}-microvm`,
-    );
+    const staging = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-microvm`);
     const rewrittenPath = path.join(staging, "Dockerfile");
     yield* fs.writeFileString(rewrittenPath, rewritten);
     const tag = `alchemy-dev/microvm-${id.toLowerCase()}:${contentHash.slice(0, 16)}`;
@@ -164,92 +147,85 @@ const buildLocalImage = Effect.fn(function* (
 });
 
 export const FlociMicrovmImageProvider = () =>
-  makeDevWatchProvider<
+  makeDevWatchProvider<MicrovmImage, MicrovmImageProps, MicrovmImage["Attributes"]>(
     MicrovmImage,
-    MicrovmImageProps,
-    MicrovmImage["Attributes"]
-  >(MicrovmImage, flociProvidersUrl(), {
-    liveProvider: () => MicrovmImageProvider(),
-    services: DockerLive,
-    // The restart surface of the watch loop: everything that changes WHAT
-    // is built (props flow through the reconcile anyway).
-    watchConfigOf: (news, attrs) => {
-      const source = news as ImageSourceLike;
-      return {
-        name: attrs.name,
-        main: source.main,
-        context: source.context,
-        dockerfile: source.dockerfile,
-        codeArtifactUri: news.codeArtifact?.uri,
-        runtime: news.runtime,
-        port: news.port,
-        isExternal: news.isExternal,
-        external: news.external,
-        build: news.build,
-      };
-    },
-    // Mirrors the live diff: the image name is the identity.
-    replaceOn: ({ id: _id, olds, news }) =>
-      Effect.sync(() =>
-        (olds.name ?? null) !== (news.name ?? null)
-          ? { action: "replace" as const }
-          : undefined,
-      ),
-    // Build locally, delegate with a pre-built reference. A user-supplied
-    // `codeArtifact.uri` passes through untouched (already pre-built).
-    transformReconcileNews: ({ id, news }) =>
-      Effect.gen(function* () {
-        const tag = yield* buildLocalImage(id, news);
-        if (tag === undefined) return news;
-        // The live reconcile memoizes its resolved artifact per id for the
-        // run (`Artifacts.cached`) — but the sidecar's artifact store lives
-        // for the whole dev session, so a rebuilt docker:// reference would
-        // read back the FIRST reconcile's artifact and no-op forever. Evict
-        // so the reconcile resolves the fresh reference.
-        yield* (yield* Artifacts.Artifacts).delete(
-          `microvm-image-content:${id}`,
-        );
+    flociProvidersUrl(),
+    {
+      liveProvider: () => MicrovmImageProvider(),
+      services: DockerLive,
+      // The restart surface of the watch loop: everything that changes WHAT
+      // is built (props flow through the reconcile anyway).
+      watchConfigOf: (news, attrs) => {
+        const source = news as ImageSourceLike;
         return {
-          ...news,
-          main: undefined,
-          context: undefined,
-          dockerfile: undefined,
-          codeArtifact: { uri: `docker://${tag}` },
-        } satisfies MicrovmImageProps;
-      }),
-    startWatch: (ctx) =>
-      Effect.gen(function* () {
-        const trigger = yield* imageSourceTrigger({
-          id: ctx.id,
-          source: ctx.news as ImageSourceLike,
-          isExternal: ctx.news.isExternal,
-        });
-        yield* trigger.pipe(
-          // The re-run builds (cached) and re-reconciles; floci marks the
-          // new version ACTIVE immediately, and the next RunMicrovm boots
-          // it. Running VMs keep their session (deliberately not killed).
-          Stream.runForEach(() =>
-            Effect.gen(function* () {
-              const startedAt = Date.now();
-              yield* Effect.logInfo(
-                `[alchemy dev] ${ctx.id}: microvm source changed — rebuilding`,
-              );
-              const previous = yield* ctx.currentAttrs;
-              const attrs = yield* ctx.rerunReconcile;
-              if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {
+          name: attrs.name,
+          main: source.main,
+          context: source.context,
+          dockerfile: source.dockerfile,
+          codeArtifactUri: news.codeArtifact?.uri,
+          runtime: news.runtime,
+          port: news.port,
+          isExternal: news.isExternal,
+          external: news.external,
+          build: news.build,
+        };
+      },
+      // Mirrors the live diff: the image name is the identity.
+      replaceOn: ({ id: _id, olds, news }) =>
+        Effect.sync(() =>
+          (olds.name ?? null) !== (news.name ?? null) ? { action: "replace" as const } : undefined,
+        ),
+      // Build locally, delegate with a pre-built reference. A user-supplied
+      // `codeArtifact.uri` passes through untouched (already pre-built).
+      transformReconcileNews: ({ id, news }) =>
+        Effect.gen(function* () {
+          const tag = yield* buildLocalImage(id, news);
+          if (tag === undefined) return news;
+          // The live reconcile memoizes its resolved artifact per id for the
+          // run (`Artifacts.cached`) — but the sidecar's artifact store lives
+          // for the whole dev session, so a rebuilt docker:// reference would
+          // read back the FIRST reconcile's artifact and no-op forever. Evict
+          // so the reconcile resolves the fresh reference.
+          yield* (yield* Artifacts.Artifacts).delete(`microvm-image-content:${id}`);
+          return {
+            ...news,
+            main: undefined,
+            context: undefined,
+            dockerfile: undefined,
+            codeArtifact: { uri: `docker://${tag}` },
+          } satisfies MicrovmImageProps;
+        }),
+      startWatch: (ctx) =>
+        Effect.gen(function* () {
+          const trigger = yield* imageSourceTrigger({
+            id: ctx.id,
+            source: ctx.news as ImageSourceLike,
+            isExternal: ctx.news.isExternal,
+          });
+          yield* trigger.pipe(
+            // The re-run builds (cached) and re-reconciles; floci marks the
+            // new version ACTIVE immediately, and the next RunMicrovm boots
+            // it. Running VMs keep their session (deliberately not killed).
+            Stream.runForEach(() =>
+              Effect.gen(function* () {
+                const startedAt = Date.now();
                 yield* Effect.logInfo(
-                  `[alchemy dev] ${attrs.name}: microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
+                  `[alchemy dev] ${ctx.id}: microvm source changed — rebuilding`,
                 );
-              }
-            }).pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning(
-                  `[alchemy dev] ${ctx.id}: microvm image rebuild failed`,
-                  cause,
+                const previous = yield* ctx.currentAttrs;
+                const attrs = yield* ctx.rerunReconcile;
+                if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {
+                  yield* Effect.logInfo(
+                    `[alchemy dev] ${attrs.name}: microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
+                  );
+                }
+              }).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`[alchemy dev] ${ctx.id}: microvm image rebuild failed`, cause),
                 ),
               ),
             ),
-          ),
-        );
-      }),
-  });
+          );
+        }),
+    },
+  );

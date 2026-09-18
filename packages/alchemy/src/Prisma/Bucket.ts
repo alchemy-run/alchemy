@@ -1,15 +1,4 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
-import * as Provider from "../Provider.ts";
-import {
-  DEV_TIMESTAMP,
-  attrOrString,
-  devId,
-  devProvider,
-} from "./Internal/DevStub.ts";
-import * as ProviderLayer from "../Local/ProviderLayer.ts";
-import { Resource } from "../Resource.ts";
+import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetBucketsResponse,
   deleteBucket,
@@ -17,7 +6,15 @@ import {
   getBucket,
   createBucket,
 } from "@distilled.cloud/prisma/management";
-import { Retry } from "@distilled.cloud/prisma";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import { isResolved } from "../Diff.ts";
+import * as ProviderLayer from "../Local/ProviderLayer.ts";
+import * as Provider from "../Provider.ts";
+import { Resource } from "../Resource.ts";
+import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./Internal/DevStub.ts";
+import type { ObservedBucket } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -27,8 +24,6 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { ObservedBucket } from "./Internal/Observed.ts";
-import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface BucketProps {
   /**
@@ -108,9 +103,7 @@ export const Bucket = Resource<Bucket>("Prisma.Bucket");
  * one requested or persisted. Convergence and deletion both refuse rather
  * than acting on a bucket that is not the one this resource manages.
  */
-export class BucketProjectMismatchError extends Data.TaggedError(
-  "BucketProjectMismatchError",
-)<{
+export class BucketProjectMismatchError extends Data.TaggedError("BucketProjectMismatchError")<{
   bucketId: string;
   actualProjectId: string;
   expectedProjectId: string;
@@ -154,15 +147,13 @@ const ProviderLive = () =>
     Effect.gen(function* () {
       return {
         stables: ["bucketId"],
-        list: () =>
-          listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
+        list: () => listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.bucketId)) {
             return { action: "update" } as const;
           }
-          const oldProjectId =
-            output?.projectId ?? unresolvedProjectIdOf(olds.project);
+          const oldProjectId = output?.projectId ?? unresolvedProjectIdOf(olds.project);
           const newProjectId = isResolved(news.project)
             ? unresolvedProjectIdOf(news.project)
             : undefined;
@@ -187,9 +178,7 @@ const ProviderLive = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ output }) {
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) return undefined;
           const bucket = yield* getBucket({ bucketId }).pipe(
             Effect.map((response) => response.data),
@@ -199,9 +188,7 @@ const ProviderLive = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const projectId = yield* resolveProjectId(news.project);
-          const bucketId = isPrismaDevId(output?.bucketId)
-            ? undefined
-            : output?.bucketId;
+          const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           const observed = bucketId
             ? yield* getBucket({ bucketId }).pipe(
                 Effect.map((response) => response.data),

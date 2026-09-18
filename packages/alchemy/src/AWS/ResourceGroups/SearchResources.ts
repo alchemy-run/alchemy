@@ -38,10 +38,7 @@ export interface SearchResources extends Binding.Service<
   () => Effect.Effect<
     (
       request: resourcegroups.SearchResourcesInput,
-    ) => Effect.Effect<
-      resourcegroups.SearchResourcesOutput,
-      resourcegroups.SearchResourcesError
-    >
+    ) => Effect.Effect<resourcegroups.SearchResourcesOutput, resourcegroups.SearchResourcesError>
   >
 > {}
 export const SearchResources = Binding.Service<SearchResources>(

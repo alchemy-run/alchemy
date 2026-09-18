@@ -39,7 +39,6 @@ export interface UpdateDatasourcePackages extends Binding.Service<
     >
   >
 > {}
-export const UpdateDatasourcePackages =
-  Binding.Service<UpdateDatasourcePackages>(
-    "AWS.Detective.UpdateDatasourcePackages",
-  );
+export const UpdateDatasourcePackages = Binding.Service<UpdateDatasourcePackages>(
+  "AWS.Detective.UpdateDatasourcePackages",
+);

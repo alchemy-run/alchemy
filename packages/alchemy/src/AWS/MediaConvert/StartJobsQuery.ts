@@ -32,12 +32,7 @@ export interface StartJobsQuery extends Binding.Service<
   () => Effect.Effect<
     (
       request?: mediaconvert.StartJobsQueryRequest,
-    ) => Effect.Effect<
-      mediaconvert.StartJobsQueryResponse,
-      mediaconvert.StartJobsQueryError
-    >
+    ) => Effect.Effect<mediaconvert.StartJobsQueryResponse, mediaconvert.StartJobsQueryError>
   >
 > {}
-export const StartJobsQuery = Binding.Service<StartJobsQuery>(
-  "AWS.MediaConvert.StartJobsQuery",
-);
+export const StartJobsQuery = Binding.Service<StartJobsQuery>("AWS.MediaConvert.StartJobsQuery");

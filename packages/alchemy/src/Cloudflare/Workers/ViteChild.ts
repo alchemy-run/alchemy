@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import * as NodeV8 from "node:v8";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -7,11 +9,8 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
-import * as NodeV8 from "node:v8";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { BundleError } from "../../Bundle/Bundle.ts";
-import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   fromProcessEnv,
   RPC_SERVER_ENVIRONMENT_KEY,
@@ -21,6 +20,7 @@ import { Stack } from "../../Stack.ts";
 import { unwrapRedacted } from "../../Util/index.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { moduleExtension } from "../../Util/Node.ts";
+import { pipedColorEnv } from "../../Util/Terminal.ts";
 import {
   type ViteBuildChildConfig,
   type ViteBuildChildResult,
@@ -41,9 +41,7 @@ export interface ViteChildHandle {
 // at startup even though no child is ever spawned there. At spawn time
 // we are guaranteed to be in Node/bun.
 const resolveRunner = (basename: string) =>
-  fileURLToPath(
-    import.meta.resolve(`./${basename}${moduleExtension(import.meta.url)}`),
-  );
+  fileURLToPath(import.meta.resolve(`./${basename}${moduleExtension(import.meta.url)}`));
 
 export const startViteChild = (
   config: ViteChildConfig,
@@ -108,9 +106,7 @@ export const startViteChild = (
     const child = yield* spawner.spawn(
       ChildProcess.make(
         nodeExecPath ?? process.execPath,
-        isBun && nodeExecPath === undefined
-          ? ["run", runner]
-          : [...nodeLoaderArgs(runner), runner],
+        isBun && nodeExecPath === undefined ? ["run", runner] : [...nodeLoaderArgs(runner), runner],
         {
           cwd: config.rootDir,
           stdin: Stream.succeed(serializedConfig),
@@ -150,11 +146,7 @@ export const startViteChild = (
       Deferred.await(ready),
       exitCode.pipe(
         Effect.flatMap((exitCode) =>
-          Effect.die(
-            new Error(
-              `Vite child exited with code ${exitCode} before becoming ready`,
-            ),
-          ),
+          Effect.die(new Error(`Vite child exited with code ${exitCode} before becoming ready`)),
         ),
       ),
     ]);
@@ -192,9 +184,7 @@ export const runViteBuildChild = (
       const outputPath = path.join(outputDir, "result.v8");
       // Redacted values can't cross the process boundary — the config is
       // plain data once unwrapped.
-      const serializedConfig = NodeV8.serialize(
-        unwrapRedacted({ ...config, outputPath }),
-      );
+      const serializedConfig = NodeV8.serialize(unwrapRedacted({ ...config, outputPath }));
       const child = yield* spawner.spawn(
         ChildProcess.make(
           process.execPath,

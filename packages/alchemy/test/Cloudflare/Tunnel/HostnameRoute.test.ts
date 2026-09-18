@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic hostnames on the testing zone — hostnames are unique per
 // account, so reruns converge on the same route instead of leaking. The two
@@ -83,10 +80,7 @@ test.provider(
       expect(initial.route.tunnelId).toEqual(initial.tunnel.tunnelId);
       expect(initial.route.comment).toEqual("v1");
 
-      const live = yield* getLiveRoute(
-        accountId,
-        initial.route.hostnameRouteId,
-      );
+      const live = yield* getLiveRoute(accountId, initial.route.hostnameRouteId);
       expect(live?.hostname).toEqual(HOSTNAME);
       expect(live?.comment).toEqual("v1");
 
@@ -104,24 +98,16 @@ test.provider(
           return { route };
         }),
       );
-      expect(updated.route.hostnameRouteId).toEqual(
-        initial.route.hostnameRouteId,
-      );
+      expect(updated.route.hostnameRouteId).toEqual(initial.route.hostnameRouteId);
       expect(updated.route.comment).toEqual("v2");
 
-      const liveUpdated = yield* getLiveRoute(
-        accountId,
-        initial.route.hostnameRouteId,
-      );
+      const liveUpdated = yield* getLiveRoute(accountId, initial.route.hostnameRouteId);
       expect(liveUpdated?.comment).toEqual("v2");
 
       yield* stack.destroy();
 
       // Cloudflare tombstones hostname routes; gone = 404 or deletedAt set.
-      const afterDestroy = yield* getLiveRoute(
-        accountId,
-        initial.route.hostnameRouteId,
-      );
+      const afterDestroy = yield* getLiveRoute(accountId, initial.route.hostnameRouteId);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },
@@ -150,9 +136,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Tunnel.HostnameRoute,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Tunnel.HostnameRoute);
 
       // The account-wide list is eventually consistent right after a create —
       // poll until the freshly-deployed route is enumerated.
@@ -160,23 +144,16 @@ test.provider(
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
           until: (routes) =>
-            routes.some(
-              (r) => r.hostnameRouteId === deployed.route.hostnameRouteId,
-            ),
+            routes.some((r) => r.hostnameRouteId === deployed.route.hostnameRouteId),
           times: 10,
         }),
       );
 
-      expect(
-        all.some((r) => r.hostnameRouteId === deployed.route.hostnameRouteId),
-      ).toBe(true);
+      expect(all.some((r) => r.hostnameRouteId === deployed.route.hostnameRouteId)).toBe(true);
 
       yield* stack.destroy();
 
-      const afterDestroy = yield* getLiveRoute(
-        accountId,
-        deployed.route.hostnameRouteId,
-      );
+      const afterDestroy = yield* getLiveRoute(accountId, deployed.route.hostnameRouteId);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },

@@ -47,9 +47,7 @@ export interface StripeAuth {
 const stripeRuntimeLayer = (
   credentials: Effect.Effect<StripeCredentialsConfig>,
 ): Layer.Layer<Credentials | HttpClient.HttpClient> =>
-  Layer.succeed(Credentials, credentials).pipe(
-    Layer.provideMerge(FetchHttpClient.layer),
-  );
+  Layer.succeed(Credentials, credentials).pipe(Layer.provideMerge(FetchHttpClient.layer));
 
 export const authorizeWith =
   (token: { value: Effect.Effect<Redacted.Redacted<string>> }) =>
@@ -109,9 +107,7 @@ export const resolveStripeAuth = Effect.gen(function* () {
  * RuntimeContext.set runs; the inner Effect is the runtime getter.
  * Never unwrap the Output to a string here.
  */
-export const asStringEffect = (
-  value: unknown,
-): Effect.Effect<Effect.Effect<string>> => {
+export const asStringEffect = (value: unknown): Effect.Effect<Effect.Effect<string>> => {
   if (typeof value === "string") {
     return Effect.succeed(Effect.succeed(value));
   }
@@ -132,9 +128,7 @@ export const asOptionalStringEffect = (
     return Effect.succeed(Effect.succeed(undefined));
   }
   return asStringEffect(value).pipe(
-    Effect.map((inner) =>
-      inner.pipe(Effect.map((s) => (s.length > 0 ? s : undefined))),
-    ),
+    Effect.map((inner) => inner.pipe(Effect.map((s) => (s.length > 0 ? s : undefined)))),
   );
 };
 
@@ -164,9 +158,7 @@ export const attachStripeToken = (
     const token = yield* Token(`${host.LogicalId}StripeToken`, {});
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       const sid =
-        resource !== undefined
-          ? `${bindId}:${resource.LogicalId}`
-          : `${bindId}:${host.LogicalId}`;
+        resource !== undefined ? `${bindId}:${resource.LogicalId}` : `${bindId}:${host.LogicalId}`;
       yield* token.bind(sid, {
         permissions: [...permissions],
       });
@@ -181,9 +173,7 @@ export const makeHttpStripeIdBinding = <
   IdField extends string,
 >(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: (input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
   idField: IdField;
   permissions: readonly StripePermission[];
 }) =>
@@ -198,8 +188,7 @@ export const makeHttpStripeIdBinding = <
         options.tag,
       );
       const id = yield* asStringEffect(resource.id);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Omit<I, IdField>,
@@ -216,9 +205,7 @@ export const makeHttpStripeIdBinding = <
 
 export const makeHttpStripeAccountBinding = <I, A, E>(options: {
   tag: string;
-  operation: (
-    input: I,
-  ) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
+  operation: (input: I) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>;
   permissions: readonly StripePermission[];
 }) =>
   Effect.gen(function* () {
@@ -226,13 +213,8 @@ export const makeHttpStripeAccountBinding = <I, A, E>(options: {
 
     return Effect.fn(function* () {
       const host = yield* Binding.Host;
-      const bound = yield* attachStripeToken(
-        undefined,
-        options.permissions,
-        options.tag,
-      );
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const bound = yield* attachStripeToken(undefined, options.permissions, options.tag);
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(options.tag)(function* (request: I) {
         return yield* auth(options.operation(request));

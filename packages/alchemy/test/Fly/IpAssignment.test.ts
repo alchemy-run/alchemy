@@ -1,19 +1,16 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilAppGone = (appName: string) =>
   machines.getApp({ app_name: appName }).pipe(
@@ -28,9 +25,7 @@ const waitUntilAppGone = (appName: string) =>
 
 const waitUntilIpGone = (appName: string, ip: string) =>
   machines.listAppIPAssignments({ app_name: appName }).pipe(
-    Effect.map((res) =>
-      (res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone",
-    ),
+    Effect.map((res) => ((res.ips ?? []).some((item) => item.ip === ip) ? "found" : "gone")),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -139,18 +134,12 @@ test.provider(
       expect(fetched?.ip).toEqual(replaced.ip.ip);
       expect(fetched?.ip).not.toContain(":");
 
-      const oldGone = yield* waitUntilIpGone(
-        created.app.appName,
-        created.ip.ip,
-      );
+      const oldGone = yield* waitUntilIpGone(created.app.appName, created.ip.ip);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const ipGone = yield* waitUntilIpGone(
-        replaced.app.appName,
-        replaced.ip.ip,
-      );
+      const ipGone = yield* waitUntilIpGone(replaced.app.appName, replaced.ip.ip);
       expect(ipGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(replaced.app.appName);
       expect(appGone).toEqual("gone");
@@ -184,10 +173,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const ipGone = yield* waitUntilIpGone(
-        deployed.app.appName,
-        deployed.ip.ip,
-      );
+      const ipGone = yield* waitUntilIpGone(deployed.app.appName, deployed.ip.ip);
       expect(ipGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");

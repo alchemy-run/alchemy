@@ -34,6 +34,4 @@ export interface CheckCapacity extends Binding.Service<
   >
 > {}
 
-export const CheckCapacity = Binding.Service<CheckCapacity>(
-  "AWS.WAFv2.CheckCapacity",
-);
+export const CheckCapacity = Binding.Service<CheckCapacity>("AWS.WAFv2.CheckCapacity");

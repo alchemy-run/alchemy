@@ -38,11 +38,9 @@ export interface ListSubscriptionsByTopic extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSubscriptionsByTopicRequest,
-    ) => Effect.Effect<
-      sns.ListSubscriptionsByTopicResponse,
-      sns.ListSubscriptionsByTopicError
-    >
+    ) => Effect.Effect<sns.ListSubscriptionsByTopicResponse, sns.ListSubscriptionsByTopicError>
   >
 > {}
-export const ListSubscriptionsByTopic =
-  Binding.Service<ListSubscriptionsByTopic>("AWS.SNS.ListSubscriptionsByTopic");
+export const ListSubscriptionsByTopic = Binding.Service<ListSubscriptionsByTopic>(
+  "AWS.SNS.ListSubscriptionsByTopic",
+);

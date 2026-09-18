@@ -41,10 +41,7 @@ export interface CalculateRouteMatrix extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CalculateRouteMatrixRequest,
-    ) => Effect.Effect<
-      location.CalculateRouteMatrixResponse,
-      location.CalculateRouteMatrixError
-    >
+    ) => Effect.Effect<location.CalculateRouteMatrixResponse, location.CalculateRouteMatrixError>
   >
 > {}
 export const CalculateRouteMatrix = Binding.Service<CalculateRouteMatrix>(

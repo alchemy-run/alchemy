@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -6,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "event-source-handler.ts");
 
@@ -71,10 +71,7 @@ export default LogGroupEventSourceFunction.make(
     Effect.provide(
       Layer.provideMerge(
         Layer.mergeAll(AWS.Lambda.LogGroupEventSource, AWS.SQS.QueueSinkHttp),
-        Layer.mergeAll(
-          AWS.SQS.SendMessageBatchHttp,
-          SourceGroupAndResultQueueLive,
-        ),
+        Layer.mergeAll(AWS.SQS.SendMessageBatchHttp, SourceGroupAndResultQueueLive),
       ),
     ),
   ),

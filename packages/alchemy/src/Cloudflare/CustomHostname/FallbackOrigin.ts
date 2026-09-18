@@ -1,7 +1,6 @@
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -77,14 +76,12 @@ export type FallbackOrigin = Resource<
  * @product Custom Hostnames
  * @category Domains & DNS
  */
-export const FallbackOrigin = Resource<FallbackOrigin>(
-  "Cloudflare.CustomHostname.FallbackOrigin",
-  { aliases: ["Cloudflare.FallbackOrigin"] },
-);
+export const FallbackOrigin = Resource<FallbackOrigin>("Cloudflare.CustomHostname.FallbackOrigin", {
+  aliases: ["Cloudflare.FallbackOrigin"],
+});
 
 export const isFallbackOrigin = (value: unknown): value is FallbackOrigin =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.CustomHostname.FallbackOrigin";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.CustomHostname.FallbackOrigin";
 
 export const FallbackOriginProvider = () =>
   Provider.succeed(FallbackOrigin, {
@@ -116,15 +113,11 @@ export const FallbackOriginProvider = () =>
             }),
             // Zones without Cloudflare for SaaS entitlement reject the
             // route; skip them rather than failing the whole enumeration.
-            Effect.catchTag(["SaasAccessNotGranted", "Forbidden"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["SaasAccessNotGranted", "Forbidden"], () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },
       );
-      return rows.filter(
-        (row): row is FallbackOriginAttributes => row !== undefined,
-      );
+      return rows.filter((row): row is FallbackOriginAttributes => row !== undefined);
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
@@ -132,11 +125,7 @@ export const FallbackOriginProvider = () =>
       const n = news as FallbackOriginProps;
       // zoneId is Input<string>; compare only once both sides are
       // concrete strings.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
     }),
@@ -179,9 +168,7 @@ export const FallbackOriginProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId =
-        output?.zoneId ??
-        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* observeFallbackOrigin(zoneId);
       if (

@@ -2,7 +2,6 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -11,12 +10,10 @@ import { getDefaultVpcScope } from "./defaultVpcScope.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 import type { SubnetId } from "./Subnet.ts";
 
-export type NetworkAclAssociationId<ID extends string = string> =
-  `aclassoc-${ID}`;
+export type NetworkAclAssociationId<ID extends string = string> = `aclassoc-${ID}`;
 export const NetworkAclAssociationId = <ID extends string>(
   id: ID,
-): ID & NetworkAclAssociationId<ID> =>
-  `aclassoc-${id}` as ID & NetworkAclAssociationId<ID>;
+): ID & NetworkAclAssociationId<ID> => `aclassoc-${id}` as ID & NetworkAclAssociationId<ID>;
 
 export interface NetworkAclAssociationProps {
   /**
@@ -93,9 +90,7 @@ export const NetworkAclAssociationProvider = () =>
           .pipe(
             Effect.map((r) => {
               const acl = r.NetworkAcls?.[0];
-              const assoc = acl?.Associations?.find(
-                (a) => a.SubnetId === subnetId,
-              );
+              const assoc = acl?.Associations?.find((a) => a.SubnetId === subnetId);
               return assoc
                 ? {
                     associationId: assoc.NetworkAclAssociationId!,
@@ -144,8 +139,7 @@ export const NetworkAclAssociationProvider = () =>
                             a.SubnetId != null,
                         )
                         .map((a) => ({
-                          associationId:
-                            a.NetworkAclAssociationId as NetworkAclAssociationId,
+                          associationId: a.NetworkAclAssociationId as NetworkAclAssociationId,
                           networkAclId: a.NetworkAclId as NetworkAclId,
                           subnetId: a.SubnetId as SubnetId,
                         })),
@@ -160,9 +154,7 @@ export const NetworkAclAssociationProvider = () =>
           const assoc = yield* findAssociation(olds.subnetId as string);
           if (!assoc) {
             return yield* Effect.fail(
-              new Error(
-                `Network ACL Association not found for subnet ${olds.subnetId}`,
-              ),
+              new Error(`Network ACL Association not found for subnet ${olds.subnetId}`),
             );
           }
           return {
@@ -188,9 +180,7 @@ export const NetworkAclAssociationProvider = () =>
           const currentAssoc = yield* findAssociation(news.subnetId as string);
           if (!currentAssoc) {
             return yield* Effect.fail(
-              new Error(
-                `No existing Network ACL Association found for subnet ${news.subnetId}`,
-              ),
+              new Error(`No existing Network ACL Association found for subnet ${news.subnetId}`),
             );
           }
 
@@ -199,8 +189,7 @@ export const NetworkAclAssociationProvider = () =>
           // ReplaceNetworkAclAssociation atomically swaps it.
           if (currentAssoc.networkAclId === (news.networkAclId as string)) {
             return {
-              associationId:
-                currentAssoc.associationId as NetworkAclAssociationId,
+              associationId: currentAssoc.associationId as NetworkAclAssociationId,
               networkAclId: news.networkAclId as NetworkAclId,
               subnetId: news.subnetId as SubnetId,
             };
@@ -234,9 +223,7 @@ export const NetworkAclAssociationProvider = () =>
             })
             .pipe(
               // If subnet is already deleted, association is gone too
-              Effect.catchTag("InvalidSubnetID.NotFound", () =>
-                Effect.succeed({ Subnets: [] }),
-              ),
+              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
             );
           const vpcId = subnetResult.Subnets?.[0]?.VpcId;
 
@@ -265,18 +252,11 @@ export const NetworkAclAssociationProvider = () =>
                 NetworkAclId: defaultAclId,
                 DryRun: false,
               })
-              .pipe(
-                Effect.catchTag(
-                  "InvalidAssociationID.NotFound",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("InvalidAssociationID.NotFound", () => Effect.void));
 
             yield* session.note(`Network ACL Association reverted to default`);
           } else {
-            yield* session.note(
-              `Already using default Network ACL, nothing to do`,
-            );
+            yield* session.note(`Already using default Network ACL, nothing to do`);
           }
         }),
       });

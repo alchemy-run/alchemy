@@ -1,10 +1,10 @@
+import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { LogGroup } from "@/AWS/Logs";
 import { AccessLogSubscription, ServiceNetwork } from "@/AWS/VpcLattice";
 import * as Test from "@/Test/Alchemy";
-import * as vpclattice from "@distilled.cloud/aws/vpc-lattice";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,10 +29,7 @@ test.provider(
           });
           const subscription = yield* AccessLogSubscription("NetworkLogs", {
             resourceIdentifier: network.serviceNetworkId,
-            destinationArn:
-              destination === "primary"
-                ? primary.logGroupArn
-                : secondary.logGroupArn,
+            destinationArn: destination === "primary" ? primary.logGroupArn : secondary.logGroupArn,
           });
           return { network, primary, secondary, subscription };
         });
@@ -45,12 +42,9 @@ test.provider(
       );
 
       const live = yield* vpclattice.getAccessLogSubscription({
-        accessLogSubscriptionIdentifier:
-          first.subscription.accessLogSubscriptionId,
+        accessLogSubscriptionIdentifier: first.subscription.accessLogSubscriptionId,
       });
-      expect(normalizeArn(live.destinationArn)).toBe(
-        normalizeArn(first.primary.logGroupArn),
-      );
+      expect(normalizeArn(live.destinationArn)).toBe(normalizeArn(first.primary.logGroupArn));
       expect(live.resourceId).toBe(first.network.serviceNetworkId);
 
       // Update the destination in place (same destination type).
@@ -59,24 +53,18 @@ test.provider(
         first.subscription.accessLogSubscriptionId,
       );
       const updated = yield* vpclattice.getAccessLogSubscription({
-        accessLogSubscriptionIdentifier:
-          first.subscription.accessLogSubscriptionId,
+        accessLogSubscriptionIdentifier: first.subscription.accessLogSubscriptionId,
       });
-      expect(normalizeArn(updated.destinationArn)).toBe(
-        normalizeArn(first.secondary.logGroupArn),
-      );
+      expect(normalizeArn(updated.destinationArn)).toBe(normalizeArn(first.secondary.logGroupArn));
 
       yield* stack.destroy();
       const gone = yield* vpclattice
         .getAccessLogSubscription({
-          accessLogSubscriptionIdentifier:
-            first.subscription.accessLogSubscriptionId,
+          accessLogSubscriptionIdentifier: first.subscription.accessLogSubscriptionId,
         })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
       expect(gone).toBe(true);
     }).pipe(Effect.ensuring(Effect.ignore(stack.destroy()))),

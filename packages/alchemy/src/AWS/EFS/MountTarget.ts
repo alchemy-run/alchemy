@@ -98,17 +98,19 @@ export const MountTarget = Resource<MountTarget>("AWS.EFS.MountTarget");
  * Internal marker error used to drive the bounded wait for a mount target to
  * reach the `available` lifecycle state.
  */
-export class MountTargetNotAvailable extends Data.TaggedError(
-  "MountTargetNotAvailable",
-)<{ mountTargetId: string; state: string }> {}
+export class MountTargetNotAvailable extends Data.TaggedError("MountTargetNotAvailable")<{
+  mountTargetId: string;
+  state: string;
+}> {}
 
 /**
  * Internal marker error used to drive the bounded wait for a mount target to
  * disappear after deletion (its ENI releases asynchronously).
  */
-export class MountTargetStillDeleting extends Data.TaggedError(
-  "MountTargetStillDeleting",
-)<{ mountTargetId: string; state: string }> {}
+export class MountTargetStillDeleting extends Data.TaggedError("MountTargetStillDeleting")<{
+  mountTargetId: string;
+  state: string;
+}> {}
 
 /**
  * Mount-target provisioning takes 1–3 minutes. Bounded poll (5s × 36 ≈
@@ -131,10 +133,7 @@ const retryUntilMountTargetAvailable = <E extends { _tag: string }, R>(
     ),
     {
       while: (e) => e._tag === "MountTargetNotAvailable",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(36),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
     },
   );
 
@@ -160,8 +159,7 @@ const retryWhileMountTargetSettling = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "IncorrectMountTargetState" || e._tag === "DependencyTimeout",
+    while: (e) => e._tag === "IncorrectMountTargetState" || e._tag === "DependencyTimeout",
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
   });
 
@@ -170,30 +168,17 @@ export const MountTargetProvider = () =>
     MountTarget,
     Effect.gen(function* () {
       const findById = Effect.fn(function* (mountTargetId: string) {
-        return yield* efs
-          .describeMountTargets({ MountTargetId: mountTargetId })
-          .pipe(
-            Effect.map((r) => r.MountTargets?.[0]),
-            Effect.catchTag("MountTargetNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* efs.describeMountTargets({ MountTargetId: mountTargetId }).pipe(
+          Effect.map((r) => r.MountTargets?.[0]),
+          Effect.catchTag("MountTargetNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
-      const findBySubnet = Effect.fn(function* (
-        fileSystemId: string,
-        subnetId: string,
-      ) {
-        return yield* efs
-          .describeMountTargets({ FileSystemId: fileSystemId })
-          .pipe(
-            Effect.map((r) =>
-              r.MountTargets?.find((mt) => mt.SubnetId === subnetId),
-            ),
-            Effect.catchTag("FileSystemNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const findBySubnet = Effect.fn(function* (fileSystemId: string, subnetId: string) {
+        return yield* efs.describeMountTargets({ FileSystemId: fileSystemId }).pipe(
+          Effect.map((r) => r.MountTargets?.find((mt) => mt.SubnetId === subnetId)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
       const toAttributes = (mt: efs.MountTargetDescription) => ({
@@ -206,13 +191,7 @@ export const MountTargetProvider = () =>
       });
 
       return MountTarget.Provider.of({
-        stables: [
-          "mountTargetId",
-          "fileSystemId",
-          "subnetId",
-          "ipAddress",
-          "availabilityZoneName",
-        ],
+        stables: ["mountTargetId", "fileSystemId", "subnetId", "ipAddress", "availabilityZoneName"],
 
         // Mount targets are only enumerable per file system, so walk every
         // file system in the account/region. A file system can vanish between
@@ -226,18 +205,14 @@ export const MountTargetProvider = () =>
             const perSystem = yield* Effect.forEach(
               systems,
               (fs) =>
-                efs
-                  .describeMountTargets({ FileSystemId: fs.FileSystemId })
-                  .pipe(
-                    Effect.map((r) =>
-                      (r.MountTargets ?? [])
-                        .filter((mt) => mt.LifeCycleState !== "deleted")
-                        .map(toAttributes),
-                    ),
-                    Effect.catchTag("FileSystemNotFound", () =>
-                      Effect.succeed([]),
-                    ),
+                efs.describeMountTargets({ FileSystemId: fs.FileSystemId }).pipe(
+                  Effect.map((r) =>
+                    (r.MountTargets ?? [])
+                      .filter((mt) => mt.LifeCycleState !== "deleted")
+                      .map(toAttributes),
                   ),
+                  Effect.catchTag("FileSystemNotFound", () => Effect.succeed([])),
+                ),
               { concurrency: 5 },
             );
             return perSystem.flat();
@@ -273,9 +248,7 @@ export const MountTargetProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // 1. OBSERVE — output.mountTargetId is only a cache; fall through
           //    to the (fileSystemId, subnetId) identity if it is stale.
-          let mt = output?.mountTargetId
-            ? yield* findById(output.mountTargetId)
-            : undefined;
+          let mt = output?.mountTargetId ? yield* findById(output.mountTargetId) : undefined;
           if (mt === undefined || mt.LifeCycleState === "deleted") {
             mt = yield* findBySubnet(news.fileSystemId, news.subnetId);
           }
@@ -355,26 +328,22 @@ export const MountTargetProvider = () =>
             .deleteMountTarget({ MountTargetId: output.mountTargetId })
             .pipe(Effect.catchTag("MountTargetNotFound", () => Effect.void));
 
-          yield* session.note(
-            `waiting for ${output.mountTargetId} to be deleted`,
-          );
+          yield* session.note(`waiting for ${output.mountTargetId} to be deleted`);
           yield* retryUntilMountTargetGone(
-            efs
-              .describeMountTargets({ MountTargetId: output.mountTargetId })
-              .pipe(
-                Effect.flatMap((r) => {
-                  const state = r.MountTargets?.[0]?.LifeCycleState;
-                  return state === undefined || state === "deleted"
-                    ? Effect.void
-                    : Effect.fail(
-                        new MountTargetStillDeleting({
-                          mountTargetId: output.mountTargetId,
-                          state,
-                        }),
-                      );
-                }),
-                Effect.catchTag("MountTargetNotFound", () => Effect.void),
-              ),
+            efs.describeMountTargets({ MountTargetId: output.mountTargetId }).pipe(
+              Effect.flatMap((r) => {
+                const state = r.MountTargets?.[0]?.LifeCycleState;
+                return state === undefined || state === "deleted"
+                  ? Effect.void
+                  : Effect.fail(
+                      new MountTargetStillDeleting({
+                        mountTargetId: output.mountTargetId,
+                        state,
+                      }),
+                    );
+              }),
+              Effect.catchTag("MountTargetNotFound", () => Effect.void),
+            ),
           );
         }),
       });

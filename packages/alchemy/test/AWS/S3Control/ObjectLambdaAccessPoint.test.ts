@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { AccessPoint, ObjectLambdaAccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { AccessPoint, ObjectLambdaAccessPoint } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 import {
   ObjectTransformFunction,
   ObjectTransformFunctionLive,
@@ -19,9 +19,7 @@ const ACCOUNT_ID = "391965393224";
 const findObjectLambdaAccessPoint = (name: string) =>
   s3control
     .getAccessPointForObjectLambda({ AccountId: ACCOUNT_ID, Name: name })
-    .pipe(
-      Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
 
 class ObjectLambdaAccessPointStillExists extends Data.TaggedError(
   "ObjectLambdaAccessPointStillExists",
@@ -51,9 +49,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "found" as const),
-          Effect.catchTag("NoSuchAccessPoint", () =>
-            Effect.succeed("missing" as const),
-          ),
+          Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed("missing" as const)),
         );
       expect(result).toBe("missing");
     }),
@@ -90,9 +86,7 @@ test.provider(
         })
         .pipe(
           Effect.map(() => "created" as const),
-          Effect.catchTag("ObjectLambdaNotAvailable", () =>
-            Effect.succeed("gated" as const),
-          ),
+          Effect.catchTag("ObjectLambdaNotAvailable", () => Effect.succeed("gated" as const)),
           Effect.catchTag("NoSuchAccessPoint", () =>
             Effect.succeed("missing-supporting-ap" as const),
           ),
@@ -142,27 +136,18 @@ test.provider.skipIf(!process.env.AWS_TEST_OBJECT_LAMBDA)(
       const deployed = yield* stack.deploy(makeStack(false));
 
       expect(deployed.olap.objectLambdaAccessPointName).toBeDefined();
-      expect(deployed.olap.objectLambdaAccessPointArn).toContain(
-        ":s3-object-lambda:",
-      );
+      expect(deployed.olap.objectLambdaAccessPointArn).toContain(":s3-object-lambda:");
 
       // out-of-band verification via distilled
-      const live = yield* findObjectLambdaAccessPoint(
-        deployed.olap.objectLambdaAccessPointName,
-      );
+      const live = yield* findObjectLambdaAccessPoint(deployed.olap.objectLambdaAccessPointName);
       expect(live).toBeDefined();
 
-      const config =
-        yield* s3control.getAccessPointConfigurationForObjectLambda({
-          AccountId: ACCOUNT_ID,
-          Name: deployed.olap.objectLambdaAccessPointName,
-        });
-      expect(config.Configuration?.SupportingAccessPoint).toBe(
-        deployed.accessPoint.accessPointArn,
-      );
-      expect(config.Configuration?.CloudWatchMetricsEnabled ?? false).toBe(
-        false,
-      );
+      const config = yield* s3control.getAccessPointConfigurationForObjectLambda({
+        AccountId: ACCOUNT_ID,
+        Name: deployed.olap.objectLambdaAccessPointName,
+      });
+      expect(config.Configuration?.SupportingAccessPoint).toBe(deployed.accessPoint.accessPointArn);
+      expect(config.Configuration?.CloudWatchMetricsEnabled ?? false).toBe(false);
 
       // update the mutable configuration in place — same access point
       const updated = yield* stack.deploy(makeStack(true));
@@ -170,17 +155,14 @@ test.provider.skipIf(!process.env.AWS_TEST_OBJECT_LAMBDA)(
         deployed.olap.objectLambdaAccessPointName,
       );
 
-      const updatedConfig =
-        yield* s3control.getAccessPointConfigurationForObjectLambda({
-          AccountId: ACCOUNT_ID,
-          Name: deployed.olap.objectLambdaAccessPointName,
-        });
+      const updatedConfig = yield* s3control.getAccessPointConfigurationForObjectLambda({
+        AccountId: ACCOUNT_ID,
+        Name: deployed.olap.objectLambdaAccessPointName,
+      });
       expect(updatedConfig.Configuration?.CloudWatchMetricsEnabled).toBe(true);
 
       yield* stack.destroy();
-      yield* assertObjectLambdaAccessPointDeleted(
-        deployed.olap.objectLambdaAccessPointName,
-      );
+      yield* assertObjectLambdaAccessPointDeleted(deployed.olap.objectLambdaAccessPointName);
     }),
   { timeout: 240_000 },
 );

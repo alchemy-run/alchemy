@@ -34,12 +34,7 @@ export interface GetSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSubscriptionRequest,
-    ) => Effect.Effect<
-      datazone.GetSubscriptionOutput,
-      datazone.GetSubscriptionError
-    >
+    ) => Effect.Effect<datazone.GetSubscriptionOutput, datazone.GetSubscriptionError>
   >
 > {}
-export const GetSubscription = Binding.Service<GetSubscription>(
-  "AWS.DataZone.GetSubscription",
-);
+export const GetSubscription = Binding.Service<GetSubscription>("AWS.DataZone.GetSubscription");

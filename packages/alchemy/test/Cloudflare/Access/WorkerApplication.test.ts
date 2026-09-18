@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,16 +5,16 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import OwnedAccessWorker from "./fixtures/access-owned-worker.ts";
 import SecondAccessWorker from "./fixtures/access-worker-b.ts";
 import AccessProtectedWorker, { App } from "./fixtures/access-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class NotYetProtected extends Data.TaggedError("NotYetProtected")<{
   status: number;
@@ -42,11 +39,7 @@ const expectAccessLoginRedirect = (url: string) =>
           cache: "no-store",
         });
         const location = res.headers.get("location");
-        if (
-          res.status === 302 &&
-          location !== null &&
-          location.includes("cloudflareaccess.com")
-        ) {
+        if (res.status === 302 && location !== null && location.includes("cloudflareaccess.com")) {
           return location;
         }
         const body = await res.text();
@@ -69,10 +62,7 @@ const expectAccessLoginRedirect = (url: string) =>
       Effect.retry({
         while: (e) => e._tag === "NotYetProtected",
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("1 second", 1.5),
-            Schedule.spaced("5 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("1 second", 1.5), Schedule.spaced("5 seconds")]),
           Schedule.recurs(24),
         ]),
       }),
@@ -162,9 +152,7 @@ test.provider(
       expect(liveAfter.policies?.length).toBe(1);
       expect(liveAfter.policies![0].id).toBe(inlinePolicyId);
       expect(
-        (liveAfter.destinations ?? []).filter(
-          (d) => d.workerId === worker.workerId,
-        ),
+        (liveAfter.destinations ?? []).filter((d) => d.workerId === worker.workerId),
       ).toHaveLength(2);
 
       yield* stack.destroy();
@@ -174,9 +162,7 @@ test.provider(
         .getAccessApplicationForAccount({ accountId, appId: app.applicationId })
         .pipe(
           Effect.map(() => "still-exists" as const),
-          Effect.catchTag("AccessApplicationNotFound", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed("gone" as const)),
         );
       expect(gone).toBe("gone");
     }).pipe(logLevel),
@@ -190,9 +176,7 @@ const findAppByName = (accountId: string, name: string) =>
     Effect.map((chunk) =>
       Array.from(chunk)
         .flatMap((page) => page.result ?? [])
-        .map(
-          (raw) => raw as unknown as LiveApp & { id?: string; name?: string },
-        )
+        .map((raw) => raw as unknown as LiveApp & { id?: string; name?: string })
         .find((app) => app.name === name),
     ),
   );
@@ -214,10 +198,7 @@ test.provider(
 
       // The dedicated application exists with the inline policy and this
       // Worker's destinations — declared entirely from the `access` prop.
-      const app = yield* findAppByName(
-        accountId,
-        "Access for alchemy owned-app test",
-      );
+      const app = yield* findAppByName(accountId, "Access for alchemy owned-app test");
       expect(app).toBeDefined();
       expect(app!.policies?.length).toBe(1);
       expect(app!.policies![0].decision).toBe("allow");
@@ -234,10 +215,7 @@ test.provider(
       yield* stack.destroy();
 
       // The dedicated application is deleted with the Worker's stack.
-      const appAfter = yield* findAppByName(
-        accountId,
-        "Access for alchemy owned-app test",
-      );
+      const appAfter = yield* findAppByName(accountId, "Access for alchemy owned-app test");
       expect(appAfter).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 300_000 },

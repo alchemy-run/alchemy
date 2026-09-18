@@ -27,12 +27,7 @@ export interface CreateInvitations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.CreateInvitationsRequest,
-    ) => Effect.Effect<
-      macie2.CreateInvitationsResponse,
-      macie2.CreateInvitationsError
-    >
+    ) => Effect.Effect<macie2.CreateInvitationsResponse, macie2.CreateInvitationsError>
   >
 > {}
-export const CreateInvitations = Binding.Service<CreateInvitations>(
-  "AWS.Macie2.CreateInvitations",
-);
+export const CreateInvitations = Binding.Service<CreateInvitations>("AWS.Macie2.CreateInvitations");

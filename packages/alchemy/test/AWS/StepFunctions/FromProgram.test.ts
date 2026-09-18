@@ -1,3 +1,10 @@
+import * as sfn from "@distilled.cloud/aws/sfn";
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 /**
  * Live test for `StateMachine.fromProgram`: deploy a typed `Sfn` program
  * (Lambda invoke + retry, inline Map, Choice, typed Fail + catchTag) as an
@@ -9,17 +16,7 @@ import * as AWS from "@/AWS";
 import * as Lambda from "@/AWS/Lambda";
 import { StateMachine } from "@/AWS/StepFunctions";
 import * as Test from "@/Test/Alchemy";
-import * as sfn from "@distilled.cloud/aws/sfn";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import {
-  makeOrderProgram,
-  type OrderOutput,
-} from "./fixtures/order-program.ts";
+import { makeOrderProgram, type OrderOutput } from "./fixtures/order-program.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,14 +24,8 @@ const { test } = Test.make({ providers: AWS.providers() });
 // resolveMainPath cannot stat; it converts URLs via fileURLToPath itself.
 const doublerMain = new URL("./fixtures/doubler.ts", import.meta.url).href;
 
-const plain = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const plain = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 /**
  * A sync execution finished in a non-SUCCEEDED state. Fresh execution
@@ -118,10 +109,7 @@ test.provider(
           ),
           Effect.retry({
             while: (e) => e._tag === "ExecutionNotSucceeded",
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
           }),
         );
       const output = JSON.parse(plain(result.output)!) as OrderOutput;
@@ -152,10 +140,7 @@ test.provider(
           ),
           Effect.retry({
             while: (e) => e._tag === "ExecutionNotSucceeded",
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(5),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(5)]),
           }),
         );
       const smallOutput = JSON.parse(plain(small.output)!) as OrderOutput;

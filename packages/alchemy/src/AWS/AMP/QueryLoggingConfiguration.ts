@@ -80,11 +80,7 @@ export const QueryLoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeQueryLoggingConfiguration({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.queryLoggingConfiguration;
       });
 
@@ -93,18 +89,13 @@ export const QueryLoggingConfigurationProvider = () =>
        * a still-transitioning configuration converges on a later reconcile.
        */
       const waitActive = Effect.fn(function* (workspaceId: string) {
-        return yield* amp
-          .describeQueryLoggingConfiguration({ workspaceId })
-          .pipe(
-            Effect.map((r) => r.queryLoggingConfiguration),
-            Effect.repeat({
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(20),
-              ]),
-              until: (c) => c.status.statusCode === "ACTIVE",
-            }),
-          );
+        return yield* amp.describeQueryLoggingConfiguration({ workspaceId }).pipe(
+          Effect.map((r) => r.queryLoggingConfiguration),
+          Effect.repeat({
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
+            until: (c) => c.status.statusCode === "ACTIVE",
+          }),
+        );
       });
 
       /** Desired props → wire destinations (normalized + defaulted). */
@@ -184,9 +175,7 @@ export const QueryLoggingConfigurationProvider = () =>
                   }),
                 ),
               );
-          } else if (
-            canonical([...existing.destinations]) !== canonical(desired)
-          ) {
+          } else if (canonical([...existing.destinations]) !== canonical(desired)) {
             yield* amp.updateQueryLoggingConfiguration({
               workspaceId,
               destinations: desired,
@@ -207,10 +196,7 @@ export const QueryLoggingConfigurationProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
               }),
             );
         }),

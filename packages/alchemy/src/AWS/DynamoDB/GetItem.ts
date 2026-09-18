@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Table } from "./Table.ts";
 
-export interface GetItemRequest extends Omit<
-  DynamoDB.GetItemInput,
-  "TableName"
-> {}
+export interface GetItemRequest extends Omit<DynamoDB.GetItemInput, "TableName"> {}
 
 /**
  * Runtime binding for `dynamodb:GetItem`.
@@ -33,9 +30,7 @@ export interface GetItem extends Binding.Service<
   <T extends Table>(
     table: T,
   ) => Effect.Effect<
-    (
-      request: GetItemRequest,
-    ) => Effect.Effect<DynamoDB.GetItemOutput, DynamoDB.GetItemError>
+    (request: GetItemRequest) => Effect.Effect<DynamoDB.GetItemOutput, DynamoDB.GetItemError>
   >
 > {}
 export const GetItem = Binding.Service<GetItem>("AWS.DynamoDB.GetItem");

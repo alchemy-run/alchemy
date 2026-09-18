@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  canonicalParameters,
-  observeControlTowerTags,
-  syncControlTowerTags,
-} from "./internal.ts";
+import { canonicalParameters, observeControlTowerTags, syncControlTowerTags } from "./internal.ts";
 
 export interface EnabledBaselineProps {
   /**
@@ -108,17 +104,13 @@ export interface EnabledBaseline extends Resource<
  *
  * @resource
  */
-export const EnabledBaseline = Resource<EnabledBaseline>(
-  "AWS.ControlTower.EnabledBaseline",
-);
+export const EnabledBaseline = Resource<EnabledBaseline>("AWS.ControlTower.EnabledBaseline");
 
 /**
  * An asynchronous baseline operation (ENABLE_BASELINE / DISABLE_BASELINE /
  * UPDATE_ENABLED_BASELINE) converged to the terminal `FAILED` status.
  */
-export class BaselineOperationFailed extends Data.TaggedError(
-  "BaselineOperationFailed",
-)<{
+export class BaselineOperationFailed extends Data.TaggedError("BaselineOperationFailed")<{
   readonly operationIdentifier: string;
   readonly status: string;
   readonly statusMessage: string | undefined;
@@ -128,9 +120,7 @@ export class BaselineOperationFailed extends Data.TaggedError(
  * Internal signal that a baseline operation is still `IN_PROGRESS`,
  * consumed by {@link waitForBaselineOperation}'s bounded schedule.
  */
-class BaselineOperationPending extends Data.TaggedError(
-  "BaselineOperationPending",
-)<{
+class BaselineOperationPending extends Data.TaggedError("BaselineOperationPending")<{
   readonly operationIdentifier: string;
   readonly status: string | undefined;
 }> {}
@@ -139,21 +129,14 @@ class BaselineOperationPending extends Data.TaggedError(
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
-const retryWhileBaselineOperationPending = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryWhileBaselineOperationPending = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "BaselineOperationPending",
     // Baseline enablement provisions accounts and typically takes several
     // minutes; poll every 10s up to ~20 minutes.
-    schedule: Schedule.max([
-      Schedule.spaced("10 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(120)]),
   });
 
 // Control Tower serializes baseline operations per target — a concurrent
@@ -164,10 +147,7 @@ const retryWhileBaselineConflict = <A, E extends { readonly _tag: string }, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
     while: (e) => e._tag === "ConflictException",
-    schedule: Schedule.max([
-      Schedule.spaced("15 seconds"),
-      Schedule.recurs(40),
-    ]),
+    schedule: Schedule.max([Schedule.spaced("15 seconds"), Schedule.recurs(40)]),
   });
 
 const waitForBaselineOperation = (operationIdentifier: string) =>
@@ -198,22 +178,15 @@ const waitForBaselineOperation = (operationIdentifier: string) =>
   );
 
 const readEnabledBaseline = (enabledBaselineArn: string) =>
-  controltower
-    .getEnabledBaseline({ enabledBaselineIdentifier: enabledBaselineArn })
-    .pipe(
-      Effect.map((r) => r.enabledBaselineDetails),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+  controltower.getEnabledBaseline({ enabledBaselineIdentifier: enabledBaselineArn }).pipe(
+    Effect.map((r) => r.enabledBaselineDetails),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  );
 
 // Find an enabled baseline by (baselineIdentifier, targetIdentifier) —
 // covers the create-race and lost-output cases where we don't have the
 // ARN cached.
-const findEnabledBaselineArn = (
-  baselineIdentifier: string,
-  targetIdentifier: string,
-) =>
+const findEnabledBaselineArn = (baselineIdentifier: string, targetIdentifier: string) =>
   controltower.listEnabledBaselines
     .pages({
       filter: {
@@ -223,10 +196,7 @@ const findEnabledBaselineArn = (
     })
     .pipe(
       Stream.runCollect,
-      Effect.map(
-        (chunk) =>
-          Array.from(chunk).flatMap((page) => page.enabledBaselines)[0]?.arn,
-      ),
+      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.enabledBaselines)[0]?.arn),
     );
 
 const toAttributes = (
@@ -239,8 +209,7 @@ const toAttributes = (
   },
 ): EnabledBaseline["Attributes"] => ({
   enabledBaselineArn: arn,
-  baselineIdentifier:
-    details?.baselineIdentifier ?? fallback.baselineIdentifier,
+  baselineIdentifier: details?.baselineIdentifier ?? fallback.baselineIdentifier,
   targetIdentifier: details?.targetIdentifier ?? fallback.targetIdentifier,
   baselineVersion: details?.baselineVersion ?? fallback.baselineVersion,
 });
@@ -250,11 +219,7 @@ export const EnabledBaselineProvider = () =>
     EnabledBaseline,
     Effect.gen(function* () {
       return EnabledBaseline.Provider.of({
-        stables: [
-          "enabledBaselineArn",
-          "baselineIdentifier",
-          "targetIdentifier",
-        ],
+        stables: ["enabledBaselineArn", "baselineIdentifier", "targetIdentifier"],
         // Enumerate every enabled baseline in the ambient account (the
         // filter-less listing is supported on management accounts; on
         // non-Control-Tower accounts there is simply nothing to list).
@@ -276,10 +241,7 @@ export const EnabledBaselineProvider = () =>
           const arn =
             output?.enabledBaselineArn ??
             (olds !== undefined
-              ? yield* findEnabledBaselineArn(
-                  olds.baselineIdentifier,
-                  olds.targetIdentifier,
-                )
+              ? yield* findEnabledBaselineArn(olds.baselineIdentifier, olds.targetIdentifier)
               : undefined);
           if (arn === undefined) return undefined;
           const details = yield* readEnabledBaseline(arn);
@@ -304,15 +266,10 @@ export const EnabledBaselineProvider = () =>
           // 1. Observe — cloud state is authoritative; output is only an
           //    ARN cache.
           let arn = output?.enabledBaselineArn;
-          let details =
-            arn === undefined ? undefined : yield* readEnabledBaseline(arn);
+          let details = arn === undefined ? undefined : yield* readEnabledBaseline(arn);
           if (details === undefined) {
-            arn = yield* findEnabledBaselineArn(
-              news.baselineIdentifier,
-              news.targetIdentifier,
-            );
-            details =
-              arn === undefined ? undefined : yield* readEnabledBaseline(arn);
+            arn = yield* findEnabledBaselineArn(news.baselineIdentifier, news.targetIdentifier);
+            details = arn === undefined ? undefined : yield* readEnabledBaseline(arn);
           }
 
           // 2. Ensure — enable if missing and wait for the asynchronous
@@ -329,9 +286,7 @@ export const EnabledBaselineProvider = () =>
               }),
             );
             arn = enabled.arn;
-            yield* session.note(
-              `baseline operation ${enabled.operationIdentifier}`,
-            );
+            yield* session.note(`baseline operation ${enabled.operationIdentifier}`);
             yield* waitForBaselineOperation(enabled.operationIdentifier);
             details = yield* readEnabledBaseline(arn);
           } else {
@@ -340,12 +295,10 @@ export const EnabledBaselineProvider = () =>
             //    Parameters cannot be cleared (only replaced), so an
             //    absent `parameters` prop leaves observed parameters
             //    alone.
-            const versionChanged =
-              details.baselineVersion !== news.baselineVersion;
+            const versionChanged = details.baselineVersion !== news.baselineVersion;
             const parametersChanged =
               news.parameters !== undefined &&
-              canonicalParameters(details.parameters) !==
-                canonicalParameters(news.parameters);
+              canonicalParameters(details.parameters) !== canonicalParameters(news.parameters);
             if (versionChanged || parametersChanged) {
               const updated = yield* retryWhileBaselineConflict(
                 controltower.updateEnabledBaseline({
@@ -354,9 +307,7 @@ export const EnabledBaselineProvider = () =>
                   parameters: news.parameters,
                 }),
               );
-              yield* session.note(
-                `baseline operation ${updated.operationIdentifier}`,
-              );
+              yield* session.note(`baseline operation ${updated.operationIdentifier}`);
               yield* waitForBaselineOperation(updated.operationIdentifier);
               details = yield* readEnabledBaseline(arn);
             }
@@ -377,15 +328,9 @@ export const EnabledBaselineProvider = () =>
             controltower.disableBaseline({
               enabledBaselineIdentifier: output.enabledBaselineArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (result !== undefined) {
-            yield* session.note(
-              `baseline operation ${result.operationIdentifier}`,
-            );
+            yield* session.note(`baseline operation ${result.operationIdentifier}`);
             yield* waitForBaselineOperation(result.operationIdentifier);
           }
         }),

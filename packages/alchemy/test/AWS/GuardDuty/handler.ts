@@ -1,11 +1,11 @@
-import * as GuardDuty from "@/AWS/GuardDuty";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as GuardDuty from "@/AWS/GuardDuty";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -27,9 +27,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { Message?: string }).Message ??
-          (e as { message?: string }).message,
+        errorMessage: (e as { Message?: string }).Message ?? (e as { message?: string }).message,
       }),
     ),
   );
@@ -55,27 +53,21 @@ export default GuardDutyTestFunction.make(
     });
 
     // Findings triage loop
-    const createSampleFindings =
-      yield* GuardDuty.CreateSampleFindings(detector);
+    const createSampleFindings = yield* GuardDuty.CreateSampleFindings(detector);
     const listFindings = yield* GuardDuty.ListFindings(detector);
     const getFindings = yield* GuardDuty.GetFindings(detector);
-    const getFindingsStatistics =
-      yield* GuardDuty.GetFindingsStatistics(detector);
+    const getFindingsStatistics = yield* GuardDuty.GetFindingsStatistics(detector);
     const archiveFindings = yield* GuardDuty.ArchiveFindings(detector);
     const unarchiveFindings = yield* GuardDuty.UnarchiveFindings(detector);
-    const updateFindingsFeedback =
-      yield* GuardDuty.UpdateFindingsFeedback(detector);
+    const updateFindingsFeedback = yield* GuardDuty.UpdateFindingsFeedback(detector);
 
     // Detector-scoped reads
     const listMembers = yield* GuardDuty.ListMembers(detector);
-    const getAdministratorAccount =
-      yield* GuardDuty.GetAdministratorAccount(detector);
-    const getMalwareScanSettings =
-      yield* GuardDuty.GetMalwareScanSettings(detector);
+    const getAdministratorAccount = yield* GuardDuty.GetAdministratorAccount(detector);
+    const getMalwareScanSettings = yield* GuardDuty.GetMalwareScanSettings(detector);
     const getUsageStatistics = yield* GuardDuty.GetUsageStatistics(detector);
     const listCoverage = yield* GuardDuty.ListCoverage(detector);
-    const getRemainingFreeTrialDays =
-      yield* GuardDuty.GetRemainingFreeTrialDays(detector);
+    const getRemainingFreeTrialDays = yield* GuardDuty.GetRemainingFreeTrialDays(detector);
     const listInvestigations = yield* GuardDuty.ListInvestigations(detector);
     const describeOrganizationConfiguration =
       yield* GuardDuty.DescribeOrganizationConfiguration(detector);
@@ -83,10 +75,8 @@ export default GuardDutyTestFunction.make(
     // Account-level (invitation flow + org administration)
     const getInvitationsCount = yield* GuardDuty.GetInvitationsCount();
     const listInvitations = yield* GuardDuty.ListInvitations();
-    const listOrganizationAdminAccounts =
-      yield* GuardDuty.ListOrganizationAdminAccounts();
-    const getOrganizationStatistics =
-      yield* GuardDuty.GetOrganizationStatistics();
+    const listOrganizationAdminAccounts = yield* GuardDuty.ListOrganizationAdminAccounts();
+    const getOrganizationStatistics = yield* GuardDuty.GetOrganizationStatistics();
 
     const bound = {
       createSampleFindings,
@@ -142,10 +132,7 @@ export default GuardDutyTestFunction.make(
         if (request.method === "GET" && pathname === "/finding-detail") {
           const id = url.searchParams.get("id");
           if (!id) {
-            return yield* HttpServerResponse.json(
-              { error: "missing id" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing id" }, { status: 400 });
           }
           const { Findings } = yield* getFindings({ FindingIds: [id] });
           return yield* HttpServerResponse.json({
@@ -232,10 +219,7 @@ export default GuardDutyTestFunction.make(
           // own account id.
           const account = url.searchParams.get("account");
           if (!account) {
-            return yield* HttpServerResponse.json(
-              { error: "missing account" },
-              { status: 400 },
-            );
+            return yield* HttpServerResponse.json({ error: "missing account" }, { status: 400 });
           }
           const { Accounts } = yield* getRemainingFreeTrialDays({
             AccountIds: [account],
@@ -284,8 +268,7 @@ export default GuardDutyTestFunction.make(
             getOrganizationStatistics().pipe(
               Effect.map((r) => ({
                 activeAccounts:
-                  r.OrganizationDetails?.OrganizationStatistics
-                    ?.ActiveAccountsCount ?? 0,
+                  r.OrganizationDetails?.OrganizationStatistics?.ActiveAccountsCount ?? 0,
               })),
             ),
           );

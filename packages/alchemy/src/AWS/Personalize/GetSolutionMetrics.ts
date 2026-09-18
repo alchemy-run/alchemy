@@ -27,10 +27,7 @@ export interface GetSolutionMetrics extends Binding.Service<
   () => Effect.Effect<
     (
       request: personalize.GetSolutionMetricsRequest,
-    ) => Effect.Effect<
-      personalize.GetSolutionMetricsResponse,
-      personalize.GetSolutionMetricsError
-    >
+    ) => Effect.Effect<personalize.GetSolutionMetricsResponse, personalize.GetSolutionMetricsError>
   >
 > {}
 export const GetSolutionMetrics = Binding.Service<GetSolutionMetrics>(

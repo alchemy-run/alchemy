@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -121,13 +120,7 @@ export const Route = Resource<Route>("Cloudflare.Tunnel.Route", {
 
 export const RouteProvider = () =>
   Provider.succeed(Route, {
-    stables: [
-      "routeId",
-      "accountId",
-      "tunnelId",
-      "network",
-      "virtualNetworkId",
-    ],
+    stables: ["routeId", "accountId", "tunnelId", "network", "virtualNetworkId"],
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -155,8 +148,7 @@ export const RouteProvider = () =>
       // EXPLICITLY chosen a vnet and it differs from what's deployed.
       if (
         news.virtualNetworkId !== undefined &&
-        (output?.virtualNetworkId ?? olds.virtualNetworkId) !==
-          news.virtualNetworkId
+        (output?.virtualNetworkId ?? olds.virtualNetworkId) !== news.virtualNetworkId
       ) {
         return { action: "replace" } as const;
       }
@@ -172,12 +164,7 @@ export const RouteProvider = () =>
       // Observe — cached id first, then an account-wide list scan by
       // network so we recover from out-of-band deletes, partial state
       // writes, or a route left attached to another tunnel.
-      let observed = yield* observe(
-        acct,
-        network,
-        virtualNetworkId,
-        output?.routeId,
-      );
+      let observed = yield* observe(acct, network, virtualNetworkId, output?.routeId);
 
       // Ensure — create when missing. Cloudflare returns a generic
       // conflict on duplicate (network, tunnel, vnet) tuples; on any
@@ -201,12 +188,7 @@ export const RouteProvider = () =>
             Effect.catch((err) =>
               Effect.gen(function* () {
                 if (!news.adopt) return yield* Effect.fail(err);
-                const existing = yield* observe(
-                  acct,
-                  network,
-                  virtualNetworkId,
-                  undefined,
-                );
+                const existing = yield* observe(acct, network, virtualNetworkId, undefined);
                 if (!existing) return yield* Effect.fail(err);
                 // Sentinel: undefined means "adoption path; use re-observed value".
                 return undefined;
@@ -245,8 +227,7 @@ export const RouteProvider = () =>
           id: patched.id ?? observed.id,
           network: normalize(patched.network) ?? observed.network,
           tunnelId: normalize(patched.tunnelId) ?? observed.tunnelId,
-          virtualNetworkId:
-            normalize(patched.virtualNetworkId) ?? observed.virtualNetworkId,
+          virtualNetworkId: normalize(patched.virtualNetworkId) ?? observed.virtualNetworkId,
           comment: normalize(patched.comment),
           createdAt: normalize(patched.createdAt) ?? observed.createdAt,
         };
@@ -281,29 +262,24 @@ export const RouteProvider = () =>
       // route in the account, exhaustively paginating. Drop soft-deleted
       // routes and anything missing an id, then hydrate into the exact
       // `read` Attributes shape so each element is delete-ready.
-      return yield* zeroTrust.listNetworkRoutes
-        .pages({ accountId, isDeleted: false })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (r): r is typeof r & { id: string } =>
-                    r.id != null && !r.deletedAt,
-                )
-                .map((r) => ({
-                  routeId: r.id,
-                  network: normalize(r.network) ?? "",
-                  tunnelId: normalize(r.tunnelId) ?? "",
-                  accountId,
-                  comment: normalize(r.comment),
-                  virtualNetworkId: normalize(r.virtualNetworkId),
-                  createdAt: normalize(r.createdAt),
-                })),
-            ),
+      return yield* zeroTrust.listNetworkRoutes.pages({ accountId, isDeleted: false }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((r): r is typeof r & { id: string } => r.id != null && !r.deletedAt)
+              .map((r) => ({
+                routeId: r.id,
+                network: normalize(r.network) ?? "",
+                tunnelId: normalize(r.tunnelId) ?? "",
+                accountId,
+                comment: normalize(r.comment),
+                virtualNetworkId: normalize(r.virtualNetworkId),
+                createdAt: normalize(r.createdAt),
+              })),
           ),
-        );
+        ),
+      );
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -311,15 +287,9 @@ export const RouteProvider = () =>
       const acct = output?.accountId ?? accountId;
       const tunnelId = output?.tunnelId ?? olds?.tunnelId;
       const network = output?.network ?? olds?.network;
-      const virtualNetworkId =
-        output?.virtualNetworkId ?? olds?.virtualNetworkId;
+      const virtualNetworkId = output?.virtualNetworkId ?? olds?.virtualNetworkId;
       if (!tunnelId || !network) return undefined;
-      const observed = yield* observe(
-        acct,
-        network,
-        virtualNetworkId,
-        output?.routeId,
-      );
+      const observed = yield* observe(acct, network, virtualNetworkId, output?.routeId);
       if (!observed) return undefined;
       return {
         routeId: observed.id,
@@ -356,8 +326,7 @@ const findRouteByNetwork = (
         (r) =>
           !r.deletedAt &&
           r.network === network &&
-          (virtualNetworkId === undefined ||
-            r.virtualNetworkId === virtualNetworkId),
+          (virtualNetworkId === undefined || r.virtualNetworkId === virtualNetworkId),
       ),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
@@ -403,7 +372,7 @@ const observe = Effect.fn(function* (
     // error and fall through to the list scan.
     const raw = yield* zeroTrust
       .getNetworkRoute({ accountId: acct, routeId })
-      .pipe(Effect.catch((_: unknown) => Effect.succeed(undefined)));
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
     const got = raw ? toObserved(raw) : undefined;
     if (got) return got;
   }
@@ -421,5 +390,4 @@ type ObservedRoute = {
   createdAt: string | undefined;
 };
 
-const normalize = (v: string | null | undefined): string | undefined =>
-  v == null ? undefined : v;
+const normalize = (v: string | null | undefined): string | undefined => (v == null ? undefined : v);

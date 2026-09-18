@@ -1,7 +1,6 @@
 import * as pageRules from "@distilled.cloud/cloudflare/page-rules";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -197,16 +196,12 @@ export const PageRuleProvider = () =>
         zones,
         (zone) =>
           pageRules.listPageRules({ zoneId: zone.id }).pipe(
-            Effect.map((rules) =>
-              rules.map((rule) => toAttributes(rule as ObservedRule, zone.id)),
-            ),
+            Effect.map((rules) => rules.map((rule) => toAttributes(rule as ObservedRule, zone.id))),
             // Skip plan-gated zones (`Forbidden`) and zones Cloudflare rejects
             // with "Invalid zone identifier" (e.g. pending/partial-setup zones
             // that don't accept the page-rules endpoint) — they contribute no
             // rules and shouldn't fail the whole account enumeration.
-            Effect.catchTag(["Forbidden", "InvalidZoneIdentifier"], () =>
-              Effect.succeed([]),
-            ),
+            Effect.catchTag(["Forbidden", "InvalidZoneIdentifier"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
       );
@@ -217,11 +212,7 @@ export const PageRuleProvider = () =>
       const o = olds as Props;
       const n = news as Props;
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       // Everything else (target, actions, priority, status) is mutable
@@ -259,9 +250,7 @@ export const PageRuleProvider = () =>
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the target scan
       //    and then to create.
-      let observed = output?.pageRuleId
-        ? yield* getRule(zoneId, output.pageRuleId)
-        : undefined;
+      let observed = output?.pageRuleId ? yield* getRule(zoneId, output.pageRuleId) : undefined;
 
       // 2. Fall back to scanning the zone for a rule with the same
       //    target. Ownership has already been verified upstream — `read`
@@ -342,10 +331,7 @@ const findByTarget = (zoneId: string, target: string) =>
     .listPageRules({ zoneId })
     .pipe(
       Effect.map(
-        (rules) =>
-          rules.find((rule) => targetOf(rule) === target) as
-            | ObservedRule
-            | undefined,
+        (rules) => rules.find((rule) => targetOf(rule) === target) as ObservedRule | undefined,
       ),
     );
 
@@ -392,9 +378,7 @@ const canonicalActions = (actions: ReadonlyArray<Action>): string =>
   JSON.stringify(
     actions
       .map((a) => canonical(a) as { id?: string })
-      .sort((a, b) =>
-        (a.id ?? "") < (b.id ?? "") ? -1 : (a.id ?? "") > (b.id ?? "") ? 1 : 0,
-      ),
+      .sort((a, b) => ((a.id ?? "") < (b.id ?? "") ? -1 : (a.id ?? "") > (b.id ?? "") ? 1 : 0)),
   );
 
 /** True when the observed rule already matches every desired aspect. */
@@ -402,8 +386,7 @@ const ruleMatchesDesired = (observed: ObservedRule, news: Props): boolean =>
   targetOf(observed) === news.target &&
   observed.priority === (news.priority ?? 1) &&
   observed.status === (news.status ?? "active") &&
-  canonicalActions(observed.actions as ReadonlyArray<Action>) ===
-    canonicalActions(news.actions);
+  canonicalActions(observed.actions as ReadonlyArray<Action>) === canonicalActions(news.actions);
 
 const toAttributes = (rule: ObservedRule, zoneId: string): Attributes => ({
   pageRuleId: rule.id,

@@ -1,7 +1,3 @@
-import * as CodeBuild from "@/AWS/CodeBuild";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as Logs from "@/AWS/Logs";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,12 +5,15 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CodeBuild from "@/AWS/CodeBuild";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as Logs from "@/AWS/Logs";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 export const FIXTURE_PROJECT_NAME = "alchemy-test-codebuild-bindings";
-export const FIXTURE_REPORT_GROUP_NAME =
-  "alchemy-test-codebuild-bindings-reports";
+export const FIXTURE_REPORT_GROUP_NAME = "alchemy-test-codebuild-bindings-reports";
 
 const buildspec = [
   "version: 0.2",
@@ -115,35 +114,28 @@ export default CodeBuildTestFunction.make(
     const retryBuild = yield* CodeBuild.RetryBuild(project);
     const listBuilds = yield* CodeBuild.ListBuildsForProject(project);
     const batchDeleteBuilds = yield* CodeBuild.BatchDeleteBuilds(project);
-    const invalidateProjectCache =
-      yield* CodeBuild.InvalidateProjectCache(project);
+    const invalidateProjectCache = yield* CodeBuild.InvalidateProjectCache(project);
     // Batch-build plane
     const startBuildBatch = yield* CodeBuild.StartBuildBatch(project);
     const stopBuildBatch = yield* CodeBuild.StopBuildBatch(project);
     const retryBuildBatch = yield* CodeBuild.RetryBuildBatch(project);
     const batchGetBuildBatches = yield* CodeBuild.BatchGetBuildBatches(project);
-    const listBuildBatches =
-      yield* CodeBuild.ListBuildBatchesForProject(project);
+    const listBuildBatches = yield* CodeBuild.ListBuildBatchesForProject(project);
     const deleteBuildBatch = yield* CodeBuild.DeleteBuildBatch(project);
     // Sandbox plane
     const startSandbox = yield* CodeBuild.StartSandbox(project);
     const stopSandbox = yield* CodeBuild.StopSandbox(project);
     const batchGetSandboxes = yield* CodeBuild.BatchGetSandboxes(project);
     const listSandboxes = yield* CodeBuild.ListSandboxesForProject(project);
-    const startCommandExecution =
-      yield* CodeBuild.StartCommandExecution(project);
-    const batchGetCommandExecutions =
-      yield* CodeBuild.BatchGetCommandExecutions(project);
-    const listCommandExecutions =
-      yield* CodeBuild.ListCommandExecutionsForSandbox(project);
+    const startCommandExecution = yield* CodeBuild.StartCommandExecution(project);
+    const batchGetCommandExecutions = yield* CodeBuild.BatchGetCommandExecutions(project);
+    const listCommandExecutions = yield* CodeBuild.ListCommandExecutionsForSandbox(project);
     // Report plane
     const listReports = yield* CodeBuild.ListReportsForReportGroup(reportGroup);
     const batchGetReports = yield* CodeBuild.BatchGetReports(reportGroup);
     const describeTestCases = yield* CodeBuild.DescribeTestCases(reportGroup);
-    const describeCodeCoverages =
-      yield* CodeBuild.DescribeCodeCoverages(reportGroup);
-    const getReportGroupTrend =
-      yield* CodeBuild.GetReportGroupTrend(reportGroup);
+    const describeCodeCoverages = yield* CodeBuild.DescribeCodeCoverages(reportGroup);
+    const getReportGroupTrend = yield* CodeBuild.GetReportGroupTrend(reportGroup);
     const deleteReport = yield* CodeBuild.DeleteReport(reportGroup);
 
     // Deploy-time: creates the EventBridge rule (default bus, source
@@ -174,13 +166,9 @@ export default CodeBuildTestFunction.make(
             );
           }
           case "GET /build/get": {
-            const result = yield* errorTagged(
-              batchGetBuilds({ ids: [param("id")] }),
-            );
+            const result = yield* errorTagged(batchGetBuilds({ ids: [param("id")] }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { status: result.builds?.[0]?.buildStatus },
+              "errorTag" in result ? result : { status: result.builds?.[0]?.buildStatus },
             );
           }
           case "GET /build/list": {
@@ -193,9 +181,7 @@ export default CodeBuildTestFunction.make(
             const body = (yield* request.json) as unknown as { id: string };
             const result = yield* errorTagged(stopBuild({ id: body.id }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { status: result.build?.buildStatus },
+              "errorTag" in result ? result : { status: result.build?.buildStatus },
             );
           }
           case "POST /build/retry": {
@@ -209,54 +195,40 @@ export default CodeBuildTestFunction.make(
             const body = (yield* request.json) as unknown as {
               ids: string[];
             };
-            const result = yield* errorTagged(
-              batchDeleteBuilds({ ids: body.ids }),
-            );
+            const result = yield* errorTagged(batchDeleteBuilds({ ids: body.ids }));
             return yield* HttpServerResponse.json(
               "errorTag" in result
                 ? result
                 : {
                     deleted: result.buildsDeleted ?? [],
-                    notDeleted: (result.buildsNotDeleted ?? []).map(
-                      (b) => b.id,
-                    ),
+                    notDeleted: (result.buildsNotDeleted ?? []).map((b) => b.id),
                   },
             );
           }
           case "POST /cache/invalidate": {
             const result = yield* errorTagged(invalidateProjectCache());
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ---- batch-build plane ----
           case "POST /batch/start": {
             const result = yield* errorTagged(startBuildBatch());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { batchId: result.buildBatch?.id },
+              "errorTag" in result ? result : { batchId: result.buildBatch?.id },
             );
           }
           case "POST /batch/stop": {
             const body = (yield* request.json) as unknown as { id: string };
             const result = yield* errorTagged(stopBuildBatch({ id: body.id }));
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /batch/retry": {
             const body = (yield* request.json) as unknown as { id: string };
             const result = yield* errorTagged(retryBuildBatch({ id: body.id }));
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "GET /batch/get": {
-            const result = yield* errorTagged(
-              batchGetBuildBatches({ ids: [param("id")] }),
-            );
+            const result = yield* errorTagged(batchGetBuildBatches({ ids: [param("id")] }));
             return yield* HttpServerResponse.json(
               "errorTag" in result
                 ? result
@@ -274,12 +246,8 @@ export default CodeBuildTestFunction.make(
           }
           case "POST /batch/delete": {
             const body = (yield* request.json) as unknown as { id: string };
-            const result = yield* errorTagged(
-              deleteBuildBatch({ id: body.id }),
-            );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            const result = yield* errorTagged(deleteBuildBatch({ id: body.id }));
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ---- sandbox plane ----
@@ -292,14 +260,10 @@ export default CodeBuildTestFunction.make(
           case "POST /sandbox/stop": {
             const body = (yield* request.json) as unknown as { id: string };
             const result = yield* errorTagged(stopSandbox({ id: body.id }));
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "GET /sandbox/get": {
-            const result = yield* errorTagged(
-              batchGetSandboxes({ ids: [param("id")] }),
-            );
+            const result = yield* errorTagged(batchGetSandboxes({ ids: [param("id")] }));
             return yield* HttpServerResponse.json(
               "errorTag" in result
                 ? result
@@ -326,9 +290,7 @@ export default CodeBuildTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { commandId: result.commandExecution?.id },
+              "errorTag" in result ? result : { commandId: result.commandExecution?.id },
             );
           }
           case "GET /sandbox/command-get": {
@@ -342,9 +304,7 @@ export default CodeBuildTestFunction.make(
               "errorTag" in result
                 ? result
                 : {
-                    statuses: (result.commandExecutions ?? []).map(
-                      (c) => c.status,
-                    ),
+                    statuses: (result.commandExecutions ?? []).map((c) => c.status),
                   },
             );
           }
@@ -369,9 +329,7 @@ export default CodeBuildTestFunction.make(
             );
           }
           case "GET /reports/get": {
-            const result = yield* errorTagged(
-              batchGetReports({ reportArns: [param("arn")] }),
-            );
+            const result = yield* errorTagged(batchGetReports({ reportArns: [param("arn")] }));
             return yield* HttpServerResponse.json(
               "errorTag" in result
                 ? result
@@ -382,48 +340,31 @@ export default CodeBuildTestFunction.make(
             );
           }
           case "GET /reports/test-cases": {
-            const result = yield* errorTagged(
-              describeTestCases({ reportArn: param("arn") }),
-            );
+            const result = yield* errorTagged(describeTestCases({ reportArn: param("arn") }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.testCases ?? []).length },
+              "errorTag" in result ? result : { count: (result.testCases ?? []).length },
             );
           }
           case "GET /reports/coverage": {
-            const result = yield* errorTagged(
-              describeCodeCoverages({ reportArn: param("arn") }),
-            );
+            const result = yield* errorTagged(describeCodeCoverages({ reportArn: param("arn") }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.codeCoverages ?? []).length },
+              "errorTag" in result ? result : { count: (result.codeCoverages ?? []).length },
             );
           }
           case "GET /reports/trend": {
-            const result = yield* errorTagged(
-              getReportGroupTrend({ trendField: "DURATION" }),
-            );
+            const result = yield* errorTagged(getReportGroupTrend({ trendField: "DURATION" }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { average: result.stats?.average },
+              "errorTag" in result ? result : { average: result.stats?.average },
             );
           }
           case "POST /reports/delete": {
             const body = (yield* request.json) as unknown as { arn: string };
             const result = yield* errorTagged(deleteReport({ arn: body.arn }));
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

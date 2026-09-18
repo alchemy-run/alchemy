@@ -1,7 +1,4 @@
-import type {
-  Sprite as FlySprite,
-  UrlAuth as FlyUrlAuth,
-} from "@distilled.cloud/fly-io/sprites";
+import type { Sprite as FlySprite } from "@distilled.cloud/fly-io/sprites";
 import * as sprites from "@distilled.cloud/fly-io/sprites";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -19,18 +16,18 @@ import type { ServerHost } from "../Server/Process.ts";
 import { Stack } from "../Stack.ts";
 import { createInternalTags } from "../Tags.ts";
 import {
-  createFlyResourceName,
-  matchesAlchemyPhysicalName,
-  sanitizeFlyAppName,
-} from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
-import {
   createFlyHostRuntimeContext,
   createSpriteHostedSupport,
   DEFAULT_PORT,
   type FlyHostRuntimeContext,
   type HostedProgramProps,
 } from "./hosted.ts";
+import {
+  createFlyResourceName,
+  matchesAlchemyPhysicalName,
+  sanitizeFlyAppName,
+} from "./Metadata.ts";
+import type { Providers } from "./Providers.ts";
 
 const DEFAULT_URL_AUTH: UrlAuth = "public";
 const APP_DIR = "/home/sprite/alchemy";
@@ -126,9 +123,7 @@ export type Sprite = Resource<
 >;
 
 export const isSprite = (value: unknown): value is Sprite =>
-  typeof value === "object" &&
-  value !== null &&
-  (value as { Type?: string }).Type === "Fly.Sprite";
+  typeof value === "object" && value !== null && (value as { Type?: string }).Type === "Fly.Sprite";
 
 export type SpriteServices = ServerHost;
 
@@ -314,14 +309,12 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  *
  * @resource
  */
-export const Sprite: Platform<
-  Sprite,
-  SpriteServices,
-  SpriteShape,
-  SpriteRuntimeContext
-> = Platform("Fly.Sprite", {
-  createRuntimeContext: createFlyHostRuntimeContext("Fly.Sprite"),
-});
+export const Sprite: Platform<Sprite, SpriteServices, SpriteShape, SpriteRuntimeContext> = Platform(
+  "Fly.Sprite",
+  {
+    createRuntimeContext: createFlyHostRuntimeContext("Fly.Sprite"),
+  },
+);
 
 export class SpriteNotCreated extends Data.TaggedError("Fly.SpriteNotCreated")<{
   name: string;
@@ -339,18 +332,11 @@ class SpritePending extends Data.TaggedError("Fly.SpritePending")<{
 }> {}
 
 const toStatus = (status: string | undefined): SpriteStatus =>
-  status === "warm" || status === "running" || status === "cold"
-    ? status
-    : "cold";
+  status === "warm" || status === "running" || status === "cold" ? status : "cold";
 
-const toUrlAuth = (auth: string | undefined): UrlAuth =>
-  auth === "sprite" ? "sprite" : "public";
+const toUrlAuth = (auth: string | undefined): UrlAuth => (auth === "sprite" ? "sprite" : "public");
 
-const toAttrs = (
-  sprite: FlySprite,
-  name: string,
-  codeHash: string,
-): Sprite["Attributes"] => ({
+const toAttrs = (sprite: FlySprite, name: string, codeHash: string): Sprite["Attributes"] => ({
   spriteId: sprite.id ?? name,
   name: sprite.name ?? name,
   url: sprite.url ?? `https://${name}.sprites.app`,
@@ -367,11 +353,7 @@ const isOwnedSprite = (sprite: FlySprite): boolean => {
   return matchesAlchemyPhysicalName(sprite.name);
 };
 
-const resolveSpriteName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const resolveSpriteName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
     if (name !== undefined) return sanitizeFlyAppName(name);
     if (existing !== undefined) return existing;
@@ -381,23 +363,16 @@ const resolveSpriteName = (
 const ownershipLabels = (id: string) =>
   Effect.gen(function* () {
     const tags = yield* createInternalTags(id);
-    return [
-      ...Object.entries(tags).map(([key, value]) => `${key}=${value}`),
-      OWNER_LABEL,
-    ];
+    return [...Object.entries(tags).map(([key, value]) => `${key}=${value}`), OWNER_LABEL];
   });
 
 const getByName = (name: string) =>
-  sprites
-    .getSprite({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  sprites.getSprite({ name }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
 
 const waitForSprite = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((found) =>
-      found !== undefined
-        ? Effect.succeed(found)
-        : Effect.fail(new SpritePending({ name })),
+      found !== undefined ? Effect.succeed(found) : Effect.fail(new SpritePending({ name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "Fly.SpritePending",
@@ -433,12 +408,9 @@ const toEnv = (env: Record<string, any> | undefined): Record<string, string> =>
     }),
   );
 
-const collectBindingEnv = (
-  bindings: readonly ResourceBinding<SpriteBinding>[],
-) => {
+const collectBindingEnv = (bindings: readonly ResourceBinding<SpriteBinding>[]) => {
   const active = bindings.filter(
-    (binding: ResourceBinding<SpriteBinding> & { action?: string }) =>
-      binding.action !== "delete",
+    (binding: ResourceBinding<SpriteBinding> & { action?: string }) => binding.action !== "delete",
   );
   return active
     .map((binding) => binding?.data?.env)
@@ -463,11 +435,7 @@ const renderEnvFile = (env: Record<string, string>) =>
     .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
     .join("\n")}\n`;
 
-const writeRemoteFile = (input: {
-  name: string;
-  path: string;
-  body: Uint8Array;
-}) =>
+const writeRemoteFile = (input: { name: string; path: string; body: Uint8Array }) =>
   retryTransient(
     sprites.writeFile({
       name: input.name,
@@ -579,9 +547,7 @@ export const SpriteProvider = () =>
           if (news === undefined || output === undefined) return undefined;
           if (isResolved(news)) {
             const desiredName =
-              news.name !== undefined
-                ? sanitizeFlyAppName(news.name)
-                : output.name;
+              news.name !== undefined ? sanitizeFlyAppName(news.name) : output.name;
             if (desiredName !== output.name) {
               return { action: "replace" as const };
             }
@@ -609,18 +575,12 @@ export const SpriteProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = yield* resolveSpriteName(id, olds?.name, output?.name);
           const found = yield* (
-            output?.name !== undefined
-              ? getByName(output.name)
-              : Effect.succeed(undefined)
+            output?.name !== undefined ? getByName(output.name) : Effect.succeed(undefined)
           ).pipe(
             Effect.flatMap((existing) =>
-              existing !== undefined
-                ? Effect.succeed(existing)
-                : getByName(name),
+              existing !== undefined ? Effect.succeed(existing) : getByName(name),
             ),
-            Effect.catchTag("SpritesNotEnabled", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("SpritesNotEnabled", () => Effect.succeed(undefined)),
           );
           if (found === undefined) return undefined;
           const attrs = toAttrs(found, name, output?.code.hash ?? "");
@@ -629,25 +589,17 @@ export const SpriteProvider = () =>
         }),
 
         list: Effect.fn(function* () {
-          const items = yield* sprites.listSprites
-            .items({ max_results: 50 })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.catchTag("SpritesNotEnabled", () => Effect.succeed([])),
-            );
+          const items = yield* sprites.listSprites.items({ max_results: 50 }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.catchTag("SpritesNotEnabled", () => Effect.succeed([])),
+          );
           return items
             .filter(isOwnedSprite)
             .map((sprite) => toAttrs(sprite, sprite.name ?? "", ""));
         }),
 
-        reconcile: Effect.fn(function* ({
-          id,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const props = news;
           const name = yield* resolveSpriteName(id, props.name, output?.name);
           const urlAuth = props.urlAuth ?? DEFAULT_URL_AUTH;
@@ -656,10 +608,7 @@ export const SpriteProvider = () =>
           const boundEnv = collectBindingEnv(bindings ?? []);
           const env = desiredEnv(props, boundEnv, hosted.alchemyEnv, port);
 
-          let current =
-            output?.name !== undefined
-              ? yield* getByName(output.name)
-              : undefined;
+          let current = output?.name !== undefined ? yield* getByName(output.name) : undefined;
           if (current === undefined && output?.name !== name) {
             current = yield* getByName(name);
           }
@@ -714,12 +663,7 @@ export const SpriteProvider = () =>
           if (output.name.length === 0) return;
           yield* sprites
             .deleteSprite({ name: output.name })
-            .pipe(
-              Effect.catchTag(
-                ["NotFound", "SpritesNotEnabled"],
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag(["NotFound", "SpritesNotEnabled"], () => Effect.void));
         }),
       });
     }),

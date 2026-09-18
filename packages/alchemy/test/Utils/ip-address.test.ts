@@ -1,5 +1,5 @@
-import { canonicalCidr } from "@/Utils/ip-address.ts";
 import { describe, expect, test } from "alchemy-test";
+import { canonicalCidr } from "@/Utils/ip-address.ts";
 
 const valid: [string, string][] = [
   ["10.0.0.7/16", "10.0.0.0/16"],
@@ -23,14 +23,8 @@ const valid: [string, string][] = [
   ["::1/127", "::/127"],
   ["FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF/0", "::/0"],
   ["FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF:FFFF/1", "8000::/1"],
-  [
-    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/127",
-    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe/127",
-  ],
-  [
-    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128",
-    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128",
-  ],
+  ["ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/127", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe/127"],
+  ["ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/128"],
   ["2001:0DB8:0000:0000:0000:0000:0000:0001/128", "2001:db8::1/128"],
   ["2001:db8:abcd:1234:5678:9abc:def0:1234/64", "2001:db8:abcd:1234::/64"],
   ["2001:db8:abcd:1234:ffff:ffff:ffff:ffff/65", "2001:db8:abcd:1234:8000::/65"],
@@ -138,14 +132,8 @@ const ipv6Bits = (address: string) => {
   const words =
     right === undefined
       ? head
-      : [
-          ...head,
-          ...Array<string>(8 - head.length - tail.length).fill("0"),
-          ...tail,
-        ];
-  return words
-    .map((word) => parseInt(word, 16).toString(2).padStart(16, "0"))
-    .join("");
+      : [...head, ...Array<string>(8 - head.length - tail.length).fill("0"), ...tail];
+  return words.map((word) => parseInt(word, 16).toString(2).padStart(16, "0")).join("");
 };
 
 describe("canonicalCidr", () => {
@@ -167,15 +155,7 @@ describe("canonicalCidr", () => {
   }
 
   test("preserves whitespace rather than interpreting a different address", () => {
-    for (const whitespace of [
-      " ",
-      "\t",
-      "\n",
-      "\r",
-      "\r\n",
-      "\u00a0",
-      "\ufeff",
-    ]) {
+    for (const whitespace of [" ", "\t", "\n", "\r", "\r\n", "\u00a0", "\ufeff"]) {
       for (const base of ["10.0.0.1/24", "2001:db8::1/64"]) {
         for (let index = 0; index <= base.length; index++) {
           const input = base.slice(0, index) + whitespace + base.slice(index);

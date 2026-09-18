@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
-export interface GetUsagePlanKeysRequest extends Omit<
-  ag.GetUsagePlanKeysRequest,
-  "usagePlanId"
-> {}
+export interface GetUsagePlanKeysRequest extends Omit<ag.GetUsagePlanKeysRequest, "usagePlanId"> {}
 
 /**
  * Runtime binding for listing the API keys enrolled in a
@@ -33,9 +30,7 @@ export interface GetUsagePlanKeys extends Binding.Service<
   <P extends UsagePlan>(
     usagePlan: P,
   ) => Effect.Effect<
-    (
-      request?: GetUsagePlanKeysRequest,
-    ) => Effect.Effect<ag.UsagePlanKeys, ag.GetUsagePlanKeysError>
+    (request?: GetUsagePlanKeysRequest) => Effect.Effect<ag.UsagePlanKeys, ag.GetUsagePlanKeysError>
   >
 > {}
 export const GetUsagePlanKeys = Binding.Service<GetUsagePlanKeys>(

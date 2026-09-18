@@ -7,7 +7,5 @@ export const SERVICE_USER_WORKER = "user-worker";
  */
 export const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
 
-export const defaultDurableObjectUniqueKey = (
-  scriptName: string,
-  className: string,
-) => `${encodeURIComponent(scriptName)}-${encodeURIComponent(className)}`;
+export const defaultDurableObjectUniqueKey = (scriptName: string, className: string) =>
+  `${encodeURIComponent(scriptName)}-${encodeURIComponent(className)}`;

@@ -185,10 +185,7 @@ export function toPostgresClusterSku(input: {
  * routinely take longer than the default 10-minute polling budget, so
  * give change requests a 60-minute budget (720 × 5s).
  */
-const changeRequestSchedule = Schedule.max([
-  Schedule.spaced("5 seconds"),
-  Schedule.recurs(720),
-]);
+const changeRequestSchedule = Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(720)]);
 
 /**
  * Polls branch change requests until all visible changes are in a terminal
@@ -211,8 +208,7 @@ export const waitForPendingPostgresChanges = Effect.fn(function* (
       per_page: 25,
     }),
     (page) => {
-      const isTerminal = (state: string) =>
-        state === "completed" || state === "canceled";
+      const isTerminal = (state: string) => state === "completed" || state === "canceled";
 
       if (changeId) {
         const change = page.data.find((change) => change.id === changeId);
@@ -256,10 +252,5 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
     branch,
     cluster_size: sku,
   });
-  yield* waitForPendingPostgresChanges(
-    organization,
-    database,
-    branch,
-    change.id,
-  );
+  yield* waitForPendingPostgresChanges(organization, database, branch, change.id);
 });

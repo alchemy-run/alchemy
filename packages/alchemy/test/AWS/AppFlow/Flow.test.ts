@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Flow } from "@/AWS/AppFlow";
-import type { PolicyStatement } from "@/AWS/IAM";
-import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as appflow from "@distilled.cloud/aws/appflow";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Flow } from "@/AWS/AppFlow";
+import type { PolicyStatement } from "@/AWS/IAM";
+import { Bucket } from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -82,9 +82,7 @@ const assertFlowGone = (flowName: string) =>
   Effect.gen(function* () {
     const result = yield* appflow.describeFlow({ flowName }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
       return yield* Effect.fail(new Error(`Flow '${flowName}' still exists`));

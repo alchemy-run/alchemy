@@ -23,20 +23,12 @@ type Stored =
 const asString = (value: unknown): string => String(value ?? "");
 
 const wrongType = () =>
-  encodeError(
-    "WRONGTYPE Operation against a key holding the wrong kind of value",
-  );
+  encodeError("WRONGTYPE Operation against a key holding the wrong kind of value");
 
-const execute = (
-  store: Map<string, Stored>,
-  name: string,
-  args: string[],
-): Uint8Array => {
+const execute = (store: Map<string, Stored>, name: string, args: string[]): Uint8Array => {
   const cmd = name.toUpperCase();
   if (cmd === "PING") {
-    return args[0] === undefined
-      ? encodeSimpleString("PONG")
-      : encodeReply(args[0]);
+    return args[0] === undefined ? encodeSimpleString("PONG") : encodeReply(args[0]);
   }
   if (cmd === "ECHO") return encodeReply(args[0] ?? "");
   if (cmd === "AUTH") return encodeSimpleString("OK");
@@ -63,8 +55,7 @@ const execute = (
   }
   if (cmd === "INCR" || cmd === "INCRBY" || cmd === "DECR") {
     const key = args[0] ?? "";
-    const delta =
-      cmd === "DECR" ? -1 : cmd === "INCR" ? 1 : Number(args[1] ?? 1);
+    const delta = cmd === "DECR" ? -1 : cmd === "INCR" ? 1 : Number(args[1] ?? 1);
     const row = store.get(key);
     if (row !== undefined && row.t !== "string") return wrongType();
     const next = Number(row?.t === "string" ? row.v : 0) + delta;
@@ -166,20 +157,14 @@ const execute = (
   return encodeError(`ERR unknown command '${name}'`);
 };
 
-const startFakeRedis = (options?: {
-  readonly password?: string;
-  readonly splitWrites?: boolean;
-}) =>
+const startFakeRedis = (options?: { readonly password?: string; readonly splitWrites?: boolean }) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const store = new Map<string, Stored>();
       const sessions = new WeakMap<object, Session>();
       const password = options?.password ?? "";
       const splitWrites = options?.splitWrites === true;
-      const write = (
-        socket: { write(bytes: Uint8Array): unknown },
-        payload: Uint8Array,
-      ) => {
+      const write = (socket: { write(bytes: Uint8Array): unknown }, payload: Uint8Array) => {
         if (!splitWrites) {
           socket.write(payload);
           return;
@@ -318,10 +303,7 @@ describe("Redis protocol client", () => {
       expect(yield* conn.send("LRANGE", ["l", 0, -1])).toEqual(["y", "x"]);
       expect(yield* conn.send("SADD", ["s", "a", "a", "b"])).toBe(2);
       const members = yield* conn.send("SMEMBERS", ["s"]);
-      expect(Array.isArray(members) ? [...members].sort() : members).toEqual([
-        "a",
-        "b",
-      ]);
+      expect(Array.isArray(members) ? [...members].sort() : members).toEqual(["a", "b"]);
       expect(yield* conn.send("ZADD", ["z", 2, "b"])).toBe(1);
       expect(yield* conn.send("ZADD", ["z", 1, "a"])).toBe(1);
       expect(yield* conn.send("ZRANGE", ["z", 0, -1])).toEqual(["a", "b"]);

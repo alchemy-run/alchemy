@@ -43,6 +43,4 @@ export interface RebootInstance extends Binding.Service<
   >
 > {}
 
-export const RebootInstance = Binding.Service<RebootInstance>(
-  "AWS.EC2.RebootInstance",
-);
+export const RebootInstance = Binding.Service<RebootInstance>("AWS.EC2.RebootInstance");

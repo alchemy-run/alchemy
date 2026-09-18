@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { EventIntegration } from "@/AWS/AppIntegrations";
-import * as Test from "@/Test/Alchemy";
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { EventIntegration } from "@/AWS/AppIntegrations";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,15 +25,10 @@ test.provider(
 
 const assertGone = (name: string) =>
   appintegrations.getEventIntegration({ Name: name }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`event integration '${name}' still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`event integration '${name}' still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -66,9 +61,7 @@ test.provider(
       });
       expect(observed.Description).toBe("alchemy event integration");
       expect(observed.EventBridgeBus).toBe("default");
-      expect(observed.EventFilter?.Source).toBe(
-        "aws.partner/examplepartner.com",
-      );
+      expect(observed.EventFilter?.Source).toBe("aws.partner/examplepartner.com");
       expect(observed.Tags?.purpose).toBe("alchemy-test");
 
       // Update the description in place (name/arn stable).
@@ -83,9 +76,7 @@ test.provider(
           return { integration };
         }),
       );
-      expect(updated.eventIntegrationName).toBe(
-        integration.eventIntegrationName,
-      );
+      expect(updated.eventIntegrationName).toBe(integration.eventIntegrationName);
       expect(updated.eventIntegrationArn).toBe(integration.eventIntegrationArn);
 
       const reobserved = yield* appintegrations.getEventIntegration({
@@ -107,9 +98,7 @@ test.provider(
         }),
       );
       expect(replaced.source).toBe("aws.partner/otherpartner.com");
-      expect(replaced.eventIntegrationName).not.toBe(
-        integration.eventIntegrationName,
-      );
+      expect(replaced.eventIntegrationName).not.toBe(integration.eventIntegrationName);
 
       // The replaced (old) integration is deleted.
       yield* assertGone(integration.eventIntegrationName);

@@ -42,13 +42,8 @@ export interface DeleteMessageBatch extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteMessageBatchRequest,
-    ) => Effect.Effect<
-      sqs.DeleteMessageBatchResult,
-      sqs.DeleteMessageBatchError
-    >
+    ) => Effect.Effect<sqs.DeleteMessageBatchResult, sqs.DeleteMessageBatchError>
   >
 > {}
 
-export const DeleteMessageBatch = Binding.Service<DeleteMessageBatch>(
-  "AWS.SQS.DeleteMessageBatch",
-);
+export const DeleteMessageBatch = Binding.Service<DeleteMessageBatch>("AWS.SQS.DeleteMessageBatch");

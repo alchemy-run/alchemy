@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deterministic key material (this is test-only, not a real secret).
 const SECRET_A =
@@ -23,9 +20,7 @@ const SECRET_B =
   "8nNZTjsM1Yu0aFYNYTcMM2KFCDc2cMKQz3mNkLV0XzUgDgQ4Mc7XhhSh0RUFhd6OYzz6Vl5hUTUVUYz1JBdt0g==";
 
 // Ride out fresh-token 403 blips on out-of-band calls.
-const retryForbidden = <A, E extends { _tag: string }, R>(
-  eff: Effect.Effect<A, E, R>,
-) =>
+const retryForbidden = <A, E extends { _tag: string }, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
@@ -44,10 +39,7 @@ const expectGone = (accountId: string, tsigId: string) =>
     Effect.catchTag("TsigNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "TsigNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -118,9 +110,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DNS.ZoneTransferTsig,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.DNS.ZoneTransferTsig);
       const all = yield* provider.list();
 
       expect(all.some((t) => t.tsigId === deployed.tsigId)).toBe(true);

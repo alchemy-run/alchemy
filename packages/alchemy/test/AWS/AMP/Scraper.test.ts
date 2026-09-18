@@ -1,10 +1,10 @@
+import * as amp from "@distilled.cloud/aws/amp";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Scraper, ScraperLoggingConfiguration, Workspace } from "@/AWS/AMP";
 import * as Logs from "@/AWS/Logs";
 import * as Test from "@/Test/Alchemy";
-import * as amp from "@distilled.cloud/aws/amp";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -30,9 +30,7 @@ test.provider(
   () =>
     Effect.gen(function* () {
       const response = yield* amp.getDefaultScraperConfiguration({});
-      const yaml = yield* Effect.sync(() =>
-        new TextDecoder().decode(response.configuration),
-      );
+      const yaml = yield* Effect.sync(() => new TextDecoder().decode(response.configuration));
       expect(yaml).toContain("scrape_configs");
     }),
   { timeout: 30_000 },

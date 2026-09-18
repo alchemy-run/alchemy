@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as frauddetector from "@distilled.cloud/aws/frauddetector";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import FraudDetectorTestFunctionLive, {
   FRAUD_EMAIL,
   FraudDetectorTestFunction,
@@ -33,33 +33,23 @@ test.provider("getDetectors on a nonexistent id fails with a typed error", () =>
     const error = yield* Effect.flip(
       frauddetector.getDetectors({ detectorId: "does_not_exist_detector" }),
     );
-    expect(
-      ["ResourceNotFoundException", "AccessDeniedException"].includes(
-        error._tag,
-      ),
-    ).toBe(true);
+    expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(true);
   }),
 );
 
 // Ungated typed-error probe for the event data plane: getEvent on a
 // nonexistent event type decodes to a typed tag (ResourceNotFoundException in
 // an entitled account, AccessDeniedException in an ungranted one).
-test.provider(
-  "getEvent on a nonexistent event type fails with a typed error",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        frauddetector.getEvent({
-          eventId: "does-not-exist",
-          eventTypeName: "does_not_exist_event_type",
-        }),
-      );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
-    }),
+test.provider("getEvent on a nonexistent event type fails with a typed error", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      frauddetector.getEvent({
+        eventId: "does-not-exist",
+        eventTypeName: "does_not_exist_event_type",
+      }),
+    );
+    expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(true);
+  }),
 );
 
 // Ungated typed-error probe for the list data plane: updateList on a
@@ -74,11 +64,7 @@ test.provider("updateList on a nonexistent list fails with a typed error", () =>
         updateMode: "REPLACE",
       }),
     );
-    expect(
-      ["ResourceNotFoundException", "AccessDeniedException"].includes(
-        error._tag,
-      ),
-    ).toBe(true);
+    expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(true);
   }),
 );
 
@@ -113,10 +99,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(60),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
         }),
       );
     }),
@@ -147,10 +130,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
               : Effect.fail(new Error(`predict failed: ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("2 seconds"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(8)]),
           }),
         );
         const body = (yield* response.json) as { outcomes: string[] };
@@ -174,10 +154,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
               : Effect.fail(new Error(`predict failed: ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("2 seconds"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(8)]),
           }),
         );
         const body = (yield* response.json) as { outcomes: string[] };
@@ -207,10 +184,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
                   : Effect.fail(new Error(`${path} failed: ${res.status}`)),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.exponential("2 seconds"),
-                  Schedule.recurs(6),
-                ]),
+                schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
               }),
             );
 
@@ -220,9 +194,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
             Effect.flatMap((res) =>
               res.status === 200
                 ? Effect.flatMap(res.json, (body) =>
-                    Effect.succeed(
-                      body as { found: boolean; currentLabel?: string },
-                    ),
+                    Effect.succeed(body as { found: boolean; currentLabel?: string }),
                   )
                 : Effect.fail(new Error(`get event failed: ${res.status}`)),
             ),
@@ -233,10 +205,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
         yield* post("/event", { eventId, email: "legit@example.com" });
         const stored = yield* readEvent.pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
             while: (e): boolean => e instanceof Error,
           }),
           Effect.repeat({
@@ -285,9 +254,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
           .pipe(
             Effect.flatMap((res) =>
               res.status === 200
-                ? Effect.flatMap(res.json, (body) =>
-                    Effect.succeed(body as { elements: string[] }),
-                  )
+                ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { elements: string[] }))
                 : Effect.fail(new Error(`get list failed: ${res.status}`)),
             ),
           );
@@ -295,10 +262,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
         // The seeded element from the List resource is readable.
         const seeded = yield* readList.pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("2 seconds"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
           }),
         );
         expect(seeded.elements).toContain(SEED_BLOCKED_IP);
@@ -348,52 +312,41 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
                 : Effect.fail(new Error(`predict failed: ${res.status}`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential("2 seconds"),
-                Schedule.recurs(6),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
             }),
           );
 
         // The prediction shows up in ListEventPredictions eventually.
-        const listed = yield* client
-          .get(`${baseUrl}/predictions?eventId=${eventId}`)
-          .pipe(
-            Effect.flatMap((res) =>
-              res.status === 200
-                ? Effect.flatMap(res.json, (body) =>
-                    Effect.succeed(body as { summaries: unknown[] }),
-                  )
-                : Effect.fail(
-                    new Error(`list predictions failed: ${res.status}`),
-                  ),
-            ),
-            Effect.repeat({
-              schedule: Schedule.spaced("5 seconds"),
-              until: (body): boolean => body.summaries.length > 0,
-              times: 10,
-            }),
-          );
+        const listed = yield* client.get(`${baseUrl}/predictions?eventId=${eventId}`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { summaries: unknown[] }))
+              : Effect.fail(new Error(`list predictions failed: ${res.status}`)),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (body): boolean => body.summaries.length > 0,
+            times: 10,
+          }),
+        );
         expect(listed.summaries.length).toBeGreaterThan(0);
 
         // Its full evaluation metadata is auditable.
-        const audit = yield* client
-          .get(`${baseUrl}/prediction-metadata?eventId=${eventId}`)
-          .pipe(
-            Effect.flatMap((res) =>
-              res.status === 200
-                ? Effect.flatMap(res.json, (body) =>
-                    Effect.succeed(
-                      body as {
-                        found: boolean;
-                        outcomes: string[];
-                        ruleCount: number;
-                      },
-                    ),
-                  )
-                : Effect.fail(new Error(`audit failed: ${res.status}`)),
-            ),
-          );
+        const audit = yield* client.get(`${baseUrl}/prediction-metadata?eventId=${eventId}`).pipe(
+          Effect.flatMap((res) =>
+            res.status === 200
+              ? Effect.flatMap(res.json, (body) =>
+                  Effect.succeed(
+                    body as {
+                      found: boolean;
+                      outcomes: string[];
+                      ruleCount: number;
+                    },
+                  ),
+                )
+              : Effect.fail(new Error(`audit failed: ${res.status}`)),
+          ),
+        );
         expect(audit.found).toBe(true);
         expect(audit.outcomes).toContain(REVIEW_OUTCOME);
         expect(audit.ruleCount).toBeGreaterThan(0);
@@ -413,9 +366,7 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
           .pipe(
             Effect.flatMap((res) =>
               res.status === 200
-                ? Effect.flatMap(res.json, (body) =>
-                    Effect.succeed(body as { status?: string }),
-                  )
+                ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { status?: string }))
                 : Effect.fail(new Error(`purge failed: ${res.status}`)),
             ),
           );
@@ -425,16 +376,11 @@ describe("FraudDetector GetEventPrediction (E2E)", () => {
         const status = yield* client.get(`${baseUrl}/events/purge-status`).pipe(
           Effect.flatMap((res) =>
             res.status === 200
-              ? Effect.flatMap(res.json, (body) =>
-                  Effect.succeed(body as { status?: string }),
-                )
+              ? Effect.flatMap(res.json, (body) => Effect.succeed(body as { status?: string }))
               : Effect.fail(new Error(`purge status failed: ${res.status}`)),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.exponential("2 seconds"),
-              Schedule.recurs(6),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(6)]),
           }),
         );
         expect(status.status).toBeTruthy();

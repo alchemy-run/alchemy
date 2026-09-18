@@ -1,9 +1,9 @@
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
-import * as NodeCrypto from "node:crypto";
 
 /**
  * A single server module produced by a framework build.
@@ -80,8 +80,7 @@ export const sortServerModules = (
 export const stringifyBuildOutput = (output: BuildOutput): string =>
   JSON.stringify(
     output,
-    (_, value) =>
-      value instanceof Set ? Array.from(value as Set<string>).sort() : value,
+    (_, value) => (value instanceof Set ? Array.from(value as Set<string>).sort() : value),
     2,
   );
 
@@ -104,9 +103,7 @@ export const parseBuildOutput = (content: string): BuildOutput => {
     return value;
   }) as BuildOutput & { externalWorkspaces: unknown };
   parsed.externalWorkspaces = new Set(
-    Array.isArray(parsed.externalWorkspaces)
-      ? (parsed.externalWorkspaces as Array<string>)
-      : [],
+    Array.isArray(parsed.externalWorkspaces) ? (parsed.externalWorkspaces as Array<string>) : [],
   );
   return parsed as BuildOutput;
 };

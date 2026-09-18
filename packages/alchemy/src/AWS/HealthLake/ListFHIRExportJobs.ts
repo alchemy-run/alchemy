@@ -39,10 +39,7 @@ export interface ListFHIRExportJobs extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListFHIRExportJobsRequest,
-    ) => Effect.Effect<
-      healthlake.ListFHIRExportJobsResponse,
-      healthlake.ListFHIRExportJobsError
-    >
+    ) => Effect.Effect<healthlake.ListFHIRExportJobsResponse, healthlake.ListFHIRExportJobsError>
   >
 > {}
 export const ListFHIRExportJobs = Binding.Service<ListFHIRExportJobs>(

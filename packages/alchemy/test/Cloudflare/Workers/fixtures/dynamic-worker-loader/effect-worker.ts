@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Effect-native Worker fixture for the Worker Loader binding. Yielding
@@ -42,9 +42,7 @@ export default class DynamicLoaderEffectWorker extends Cloudflare.Worker<Dynamic
                 }
               }`,
             },
-            ...(request.url.startsWith("/outbound/sandboxed")
-              ? { globalOutbound: null }
-              : {}),
+            ...(request.url.startsWith("/outbound/sandboxed") ? { globalOutbound: null } : {}),
           });
           return yield* worker.fetch(request).pipe(Effect.orDie);
         }

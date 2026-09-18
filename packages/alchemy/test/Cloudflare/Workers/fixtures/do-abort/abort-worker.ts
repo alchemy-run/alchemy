@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * Durable Object for `DurableObjectAbort.test.ts`.
@@ -54,10 +54,7 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
             Effect.flatMap((result) => HttpServerResponse.json(result)),
             Effect.catchCause((cause) => {
               const error = Cause.squash(cause);
-              const native =
-                error instanceof Cloudflare.RpcCallError
-                  ? error.cause
-                  : undefined;
+              const native = error instanceof Cloudflare.RpcCallError ? error.cause : undefined;
               const retryable =
                 native instanceof Error &&
                 "retryable" in native &&
@@ -77,8 +74,7 @@ export default class AbortWorker extends Cloudflare.Worker<AbortWorker>()(
         if (url.pathname === "/abort") {
           return yield* task.crash().pipe(
             Effect.matchCause({
-              onFailure: (cause) =>
-                HttpServerResponse.text(`aborted: ${Cause.pretty(cause)}`),
+              onFailure: (cause) => HttpServerResponse.text(`aborted: ${Cause.pretty(cause)}`),
               onSuccess: () => HttpServerResponse.text("still-alive"),
             }),
           );

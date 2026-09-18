@@ -37,10 +37,7 @@ export interface StartSessionsStatisticsAggregation extends Binding.Service<
     farm: Farm,
   ) => Effect.Effect<
     (
-      request: Omit<
-        deadline.StartSessionsStatisticsAggregationRequest,
-        "farmId"
-      >,
+      request: Omit<deadline.StartSessionsStatisticsAggregationRequest, "farmId">,
     ) => Effect.Effect<
       deadline.StartSessionsStatisticsAggregationResponse,
       deadline.StartSessionsStatisticsAggregationError

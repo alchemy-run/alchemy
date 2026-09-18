@@ -1,38 +1,32 @@
+import { inspect } from "node:util";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Prompt from "effect/unstable/cli/Prompt";
-import { inspect } from "node:util";
+import { NonInteractiveTerminal } from "../Interaction.ts";
 import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
+import type { ApplyEvent, ApplyStatus } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
-import { NonInteractiveTerminal } from "../Interaction.ts";
+import { formatResourceTag } from "../Util/ResourceOutput.ts";
 import { ansiFg, colorsEnabled, theme } from "./CliKit/index.ts";
-import { formatElapsed } from "./Format.ts";
 import {
   actionStyle,
   applyStatusColor,
   isTerminalStatus as isTerminal,
 } from "./components/view/statusStyle.ts";
-import type { ApplyEvent, ApplyStatus } from "../Report.ts";
+import { formatElapsed } from "./Format.ts";
 import { formatModeNote } from "./ModeTag.ts";
-import { formatResourceTag } from "../Util/ResourceOutput.ts";
-import {
-  formatDeclaredPropertyYaml,
-  matchYamlChange,
-  matchYamlKey,
-} from "./PropertyDiff.ts";
 import { actionHasPlannedWork, buildPlanSummary } from "./NamespaceTree.ts";
+import { formatDeclaredPropertyYaml, matchYamlChange, matchYamlKey } from "./PropertyDiff.ts";
 
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
 // Shared with every other non-ink output path — notably it honors
 // FORCE_COLOR, so lines emitted from the piped dev sidecar keep their color.
 const useColor = colorsEnabled();
-const c = (code: string, s: string) =>
-  useColor ? `${ESC}${code}m${s}${RESET}` : s;
-const hex = (color: string) => (s: string) =>
-  useColor ? `${ansiFg(color)}${s}${RESET}` : s;
+const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
+const hex = (color: string) => (s: string) => (useColor ? `${ansiFg(color)}${s}${RESET}` : s);
 const dim = (s: string) => c("2", s);
 const bold = (s: string) => c("1", s);
 const red = hex(theme.color.danger);
@@ -89,18 +83,9 @@ const modeSuffix = (options: Parameters<typeof formatModeNote>[0]): string => {
 };
 
 /** Exported for unit tests — pure plan-preview rendering. */
-export const formatPlanLines = (
-  plan: Plan,
-  options: PlanDisplayOptions = {},
-): string[] => {
-  const allItems = [
-    ...Object.values(plan.resources),
-    ...Object.values(plan.deletions),
-  ] as CRUD[];
-  const tasks = [
-    ...Object.values(plan.actions ?? {}),
-    ...Object.values(plan.actionDeletions ?? {}),
-  ]
+export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): string[] => {
+  const allItems = [...Object.values(plan.resources), ...Object.values(plan.deletions)] as CRUD[];
+  const tasks = [...Object.values(plan.actions ?? {}), ...Object.values(plan.actionDeletions ?? {})]
     .filter((task): task is ActionApply | ActionDelete => task !== undefined)
     .filter(actionHasPlannedWork);
   if (allItems.length === 0 && tasks.length === 0) {
@@ -108,9 +93,7 @@ export const formatPlanLines = (
   }
 
   const { counts, bindingChanges } = buildPlanSummary(plan);
-  const summaryParts = (
-    ["create", "update", "adopted", "replace", "delete", "orphaned"] as const
-  )
+  const summaryParts = (["create", "update", "adopted", "replace", "delete", "orphaned"] as const)
     .filter((a) => counts[a])
     .map((a) => actionColor[a](`${counts[a]} to ${a}`));
   if (bindingChanges > 0) {
@@ -119,10 +102,7 @@ export const formatPlanLines = (
   if (tasks.length > 0) {
     summaryParts.push(cyan(`${tasks.length} tasks`));
   }
-  const summary =
-    summaryParts.length === 0
-      ? dim("no changes")
-      : summaryParts.join(dim(", "));
+  const summary = summaryParts.length === 0 ? dim("no changes") : summaryParts.join(dim(", "));
 
   const sorted = [...allItems].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
@@ -134,8 +114,7 @@ export const formatPlanLines = (
     const action = actionColor[item.action](item.action);
     const mode = modeSuffix({
       mode: item.mode,
-      priorMode:
-        item.action === "replace" ? item.state.providerMode : undefined,
+      priorMode: item.action === "replace" ? item.state.providerMode : undefined,
       defaultMode: plan.defaultMode,
     });
     // Surface FQN migrations: `[Assets] update (renamed from Bucket)` —
@@ -148,16 +127,10 @@ export const formatPlanLines = (
         ? ` ${dim(`(renamed from ${item.renamedFrom.join(", ")})`)}`
         : "";
     lines.push(`${tag(item.resource.FQN)} ${action}${mode}${renamed}`);
-    for (const binding of [...item.bindings].sort((a, b) =>
-      a.sid.localeCompare(b.sid),
-    )) {
+    for (const binding of [...item.bindings].sort((a, b) => a.sid.localeCompare(b.sid))) {
       const bindingAction =
-        binding.action === "delete"
-          ? dim("unbind")
-          : actionColor[binding.action](binding.action);
-      lines.push(
-        `${tag(`${item.resource.FQN}/${binding.sid}`)} ${bindingAction}`,
-      );
+        binding.action === "delete" ? dim("unbind") : actionColor[binding.action](binding.action);
+      lines.push(`${tag(`${item.resource.FQN}/${binding.sid}`)} ${bindingAction}`);
     }
     if (
       options.detailed &&
@@ -174,17 +147,11 @@ export const formatPlanLines = (
       if (document === undefined) {
         lines.push(`  ${dim("no declared property changes")}`);
       } else {
-        lines.push(
-          ...document.lines.map(
-            (line) => `  ${colorYamlLine(line, document.kind)}`,
-          ),
-        );
+        lines.push(...document.lines.map((line) => `  ${colorYamlLine(line, document.kind)}`));
       }
     }
   }
-  for (const task of tasks.sort((a, b) =>
-    a.def.LogicalId.localeCompare(b.def.LogicalId),
-  )) {
+  for (const task of tasks.sort((a, b) => a.def.LogicalId.localeCompare(b.def.LogicalId))) {
     lines.push(
       `${tag(task.def.FQN)} ${cyan(task.action === "delete" ? "drop" : "run")} ${dim("[action]")}`,
     );
@@ -192,10 +159,7 @@ export const formatPlanLines = (
   return lines;
 };
 
-const colorYamlLine = (
-  line: string,
-  kind: "create" | "change" | "drift",
-): string => {
+const colorYamlLine = (line: string, kind: "create" | "change" | "drift"): string => {
   const change = matchYamlChange(line);
   if (change !== undefined) {
     const color = change.marker === "-" ? red : green;
@@ -244,9 +208,7 @@ export const LoggingCli = Layer.effect(
               closed = true;
               return Clock.currentTimeMillis.pipe(
                 Effect.flatMap((now) =>
-                  Effect.logInfo(
-                    `${paint(message)} ${dim(`(${formatElapsed(now - startedAt)})`)}`,
-                  ),
+                  Effect.logInfo(`${paint(message)} ${dim(`(${formatElapsed(now - startedAt)})`)}`),
                 ),
               );
             });
@@ -261,8 +223,7 @@ export const LoggingCli = Layer.effect(
         }),
       approvePlan: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options))
-            yield* Effect.logInfo(line);
+          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
           if (canPromptOnStdin()) {
             return yield* confirm(
               plan.destroy === true
@@ -280,13 +241,11 @@ export const LoggingCli = Layer.effect(
         }),
       displayPlan: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options))
-            yield* Effect.logInfo(line);
+          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
         }),
       startApplySession: (plan, options) =>
         Effect.gen(function* () {
-          for (const line of formatPlanLines(plan, options))
-            yield* Effect.logInfo(line);
+          for (const line of formatPlanLines(plan, options)) yield* Effect.logInfo(line);
           yield* Effect.logInfo("");
 
           const startedAt = yield* Clock.currentTimeMillis;
@@ -295,8 +254,7 @@ export const LoggingCli = Layer.effect(
           const notes = new Map<string, string>();
           const statusNotes = new Map<string, string>();
           return {
-            setOutput: (value: unknown) =>
-              Effect.logInfo(inspect(value, { colors: false })),
+            setOutput: (value: unknown) => Effect.logInfo(inspect(value, { colors: false })),
             // Progress is an Effect log record, just like provider and build
             // diagnostics, so the append-only renderer gives every line the
             // same timestamp / level / fiber prefix.
@@ -311,12 +269,9 @@ export const LoggingCli = Layer.effect(
                         statusNotes.set(event.fqn, event.message);
                         return Effect.void;
                       }
-                      if (notes.get(event.fqn) === event.message)
-                        return Effect.void;
+                      if (notes.get(event.fqn) === event.message) return Effect.void;
                       notes.set(event.fqn, event.message);
-                      return Effect.logInfo(
-                        `${tag(event.fqn)} ${blue(event.message)}`,
-                      );
+                      return Effect.logInfo(`${tag(event.fqn)} ${blue(event.message)}`);
                     }
                     const id = event.fqn;
                     const mode = modeSuffix({
@@ -327,17 +282,13 @@ export const LoggingCli = Layer.effect(
                     if (!isTerminal(event.status)) {
                       if (!isActive(event.status)) return Effect.void;
                       if (!started.has(id)) started.set(id, now);
-                      return Effect.logInfo(
-                        `${tag(id)} ${dim(event.status)}${mode}`,
-                      );
+                      return Effect.logInfo(`${tag(id)} ${dim(event.status)}${mode}`);
                     }
                     terminal.set(id, event.status);
                     const status = statusColor(event.status)(event.status);
                     const from = started.get(id);
                     const took =
-                      from === undefined
-                        ? ""
-                        : ` ${dim(`(${formatElapsed(now - from)})`)}`;
+                      from === undefined ? "" : ` ${dim(`(${formatElapsed(now - from)})`)}`;
                     const message = event.message ?? statusNotes.get(event.fqn);
                     // Failures carry their error as the message — paint it
                     // red so the line reads as the error line for that
@@ -345,9 +296,7 @@ export const LoggingCli = Layer.effect(
                     const msg = message
                       ? ` ${dim("—")} ${event.status === "fail" ? red(message) : message}`
                       : "";
-                    return Effect.logInfo(
-                      `${tag(id)} ${status}${mode}${msg}${took}`,
-                    );
+                    return Effect.logInfo(`${tag(id)} ${status}${mode}${msg}${took}`);
                   }),
                 ),
               ),
@@ -356,9 +305,7 @@ export const LoggingCli = Layer.effect(
                 Effect.flatMap((now) => {
                   const statuses = [...terminal.values()];
                   const failed = statuses.filter((s) => s === "fail").length;
-                  const skipped = statuses.filter(
-                    (s) => s === "skipped",
-                  ).length;
+                  const skipped = statuses.filter((s) => s === "skipped").length;
                   const succeeded = terminal.size - failed - skipped;
                   const parts = [green(`${succeeded} succeeded`)];
                   if (failed) parts.push(red(`${failed} failed`));

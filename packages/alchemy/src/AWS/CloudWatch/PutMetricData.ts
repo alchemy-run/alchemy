@@ -45,13 +45,8 @@ export interface PutMetricData extends Binding.Service<
   () => Effect.Effect<
     (
       request: PutMetricDataRequest,
-    ) => Effect.Effect<
-      cloudwatch.PutMetricDataResponse,
-      cloudwatch.PutMetricDataError
-    >
+    ) => Effect.Effect<cloudwatch.PutMetricDataResponse, cloudwatch.PutMetricDataError>
   >
 > {}
 
-export const PutMetricData = Binding.Service<PutMetricData>(
-  "AWS.CloudWatch.PutMetricData",
-);
+export const PutMetricData = Binding.Service<PutMetricData>("AWS.CloudWatch.PutMetricData");

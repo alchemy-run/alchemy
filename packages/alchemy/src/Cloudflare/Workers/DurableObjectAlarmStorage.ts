@@ -31,9 +31,7 @@ const initializeAlarmTables = (storage: cf.DurableObjectStorage) =>
         .toArray().length > 0;
     const version = hasVersion
       ? storage.sql
-          .exec<{ version: number }>(
-            "SELECT version FROM alchemy_alarm_schema WHERE id = 1",
-          )
+          .exec<{ version: number }>("SELECT version FROM alchemy_alarm_schema WHERE id = 1")
           .one().version
       : 0;
     if (version === SCHEMA_VERSION) return;
@@ -113,8 +111,6 @@ const reconcileAlarm = (storage: cf.DurableObjectStorage) =>
     const now = yield* Clock.currentTimeMillis;
     // A continuation must use a new timestamp, not the alarm currently being acknowledged.
     yield* Effect.promise(() =>
-      next === null
-        ? storage.deleteAlarm()
-        : storage.setAlarm(Math.max(next, now + 1)),
+      next === null ? storage.deleteAlarm() : storage.setAlarm(Math.max(next, now + 1)),
     );
   });

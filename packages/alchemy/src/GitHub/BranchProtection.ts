@@ -352,9 +352,7 @@ export interface BranchProtection extends Resource<
  *
  * @resource
  */
-export const BranchProtection = Resource<BranchProtection>(
-  "GitHub.BranchProtection",
-);
+export const BranchProtection = Resource<BranchProtection>("GitHub.BranchProtection");
 
 /**
  * The `GET .../protection` payload. Both the GET and PUT responses share this
@@ -383,8 +381,7 @@ const attrsOf = (
   requiredLinearHistory: protection.required_linear_history?.enabled ?? false,
   allowForcePushes: protection.allow_force_pushes?.enabled ?? false,
   allowDeletions: protection.allow_deletions?.enabled ?? false,
-  requiredConversationResolution:
-    protection.required_conversation_resolution?.enabled ?? false,
+  requiredConversationResolution: protection.required_conversation_resolution?.enabled ?? false,
   lockBranch: protection.lock_branch?.enabled ?? false,
 });
 
@@ -435,9 +432,7 @@ export const BranchProtectionProvider = () =>
                       : {
                           checks: checks.checks.map((check) => ({
                             context: check.context,
-                            ...(check.appId === undefined
-                              ? {}
-                              : { app_id: check.appId }),
+                            ...(check.appId === undefined ? {} : { app_id: check.appId }),
                           })),
                         }),
                   },
@@ -447,12 +442,9 @@ export const BranchProtectionProvider = () =>
                 ? null
                 : {
                     dismiss_stale_reviews: reviews.dismissStaleReviews ?? false,
-                    require_code_owner_reviews:
-                      reviews.requireCodeOwnerReviews ?? false,
-                    required_approving_review_count:
-                      reviews.requiredApprovingReviewCount ?? 0,
-                    require_last_push_approval:
-                      reviews.requireLastPushApproval ?? false,
+                    require_code_owner_reviews: reviews.requireCodeOwnerReviews ?? false,
+                    required_approving_review_count: reviews.requiredApprovingReviewCount ?? 0,
+                    require_last_push_approval: reviews.requireLastPushApproval ?? false,
                     ...(reviews.dismissalRestrictions === undefined
                       ? {}
                       : {
@@ -466,12 +458,9 @@ export const BranchProtectionProvider = () =>
                       ? {}
                       : {
                           bypass_pull_request_allowances: {
-                            users:
-                              reviews.bypassPullRequestAllowances.users ?? [],
-                            teams:
-                              reviews.bypassPullRequestAllowances.teams ?? [],
-                            apps:
-                              reviews.bypassPullRequestAllowances.apps ?? [],
+                            users: reviews.bypassPullRequestAllowances.users ?? [],
+                            teams: reviews.bypassPullRequestAllowances.teams ?? [],
+                            apps: reviews.bypassPullRequestAllowances.apps ?? [],
                           },
                         }),
                   },
@@ -487,8 +476,7 @@ export const BranchProtectionProvider = () =>
             allow_force_pushes: news.allowForcePushes ?? false,
             allow_deletions: news.allowDeletions ?? false,
             block_creations: news.blockCreations ?? false,
-            required_conversation_resolution:
-              news.requiredConversationResolution ?? false,
+            required_conversation_resolution: news.requiredConversationResolution ?? false,
             lock_branch: news.lockBranch ?? false,
             allow_fork_syncing: news.allowForkSyncing ?? false,
           }),
@@ -583,24 +571,20 @@ export const BranchProtectionProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const branches = await octokit.paginate(
-                  octokit.rest.repos.listBranches,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    protected: true,
-                    per_page: 100,
-                  },
-                );
+                const branches = await octokit.paginate(octokit.rest.repos.listBranches, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  protected: true,
+                  per_page: 100,
+                });
                 const rules: BranchProtection["Attributes"][] = [];
                 for (const branch of branches) {
                   try {
-                    const { data } =
-                      await octokit.rest.repos.getBranchProtection({
-                        owner: repo.owner.login,
-                        repo: repo.name,
-                        branch: branch.name,
-                      });
+                    const { data } = await octokit.rest.repos.getBranchProtection({
+                      owner: repo.owner.login,
+                      repo: repo.name,
+                      branch: branch.name,
+                    });
                     rules.push(attrsOf(branch.name, data as ProtectionPayload));
                   } catch (error: any) {
                     // Protection may be removed between the list and the

@@ -53,15 +53,9 @@ export type PresignRequest =
 export interface BucketAccess {
   bucketName: Effect.Effect<string, never, RuntimeContext>;
   authorize: <A, E>(
-    effect: Effect.Effect<
-      A,
-      E,
-      Credentials.Credentials | Region.Region | HttpClient
-    >,
+    effect: Effect.Effect<A, E, Credentials.Credentials | Region.Region | HttpClient>,
   ) => Effect.Effect<A, E, RuntimeContext>;
-  presign: (
-    request: PresignRequest,
-  ) => Effect.Effect<string, BucketError, RuntimeContext>;
+  presign: (request: PresignRequest) => Effect.Effect<string, BucketError, RuntimeContext>;
 }
 
 export const toBucketError = (error: unknown): BucketError =>
@@ -74,11 +68,7 @@ export const toBucketError = (error: unknown): BucketError =>
   });
 
 const signingContext = (credentials: BucketCredentials) =>
-  Effect.all([
-    credentials.endpoint,
-    credentials.accessKeyId,
-    credentials.secretAccessKey,
-  ]).pipe(
+  Effect.all([credentials.endpoint, credentials.accessKeyId, credentials.secretAccessKey]).pipe(
     Effect.map(([endpoint, accessKeyId, secretAccessKey]) =>
       Layer.mergeAll(
         Layer.succeed(
@@ -103,14 +93,11 @@ const signingContext = (credentials: BucketCredentials) =>
  * set, the S3 client addresses the bucket path-style rather than through the
  * AWS virtual-host rules.
  */
-export const makeBucketAccess = (
-  credentials: BucketCredentials,
-): BucketAccess => {
+export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess => {
   const context = signingContext(credentials);
   return {
     bucketName: credentials.bucketName,
-    authorize: (effect) =>
-      context.pipe(Effect.flatMap((layer) => Effect.provide(effect, layer))),
+    authorize: (effect) => context.pipe(Effect.flatMap((layer) => Effect.provide(effect, layer))),
     presign: (request) =>
       Effect.all([context, credentials.bucketName]).pipe(
         Effect.flatMap(([layer, bucket]) =>
@@ -120,12 +107,8 @@ export const makeBucketAccess = (
             key: request.key,
             region: BUCKET_SIGNING_REGION,
             expiresIn: request.expiresIn,
-            contentType:
-              request.method === "PUT" ? request.contentType : undefined,
-            responseContentType:
-              request.method === "GET"
-                ? request.responseContentType
-                : undefined,
+            contentType: request.method === "PUT" ? request.contentType : undefined,
+            responseContentType: request.method === "GET" ? request.responseContentType : undefined,
           }).pipe(Effect.provide(layer)),
         ),
         Effect.mapError(toBucketError),
@@ -136,8 +119,7 @@ export const makeBucketAccess = (
 /** Render a {@link BucketRange} as an HTTP `Range` header value. */
 export const rangeHeader = (range: BucketRange | undefined) => {
   if (range === undefined) return undefined;
-  const end =
-    range.length === undefined ? "" : String(range.offset + range.length - 1);
+  const end = range.length === undefined ? "" : String(range.offset + range.length - 1);
   return `bytes=${range.offset}-${end}`;
 };
 
@@ -197,13 +179,8 @@ const concatBytes = (chunks: readonly Uint8Array[]): Uint8Array => {
  * single-consumption stream, so `body` and the buffering accessors are three
  * views of the same bytes and only one of them may be read.
  */
-export const objectBodyFrom = (
-  key: string,
-  response: S3.GetObjectOutput,
-): BucketObjectBody => {
-  const body = (response.Body ?? Stream.empty).pipe(
-    Stream.mapError(toBucketError),
-  );
+export const objectBodyFrom = (key: string, response: S3.GetObjectOutput): BucketObjectBody => {
+  const body = (response.Body ?? Stream.empty).pipe(Stream.mapError(toBucketError));
   const bytes = () => Stream.runCollect(body).pipe(Effect.map(concatBytes));
   const text = () => Stream.mkString(Stream.decodeText(body));
   return {

@@ -1,31 +1,26 @@
-import * as AWS from "@/AWS";
-import { Dataset, DatasetGroup } from "@/AWS/Forecast";
-import { toTagRecord } from "@/AWS/Forecast/internal.ts";
-import * as Test from "@/Test/Alchemy";
 import * as forecast from "@distilled.cloud/aws/forecast";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Dataset, DatasetGroup } from "@/AWS/Forecast";
+import { toTagRecord } from "@/AWS/Forecast/internal.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-class DatasetGroupStillExists extends Data.TaggedError(
-  "DatasetGroupStillExists",
-)<{ readonly arn: string }> {}
+class DatasetGroupStillExists extends Data.TaggedError("DatasetGroupStillExists")<{
+  readonly arn: string;
+}> {}
 
 const assertDatasetGroupDeleted = (arn: string) =>
   forecast.describeDatasetGroup({ DatasetGroupArn: arn }).pipe(
     Effect.flatMap(() => Effect.fail(new DatasetGroupStillExists({ arn }))),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "DatasetGroupStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(20)]),
     }),
   );
 
@@ -34,22 +29,16 @@ const assertDatasetGroupDeleted = (arn: string) =>
 // (predictors, forecasts) take ~an hour of paid training — they are
 // intentionally NOT implemented; only the cheap definition resources below
 // have a live lifecycle.
-test.provider(
-  "describeDataset on a nonexistent ARN fails with a typed error",
-  () =>
-    Effect.gen(function* () {
-      const region = yield* yield* AWS.Region;
-      const error = yield* Effect.flip(
-        forecast.describeDataset({
-          DatasetArn: `arn:aws:forecast:${region}:000000000000:dataset/does_not_exist`,
-        }),
-      );
-      expect(
-        ["ResourceNotFoundException", "AccessDeniedException"].includes(
-          error._tag,
-        ),
-      ).toBe(true);
-    }),
+test.provider("describeDataset on a nonexistent ARN fails with a typed error", () =>
+  Effect.gen(function* () {
+    const region = yield* yield* AWS.Region;
+    const error = yield* Effect.flip(
+      forecast.describeDataset({
+        DatasetArn: `arn:aws:forecast:${region}:000000000000:dataset/does_not_exist`,
+      }),
+    );
+    expect(["ResourceNotFoundException", "AccessDeniedException"].includes(error._tag)).toBe(true);
+  }),
 );
 
 // Entitlement probe: Amazon Forecast is closed to new customers — accounts
@@ -58,32 +47,28 @@ test.provider(
 // customers of Amazon Forecast can continue to use the service as normal.").
 // In an entitled (grandfathered) account the create succeeds, so this probe
 // accepts either outcome and cleans up after itself.
-test.provider(
-  "createDatasetGroup is either entitled or a typed AccessDeniedException",
-  () =>
-    Effect.gen(function* () {
-      const arn = yield* forecast
-        .createDatasetGroup({
-          DatasetGroupName: "alchemy_forecast_entitlement_probe",
-          Domain: "CUSTOM",
-        })
-        .pipe(
-          Effect.map((r) => r.DatasetGroupArn),
-          Effect.catchTag(
-            // A leftover probe group from a crashed prior run is also fine.
-            ["AccessDeniedException", "ResourceAlreadyExistsException"],
-            () => Effect.succeed(undefined),
-          ),
-        );
-      if (arn !== undefined) {
-        // Entitled account — clean up the probe group.
-        yield* forecast
-          .deleteDatasetGroup({ DatasetGroupArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
-      }
-    }),
+test.provider("createDatasetGroup is either entitled or a typed AccessDeniedException", () =>
+  Effect.gen(function* () {
+    const arn = yield* forecast
+      .createDatasetGroup({
+        DatasetGroupName: "alchemy_forecast_entitlement_probe",
+        Domain: "CUSTOM",
+      })
+      .pipe(
+        Effect.map((r) => r.DatasetGroupArn),
+        Effect.catchTag(
+          // A leftover probe group from a crashed prior run is also fine.
+          ["AccessDeniedException", "ResourceAlreadyExistsException"],
+          () => Effect.succeed(undefined),
+        ),
+      );
+    if (arn !== undefined) {
+      // Entitled account — clean up the probe group.
+      yield* forecast
+        .deleteDatasetGroup({ DatasetGroupArn: arn })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+    }
+  }),
 );
 
 // Forecast datasets and dataset groups are cheap, fast metadata objects, but
@@ -174,9 +159,7 @@ test.provider.skipIf(!process.env.AWS_TEST_FORECAST)(
       const reDescribedGroup = yield* forecast.describeDatasetGroup({
         DatasetGroupArn: created.group.datasetGroupArn,
       });
-      expect(reDescribedGroup.DatasetArns ?? []).not.toContain(
-        created.dataset.datasetArn,
-      );
+      expect(reDescribedGroup.DatasetArns ?? []).not.toContain(created.dataset.datasetArn);
       const updatedTags = yield* forecast.listTagsForResource({
         ResourceArn: created.group.datasetGroupArn,
       });

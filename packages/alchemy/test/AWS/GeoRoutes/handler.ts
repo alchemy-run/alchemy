@@ -1,5 +1,3 @@
-import * as GeoRoutes from "@/AWS/GeoRoutes";
-import * as Lambda from "@/AWS/Lambda";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,6 +5,8 @@ import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as GeoRoutes from "@/AWS/GeoRoutes";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -69,20 +69,11 @@ export default GeoRoutesTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/calculate-route-matrix"
-        ) {
+        if (request.method === "GET" && pathname === "/calculate-route-matrix") {
           const result = yield* calculateRouteMatrix({
             // [longitude, latitude] — 2x2 matrix within the Seattle area.
-            Origins: [
-              { Position: [-122.339, 47.61] },
-              { Position: [-122.335, 47.608] },
-            ],
-            Destinations: [
-              { Position: [-122.201, 47.61] },
-              { Position: [-122.313, 47.62] },
-            ],
+            Origins: [{ Position: [-122.339, 47.61] }, { Position: [-122.335, 47.608] }],
+            Destinations: [{ Position: [-122.201, 47.61] }, { Position: [-122.313, 47.62] }],
             RoutingBoundary: {
               Geometry: {
                 // Radius in meters — covers all origins and destinations.
@@ -144,10 +135,7 @@ export default GeoRoutesTestFunction.make(
         // Surface the typed error (tag + message) instead of an opaque 500 so
         // test failures show the real cause in the response body.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

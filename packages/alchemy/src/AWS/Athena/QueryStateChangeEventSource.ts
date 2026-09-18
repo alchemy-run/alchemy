@@ -9,12 +9,7 @@ import {
 /**
  * A query execution state, as reported in the EventBridge event detail.
  */
-export type QueryState =
-  | "QUEUED"
-  | "RUNNING"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "CANCELLED";
+export type QueryState = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELLED";
 
 /**
  * The `detail` payload Athena delivers to EventBridge on every query
@@ -117,9 +112,7 @@ export const consumeQueryStateChanges = <StreamReq = never, Req = never>(
         ? {
             detail: {
               ...(props.states ? { currentState: [...props.states] } : {}),
-              ...(props.workGroups
-                ? { workgroupName: [...props.workGroups] }
-                : {}),
+              ...(props.workGroups ? { workgroupName: [...props.workGroups] } : {}),
             },
           }
         : {}),

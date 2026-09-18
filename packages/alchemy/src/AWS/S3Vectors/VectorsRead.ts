@@ -6,18 +6,9 @@ import type { Index } from "./VectorIndex.ts";
 /** Fields the binding injects from the bound {@link Index}. */
 type IndexRef = "vectorBucketName" | "indexName" | "indexArn";
 
-export interface QueryVectorsRequest extends Omit<
-  s3vectors.QueryVectorsInput,
-  IndexRef
-> {}
-export interface GetVectorsRequest extends Omit<
-  s3vectors.GetVectorsInput,
-  IndexRef
-> {}
-export interface ListVectorsRequest extends Omit<
-  s3vectors.ListVectorsInput,
-  IndexRef
-> {}
+export interface QueryVectorsRequest extends Omit<s3vectors.QueryVectorsInput, IndexRef> {}
+export interface GetVectorsRequest extends Omit<s3vectors.GetVectorsInput, IndexRef> {}
+export interface ListVectorsRequest extends Omit<s3vectors.ListVectorsInput, IndexRef> {}
 
 /**
  * The read-only runtime client returned by binding an {@link Index} via
@@ -70,6 +61,4 @@ export interface VectorsRead extends Binding.Service<
   "AWS.S3Vectors.VectorsRead",
   <I extends Index>(index: I) => Effect.Effect<ReadVectorsClient>
 > {}
-export const VectorsRead = Binding.Service<VectorsRead>(
-  "AWS.S3Vectors.VectorsRead",
-);
+export const VectorsRead = Binding.Service<VectorsRead>("AWS.S3Vectors.VectorsRead");

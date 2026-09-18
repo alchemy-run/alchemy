@@ -1,16 +1,12 @@
-import * as AWS from "@/AWS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import { LogGroup } from "@/AWS/Logs";
-import {
-  Firewall,
-  FirewallPolicy,
-  LoggingConfiguration,
-} from "@/AWS/NetworkFirewall";
-import * as Test from "@/Test/Alchemy";
 import * as nfw from "@distilled.cloud/aws/network-firewall";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import { LogGroup } from "@/AWS/Logs";
+import { Firewall, FirewallPolicy, LoggingConfiguration } from "@/AWS/NetworkFirewall";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -44,20 +40,13 @@ test.provider(
 
 const assertFirewallGone = (name: string) =>
   Effect.gen(function* () {
-    const error = yield* Effect.flip(
-      nfw.describeFirewall({ FirewallName: name }),
-    );
+    const error = yield* Effect.flip(nfw.describeFirewall({ FirewallName: name }));
     if (error._tag !== "ResourceNotFoundException") {
-      return yield* Effect.fail(
-        new Error(`firewall '${name}' still exists (${error._tag})`),
-      );
+      return yield* Effect.fail(new Error(`firewall '${name}' still exists (${error._tag})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(18),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(18)]),
     }),
   );
 
@@ -122,17 +111,14 @@ test.provider.skipIf(!process.env.AWS_TEST_NETWORKFIREWALL)(
         FirewallName: firewall.firewallName,
       });
       expect(observed.FirewallStatus?.Status).toBe("READY");
-      expect(observed.Firewall?.FirewallPolicyArn).toBe(
-        policy.firewallPolicyArn,
-      );
+      expect(observed.Firewall?.FirewallPolicyArn).toBe(policy.firewallPolicyArn);
 
       const observedLogging = yield* nfw.describeLoggingConfiguration({
         FirewallArn: firewall.firewallArn,
       });
-      expect(
-        observedLogging.LoggingConfiguration?.LogDestinationConfigs?.[0]
-          ?.LogType,
-      ).toBe("FLOW");
+      expect(observedLogging.LoggingConfiguration?.LogDestinationConfigs?.[0]?.LogType).toBe(
+        "FLOW",
+      );
 
       // Destroy immediately (delete waits for endpoint deprovisioning) and
       // verify the firewall is gone out-of-band.

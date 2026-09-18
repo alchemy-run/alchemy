@@ -1,9 +1,9 @@
-import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import ZlibProbeWorker from "./fixtures/zlib-probe-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -43,9 +43,7 @@ test(
       "deflate1",
     ]) {
       const n = path.startsWith("deflate") ? 200 : 2000;
-      yield* client
-        .get(`${url}/?path=${path}&n=50`)
-        .pipe(Effect.flatMap((r) => r.json));
+      yield* client.get(`${url}/?path=${path}&n=50`).pipe(Effect.flatMap((r) => r.json));
       const t0 = performance.now();
       const r = (yield* client
         .get(`${url}/?path=${path}&n=${n}`)

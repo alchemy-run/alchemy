@@ -1,4 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -6,6 +5,7 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 const targetMain = path.resolve(import.meta.dirname, "timeout-handler.ts");
@@ -34,8 +34,7 @@ export default LambdaBindingsTestFunction.make(
     });
 
     const invokeFunction = yield* Lambda.InvokeFunction(target);
-    const invokeWithResponseStream =
-      yield* Lambda.InvokeWithResponseStream(target);
+    const invokeWithResponseStream = yield* Lambda.InvokeWithResponseStream(target);
     const getFunction = yield* Lambda.GetFunction(target);
     const getAccountSettings = yield* Lambda.GetAccountSettings();
     const listFunctions = yield* Lambda.ListFunctions();
@@ -61,9 +60,7 @@ export default LambdaBindingsTestFunction.make(
             : [];
           const decoder = new TextDecoder();
           const decodeChunk = (chunk: unknown): string => {
-            const value = Redacted.isRedacted(chunk)
-              ? Redacted.value(chunk)
-              : chunk;
+            const value = Redacted.isRedacted(chunk) ? Redacted.value(chunk) : chunk;
             if (value instanceof Uint8Array) return decoder.decode(value);
             if (typeof value === "string") return value;
             return "";
@@ -113,10 +110,7 @@ export default LambdaBindingsTestFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

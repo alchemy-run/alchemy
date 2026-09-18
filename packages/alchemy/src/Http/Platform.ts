@@ -21,8 +21,7 @@ const HttpPlatformStub: Layer.Layer<HttpPlatform.HttpPlatform> = Layer.succeed(
       compressResponse: (response) => Effect.succeed(response),
     },
     fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-    fileWebResponse: () =>
-      Effect.die("HttpPlatform.fileWebResponse not supported"),
+    fileWebResponse: () => Effect.die("HttpPlatform.fileWebResponse not supported"),
   },
 );
 
@@ -39,9 +38,4 @@ const HttpPlatformStub: Layer.Layer<HttpPlatform.HttpPlatform> = Layer.succeed(
  */
 export const Platform: Layer.Layer<
   Etag.Generator | HttpPlatform.HttpPlatform | Path.Path | FileSystem.FileSystem
-> = Layer.mergeAll(
-  Etag.layer,
-  HttpPlatformStub,
-  Path.layer,
-  FileSystem.layerNoop({}),
-);
+> = Layer.mergeAll(Etag.layer, HttpPlatformStub, Path.layer, FileSystem.layerNoop({}));

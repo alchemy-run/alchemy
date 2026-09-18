@@ -68,7 +68,6 @@ export interface InvokeEndpointWithResponseStream extends Binding.Service<
     >
   >
 > {}
-export const InvokeEndpointWithResponseStream =
-  Binding.Service<InvokeEndpointWithResponseStream>(
-    "AWS.SageMakerRuntime.InvokeEndpointWithResponseStream",
-  );
+export const InvokeEndpointWithResponseStream = Binding.Service<InvokeEndpointWithResponseStream>(
+  "AWS.SageMakerRuntime.InvokeEndpointWithResponseStream",
+);

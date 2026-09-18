@@ -27,11 +27,9 @@ import { routeCacheLayer } from "./Session.ts";
  */
 export const layer = () =>
   Layer.mergeAll(
-    Layer.mergeAll(
-      AlchemyContextLive,
-      ProfileStoreLive,
-      CredentialsStoreLive,
-    ).pipe(Layer.provideMerge(PlatformServices)),
+    Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive).pipe(
+      Layer.provideMerge(PlatformServices),
+    ),
     FetchHttpClient.layer,
     ConfigProvider.layer(ConfigProvider.fromEnv()),
     Layer.succeed(ArtifactStore, createArtifactStore()),

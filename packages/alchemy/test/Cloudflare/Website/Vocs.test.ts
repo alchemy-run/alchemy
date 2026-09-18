@@ -1,51 +1,33 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(
   import.meta.dirname,
   "../../../../../examples/cloudflare-website-vocs",
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
-const fixtureEntries = [
-  "package.json",
-  "public",
-  "src",
-  "tsconfig.json",
-  "vocs.config.ts",
-];
+const fixtureEntries = ["package.json", "public", "src", "tsconfig.json", "vocs.config.ts"];
 
 const vocsProps = (rootDir: string) => ({
   rootDir,
   workersDev: { enabled: true, previewsEnabled: true },
   compatibility: { date: "2026-03-10" },
   memo: {
-    include: [
-      "src/**",
-      "public/**",
-      "package.json",
-      "tsconfig.json",
-      "vocs.config.ts",
-    ],
+    include: ["src/**", "public/**", "package.json", "tsconfig.json", "vocs.config.ts"],
   },
 });
 
@@ -66,8 +48,7 @@ describe.concurrent("Vocs", () => {
           entries: fixtureEntries,
         });
 
-        const deploy = () =>
-          stack.deploy(Cloudflare.Website.Vocs("VocsSite", vocsProps(rootDir)));
+        const deploy = () => stack.deploy(Cloudflare.Website.Vocs("VocsSite", vocsProps(rootDir)));
 
         const site1 = yield* deploy();
 
@@ -85,15 +66,11 @@ describe.concurrent("Vocs", () => {
           headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
           label: "Vocs prerendered MDX guide",
         });
-        yield* expectUrlContains(
-          `${site1.url!}/counter`,
-          "Interactive component",
-          {
-            timeout: "60 seconds",
-            headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
-            label: "Vocs MDX client-component page",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/counter`, "Interactive component", {
+          timeout: "60 seconds",
+          headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
+          label: "Vocs MDX client-component page",
+        });
         yield* expectUrlContains(
           `${site1.url!}/hello.txt`,
           "hello from the Vocs public directory",
@@ -103,15 +80,11 @@ describe.concurrent("Vocs", () => {
             label: "Vocs public asset",
           },
         );
-        yield* expectUrlContains(
-          `${site1.url!}/llms.txt`,
-          "Alchemy with Vocs",
-          {
-            timeout: "60 seconds",
-            headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
-            label: "Vocs generated llms asset",
-          },
-        );
+        yield* expectUrlContains(`${site1.url!}/llms.txt`, "Alchemy with Vocs", {
+          timeout: "60 seconds",
+          headers: { accept: "text/html", "user-agent": "Mozilla/5.0" },
+          label: "Vocs generated llms asset",
+        });
 
         const site2 = yield* deploy();
         expect(site2.hash?.input).toEqual(site1.hash?.input);

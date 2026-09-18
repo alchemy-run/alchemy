@@ -5,12 +5,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryThroughEnablement } from "./common.ts";
 
@@ -90,14 +85,9 @@ const AllowListResource = Resource<AllowList>("AWS.Macie2.AllowList");
 export { AllowListResource as AllowList };
 
 const createName = (id: string, props: Partial<AllowListProps>) =>
-  props.name
-    ? Effect.succeed(props.name)
-    : createPhysicalName({ id, maxLength: 128 });
+  props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 128 });
 
-const buildAllowListAttrs = (
-  id: string,
-  live: macie2.GetAllowListResponse,
-) => ({
+const buildAllowListAttrs = (id: string, live: macie2.GetAllowListResponse) => ({
   id,
   arn: live.arn!,
   name: live.name!,
@@ -110,14 +100,10 @@ export const AllowListProvider = () =>
     Effect.gen(function* () {
       const getAllowList = (id: string) =>
         macie2.getAllowList({ id }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           // Macie disabled ⇒ the list is unreachable (and disabling deletes
           // all Macie configuration), so report it as gone.
-          Effect.catchTag("AccessDeniedException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
         );
 
       return {
@@ -128,18 +114,14 @@ export const AllowListProvider = () =>
           const live = yield* getAllowList(output.id);
           if (!live) return undefined;
           const attrs = buildAllowListAttrs(output.id, live);
-          return (yield* hasAlchemyTags(id, live.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, live.tags)) ? attrs : Unowned(attrs);
         }),
 
         list: () =>
           Effect.gen(function* () {
             const pages = yield* macie2.listAllowLists.pages({}).pipe(
               Stream.runCollect,
-              Effect.catchTag("AccessDeniedException", () =>
-                Effect.succeed([]),
-              ),
+              Effect.catchTag("AccessDeniedException", () => Effect.succeed([])),
             );
             const out: AllowList["Attributes"][] = [];
             for (const page of pages) {
@@ -176,8 +158,7 @@ export const AllowListProvider = () =>
             // update API, so it is always sent when anything drifts).
             const drift =
               live.name !== name ||
-              (news.description !== undefined &&
-                live.description !== news.description) ||
+              (news.description !== undefined && live.description !== news.description) ||
               JSON.stringify(live.criteria) !== JSON.stringify(news.criteria);
             if (drift) {
               yield* macie2.updateAllowList({
@@ -189,10 +170,7 @@ export const AllowListProvider = () =>
             }
 
             // 3b. SYNC tags — diff against OBSERVED cloud tags.
-            const { upsert, removed } = diffTags(
-              tagRecord(live.tags),
-              desiredTags,
-            );
+            const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
                 resourceArn: live.arn!,
@@ -216,12 +194,10 @@ export const AllowListProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // Idempotent — the list may already be gone, or Macie may already be
           // disabled for the account (which removes all Macie configuration).
-          yield* macie2
-            .deleteAllowList({ id: output.id, ignoreJobChecks: "true" })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.catchTag("AccessDeniedException", () => Effect.void),
-            );
+          yield* macie2.deleteAllowList({ id: output.id, ignoreJobChecks: "true" }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.catchTag("AccessDeniedException", () => Effect.void),
+          );
         }),
       };
     }),

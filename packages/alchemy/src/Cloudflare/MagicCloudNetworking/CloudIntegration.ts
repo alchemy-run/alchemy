@@ -2,7 +2,6 @@ import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -17,19 +16,12 @@ type TypeId = typeof TypeId;
 /**
  * The cloud provider an integration discovers resources from.
  */
-export type CloudIntegrationCloudType =
-  | "AWS"
-  | "AZURE"
-  | "GOOGLE"
-  | "CLOUDFLARE";
+export type CloudIntegrationCloudType = "AWS" | "AZURE" | "GOOGLE" | "CLOUDFLARE";
 
 /**
  * Lifecycle state of a cloud integration.
  */
-export type CloudIntegrationLifecycleState =
-  | "ACTIVE"
-  | "PENDING_SETUP"
-  | "RETIRED";
+export type CloudIntegrationLifecycleState = "ACTIVE" | "PENDING_SETUP" | "RETIRED";
 
 /**
  * Discovery state of a cloud integration.
@@ -185,8 +177,7 @@ export const CloudIntegrationProvider = () =>
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const oldCloudType =
-        output?.cloudType ??
-        (olds !== undefined && isResolved(olds) ? olds.cloudType : undefined);
+        output?.cloudType ?? (olds !== undefined && isResolved(olds) ? olds.cloudType : undefined);
       if (oldCloudType !== undefined && oldCloudType !== news.cloudType) {
         return { action: "replace" } as const;
       }
@@ -219,10 +210,7 @@ export const CloudIntegrationProvider = () =>
       // 1. Observe — the id cached on `output` is a hint, not a guarantee:
       //    a missing integration falls through to the name scan and create.
       let observed = output?.integrationId
-        ? yield* getIntegration(
-            output.accountId ?? accountId,
-            output.integrationId,
-          )
+        ? yield* getIntegration(output.accountId ?? accountId, output.integrationId)
         : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
@@ -253,10 +241,7 @@ export const CloudIntegrationProvider = () =>
         patch.friendlyName = name;
         dirty = true;
       }
-      if (
-        news.description !== undefined &&
-        (observed.description ?? "") !== news.description
-      ) {
+      if (news.description !== undefined && (observed.description ?? "") !== news.description) {
         patch.description = news.description;
         dirty = true;
       }
@@ -292,9 +277,7 @@ export const CloudIntegrationProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((integration) =>
-              toAttributes(integration, accountId),
-            ),
+            (page.result ?? []).map((integration) => toAttributes(integration, accountId)),
           ),
         ),
         // Magic Cloud Networking is an entitlement-gated add-on; accounts
@@ -335,9 +318,7 @@ type ObservedIntegration = Pick<
 const getIntegration = (accountId: string, providerId: string) =>
   mcn.getCloudIntegration({ accountId, providerId }).pipe(
     Effect.map((integration): ObservedIntegration | undefined => integration),
-    Effect.catchTag("CloudIntegrationNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("CloudIntegrationNotFound", () => Effect.succeed(undefined)),
   );
 
 /**

@@ -27,12 +27,7 @@ export interface AcceptInvitation extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.AcceptInvitationRequest,
-    ) => Effect.Effect<
-      macie2.AcceptInvitationResponse,
-      macie2.AcceptInvitationError
-    >
+    ) => Effect.Effect<macie2.AcceptInvitationResponse, macie2.AcceptInvitationError>
   >
 > {}
-export const AcceptInvitation = Binding.Service<AcceptInvitation>(
-  "AWS.Macie2.AcceptInvitation",
-);
+export const AcceptInvitation = Binding.Service<AcceptInvitation>("AWS.Macie2.AcceptInvitation");

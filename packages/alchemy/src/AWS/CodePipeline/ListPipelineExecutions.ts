@@ -31,10 +31,7 @@ export interface ListPipelineExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListPipelineExecutionsRequest,
-    ) => Effect.Effect<
-      SVC.ListPipelineExecutionsOutput,
-      SVC.ListPipelineExecutionsError
-    >
+    ) => Effect.Effect<SVC.ListPipelineExecutionsOutput, SVC.ListPipelineExecutionsError>
   >
 > {}
 export const ListPipelineExecutions = Binding.Service<ListPipelineExecutions>(

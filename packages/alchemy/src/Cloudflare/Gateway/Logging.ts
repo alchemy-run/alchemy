@@ -1,7 +1,6 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -68,13 +67,7 @@ export type LoggingAttributes = LoggingSnapshot & {
   initialSettings: LoggingSnapshot;
 };
 
-export type Logging = Resource<
-  TypeId,
-  LoggingProps,
-  LoggingAttributes,
-  never,
-  Providers
->;
+export type Logging = Resource<TypeId, LoggingProps, LoggingAttributes, never, Providers>;
 
 /**
  * Manages the **singleton** Cloudflare Zero Trust **Gateway logging
@@ -212,9 +205,7 @@ const observeLogging = (accountId: string) =>
 const putLogging = (accountId: string, snapshot: LoggingSnapshot) =>
   zeroTrust.putGatewayLogging({
     accountId,
-    ...(snapshot.redactPii !== undefined
-      ? { redactPii: snapshot.redactPii }
-      : {}),
+    ...(snapshot.redactPii !== undefined ? { redactPii: snapshot.redactPii } : {}),
     settingsByRuleType: {
       ...(snapshot.dns !== undefined ? { dns: snapshot.dns } : {}),
       ...(snapshot.http !== undefined ? { http: snapshot.http } : {}),
@@ -228,10 +219,7 @@ const RULE_TYPES = ["dns", "http", "l4"] as const;
  * Overlay the declared (non-undefined) fields onto the observed snapshot,
  * merging per-rule-type blocks field-by-field.
  */
-const mergeSnapshot = (
-  observed: LoggingSnapshot,
-  declared: LoggingSnapshot,
-): LoggingSnapshot => {
+const mergeSnapshot = (observed: LoggingSnapshot, declared: LoggingSnapshot): LoggingSnapshot => {
   const merged: LoggingSnapshot =
     observed.redactPii !== undefined ? { redactPii: observed.redactPii } : {};
   if (declared.redactPii !== undefined) merged.redactPii = declared.redactPii;

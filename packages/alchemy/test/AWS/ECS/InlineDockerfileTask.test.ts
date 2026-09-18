@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import * as Test from "@/Test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Cluster } from "@/AWS/ECS/Cluster.ts";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpcNetwork } from "../DefaultVpc.ts";
 import InlineDockerfileTaskLive, {
   InlineDockerfileTask,
@@ -82,20 +82,16 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW || !!process.env.FAST)(
 
       // Wait for the task to stop: image pull + container boot + the
       // one-shot program running to completion (~1-3 minutes cold).
-      const stopped = yield* ecs
-        .describeTasks({ cluster: clusterArn, tasks: [taskArn!] })
-        .pipe(
-          Effect.flatMap((result) => {
-            const task = result.tasks?.[0];
-            return task?.lastStatus === "STOPPED"
-              ? Effect.succeed(task)
-              : Effect.fail(
-                  new Error(`task not stopped yet: ${task?.lastStatus}`),
-                );
-          }),
-          Effect.tapError((error) => Effect.logInfo(String(error))),
-          Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
-        );
+      const stopped = yield* ecs.describeTasks({ cluster: clusterArn, tasks: [taskArn!] }).pipe(
+        Effect.flatMap((result) => {
+          const task = result.tasks?.[0];
+          return task?.lastStatus === "STOPPED"
+            ? Effect.succeed(task)
+            : Effect.fail(new Error(`task not stopped yet: ${task?.lastStatus}`));
+        }),
+        Effect.tapError((error) => Effect.logInfo(String(error))),
+        Effect.retry({ schedule: Schedule.spaced("6 seconds"), times: 50 }),
+      );
 
       // Exit 0 requires the artifact to have been baked by the inline RUN.
       expect(stopped.stoppedReason ?? "").not.toContain("CannotPullContainer");

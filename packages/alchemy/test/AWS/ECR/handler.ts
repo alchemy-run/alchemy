@@ -1,16 +1,16 @@
-import * as ECR from "@/AWS/ECR";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import crypto from "node:crypto";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Stream from "effect/Stream";
 import path from "pathe";
+import * as ECR from "@/AWS/ECR";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -34,9 +34,7 @@ const configBytesFor = (tag: string) =>
     "utf8",
   );
 
-export class EcrTestFunction extends Lambda.Function<Lambda.Function>()(
-  "EcrTestFunction",
-) {}
+export class EcrTestFunction extends Lambda.Function<Lambda.Function>()("EcrTestFunction") {}
 
 export default EcrTestFunction.make(
   {
@@ -72,8 +70,7 @@ export default EcrTestFunction.make(
     const putImage = yield* ECR.PutImage(repository);
     const batchDeleteImage = yield* ECR.BatchDeleteImage(repository);
     const startImageScan = yield* ECR.StartImageScan(repository);
-    const describeScanFindings =
-      yield* ECR.DescribeImageScanFindings(repository);
+    const describeScanFindings = yield* ECR.DescribeImageScanFindings(repository);
 
     // --- event source ---
     // ECR publishes every completed push to the default bus; write a marker
@@ -92,10 +89,7 @@ export default EcrTestFunction.make(
     );
 
     const sha256 = (bytes: Buffer) =>
-      Effect.sync(
-        () =>
-          `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`,
-      );
+      Effect.sync(() => `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`);
 
     // Upload one blob through the initiate → upload → complete flow.
     // `LayerAlreadyExistsException` means a previous push (or a retried one)
@@ -112,11 +106,7 @@ export default EcrTestFunction.make(
       yield* completeUpload({
         uploadId: uploadId!,
         layerDigests: [digest],
-      }).pipe(
-        Effect.catchTag("LayerAlreadyExistsException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      }).pipe(Effect.catchTag("LayerAlreadyExistsException", () => Effect.succeed(undefined)));
       return digest;
     });
 
@@ -147,14 +137,9 @@ export default EcrTestFunction.make(
       // ImageAlreadyExistsException — the image is present, so converge.
       const put = yield* putImage({
         imageManifest: manifest,
-        imageManifestMediaType:
-          "application/vnd.docker.distribution.manifest.v2+json",
+        imageManifestMediaType: "application/vnd.docker.distribution.manifest.v2+json",
         imageTag: tag,
-      }).pipe(
-        Effect.catchTag("ImageAlreadyExistsException", () =>
-          Effect.succeed(undefined),
-        ),
-      );
+      }).pipe(Effect.catchTag("ImageAlreadyExistsException", () => Effect.succeed(undefined)));
       return {
         digest: put?.image?.imageId?.imageDigest,
         layerDigest,
@@ -175,9 +160,7 @@ export default EcrTestFunction.make(
           const res = yield* getAuthorizationToken();
           const data = res.authorizationData?.[0];
           const token = data?.authorizationToken;
-          const raw = Redacted.isRedacted(token)
-            ? Redacted.value(token)
-            : (token ?? "");
+          const raw = Redacted.isRedacted(token) ? Redacted.value(token) : (token ?? "");
           const decoded = Buffer.from(raw, "base64").toString("utf8");
           return yield* HttpServerResponse.json({
             redacted: Redacted.isRedacted(token),
@@ -207,9 +190,7 @@ export default EcrTestFunction.make(
         if (request.method === "GET" && pathname === "/image-ids") {
           const res = yield* listImages({ filter: { tagStatus: "TAGGED" } });
           return yield* HttpServerResponse.json({
-            tags: (res.imageIds ?? []).flatMap((id) =>
-              id.imageTag ? [id.imageTag] : [],
-            ),
+            tags: (res.imageIds ?? []).flatMap((id) => (id.imageTag ? [id.imageTag] : [])),
           });
         }
 
@@ -256,11 +237,7 @@ export default EcrTestFunction.make(
               error: undefined,
             })),
             Effect.catchTag(
-              [
-                "UnsupportedImageTypeException",
-                "LimitExceededException",
-                "ValidationException",
-              ],
+              ["UnsupportedImageTypeException", "LimitExceededException", "ValidationException"],
               (e) => Effect.succeed({ status: undefined, error: e._tag }),
             ),
           );
@@ -277,9 +254,8 @@ export default EcrTestFunction.make(
               status: r.imageScanStatus?.status,
               error: undefined,
             })),
-            Effect.catchTag(
-              ["ScanNotFoundException", "ValidationException"],
-              (e) => Effect.succeed({ status: undefined, error: e._tag }),
+            Effect.catchTag(["ScanNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed({ status: undefined, error: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(res);

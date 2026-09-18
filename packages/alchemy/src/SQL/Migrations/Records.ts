@@ -1,13 +1,9 @@
+import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as crypto from "node:crypto";
 import { listSqlFiles, splitSqlStatements } from "../SqlFile.ts";
-import {
-  MigrationError,
-  type MigrationDialect,
-  type MigrationRecord,
-} from "./Format.ts";
+import { MigrationError, type MigrationDialect, type MigrationRecord } from "./Format.ts";
 
 /** Map filesystem failures into the migration error channel. */
 export const mapPlatformError = <A, E, R>(
@@ -66,9 +62,7 @@ export const readDrizzleDirRecords = (dir: string) =>
       names.sort((a, b) => a.localeCompare(b));
       const records: MigrationRecord[] = [];
       for (const name of names) {
-        const sql = yield* fs.readFileString(
-          path.join(dir, name, "migration.sql"),
-        );
+        const sql = yield* fs.readFileString(path.join(dir, name, "migration.sql"));
         records.push({
           name,
           hash: yield* sha256(sql),
@@ -135,9 +129,7 @@ export const inlineSqlParams = (
   if (dialect === "postgres") {
     return sql.replace(/\$(\d+)/g, (match, n: string) => {
       const index = Number.parseInt(n, 10) - 1;
-      return index >= 0 && index < params.length
-        ? sqlLiteral(params[index])
-        : match;
+      return index >= 0 && index < params.length ? sqlLiteral(params[index]) : match;
     });
   }
   let out = "";
@@ -165,10 +157,7 @@ export const inlineSqlParams = (
 };
 
 /** Quote an identifier for the given dialect. */
-export const quoteIdentifier = (
-  identifier: string,
-  dialect: MigrationDialect,
-): string =>
+export const quoteIdentifier = (identifier: string, dialect: MigrationDialect): string =>
   dialect === "mysql"
     ? `\`${identifier.replaceAll("`", "``")}\``
     : `"${identifier.replaceAll('"', '""')}"`;

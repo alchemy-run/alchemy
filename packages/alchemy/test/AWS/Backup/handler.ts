@@ -1,12 +1,12 @@
-import * as Backup from "@/AWS/Backup";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Backup from "@/AWS/Backup";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -18,12 +18,9 @@ export const FIXTURE_VAULT_NAME = "alchemy-test-backup-bindings-vault";
 // An IAM gap would surface AccessDeniedException (a 500 through the
 // handler's orDie), so a typed not-found tag proves the grant end-to-end.
 const BOGUS_JOB_ID = "00000000-0000-0000-0000-000000000000";
-const BOGUS_RECOVERY_POINT_ARN =
-  "arn:aws:ec2:us-east-1::snapshot/snap-00000000000000000";
+const BOGUS_RECOVERY_POINT_ARN = "arn:aws:ec2:us-east-1::snapshot/snap-00000000000000000";
 
-export class BackupTestFunction extends Lambda.Function<Lambda.Function>()(
-  "BackupTestFunction",
-) {}
+export class BackupTestFunction extends Lambda.Function<Lambda.Function>()("BackupTestFunction") {}
 
 export default BackupTestFunction.make(
   {
@@ -54,11 +51,9 @@ export default BackupTestFunction.make(
     });
 
     // --- vault-scoped bindings ---
-    const listRecoveryPointsByBackupVault =
-      yield* Backup.ListRecoveryPointsByBackupVault(vault);
+    const listRecoveryPointsByBackupVault = yield* Backup.ListRecoveryPointsByBackupVault(vault);
     const describeRecoveryPoint = yield* Backup.DescribeRecoveryPoint(vault);
-    const getRecoveryPointRestoreMetadata =
-      yield* Backup.GetRecoveryPointRestoreMetadata(vault);
+    const getRecoveryPointRestoreMetadata = yield* Backup.GetRecoveryPointRestoreMetadata(vault);
     // Bound (compile + IAM coverage) but not routed: needs a live recovery
     // point to delete deterministically.
     const deleteRecoveryPoint = yield* Backup.DeleteRecoveryPoint(vault);
@@ -81,26 +76,20 @@ export default BackupTestFunction.make(
     // AWS invokes a validation Lambda after a restore test; it inspects the
     // restored resource and reports the verdict.
     const getRestoreJobMetadata = yield* Backup.GetRestoreJobMetadata();
-    const putRestoreValidationResult =
-      yield* Backup.PutRestoreValidationResult();
+    const putRestoreValidationResult = yield* Backup.PutRestoreValidationResult();
     const describeCopyJob = yield* Backup.DescribeCopyJob();
     const listCopyJobs = yield* Backup.ListCopyJobs();
     const listProtectedResources = yield* Backup.ListProtectedResources();
     const describeProtectedResource = yield* Backup.DescribeProtectedResource();
     const getSupportedResourceTypes = yield* Backup.GetSupportedResourceTypes();
-    const listRecoveryPointsByResource =
-      yield* Backup.ListRecoveryPointsByResource();
+    const listRecoveryPointsByResource = yield* Backup.ListRecoveryPointsByResource();
 
     // --- event source ---
     // Deploy-time: creates the EventBridge rule (default bus, source
     // aws.backup) targeting this Function. Runtime firing needs a real
     // backup job, so the test only verifies the subscription deploys.
-    yield* Backup.consumeBackupEvents(
-      { kinds: ["backup-job", "restore-job"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(`backup event: ${event.detail.state}`),
-        ),
+    yield* Backup.consumeBackupEvents({ kinds: ["backup-job", "restore-job"] }, (events) =>
+      Stream.runForEach(events, (event) => Effect.log(`backup event: ${event.detail.state}`)),
     );
 
     const bound = {
@@ -168,96 +157,71 @@ export default BackupTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/list-protected-resources"
-        ) {
+        if (request.method === "GET" && pathname === "/list-protected-resources") {
           const result = yield* listProtectedResources({ MaxResults: 25 });
           return yield* HttpServerResponse.json({
             count: (result.Results ?? []).length,
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/supported-resource-types"
-        ) {
+        if (request.method === "GET" && pathname === "/supported-resource-types") {
           const result = yield* getSupportedResourceTypes();
           return yield* HttpServerResponse.json({
             resourceTypes: result.ResourceTypes ?? [],
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-backup-job-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-backup-job-not-found") {
           // Exercises the typed not-found error path end-to-end.
           const result = yield* describeBackupJob({
             BackupJobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed({ found: false }),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed({ found: false }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-recovery-point-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-recovery-point-not-found") {
           // Exercises BackupVaultName injection + the typed not-found path.
           const result = yield* describeRecoveryPoint({
             RecoveryPointArn: BOGUS_RECOVERY_POINT_ARN,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed({ found: false }),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed({ found: false }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/restore-metadata-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/restore-metadata-not-found") {
           const result = yield* getRecoveryPointRestoreMetadata({
             RecoveryPointArn: BOGUS_RECOVERY_POINT_ARN,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed({ found: false }),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed({ found: false }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/restore-job-metadata-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/restore-job-metadata-not-found") {
           const result = yield* getRestoreJobMetadata({
             RestoreJobId: BOGUS_JOB_ID,
           }).pipe(
             Effect.map(() => ({ found: true })),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "InvalidParameterValueException"],
-              () => Effect.succeed({ found: false }),
+            Effect.catchTag(["ResourceNotFoundException", "InvalidParameterValueException"], () =>
+              Effect.succeed({ found: false }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/put-restore-validation-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/put-restore-validation-not-found") {
           // A verdict can only be posted against a live restore-test job;
           // drive the binding through its typed error path instead — an IAM
           // gap would surface AccessDeniedException (500), not a typed tag.
@@ -279,10 +243,7 @@ export default BackupTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/stop-backup-job-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/stop-backup-job-not-found") {
           const tag = yield* stopBackupJob({ BackupJobId: BOGUS_JOB_ID }).pipe(
             Effect.map(() => "Stopped"),
             Effect.catchTag(
@@ -297,10 +258,7 @@ export default BackupTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/start-restore-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/start-restore-not-found") {
           // A real restore needs a live recovery point; drive the binding
           // (role injection + IAM grant) through its typed error path — an
           // IAM gap would surface AccessDeniedException (500) instead.

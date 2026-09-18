@@ -1,10 +1,7 @@
 import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Layer from "effect/Layer";
 import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
-import {
-  CommitTransaction,
-  type CommitTransactionRequest,
-} from "./CommitTransaction.ts";
+import { CommitTransaction, type CommitTransactionRequest } from "./CommitTransaction.ts";
 
 export const CommitTransactionHttp = Layer.effect(
   CommitTransaction,

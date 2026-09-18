@@ -3,18 +3,10 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
-
 import * as Logs from "../../Alchemist/routes/logs.ts";
 import { paint } from "../CliKit/index.ts";
 import { formatLocalTimestamp, TAIL_COLORS } from "../Format.ts";
-import {
-  config,
-  envFile,
-  parseSince,
-  profile,
-  resolveStage,
-  stage,
-} from "./flags.ts";
+import { config, envFile, parseSince, profile, resolveStage, stage } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 const logsLimit = Flag.Int("limit").pipe(
@@ -30,17 +22,13 @@ const tail = Flag.Boolean("tail").pipe(
 
 const resources = Flag.String("resource").pipe(
   Flag.withAlias("r"),
-  Flag.withDescription(
-    "Comma-separated logical resource IDs to include (for example Worker,Api)",
-  ),
+  Flag.withDescription("Comma-separated logical resource IDs to include (for example Worker,Api)"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
 
 const logsSince = Flag.String("since").pipe(
-  Flag.withDescription(
-    "Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')",
-  ),
+  Flag.withDescription("Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')"),
   Flag.optional,
   Flag.map(Option.getOrUndefined),
 );
@@ -86,16 +74,9 @@ const runLogs = Effect.fn(function* ({
       selectedSet.has(resource.logicalId),
   );
   const colors = new Map(
-    matching.map((resource, index) => [
-      resource.fqn,
-      TAIL_COLORS[index % TAIL_COLORS.length]!,
-    ]),
+    matching.map((resource, index) => [resource.fqn, TAIL_COLORS[index % TAIL_COLORS.length]!]),
   );
-  const format = (entry: {
-    resource: { fqn: string };
-    timestamp: Date;
-    message: string;
-  }) =>
+  const format = (entry: { resource: { fqn: string }; timestamp: Date; message: string }) =>
     `${paint(colors.get(entry.resource.fqn) ?? "gray", `${formatLocalTimestamp(entry.timestamp)} [${entry.resource.fqn}]`)} ${entry.message}`;
 
   if (tail) {
@@ -104,9 +85,7 @@ const runLogs = Effect.fn(function* ({
       yield* Console.log("No matching resources support live logs.");
       return;
     }
-    yield* Console.log(
-      `Tailing: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`,
-    );
+    yield* Console.log(`Tailing: ${tailing.map(({ logicalId }) => logicalId).join(", ")}`);
     yield* Logs.tail({ target, resources: selected }).pipe(
       Stream.runForEach((entry) => Console.log(format(entry))),
     );

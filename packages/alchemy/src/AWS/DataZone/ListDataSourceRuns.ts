@@ -34,10 +34,7 @@ export interface ListDataSourceRuns extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListDataSourceRunsRequest,
-    ) => Effect.Effect<
-      datazone.ListDataSourceRunsOutput,
-      datazone.ListDataSourceRunsError
-    >
+    ) => Effect.Effect<datazone.ListDataSourceRunsOutput, datazone.ListDataSourceRunsError>
   >
 > {}
 export const ListDataSourceRuns = Binding.Service<ListDataSourceRuns>(

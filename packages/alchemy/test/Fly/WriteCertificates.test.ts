@@ -1,37 +1,29 @@
+import * as machines from "@distilled.cloud/fly-io/machines";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Fly from "@/Fly";
 import { FlyAuth } from "@/Fly/AuthProvider";
 import { fromAuthProvider } from "@/Fly/Credentials";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Layer from "effect/Layer";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import CertificatesApi, {
-  CertIp,
-  CertSite,
-} from "./fixtures/certificates-api.ts";
+import CertificatesApi, { CertIp, CertSite } from "./fixtures/certificates-api.ts";
 
 /**
  * Runtime certificate management on a Fly App: `request` a Fly-managed
  * certificate, upload a Let's Encrypt staging certificate, check, get, and remove.
  */
-const providers = Layer.mergeAll(
-  Fly.providers(),
-  Cloudflare.providers(),
-  ACME.providers(),
-);
+const providers = Layer.mergeAll(Fly.providers(), Cloudflare.providers(), ACME.providers());
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const UPLOAD_HOST = `alchemy-wc-upload.${zoneName}`;
 const REQUEST_HOST = `alchemy-wc-request.${zoneName}`;
 
@@ -43,11 +35,8 @@ const Stack = Alchemy.Stack(
     yield* CertIp;
     const api = yield* CertificatesApi;
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const zone = yield* findZoneByName({ accountId, name: zoneName }).pipe(
-      Effect.orDie,
-    );
-    if (!zone)
-      return yield* Effect.die(new Error(`zone ${zoneName} not found`));
+    const zone = yield* findZoneByName({ accountId, name: zoneName }).pipe(Effect.orDie);
+    if (!zone) return yield* Effect.die(new Error(`zone ${zoneName} not found`));
     const account = yield* ACME.Account("Issuer", {
       ca: ACME.LetsEncryptStaging,
       termsOfServiceAgreed: true,
@@ -87,9 +76,7 @@ test(
         const request =
           body === undefined
             ? HttpClientRequest.get(`${url}${path}`)
-            : HttpClientRequest.post(`${url}${path}`).pipe(
-                HttpClientRequest.bodyJsonUnsafe(body),
-              );
+            : HttpClientRequest.post(`${url}${path}`).pipe(HttpClientRequest.bodyJsonUnsafe(body));
         const response = yield* client.execute(request);
         const text = yield* response.text;
         return JSON.parse(text || "null") as Reply;
@@ -123,9 +110,7 @@ test(
     expect(fetched.ok).toBe(true);
     expect(fetched.value?.hostname).toBe(UPLOAD_HOST);
     expect(
-      (fetched.value?.certificates ?? []).some(
-        (c: { source?: string }) => c.source === "custom",
-      ),
+      (fetched.value?.certificates ?? []).some((c: { source?: string }) => c.source === "custom"),
     ).toBe(true);
 
     // Re-upload replaces in place (conflict → delete + create).

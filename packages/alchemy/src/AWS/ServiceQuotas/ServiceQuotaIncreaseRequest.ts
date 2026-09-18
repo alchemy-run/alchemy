@@ -118,10 +118,9 @@ export interface ServiceQuotaIncreaseRequest extends Resource<
  * });
  * ```
  */
-export const ServiceQuotaIncreaseRequest =
-  Resource<ServiceQuotaIncreaseRequest>(
-    "AWS.ServiceQuotas.ServiceQuotaIncreaseRequest",
-  );
+export const ServiceQuotaIncreaseRequest = Resource<ServiceQuotaIncreaseRequest>(
+  "AWS.ServiceQuotas.ServiceQuotaIncreaseRequest",
+);
 
 // Statuses in which a request is still in flight and represents the desired
 // state (a new submission would be rejected with ResourceAlreadyExists).
@@ -137,11 +136,7 @@ const getRequest = (requestId: string) =>
 
 // Observe the applied quota value; quotas without an applied (account-level)
 // value fall back to the AWS default value.
-const observeQuota = (
-  serviceCode: string,
-  quotaCode: string,
-  contextId: string | undefined,
-) =>
+const observeQuota = (serviceCode: string, quotaCode: string, contextId: string | undefined) =>
   servicequotas
     .getServiceQuota({
       ServiceCode: serviceCode,
@@ -158,9 +153,7 @@ const observeQuota = (
           })
           .pipe(
             Effect.map((r) => r.Quota),
-            Effect.catchTag("NoSuchResourceException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("NoSuchResourceException", () => Effect.succeed(undefined)),
           ),
       ),
     );
@@ -185,9 +178,7 @@ const findOpenRequest = Effect.fn(function* (
           Effect.succeed([] as servicequotas.RequestedServiceQuotaChange[]),
         ),
       );
-    const match = page.find(
-      (r) => desiredValue === undefined || r.DesiredValue === desiredValue,
-    );
+    const match = page.find((r) => desiredValue === undefined || r.DesiredValue === desiredValue);
     if (match !== undefined) return match;
   }
   return undefined;
@@ -260,21 +251,11 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
           if (serviceCode === undefined || quotaCode === undefined) {
             return undefined;
           }
-          const quota = yield* observeQuota(
-            serviceCode,
-            quotaCode,
-            olds?.contextId,
-          );
+          const quota = yield* observeQuota(serviceCode, quotaCode, olds?.contextId);
           let request =
-            output?.requestId !== undefined
-              ? yield* getRequest(output.requestId)
-              : undefined;
+            output?.requestId !== undefined ? yield* getRequest(output.requestId) : undefined;
           if (request === undefined) {
-            request = yield* findOpenRequest(
-              serviceCode,
-              quotaCode,
-              desiredValue,
-            );
+            request = yield* findOpenRequest(serviceCode, quotaCode, desiredValue);
           }
           if (request !== undefined) {
             const attrs = buildAttrs(
@@ -302,11 +283,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
             quota?.Value !== undefined &&
             quota.Value >= desiredValue
           ) {
-            return buildAttrs(
-              { serviceCode, quotaCode, desiredValue },
-              undefined,
-              quota,
-            );
+            return buildAttrs({ serviceCode, quotaCode, desiredValue }, undefined, quota);
           }
           return undefined;
         }),
@@ -330,15 +307,9 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
           // 1. OBSERVE — the applied quota value and any existing request.
           //    Cloud state is authoritative; output only caches the request
           //    ID from a previous run.
-          const quota = yield* observeQuota(
-            serviceCode,
-            quotaCode,
-            news.contextId,
-          );
+          const quota = yield* observeQuota(serviceCode, quotaCode, news.contextId);
           let request =
-            output?.requestId !== undefined
-              ? yield* getRequest(output.requestId)
-              : undefined;
+            output?.requestId !== undefined ? yield* getRequest(output.requestId) : undefined;
           if (
             request !== undefined &&
             (request.ServiceCode !== serviceCode ||
@@ -349,18 +320,13 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
             request = undefined;
           }
           if (request === undefined) {
-            request = yield* findOpenRequest(
-              serviceCode,
-              quotaCode,
-              desiredValue,
-            );
+            request = yield* findOpenRequest(serviceCode, quotaCode, desiredValue);
           }
 
           // 2. ENSURE — submit only when the applied value is below the
           //    desired value and no matching request is already in flight.
           if (request === undefined) {
-            const satisfied =
-              quota?.Value !== undefined && quota.Value >= desiredValue;
+            const satisfied = quota?.Value !== undefined && quota.Value >= desiredValue;
             if (!satisfied) {
               request = yield* servicequotas
                 .requestServiceQuotaIncrease({
@@ -386,11 +352,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
           if (request?.Id !== undefined) {
             yield* session.note(request.Id);
           }
-          return buildAttrs(
-            { serviceCode, quotaCode, desiredValue },
-            request,
-            quota,
-          );
+          return buildAttrs({ serviceCode, quotaCode, desiredValue }, request, quota);
         }),
 
         delete: Effect.fn(function* ({ output }) {

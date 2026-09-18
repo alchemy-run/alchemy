@@ -25,15 +25,15 @@ export const ExportApiHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/apis/${api.apiId}/exports/*`,
         ],
       });
-      return Effect.fn(`AWS.ApiGatewayV2.ExportApi(${api.LogicalId})`)(
-        function* (request?: ExportApiRequest) {
-          return yield* exportApi({
-            ...request,
-            ApiId: yield* ApiId,
-            Specification: request?.Specification ?? "OAS30",
-          });
-        },
-      );
+      return Effect.fn(`AWS.ApiGatewayV2.ExportApi(${api.LogicalId})`)(function* (
+        request?: ExportApiRequest,
+      ) {
+        return yield* exportApi({
+          ...request,
+          ApiId: yield* ApiId,
+          Specification: request?.Specification ?? "OAS30",
+        });
+      });
     });
   }),
 );

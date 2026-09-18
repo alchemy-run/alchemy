@@ -30,10 +30,6 @@ export interface DescribePipe extends Binding.Service<
   "AWS.Pipes.DescribePipe",
   (
     pipe: Pipe,
-  ) => Effect.Effect<
-    () => Effect.Effect<pipes.DescribePipeResponse, pipes.DescribePipeError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<pipes.DescribePipeResponse, pipes.DescribePipeError>>
 > {}
-export const DescribePipe = Binding.Service<DescribePipe>(
-  "AWS.Pipes.DescribePipe",
-);
+export const DescribePipe = Binding.Service<DescribePipe>("AWS.Pipes.DescribePipe");

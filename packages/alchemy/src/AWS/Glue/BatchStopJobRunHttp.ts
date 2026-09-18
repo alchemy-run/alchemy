@@ -1,7 +1,7 @@
 import * as glue from "@distilled.cloud/aws/glue";
 import * as Layer from "effect/Layer";
-import { makeGlueJobHttpBinding } from "./BindingHttp.ts";
 import { BatchStopJobRun } from "./BatchStopJobRun.ts";
+import { makeGlueJobHttpBinding } from "./BindingHttp.ts";
 
 export const BatchStopJobRunHttp = Layer.effect(
   BatchStopJobRun,

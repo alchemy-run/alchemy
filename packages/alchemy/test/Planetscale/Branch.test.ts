@@ -1,18 +1,15 @@
-import * as Planetscale from "@/Planetscale";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
 import { describe, expect } from "alchemy-test";
 import { Data, Schedule } from "effect";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Planetscale.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const branchOutput = (
   overrides: Partial<Planetscale.PostgresBranchAttributes> = {},
@@ -137,11 +134,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Branch", () => {
 
           yield* stack.destroy();
           yield* waitForBranchToBeDeleted(dbName, branchName, organization);
-        }).pipe(
-          Effect.ensuring(
-            deleteBranchIfExists(dbName, branchName, organization),
-          ),
-        );
+        }).pipe(Effect.ensuring(deleteBranchIfExists(dbName, branchName, organization)));
       }).pipe(logLevel),
     5_000_000,
   );
@@ -203,9 +196,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Branch", () => {
 
         // Every item is hydrated into the exact `read` Attributes shape — the
         // org's `main` branch is enumerated too, only as MySQL kind.
-        expect(all.every((b) => b.organization === database.organization)).toBe(
-          true,
-        );
+        expect(all.every((b) => b.organization === database.organization)).toBe(true);
 
         yield* stack.destroy();
         yield* waitForDatabaseToBeDeleted(dbName, database.organization);
@@ -214,10 +205,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)("Branch", () => {
   );
 });
 
-const waitForDatabaseToBeDeleted = Effect.fn(function* (
-  database: string,
-  organization: string,
-) {
+const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organization: string) {
   yield* ps
     .getDatabase({
       organization,
@@ -226,8 +214,7 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (
     .pipe(
       Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
       Effect.retry({
-        while: (e): e is DatabaseStillExists =>
-          e instanceof DatabaseStillExists,
+        while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
         schedule: Schedule.exponential(100),
       }),
       Effect.catchTag("NotFound", () => Effect.void),
@@ -255,16 +242,10 @@ const waitForBranchToBeDeleted = Effect.fn(function* (
     );
 });
 
-const deleteBranchIfExists = (
-  database: string,
-  branch: string,
-  organization: string,
-) =>
+const deleteBranchIfExists = (database: string, branch: string, organization: string) =>
   ps.deleteBranch({ organization, database, branch }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.flatMap(() =>
-      waitForBranchToBeDeleted(database, branch, organization),
-    ),
+    Effect.flatMap(() => waitForBranchToBeDeleted(database, branch, organization)),
     Effect.ignore,
   );
 

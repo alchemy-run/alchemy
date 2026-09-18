@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
-const assetsFixture = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/assets-only",
-);
+const assetsFixture = pathe.resolve(import.meta.dirname, "fixtures/assets-only");
 
 const actionOf = (plan: any, logicalId: string) =>
   (Object.values(plan.resources) as any[]).find(
@@ -57,13 +54,10 @@ describe.concurrent("Cloudflare.Worker assets plan convergence", () => {
               assets: { directory: a },
               compatibility: { date: "2024-01-01" },
             });
-            const assetsOnly = yield* Cloudflare.Worker(
-              "AssetsPlanAssetsOnly",
-              {
-                assets: { directory: b, notFoundHandling: "404-page" },
-                compatibility: { date: "2024-01-01" },
-              },
-            );
+            const assetsOnly = yield* Cloudflare.Worker("AssetsPlanAssetsOnly", {
+              assets: { directory: b, notFoundHandling: "404-page" },
+              compatibility: { date: "2024-01-01" },
+            });
             const withScript = yield* Cloudflare.Worker("AssetsPlanScript", {
               script: `export default { fetch: () => new Response("assets-plan-script") };`,
               assets: { directory: b },
@@ -123,10 +117,7 @@ describe.concurrent("Cloudflare.Worker assets plan convergence", () => {
         // `_headers` is excluded from the manifest but shipped via the
         // asset config, so editing it must dirty every worker serving the
         // directory.
-        yield* fs.writeFileString(
-          path.join(dirB, "_headers"),
-          "/*\n  X-Assets-Plan: v1\n",
-        );
+        yield* fs.writeFileString(path.join(dirB, "_headers"), "/*\n  X-Assets-Plan: v1\n");
         const headers = yield* stack.plan(program(dirA, dirB));
         expect(actionOf(headers, "AssetsPlanWithMain")).toBe("noop");
         expect(actionOf(headers, "AssetsPlanAssetsOnly")).toBe("update");

@@ -52,13 +52,8 @@ export interface WriteRecords extends Binding.Service<
   ) => Effect.Effect<
     (
       request: WriteRecordsRequest,
-    ) => Effect.Effect<
-      TSW.WriteRecordsResponse,
-      TSW.WriteRecordsError | TSW.DescribeEndpointsError
-    >
+    ) => Effect.Effect<TSW.WriteRecordsResponse, TSW.WriteRecordsError | TSW.DescribeEndpointsError>
   >
 > {}
 
-export const WriteRecords = Binding.Service<WriteRecords>(
-  "AWS.Timestream.WriteRecords",
-);
+export const WriteRecords = Binding.Service<WriteRecords>("AWS.Timestream.WriteRecords");

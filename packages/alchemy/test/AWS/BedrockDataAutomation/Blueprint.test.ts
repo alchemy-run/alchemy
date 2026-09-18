@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { Blueprint } from "@/AWS/BedrockDataAutomation";
-import * as Test from "@/Test/Alchemy";
 import * as bda from "@distilled.cloud/aws/bedrock-data-automation";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
@@ -8,6 +5,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Blueprint } from "@/AWS/BedrockDataAutomation";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -34,9 +34,7 @@ const invoiceSchema = (instruction: string) =>
 const findBlueprint = (blueprintArn: string) =>
   bda.getBlueprint({ blueprintArn }).pipe(
     Effect.map((r) => r.blueprint),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class BlueprintStillExists extends Data.TaggedError("BlueprintStillExists")<{
@@ -58,21 +56,17 @@ const assertBlueprintDeleted = (blueprintArn: string) =>
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getBlueprint on a nonexistent ARN fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const { Account } = yield* sts.getCallerIdentity({});
-      const region = yield* Effect.sync(
-        () => process.env.AWS_REGION ?? "us-west-2",
-      );
-      const error = yield* Effect.flip(
-        bda.getBlueprint({
-          blueprintArn: `arn:aws:bedrock:${region}:${Account}:blueprint/nonexistent-alchemy-probe`,
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getBlueprint on a nonexistent ARN fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const { Account } = yield* sts.getCallerIdentity({});
+    const region = yield* Effect.sync(() => process.env.AWS_REGION ?? "us-west-2");
+    const error = yield* Effect.flip(
+      bda.getBlueprint({
+        blueprintArn: `arn:aws:bedrock:${region}:${Account}:blueprint/nonexistent-alchemy-probe`,
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 test.provider(
@@ -98,16 +92,10 @@ test.provider(
       const created = yield* findBlueprint(blueprint.blueprintArn);
       expect(created).toBeDefined();
       expect(unredact(created!.blueprintName)).toBe(blueprint.blueprintName);
-      expect(
-        JSON.parse(unredact(created!.schema)).properties.invoice_number,
-      ).toBeDefined();
+      expect(JSON.parse(unredact(created!.schema)).properties.invoice_number).toBeDefined();
       const tags = yield* bda
         .listTagsForResource({ resourceARN: blueprint.blueprintArn })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.tags ?? []).map((t) => [t.key, t.value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestBlueprint");
 
@@ -124,10 +112,9 @@ test.provider(
       expect(updated.blueprintArn).toBe(blueprint.blueprintArn);
 
       const afterUpdate = yield* findBlueprint(blueprint.blueprintArn);
-      expect(
-        JSON.parse(unredact(afterUpdate!.schema)).properties.invoice_number
-          .instruction,
-      ).toBe("The unique invoice number on the header");
+      expect(JSON.parse(unredact(afterUpdate!.schema)).properties.invoice_number.instruction).toBe(
+        "The unique invoice number on the header",
+      );
 
       yield* stack.destroy();
       yield* assertBlueprintDeleted(blueprint.blueprintArn);

@@ -52,6 +52,4 @@ export interface CreateAccessPoint extends Binding.Service<
     ) => Effect.Effect<efs.AccessPointDescription, efs.CreateAccessPointError>
   >
 > {}
-export const CreateAccessPoint = Binding.Service<CreateAccessPoint>(
-  "AWS.EFS.CreateAccessPoint",
-);
+export const CreateAccessPoint = Binding.Service<CreateAccessPoint>("AWS.EFS.CreateAccessPoint");

@@ -1,8 +1,5 @@
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
-import {
-  apiKeyCredentials,
-  apiTokenCredentials,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { apiKeyCredentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -26,10 +23,7 @@ export interface Account {
   readonly name: string;
 }
 
-export type {
-  PermissionGroup,
-  TokenPolicy,
-} from "../../Cloudflare/Auth/TokenPolicy.ts";
+export type { PermissionGroup, TokenPolicy } from "../../Cloudflare/Auth/TokenPolicy.ts";
 
 export interface TokenCatalog {
   readonly accounts: ReadonlyArray<Account>;
@@ -69,9 +63,9 @@ export interface CreatedToken {
 }
 
 /** Cloudflare accepted the create call but returned no usable token. */
-export class CloudflareTokenError extends Data.TaggedError(
-  "CloudflareTokenError",
-)<{ readonly message: string }> {}
+export class CloudflareTokenError extends Data.TaggedError("CloudflareTokenError")<{
+  readonly message: string;
+}> {}
 
 /** Authenticate the surrounding effect with the user's Global API Key. */
 const withGlobalKey = (credentials: GlobalCredentials) =>
@@ -122,17 +116,13 @@ export const catalog = Effect.fn("Alchemist.cloudflare.token.catalog")(
 );
 
 /** Resolve the selected permission groups into concrete token policies. */
-export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (
-  input: PlanInput,
-) {
+export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (input: PlanInput) {
   const tokenCatalog = yield* catalog(input.credentials);
   const selected =
     input.permissionGroupIds === "all"
       ? tokenCatalog.permissionGroups
       : yield* Effect.forEach(input.permissionGroupIds, (id) => {
-          const group = tokenCatalog.permissionGroups.find(
-            (candidate) => candidate.id === id,
-          );
+          const group = tokenCatalog.permissionGroups.find((candidate) => candidate.id === id);
           if (group === undefined) {
             return Effect.fail(
               new AlchemistInvalidInput({
@@ -143,16 +133,13 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (
           }
           return Effect.succeed(group);
         });
-  const currentUser = yield* user
-    .getUser({})
-    .pipe(withGlobalKey(input.credentials));
+  const currentUser = yield* user.getUser({}).pipe(withGlobalKey(input.credentials));
   const resolved = tokenPolicies(input.accountIds, currentUser.id, selected);
   if (resolved.length === 0) {
     return yield* Effect.fail(
       new AlchemistInvalidInput({
         field: "permissionGroupIds",
-        message:
-          "No selected permission groups can be expressed as token policies.",
+        message: "No selected permission groups can be expressed as token policies.",
       }),
     );
   }

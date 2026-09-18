@@ -118,9 +118,7 @@ export const consumeDomainEvents = <StreamReq = never, Req = never>(
       ...(props.kinds !== undefined
         ? { "detail-type": props.kinds.map((kind) => DETAIL_TYPES[kind]) }
         : {}),
-      ...(props.domainArns !== undefined
-        ? { resources: [...props.domainArns] }
-        : {}),
+      ...(props.domainArns !== undefined ? { resources: [...props.domainArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

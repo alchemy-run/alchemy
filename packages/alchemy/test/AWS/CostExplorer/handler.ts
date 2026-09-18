@@ -1,5 +1,3 @@
-import * as CostExplorer from "@/AWS/CostExplorer";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CostExplorer from "@/AWS/CostExplorer";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -21,9 +21,7 @@ const NONEXISTENT_ANOMALY_ID = "00000000-0000-0000-0000-000000000000";
 const monthStart = (offset: number) =>
   Effect.sync(() => {
     const now = new Date();
-    return new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1),
-    )
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1))
       .toISOString()
       .slice(0, 10);
   });
@@ -69,14 +67,10 @@ export default CostExplorerTestFunction.make(
 
     // --- account-level bindings ---
     const getCostAndUsage = yield* CostExplorer.GetCostAndUsage();
-    const getCostAndUsageComparisons =
-      yield* CostExplorer.GetCostAndUsageComparisons();
-    const getCostAndUsageWithResources =
-      yield* CostExplorer.GetCostAndUsageWithResources();
-    const getCostComparisonDrivers =
-      yield* CostExplorer.GetCostComparisonDrivers();
-    const getApproximateUsageRecords =
-      yield* CostExplorer.GetApproximateUsageRecords();
+    const getCostAndUsageComparisons = yield* CostExplorer.GetCostAndUsageComparisons();
+    const getCostAndUsageWithResources = yield* CostExplorer.GetCostAndUsageWithResources();
+    const getCostComparisonDrivers = yield* CostExplorer.GetCostComparisonDrivers();
+    const getApproximateUsageRecords = yield* CostExplorer.GetApproximateUsageRecords();
     const getCostForecast = yield* CostExplorer.GetCostForecast();
     const getUsageForecast = yield* CostExplorer.GetUsageForecast();
     const getDimensionValues = yield* CostExplorer.GetDimensionValues();
@@ -85,35 +79,26 @@ export default CostExplorerTestFunction.make(
     const getReservationCoverage = yield* CostExplorer.GetReservationCoverage();
     const getReservationPurchaseRecommendation =
       yield* CostExplorer.GetReservationPurchaseRecommendation();
-    const getReservationUtilization =
-      yield* CostExplorer.GetReservationUtilization();
-    const getRightsizingRecommendation =
-      yield* CostExplorer.GetRightsizingRecommendation();
-    const getSavingsPlansCoverage =
-      yield* CostExplorer.GetSavingsPlansCoverage();
+    const getReservationUtilization = yield* CostExplorer.GetReservationUtilization();
+    const getRightsizingRecommendation = yield* CostExplorer.GetRightsizingRecommendation();
+    const getSavingsPlansCoverage = yield* CostExplorer.GetSavingsPlansCoverage();
     const getSavingsPlansPurchaseRecommendation =
       yield* CostExplorer.GetSavingsPlansPurchaseRecommendation();
     const getSavingsPlanPurchaseRecommendationDetails =
       yield* CostExplorer.GetSavingsPlanPurchaseRecommendationDetails();
-    const getSavingsPlansUtilization =
-      yield* CostExplorer.GetSavingsPlansUtilization();
+    const getSavingsPlansUtilization = yield* CostExplorer.GetSavingsPlansUtilization();
     const getSavingsPlansUtilizationDetails =
       yield* CostExplorer.GetSavingsPlansUtilizationDetails();
     const startSavingsPlansPurchaseRecommendationGeneration =
       yield* CostExplorer.StartSavingsPlansPurchaseRecommendationGeneration();
     const listSavingsPlansPurchaseRecommendationGeneration =
       yield* CostExplorer.ListSavingsPlansPurchaseRecommendationGeneration();
-    const startCommitmentPurchaseAnalysis =
-      yield* CostExplorer.StartCommitmentPurchaseAnalysis();
-    const getCommitmentPurchaseAnalysis =
-      yield* CostExplorer.GetCommitmentPurchaseAnalysis();
-    const listCommitmentPurchaseAnalyses =
-      yield* CostExplorer.ListCommitmentPurchaseAnalyses();
+    const startCommitmentPurchaseAnalysis = yield* CostExplorer.StartCommitmentPurchaseAnalysis();
+    const getCommitmentPurchaseAnalysis = yield* CostExplorer.GetCommitmentPurchaseAnalysis();
+    const listCommitmentPurchaseAnalyses = yield* CostExplorer.ListCommitmentPurchaseAnalyses();
     const listCostAllocationTags = yield* CostExplorer.ListCostAllocationTags();
-    const updateCostAllocationTagsStatus =
-      yield* CostExplorer.UpdateCostAllocationTagsStatus();
-    const startCostAllocationTagBackfill =
-      yield* CostExplorer.StartCostAllocationTagBackfill();
+    const updateCostAllocationTagsStatus = yield* CostExplorer.UpdateCostAllocationTagsStatus();
+    const startCostAllocationTagBackfill = yield* CostExplorer.StartCostAllocationTagBackfill();
     const listCostAllocationTagBackfillHistory =
       yield* CostExplorer.ListCostAllocationTagBackfillHistory();
     const provideAnomalyFeedback = yield* CostExplorer.ProvideAnomalyFeedback();
@@ -131,9 +116,7 @@ export default CostExplorerTestFunction.make(
     // on `aws.ce` / `Anomaly Detected` plus the Lambda invoke permission.
     yield* CostExplorer.consumeAnomalyEvents({}, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `cost anomaly ${event.detail.anomalyId} on ${event.detail.dimensionValue}`,
-        ),
+        Effect.log(`cost anomaly ${event.detail.anomalyId} on ${event.detail.dimensionValue}`),
       ),
     );
 
@@ -194,8 +177,7 @@ export default CostExplorerTestFunction.make(
             Effect.map((r) => ({
               tag: "Ok",
               results: (r.ResultsByTime ?? []).length,
-              amount:
-                r.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount ?? null,
+              amount: r.ResultsByTime?.[0]?.Total?.UnblendedCost?.Amount ?? null,
             })),
             Effect.catchTag("DataUnavailableException", (e) =>
               Effect.succeed({ tag: e._tag, results: 0, amount: null }),
@@ -306,10 +288,7 @@ export default CostExplorerTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/reservation-recommendation"
-        ) {
+        if (request.method === "GET" && pathname === "/reservation-recommendation") {
           const result = yield* getReservationPurchaseRecommendation({
             Service: "Amazon Elastic Compute Cloud - Compute",
           }).pipe(
@@ -324,10 +303,7 @@ export default CostExplorerTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/savings-plans-utilization"
-        ) {
+        if (request.method === "GET" && pathname === "/savings-plans-utilization") {
           const Start = yield* monthStart(-1);
           const End = yield* monthStart(0);
           const result = yield* getSavingsPlansUtilization({
@@ -344,20 +320,16 @@ export default CostExplorerTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/recommendation-generations"
-        ) {
-          const result =
-            yield* listSavingsPlansPurchaseRecommendationGeneration().pipe(
-              Effect.map((r) => ({
-                tag: "Ok",
-                count: (r.GenerationSummaryList ?? []).length,
-              })),
-              Effect.catchTag("DataUnavailableException", (e) =>
-                Effect.succeed({ tag: e._tag, count: 0 }),
-              ),
-            );
+        if (request.method === "GET" && pathname === "/recommendation-generations") {
+          const result = yield* listSavingsPlansPurchaseRecommendationGeneration().pipe(
+            Effect.map((r) => ({
+              tag: "Ok",
+              count: (r.GenerationSummaryList ?? []).length,
+            })),
+            Effect.catchTag("DataUnavailableException", (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
+            ),
+          );
           return yield* HttpServerResponse.json(result);
         }
 
@@ -398,10 +370,7 @@ export default CostExplorerTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/anomaly-feedback-invalid"
-        ) {
+        if (request.method === "GET" && pathname === "/anomaly-feedback-invalid") {
           // Exercises the account-level grant + the typed error path — the
           // nonexistent anomaly id must surface the typed ValidationException
           // ("Feedback is submitted for an invalid anomaly", verified by
@@ -412,9 +381,7 @@ export default CostExplorerTestFunction.make(
             Feedback: "PLANNED_ACTIVITY",
           }).pipe(
             Effect.map(() => "Provided"),
-            Effect.catchTag("ValidationException", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ValidationException", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag: result });
         }

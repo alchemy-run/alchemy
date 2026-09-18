@@ -30,8 +30,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -360,9 +360,7 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const capabilityStatuses = (
-  capabilities: StripeAccount["capabilities"],
-): Record<string, string> =>
+const capabilityStatuses = (capabilities: StripeAccount["capabilities"]): Record<string, string> =>
   Object.fromEntries(
     Object.entries(capabilities ?? {}).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -378,26 +376,16 @@ const toWireBusinessProfile = (
   ...(profile.productDescription !== undefined
     ? { product_description: profile.productDescription }
     : {}),
-  ...(profile.supportEmail !== undefined
-    ? { support_email: profile.supportEmail }
-    : {}),
-  ...(profile.supportPhone !== undefined
-    ? { support_phone: profile.supportPhone }
-    : {}),
-  ...(profile.supportUrl !== undefined
-    ? { support_url: profile.supportUrl }
-    : {}),
+  ...(profile.supportEmail !== undefined ? { support_email: profile.supportEmail } : {}),
+  ...(profile.supportPhone !== undefined ? { support_phone: profile.supportPhone } : {}),
+  ...(profile.supportUrl !== undefined ? { support_url: profile.supportUrl } : {}),
 });
 
-const toWireController = (
-  controller: AccountController,
-): CreateAccountRequestController => ({
+const toWireController = (controller: AccountController): CreateAccountRequestController => ({
   ...(controller.fees !== undefined
     ? {
         fees: {
-          ...(controller.fees.payer !== undefined
-            ? { payer: controller.fees.payer }
-            : {}),
+          ...(controller.fees.payer !== undefined ? { payer: controller.fees.payer } : {}),
         },
       }
     : {}),
@@ -424,15 +412,11 @@ const toWireController = (
     : {}),
 });
 
-const toWireTosAcceptance = (
-  tos: AccountTosAcceptance,
-): CreateAccountRequestTosAcceptance => ({
+const toWireTosAcceptance = (tos: AccountTosAcceptance): CreateAccountRequestTosAcceptance => ({
   ...(tos.date !== undefined ? { date: tos.date } : {}),
   ...(tos.ip !== undefined ? { ip: tos.ip } : {}),
   ...(tos.userAgent !== undefined ? { user_agent: tos.userAgent } : {}),
-  ...(tos.serviceAgreement !== undefined
-    ? { service_agreement: tos.serviceAgreement }
-    : {}),
+  ...(tos.serviceAgreement !== undefined ? { service_agreement: tos.serviceAgreement } : {}),
 });
 
 const toAttrs = (account: StripeAccount) => ({
@@ -449,8 +433,7 @@ const toAttrs = (account: StripeAccount) => ({
   detailsSubmitted: account.details_submitted ?? false,
   capabilities: capabilityStatuses(account.capabilities),
   requirementsCurrentlyDue: [...(account.requirements?.currently_due ?? [])],
-  requirementsDisabledReason:
-    account.requirements?.disabled_reason ?? undefined,
+  requirementsDisabledReason: account.requirements?.disabled_reason ?? undefined,
   created: account.created,
   metadata: userMetadata(account.metadata),
 });
@@ -494,10 +477,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -520,22 +500,13 @@ const businessProfileChanged = (
   observed: StripeAccount["business_profile"],
 ): boolean => {
   if (desired === undefined) return false;
-  if (
-    desired.name !== undefined &&
-    desired.name !== (observed?.name ?? undefined)
-  ) {
+  if (desired.name !== undefined && desired.name !== (observed?.name ?? undefined)) {
     return true;
   }
-  if (
-    desired.url !== undefined &&
-    desired.url !== (observed?.url ?? undefined)
-  ) {
+  if (desired.url !== undefined && desired.url !== (observed?.url ?? undefined)) {
     return true;
   }
-  if (
-    desired.mcc !== undefined &&
-    desired.mcc !== (observed?.mcc ?? undefined)
-  ) {
+  if (desired.mcc !== undefined && desired.mcc !== (observed?.mcc ?? undefined)) {
     return true;
   }
   if (
@@ -584,11 +555,7 @@ const shouldReplace = (
   olds: AccountProps | undefined,
   output: Account["Attributes"] | undefined,
 ): boolean => {
-  if (
-    news.type !== undefined &&
-    output?.type !== undefined &&
-    news.type !== output.type
-  ) {
+  if (news.type !== undefined && output?.type !== undefined && news.type !== output.type) {
     return true;
   }
   if (
@@ -627,9 +594,7 @@ export const AccountProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -649,13 +614,9 @@ export const AccountProvider = () =>
           ? toWireBusinessProfile(news.businessProfile)
           : undefined;
       const controller =
-        news.controller !== undefined
-          ? toWireController(news.controller)
-          : undefined;
+        news.controller !== undefined ? toWireController(news.controller) : undefined;
       const tosAcceptance =
-        news.tosAcceptance !== undefined
-          ? toWireTosAcceptance(news.tosAcceptance)
-          : undefined;
+        news.tosAcceptance !== undefined ? toWireTosAcceptance(news.tosAcceptance) : undefined;
 
       let current = yield* observe({
         id: output?.id,
@@ -669,26 +630,14 @@ export const AccountProvider = () =>
           ...(news.country !== undefined ? { country: news.country } : {}),
           ...(controller !== undefined ? { controller } : {}),
           ...(news.email !== undefined ? { email: news.email } : {}),
-          ...(news.businessType !== undefined
-            ? { business_type: news.businessType }
-            : {}),
-          ...(businessProfile !== undefined
-            ? { business_profile: businessProfile }
-            : {}),
-          ...(news.capabilities !== undefined
-            ? { capabilities: news.capabilities }
-            : {}),
+          ...(news.businessType !== undefined ? { business_type: news.businessType } : {}),
+          ...(businessProfile !== undefined ? { business_profile: businessProfile } : {}),
+          ...(news.capabilities !== undefined ? { capabilities: news.capabilities } : {}),
           ...(news.settings !== undefined ? { settings: news.settings } : {}),
-          ...(news.defaultCurrency !== undefined
-            ? { default_currency: news.defaultCurrency }
-            : {}),
+          ...(news.defaultCurrency !== undefined ? { default_currency: news.defaultCurrency } : {}),
           ...(news.company !== undefined ? { company: news.company } : {}),
-          ...(news.individual !== undefined
-            ? { individual: news.individual }
-            : {}),
-          ...(tosAcceptance !== undefined
-            ? { tos_acceptance: tosAcceptance }
-            : {}),
+          ...(news.individual !== undefined ? { individual: news.individual } : {}),
+          ...(tosAcceptance !== undefined ? { tos_acceptance: tosAcceptance } : {}),
           metadata,
         }).pipe(
           withRequestOptions({
@@ -701,18 +650,13 @@ export const AccountProvider = () =>
       const observedMetadata = tagRecord(current.metadata);
       const { upsert, removed } = diffMetadata(observedMetadata, metadata);
       const metadataChanged = upsert.length > 0 || removed.length > 0;
-      const emailChanged =
-        news.email !== undefined && (current.email ?? undefined) !== news.email;
+      const emailChanged = news.email !== undefined && (current.email ?? undefined) !== news.email;
       const businessTypeChanged =
         news.businessType !== undefined &&
         (current.business_type ?? undefined) !== news.businessType;
       const defaultCurrencyChanged =
-        news.defaultCurrency !== undefined &&
-        current.default_currency !== news.defaultCurrency;
-      const profileChanged = businessProfileChanged(
-        news.businessProfile,
-        current.business_profile,
-      );
+        news.defaultCurrency !== undefined && current.default_currency !== news.defaultCurrency;
+      const profileChanged = businessProfileChanged(news.businessProfile, current.business_profile);
       const capsChanged = capabilitiesDiverge(
         news.capabilities,
         capabilityStatuses(current.capabilities),
@@ -756,17 +700,11 @@ export const AccountProvider = () =>
         account: current.id,
         ...(emailChanged ? { email: news.email } : {}),
         ...(businessTypeChanged ? { business_type: news.businessType } : {}),
-        ...(defaultCurrencyChanged
-          ? { default_currency: news.defaultCurrency }
-          : {}),
+        ...(defaultCurrencyChanged ? { default_currency: news.defaultCurrency } : {}),
         ...(profileChanged ? { business_profile: businessProfile } : {}),
         ...(capsChanged ? { capabilities: news.capabilities } : {}),
-        ...(writeOnlyChanged && news.settings !== undefined
-          ? { settings: news.settings }
-          : {}),
-        ...(writeOnlyChanged && news.company !== undefined
-          ? { company: news.company }
-          : {}),
+        ...(writeOnlyChanged && news.settings !== undefined ? { settings: news.settings } : {}),
+        ...(writeOnlyChanged && news.company !== undefined ? { company: news.company } : {}),
         ...(writeOnlyChanged && news.individual !== undefined
           ? { individual: news.individual }
           : {}),
@@ -776,9 +714,7 @@ export const AccountProvider = () =>
         ...(metadataChanged
           ? {
               metadata: {
-                ...Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
+                ...Object.fromEntries(upsert.map((tag) => [tag.Key, tag.Value])),
                 ...Object.fromEntries(removed.map((key) => [key, ""])),
               },
             }

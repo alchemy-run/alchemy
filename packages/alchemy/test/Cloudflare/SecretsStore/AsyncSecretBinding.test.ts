@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,8 +5,10 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
-import Stack from "./fixtures/stack.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import { SECRET_VALUE } from "./fixtures/secret.ts";
+import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -18,10 +18,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 120_000;
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
@@ -36,10 +33,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
 }> {}
 
-const ready = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(30),
-]);
+const ready = Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(30)]);
 
 const fetchWhenReady = (url: string) =>
   Effect.gen(function* () {

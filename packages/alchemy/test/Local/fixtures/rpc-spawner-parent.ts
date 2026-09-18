@@ -50,10 +50,7 @@ const program = Effect.gen(function* () {
 program
   .pipe(
     Effect.provide([
-      Layer.provide(
-        layerServer({ profile: undefined, envFile: undefined }),
-        PlatformServices,
-      ),
+      Layer.provide(layerServer({ profile: undefined, envFile: undefined }), PlatformServices),
       FetchHttpClient.layer,
     ]),
     Effect.scoped,

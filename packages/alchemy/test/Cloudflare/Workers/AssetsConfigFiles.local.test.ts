@@ -1,24 +1,17 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
-import {
-  expectUrlContains,
-  expectUrlHeader,
-  expectUrlRedirect,
-} from "../Utils/Http.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
+import { expectUrlContains, expectUrlHeader, expectUrlRedirect } from "../Utils/Http.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures/assets-config");
 
@@ -52,12 +45,9 @@ test.provider(
 
       const url = deployed.worker.url;
       yield* expectUrlContains(`${url}/`, "alchemy-assets-config-index");
-      yield* expectUrlHeader(
-        `${url}/`,
-        "x-alchemy-test",
-        "assets-config-header",
-        { label: "local _headers" },
-      );
+      yield* expectUrlHeader(`${url}/`, "x-alchemy-test", "assets-config-header", {
+        label: "local _headers",
+      });
       yield* expectUrlRedirect(`${url}/old-path`, "/index.html", {
         status: 301,
         label: "local _redirects",

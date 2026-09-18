@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -147,9 +146,7 @@ export const IntegrationProvider = () =>
           accountId,
           integrationType: news.integrationType ?? "Okta",
           tenantUrl: news.tenantUrl,
-          ...(news.referenceId !== undefined
-            ? { referenceId: news.referenceId }
-            : {}),
+          ...(news.referenceId !== undefined ? { referenceId: news.referenceId } : {}),
         });
       }
 
@@ -159,8 +156,7 @@ export const IntegrationProvider = () =>
       const dirty =
         observed.tenantUrl !== news.tenantUrl ||
         observed.active !== desiredActive ||
-        (news.referenceId !== undefined &&
-          observed.referenceId !== news.referenceId);
+        (news.referenceId !== undefined && observed.referenceId !== news.referenceId);
       if (!dirty) {
         return toAttributes(observed, accountId);
       }
@@ -169,9 +165,7 @@ export const IntegrationProvider = () =>
         integrationId: observed.id,
         active: desiredActive,
         tenantUrl: news.tenantUrl,
-        ...(news.referenceId !== undefined
-          ? { referenceId: news.referenceId }
-          : {}),
+        ...(news.referenceId !== undefined ? { referenceId: news.referenceId } : {}),
       });
       return toAttributes(updated, accountId);
     }),
@@ -182,9 +176,7 @@ export const IntegrationProvider = () =>
           accountId: output.accountId,
           integrationId: output.integrationId,
         })
-        .pipe(
-          Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.void));
     }),
 
     // Account collection (pattern b). Enumerate every risk-scoring
@@ -194,19 +186,15 @@ export const IntegrationProvider = () =>
     // as "nothing to list" and return [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listRiskScoringIntegrations
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((integration) =>
-                toAttributes(integration, accountId),
-              ),
-            ),
+      return yield* zeroTrust.listRiskScoringIntegrations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((integration) => toAttributes(integration, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
     }),
   });
 
@@ -229,11 +217,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getRiskScoringIntegration({ accountId, integrationId })
-    .pipe(
-      Effect.catchTag("RiskScoringIntegrationNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.succeed(undefined)));
 
 /**
  * Find an integration by exact tenant URL.
@@ -241,9 +225,7 @@ const observeIntegration = (accountId: string, integrationId: string) =>
 const findByTenantUrl = (accountId: string, tenantUrl: string) =>
   zeroTrust
     .listRiskScoringIntegrations({ accountId })
-    .pipe(
-      Effect.map((list) => list.result.find((i) => i.tenantUrl === tenantUrl)),
-    );
+    .pipe(Effect.map((list) => list.result.find((i) => i.tenantUrl === tenantUrl)));
 
 const toAttributes = (
   integration: ObservedIntegration,

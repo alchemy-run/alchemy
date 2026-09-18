@@ -12,9 +12,9 @@ import {
   type DnsSolverDescriptor,
 } from "../../ACME/DnsSolver.ts";
 import { DnsSolverError } from "../../ACME/Errors.ts";
+import type { Input } from "../../Input.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Credentials } from "../Credentials.ts";
-import type { Input } from "../../Input.ts";
 import type { WriteDnsClient } from "./WriteDns.ts";
 
 /** Solver descriptor: publish `_acme-challenge` TXT records in a Cloudflare zone. */
@@ -38,9 +38,7 @@ export interface CloudflareDnsSolver extends DnsSolverDescriptor {
  * });
  * ```
  */
-export const AcmeSolver = <ZoneId extends Input<string>>(zone: {
-  readonly zoneId: ZoneId;
-}) => ({
+export const AcmeSolver = <ZoneId extends Input<string>>(zone: { readonly zoneId: ZoneId }) => ({
   type: "Cloudflare.DNS" as const,
   zoneId: zone.zoneId,
 });
@@ -52,23 +50,18 @@ const RUNTIME_PROPAGATION_DELAY = "60 seconds";
 const unquote = (content: string | null | undefined): string =>
   (content ?? "").replace(/^"|"$/g, "");
 
-const solverError = (message: string) => (cause: unknown) =>
-  new DnsSolverError({ message, cause });
+const solverError = (message: string) => (cause: unknown) => new DnsSolverError({ message, cause });
 
 /** Deploy-time solver over the distilled DNS SDK (zone id fixed). */
 export const makeCloudflareDnsSolver = (
   zoneId: string,
 ): DnsSolver<Credentials | HttpClient.HttpClient> => {
   const matching = (record: DnsChallengeRecord) =>
-    dns.listRecords
-      .items({ zoneId, name: { exact: record.fqdn }, type: "TXT" })
-      .pipe(
-        Stream.filter(
-          (r) => r.name === record.fqdn && unquote(r.content) === record.value,
-        ),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-      );
+    dns.listRecords.items({ zoneId, name: { exact: record.fqdn }, type: "TXT" }).pipe(
+      Stream.filter((r) => r.name === record.fqdn && unquote(r.content) === record.value),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    );
   return {
     present: (record) =>
       Effect.gen(function* () {
@@ -81,18 +74,12 @@ export const makeCloudflareDnsSolver = (
           content: record.value,
           ttl: CHALLENGE_TTL,
         });
-      }).pipe(
-        Effect.mapError(solverError(`Could not publish TXT ${record.fqdn}`)),
-      ),
+      }).pipe(Effect.mapError(solverError(`Could not publish TXT ${record.fqdn}`))),
     cleanup: (record) =>
       Effect.gen(function* () {
         const existing = yield* matching(record);
-        yield* Effect.forEach(existing, (r) =>
-          dns.deleteRecord({ zoneId, dnsRecordId: r.id }),
-        );
-      }).pipe(
-        Effect.mapError(solverError(`Could not remove TXT ${record.fqdn}`)),
-      ),
+        yield* Effect.forEach(existing, (r) => dns.deleteRecord({ zoneId, dnsRecordId: r.id }));
+      }).pipe(Effect.mapError(solverError(`Could not remove TXT ${record.fqdn}`))),
     // Allow recursive caches used by secondary validators to expire.
     propagated: (record, options) =>
       waitForTxt(record.fqdn, record.value, {
@@ -107,16 +94,14 @@ export const makeCloudflareDnsSolver = (
  * Registers the `Cloudflare.DNS` solver type with the ACME provider,
  * capturing the Cloudflare credentials from the providers layer.
  */
-export const AcmeDnsSolverLive = dnsSolverLayer(
-  "Cloudflare.DNS",
-  (descriptor) =>
-    typeof descriptor.zoneId === "string" && descriptor.zoneId.length > 0
-      ? Effect.succeed(makeCloudflareDnsSolver(descriptor.zoneId))
-      : Effect.fail(
-          new DnsSolverError({
-            message: "Cloudflare DNS solver requires a zoneId.",
-          }),
-        ),
+export const AcmeDnsSolverLive = dnsSolverLayer("Cloudflare.DNS", (descriptor) =>
+  typeof descriptor.zoneId === "string" && descriptor.zoneId.length > 0
+    ? Effect.succeed(makeCloudflareDnsSolver(descriptor.zoneId))
+    : Effect.fail(
+        new DnsSolverError({
+          message: "Cloudflare DNS solver requires a zoneId.",
+        }),
+      ),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
 /**
@@ -132,12 +117,9 @@ export const AcmeDnsSolverLive = dnsSolverLayer(
  * });
  * ```
  */
-export const acmeDnsSolver = (
-  client: WriteDnsClient,
-): DnsSolver<RuntimeContext> => {
+export const acmeDnsSolver = (client: WriteDnsClient): DnsSolver<RuntimeContext> => {
   const published = new Map<string, string>();
-  const keyOf = (record: DnsChallengeRecord) =>
-    `${record.fqdn}|${record.value}`;
+  const keyOf = (record: DnsChallengeRecord) => `${record.fqdn}|${record.value}`;
   return {
     present: (record) =>
       client
@@ -148,9 +130,7 @@ export const acmeDnsSolver = (
           ttl: CHALLENGE_TTL,
         })
         .pipe(
-          Effect.tap((created) =>
-            Effect.sync(() => published.set(keyOf(record), created.id)),
-          ),
+          Effect.tap((created) => Effect.sync(() => published.set(keyOf(record), created.id))),
           Effect.asVoid,
           Effect.mapError(solverError(`Could not publish TXT ${record.fqdn}`)),
         ),

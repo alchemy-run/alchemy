@@ -1,27 +1,25 @@
-import * as AWS from "@/AWS";
-import { SearchJob } from "@/AWS/BackupSearch";
-import * as Test from "@/Test/Alchemy";
 import * as backupsearch from "@distilled.cloud/aws/backupsearch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { SearchJob } from "@/AWS/BackupSearch";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probes: prove the distilled error union carries the
 // not-found tag this provider's read/reconcile/delete paths depend on. Runs
 // in every CI pass at near-zero cost, unlike the gated lifecycle below.
-test.provider(
-  "getSearchJob on a nonexistent identifier fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      // Identifiers must be UUID-shaped — anything else is a ValidationException.
-      const error = yield* Effect.flip(
-        backupsearch.getSearchJob({
-          SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getSearchJob on a nonexistent identifier fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    // Identifiers must be UUID-shaped — anything else is a ValidationException.
+    const error = yield* Effect.flip(
+      backupsearch.getSearchJob({
+        SearchJobIdentifier: "00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 test.provider(
@@ -86,16 +84,12 @@ const stopLeakedSearchJobs = Effect.gen(function* () {
     MaxResults: 25,
   });
   yield* Effect.forEach(
-    (page.SearchJobs ?? []).filter((job) =>
-      job.Name?.startsWith("start-S3-search-job"),
-    ),
+    (page.SearchJobs ?? []).filter((job) => job.Name?.startsWith("start-S3-search-job")),
     (job) =>
-      backupsearch
-        .stopSearchJob({ SearchJobIdentifier: job.SearchJobIdentifier! })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          Effect.catchTag("ConflictException", () => Effect.void),
-        ),
+      backupsearch.stopSearchJob({ SearchJobIdentifier: job.SearchJobIdentifier! }).pipe(
+        Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        Effect.catchTag("ConflictException", () => Effect.void),
+      ),
   );
 }).pipe(Effect.orDie);
 
@@ -178,9 +172,7 @@ test.provider.skipIf(!process.env.AWS_TEST_BACKUP_SEARCH)(
       const after = yield* backupsearch.getSearchJob({
         SearchJobIdentifier: replaced.searchJobIdentifier,
       });
-      expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(
-        after.Status,
-      );
+      expect(["STOPPING", "STOPPED", "COMPLETED", "FAILED"]).toContain(after.Status);
     }).pipe(
       // Crash-safe teardown: even if any assertion above fails mid-flight,
       // never leave a search job RUNNING. (Terminal records are un-deletable

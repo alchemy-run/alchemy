@@ -37,6 +37,4 @@ export interface GetMembers extends Binding.Service<
     ) => Effect.Effect<detective.GetMembersResponse, detective.GetMembersError>
   >
 > {}
-export const GetMembers = Binding.Service<GetMembers>(
-  "AWS.Detective.GetMembers",
-);
+export const GetMembers = Binding.Service<GetMembers>("AWS.Detective.GetMembers");

@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment.ts";
-import { Alias, Key } from "@/AWS/KMS";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as KMS from "@distilled.cloud/aws/kms";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
+import { Alias, Key } from "@/AWS/KMS";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -327,19 +327,11 @@ describe("AWS.KMS.Key", () => {
   );
 
   class AliasStillExists extends Data.TaggedError("AliasStillExists") {}
-  class KeyNotPendingDeletion extends Data.TaggedError(
-    "KeyNotPendingDeletion",
-  ) {}
-  class ProviderListNotConverged extends Data.TaggedError(
-    "ProviderListNotConverged",
-  ) {}
-  class KeyMetadataNotConverged extends Data.TaggedError(
-    "KeyMetadataNotConverged",
-  ) {}
+  class KeyNotPendingDeletion extends Data.TaggedError("KeyNotPendingDeletion") {}
+  class ProviderListNotConverged extends Data.TaggedError("ProviderListNotConverged") {}
+  class KeyMetadataNotConverged extends Data.TaggedError("KeyMetadataNotConverged") {}
   class KeyTagsNotConverged extends Data.TaggedError("KeyTagsNotConverged") {}
-  class AliasTargetNotConverged extends Data.TaggedError(
-    "AliasTargetNotConverged",
-  ) {}
+  class AliasTargetNotConverged extends Data.TaggedError("AliasTargetNotConverged") {}
 
   const assertKeyMetadata = Effect.fn(function* ({
     description,
@@ -352,10 +344,7 @@ describe("AWS.KMS.Key", () => {
   }) {
     yield* Effect.gen(function* () {
       const key = yield* KMS.describeKey({ KeyId: keyId });
-      if (
-        key.KeyMetadata!.Description !== description ||
-        key.KeyMetadata!.Enabled !== enabled
-      ) {
+      if (key.KeyMetadata!.Description !== description || key.KeyMetadata!.Enabled !== enabled) {
         return yield* Effect.fail(new KeyMetadataNotConverged());
       }
     }).pipe(
@@ -375,9 +364,7 @@ describe("AWS.KMS.Key", () => {
   }) {
     yield* Effect.gen(function* () {
       const observed = yield* listTags(keyId);
-      if (
-        !Object.entries(tags).every(([name, value]) => observed[name] === value)
-      ) {
+      if (!Object.entries(tags).every(([name, value]) => observed[name] === value)) {
         return yield* Effect.fail(new KeyTagsNotConverged());
       }
     }).pipe(
@@ -469,8 +456,7 @@ describe("AWS.KMS.Key", () => {
     // out, proving the Duration→days conversion round-trips through
     // scheduleKeyDeletion.
     const now = yield* Effect.sync(() => Date.now());
-    const windowDays =
-      (metadata.DeletionDate!.getTime() - now) / (24 * 60 * 60 * 1000);
+    const windowDays = (metadata.DeletionDate!.getTime() - now) / (24 * 60 * 60 * 1000);
     expect(windowDays).toBeGreaterThan(6);
     expect(windowDays).toBeLessThanOrEqual(7.1);
   });
@@ -478,9 +464,7 @@ describe("AWS.KMS.Key", () => {
   const getAlias = Effect.fn(function* (aliasName: string) {
     const aliases = yield* KMS.listAliases.pages({}).pipe(
       Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.Aliases ?? []),
-      ),
+      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Aliases ?? [])),
     );
 
     return aliases.find((alias) => alias.AliasName === aliasName);
@@ -489,9 +473,7 @@ describe("AWS.KMS.Key", () => {
   const listTags = Effect.fn(function* (keyId: string) {
     const tags = yield* KMS.listResourceTags.pages({ KeyId: keyId }).pipe(
       Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.from(chunk).flatMap((page) => page.Tags ?? []),
-      ),
+      Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Tags ?? [])),
     );
 
     return Object.fromEntries(tags.map((tag) => [tag.TagKey, tag.TagValue]));

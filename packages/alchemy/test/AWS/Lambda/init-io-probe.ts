@@ -1,19 +1,18 @@
-import * as AWS from "@/AWS/index.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS/index.ts";
 
 /**
  * A service whose Layer performs real async I/O during the sandbox's init
  * (cold start) — the "fetch a value once and cache it for every
  * invocation" pattern.
  */
-class TraceConfig extends Context.Service<
-  TraceConfig,
-  { trace: string; nonce: string }
->()("InitIO.TraceConfig") {}
+class TraceConfig extends Context.Service<TraceConfig, { trace: string; nonce: string }>()(
+  "InitIO.TraceConfig",
+) {}
 
 const TraceConfigLive = Layer.effect(
   TraceConfig,
@@ -21,13 +20,10 @@ const TraceConfigLive = Layer.effect(
     // Counted per sandbox so every response can assert the layer's I/O ran
     // exactly once no matter how many invocations the sandbox has served.
     yield* Effect.sync(() => {
-      (globalThis as any).__initFetches =
-        ((globalThis as any).__initFetches ?? 0) + 1;
+      (globalThis as any).__initFetches = ((globalThis as any).__initFetches ?? 0) + 1;
     });
     const client = yield* HttpClient.HttpClient;
-    const response = yield* client.get(
-      "https://www.cloudflare.com/cdn-cgi/trace",
-    );
+    const response = yield* client.get("https://www.cloudflare.com/cdn-cgi/trace");
     const trace = yield* response.text;
     return { trace, nonce: crypto.randomUUID() };
   }).pipe(

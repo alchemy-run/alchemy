@@ -43,15 +43,12 @@
     "floci:build": "docker build -t floci:dev -f submodules/floci/docker/Dockerfile submodules/floci",
     "floci:build:native": "docker build -t floci:dev -f submodules/floci/docker/Dockerfile.native submodules/floci",
     "floci:dev": "cd submodules/floci && mvn quarkus:dev",
-    "format": "oxfmt ./packages ./website",
-    "format:check": "bun run format ./packages ./website -- --check",
     "install:clean": "rm -rf node_modules examples/**/node_modules alchemy/node_modules && pnpm install",
     "lint:providers": "bun scripts/lint-providers.ts",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "logs:otel:prod": "bun logs:otel --profile prod --stage prod",
     "nuke": "bash scripts/nuke.sh",
     "nuke:local": "bash scripts/nuke-local.sh",
-    "prepare": "husky && effect-tsgo patch && bun build:cloudflare-packages",
     "publish:packages": "pnpm publish --recursive --filter './packages/*' --access public",
     "setup": "effect-tsgo patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
@@ -62,12 +59,17 @@
     "test:dev": "cd ./examples/dev-stress && bun test",
     "test:examples": "bun scripts/test-examples.ts",
     "typecheck:cloudflare-packages": "turbo run typecheck --filter=@alchemy.run/cloudflare-runtime --filter=@alchemy.run/frontend-frameworks --filter=@alchemy.run/cloudflare-test-tools",
-    "validate:publish-packages": "bun scripts/validate-publish-packages.ts"
+    "validate:publish-packages": "bun scripts/validate-publish-packages.ts",
+    "prepare:hooks": "husky",
+    "prepare:patch": "effect-tsgo patch --oxlint --no-typescript",
+    "prepare": "pnpm prepare:hooks && pnpm prepare:patch && pnpm build:cloudflare-packages",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint -c oxlint.config.ts"
   },
   "devDependencies": {
     "@alchemy.run/pkg": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
-    "@effect/language-service": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/tsgo": "catalog:",
@@ -79,11 +81,11 @@
     "husky": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
     "typescript-api": "catalog:"
   },
-  "packageManager": "pnpm@11.25.0",
   "devEngines": {
     "runtime": [
       {
@@ -97,5 +99,6 @@
         "onFail": "warn"
       }
     ]
-  }
+  },
+  "packageManager": "pnpm@11.25.0"
 }

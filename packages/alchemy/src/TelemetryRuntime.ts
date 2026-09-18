@@ -46,11 +46,7 @@ const readBoundValue = (key: string): Effect.Effect<unknown> =>
 const readBound = (key: string): Effect.Effect<string | undefined> =>
   readBoundValue(key).pipe(
     Effect.map((inner) =>
-      inner === undefined
-        ? undefined
-        : typeof inner === "string"
-          ? inner
-          : String(inner),
+      inner === undefined ? undefined : typeof inner === "string" ? inner : String(inner),
     ),
   );
 
@@ -87,9 +83,7 @@ const defaultResource = Effect.gen(function* () {
  * Parse the OpenTelemetry `OTEL_EXPORTER_OTLP_HEADERS` format:
  * `key1=value1,key2=value2` with URL-encoded values.
  */
-const parseOtlpHeaders = (
-  raw: string | undefined,
-): Record<string, string> | undefined => {
+const parseOtlpHeaders = (raw: string | undefined): Record<string, string> | undefined => {
   if (raw === undefined || raw === "") {
     return undefined;
   }
@@ -218,15 +212,11 @@ const fanoutClient = (
               result.success.status >= 200 &&
               result.success.status < 300,
           );
-          const anySuccess =
-            healthy ?? results.find((result) => Result.isSuccess(result));
+          const anySuccess = healthy ?? results.find((result) => Result.isSuccess(result));
           if (anySuccess !== undefined && Result.isSuccess(anySuccess)) {
             for (const result of results) {
               if (result !== anySuccess && Result.isFailure(result)) {
-                yield* Effect.logDebug(
-                  "telemetry destination failed",
-                  result.failure,
-                );
+                yield* Effect.logDebug("telemetry destination failed", result.failure);
               }
             }
             return anySuccess.success;
@@ -240,9 +230,7 @@ const fanoutClient = (
     }),
   );
 
-const makeExporterLayer = (options?: {
-  exportInterval?: Duration.Input;
-}): TelemetryLayer =>
+const makeExporterLayer = (options?: { exportInterval?: Duration.Input }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
       // Depending on the secret/plain packing path, the bound list arrives
@@ -251,9 +239,7 @@ const makeExporterLayer = (options?: {
       const bound: ResolvedDestination[] = Array.isArray(rawList)
         ? (rawList as ResolvedDestination[])
         : typeof rawList === "string" && rawList !== ""
-          ? yield* Effect.try(
-              () => JSON.parse(rawList) as ResolvedDestination[],
-            )
+          ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[])
           : [];
       // The standard OTEL_* env vars form an implicit extra destination.
       const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
@@ -317,10 +303,9 @@ const makeExporterLayer = (options?: {
       );
     }).pipe(
       Effect.catchCause((cause) =>
-        Effect.logWarning(
-          "Invalid telemetry configuration; telemetry disabled",
-          cause,
-        ).pipe(Effect.as(Layer.empty)),
+        Effect.logWarning("Invalid telemetry configuration; telemetry disabled", cause).pipe(
+          Effect.as(Layer.empty),
+        ),
       ),
     ),
   );
@@ -359,12 +344,9 @@ const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
  * Provide it via {@link layerOtlp} / {@link layer} rather than directly —
  * see the module documentation.
  */
-export const Telemetry = Context.Reference<TelemetryLayer>(
-  "alchemy/Telemetry",
-  {
-    defaultValue: () => fromBoundConfig,
-  },
-);
+export const Telemetry = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
+  defaultValue: () => fromBoundConfig,
+});
 
 const reference = Telemetry;
 
@@ -407,9 +389,7 @@ export const buildEventTelemetry = (
     );
   }).pipe(
     Effect.catchCause((cause) =>
-      Effect.logWarning("Failed to build telemetry layer", cause).pipe(
-        Effect.as(Context.empty()),
-      ),
+      Effect.logWarning("Failed to build telemetry layer", cause).pipe(Effect.as(Context.empty())),
     ),
   ) as Effect.Effect<Context.Context<never>>;
 
@@ -430,9 +410,7 @@ export const buildEventTelemetry = (
  */
 export const provideProcessTelemetry =
   (runtimeContext?: { telemetry?: TelemetryLayer | undefined }) =>
-  <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E, R | Scope.Scope> =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R | Scope.Scope> =>
     Effect.gen(function* () {
       const context = yield* Effect.context<never>();
       const scope = yield* Effect.scope;

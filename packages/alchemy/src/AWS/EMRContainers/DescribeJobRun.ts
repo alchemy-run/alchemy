@@ -42,6 +42,4 @@ export interface DescribeJobRun extends Binding.Service<
     ) => Effect.Effect<emrc.DescribeJobRunResponse, emrc.DescribeJobRunError>
   >
 > {}
-export const DescribeJobRun = Binding.Service<DescribeJobRun>(
-  "AWS.EMRContainers.DescribeJobRun",
-);
+export const DescribeJobRun = Binding.Service<DescribeJobRun>("AWS.EMRContainers.DescribeJobRun");

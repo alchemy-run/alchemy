@@ -1,11 +1,7 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
-import type {
-  PrometheusApiError,
-  PrometheusSeries,
-  PrometheusTime,
-} from "./PrometheusTypes.ts";
+import type { PrometheusApiError, PrometheusSeries, PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
 export interface GetSeriesRequest {
@@ -40,10 +36,7 @@ export interface GetSeries extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetSeriesRequest,
-    ) => Effect.Effect<
-      PrometheusSeries[],
-      PrometheusApiError | Credentials.CredentialsError
-    >
+    ) => Effect.Effect<PrometheusSeries[], PrometheusApiError | Credentials.CredentialsError>
   >
 > {}
 export const GetSeries = Binding.Service<GetSeries>("AWS.AMP.GetSeries");

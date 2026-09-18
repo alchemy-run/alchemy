@@ -1,9 +1,9 @@
-import * as Fly from "@/Fly";
-import * as Drizzle from "@/Drizzle/Postgres.ts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Drizzle from "@/Drizzle/Postgres.ts";
+import * as Fly from "@/Fly";
 
 export const POSTGRES_PORT = 3000;
 
@@ -55,10 +55,7 @@ export default class PostgresApi extends Fly.Service<PostgresApi>()(
           return yield* HttpServerResponse.json(
             {
               ok: false,
-              error:
-                error instanceof Error
-                  ? `${error.name}: ${error.message}`
-                  : String(error),
+              error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
             },
             { status: 500 },
           );

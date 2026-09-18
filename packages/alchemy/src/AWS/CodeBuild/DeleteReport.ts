@@ -22,11 +22,7 @@ export interface DeleteReport extends Binding.Service<
   <G extends ReportGroup>(
     reportGroup: G,
   ) => Effect.Effect<
-    (
-      request: SVC.DeleteReportInput,
-    ) => Effect.Effect<SVC.DeleteReportOutput, SVC.DeleteReportError>
+    (request: SVC.DeleteReportInput) => Effect.Effect<SVC.DeleteReportOutput, SVC.DeleteReportError>
   >
 > {}
-export const DeleteReport = Binding.Service<DeleteReport>(
-  "AWS.CodeBuild.DeleteReport",
-);
+export const DeleteReport = Binding.Service<DeleteReport>("AWS.CodeBuild.DeleteReport");

@@ -1,14 +1,14 @@
+import * as glue from "@distilled.cloud/aws/glue";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Crawler, Database } from "@/AWS/Glue";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
-import * as glue from "@distilled.cloud/aws/glue";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
 import * as Output from "@/Output";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,9 +49,7 @@ test.provider("create, update, delete Glue crawler definition", (stack) =>
           role: role.roleArn,
           databaseName: database.databaseName,
           targets: {
-            s3Targets: [
-              { path: Output.interpolate`s3://${bucket.bucketName}/data/` },
-            ],
+            s3Targets: [{ path: Output.interpolate`s3://${bucket.bucketName}/data/` }],
           },
           tablePrefix: "raw_",
           tags: { Environment: "test" },
@@ -61,9 +59,7 @@ test.provider("create, update, delete Glue crawler definition", (stack) =>
     );
 
     expect(created.crawler.crawlerName).toBeDefined();
-    expect(created.crawler.crawlerArn).toContain(
-      `:crawler/${created.crawler.crawlerName}`,
-    );
+    expect(created.crawler.crawlerArn).toContain(`:crawler/${created.crawler.crawlerName}`);
 
     // out-of-band verification
     const observed = yield* getCrawler(created.crawler.crawlerName);
@@ -92,9 +88,7 @@ test.provider("create, update, delete Glue crawler definition", (stack) =>
           databaseName: database.databaseName,
           description: "crawls the events prefix",
           targets: {
-            s3Targets: [
-              { path: Output.interpolate`s3://${bucket.bucketName}/data/` },
-            ],
+            s3Targets: [{ path: Output.interpolate`s3://${bucket.bucketName}/data/` }],
           },
           tablePrefix: "raw_",
           schedule: "cron(0 12 * * ? *)",
@@ -110,12 +104,8 @@ test.provider("create, update, delete Glue crawler definition", (stack) =>
 
     const reobserved = yield* getCrawler(created.crawler.crawlerName);
     expect(reobserved?.Description).toEqual("crawls the events prefix");
-    expect(reobserved?.Schedule?.ScheduleExpression).toEqual(
-      "cron(0 12 * * ? *)",
-    );
-    expect(reobserved?.SchemaChangePolicy?.UpdateBehavior).toEqual(
-      "UPDATE_IN_DATABASE",
-    );
+    expect(reobserved?.Schedule?.ScheduleExpression).toEqual("cron(0 12 * * ? *)");
+    expect(reobserved?.SchemaChangePolicy?.UpdateBehavior).toEqual("UPDATE_IN_DATABASE");
 
     yield* stack.destroy();
     const gone = yield* getCrawler(created.crawler.crawlerName);
@@ -141,9 +131,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
             role: role.roleArn,
             databaseName: database.databaseName,
             targets: {
-              s3Targets: [
-                { path: Output.interpolate`s3://${bucket.bucketName}/data/` },
-              ],
+              s3Targets: [{ path: Output.interpolate`s3://${bucket.bucketName}/data/` }],
             },
           });
           return { database, bucket, crawler };
@@ -164,8 +152,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       const finalState = yield* getCrawler(deployed.crawler.crawlerName).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("15 seconds"),
-          until: (c) =>
-            c?.State === "READY" && c?.LastCrawl?.Status !== undefined,
+          until: (c) => c?.State === "READY" && c?.LastCrawl?.Status !== undefined,
           times: 20,
         }),
       );

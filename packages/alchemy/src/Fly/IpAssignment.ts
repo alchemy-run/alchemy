@@ -224,25 +224,17 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * @resource
  */
 export const IpAssignment: typeof IpAssignmentResource = Object.assign(
-  (
-    id: string,
-    props:
-      | IpAssignmentProps
-      | Effect.Effect<IpAssignmentProps, never, Providers>,
-  ) => IpAssignmentResource(id, resolveIpAssignmentProps(props)),
+  (id: string, props: IpAssignmentProps | Effect.Effect<IpAssignmentProps, never, Providers>) =>
+    IpAssignmentResource(id, resolveIpAssignmentProps(props)),
   IpAssignmentResource,
 );
 
-export class IpAssignmentNotCreated extends Data.TaggedError(
-  "Fly.IpAssignmentNotCreated",
-)<{
+export class IpAssignmentNotCreated extends Data.TaggedError("Fly.IpAssignmentNotCreated")<{
   appName: string;
   type: IpAssignmentType;
 }> {}
 
-export class IpAssignmentAppMissing extends Data.TaggedError(
-  "Fly.IpAssignmentAppMissing",
-)<{
+export class IpAssignmentAppMissing extends Data.TaggedError("Fly.IpAssignmentAppMissing")<{
   type: IpAssignmentType;
 }> {}
 
@@ -261,10 +253,7 @@ const appNameOf = (value: unknown): string | undefined => {
 const asType = (value: string | undefined): IpAssignmentType | undefined =>
   value === "v4" || value === "v6" || value === "shared_v4" ? value : undefined;
 
-const inferType = (
-  assignment: FlyIPAssignment,
-  fallback?: IpAssignmentType,
-): IpAssignmentType => {
+const inferType = (assignment: FlyIPAssignment, fallback?: IpAssignmentType): IpAssignmentType => {
   const wire = asType(assignment.type);
   if (wire !== undefined) return wire;
   if (assignment.shared === true) return "shared_v4";
@@ -299,10 +288,7 @@ const matchesDesired = (
   if (news.region !== undefined && assignment.region !== news.region) {
     return false;
   }
-  if (
-    news.serviceName !== undefined &&
-    assignment.service_name !== news.serviceName
-  ) {
+  if (news.serviceName !== undefined && assignment.service_name !== news.serviceName) {
     return false;
   }
   return true;
@@ -311,15 +297,11 @@ const matchesDesired = (
 const listAssignments = (appName: string) =>
   machines.listAppIPAssignments({ app_name: appName }).pipe(
     Effect.map((res) => res.ips ?? []),
-    Effect.catchTag(["NotFound", "Forbidden"], () =>
-      Effect.succeed([] as FlyIPAssignment[]),
-    ),
+    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([] as FlyIPAssignment[])),
   );
 
 const findByIp = (appName: string, ip: string) =>
-  listAssignments(appName).pipe(
-    Effect.map((ips) => ips.find((item) => item.ip === ip)),
-  );
+  listAssignments(appName).pipe(Effect.map((ips) => ips.find((item) => item.ip === ip)));
 
 const findMatching = (
   appName: string,
@@ -350,22 +332,12 @@ export const IpAssignmentProvider = () =>
       const appName = appNameOf(news.app);
       const appChanged = appName !== undefined && appName !== output.appName;
       const typeChanged = news.type !== output.type;
-      const regionChanged =
-        news.region !== undefined && news.region !== output.region;
+      const regionChanged = news.region !== undefined && news.region !== output.region;
       const serviceChanged =
-        news.serviceName !== undefined &&
-        news.serviceName !== output.serviceName;
+        news.serviceName !== undefined && news.serviceName !== output.serviceName;
       const networkChanged =
-        olds !== undefined &&
-        news.network !== undefined &&
-        news.network !== olds.network;
-      if (
-        appChanged ||
-        typeChanged ||
-        regionChanged ||
-        serviceChanged ||
-        networkChanged
-      ) {
+        olds !== undefined && news.network !== undefined && news.network !== olds.network;
+      if (appChanged || typeChanged || regionChanged || serviceChanged || networkChanged) {
         return { action: "replace" as const };
       }
       return undefined;

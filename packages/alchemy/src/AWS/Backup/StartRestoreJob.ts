@@ -7,10 +7,7 @@ import type { Role } from "../IAM/Role.ts";
  * `StartRestoreJob` request with `IamRoleArn` defaulting to the bound
  * restore role.
  */
-export interface StartRestoreJobRequest extends Omit<
-  backup.StartRestoreJobInput,
-  "IamRoleArn"
-> {
+export interface StartRestoreJobRequest extends Omit<backup.StartRestoreJobInput, "IamRoleArn"> {
   /**
    * IAM role AWS Backup assumes to create the restored resource.
    * @default the restore role bound via `StartRestoreJob(role)`
@@ -51,12 +48,7 @@ export interface StartRestoreJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request: StartRestoreJobRequest,
-    ) => Effect.Effect<
-      backup.StartRestoreJobOutput,
-      backup.StartRestoreJobError
-    >
+    ) => Effect.Effect<backup.StartRestoreJobOutput, backup.StartRestoreJobError>
   >
 > {}
-export const StartRestoreJob = Binding.Service<StartRestoreJob>(
-  "AWS.Backup.StartRestoreJob",
-);
+export const StartRestoreJob = Binding.Service<StartRestoreJob>("AWS.Backup.StartRestoreJob");

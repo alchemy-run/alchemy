@@ -1,3 +1,10 @@
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as AWS from "@/AWS";
 import {
   AutoScalingGroup,
@@ -24,13 +31,6 @@ import {
 } from "@/AWS/AutoScaling";
 import { amazonLinux2023 } from "@/AWS/EC2";
 import * as Output from "@/Output";
-import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { getAutoScalingTestSubnetId } from "../TestNetwork.ts";
 
 export const bindingsAsgName = "alchemy-test-asg-bindings-asg";
@@ -49,18 +49,15 @@ export class AsgBindingsFunction extends AWS.Lambda.Function<AWS.Lambda.Function
  * deploy time only, so this composition is safe to re-execute inside the
  * deployed Lambda without runtime guards.
  */
-export class BindingsFleet extends Context.Service<
-  BindingsFleet,
-  { group: AutoScalingGroup }
->()("AutoScalingBindingsFleet") {}
+export class BindingsFleet extends Context.Service<BindingsFleet, { group: AutoScalingGroup }>()(
+  "AutoScalingBindingsFleet",
+) {}
 
 export const BindingsFleetLive = Layer.effect(
   BindingsFleet,
   Effect.gen(function* () {
     const imageId = amazonLinux2023();
-    const subnetId = Output.fromEffect(
-      getAutoScalingTestSubnetId.pipe(Effect.orDie),
-    );
+    const subnetId = Output.fromEffect(getAutoScalingTestSubnetId.pipe(Effect.orDie));
 
     const template = yield* LaunchTemplate("BindingsTemplate", {
       imageId,
@@ -125,26 +122,17 @@ export default AsgBindingsFunction.make(
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            name:
-              result._tag === "Success"
-                ? result.success?.AutoScalingGroupName
-                : undefined,
-            maxSize:
-              result._tag === "Success" ? result.success?.MaxSize : undefined,
+            name: result._tag === "Success" ? result.success?.AutoScalingGroupName : undefined,
+            maxSize: result._tag === "Success" ? result.success?.MaxSize : undefined,
           });
         }
 
         if (request.method === "GET" && pathname === "/activities") {
-          const result = yield* describeActivities({ MaxRecords: 10 }).pipe(
-            Effect.result,
-          );
+          const result = yield* describeActivities({ MaxRecords: 10 }).pipe(Effect.result);
           return yield* HttpServerResponse.json({
             ok: result._tag === "Success",
             tag: result._tag === "Failure" ? result.failure._tag : "Success",
-            count:
-              result._tag === "Success"
-                ? (result.success.Activities ?? []).length
-                : undefined,
+            count: result._tag === "Success" ? (result.success.Activities ?? []).length : undefined,
           });
         }
 
@@ -237,8 +225,7 @@ export default AsgBindingsFunction.make(
         // describe lists it, cancel tolerates the already-finished refresh.
         if (request.method === "POST" && pathname === "/refresh") {
           const started = yield* refresh.start().pipe(Effect.result);
-          const startTag =
-            started._tag === "Failure" ? started.failure._tag : "Success";
+          const startTag = started._tag === "Failure" ? started.failure._tag : "Success";
 
           const described = yield* refresh.describe().pipe(Effect.result);
           const describeOk = described._tag === "Success";
@@ -253,8 +240,7 @@ export default AsgBindingsFunction.make(
             ),
             Effect.result,
           );
-          const cancelTag =
-            cancelled._tag === "Failure" ? cancelled.failure._tag : "Success";
+          const cancelTag = cancelled._tag === "Failure" ? cancelled.failure._tag : "Success";
 
           return yield* HttpServerResponse.json({
             startTag,

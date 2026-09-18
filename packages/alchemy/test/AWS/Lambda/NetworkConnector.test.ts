@@ -1,13 +1,13 @@
+import * as EC2 from "@distilled.cloud/aws/ec2";
+import * as lambdacore from "@distilled.cloud/aws/lambda-core";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { SecurityGroup, Subnet, Vpc } from "@/AWS/EC2";
 import { Role } from "@/AWS/IAM";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as EC2 from "@distilled.cloud/aws/ec2";
-import * as lambdacore from "@distilled.cloud/aws/lambda-core";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -25,9 +25,7 @@ test.provider.skipIf(!process.env.LAMBDA_TEST_NETWORK_CONNECTOR)(
       yield* stack.destroy();
 
       const azResult = yield* EC2.describeAvailabilityZones({});
-      const az = azResult.AvailabilityZones?.find(
-        (z) => z.State === "available",
-      )?.ZoneName!;
+      const az = azResult.AvailabilityZones?.find((z) => z.State === "available")?.ZoneName!;
 
       const infra = (networkProtocol: lambdacore.NetworkProtocol) =>
         Effect.gen(function* () {
@@ -97,9 +95,7 @@ test.provider.skipIf(!process.env.LAMBDA_TEST_NETWORK_CONNECTOR)(
       // --- create ---
       const created = yield* stack.deploy(infra("IPv4"));
       expect(created.connector.state).toBe("ACTIVE");
-      expect(created.connector.networkConnectorArn).toContain(
-        "network-connector",
-      );
+      expect(created.connector.networkConnectorArn).toContain("network-connector");
 
       const fetched = yield* lambdacore.getNetworkConnector({
         Identifier: created.connector.networkConnectorId,
@@ -108,21 +104,15 @@ test.provider.skipIf(!process.env.LAMBDA_TEST_NETWORK_CONNECTOR)(
 
       // --- update (network protocol) ---
       const updated = yield* stack.deploy(infra("DualStack"));
-      expect(updated.connector.networkConnectorArn).toBe(
-        created.connector.networkConnectorArn,
-      );
+      expect(updated.connector.networkConnectorArn).toBe(created.connector.networkConnectorArn);
       expect(updated.connector.networkProtocol).toBe("DualStack");
 
       // --- list ---
-      const provider = yield* Provider.findProvider(
-        AWS.Lambda.NetworkConnector,
-      );
+      const provider = yield* Provider.findProvider(AWS.Lambda.NetworkConnector);
       const all = yield* provider.list();
-      expect(
-        all.some(
-          (c) => c.networkConnectorId === created.connector.networkConnectorId,
-        ),
-      ).toBe(true);
+      expect(all.some((c) => c.networkConnectorId === created.connector.networkConnectorId)).toBe(
+        true,
+      );
 
       // --- delete ---
       yield* stack.destroy();
@@ -130,11 +120,7 @@ test.provider.skipIf(!process.env.LAMBDA_TEST_NETWORK_CONNECTOR)(
         .getNetworkConnector({
           Identifier: created.connector.networkConnectorId,
         })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       expect(afterDestroy).toBeUndefined();
     }).pipe(
       Effect.tap(() => stack.destroy()),

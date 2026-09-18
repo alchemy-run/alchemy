@@ -37,10 +37,7 @@ export interface ExportQAppSessionData extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExportQAppSessionDataRequest,
-    ) => Effect.Effect<
-      qapps.ExportQAppSessionDataOutput,
-      qapps.ExportQAppSessionDataError
-    >
+    ) => Effect.Effect<qapps.ExportQAppSessionDataOutput, qapps.ExportQAppSessionDataError>
   >
 > {}
 

@@ -1,9 +1,9 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Result from "effect/Result";
+import * as Bundle from "@/Bundle/Bundle";
 import {
   isolatedProject,
   materializeIsolatedProject,
@@ -50,10 +50,7 @@ layer(NodeServices.layer)("generated entry bootstraps", (it) => {
       `alchemy/Runtime/Bootstrap/${name} bundles from an isolated project`,
       () =>
         Effect.gen(function* () {
-          const project = isolatedProject(
-            `bootstrap-${name.toLowerCase()}`,
-            import.meta.filename,
-          );
+          const project = isolatedProject(`bootstrap-${name.toLowerCase()}`, import.meta.filename);
           yield* materializeIsolatedProject(project);
           const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
           // The exact production condition sets: bun modules resolve
@@ -89,9 +86,7 @@ export default bootstrap;
             expect(bareImports(result)).toEqual([]);
             expect(
               result.files.some(
-                (file) =>
-                  typeof file.content === "string" &&
-                  file.content.includes("bootstrap"),
+                (file) => typeof file.content === "string" && file.content.includes("bootstrap"),
               ),
             ).toBe(true);
           } finally {
@@ -109,10 +104,7 @@ export default bootstrap;
   it.effect("an unresolvable import in a generated entry fails the build", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const project = isolatedProject(
-        "bootstrap-control",
-        import.meta.filename,
-      );
+      const project = isolatedProject("bootstrap-control", import.meta.filename);
       yield* materializeIsolatedProject(project);
       yield* fs.remove(`${project.dir}/node_modules`, { recursive: true });
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -152,10 +144,7 @@ export default bootstrap;
   // the guard leaves them alone.
   it.effect("a declared external in a generated entry is not an error", () =>
     Effect.gen(function* () {
-      const project = isolatedProject(
-        "bootstrap-external",
-        import.meta.filename,
-      );
+      const project = isolatedProject("bootstrap-external", import.meta.filename);
       yield* materializeIsolatedProject(project);
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       try {
@@ -176,9 +165,7 @@ export default Database;
           },
           { format: "esm" },
         );
-        expect(bareImports(result)).toEqual([
-          'import { Database } from "bun:sqlite";',
-        ]);
+        expect(bareImports(result)).toEqual(['import { Database } from "bun:sqlite";']);
       } finally {
         yield* removeIsolatedProject(project);
       }

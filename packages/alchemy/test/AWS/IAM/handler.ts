@@ -1,5 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,12 +5,12 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class IamTestFunction extends Lambda.Function<Lambda.Function>()(
-  "IamTestFunction",
-) {}
+export class IamTestFunction extends Lambda.Function<Lambda.Function>()("IamTestFunction") {}
 
 /**
  * A permissive-but-harmless custom policy used by the simulator and
@@ -70,30 +68,24 @@ export default IamTestFunction.make(
 
     // --- account-audit bindings ---
     const getAccountSummary = yield* IAM.GetAccountSummary();
-    const getAccountAuthorizationDetails =
-      yield* IAM.GetAccountAuthorizationDetails();
+    const getAccountAuthorizationDetails = yield* IAM.GetAccountAuthorizationDetails();
 
     // --- credential report ---
     const generateCredentialReport = yield* IAM.GenerateCredentialReport();
     const getCredentialReport = yield* IAM.GetCredentialReport();
 
     // --- access advisor ---
-    const generateServiceLastAccessedDetails =
-      yield* IAM.GenerateServiceLastAccessedDetails();
-    const getServiceLastAccessedDetails =
-      yield* IAM.GetServiceLastAccessedDetails();
+    const generateServiceLastAccessedDetails = yield* IAM.GenerateServiceLastAccessedDetails();
+    const getServiceLastAccessedDetails = yield* IAM.GetServiceLastAccessedDetails();
     const getServiceLastAccessedDetailsWithEntities =
       yield* IAM.GetServiceLastAccessedDetailsWithEntities();
-    const listPoliciesGrantingServiceAccess =
-      yield* IAM.ListPoliciesGrantingServiceAccess();
+    const listPoliciesGrantingServiceAccess = yield* IAM.ListPoliciesGrantingServiceAccess();
 
     // --- policy simulation ---
     const simulateCustomPolicy = yield* IAM.SimulateCustomPolicy();
     const simulatePrincipalPolicy = yield* IAM.SimulatePrincipalPolicy();
-    const getContextKeysForCustomPolicy =
-      yield* IAM.GetContextKeysForCustomPolicy();
-    const getContextKeysForPrincipalPolicy =
-      yield* IAM.GetContextKeysForPrincipalPolicy();
+    const getContextKeysForCustomPolicy = yield* IAM.GetContextKeysForCustomPolicy();
+    const getContextKeysForPrincipalPolicy = yield* IAM.GetContextKeysForPrincipalPolicy();
 
     // --- access-key hygiene (scoped to the fixture's canonical AccessKey) ---
     const getAccessKeyLastUsed = yield* IAM.GetAccessKeyLastUsed(accessKey);
@@ -164,10 +156,7 @@ export default IamTestFunction.make(
               format: r.ReportFormat ?? null,
             })),
             Effect.catchTag(
-              [
-                "CredentialReportNotPresentException",
-                "CredentialReportNotReadyException",
-              ],
+              ["CredentialReportNotPresentException", "CredentialReportNotReadyException"],
               (e) => Effect.succeed({ tag: e._tag, bytes: 0, format: null }),
             ),
           );
@@ -200,12 +189,10 @@ export default IamTestFunction.make(
               entities: null,
             });
           }
-          const withEntities = yield* getServiceLastAccessedDetailsWithEntities(
-            {
-              JobId: JobId!,
-              ServiceNamespace: "s3",
-            },
-          );
+          const withEntities = yield* getServiceLastAccessedDetailsWithEntities({
+            JobId: JobId!,
+            ServiceNamespace: "s3",
+          });
           return yield* HttpServerResponse.json({
             status: details.JobStatus,
             services: (details.ServicesLastAccessed ?? []).length,
@@ -213,15 +200,11 @@ export default IamTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/policies-granting-access"
-        ) {
-          const { PoliciesGrantingServiceAccess } =
-            yield* listPoliciesGrantingServiceAccess({
-              Arn: yield* userArn,
-              ServiceNamespaces: ["s3"],
-            });
+        if (request.method === "GET" && pathname === "/policies-granting-access") {
+          const { PoliciesGrantingServiceAccess } = yield* listPoliciesGrantingServiceAccess({
+            Arn: yield* userArn,
+            ServiceNamespaces: ["s3"],
+          });
           const s3 = (PoliciesGrantingServiceAccess ?? []).find(
             (entry) => entry.ServiceNamespace === "s3",
           );
@@ -266,10 +249,7 @@ export default IamTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/context-keys-principal"
-        ) {
+        if (request.method === "GET" && pathname === "/context-keys-principal") {
           const { ContextKeyNames } = yield* getContextKeysForPrincipalPolicy({
             PolicySourceArn: yield* userArn,
           });

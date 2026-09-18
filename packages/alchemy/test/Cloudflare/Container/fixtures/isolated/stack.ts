@@ -1,6 +1,6 @@
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
-import * as Effect from "effect/Effect";
 import IsolatedContainerLive from "./container.ts";
 import Worker from "./worker.ts";
 

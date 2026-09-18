@@ -42,7 +42,6 @@ export interface UpdateCostAllocationTagsStatus extends Binding.Service<
   >
 > {}
 
-export const UpdateCostAllocationTagsStatus =
-  Binding.Service<UpdateCostAllocationTagsStatus>(
-    "AWS.CostExplorer.UpdateCostAllocationTagsStatus",
-  );
+export const UpdateCostAllocationTagsStatus = Binding.Service<UpdateCostAllocationTagsStatus>(
+  "AWS.CostExplorer.UpdateCostAllocationTagsStatus",
+);

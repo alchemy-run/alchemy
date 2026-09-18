@@ -1,17 +1,15 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RedshiftServerless from "@/AWS/RedshiftServerless";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RedshiftServerless from "@/AWS/RedshiftServerless";
 
 const main = path.resolve(import.meta.dirname, "snapshot-handler.ts");
 
-export class SnapshotFunction extends Lambda.Function<Lambda.Function>()(
-  "SnapshotFunction",
-) {}
+export class SnapshotFunction extends Lambda.Function<Lambda.Function>()("SnapshotFunction") {}
 
 /**
  * Exercises the snapshot/recovery-point bindings against a namespace only —
@@ -38,8 +36,7 @@ export default SnapshotFunction.make(
     const updateSnapshot = yield* RedshiftServerless.UpdateSnapshot();
     const deleteSnapshot = yield* RedshiftServerless.DeleteSnapshot();
     const listRecoveryPoints = yield* RedshiftServerless.ListRecoveryPoints();
-    const listTableRestoreStatus =
-      yield* RedshiftServerless.ListTableRestoreStatus();
+    const listTableRestoreStatus = yield* RedshiftServerless.ListTableRestoreStatus();
 
     return {
       fetch: Effect.gen(function* () {

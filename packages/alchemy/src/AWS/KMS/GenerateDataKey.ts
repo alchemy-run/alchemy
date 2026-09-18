@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GenerateDataKeyRequest extends Omit<
-  kms.GenerateDataKeyRequest,
-  "KeyId"
-> {}
+export interface GenerateDataKeyRequest extends Omit<kms.GenerateDataKeyRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GenerateDataKey`.
@@ -84,6 +81,4 @@ export interface GenerateDataKey extends Binding.Service<
   >
 > {}
 
-export const GenerateDataKey = Binding.Service<GenerateDataKey>(
-  "AWS.KMS.GenerateDataKey",
-);
+export const GenerateDataKey = Binding.Service<GenerateDataKey>("AWS.KMS.GenerateDataKey");

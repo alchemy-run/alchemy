@@ -33,10 +33,7 @@ export interface StartArchiveSearch extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<mm.StartArchiveSearchRequest, "ArchiveId">,
-    ) => Effect.Effect<
-      mm.StartArchiveSearchResponse,
-      mm.StartArchiveSearchError
-    >
+    ) => Effect.Effect<mm.StartArchiveSearchResponse, mm.StartArchiveSearchError>
   >
 > {}
 export const StartArchiveSearch = Binding.Service<StartArchiveSearch>(

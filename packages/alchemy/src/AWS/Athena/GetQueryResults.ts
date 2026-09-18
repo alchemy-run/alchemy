@@ -32,13 +32,8 @@ export interface GetQueryResults extends Binding.Service<
   ) => Effect.Effect<
     (
       request: athena.GetQueryResultsInput,
-    ) => Effect.Effect<
-      athena.GetQueryResultsOutput,
-      athena.GetQueryResultsError
-    >
+    ) => Effect.Effect<athena.GetQueryResultsOutput, athena.GetQueryResultsError>
   >
 > {}
 
-export const GetQueryResults = Binding.Service<GetQueryResults>(
-  "AWS.Athena.GetQueryResults",
-);
+export const GetQueryResults = Binding.Service<GetQueryResults>("AWS.Athena.GetQueryResults");

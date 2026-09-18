@@ -1,9 +1,3 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -12,16 +6,18 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const main = pathe.resolve(import.meta.dirname, "fixtures", "route-worker.ts");
 
@@ -38,9 +34,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -84,9 +78,7 @@ const purgeRoutes = (zoneId: string, pattern: string) =>
   listByPattern(zoneId, pattern).pipe(
     Effect.flatMap(
       Effect.forEach((r) =>
-        workers
-          .deleteRoute({ zoneId, routeId: r.id })
-          .pipe(Effect.catch(() => Effect.void)),
+        workers.deleteRoute({ zoneId, routeId: r.id }).pipe(Effect.catch(() => Effect.void)),
       ),
     ),
   );
@@ -202,15 +194,13 @@ test.provider(
 
       // Create the route out-of-band so the stack has no state of its own
       // for it — exactly the "the route already exists" scenario.
-      const pre = yield* workers
-        .createRoute({ zoneId, pattern: PATTERN_ADOPT })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
-          }),
-        );
+      const pre = yield* workers.createRoute({ zoneId, pattern: PATTERN_ADOPT }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
       expect(pre.id).toBeDefined();
 
       // Without `adopt`: routes carry no ownership markers, so the engine
@@ -283,9 +273,7 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Workers.WorkerRoute,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Workers.WorkerRoute);
       const all = yield* provider.list();
 
       expect(
@@ -309,9 +297,7 @@ test.provider(
  * Pull the {@link OwnedBySomeoneElse} value out of a Cause regardless of
  * whether the engine raised it as a typed failure or a defect.
  */
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -320,7 +306,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link SearchTablesByLFTags}.
  */
-export interface SearchTablesByLFTagsRequest
-  extends lf.SearchTablesByLFTagsRequest {}
+export interface SearchTablesByLFTagsRequest extends lf.SearchTablesByLFTagsRequest {}
 
 /**
  * Runtime binding for `lakeformation:SearchTablesByLFTags`.
@@ -34,10 +33,7 @@ export interface SearchTablesByLFTags extends Binding.Service<
   () => Effect.Effect<
     (
       request: SearchTablesByLFTagsRequest,
-    ) => Effect.Effect<
-      lf.SearchTablesByLFTagsResponse,
-      lf.SearchTablesByLFTagsError
-    >
+    ) => Effect.Effect<lf.SearchTablesByLFTagsResponse, lf.SearchTablesByLFTagsError>
   >
 > {}
 

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as mwaa from "@distilled.cloud/aws/mwaa";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -137,21 +137,14 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
                 {
                   Effect: "Allow",
                   Principal: {
-                    Service: [
-                      "airflow.amazonaws.com",
-                      "airflow-env.amazonaws.com",
-                    ],
+                    Service: ["airflow.amazonaws.com", "airflow-env.amazonaws.com"],
                   },
                   Action: ["sts:AssumeRole"],
                 },
               ],
             },
             inlinePolicies: {
-              "mwaa-execution": executionRolePolicy(
-                bucket.bucketArn,
-                region,
-                accountId,
-              ),
+              "mwaa-execution": executionRolePolicy(bucket.bucketArn, region, accountId),
             },
           });
           const environment = yield* AWS.MWAA.Environment("Airflow", {
@@ -200,22 +193,15 @@ const assertEnvironmentDeleted = (name: string) =>
   Effect.gen(function* () {
     const status = yield* mwaa.getEnvironment({ Name: name }).pipe(
       Effect.map((r) => r.Environment?.Status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETING") {
       return yield* Effect.fail(
-        new Error(
-          `MWAA environment '${name}' still exists (status: ${status})`,
-        ),
+        new Error(`MWAA environment '${name}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("15 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(20)]),
     }),
   );

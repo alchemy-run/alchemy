@@ -1,8 +1,8 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import * as Core from "@/Test/Core";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });
@@ -79,11 +79,7 @@ describe("test.provider scratch state durability", () => {
       expect(Core.defaultStage()).toBe(expected);
       const scratch = Core.scratchStack(options, NAME, FILE);
       expect(scratch.stage).toBe(expected);
-      const overridden = Core.scratchStack(
-        { ...options, stage: "custom" },
-        NAME,
-        FILE,
-      );
+      const overridden = Core.scratchStack({ ...options, stage: "custom" }, NAME, FILE);
       expect(overridden.stage).toBe("custom");
     }),
   );

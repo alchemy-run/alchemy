@@ -59,9 +59,7 @@ export const makeQueueBinding = <Client>(options: {
 
 /** Primitives shared by the Worker-binding producer clients. */
 export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
-  const raw = Effect.sync(
-    () => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!,
-  );
+  const raw = Effect.sync(() => (env as Record<string, runtime.Queue<unknown>>)[queue.LogicalId]!);
 
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, SendError> =>
     Effect.tryPromise({
@@ -73,9 +71,7 @@ export const makeQueueHelpers = (env: Record<string, any>, queue: Queue) => {
         }),
     });
 
-  const use = <T>(
-    fn: (raw: runtime.Queue<unknown>) => Promise<T>,
-  ): Effect.Effect<T, SendError> =>
+  const use = <T>(fn: (raw: runtime.Queue<unknown>) => Promise<T>): Effect.Effect<T, SendError> =>
     raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
   return { raw, use, tryPromise };

@@ -36,10 +36,7 @@ export interface DescribeKeyValueStore extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DescribeKeyValueStoreRequest,
-    ) => Effect.Effect<
-      kvs.DescribeKeyValueStoreResponse,
-      kvs.DescribeKeyValueStoreError
-    >
+    ) => Effect.Effect<kvs.DescribeKeyValueStoreResponse, kvs.DescribeKeyValueStoreError>
   >
 > {}
 

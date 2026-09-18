@@ -30,13 +30,8 @@ export interface ListMetrics extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListMetricsRequest,
-    ) => Effect.Effect<
-      cloudwatch.ListMetricsOutput,
-      cloudwatch.ListMetricsError
-    >
+    ) => Effect.Effect<cloudwatch.ListMetricsOutput, cloudwatch.ListMetricsError>
   >
 > {}
 
-export const ListMetrics = Binding.Service<ListMetrics>(
-  "AWS.CloudWatch.ListMetrics",
-);
+export const ListMetrics = Binding.Service<ListMetrics>("AWS.CloudWatch.ListMetrics");

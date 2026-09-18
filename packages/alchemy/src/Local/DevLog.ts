@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 /**
  * Per-resource dev log files.
  *
@@ -16,15 +17,14 @@
  * swallowed so it can never break dev startup.
  */
 import * as Clock from "effect/Clock";
-import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
-import { stripVTControlCharacters } from "node:util";
 
 const LOG_RETENTION = Duration.days(7);
 const LOG_RETENTION_GENERATIONS = 10;
@@ -49,15 +49,11 @@ const pruneDevLogs = (
     for (const entry of entries) {
       if (!entry.endsWith(".log")) continue;
       const file = path.join(dir, entry);
-      const info = yield* fs
-        .stat(file)
-        .pipe(Effect.orElseSucceed(() => undefined));
-      const mtime =
-        info === undefined ? undefined : Option.getOrUndefined(info.mtime);
+      const info = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined));
+      const mtime = info === undefined ? undefined : Option.getOrUndefined(info.mtime);
       if (mtime !== undefined) logs.push({ file, mtime: mtime.getTime() });
     }
-    const cutoff =
-      (yield* Clock.currentTimeMillis) - Duration.toMillis(LOG_RETENTION);
+    const cutoff = (yield* Clock.currentTimeMillis) - Duration.toMillis(LOG_RETENTION);
     logs.sort((a, b) => b.mtime - a.mtime);
     for (const [index, log] of logs.entries()) {
       if (index >= LOG_RETENTION_GENERATIONS - 1 || log.mtime < cutoff) {
@@ -74,8 +70,7 @@ const pruneDevLogs = (
 export const makeDevLogDirectory = Effect.gen(function* () {
   const path = yield* Path.Path;
   const { dotAlchemy } = yield* AlchemyContext;
-  return (...segments: ReadonlyArray<string>) =>
-    path.join(dotAlchemy, "log", ...segments);
+  return (...segments: ReadonlyArray<string>) => path.join(dotAlchemy, "log", ...segments);
 });
 
 /**
@@ -102,9 +97,7 @@ export const makeDevLogOpener = Effect.gen(function* () {
     const dir = devLogDirectory(...segments);
     yield* fs.makeDirectory(dir, { recursive: true });
     yield* pruneDevLogs(fs, path, dir);
-    const name = yield* Effect.sync(
-      () => `${new Date().toISOString().replaceAll(":", "-")}.log`,
-    );
+    const name = yield* Effect.sync(() => `${new Date().toISOString().replaceAll(":", "-")}.log`);
     const filePath = path.join(dir, name);
     const file = yield* fs.open(filePath, { flag: "a" });
     const queue = yield* Queue.make<Uint8Array>();
@@ -118,17 +111,11 @@ export const makeDevLogOpener = Effect.gen(function* () {
       /** Absolute path of this generation's log file. */
       path: filePath,
       write: (chunk: string): void => {
-        Queue.offerUnsafe(
-          queue,
-          encoder.encode(stripVTControlCharacters(chunk)),
-        );
+        Queue.offerUnsafe(queue, encoder.encode(stripVTControlCharacters(chunk)));
       },
       /** `write` + a trailing newline — for line-based sources. */
       writeLine: (line: string): void => {
-        Queue.offerUnsafe(
-          queue,
-          encoder.encode(`${stripVTControlCharacters(line)}\n`),
-        );
+        Queue.offerUnsafe(queue, encoder.encode(`${stripVTControlCharacters(line)}\n`));
       },
     };
   });

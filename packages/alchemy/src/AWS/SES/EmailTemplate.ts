@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -89,8 +84,7 @@ export const EmailTemplate = Resource<EmailTemplate>("AWS.SES.EmailTemplate");
 
 const toTagRecord = (
   tags: ReadonlyArray<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const templateArnOf = (region: string, accountId: string, name: string) =>
   `arn:aws:ses:${region}:${accountId}:template/${name}`;
@@ -109,20 +103,13 @@ export const EmailTemplateProvider = () =>
         id: string,
         props: Pick<EmailTemplateProps, "templateName">,
       ) {
-        return (
-          props.templateName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.templateName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getEmailTemplate({ TemplateName: name })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       });
 
       return EmailTemplate.Provider.of({
@@ -131,29 +118,21 @@ export const EmailTemplateProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const pages = yield* sesv2.listEmailTemplates
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* sesv2.listEmailTemplates.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.TemplatesMetadata ?? [])
               .filter(
-                (meta): meta is typeof meta & { TemplateName: string } =>
-                  meta.TemplateName != null,
+                (meta): meta is typeof meta & { TemplateName: string } => meta.TemplateName != null,
               )
               .map((meta) => ({
                 templateName: meta.TemplateName,
-                templateArn: templateArnOf(
-                  region,
-                  accountId,
-                  meta.TemplateName,
-                ),
+                templateArn: templateArnOf(region, accountId, meta.TemplateName),
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.templateName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.templateName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getTemplate(name);
           if (!found) return undefined;
           const attrs = {

@@ -87,9 +87,7 @@ export interface DBParameterGroup extends Resource<
  *
  * @resource
  */
-export const DBParameterGroup = Resource<DBParameterGroup>(
-  "AWS.Neptune.DBParameterGroup",
-);
+export const DBParameterGroup = Resource<DBParameterGroup>("AWS.Neptune.DBParameterGroup");
 
 const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
@@ -130,25 +128,17 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: groupName,
           })
-          .pipe(
-            Effect.catchTag("DBParameterGroupNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBParameterGroups?.[0];
       });
 
       // All parameters (defaults + overrides) with their current values and
       // apply types — the observed baseline for the parameter sync.
       const readParameters = Effect.fn(function* (groupName: string) {
-        return yield* neptune.describeDBParameters
-          .pages({ DBParameterGroupName: groupName })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
-          );
+        return yield* neptune.describeDBParameters.pages({ DBParameterGroupName: groupName }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
+        );
       });
 
       // The subset of parameters the user has overridden (Source `user`) —
@@ -158,9 +148,7 @@ export const DBParameterGroupProvider = () =>
           .pages({ DBParameterGroupName: groupName, Source: "user" })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Parameters ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Parameters ?? [])),
           );
       });
 
@@ -172,9 +160,7 @@ export const DBParameterGroupProvider = () =>
         return toTagRecord(response?.TagList);
       });
 
-      const toUserParameterRecord = (
-        parameters: neptune.Parameter[],
-      ): Record<string, string> =>
+      const toUserParameterRecord = (parameters: neptune.Parameter[]): Record<string, string> =>
         Object.fromEntries(
           parameters.flatMap((p) =>
             p.ParameterName !== undefined && p.ParameterValue !== undefined
@@ -187,10 +173,7 @@ export const DBParameterGroupProvider = () =>
         stables: ["dbParameterGroupArn", "dbParameterGroupName", "family"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? { family: "" })) !==
-            (yield* toName(id, news))
-          ) {
+          if ((yield* toName(id, olds ?? { family: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
           // Family is immutable — any change forces a fresh group.
@@ -201,10 +184,7 @@ export const DBParameterGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.dbParameterGroupName ??
-            (yield* toName(
-              id,
-              olds ?? ({ family: "" } as DBParameterGroupProps),
-            ));
+            (yield* toName(id, olds ?? ({ family: "" } as DBParameterGroupProps)));
           const group = yield* readGroup(name);
           if (!group?.DBParameterGroupName) {
             return undefined;
@@ -221,8 +201,7 @@ export const DBParameterGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const name =
-            output?.dbParameterGroupName ?? (yield* toName(id, news));
+          const name = output?.dbParameterGroupName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -243,43 +222,31 @@ export const DBParameterGroupProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBParameterGroupAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create DB parameter group '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
             }
           }
 
           // Sync parameters — diff observed cloud values against desired.
           const desiredParameters = news.parameters ?? {};
           const allParameters = yield* readParameters(name);
-          const byName = new Map(
-            allParameters.map((p) => [p.ParameterName, p]),
-          );
+          const byName = new Map(allParameters.map((p) => [p.ParameterName, p]));
 
-          const toModify: neptune.Parameter[] = Object.entries(
-            desiredParameters,
-          ).flatMap(([ParameterName, ParameterValue]) => {
-            const current = byName.get(ParameterName);
-            if (current?.ParameterValue === ParameterValue) return [];
-            return [
-              {
-                ParameterName,
-                ParameterValue,
-                ApplyMethod:
-                  current?.ApplyType === "static"
-                    ? "pending-reboot"
-                    : "immediate",
-              },
-            ];
-          });
+          const toModify: neptune.Parameter[] = Object.entries(desiredParameters).flatMap(
+            ([ParameterName, ParameterValue]) => {
+              const current = byName.get(ParameterName);
+              if (current?.ParameterValue === ParameterValue) return [];
+              return [
+                {
+                  ParameterName,
+                  ParameterValue,
+                  ApplyMethod: current?.ApplyType === "static" ? "pending-reboot" : "immediate",
+                },
+              ];
+            },
+          );
           if (toModify.length > 0) {
             // The API caps a single call at 20 parameters.
             for (let i = 0; i < toModify.length; i += 20) {
@@ -295,8 +262,7 @@ export const DBParameterGroupProvider = () =>
           // Reset user-overridden parameters that were removed from props.
           const userParameters = yield* readUserParameters(name);
           const toReset = userParameters.flatMap((p) =>
-            p.ParameterName !== undefined &&
-            !(p.ParameterName in desiredParameters)
+            p.ParameterName !== undefined && !(p.ParameterName in desiredParameters)
               ? [
                   {
                     ParameterName: p.ParameterName,
@@ -358,8 +324,7 @@ export const DBParameterGroupProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBParameterGroups ?? []).flatMap((group) =>
-                  group.DBParameterGroupName &&
-                  group.DBParameterGroupFamily?.startsWith("neptune")
+                  group.DBParameterGroupName && group.DBParameterGroupFamily?.startsWith("neptune")
                     ? [
                         {
                           dbParameterGroupName: group.DBParameterGroupName,
@@ -380,12 +345,7 @@ export const DBParameterGroupProvider = () =>
             .deleteDBParameterGroup({
               DBParameterGroupName: output.dbParameterGroupName,
             })
-            .pipe(
-              Effect.catchTag(
-                "DBParameterGroupNotFoundFault",
-                () => Effect.void,
-              ),
-            );
+            .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.void));
         }),
       };
     }),

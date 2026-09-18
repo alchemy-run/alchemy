@@ -160,20 +160,13 @@ export const RecipeProvider = () =>
         id: string,
         props: { recipeName?: string | undefined },
       ) {
-        return (
-          props.recipeName ??
-          (yield* createPhysicalName({ id, maxLength: 255 }))
-        );
+        return props.recipeName ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 
       const observeWorking = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeRecipe({ Name: name, RecipeVersion: "LATEST_WORKING" })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const publishedVersions = Effect.fn(function* (name: string) {
@@ -196,9 +189,7 @@ export const RecipeProvider = () =>
             const workingPages = yield* databrew.listRecipes
               .pages({ RecipeVersion: "LATEST_WORKING" })
               .pipe(Stream.runCollect);
-            const publishedPages = yield* databrew.listRecipes
-              .pages({})
-              .pipe(Stream.runCollect);
+            const publishedPages = yield* databrew.listRecipes.pages({}).pipe(Stream.runCollect);
             const published = new Map(
               Array.from(publishedPages)
                 .flatMap((page) => page.Recipes ?? [])
@@ -208,22 +199,17 @@ export const RecipeProvider = () =>
               .flatMap((page) => page.Recipes ?? [])
               .map((r) => ({
                 recipeName: r.Name,
-                recipeArn:
-                  r.ResourceArn ??
-                  databrewArn(region, accountId, "recipe", r.Name),
+                recipeArn: r.ResourceArn ?? databrewArn(region, accountId, "recipe", r.Name),
                 recipeVersion: published.get(r.Name) ?? "LATEST_WORKING",
               }));
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.recipeName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.recipeName ?? (yield* createName(id, olds ?? {}));
           const recipe = yield* observeWorking(name);
           if (recipe === undefined) return undefined;
-          const arn =
-            recipe.ResourceArn ??
-            databrewArn(region, accountId, "recipe", name);
+          const arn = recipe.ResourceArn ?? databrewArn(region, accountId, "recipe", name);
           const versions = yield* publishedVersions(name);
           const attrs = {
             recipeName: name,
@@ -289,9 +275,7 @@ export const RecipeProvider = () =>
             versions = yield* publishedVersions(name);
           }
 
-          const arn =
-            recipe?.ResourceArn ??
-            databrewArn(region, accountId, "recipe", name);
+          const arn = recipe?.ResourceArn ?? databrewArn(region, accountId, "recipe", name);
 
           // 3c. SYNC TAGS against observed cloud tags
           const observedTags = yield* fetchObservedTags(arn);
@@ -319,9 +303,7 @@ export const RecipeProvider = () =>
                   .map((r) => r.RecipeVersion)
                   .filter((v): v is string => v !== undefined),
               ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([] as string[]),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
             );
           if (versions.length > 0) {
             yield* retryWhileConflict(
@@ -329,22 +311,14 @@ export const RecipeProvider = () =>
                 Name: name,
                 RecipeVersions: versions,
               }),
-            ).pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           }
           yield* retryWhileConflict(
             databrew.deleteRecipeVersion({
               Name: name,
               RecipeVersion: "LATEST_WORKING",
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         }),
       });
     }),

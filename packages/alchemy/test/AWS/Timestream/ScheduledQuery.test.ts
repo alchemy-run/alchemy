@@ -1,3 +1,6 @@
+import * as TSQ from "@distilled.cloud/aws/timestream-query";
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import * as IAM from "@/AWS/IAM";
 import * as S3 from "@/AWS/S3";
@@ -6,9 +9,6 @@ import { Database, ScheduledQuery, Table } from "@/AWS/Timestream";
 import { withQueryEndpoint } from "@/AWS/Timestream/internal";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as TSQ from "@distilled.cloud/aws/timestream-query";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -24,9 +24,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
     "listScheduledQueries reports typed TimestreamNotOnboarded via endpoint discovery",
     (_stack) =>
       Effect.gen(function* () {
-        const error = yield* withQueryEndpoint(
-          TSQ.listScheduledQueries({}),
-        ).pipe(Effect.flip);
+        const error = yield* withQueryEndpoint(TSQ.listScheduledQueries({})).pipe(Effect.flip);
         expect(error._tag).toBe("TimestreamNotOnboarded");
       }),
     { timeout: 60_000 },
@@ -78,10 +76,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
                   {
                     Effect: "Allow",
                     Action: ["s3:PutObject", "s3:GetBucketAcl"],
-                    Resource: [
-                      bucket.bucketArn,
-                      Output.interpolate`${bucket.bucketArn}/*`,
-                    ],
+                    Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
                   },
                 ],
               },
@@ -119,9 +114,7 @@ describe("AWS.Timestream.ScheduledQuery", () => {
           }),
         ).pipe(
           Effect.map(() => false),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
         );
         expect(gone).toBe(true);
       }),

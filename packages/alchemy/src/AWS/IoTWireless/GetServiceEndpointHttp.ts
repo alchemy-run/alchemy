@@ -9,7 +9,6 @@ export const GetServiceEndpointHttp = Layer.effect(
     capability: "GetServiceEndpoint",
     iamActions: ["iotwireless:GetServiceEndpoint"],
     operation: iotw.getServiceEndpoint,
-    prepare: (request: iotw.GetServiceEndpointRequest | undefined) =>
-      request ?? {},
+    prepare: (request: iotw.GetServiceEndpointRequest | undefined) => request ?? {},
   }),
 );

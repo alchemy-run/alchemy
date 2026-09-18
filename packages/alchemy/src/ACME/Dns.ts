@@ -39,9 +39,7 @@ export interface PropagationOptions {
 export const DEFAULT_PROPAGATION_DELAY: Duration.Input = "5 seconds";
 
 /** Sleep `options.delay` (default 5 seconds). */
-export const propagationDelay = (
-  options: PropagationOptions = {},
-): Effect.Effect<void> =>
+export const propagationDelay = (options: PropagationOptions = {}): Effect.Effect<void> =>
   Effect.sleep(options.delay ?? DEFAULT_PROPAGATION_DELAY);
 
 // =============================================================================
@@ -61,25 +59,20 @@ const nodeDns: Effect.Effect<NodeDns | undefined> = Effect.tryPromise(
   () => import("node:dns/promises") as unknown as Promise<NodeDns>,
 ).pipe(
   Effect.map((mod) =>
-    typeof mod?.Resolver === "function" && typeof mod.resolveNs === "function"
-      ? mod
-      : undefined,
+    typeof mod?.Resolver === "function" && typeof mod.resolveNs === "function" ? mod : undefined,
   ),
   Effect.orElseSucceed(() => undefined),
 );
 
 /** The zone apex's nameserver IPv4s for `fqdn`, or `[]` when unknown. */
-const authoritativeServers = (
-  dns: NodeDns,
-  fqdn: string,
-): Effect.Effect<ReadonlyArray<string>> =>
+const authoritativeServers = (dns: NodeDns, fqdn: string): Effect.Effect<ReadonlyArray<string>> =>
   Effect.gen(function* () {
     const labels = fqdn.replace(/\.$/, "").split(".");
     for (let i = 0; i < labels.length - 1; i++) {
       const candidate = labels.slice(i).join(".");
-      const names = yield* Effect.tryPromise(() =>
-        dns.resolveNs(candidate),
-      ).pipe(Effect.orElseSucceed(() => [] as string[]));
+      const names = yield* Effect.tryPromise(() => dns.resolveNs(candidate)).pipe(
+        Effect.orElseSucceed(() => [] as string[]),
+      );
       if (names.length === 0) continue;
       const addresses = yield* Effect.forEach(
         names,
@@ -164,27 +157,17 @@ export const waitForTxt = (
     const timeout = options.timeout ?? "45 seconds";
     const attempts = Math.max(
       1,
-      Math.min(
-        8,
-        Math.ceil(Duration.toMillis(timeout) / Duration.toMillis(interval)),
-      ),
+      Math.min(8, Math.ceil(Duration.toMillis(timeout) / Duration.toMillis(interval))),
     );
     const dns = yield* nodeDns;
-    const servers =
-      dns === undefined ? [] : yield* authoritativeServers(dns, fqdn);
-    const lookups: ReadonlyArray<
-      Effect.Effect<boolean, never, HttpClient.HttpClient>
-    > =
+    const servers = dns === undefined ? [] : yield* authoritativeServers(dns, fqdn);
+    const lookups: ReadonlyArray<Effect.Effect<boolean, never, HttpClient.HttpClient>> =
       dns !== undefined && servers.length > 0
         ? servers.map((server) =>
-            resolveTxtAt(dns, server, fqdn).pipe(
-              Effect.map((values) => values.includes(value)),
-            ),
+            resolveTxtAt(dns, server, fqdn).pipe(Effect.map((values) => values.includes(value))),
           )
         : (options.resolvers ?? DEFAULT_RESOLVERS).map((resolver) =>
-            resolveTxt(resolver, fqdn).pipe(
-              Effect.map((values) => values.includes(value)),
-            ),
+            resolveTxt(resolver, fqdn).pipe(Effect.map((values) => values.includes(value))),
           );
     const check = Effect.all(lookups, { concurrency: "unbounded" }).pipe(
       Effect.map((seen) => seen.length > 0 && seen.every(Boolean)),

@@ -1,10 +1,10 @@
+import * as datazone from "@distilled.cloud/aws/datazone";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { Domain, EnvironmentBlueprintConfiguration } from "@/AWS/DataZone";
 import * as IAM from "@/AWS/IAM";
 import * as Test from "@/Test/Alchemy";
-import * as datazone from "@distilled.cloud/aws/datazone";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ const findConfiguration = (domainId: string, blueprintId: string) =>
       environmentBlueprintIdentifier: blueprintId,
     })
     .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
       // once the domain is deleted, DataZone reports AccessDenied (auth is
       // checked before existence) — also "absent".
       Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
@@ -66,16 +64,13 @@ test.provider(
               "arn:aws:iam::aws:policy/service-role/AmazonDataZoneGlueManageAccessRolePolicy",
             ],
           });
-          const config = yield* EnvironmentBlueprintConfiguration(
-            "DataLakeBlueprint",
-            {
-              domainId: domain.domainId,
-              environmentBlueprint: "DefaultDataLake",
-              enabledRegions: ["us-west-2"],
-              provisioningRoleArn: provisioningRole.roleArn,
-              manageAccessRoleArn: manageAccessRole.roleArn,
-            },
-          );
+          const config = yield* EnvironmentBlueprintConfiguration("DataLakeBlueprint", {
+            domainId: domain.domainId,
+            environmentBlueprint: "DefaultDataLake",
+            enabledRegions: ["us-west-2"],
+            provisioningRoleArn: provisioningRole.roleArn,
+            manageAccessRoleArn: manageAccessRole.roleArn,
+          });
           return {
             domainId: domain.domainId,
             environmentBlueprintId: config.environmentBlueprintId,
@@ -92,10 +87,7 @@ test.provider(
       expect(result.enabledRegions).toEqual(["us-west-2"]);
 
       // out-of-band: the configuration exists with the requested roles.
-      const created = yield* findConfiguration(
-        result.domainId,
-        result.environmentBlueprintId,
-      );
+      const created = yield* findConfiguration(result.domainId, result.environmentBlueprintId);
       expect(created).toBeDefined();
       expect(created!.enabledRegions).toEqual(["us-west-2"]);
       expect(created!.provisioningRoleArn).toBe(result.provisioningRoleArn);
@@ -150,10 +142,7 @@ test.provider(
         }),
       );
 
-      const updated = yield* findConfiguration(
-        result.domainId,
-        result.environmentBlueprintId,
-      );
+      const updated = yield* findConfiguration(result.domainId, result.environmentBlueprintId);
       expect(updated!.regionalParameters?.["us-west-2"]?.S3Location).toBe(
         "s3://alchemy-datazone-test",
       );
@@ -162,10 +151,7 @@ test.provider(
       //    domain delete waits until the domain is gone, so the config
       //    lookup must observe "absent" immediately after destroy.
       yield* stack.destroy();
-      const gone = yield* findConfiguration(
-        result.domainId,
-        result.environmentBlueprintId,
-      );
+      const gone = yield* findConfiguration(result.domainId, result.environmentBlueprintId);
       expect(gone).toBeUndefined();
     }),
   { timeout: 480_000 },

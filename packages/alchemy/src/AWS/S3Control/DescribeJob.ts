@@ -36,6 +36,4 @@ export interface DescribeJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeJob = Binding.Service<DescribeJob>(
-  "AWS.S3Control.DescribeJob",
-);
+export const DescribeJob = Binding.Service<DescribeJob>("AWS.S3Control.DescribeJob");

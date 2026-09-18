@@ -65,9 +65,7 @@ export interface ResourcePolicy extends Resource<
  *
  * @resource
  */
-export const ResourcePolicy = Resource<ResourcePolicy>(
-  "AWS.OSIS.ResourcePolicy",
-);
+export const ResourcePolicy = Resource<ResourcePolicy>("AWS.OSIS.ResourcePolicy");
 
 /** Order-insensitive canonical form of a JSON policy document. */
 const canonicalJson = (document: string): string => {
@@ -99,17 +97,11 @@ export const ResourcePolicyProvider = () =>
        * `undefined`.
        */
       const getPolicy = Effect.fn(function* (resourceArn: string) {
-        const policy = yield* osis
-          .getResourcePolicy({ ResourceArn: resourceArn })
-          .pipe(
-            Effect.map((response) => response.Policy),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return policy === undefined || canonicalJson(policy) === "{}"
-          ? undefined
-          : policy;
+        const policy = yield* osis.getResourcePolicy({ ResourceArn: resourceArn }).pipe(
+          Effect.map((response) => response.Policy),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+        return policy === undefined || canonicalJson(policy) === "{}" ? undefined : policy;
       });
 
       return {
@@ -140,10 +132,7 @@ export const ResourcePolicyProvider = () =>
 
           // 2/3. Ensure + sync — `putResourcePolicy` is a true upsert;
           // call it only when the canonical document drifts.
-          if (
-            observed === undefined ||
-            canonicalJson(observed) !== canonicalJson(news!.policy)
-          ) {
+          if (observed === undefined || canonicalJson(observed) !== canonicalJson(news!.policy)) {
             yield* osis.putResourcePolicy({
               ResourceArn: resourceArn,
               Policy: news!.policy,
@@ -157,9 +146,7 @@ export const ResourcePolicyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* osis
             .deleteResourcePolicy({ ResourceArn: output.resourceArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         // Singleton sub-resource keyed by its parent resource ARN.

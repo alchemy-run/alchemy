@@ -20,10 +20,7 @@ export interface WriteDomainClient {
     index: string,
     document: unknown,
     options?: IndexDocumentOptions,
-  ): Effect.Effect<
-    WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<WriteDocumentResponse, OpenSearchApiError | Credentials.CredentialsError>;
   /**
    * Partially update one document (`POST /{index}/_update/{id}`). The body
    * is the update API's envelope, e.g. `{ doc: { plays: 42 } }`.
@@ -33,10 +30,7 @@ export interface WriteDomainClient {
     id: string,
     body: unknown,
     options?: WriteDocumentOptions,
-  ): Effect.Effect<
-    WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<WriteDocumentResponse, OpenSearchApiError | Credentials.CredentialsError>;
   /**
    * Delete one document (`DELETE /{index}/_doc/{id}`). Deleting a missing
    * document is not an error — the response carries `result: "not_found"`.
@@ -45,10 +39,7 @@ export interface WriteDomainClient {
     index: string,
     id: string,
     options?: WriteDocumentOptions,
-  ): Effect.Effect<
-    WriteDocumentResponse,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<WriteDocumentResponse, OpenSearchApiError | Credentials.CredentialsError>;
   /**
    * Bulk-apply index/create/update/delete operations (`POST /_bulk`). Pass
    * the action/document lines as an array — they are serialized to NDJSON.
@@ -56,10 +47,7 @@ export interface WriteDomainClient {
   bulk(
     operations: ReadonlyArray<unknown>,
     options?: WriteDocumentOptions,
-  ): Effect.Effect<
-    BulkResponse,
-    OpenSearchApiError | Credentials.CredentialsError
-  >;
+  ): Effect.Effect<BulkResponse, OpenSearchApiError | Credentials.CredentialsError>;
 }
 
 /**
@@ -93,6 +81,4 @@ export interface DomainWrite extends Binding.Service<
   "AWS.OpenSearch.DomainWrite",
   (domain: Domain) => Effect.Effect<WriteDomainClient>
 > {}
-export const DomainWrite = Binding.Service<DomainWrite>(
-  "AWS.OpenSearch.DomainWrite",
-);
+export const DomainWrite = Binding.Service<DomainWrite>("AWS.OpenSearch.DomainWrite");

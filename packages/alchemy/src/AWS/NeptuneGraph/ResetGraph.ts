@@ -27,12 +27,7 @@ export interface ResetGraph extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<neptunegraph.ResetGraphInput, "graphIdentifier">,
-    ) => Effect.Effect<
-      neptunegraph.ResetGraphOutput,
-      neptunegraph.ResetGraphError
-    >
+    ) => Effect.Effect<neptunegraph.ResetGraphOutput, neptunegraph.ResetGraphError>
   >
 > {}
-export const ResetGraph = Binding.Service<ResetGraph>(
-  "AWS.NeptuneGraph.ResetGraph",
-);
+export const ResetGraph = Binding.Service<ResetGraph>("AWS.NeptuneGraph.ResetGraph");

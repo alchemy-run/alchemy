@@ -1,17 +1,12 @@
-import * as AWS from "@/AWS";
-import {
-  Domain,
-  Environment,
-  EnvironmentBlueprintConfiguration,
-  Project,
-} from "@/AWS/DataZone";
-import * as IAM from "@/AWS/IAM";
-import * as S3 from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as AWS from "@/AWS";
+import { Domain, Environment, EnvironmentBlueprintConfiguration, Project } from "@/AWS/DataZone";
+import * as IAM from "@/AWS/IAM";
+import * as S3 from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -61,9 +56,7 @@ const baseInfra = Effect.gen(function* () {
         },
       ],
     },
-    managedPolicyArns: [
-      "arn:aws:iam::aws:policy/AmazonDataZoneRedshiftGlueProvisioningPolicy",
-    ],
+    managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonDataZoneRedshiftGlueProvisioningPolicy"],
   });
   const manageAccessRole = yield* IAM.Role("EnvManageAccessRole", {
     assumeRolePolicyDocument: {
@@ -84,19 +77,16 @@ const baseInfra = Effect.gen(function* () {
     bucketName: DATALAKE_BUCKET,
     forceDestroy: true,
   });
-  const config = yield* EnvironmentBlueprintConfiguration(
-    "EnvDataLakeBlueprint",
-    {
-      domainId: domain.domainId,
-      environmentBlueprint: "DefaultDataLake",
-      enabledRegions: ["us-west-2"],
-      provisioningRoleArn: provisioningRole.roleArn,
-      manageAccessRoleArn: manageAccessRole.roleArn,
-      regionalParameters: {
-        "us-west-2": { S3Location: `s3://${DATALAKE_BUCKET}` },
-      },
+  const config = yield* EnvironmentBlueprintConfiguration("EnvDataLakeBlueprint", {
+    domainId: domain.domainId,
+    environmentBlueprint: "DefaultDataLake",
+    enabledRegions: ["us-west-2"],
+    provisioningRoleArn: provisioningRole.roleArn,
+    manageAccessRoleArn: manageAccessRole.roleArn,
+    regionalParameters: {
+      "us-west-2": { S3Location: `s3://${DATALAKE_BUCKET}` },
     },
-  );
+  });
   const project = yield* Project("EnvTestProject", {
     domainId: domain.domainId,
     description: "environment test project",
@@ -182,9 +172,7 @@ test.provider.skipIf(!RUN_SLOW)(
         })
         .pipe(
           Effect.map((env) => env.status === "DELETED"),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(true),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
           // once the domain is deleted, DataZone reports AccessDenied (auth
           // is checked before existence) — also gone.
           Effect.catchTag("AccessDeniedException", () => Effect.succeed(true)),

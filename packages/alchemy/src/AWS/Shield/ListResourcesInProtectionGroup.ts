@@ -39,7 +39,6 @@ export interface ListResourcesInProtectionGroup extends Binding.Service<
     >
   >
 > {}
-export const ListResourcesInProtectionGroup =
-  Binding.Service<ListResourcesInProtectionGroup>(
-    "AWS.Shield.ListResourcesInProtectionGroup",
-  );
+export const ListResourcesInProtectionGroup = Binding.Service<ListResourcesInProtectionGroup>(
+  "AWS.Shield.ListResourcesInProtectionGroup",
+);

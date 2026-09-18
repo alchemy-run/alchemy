@@ -27,12 +27,7 @@ import {
   type FlyAlchemyType,
 } from "./Metadata.ts";
 import type { DiskSpec, MountedDisk } from "./MountVolume.ts";
-import {
-  deleteVolume,
-  ensureVolumeGroup,
-  getVolumeById,
-  volumeGroupName,
-} from "./Volume.ts";
+import { deleteVolume, ensureVolumeGroup, getVolumeById, volumeGroupName } from "./Volume.ts";
 
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
@@ -40,16 +35,12 @@ const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 const CHECK_POLL = Schedule.spaced("5 seconds");
 const CHECK_WAIT = "60 seconds";
 
-export class ReplicaNotCreated extends Data.TaggedError(
-  "Fly.ReplicaNotCreated",
-)<{
+export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
   name: string;
   appName: string;
 }> {}
 
-export class ReplicaChecksNotPassing extends Data.TaggedError(
-  "Fly.ReplicaChecksNotPassing",
-)<{
+export class ReplicaChecksNotPassing extends Data.TaggedError("Fly.ReplicaChecksNotPassing")<{
   appName: string;
   machineId: string;
   checks: ReadonlyArray<{
@@ -120,14 +111,9 @@ export const listMachinesByApp = (appName: string) =>
     Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
   );
 
-export const resolveCount = (count: number | undefined) =>
-  Math.max(1, Math.floor(count ?? 1));
+export const resolveCount = (count: number | undefined) => Math.max(1, Math.floor(count ?? 1));
 
-export const replicaMachineName = (
-  base: string,
-  index: number,
-  count: number,
-) => {
+export const replicaMachineName = (base: string, index: number, count: number) => {
   if (count <= 1 && index === 0) return base;
   const suffix = `-${index}`;
   const room = 30 - suffix.length;
@@ -136,9 +122,7 @@ export const replicaMachineName = (
 };
 
 export const replicaIndexOf = (machine: FlyMachine): number => {
-  const raw = compactRecord(machine.config?.metadata)[
-    alchemyMetadataKeys.replica
-  ];
+  const raw = compactRecord(machine.config?.metadata)[alchemyMetadataKeys.replica];
   const parsed = raw === undefined ? 0 : Number(raw);
   return Number.isFinite(parsed) ? parsed : 0;
 };
@@ -150,15 +134,10 @@ export const alchemyIdOf = (machine: FlyMachine): string | undefined => {
 
 export const isOwnedType = (machine: FlyMachine, type: FlyAlchemyType) => {
   const metadata = compactRecord(machine.config?.metadata);
-  return (
-    isAlchemyOwnedMetadata(metadata) &&
-    metadata[alchemyMetadataKeys.type] === type
-  );
+  return isAlchemyOwnedMetadata(metadata) && metadata[alchemyMetadataKeys.type] === type;
 };
 
-export const toImageRef = (
-  ref: FlyImageRef | undefined,
-): MachineImageRef | undefined => {
+export const toImageRef = (ref: FlyImageRef | undefined): MachineImageRef | undefined => {
   if (ref === undefined) return undefined;
   const imageRef: MachineImageRef = {
     registry: ref.registry,
@@ -195,9 +174,7 @@ export const toGuestAttrs = (
   };
 };
 
-export const toFlyServiceCheck = (
-  check: MachineServiceCheck,
-): FlyMachineServiceCheck => ({
+export const toFlyServiceCheck = (check: MachineServiceCheck): FlyMachineServiceCheck => ({
   type: check.type,
   port: check.port,
   interval: check.interval,
@@ -219,11 +196,7 @@ export const toFlyService = (service: MachineService): FlyMachineService => ({
   internal_port: service.internalPort,
   autostart: service.autostart,
   autostop:
-    typeof service.autostop === "boolean"
-      ? service.autostop
-        ? "stop"
-        : "off"
-      : service.autostop,
+    typeof service.autostop === "boolean" ? (service.autostop ? "stop" : "off") : service.autostop,
   min_machines_running: service.minMachinesRunning,
   ports: service.ports?.map((port) => ({
     port: port.port,
@@ -235,13 +208,9 @@ export const toFlyService = (service: MachineService): FlyMachineService => ({
   checks: service.checks?.map(toFlyServiceCheck),
 });
 
-export const hasPublishedService = (
-  services: FlyMachineService[] | undefined,
-) =>
+export const hasPublishedService = (services: FlyMachineService[] | undefined) =>
   (services ?? []).some((service) =>
-    (service.ports ?? []).some(
-      (port) => port.port !== undefined || port.start_port !== undefined,
-    ),
+    (service.ports ?? []).some((port) => port.port !== undefined || port.start_port !== undefined),
   );
 
 export const waitStarted = (appName: string, machineId: string) =>
@@ -256,8 +225,7 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) =>
-          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
+        while: (e) => e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
       Effect.timeout("50 seconds"),
     );
@@ -272,10 +240,7 @@ const liveServiceChecks = (machine: FlyMachine) =>
 
 const allServiceChecksPassing = (machine: FlyMachine, expected: number) => {
   const checks = liveServiceChecks(machine);
-  return (
-    checks.length >= expected &&
-    checks.every((check) => check.status === "passing")
-  );
+  return checks.length >= expected && checks.every((check) => check.status === "passing");
 };
 
 const TRANSIENT_GET_TAGS = [
@@ -292,10 +257,7 @@ const TRANSIENT_GET_TAGS = [
  * `servicecheck-*` results keep polling — they are not success.
  * `warning` / `unknown` during grace keep polling.
  */
-export const waitHealthy = Effect.fn(function* (
-  appName: string,
-  machine: FlyMachine,
-) {
+export const waitHealthy = Effect.fn(function* (appName: string, machine: FlyMachine) {
   const machineId = machine.id;
   const expected = configuredServiceChecks(machine).length;
   if (machineId === undefined || expected === 0) return machine;
@@ -347,8 +309,7 @@ export const waitDestroyed = (appName: string, machineId: string) =>
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
-        while: (e) =>
-          e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
+        while: (e) => e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
     );
 
@@ -408,10 +369,7 @@ export const ensureStarted = Effect.fn(function* (
   return yield* waitHealthy(appName, started);
 });
 
-export const deleteMachine = Effect.fn(function* (
-  appName: string,
-  machineId: string,
-) {
+export const deleteMachine = Effect.fn(function* (appName: string, machineId: string) {
   if (appName.length === 0 || machineId.length === 0) return;
   yield* machines
     .deleteMachine({
@@ -430,10 +388,7 @@ export const deleteMachine = Effect.fn(function* (
   yield* waitDestroyed(appName, machineId);
 });
 
-const mountedDisksOf = (
-  machine: FlyMachine,
-  volumesById: Map<string, FlyVolume>,
-): MountedDisk[] =>
+const mountedDisksOf = (machine: FlyMachine, volumesById: Map<string, FlyVolume>): MountedDisk[] =>
   (machine.config?.mounts ?? []).flatMap((mount) => {
     const volumeId = mount.volume;
     const path = mount.path;
@@ -449,10 +404,7 @@ const mountedDisksOf = (
     ];
   });
 
-export const toReplica = (
-  machine: FlyMachine,
-  volumesById: Map<string, FlyVolume>,
-): Replica => ({
+export const toReplica = (machine: FlyMachine, volumesById: Map<string, FlyVolume>): Replica => ({
   machineId: machine.id ?? "",
   name: machine.name ?? "",
   region: machine.region ?? "",
@@ -482,9 +434,7 @@ export const toReplicaSet = (
     privateIp: primary?.privateIp,
     imageRef: primary?.imageRef,
     guest: primary?.guest,
-    url: hasPublishedService(services)
-      ? `https://${appName}.fly.dev`
-      : undefined,
+    url: hasPublishedService(services) ? `https://${appName}.fly.dev` : undefined,
     count: replicas.length,
     mounts: primary?.mounts ?? [],
     replicas,
@@ -498,10 +448,7 @@ export const listReplicas = Effect.fn(function* (input: {
 }) {
   const machines = yield* listMachinesByApp(input.appName);
   return machines
-    .filter(
-      (machine) =>
-        isOwnedType(machine, input.type) && alchemyIdOf(machine) === input.id,
-    )
+    .filter((machine) => isOwnedType(machine, input.type) && alchemyIdOf(machine) === input.id)
     .sort((left, right) => replicaIndexOf(left) - replicaIndexOf(right));
 });
 
@@ -512,9 +459,7 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
     (app) =>
       listMachinesByApp(app.appName).pipe(
         Effect.map((machines) => {
-          const owned = machines.filter((machine) =>
-            isOwnedType(machine, type),
-          );
+          const owned = machines.filter((machine) => isOwnedType(machine, type));
           const byId = new Map<string, FlyMachine[]>();
           for (const machine of owned) {
             const id = alchemyIdOf(machine);
@@ -527,9 +472,7 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
             const sorted = [...group].sort(
               (left, right) => replicaIndexOf(left) - replicaIndexOf(right),
             );
-            const replicas = sorted.map((machine) =>
-              toReplica(machine, new Map()),
-            );
+            const replicas = sorted.map((machine) => toReplica(machine, new Map()));
             return toReplicaSet(
               replicas,
               app.appName,
@@ -553,9 +496,7 @@ const pickVolume = (
     const preferred = group.find((volume) => volume.id === preferId);
     if (preferred !== undefined) return preferred;
   }
-  return group.find(
-    (volume) => volume.id !== undefined && !used.has(volume.id),
-  );
+  return group.find((volume) => volume.id !== undefined && !used.has(volume.id));
 };
 
 export const reconcileReplicas = Effect.fn(function* (input: {
@@ -592,9 +533,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
   const listed = yield* listMachinesByApp(input.appName);
   const owned = listed.filter((machine) => isOwnedType(machine, input.type));
   const byIndex = new Map<number, FlyMachine>();
-  const preferIds = new Set(
-    (input.outputMachineIds ?? []).filter((id) => id.length > 0),
-  );
+  const preferIds = new Set((input.outputMachineIds ?? []).filter((id) => id.length > 0));
   for (const machine of owned) {
     const id = machine.id;
     if (id !== undefined && preferIds.has(id)) {
@@ -648,11 +587,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
     const prefer = input.preferVolumeIds?.[index] ?? [];
     const mounts: FlyMachineMount[] = [];
     for (const [diskIndex, group] of groups.entries()) {
-      const volume = pickVolume(
-        group.volumes,
-        usedVolumeIds,
-        prefer[diskIndex],
-      );
+      const volume = pickVolume(group.volumes, usedVolumeIds, prefer[diskIndex]);
       const volumeId = volume?.id;
       if (volumeId === undefined) {
         return yield* new ReplicaNotCreated({
@@ -679,9 +614,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
       current =
         created ??
         (yield* listMachinesByApp(input.appName).pipe(
-          Effect.map((machines) =>
-            machines.find((machine) => machine.name === name),
-          ),
+          Effect.map((machines) => machines.find((machine) => machine.name === name)),
         ));
       if (current === undefined || current.id === undefined) {
         return yield* new ReplicaNotCreated({
@@ -707,11 +640,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
       if (updated !== undefined) current = updated;
     }
 
-    current = yield* ensureStarted(
-      input.appName,
-      current,
-      input.skipLaunch === true,
-    );
+    current = yield* ensureStarted(input.appName, current, input.skipLaunch === true);
     live.push(current);
   }
 
@@ -734,18 +663,11 @@ export const reconcileReplicas = Effect.fn(function* (input: {
     (machine) =>
       machine.id === undefined
         ? Effect.succeed(machine)
-        : getMachineById(input.appName, machine.id).pipe(
-            Effect.map((next) => next ?? machine),
-          ),
+        : getMachineById(input.appName, machine.id).pipe(Effect.map((next) => next ?? machine)),
     { concurrency: 4 },
   );
   const replicas = fresh.map((machine) => toReplica(machine, volumesById));
-  return toReplicaSet(
-    replicas,
-    input.appName,
-    input.baseName,
-    fresh[0]?.config?.services,
-  );
+  return toReplicaSet(replicas, input.appName, input.baseName, fresh[0]?.config?.services);
 });
 
 export const deleteReplicaSet = Effect.fn(function* (input: {
@@ -793,9 +715,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     if (input.baseName === undefined) return true;
     const name = machine.name ?? "";
     if (name === input.baseName) return true;
-    return (
-      name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2)
-    );
+    return name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2);
   });
   if (listed.length > 0) {
     const volumesById = new Map<string, FlyVolume>();
@@ -822,9 +742,7 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     (machineId) => getMachineById(input.appName!, machineId),
     { concurrency: 4 },
   );
-  const machines = found.filter(
-    (machine): machine is FlyMachine => machine !== undefined,
-  );
+  const machines = found.filter((machine): machine is FlyMachine => machine !== undefined);
   if (machines.length === 0) return undefined;
   return toReplicaSet(
     machines.map((machine) => toReplica(machine, new Map())),

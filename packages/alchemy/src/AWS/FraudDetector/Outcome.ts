@@ -62,21 +62,14 @@ export const OutcomeProvider = () =>
     Outcome,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: OutcomeProps) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }))
-        );
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
       });
 
       /** Look an outcome up by name; typed not-found → undefined. */
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getOutcomes({ name })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.outcomes?.[0];
       });
 
@@ -138,9 +131,7 @@ export const OutcomeProvider = () =>
           frauddetector.getOutcomes.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.outcomes ?? []).map(toAttrs),
-              ),
+              Array.from(chunk).flatMap((page) => (page.outcomes ?? []).map(toAttrs)),
             ),
           ),
       };

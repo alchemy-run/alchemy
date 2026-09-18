@@ -81,9 +81,7 @@ export const makeStreamHttpBinding = <
     const op = yield* options.operation;
 
     return Effect.fn(function* (stream: Stream) {
-      const identity = yield* options.key === "StreamName"
-        ? stream.streamName
-        : stream.streamArn;
+      const identity = yield* options.key === "StreamName" ? stream.streamName : stream.streamArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
@@ -98,9 +96,7 @@ export const makeStreamHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${stream.LogicalId})`)(function* (
-        request?: Omit<I, K>,
-      ) {
+      return Effect.fn(`${options.tag}(${stream.LogicalId})`)(function* (request?: Omit<I, K>) {
         return yield* op({
           ...request,
           [options.key]: yield* identity,
@@ -115,12 +111,7 @@ export const makeStreamHttpBinding = <
  * injects the bound {@link StreamConsumer}'s ARN as `ConsumerARN` and the
  * deploy-time half grants `actions` on the consumer ARN.
  */
-export const makeConsumerHttpBinding = <
-  I extends { ConsumerARN?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeConsumerHttpBinding = <I extends { ConsumerARN?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Kinesis.SubscribeToShard`. */
   tag: string;
   /** The distilled operation; `ConsumerARN` is injected from the consumer. */

@@ -1,6 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import {
   GetTaxRegistration,
   GetTaxSettings,
@@ -10,14 +7,14 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
@@ -42,9 +39,7 @@ const ensureHeadOffice = Effect.gen(function* () {
 const waitUntilExpired = (id: string) =>
   GetTaxRegistration({ id }).pipe(
     Effect.map((registration) =>
-      registration.status === "expired"
-        ? ("expired" as const)
-        : ("active" as const),
+      registration.status === "expired" ? ("expired" as const) : ("active" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("expired" as const)),
     Effect.repeat({

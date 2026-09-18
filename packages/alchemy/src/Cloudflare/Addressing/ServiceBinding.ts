@@ -2,7 +2,6 @@ import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -126,8 +125,7 @@ export const ServiceBindingProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       const prefixId =
-        output?.prefixId ??
-        (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
+        output?.prefixId ?? (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
       if (!prefixId) return undefined;
 
       if (output?.bindingId) {
@@ -146,33 +144,25 @@ export const ServiceBindingProvider = () =>
     // prefix's bindings, hydrating into the exact `read` shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const prefixIds = yield* addressing.listPrefixes
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk)
-              .map((p) => p.id)
-              .filter((id): id is string => typeof id === "string"),
-          ),
-        );
+      const prefixIds = yield* addressing.listPrefixes.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk)
+            .map((p) => p.id)
+            .filter((id): id is string => typeof id === "string"),
+        ),
+      );
       const perPrefix = yield* Effect.forEach(
         prefixIds,
         (prefixId) =>
-          addressing.listPrefixServiceBindings
-            .items({ accountId, prefixId })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).map((b) =>
-                  toAttributes(b, prefixId, accountId),
-                ),
-              ),
-              // The parent prefix vanished between enumeration and listing.
-              Effect.catchTag("PrefixNotFound", () =>
-                Effect.succeed<ServiceBindingAttributes[]>([]),
-              ),
+          addressing.listPrefixServiceBindings.items({ accountId, prefixId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((b) => toAttributes(b, prefixId, accountId)),
             ),
+            // The parent prefix vanished between enumeration and listing.
+            Effect.catchTag("PrefixNotFound", () => Effect.succeed<ServiceBindingAttributes[]>([])),
+          ),
         { concurrency: 10 },
       );
       return perPrefix.flat();
@@ -214,12 +204,7 @@ export const ServiceBindingProvider = () =>
           prefixId: output.prefixId,
           bindingId: output.bindingId,
         })
-        .pipe(
-          Effect.catchTag(
-            ["BindingNotFound", "PrefixNotFound"],
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.void));
     }),
   });
 
@@ -232,11 +217,7 @@ type ObservedBinding = addressing.GetPrefixServiceBindingResponse;
 const getBinding = (accountId: string, prefixId: string, bindingId: string) =>
   addressing
     .getPrefixServiceBinding({ accountId, prefixId, bindingId })
-    .pipe(
-      Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)));
 
 /**
  * Find a service binding by exact CIDR — unique within a parent prefix.

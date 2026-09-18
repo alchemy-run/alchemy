@@ -9,10 +9,7 @@ import type { DelegatedAdministrator } from "./DelegatedAdministrator.ts";
 import { DelegatedAdministrator as OrganizationsDelegatedAdministrator } from "./DelegatedAdministrator.ts";
 import type { Organization, OrganizationProps } from "./Organization.ts";
 import { Organization as AwsOrganization } from "./Organization.ts";
-import type {
-  OrganizationalUnit,
-  OrganizationalUnitProps,
-} from "./OrganizationalUnit.ts";
+import type { OrganizationalUnit, OrganizationalUnitProps } from "./OrganizationalUnit.ts";
 import { OrganizationalUnit as AwsOrganizationalUnit } from "./OrganizationalUnit.ts";
 import type { Policy } from "./Policy.ts";
 import { Policy as OrganizationsPolicy } from "./Policy.ts";
@@ -27,10 +24,7 @@ import { TrustedServiceAccess as OrganizationsTrustedServiceAccess } from "./Tru
 
 export type TenantTargetKey = "root" | string;
 
-export interface TenantAccountSpec extends Omit<
-  AccountProps,
-  "parentId" | "name" | "email"
-> {
+export interface TenantAccountSpec extends Omit<AccountProps, "parentId" | "name" | "email"> {
   /** Stable key identifying the account within the tenant (used in logical IDs and `targetKeys`). */
   key: string;
   /** Friendly account name. */
@@ -271,10 +265,7 @@ const toLogicalIdSegment = (value: string) =>
  *
  * @resource
  */
-export const TenantRoot = Effect.fn(function* (
-  id: string,
-  props: TenantRootProps = {},
-) {
+export const TenantRoot = Effect.fn(function* (id: string, props: TenantRootProps = {}) {
   const sharedTags = props.tags ?? {};
   const organization = yield* AwsOrganization(`${id}Organization`, {
     featureSet: "ALL",
@@ -288,13 +279,10 @@ export const TenantRoot = Effect.fn(function* (
   const policyTypes = yield* Effect.forEach(
     props.policyTypes ?? ["SERVICE_CONTROL_POLICY"],
     (policyType) =>
-      OrganizationsRootPolicyType(
-        `${id}${toLogicalIdSegment(policyType)}PolicyType`,
-        {
-          rootId: root.rootId,
-          policyType,
-        },
-      ),
+      OrganizationsRootPolicyType(`${id}${toLogicalIdSegment(policyType)}PolicyType`, {
+        rootId: root.rootId,
+        policyType,
+      }),
     { concurrency: "unbounded" },
   );
 
@@ -342,25 +330,20 @@ export const TenantRoot = Effect.fn(function* (
   const policies: Record<string, Policy> = {};
   const policyAttachments: PolicyAttachment[] = [];
   for (const policySpec of props.policies ?? []) {
-    const policy = yield* OrganizationsPolicy(
-      `${id}${toLogicalIdSegment(policySpec.key)}Policy`,
-      {
-        name: policySpec.name,
-        description: policySpec.description,
-        type: policySpec.type ?? "SERVICE_CONTROL_POLICY",
-        document: policySpec.document,
-        tags: mergeTags(sharedTags, policySpec.tags),
-      },
-    );
+    const policy = yield* OrganizationsPolicy(`${id}${toLogicalIdSegment(policySpec.key)}Policy`, {
+      name: policySpec.name,
+      description: policySpec.description,
+      type: policySpec.type ?? "SERVICE_CONTROL_POLICY",
+      document: policySpec.document,
+      tags: mergeTags(sharedTags, policySpec.tags),
+    });
     policies[policySpec.key] = policy;
 
     for (const targetKey of policySpec.targetKeys) {
       const target = targets[targetKey];
       if (!target) {
         return yield* Effect.fail(
-          new Error(
-            `Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`,
-          ),
+          new Error(`Unknown tenant policy target '${targetKey}' for policy '${policySpec.key}'`),
         );
       }
 
@@ -409,14 +392,11 @@ const createOrganizationalUnits = ({
 }): Effect.Effect<void, unknown, unknown> =>
   Effect.gen(function* () {
     for (const spec of specs) {
-      const ou = yield* AwsOrganizationalUnit(
-        `${id}${toLogicalIdSegment(spec.key)}Ou`,
-        {
-          parentId,
-          name: spec.name ?? spec.key,
-          tags: mergeTags(sharedTags, spec.tags),
-        },
-      );
+      const ou = yield* AwsOrganizationalUnit(`${id}${toLogicalIdSegment(spec.key)}Ou`, {
+        parentId,
+        name: spec.name ?? spec.key,
+        tags: mergeTags(sharedTags, spec.tags),
+      });
       organizationalUnits[spec.key] = ou;
       targets[spec.key] = { targetId: ou.ouId as any };
 
@@ -469,9 +449,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
     const account = accounts[spec.delegatedAdminAccountKey];
     if (!account) {
       return yield* Effect.fail(
-        new Error(
-          `Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`,
-        ),
+        new Error(`Unknown delegated admin account '${spec.delegatedAdminAccountKey}'`),
       );
     }
     delegatedAdministrators.push(
@@ -522,9 +500,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
     const permissionSet = permissionSets[assignmentSpec.permissionSetKey];
     if (!permissionSet) {
       return yield* Effect.fail(
-        new Error(
-          `Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`,
-        ),
+        new Error(`Unknown assignment permission set '${assignmentSpec.permissionSetKey}'`),
       );
     }
     const principalId =
@@ -549,9 +525,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
         instanceArn: instance.instanceArn,
         permissionSetArn: permissionSet.permissionSetArn,
         principalId,
-        principalType: assignmentSpec.groupKey
-          ? "GROUP"
-          : (assignmentSpec.principalType ?? "USER"),
+        principalType: assignmentSpec.groupKey ? "GROUP" : (assignmentSpec.principalType ?? "USER"),
         targetId: account.accountId,
       },
     );
@@ -565,10 +539,7 @@ const createTenantIdentityCenter = Effect.fn(function* ({
   };
 });
 
-const mergeTags = (
-  shared: Record<string, string>,
-  tags: Record<string, string> | undefined,
-) => ({
+const mergeTags = (shared: Record<string, string>, tags: Record<string, string> | undefined) => ({
   ...shared,
   ...tags,
 });

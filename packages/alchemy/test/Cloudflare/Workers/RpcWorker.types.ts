@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { Named } from "@/Named";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
+import type { Named } from "@/Named";
 
 const ping = Rpc.make("ping", {
   success: Schema.Void,
@@ -13,10 +13,9 @@ const ping = Rpc.make("ping", {
 
 class PingRpcs extends RpcGroup.make(ping) {}
 
-class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()(
-  "ModularRpcWorker",
-  { schema: PingRpcs },
-) {}
+class ModularRpcWorker extends Cloudflare.RpcWorker<ModularRpcWorker>()("ModularRpcWorker", {
+  schema: PingRpcs,
+}) {}
 
 class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
   "InlineRpcWorker",
@@ -26,23 +25,13 @@ class InlineRpcWorker extends Cloudflare.RpcWorker<InlineRpcWorker>()(
 
 type Assert<T extends true> = T;
 
-type _ModularNamed = Assert<
-  ModularRpcWorker extends Named<"ModularRpcWorker"> ? true : false
->;
+type _ModularNamed = Assert<ModularRpcWorker extends Named<"ModularRpcWorker"> ? true : false>;
 type _ModularLogicalId = Assert<
-  typeof ModularRpcWorker extends { readonly LogicalId: "ModularRpcWorker" }
-    ? true
-    : false
+  typeof ModularRpcWorker extends { readonly LogicalId: "ModularRpcWorker" } ? true : false
 >;
-type _InlineNamed = Assert<
-  InlineRpcWorker extends Named<"InlineRpcWorker"> ? true : false
->;
+type _InlineNamed = Assert<InlineRpcWorker extends Named<"InlineRpcWorker"> ? true : false>;
 type _InlineLogicalId = Assert<
-  typeof InlineRpcWorker extends { readonly LogicalId: "InlineRpcWorker" }
-    ? true
-    : false
+  typeof InlineRpcWorker extends { readonly LogicalId: "InlineRpcWorker" } ? true : false
 >;
 // Widening to `string` would still satisfy Named<string>; pin the literal.
-type _ModularIdIsNotWidened = Assert<
-  ModularRpcWorker extends Named<"other"> ? false : true
->;
+type _ModularIdIsNotWidened = Assert<ModularRpcWorker extends Named<"other"> ? false : true>;

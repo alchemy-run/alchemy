@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { PublicKey } from "@/AWS/CloudFront";
-import * as Provider from "@/Provider";
-import { isResourceState, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { PublicKey } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
+import { isResourceState, State, type ResourceState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -65,15 +65,13 @@ describe("AWS.CloudFront.PublicKey", () => {
 
         // Control-plane reads are eventually consistent — poll until the
         // update is visible, then assert.
-        const after = yield* cloudfront
-          .getPublicKey({ Id: updated.publicKeyId })
-          .pipe(
-            Effect.repeat({
-              schedule: Schedule.fixed("2 seconds"),
-              until: (r) => r.PublicKey?.PublicKeyConfig?.Comment === "updated",
-              times: 15,
-            }),
-          );
+        const after = yield* cloudfront.getPublicKey({ Id: updated.publicKeyId }).pipe(
+          Effect.repeat({
+            schedule: Schedule.fixed("2 seconds"),
+            until: (r) => r.PublicKey?.PublicKeyConfig?.Comment === "updated",
+            times: 15,
+          }),
+        );
         expect(after.PublicKey?.PublicKeyConfig?.Comment).toEqual("updated");
         // The Redacted-wrapped key reached the wire as the plain PEM.
         expect(after.PublicKey?.PublicKeyConfig?.EncodedKey?.trim()).toEqual(
@@ -104,9 +102,7 @@ describe("AWS.CloudFront.PublicKey", () => {
         const provider = yield* Provider.findProvider(PublicKey);
         const all = yield* provider.list();
 
-        expect(all.some((x) => x.publicKeyId === deployed.publicKeyId)).toBe(
-          true,
-        );
+        expect(all.some((x) => x.publicKeyId === deployed.publicKeyId)).toBe(true);
 
         yield* stack.destroy();
         yield* assertPublicKeyDeleted(deployed.publicKeyId);
@@ -139,20 +135,15 @@ describe("AWS.CloudFront.PublicKey", () => {
         const stage = stack.stage;
         const fqns = yield* state.list({ stack: stack.name, stage });
         const rows = yield* Effect.forEach(fqns, (fqn) =>
-          state
-            .get({ stack: stack.name, stage, fqn })
-            .pipe(Effect.map((row) => ({ fqn, row }))),
+          state.get({ stack: stack.name, stage, fqn }).pipe(Effect.map((row) => ({ fqn, row }))),
         );
         const wedged = rows.find(
           (r): r is { fqn: string; row: ResourceState } =>
-            isResourceState(r.row) &&
-            r.row.resourceType === "AWS.CloudFront.PublicKey",
+            isResourceState(r.row) && r.row.resourceType === "AWS.CloudFront.PublicKey",
         );
         if (!wedged) {
           return yield* Effect.die(
-            new Error(
-              "no AWS.CloudFront.PublicKey state row found after deploy",
-            ),
+            new Error("no AWS.CloudFront.PublicKey state row found after deploy"),
           );
         }
         // Delete the public key out-of-band FIRST — while the state row is
@@ -220,11 +211,7 @@ const assertPublicKeyDeleted = (id: string) =>
     Effect.flatMap(() => Effect.fail(new Error("PublicKeyStillExists"))),
     Effect.catchTag("NoSuchPublicKey", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "PublicKeyStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      while: (error) => error instanceof Error && error.message === "PublicKeyStillExists",
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

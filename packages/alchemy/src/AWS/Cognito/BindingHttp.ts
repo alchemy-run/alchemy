@@ -24,9 +24,7 @@ export const cognitoMethods = (bindingId: string, logicalId: string) => ({
       name: string,
       op: (input: A) => Effect.Effect<O, E>,
     ): ((request: Omit<A, keyof I>) => Effect.Effect<O, E>) =>
-      Effect.fn(`${bindingId}.${name}(${logicalId})`)(function* (
-        request: Omit<A, keyof I>,
-      ) {
+      Effect.fn(`${bindingId}.${name}(${logicalId})`)(function* (request: Omit<A, keyof I>) {
         return yield* op({ ...request, ...(yield* inject) } as unknown as A);
       }),
 

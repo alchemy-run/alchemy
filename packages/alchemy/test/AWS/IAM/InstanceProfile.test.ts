@@ -1,10 +1,10 @@
+import * as IAM from "@distilled.cloud/aws/iam";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { InstanceProfile } from "@/AWS/IAM";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as IAM from "@distilled.cloud/aws/iam";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,9 +27,7 @@ test.provider("list enumerates the deployed instance profile", (stack) =>
     const provider = yield* Provider.findProvider(InstanceProfile);
     const all = yield* provider.list();
 
-    expect(
-      all.some((p) => p.instanceProfileName === profile.instanceProfileName),
-    ).toBe(true);
+    expect(all.some((p) => p.instanceProfileName === profile.instanceProfileName)).toBe(true);
 
     yield* stack.destroy();
 

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as datasync from "@distilled.cloud/aws/datasync";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -41,8 +41,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeLocationS3({
-          LocationArn:
-            "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
+          LocationArn: "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
@@ -113,17 +112,13 @@ test.provider(
       const observed = yield* datasync.describeLocationS3({ LocationArn: arn });
       expect(observed.S3Config?.BucketAccessRoleArn).toContain(":role/");
 
-      const tags = dsTags(
-        (yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags,
-      );
+      const tags = dsTags((yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags);
       expect(tags.purpose).toBe("alchemy-datasync-test");
       expect(tags["alchemy::id"]).toBe("Loc");
 
       // --- list: the S3 location is enumerable ---
       const listed = yield* datasync.listLocations({});
-      expect((listed.Locations ?? []).some((l) => l.LocationArn === arn)).toBe(
-        true,
-      );
+      expect((listed.Locations ?? []).some((l) => l.LocationArn === arn)).toBe(true);
 
       // --- update: change tags in place (location itself is immutable) ---
       const updated = yield* stack.deploy(
@@ -157,9 +152,7 @@ test.provider(
       );
       // immutable identity is preserved across a tag-only update
       expect(updated.location.locationArn).toBe(arn);
-      const tags2 = dsTags(
-        (yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags,
-      );
+      const tags2 = dsTags((yield* datasync.listTagsForResource({ ResourceArn: arn })).Tags);
       expect(tags2.stage).toBe("prod");
 
       // --- delete ---

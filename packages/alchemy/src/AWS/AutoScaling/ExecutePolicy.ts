@@ -45,13 +45,8 @@ export interface ExecutePolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecutePolicyRequest,
-    ) => Effect.Effect<
-      autoscaling.ExecutePolicyResponse,
-      autoscaling.ExecutePolicyError
-    >
+    ) => Effect.Effect<autoscaling.ExecutePolicyResponse, autoscaling.ExecutePolicyError>
   >
 > {}
 
-export const ExecutePolicy = Binding.Service<ExecutePolicy>(
-  "AWS.AutoScaling.ExecutePolicy",
-);
+export const ExecutePolicy = Binding.Service<ExecutePolicy>("AWS.AutoScaling.ExecutePolicy");

@@ -31,6 +31,4 @@ export interface GetKxChangeset extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxChangesetResponse, SVC.GetKxChangesetError>
   >
 > {}
-export const GetKxChangeset = Binding.Service<GetKxChangeset>(
-  "AWS.FinSpace.GetKxChangeset",
-);
+export const GetKxChangeset = Binding.Service<GetKxChangeset>("AWS.FinSpace.GetKxChangeset");

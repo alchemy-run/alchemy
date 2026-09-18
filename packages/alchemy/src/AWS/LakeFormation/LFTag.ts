@@ -67,17 +67,10 @@ export const LFTagProvider = () =>
   Provider.effect(
     LFTag,
     Effect.gen(function* () {
-      const observe = Effect.fn(function* (
-        tagKey: string,
-        catalogId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (tagKey: string, catalogId: string | undefined) {
         return yield* lf
           .getLFTag({ TagKey: tagKey, CatalogId: catalogId })
-          .pipe(
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return LFTag.Provider.of({
@@ -86,9 +79,7 @@ export const LFTagProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            const pages = yield* lf.listLFTags
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listLFTags.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.LFTags ?? [])
               .map((tag) => ({
@@ -167,9 +158,7 @@ export const LFTagProvider = () =>
               TagKey: output.tagKey,
               CatalogId: output.catalogId,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
         }),
       });
     }),

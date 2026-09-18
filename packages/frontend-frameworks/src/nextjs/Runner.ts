@@ -1,14 +1,12 @@
+import { fileURLToPath } from "node:url";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import { fileURLToPath } from "node:url";
 
-export class RunnerError extends Data.TaggedError<"RunnerError">(
-  "RunnerError",
-)<{
+export class RunnerError extends Data.TaggedError<"RunnerError">("RunnerError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
@@ -59,21 +57,16 @@ export const runOpenNextBuild = (
 ): Effect.Effect<void, RunnerError, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.scoped(
     Effect.gen(function* () {
-      const child = yield* ChildProcess.make(
-        "node",
-        [runnerPath(), JSON.stringify(config)],
-        {
-          cwd: config.appDir,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      ).pipe(
+      const child = yield* ChildProcess.make("node", [runnerPath(), JSON.stringify(config)], {
+        cwd: config.appDir,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      }).pipe(
         Effect.mapError(
           (cause) =>
             new RunnerError({
-              message:
-                "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
+              message: "Failed to spawn the OpenNext build runner (is `node` on PATH?)",
               cause,
             }),
         ),
@@ -81,10 +74,7 @@ export const runOpenNextBuild = (
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
         dest: NodeJS.WriteStream,
-      ) =>
-        Stream.runForEach(stream, (chunk) =>
-          Effect.sync(() => dest.write(chunk)),
-        );
+      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,

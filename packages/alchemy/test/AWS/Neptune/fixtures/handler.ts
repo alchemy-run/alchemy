@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Neptune from "@/AWS/Neptune";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Neptune from "@/AWS/Neptune";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -47,25 +47,19 @@ export default NeptuneBindingsTestFunction.make(
       { kinds: ["db-cluster", "db-cluster-snapshot"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `neptune event: ${event["detail-type"]} -> ${event.resources.join(", ")}`,
-          ),
+          Effect.log(`neptune event: ${event["detail-type"]} -> ${event.resources.join(", ")}`),
         ),
     );
 
     const describeDBClusters = yield* Neptune.DescribeDBClusters();
     const describeDBInstances = yield* Neptune.DescribeDBInstances();
-    const describeDBClusterEndpoints =
-      yield* Neptune.DescribeDBClusterEndpoints();
+    const describeDBClusterEndpoints = yield* Neptune.DescribeDBClusterEndpoints();
     const describeEvents = yield* Neptune.DescribeEvents();
-    const describeDBClusterSnapshots =
-      yield* Neptune.DescribeDBClusterSnapshots();
+    const describeDBClusterSnapshots = yield* Neptune.DescribeDBClusterSnapshots();
     const deleteDBClusterSnapshot = yield* Neptune.DeleteDBClusterSnapshot();
     const copyDBClusterSnapshot = yield* Neptune.CopyDBClusterSnapshot();
-    const describePendingMaintenanceActions =
-      yield* Neptune.DescribePendingMaintenanceActions();
-    const applyPendingMaintenanceAction =
-      yield* Neptune.ApplyPendingMaintenanceAction();
+    const describePendingMaintenanceActions = yield* Neptune.DescribePendingMaintenanceActions();
+    const applyPendingMaintenanceAction = yield* Neptune.ApplyPendingMaintenanceAction();
 
     const bound = {
       describeDBClusters,
@@ -99,9 +93,7 @@ export default NeptuneBindingsTestFunction.make(
             DBClusterIdentifier: NONEXISTENT_CLUSTER_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -112,9 +104,7 @@ export default NeptuneBindingsTestFunction.make(
             DBInstanceIdentifier: NONEXISTENT_INSTANCE_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBInstanceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBInstanceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -154,9 +144,7 @@ export default NeptuneBindingsTestFunction.make(
             DBClusterSnapshotIdentifier: NONEXISTENT_SNAPSHOT_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -169,9 +157,7 @@ export default NeptuneBindingsTestFunction.make(
             TargetDBClusterSnapshotIdentifier: `${NONEXISTENT_SNAPSHOT_ID}-copy`,
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -194,9 +180,7 @@ export default NeptuneBindingsTestFunction.make(
             OptInType: "next-maintenance",
           }).pipe(
             Effect.map(() => "Applied"),
-            Effect.catchTag("ResourceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  tagRecord,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
 
@@ -141,11 +136,7 @@ export const ListenerProvider = () =>
       const observe = (serviceIdentifier: string, listenerIdentifier: string) =>
         vpclattice
           .getListener({ serviceIdentifier, listenerIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const findByName = (serviceIdentifier: string, name: string) =>
         vpclattice.listListeners
@@ -158,29 +149,19 @@ export const ListenerProvider = () =>
                 .find((l) => l.name === name),
             ),
             Effect.flatMap((summary) =>
-              summary?.id
-                ? observe(serviceIdentifier, summary.id)
-                : Effect.succeed(undefined),
+              summary?.id ? observe(serviceIdentifier, summary.id) : Effect.succeed(undefined),
             ),
           )
           .pipe(
             // The owning service may already be gone during teardown races.
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
           );
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desiredTags: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
         const listed = yield* vpclattice.listTagsForResource({
           resourceArn: arn,
         });
-        const { removed, upsert } = diffTags(
-          tagRecord(listed.tags),
-          desiredTags,
-        );
+        const { removed, upsert } = diffTags(tagRecord(listed.tags), desiredTags);
         if (upsert.length > 0) {
           yield* vpclattice.tagResource({
             resourceArn: arn,
@@ -196,18 +177,10 @@ export const ListenerProvider = () =>
       });
 
       return {
-        stables: [
-          "listenerId",
-          "listenerArn",
-          "name",
-          "serviceId",
-          "serviceArn",
-        ],
+        stables: ["listenerId", "listenerArn", "name", "serviceId", "serviceArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           if (
@@ -219,15 +192,11 @@ export const ListenerProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const serviceIdentifier =
-            output?.serviceId ?? olds?.serviceIdentifier;
+          const serviceIdentifier = output?.serviceId ?? olds?.serviceIdentifier;
           if (!serviceIdentifier) return undefined;
           const listener = output?.listenerId
             ? yield* observe(serviceIdentifier, output.listenerId)
-            : yield* findByName(
-                serviceIdentifier,
-                yield* toName(id, olds ?? {}),
-              );
+            : yield* findByName(serviceIdentifier, yield* toName(id, olds ?? {}));
           if (!listener?.arn || !listener.id || !listener.serviceId) {
             return undefined;
           }
@@ -244,9 +213,7 @@ export const ListenerProvider = () =>
             serviceArn: listener.serviceArn,
             tags: tagRecord(listed.tags),
           };
-          return (yield* hasAlchemyTags(id, listed.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, listed.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -269,18 +236,13 @@ export const ListenerProvider = () =>
                 defaultAction: news.defaultAction,
               }),
             ).pipe(
-              Effect.catchTag("ConflictException", () =>
-                findByName(news.serviceIdentifier, name),
-              ),
+              Effect.catchTag("ConflictException", () => findByName(news.serviceIdentifier, name)),
             );
             if (!listener?.arn || !listener.id) {
-              return yield* Effect.fail(
-                new Error(`Failed to create listener ${name}`),
-              );
+              return yield* Effect.fail(new Error(`Failed to create listener ${name}`));
             }
           } else if (
-            JSON.stringify(listener.defaultAction) !==
-            JSON.stringify(news.defaultAction)
+            JSON.stringify(listener.defaultAction) !== JSON.stringify(news.defaultAction)
           ) {
             // Sync default action — the only mutable setting.
             yield* retryOnConflict(
@@ -315,9 +277,7 @@ export const ListenerProvider = () =>
               serviceIdentifier: output.serviceId,
               listenerIdentifier: output.listenerId,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           yield* waitUntilAbsent(observe(output.serviceId, output.listenerId));
         }),
       };

@@ -1,15 +1,13 @@
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = import.meta.url;
 
 /** ALB Lambda target answering the `/web/*` path rule. */
-export class WebTargetFunction extends Lambda.Function<Lambda.Function>()(
-  "WebTargetFunction",
-) {}
+export class WebTargetFunction extends Lambda.Function<Lambda.Function>()("WebTargetFunction") {}
 
 export const WebTargetFunctionLive = WebTargetFunction.make(
   {

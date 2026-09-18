@@ -47,9 +47,7 @@ export const exportDatabase = (
 
         if (data.status === "complete" && data.result) {
           if (!data.result.filename || !data.result.signedUrl) {
-            return yield* Effect.die(
-              "D1 export completed but missing filename/signedUrl",
-            );
+            return yield* Effect.die("D1 export completed but missing filename/signedUrl");
           }
           return {
             filename: data.result.filename,

@@ -1,9 +1,3 @@
-import { AlchemyContext } from "@/AlchemyContext";
-import { AuthProviders } from "@/Auth/AuthProvider";
-import * as CliKit from "@/Cli/CliKit";
-import * as Provider from "@/Provider";
-import * as Prisma from "@/Prisma";
-import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -13,6 +7,12 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { v4 as uuidv4 } from "uuid";
+import { AlchemyContext } from "@/AlchemyContext";
+import { AuthProviders } from "@/Auth/AuthProvider";
+import * as CliKit from "@/Cli/CliKit";
+import * as Prisma from "@/Prisma";
+import { PrismaLogStreamError } from "@/Prisma/PrismaLogs";
+import * as Provider from "@/Provider";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",
@@ -52,9 +52,7 @@ describe("Prisma providers", () => {
         const authProviders: AuthProviders["Service"] = {};
 
         yield* Layer.build(
-          Prisma.providers().pipe(
-            Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
-          ),
+          Prisma.providers().pipe(Layer.provideMerge(Layer.succeed(AuthProviders, authProviders))),
         );
 
         expect(authProviders.Prisma?.name).toBe("Prisma");
@@ -140,21 +138,13 @@ describe("Prisma providers", () => {
 
   it.effect("uses tokenless dev providers from Prisma.providers()", () =>
     Effect.gen(function* () {
-      const projectProvider = yield* Provider.findProviderByType(
-        Prisma.Project.Type as any,
-      );
-      const appProvider = yield* Provider.findProviderByType(
-        Prisma.App.Type as any,
-      );
+      const projectProvider = yield* Provider.findProviderByType(Prisma.Project.Type as any);
+      const appProvider = yield* Provider.findProviderByType(Prisma.App.Type as any);
       const envProvider = yield* Provider.findProviderByType(
         Prisma.EnvironmentVariable.Type as any,
       );
-      const branchProvider = yield* Provider.findProviderByType(
-        Prisma.Branch.Type as any,
-      );
-      const bucketProvider = yield* Provider.findProviderByType(
-        Prisma.Bucket.Type as any,
-      );
+      const branchProvider = yield* Provider.findProviderByType(Prisma.Branch.Type as any);
+      const bucketProvider = yield* Provider.findProviderByType(Prisma.Bucket.Type as any);
       const bucketKeyProvider = yield* Provider.findProviderByType(
         Prisma.BucketAccessKey.Type as any,
       );
@@ -206,9 +196,7 @@ describe("Prisma providers", () => {
       expect(bucket.bucketId).toBe("dev:bucket:Bucket");
       expect(bucket.name).toBe("uploads");
       expect(bucket.projectId).toBe(project.projectId);
-      expect(bucketKey.bucketAccessKeyId).toBe(
-        "dev:bucket-access-key:BucketAccessKey",
-      );
+      expect(bucketKey.bucketAccessKeyId).toBe("dev:bucket-access-key:BucketAccessKey");
       expect(bucketKey.bucketId).toBe(bucket.bucketId);
       expect(Redacted.isRedacted(bucketKey.secretAccessKey)).toBe(true);
     }).pipe(providePrismaDev),
@@ -246,9 +234,7 @@ describe("Prisma providers", () => {
     "tails deployment logs from a providers()-shaped stack context",
     () =>
       Effect.gen(function* () {
-        const provider = yield* Provider.findProviderByType(
-          Prisma.Deployment.Type as any,
-        );
+        const provider = yield* Provider.findProviderByType(Prisma.Deployment.Type as any);
 
         // The tail stream must resolve everything it needs from the context
         // `providers()` produces. Point it at a closed loopback port so the
@@ -263,9 +249,7 @@ describe("Prisma providers", () => {
         expect(error).toBeInstanceOf(PrismaLogStreamError);
       }).pipe(
         Effect.provide(
-          Prisma.providers().pipe(
-            Layer.provideMerge(Layer.succeed(AuthProviders, {})),
-          ),
+          Prisma.providers().pipe(Layer.provideMerge(Layer.succeed(AuthProviders, {}))),
         ),
         Effect.provide(
           Layer.succeed(AlchemyContext, {

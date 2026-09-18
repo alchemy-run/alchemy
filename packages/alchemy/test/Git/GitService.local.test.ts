@@ -1,3 +1,26 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Cloudflare from "@/Cloudflare";
+import type { Oid } from "@/Git/Api.ts";
+import {
+  encodeCommit,
+  hashObject,
+  ObjectType,
+  parseCommit,
+  utf8Decode,
+  utf8Encode,
+} from "@/Git/Protocol/ObjectCodec.ts";
 /**
  * THE PRIMARY SUITE — full local dev-mode coverage of git-service.
  *
@@ -19,36 +42,9 @@
  *      and the wire auth matrix.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Result from "effect/Result";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import type { Oid } from "@/Git/Api.ts";
-import {
-  encodeCommit,
-  hashObject,
-  ObjectType,
-  parseCommit,
-  utf8Decode,
-  utf8Encode,
-} from "@/Git/Protocol/ObjectCodec.ts";
 import ProtectedGitHost from "./fixtures/protected-stack.ts";
-import TestGitHost, {
-  TEST_SECRET,
-  TEST_SECRET_DEV,
-  TestApi,
-} from "./fixtures/stack.ts";
+import TestGitHost, { TEST_SECRET, TEST_SECRET_DEV, TestApi } from "./fixtures/stack.ts";
 import { verifyPackResponse } from "./harness/pack.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -58,10 +54,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The local suite must not touch the cloud, so it composes its own Stack over
 // `Alchemy.localState()` — the same user pattern as production, just with a
@@ -85,10 +78,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
 }> {}
 
 const boundedReadiness = Schedule.max([
-  Schedule.min([
-    Schedule.exponential("500 millis"),
-    Schedule.spaced("2 seconds"),
-  ]),
+  Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
   Schedule.recurs(20),
 ]);
 
@@ -136,8 +126,7 @@ const makeClient = (url: string, token: string) =>
   });
 
 /** A client that sends NO Authorization header — the anonymous caller. */
-const makeAnonymousClient = (url: string) =>
-  HttpApiClient.make(TestApi, { baseUrl: url });
+const makeAnonymousClient = (url: string) => HttpApiClient.make(TestApi, { baseUrl: url });
 
 const asOid = (oid: string): Oid => oid as Oid;
 
@@ -233,11 +222,7 @@ const tempDir = Effect.gen(function* () {
 /** Poll marker: repo still visible while its async purge drains. */
 class StillDeleting extends Data.TaggedError("StillDeleting")<{}> {}
 
-const createRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  name: string,
-) {
+const createRepo = Effect.fn(function* (url: string, owner: string, name: string) {
   const client = yield* makeClient(url, TEST_SECRET);
   // Retry-safe: a previous (failed, runner-retried) attempt may have left
   // the repo behind — delete it and wait out the async purge before
@@ -299,9 +284,7 @@ test(
 
     // list-all is admin-only and contains the repo
     const listed = yield* admin.repos.list({ query: {} });
-    expect(
-      listed.items.some((r) => r.owner === "acme" && r.name === "rest-repos"),
-    ).toBe(true);
+    expect(listed.items.some((r) => r.owner === "acme" && r.name === "rest-repos")).toBe(true);
 
     // PATCH description + readOnly round-trip
     const patched = yield* admin.repos.update({
@@ -344,9 +327,7 @@ test(
       query: { public: true },
     });
     expect(
-      publicListing.items.some(
-        (row) => row.owner === "acme" && row.name === "rest-repos",
-      ),
+      publicListing.items.some((row) => row.owner === "acme" && row.name === "rest-repos"),
     ).toBe(false);
   }).pipe(logLevel),
   { timeout: 120_000 },
@@ -356,11 +337,7 @@ test(
   "refs + objects: CAS writes, typed conflicts, commit/log/tree/blob reads, raw routes",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const { client: admin, remote } = yield* createRepo(
-      url,
-      "acme",
-      "rest-refs",
-    );
+    const { client: admin, remote } = yield* createRepo(url, "acme", "rest-refs");
     const params = { owner: "acme", repo: "rest-refs" };
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -371,22 +348,12 @@ test(
 
     // seed real objects over the wire (2 commits)
     const tmp = yield* tempDir;
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "hello.txt"), "hello local\n");
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c1: seed");
-    yield* fs.writeFileString(
-      path.join(work, "hello.txt"),
-      "hello local, v2\n",
-    );
+    yield* fs.writeFileString(path.join(work, "hello.txt"), "hello local, v2\n");
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c2: bump");
     yield* mustGit(work, "push", "origin", "main");
@@ -405,10 +372,7 @@ test(
       query: { name: "refs/heads/main" },
     });
     expect(mainRef.oid).toBe(head);
-    yield* expectTag(
-      admin.refs.get({ params, query: { name: "refs/heads/nope" } }),
-      "RefNotFound",
-    );
+    yield* expectTag(admin.refs.get({ params, query: { name: "refs/heads/nope" } }), "RefNotFound");
 
     // CAS create (expectedOid: null = must-not-exist)
     const branch = yield* admin.refs.update({
@@ -502,9 +466,7 @@ test(
       params: { ...params, oid: helloEntry.oid },
     });
     expect(blob.encoding).toBe("base64");
-    const blobText = yield* Effect.sync(() =>
-      Buffer.from(blob.content, "base64").toString("utf8"),
-    );
+    const blobText = yield* Effect.sync(() => Buffer.from(blob.content, "base64").toString("utf8"));
     expect(blobText).toBe("hello local, v2\n");
 
     // wrong-kind reads → typed 422
@@ -583,24 +545,13 @@ test(
   "git: empty clone, first push (exec bit + subdir), REST agreement",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const { client: admin, remote } = yield* createRepo(
-      url,
-      "acme",
-      "wire-basic",
-    );
+    const { client: admin, remote } = yield* createRepo(url, "acme", "wire-basic");
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
 
     // empty-repo clone succeeds (unborn HEAD advertisement)
-    const clone = yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    const clone = yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     expect(`${clone.stdout}\n${clone.stderr}`).toContain("empty repository");
     const work = path.join(tmp, "work");
 
@@ -612,10 +563,7 @@ test(
     yield* fs.writeFileString(path.join(work, "sub", "nested.txt"), "nested\n");
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c2: subdir");
-    yield* fs.writeFileString(
-      path.join(work, "run.sh"),
-      "#!/bin/sh\necho ok\n",
-    );
+    yield* fs.writeFileString(path.join(work, "run.sh"), "#!/bin/sh\necho ok\n");
     yield* fs.chmod(path.join(work, "run.sh"), 0o755);
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c3: executable");
@@ -696,11 +644,7 @@ test(
   "git: force-push CAS, branch + annotated tag lifecycle",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const { client: admin, remote } = yield* createRepo(
-      url,
-      "acme",
-      "wire-refs",
-    );
+    const { client: admin, remote } = yield* createRepo(url, "acme", "wire-refs");
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
@@ -748,8 +692,7 @@ test(
     });
     expect(tagRef.oid).toBe(tagOid);
     expect(tagRef.peeled).toBe(headB); // peeled to the commit it annotates
-    const lsRemote = (yield* mustGit(b, "ls-remote", "--tags", "origin"))
-      .stdout;
+    const lsRemote = (yield* mustGit(b, "ls-remote", "--tags", "origin")).stdout;
     expect(lsRemote).toContain(`${tagOid}\trefs/tags/v1`);
     expect(lsRemote).toContain(`${headB}\trefs/tags/v1^{}`);
 
@@ -766,10 +709,7 @@ test(
       admin.refs.get({ params, query: { name: "refs/heads/feature" } }),
       "RefNotFound",
     );
-    yield* expectTag(
-      admin.refs.get({ params, query: { name: "refs/tags/v1" } }),
-      "RefNotFound",
-    );
+    yield* expectTag(admin.refs.get({ params, query: { name: "refs/tags/v1" } }), "RefNotFound");
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -778,24 +718,13 @@ test(
   "git: readOnly repos reject pushes in-band, then accept after unflag",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const { client: admin, remote } = yield* createRepo(
-      url,
-      "acme",
-      "wire-readonly",
-    );
+    const { client: admin, remote } = yield* createRepo(url, "acme", "wire-readonly");
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
     const params = { owner: "acme", repo: "wire-readonly" };
 
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "f.txt"), "one\n");
     yield* mustGit(work, "add", "-A");
@@ -825,25 +754,14 @@ test(
   "git: wire auth matrix — garbage token 401s, read token clones but cannot push",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const { client: admin, remote } = yield* createRepo(
-      url,
-      "acme",
-      "wire-auth",
-    );
+    const { client: admin, remote } = yield* createRepo(url, "acme", "wire-auth");
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
     const params = { owner: "acme", repo: "wire-auth" };
 
     // seed one commit with the bootstrap write token
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      remote,
-      "seed",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", remote, "seed");
     const seed = path.join(tmp, "seed");
     yield* fs.writeFileString(path.join(seed, "f.txt"), "seed\n");
     yield* mustGit(seed, "add", "-A");
@@ -882,14 +800,7 @@ test(
 
     // A history with enough distinct blobs that a compaction run has real
     // work to do, plus one binary file whose bytes must survive exactly.
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      repo.remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", repo.remote, "work");
     const work = path.join(tmp, "work");
     const binary = new Uint8Array(4096);
     for (let i = 0; i < binary.length; i++) binary[i] = (i * 31 + 7) & 0xff;
@@ -942,9 +853,7 @@ test(
     yield* mustGit(work, "commit", "-m", "after-compaction");
     yield* mustGit(work, "push", "origin", "main");
     yield* mustGit(verify, "pull", "origin", "main");
-    expect(yield* fs.readFileString(path.join(verify, "after.txt"))).toBe(
-      "after\n",
-    );
+    expect(yield* fs.readFileString(path.join(verify, "after.txt"))).toBe("after\n");
   }).pipe(logLevel),
   { timeout: 120_000 },
 );
@@ -958,14 +867,7 @@ test(
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
 
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      repo.remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", repo.remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "a.txt"), "one\n");
     yield* fs.makeDirectory(path.join(work, "sub"), { recursive: true });
@@ -982,12 +884,8 @@ test(
     const fromBundle = path.join(tmp, "fromBundle");
     yield* mustGit(fromBundle, "fsck", "--strict");
     expect((yield* mustGit(fromBundle, "rev-parse", "HEAD")).stdout).toBe(head);
-    expect(yield* fs.readFileString(path.join(fromBundle, "a.txt"))).toBe(
-      "one\n",
-    );
-    expect(
-      yield* fs.readFileString(path.join(fromBundle, "sub", "b.txt")),
-    ).toBe("two\n");
+    expect(yield* fs.readFileString(path.join(fromBundle, "a.txt"))).toBe("one\n");
+    expect(yield* fs.readFileString(path.join(fromBundle, "sub", "b.txt"))).toBe("two\n");
 
     // A push after the bundle was cut invalidates it: the next clone must
     // still see the NEW commit (served dynamically, or from a fresh bundle).
@@ -1003,15 +901,7 @@ test(
 
     // A single-branch clone is covered by the same (superset) bundle.
     yield* Effect.sleep("4 seconds");
-    yield* mustGit(
-      tmp,
-      "clone",
-      "--single-branch",
-      "--branch",
-      "main",
-      repo.remote,
-      "single",
-    );
+    yield* mustGit(tmp, "clone", "--single-branch", "--branch", "main", repo.remote, "single");
     yield* mustGit(path.join(tmp, "single"), "fsck", "--strict");
   }).pipe(logLevel),
   { timeout: 120_000 },
@@ -1026,14 +916,7 @@ test(
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
 
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      repo.remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", repo.remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "f.txt"), "hello\n");
     yield* mustGit(work, "add", "-A");
@@ -1046,14 +929,11 @@ test(
     // Hand-built v0 upload-pack request: one `want`, flush, `done` — the
     // shape a fresh clone sends. No capabilities, so the response is
     // `NAK` followed by the raw pack.
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const body = `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`;
     const client = yield* HttpClient.HttpClient;
     const response = yield* client.execute(
-      HttpClientRequest.post(
-        `${url}/acme/bundle-wire.git/git-upload-pack`,
-      ).pipe(
+      HttpClientRequest.post(`${url}/acme/bundle-wire.git/git-upload-pack`).pipe(
         HttpClientRequest.setHeaders({
           authorization: `Bearer ${repo.token}`,
           "content-type": "application/x-git-upload-pack-request",
@@ -1065,9 +945,7 @@ test(
     // The header is only set on the bundle path (DESIGN.md §12.2).
     expect(response.headers["x-git-bundle"]).toBeDefined();
 
-    const bytes = yield* response.arrayBuffer.pipe(
-      Effect.map((buffer) => new Uint8Array(buffer)),
-    );
+    const bytes = yield* response.arrayBuffer.pipe(Effect.map((buffer) => new Uint8Array(buffer)));
     const text = new TextDecoder().decode(bytes.subarray(0, 8));
     expect(text).toBe("0008NAK\n");
     expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
@@ -1083,42 +961,27 @@ test(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      repo.remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", repo.remote, "work");
     const work = path.join(tmp, "work");
     for (let i = 0; i < 20; i++) {
-      yield* fs.writeFileString(
-        path.join(work, `f${i}.txt`),
-        `${"line\n".repeat(200)}${i}\n`,
-      );
+      yield* fs.writeFileString(path.join(work, `f${i}.txt`), `${"line\n".repeat(200)}${i}\n`);
     }
     yield* mustGit(work, "add", "-A");
     yield* mustGit(work, "commit", "-m", "c1");
     yield* mustGit(work, "push", "origin", "main");
     const head = (yield* mustGit(work, "rev-parse", "HEAD")).stdout;
 
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const client = yield* HttpClient.HttpClient;
     const fetchPack = (caps: string) =>
       client
         .execute(
-          HttpClientRequest.post(
-            `${url}/acme/bundle-framed.git/git-upload-pack`,
-          ).pipe(
+          HttpClientRequest.post(`${url}/acme/bundle-framed.git/git-upload-pack`).pipe(
             HttpClientRequest.setHeaders({
               authorization: `Bearer ${repo.token}`,
               "content-type": "application/x-git-upload-pack-request",
             }),
-            HttpClientRequest.bodyText(
-              `${pkt(`want ${head}${caps}\n`)}0000${pkt("done\n")}`,
-            ),
+            HttpClientRequest.bodyText(`${pkt(`want ${head}${caps}\n`)}0000${pkt("done\n")}`),
           ),
         )
         .pipe(
@@ -1171,14 +1034,7 @@ test(
     const path = yield* Path.Path;
     const tmp = yield* tempDir;
 
-    yield* mustGit(
-      tmp,
-      "-c",
-      "init.defaultBranch=main",
-      "clone",
-      repo.remote,
-      "work",
-    );
+    yield* mustGit(tmp, "-c", "init.defaultBranch=main", "clone", repo.remote, "work");
     const work = path.join(tmp, "work");
     yield* fs.writeFileString(path.join(work, "f.txt"), "hello\n");
     yield* mustGit(work, "add", "-A");
@@ -1201,20 +1057,15 @@ test(
 
     // Raw wire request, immediately — before the bundle job re-cuts, so
     // the bundle on disk is definitively stale.
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const client = yield* HttpClient.HttpClient;
     const response = yield* client.execute(
-      HttpClientRequest.post(
-        `${url}/acme/bundle-splice.git/git-upload-pack`,
-      ).pipe(
+      HttpClientRequest.post(`${url}/acme/bundle-splice.git/git-upload-pack`).pipe(
         HttpClientRequest.setHeaders({
           authorization: `Bearer ${repo.token}`,
           "content-type": "application/x-git-upload-pack-request",
         }),
-        HttpClientRequest.bodyText(
-          `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
-        ),
+        HttpClientRequest.bodyText(`${pkt(`want ${head}\n`)}0000${pkt("done\n")}`),
       ),
     );
     expect(response.status).toBe(200);
@@ -1222,9 +1073,7 @@ test(
     // `computeClosure` deliberately does not subtract boundary trees (see
     // Closure.ts "accepted fat"), so the walk is the honest answer here.
     expect(response.headers["x-git-bundle"]).toBeUndefined();
-    const bytes = yield* response.arrayBuffer.pipe(
-      Effect.map((buffer) => new Uint8Array(buffer)),
-    );
+    const bytes = yield* response.arrayBuffer.pipe(Effect.map((buffer) => new Uint8Array(buffer)));
     expect(new TextDecoder().decode(bytes.subarray(0, 8))).toBe("0008NAK\n");
     expect(new TextDecoder().decode(bytes.subarray(8, 12))).toBe("PACK");
 
@@ -1234,8 +1083,7 @@ test(
     yield* mustGit(spliced, "fsck", "--strict");
     expect((yield* mustGit(spliced, "rev-parse", "HEAD")).stdout).toBe(head);
     const logWork = (yield* mustGit(work, "log", "--format=%H %s")).stdout;
-    const logSpliced = (yield* mustGit(spliced, "log", "--format=%H %s"))
-      .stdout;
+    const logSpliced = (yield* mustGit(spliced, "log", "--format=%H %s")).stdout;
     expect(logSpliced).toBe(logWork);
   }).pipe(logLevel),
   { timeout: 180_000 },
@@ -1264,10 +1112,7 @@ test(
     const pub = path.join(tmp, "pub");
     yield* fs.makeDirectory(pub, { recursive: true });
     yield* mustGit(pub, "init", "-q", "-b", "main");
-    yield* fs.writeFileString(
-      path.join(pub, "greeting.txt"),
-      "hello anonymous\n",
-    );
+    yield* fs.writeFileString(path.join(pub, "greeting.txt"), "hello anonymous\n");
     yield* mustGit(pub, "add", "-A");
     yield* mustGit(pub, "commit", "-qm", "public commit");
     yield* mustGit(pub, "push", "-q", repo.remote, "main");
@@ -1301,24 +1146,15 @@ test(
     const parsed = new URL(url);
     const anonymousRemote = `${parsed.protocol}//${parsed.host}/acme/town-square.git`;
     yield* mustGit(tmp, `clone`, `-q`, anonymousRemote, `anon-clone`);
-    const cloned = yield* mustGit(
-      path.join(tmp, "anon-clone"),
-      `show`,
-      `HEAD:greeting.txt`,
-    );
+    const cloned = yield* mustGit(path.join(tmp, "anon-clone"), `show`, `HEAD:greeting.txt`);
     expect(cloned.stdout.trim()).toBe("hello anonymous");
 
     // Writes stay locked: anonymous push is rejected (401 → git fails).
     const anonWork = path.join(tmp, "anon-clone");
-    yield* fs.writeFileString(
-      path.join(anonWork, "greeting.txt"),
-      "hello anonymous\nmore\n",
-    );
+    yield* fs.writeFileString(path.join(anonWork, "greeting.txt"), "hello anonymous\nmore\n");
     yield* mustGit(anonWork, "add", "-A");
     yield* mustGit(anonWork, "commit", "-qm", "anon write");
-    const push = yield* Effect.result(
-      mustGit(anonWork, "push", "-q", "origin", "main"),
-    );
+    const push = yield* Effect.result(mustGit(anonWork, "push", "-q", "origin", "main"));
     expect(Result.isFailure(push)).toBe(true);
 
     // Anonymous token management is rejected too.
@@ -1342,9 +1178,7 @@ test(
     const privateListing = yield* admin.repos.list({
       query: { public: true },
     });
-    expect(privateListing.items.some((row) => row.name === "town-square")).toBe(
-      false,
-    );
+    expect(privateListing.items.some((row) => row.name === "town-square")).toBe(false);
     const privateClone = yield* Effect.result(
       mustGit(tmp, `clone`, `-q`, anonymousRemote, `anon-clone-private`),
     );
@@ -1416,11 +1250,7 @@ test(
     });
     expect(d1.parent).toBeNull();
     expect(d1.files.every((f) => f.status === "added")).toBe(true);
-    expect(d1.files.map((f) => f.path).sort()).toEqual([
-      "a.txt",
-      "dir/b.txt",
-      "script.sh",
-    ]);
+    expect(d1.files.map((f) => f.path).sort()).toEqual(["a.txt", "dir/b.txt", "script.sh"]);
 
     // wrong object type: a tree oid on the diff endpoint → 422
     const treeOid = (yield* client.objects.commit({
@@ -1581,9 +1411,7 @@ test(
     const d = yield* anonymous.objects.diff({
       params: { owner: "acme", repo: "diff-public", oid: asOid(pubTip) },
     });
-    expect(d.files).toEqual([
-      expect.objectContaining({ path: "hello.txt", status: "modified" }),
-    ]);
+    expect(d.files).toEqual([expect.objectContaining({ path: "hello.txt", status: "modified" })]);
     const c = yield* anonymous.objects.compare({
       params: { owner: "acme", repo: "diff-public" },
       query: { base: d.parent!, head: "main" },
@@ -1713,10 +1541,7 @@ test(
     expect(detail.mergeableReason).toBe("ff");
 
     // unknown number → typed 404
-    yield* expectTag(
-      client.pulls.get({ params: { ...params, number: 999 } }),
-      "PullNotFound",
-    );
+    yield* expectTag(client.pulls.get({ params: { ...params, number: 999 } }), "PullNotFound");
 
     // close → detail still computed (both refs exist) → reopen → edit
     const closed = yield* client.pulls.update({
@@ -1768,12 +1593,9 @@ test(
     // pin encodeCommit against real git-produced bytes: `git cat-file
     // commit` output re-hashed must reproduce the oid (byte-exactness),
     // and parse→encode must reproduce those bytes.
-    const catFile = (yield* mustGit(work, "cat-file", "commit", featureTip))
-      .stdout;
+    const catFile = (yield* mustGit(work, "cat-file", "commit", featureTip)).stdout;
     const rawCommit = `${catFile}\n`; // mustGit trims the trailing LF
-    expect(yield* hashObject(ObjectType.commit, utf8Encode(rawCommit))).toBe(
-      featureTip,
-    );
+    expect(yield* hashObject(ObjectType.commit, utf8Encode(rawCommit))).toBe(featureTip);
     const parsed = yield* parseCommit(utf8Encode(rawCommit));
     const reEncoded = yield* encodeCommit({
       tree: parsed.tree,
@@ -1839,13 +1661,7 @@ test(
     );
 
     // up-to-date: a PR whose head is already reachable from base
-    yield* mustGit(
-      work,
-      "push",
-      "-q",
-      remote,
-      `${featureTip}:refs/heads/already-in`,
-    );
+    yield* mustGit(work, "push", "-q", remote, `${featureTip}:refs/heads/already-in`);
     const upToDate = yield* client.pulls.create({
       params,
       payload: { title: "nothing to do", base: "main", head: "already-in" },
@@ -1934,13 +1750,9 @@ test(
     const fresh = path.join(tmp, "fresh");
     yield* mustGit(fresh, "fsck", "--strict");
     expect(yield* revParse(fresh, "HEAD")).toBe(merged.oid);
-    expect(yield* fs.readFileString(path.join(fresh, "feat-a.txt"))).toBe(
-      "a\n",
-    );
+    expect(yield* fs.readFileString(path.join(fresh, "feat-a.txt"))).toBe("a\n");
     expect(yield* fs.readFileString(path.join(fresh, "b.txt"))).toBe("b\n");
-    expect(yield* fs.readFileString(path.join(fresh, "README.md"))).toBe(
-      "base\n",
-    );
+    expect(yield* fs.readFileString(path.join(fresh, "README.md"))).toBe("base\n");
     const parents = (yield* mustGit(fresh, "log", "--format=%P", "-1")).stdout;
     expect(parents).toBe(`${mainTip} ${topicATip}`);
 
@@ -1973,9 +1785,7 @@ test(
       }),
       "MergeConflict",
     );
-    expect((conflict as { paths?: ReadonlyArray<string> }).paths).toEqual([
-      "README.md",
-    ]);
+    expect((conflict as { paths?: ReadonlyArray<string> }).paths).toEqual(["README.md"]);
     // the PR stays open and the base ref did not move
     const still = yield* client.pulls.get({
       params: { ...params, number: conflictPr.number },
@@ -2040,10 +1850,7 @@ test(
     expect((missing as { ref?: string }).ref).toBe("refs/heads/topic-c");
 
     // private repo: anonymous reads are 401
-    yield* expectTag(
-      anonymous.pulls.list({ params, query: {} }),
-      "Unauthorized",
-    );
+    yield* expectTag(anonymous.pulls.list({ params, query: {} }), "Unauthorized");
 
     // public repo: anonymous reads work, writes never do
     yield* client.repos.update({ params, payload: { public: true } });
@@ -2095,15 +1902,9 @@ const ghFetch = Effect.fn(function* (
   },
 ) {
   const client = yield* HttpClient.HttpClient;
-  let request = HttpClientRequest.make((options?.method ?? "GET") as "GET")(
-    `${url}/api/v3${path}`,
-  );
+  let request = HttpClientRequest.make((options?.method ?? "GET") as "GET")(`${url}/api/v3${path}`);
   if (options?.token !== undefined) {
-    request = HttpClientRequest.setHeader(
-      request,
-      "authorization",
-      `token ${options.token}`,
-    );
+    request = HttpClientRequest.setHeader(request, "authorization", `token ${options.token}`);
   }
   if (options?.body !== undefined) {
     request = HttpClientRequest.bodyJsonUnsafe(options.body)(request);
@@ -2168,10 +1969,7 @@ test(
     expect(branches.json[0].commit.sha).toMatch(/^[0-9a-f]{40}$/);
 
     // commits list + Link pagination
-    const commits = yield* ghFetch(
-      url,
-      "/repos/acme/gh-compat/commits?per_page=1",
-    );
+    const commits = yield* ghFetch(url, "/repos/acme/gh-compat/commits?per_page=1");
     expect(commits.status).toBe(200);
     expect(commits.json.length).toBe(1);
     expect(commits.json[0].commit.message).toContain("c2");
@@ -2190,10 +1988,7 @@ test(
     expect(one.json.files[0].status).toBe("modified");
 
     // contents (base64)
-    const contents = yield* ghFetch(
-      url,
-      "/repos/acme/gh-compat/contents/hello.txt",
-    );
+    const contents = yield* ghFetch(url, "/repos/acme/gh-compat/contents/hello.txt");
     expect(contents.status).toBe(200);
     expect(contents.json.encoding).toBe("base64");
     expect(atob(contents.json.content as string)).toBe("two\n");
@@ -2295,18 +2090,12 @@ test(
     // list state filters: open empty; closed includes the merged PR
     const open = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls?state=open");
     expect(open.json.length).toBe(0);
-    const closed = yield* ghFetch(
-      url,
-      "/repos/acme/gh-pulls/pulls?state=closed",
-    );
+    const closed = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls?state=closed");
     expect(closed.json.length).toBe(1);
     expect(closed.json[0].number).toBe(1);
 
     // merged PR files fall back to the merge commit's diff
-    const mergedFiles = yield* ghFetch(
-      url,
-      "/repos/acme/gh-pulls/pulls/1/files",
-    );
+    const mergedFiles = yield* ghFetch(url, "/repos/acme/gh-pulls/pulls/1/files");
     expect(mergedFiles.json.map((f: any) => f.filename)).toEqual(["topic.txt"]);
 
     // PATCH validation
@@ -2367,12 +2156,7 @@ test(
 
     // ...but a direct push to main is refused PER-REF, after the pack is
     // parsed, with the reason the policy gave.
-    const denied = yield* mustFailGit(
-      w,
-      "push",
-      "origin",
-      "HEAD:refs/heads/main",
-    );
+    const denied = yield* mustFailGit(w, "push", "origin", "HEAD:refs/heads/main");
     expect(denied.stderr).toContain("not permitted");
 
     // The owner passes the same policy.
@@ -2382,9 +2166,7 @@ test(
     // The push advertisement is a write probe: anonymous gets the 401
     // (with `WWW-Authenticate`) that makes git ask for credentials.
     const client = yield* HttpClient.HttpClient;
-    const probe = yield* client.get(
-      `${url}/e2e/protected/info/refs?service=git-receive-pack`,
-    );
+    const probe = yield* client.get(`${url}/e2e/protected/info/refs?service=git-receive-pack`);
     expect(probe.status).toBe(401);
     expect(probe.headers["www-authenticate"]).toContain("Basic");
 
@@ -2412,15 +2194,8 @@ test(
     yield* mustGit(w, "add", "-A");
     yield* mustGit(w, "commit", "-m", "[reject-content]");
     const rejectedOid = yield* revParse(w, "HEAD");
-    const rejectedContent = yield* mustFailGit(
-      w,
-      "push",
-      adminRemote,
-      "HEAD:refs/heads/main",
-    );
-    expect(rejectedContent.stderr).toContain(
-      "commit rejected by content policy",
-    );
+    const rejectedContent = yield* mustFailGit(w, "push", adminRemote, "HEAD:refs/heads/main");
+    expect(rejectedContent.stderr).toContain("commit rejected by content policy");
     const ownerClient = yield* makeClient(url, TEST_SECRET);
     yield* expectTag(
       ownerClient.objects.commit({

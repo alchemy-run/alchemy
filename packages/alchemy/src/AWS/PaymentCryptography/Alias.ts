@@ -75,10 +75,7 @@ export const AliasProvider = () =>
   Provider.effect(
     Alias,
     Effect.gen(function* () {
-      const createAliasName = Effect.fn(function* (
-        id: string,
-        props: AliasProps,
-      ) {
+      const createAliasName = Effect.fn(function* (id: string, props: AliasProps) {
         if (props.aliasName) {
           return props.aliasName;
         }
@@ -90,14 +87,10 @@ export const AliasProvider = () =>
       });
 
       const observeAlias = Effect.fn(function* (aliasName: string) {
-        return yield* paymentcryptography
-          .getAlias({ AliasName: aliasName })
-          .pipe(
-            Effect.map((r) => r.Alias),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* paymentcryptography.getAlias({ AliasName: aliasName }).pipe(
+          Effect.map((r) => r.Alias),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return Alias.Provider.of({
@@ -108,8 +101,7 @@ export const AliasProvider = () =>
             Effect.map((chunk) => Array.from(chunk).map(toAttrs)),
           ),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const aliasName =
-            output?.aliasName ?? (yield* createAliasName(id, olds ?? {}));
+          const aliasName = output?.aliasName ?? (yield* createAliasName(id, olds ?? {}));
           const alias = yield* observeAlias(aliasName);
           if (alias === undefined) return undefined;
           return toAttrs(alias);
@@ -124,8 +116,7 @@ export const AliasProvider = () =>
           // fall through: undefined → default update (keyArn repoint)
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const aliasName =
-            output?.aliasName ?? (yield* createAliasName(id, news));
+          const aliasName = output?.aliasName ?? (yield* createAliasName(id, news));
 
           // 1. Observe — cloud state is authoritative.
           let alias = yield* observeAlias(aliasName);
@@ -159,9 +150,7 @@ export const AliasProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* paymentcryptography
             .deleteAlias({ AliasName: output.aliasName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

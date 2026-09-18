@@ -6,10 +6,7 @@ import type { Campaign } from "./Campaign.ts";
 /**
  * `UpdateCampaign` request with `name` injected from the bound campaign.
  */
-export interface UpdateCampaignRequest extends Omit<
-  iotfleetwise.UpdateCampaignRequest,
-  "name"
-> {}
+export interface UpdateCampaignRequest extends Omit<iotfleetwise.UpdateCampaignRequest, "name"> {}
 
 /**
  * Runtime binding for the `UpdateCampaign` operation (IAM action
@@ -39,12 +36,7 @@ export interface UpdateCampaign extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateCampaignRequest,
-    ) => Effect.Effect<
-      iotfleetwise.UpdateCampaignResponse,
-      iotfleetwise.UpdateCampaignError
-    >
+    ) => Effect.Effect<iotfleetwise.UpdateCampaignResponse, iotfleetwise.UpdateCampaignError>
   >
 > {}
-export const UpdateCampaign = Binding.Service<UpdateCampaign>(
-  "AWS.IoTFleetWise.UpdateCampaign",
-);
+export const UpdateCampaign = Binding.Service<UpdateCampaign>("AWS.IoTFleetWise.UpdateCampaign");

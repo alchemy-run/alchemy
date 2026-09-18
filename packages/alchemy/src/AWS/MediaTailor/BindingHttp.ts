@@ -35,24 +35,20 @@ export const makeMediaTailorHttpBinding = <I, A, E, R>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}())`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  // Channel-assembly resource names are runtime parameters;
-                  // their ARNs are unknowable at deploy time.
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}())`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                // Channel-assembly resource names are runtime parameters;
+                // their ARNs are unknowable at deploy time.
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.MediaTailor.${options.capability}`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`AWS.MediaTailor.${options.capability}`)(function* (request: I) {
         return yield* op(request);
       });
     });
@@ -89,41 +85,35 @@ export const makeMediaTailorPlaybackHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}(${config}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.iamActions],
-                  Resource: [
-                    Output.interpolate`${config.playbackConfigurationArn}`,
-                    // Prefetch schedules live in a sibling ARN space:
-                    // arn:…:prefetchSchedule/{configurationName}/{name}
-                    Output.map(
-                      config.playbackConfigurationArn,
-                      (arn) =>
-                        `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
-                    ),
-                    // ListPrefetchSchedules is authorized against the bare
-                    // account/region wildcard `…:prefetchSchedule/*` (the
-                    // configuration name is not part of the authorization
-                    // resource), so every prefetch binding also grants it.
-                    Output.map(config.playbackConfigurationArn, (arn) =>
-                      arn.replace(
-                        /:playbackConfiguration\/.*$/,
-                        ":prefetchSchedule/*",
-                      ),
-                    ),
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.MediaTailor.${options.capability}(${config}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.iamActions],
+                Resource: [
+                  Output.interpolate`${config.playbackConfigurationArn}`,
+                  // Prefetch schedules live in a sibling ARN space:
+                  // arn:…:prefetchSchedule/{configurationName}/{name}
+                  Output.map(
+                    config.playbackConfigurationArn,
+                    (arn) => `${arn.replace(":playbackConfiguration/", ":prefetchSchedule/")}/*`,
+                  ),
+                  // ListPrefetchSchedules is authorized against the bare
+                  // account/region wildcard `…:prefetchSchedule/*` (the
+                  // configuration name is not part of the authorization
+                  // resource), so every prefetch binding also grants it.
+                  Output.map(config.playbackConfigurationArn, (arn) =>
+                    arn.replace(/:playbackConfiguration\/.*$/, ":prefetchSchedule/*"),
+                  ),
+                ],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(
-        `AWS.MediaTailor.${options.capability}(${config.LogicalId})`,
-      )(function* (request: Omit<I, "PlaybackConfigurationName">) {
+      return Effect.fn(`AWS.MediaTailor.${options.capability}(${config.LogicalId})`)(function* (
+        request: Omit<I, "PlaybackConfigurationName">,
+      ) {
         return yield* op({
           ...request,
           PlaybackConfigurationName: yield* name,

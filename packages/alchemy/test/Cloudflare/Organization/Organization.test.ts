@@ -1,18 +1,15 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as organizations from "@distilled.cloud/cloudflare/organizations";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Organizations are entitlement-gated (closed rollout for tenant /
 // enterprise customers). On the standard testing account every
@@ -41,35 +38,29 @@ const PROFILE = {
   externalMetadata: "alchemy:test",
 } as const;
 
-test.provider(
-  "unentitled accounts surface the typed Forbidden error",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("unentitled accounts surface the typed Forbidden error", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const canList = yield* probeEntitlement;
-      if (canList) {
-        // Entitled account — nothing to assert here; the lifecycle test
-        // covers the real behavior.
-        yield* Effect.logInfo(
-          "account is organizations-entitled; probe test is a no-op",
-        );
-        return;
-      }
+    const canList = yield* probeEntitlement;
+    if (canList) {
+      // Entitled account — nothing to assert here; the lifecycle test
+      // covers the real behavior.
+      yield* Effect.logInfo("account is organizations-entitled; probe test is a no-op");
+      return;
+    }
 
-      // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* organizations
-        .listOrganizations({ pageSize: 1 })
-        .pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+    // The typed tag — not UnknownCloudflareError, not a status check.
+    const error = yield* organizations.listOrganizations({ pageSize: 1 }).pipe(Effect.flip);
+    expect(error._tag).toEqual("Forbidden");
 
-      const createError = yield* organizations
-        .createOrganization({ name: ORG_NAME_CRUD })
-        .pipe(Effect.flip);
-      expect(createError._tag).toEqual("Forbidden");
+    const createError = yield* organizations
+      .createOrganization({ name: ORG_NAME_CRUD })
+      .pipe(Effect.flip);
+    expect(createError._tag).toEqual("Forbidden");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Canonical `list()` test — ungated probe. `list()` enumerates every
@@ -79,35 +70,31 @@ test.provider(
 // account-wide enumeration / `nuke` never blows up on a non-tenant account;
 // the raw-op probe test above already pins the typed tag. On an entitled
 // account it returns a well-typed `Attributes[]`.
-test.provider(
-  "list either enumerates organizations or tolerates the unentitled account",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("list either enumerates organizations or tolerates the unentitled account", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Organization.Organization,
-      );
+    const provider = yield* Provider.findProvider(Cloudflare.Organization.Organization);
 
-      const canList = yield* probeEntitlement;
-      if (canList) {
-        const all = yield* provider.list();
-        // Well-typed Attributes array; entitled accounts may have zero or
-        // more organizations, so only assert the shape.
-        expect(Array.isArray(all)).toBe(true);
-        for (const org of all) {
-          expect(typeof org.organizationId).toBe("string");
-          expect(typeof org.name).toBe("string");
-        }
-      } else {
-        // Unentitled: list() swallows the typed Forbidden and reports an
-        // empty collection (nuke-safe), rather than propagating.
-        const all = yield* provider.list();
-        expect(all).toEqual([]);
+    const canList = yield* probeEntitlement;
+    if (canList) {
+      const all = yield* provider.list();
+      // Well-typed Attributes array; entitled accounts may have zero or
+      // more organizations, so only assert the shape.
+      expect(Array.isArray(all)).toBe(true);
+      for (const org of all) {
+        expect(typeof org.organizationId).toBe("string");
+        expect(typeof org.name).toBe("string");
       }
+    } else {
+      // Unentitled: list() swallows the typed Forbidden and reports an
+      // empty collection (nuke-safe), rather than propagating.
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
+    }
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Gated live enumeration: on an entitled account, a deployed organization
@@ -126,14 +113,10 @@ test.provider.skipIf(!entitled)(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Organization.Organization,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Organization.Organization);
       const all = yield* provider.list();
 
-      expect(
-        all.some((o) => o.organizationId === deployed.organizationId),
-      ).toBe(true);
+      expect(all.some((o) => o.organizationId === deployed.organizationId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

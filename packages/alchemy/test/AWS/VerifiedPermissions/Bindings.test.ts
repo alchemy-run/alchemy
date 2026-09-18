@@ -1,27 +1,19 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import VerifiedPermissionsTestFunctionLive, {
-  VerifiedPermissionsTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import VerifiedPermissionsTestFunctionLive, { VerifiedPermissionsTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "VerifiedPermissionsBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "VerifiedPermissionsBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.exponential("500 millis"),
-  Schedule.recurs(10),
-]);
+const readinessPolicy = Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]);
 
 let baseUrl: string;
 
@@ -36,19 +28,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -75,14 +62,9 @@ describe("VerifiedPermissions Bindings", () => {
   describe("IsAuthorized", () => {
     test.provider("allows alice to view a photo", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/authorize?user=alice`),
-        ).pipe(
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/authorize?user=alice`)).pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
           }),
         );
         const body = (yield* response.json) as { decision: string };
@@ -92,9 +74,7 @@ describe("VerifiedPermissions Bindings", () => {
 
     test.provider("denies bob (no matching permit policy)", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/authorize?user=bob`),
-        );
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/authorize?user=bob`));
         const body = (yield* response.json) as { decision: string };
         expect(body.decision).toBe("DENY");
       }),
@@ -104,14 +84,9 @@ describe("VerifiedPermissions Bindings", () => {
   describe("BatchIsAuthorized", () => {
     test.provider("returns ALLOW for alice and DENY for bob", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/batch`),
-        ).pipe(
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.spaced("3 seconds"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
           }),
         );
         const body = (yield* response.json) as { decisions: string[] };
@@ -121,27 +96,21 @@ describe("VerifiedPermissions Bindings", () => {
   });
 
   describe("BatchIsAuthorizedWithToken", () => {
-    test.provider(
-      "rejects a malformed token with a typed ValidationException",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* send(
-            HttpClientRequest.get(`${baseUrl}/batch-token`),
-          );
-          const body = (yield* response.json) as { tag: string };
-          // the request reaches AVP (IAM allowed) and fails Cedar-side token
-          // validation — proving the binding + IAM wiring end-to-end
-          expect(body.tag).toBe("ValidationException");
-        }),
+    test.provider("rejects a malformed token with a typed ValidationException", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/batch-token`));
+        const body = (yield* response.json) as { tag: string };
+        // the request reaches AVP (IAM allowed) and fails Cedar-side token
+        // validation — proving the binding + IAM wiring end-to-end
+        expect(body.tag).toBe("ValidationException");
+      }),
     );
   });
 
   describe("GetPolicies", () => {
     test.provider("batchGetPolicy returns the AllowAlice policy", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/policies`),
-        );
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/policies`));
         const body = (yield* response.json) as {
           ids: string[];
           types: string[];

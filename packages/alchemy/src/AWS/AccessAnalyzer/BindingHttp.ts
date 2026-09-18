@@ -18,12 +18,7 @@ import type { Analyzer } from "./Analyzer.ts";
  * callable injects the bound {@link Analyzer}'s ARN as `analyzerArn` and the
  * deploy-time half grants `actions` on the analyzer ARN.
  */
-export const makeAnalyzerScopedHttpBinding = <
-  I extends { analyzerArn: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeAnalyzerScopedHttpBinding = <I extends { analyzerArn: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.AccessAnalyzer.ListFindingsV2`. */
   tag: string;
   /** The distilled operation; `analyzerArn` is injected from the analyzer. */

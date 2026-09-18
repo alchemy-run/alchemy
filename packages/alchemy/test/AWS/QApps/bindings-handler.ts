@@ -1,8 +1,8 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 
 export class QAppsTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "QAppsTestFunction",
@@ -37,9 +37,7 @@ const QUERY_CARD_ID = "22222222-2222-4222-8222-222222222222";
 export default QAppsTestFunction.make(
   { main: import.meta.url, functionUrl: true },
   Effect.gen(function* () {
-    const instanceId = yield* Effect.sync(
-      () => process.env.QAPPS_INSTANCE_ID ?? "",
-    );
+    const instanceId = yield* Effect.sync(() => process.env.QAPPS_INSTANCE_ID ?? "");
 
     const app = yield* AWS.QApps.QApp("BindingsQApp", {
       instanceId,
@@ -71,8 +69,7 @@ export default QAppsTestFunction.make(
     const startQAppSession = yield* AWS.QApps.StartQAppSession(app);
     const getQAppSession = yield* AWS.QApps.GetQAppSession(app);
     const stopQAppSession = yield* AWS.QApps.StopQAppSession(app);
-    const describeQAppPermissions =
-      yield* AWS.QApps.DescribeQAppPermissions(app);
+    const describeQAppPermissions = yield* AWS.QApps.DescribeQAppPermissions(app);
     const listQApps = yield* AWS.QApps.ListQApps(app);
     const listCategories = yield* AWS.QApps.ListCategories(app);
 
@@ -98,18 +95,12 @@ export default QAppsTestFunction.make(
         if (pathname === "/session") {
           // start → get → stop, proving app-id injection and the session
           // sub-resource grant end-to-end.
-          const started = yield* errorTagged(
-            startQAppSession({ appVersion: yield* appVersion }),
-          );
+          const started = yield* errorTagged(startQAppSession({ appVersion: yield* appVersion }));
           if ("errorTag" in started) {
             return yield* HttpServerResponse.json(started);
           }
-          const state = yield* errorTagged(
-            getQAppSession({ sessionId: started.sessionId }),
-          );
-          const stopped = yield* errorTagged(
-            stopQAppSession({ sessionId: started.sessionId }),
-          );
+          const state = yield* errorTagged(getQAppSession({ sessionId: started.sessionId }));
+          const stopped = yield* errorTagged(stopQAppSession({ sessionId: started.sessionId }));
           return yield* HttpServerResponse.json({
             sessionId: started.sessionId,
             status: "errorTag" in state ? undefined : state.status,
@@ -128,9 +119,7 @@ export default QAppsTestFunction.make(
         if (pathname === "/categories") {
           const result = yield* errorTagged(listCategories());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.categories?.length ?? 0 },
+            "errorTag" in result ? result : { count: result.categories?.length ?? 0 },
           );
         }
 
@@ -146,10 +135,7 @@ export default QAppsTestFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

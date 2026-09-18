@@ -1,5 +1,5 @@
-import type { ConfigError } from "effect/Config";
 import { Effect } from "effect";
+import type { ConfigError } from "effect/Config";
 import type * as Scope from "effect/Scope";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
@@ -20,8 +20,8 @@ export const destroy = ({
   /** See {@link evalStack} — when set, scoped resources outlive `destroy`. */
   scope?: Scope.Scope;
 }) =>
-  evalStack(
-    stack,
-    (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)),
-    { stage, dev, scope },
-  );
+  evalStack(stack, (stack) => Plan.destroy(stack).pipe(Effect.flatMap(Apply.apply)), {
+    stage,
+    dev,
+    scope,
+  });

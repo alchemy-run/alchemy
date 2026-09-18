@@ -25,8 +25,7 @@ const loaders: Record<string, "js" | "jsx" | "ts" | "tsx"> = {
   ".tsx": "tsx",
 };
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Records every project-local module Bun loads after registration and watches
@@ -45,9 +44,7 @@ export class BunImportTracker {
 
   constructor(options: BunImportTrackerOptions) {
     if (process.versions.bun === undefined) {
-      throw new Error(
-        "BunImportTracker requires Bun; Node callers should use watchImport.",
-      );
+      throw new Error("BunImportTracker requires Bun; Node callers should use watchImport.");
     }
     this.#watcher = new DependencyWatcher(options);
     // Bun reports real paths (`/private/tmp/...` for `/tmp/...` on macOS);
@@ -95,5 +92,4 @@ export class BunImportTracker {
   }
 }
 
-export const trackBunImports = (options: BunImportTrackerOptions) =>
-  new BunImportTracker(options);
+export const trackBunImports = (options: BunImportTrackerOptions) => new BunImportTracker(options);

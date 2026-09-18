@@ -96,16 +96,13 @@ export const ApiKey = (id: string, props: ApiKeyInputProps = {}) =>
     const { api, ...rest } = props;
     const apiId = rest.apiId ?? api?.apiId;
     if (!apiId) {
-      return yield* Effect.die(
-        "ApiKey requires either `api` (preferred) or an explicit `apiId`.",
-      );
+      return yield* Effect.die("ApiKey requires either `api` (preferred) or an explicit `apiId`.");
     }
     return yield* ApiKeyResource(id, { ...rest, apiId } as any);
   });
 
 /** AWS rounds key expiry down to the nearest hour. */
-const floorToHour = (epochSeconds: number): number =>
-  Math.floor(epochSeconds / 3600) * 3600;
+const floorToHour = (epochSeconds: number): number => Math.floor(epochSeconds / 3600) * 3600;
 
 export const ApiKeyProvider = () =>
   Provider.effect(
@@ -122,10 +119,7 @@ export const ApiKeyProvider = () =>
           .find((key) => key.id === keyId);
       });
 
-      const toAttributes = (
-        apiId: string,
-        key: appsync.ApiKey,
-      ): AppSyncApiKey["Attributes"] => ({
+      const toAttributes = (apiId: string, key: appsync.ApiKey): AppSyncApiKey["Attributes"] => ({
         apiId,
         // The key id doubles as the secret `x-api-key` header value.
         id: Redacted.make(key.id!),
@@ -164,9 +158,7 @@ export const ApiKeyProvider = () =>
 
           // 1. OBSERVE — the cached key id is the only handle.
           let observed =
-            output?.id !== undefined
-              ? yield* findKey(apiId, Redacted.value(output.id))
-              : undefined;
+            output?.id !== undefined ? yield* findKey(apiId, Redacted.value(output.id)) : undefined;
 
           if (observed?.id == null) {
             // 2. ENSURE
@@ -183,11 +175,9 @@ export const ApiKeyProvider = () =>
             // 3. SYNC — update description/expiry on drift (expiry only
             //    when managed by props; AWS floors it to the hour).
             const expiresDrifted =
-              news.expires !== undefined &&
-              observed.expires !== floorToHour(news.expires);
+              news.expires !== undefined && observed.expires !== floorToHour(news.expires);
             const descriptionDrifted =
-              news.description !== undefined &&
-              observed.description !== news.description;
+              news.description !== undefined && observed.description !== news.description;
             if (expiresDrifted || descriptionDrifted) {
               const updated = yield* retryConcurrentModification(
                 appsync.updateApiKey({

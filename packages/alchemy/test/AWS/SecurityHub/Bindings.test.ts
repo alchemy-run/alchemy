@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as securityhub from "@distilled.cloud/aws/securityhub";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,9 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import SecurityHubTestFunctionLive, {
-  SecurityHubTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import SecurityHubTestFunctionLive, { SecurityHubTestFunction } from "./handler";
 import { makeSecurityHubTestLease } from "./TestLease.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -23,10 +21,7 @@ afterAll(testLease.release);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 // The Hub is an account/region singleton. If the account already runs a Hub
@@ -39,8 +34,7 @@ let accountId = "";
 let region = "";
 
 const findingId = "alchemy/securityhub-bindings/test-finding-1";
-const productArn = () =>
-  `arn:aws:securityhub:${region}:${accountId}:product/${accountId}/default`;
+const productArn = () => `arn:aws:securityhub:${region}:${accountId}:product/${accountId}/default`;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -57,31 +51,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 // beforeAll/afterAll hooks run outside `test.provider`'s layer, so raw
 // distilled calls need the provider layer (credentials, region) supplied
@@ -97,9 +82,9 @@ const describeHub = securityhub.describeHub({}).pipe(
 
 const skipForeign = () =>
   foreignHub
-    ? Effect.logInfo(
-        "Security Hub is already enabled by someone else — skipping",
-      ).pipe(Effect.as(true))
+    ? Effect.logInfo("Security Hub is already enabled by someone else — skipping").pipe(
+        Effect.as(true),
+      )
     : Effect.succeed(false);
 
 describe.sequential("SecurityHub Bindings", () => {
@@ -109,9 +94,7 @@ describe.sequential("SecurityHub Bindings", () => {
       // fixture's own Hub enabled, which must not be mistaken for a foreign
       // one. Destroying the scratch stack disables Security Hub only if the
       // Hub is tracked in our state.
-      yield* Effect.logInfo(
-        "SecurityHub test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("SecurityHub test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       // Never take over a Hub this fixture did not create — any Hub that
@@ -144,9 +127,7 @@ describe.sequential("SecurityHub Bindings", () => {
       accountId = hubAccount!;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `SecurityHub test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`SecurityHub test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -154,9 +135,7 @@ describe.sequential("SecurityHub Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SecurityHub test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SecurityHub test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -205,9 +184,7 @@ describe.sequential("SecurityHub Bindings", () => {
 
           // The imported finding surfaces asynchronously — poll bounded to
           // ~45s; the write above already proved the binding + IAM wiring.
-          const findings = (yield* getJson(
-            `/findings?id=${encodeURIComponent(findingId)}`,
-          ).pipe(
+          const findings = (yield* getJson(`/findings?id=${encodeURIComponent(findingId)}`).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
               until: (r): boolean => (r as { count: number }).count > 0,
@@ -216,9 +193,7 @@ describe.sequential("SecurityHub Bindings", () => {
           )) as { count: number; title?: string };
 
           if (findings.count > 0) {
-            expect(findings.title).toBe(
-              "Alchemy SecurityHub bindings test finding",
-            );
+            expect(findings.title).toBe("Alchemy SecurityHub bindings test finding");
 
             // Update customer-editable fields on the finding.
             const resolved = (yield* postJson(
@@ -324,10 +299,7 @@ describe.sequential("SecurityHub Bindings", () => {
           errorTag?: string;
         };
         if (admin.errorTag) {
-          expect([
-            "ResourceNotFoundException",
-            "InvalidAccessException",
-          ]).toContain(admin.errorTag);
+          expect(["ResourceNotFoundException", "InvalidAccessException"]).toContain(admin.errorTag);
         } else {
           expect(admin.administrator ?? null).toBeNull();
         }
@@ -359,10 +331,7 @@ describe.sequential("SecurityHub Bindings", () => {
             errorTag?: string;
           };
           if (admins.errorTag) {
-            expect([
-              "AccessDeniedException",
-              "InvalidAccessException",
-            ]).toContain(admins.errorTag);
+            expect(["AccessDeniedException", "InvalidAccessException"]).toContain(admins.errorTag);
           } else {
             expect(admins.admins).toBeGreaterThanOrEqual(0);
           }
@@ -372,10 +341,9 @@ describe.sequential("SecurityHub Bindings", () => {
             errorTag?: string;
           };
           if (orgConfig.errorTag) {
-            expect([
-              "AccessDeniedException",
-              "InvalidAccessException",
-            ]).toContain(orgConfig.errorTag);
+            expect(["AccessDeniedException", "InvalidAccessException"]).toContain(
+              orgConfig.errorTag,
+            );
           } else {
             expect(typeof orgConfig.autoEnable).toBe("boolean");
           }

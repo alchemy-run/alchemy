@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -7,11 +6,8 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import {
-  createRailwayName,
-  matchesAlchemyPhysicalName,
-  sanitizeRailwayName,
-} from "./Metadata.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
+import { createRailwayName, matchesAlchemyPhysicalName, sanitizeRailwayName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -186,9 +182,7 @@ export type CloudAgent = Resource<
  */
 export const CloudAgent = Resource<CloudAgent>("Railway.CloudAgent");
 
-export class CloudAgentNotCreated extends Data.TaggedError(
-  "Railway.CloudAgentNotCreated",
-)<{
+export class CloudAgentNotCreated extends Data.TaggedError("Railway.CloudAgentNotCreated")<{
   name: string;
   environmentId: string;
 }> {}
@@ -232,8 +226,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
     return yield* createRailwayName(id);
   });
 
-const isGone = (agent: CloudRow | undefined) =>
-  agent === undefined || agent.status === "DELETING";
+const isGone = (agent: CloudRow | undefined) => agent === undefined || agent.status === "DELETING";
 
 const environmentIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
@@ -246,42 +239,29 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const listAgents = (environmentId: string) =>
   railway
     .cloudAgents({ environmentId, mine: true }, selection)
     .pipe(
-      railway.catchTags(
-        ["RailwayNotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"],
-        () => Effect.succeed([] as CloudAgentsResultItem[]),
+      railway.catchTags(["RailwayNotFound", "RailwayForbidden", "RailwayPlanLimitExceeded"], () =>
+        Effect.succeed([] as CloudAgentsResultItem[]),
       ),
     );
 
 const findById = (environmentId: string, id: string) =>
-  listAgents(environmentId).pipe(
-    Effect.map((items) => items.find((agent) => agent.id === id)),
-  );
+  listAgents(environmentId).pipe(Effect.map((items) => items.find((agent) => agent.id === id)));
 
 const findByName = (environmentId: string, name: string) =>
   listAgents(environmentId).pipe(
-    Effect.map((items) =>
-      items.find((agent) => !isGone(agent) && agent.name === name),
-    ),
+    Effect.map((items) => items.find((agent) => !isGone(agent) && agent.name === name)),
   );
 
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
+const _listEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
   railway.environments
-    .items(
-      { projectId: project.projectId, first: 50 },
-      { id: true, deletedAt: true },
-    )
+    .items({ projectId: project.projectId, first: 50 }, { id: true, deletedAt: true })
     .pipe(
       Stream.filter((env) => env.deletedAt == null),
       Stream.map((env) => env.id),
@@ -294,9 +274,7 @@ const listEnvironmentIds = (project: {
         return Array.from(set);
       }),
       railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed(
-          project.environmentId.length > 0 ? [project.environmentId] : [],
-        ),
+        Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
       ),
     );
 
@@ -304,14 +282,11 @@ const waitUntilGone = (environmentId: string, cloudAgentId: string) =>
   waitUntilDeleted(
     "CloudAgent",
     cloudAgentId,
-    findById(environmentId, cloudAgentId).pipe(
-      Effect.map((agent) => isGone(agent)),
-    ),
+    findById(environmentId, cloudAgentId).pipe(Effect.map((agent) => isGone(agent))),
   );
 
-const cloudAgentIdOf = (
-  agent: { readonly cloudAgentId: string } | string,
-): string => (typeof agent === "string" ? agent : agent.cloudAgentId);
+const cloudAgentIdOf = (agent: { readonly cloudAgentId: string } | string): string =>
+  typeof agent === "string" ? agent : agent.cloudAgentId;
 
 /**
  * Sleep a running cloud agent. Compute billing stops; the disk is
@@ -320,10 +295,7 @@ const cloudAgentIdOf = (
 export const sleepCloudAgent = Effect.fn(function* (
   agent: { readonly cloudAgentId: string } | string,
 ) {
-  return yield* railway.cloudAgentSleep(
-    { id: cloudAgentIdOf(agent) },
-    selection,
-  );
+  return yield* railway.cloudAgentSleep({ id: cloudAgentIdOf(agent) }, selection);
 });
 
 /**
@@ -333,10 +305,7 @@ export const sleepCloudAgent = Effect.fn(function* (
 export const wakeCloudAgent = Effect.fn(function* (
   agent: { readonly cloudAgentId: string } | string,
 ) {
-  return yield* railway.cloudAgentWake(
-    { id: cloudAgentIdOf(agent) },
-    selection,
-  );
+  return yield* railway.cloudAgentWake({ id: cloudAgentIdOf(agent) }, selection);
 });
 
 export const CloudAgentProvider = () =>
@@ -349,11 +318,8 @@ export const CloudAgentProvider = () =>
       if (output === undefined) return undefined;
       const nextEnvironmentId = environmentIdOf(news.environment);
       const environmentChanged =
-        nextEnvironmentId !== undefined &&
-        nextEnvironmentId !== output.environmentId;
-      const nameChanged =
-        news.name !== undefined &&
-        sanitizeRailwayName(news.name) !== output.name;
+        nextEnvironmentId !== undefined && nextEnvironmentId !== output.environmentId;
+      const nameChanged = news.name !== undefined && sanitizeRailwayName(news.name) !== output.name;
       if (environmentChanged || nameChanged) {
         return { action: "replace" as const };
       }
@@ -375,8 +341,7 @@ export const CloudAgentProvider = () =>
         name,
         environmentId,
         projectId:
-          output?.projectId ??
-          (olds !== undefined ? projectIdOf(olds.environment) : undefined),
+          output?.projectId ?? (olds !== undefined ? projectIdOf(olds.environment) : undefined),
       });
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -391,10 +356,7 @@ export const CloudAgentProvider = () =>
             listAgents(environmentId).pipe(
               Effect.map((agents) =>
                 agents
-                  .filter(
-                    (agent) =>
-                      !isGone(agent) && matchesAlchemyPhysicalName(agent.name),
-                  )
+                  .filter((agent) => !isGone(agent) && matchesAlchemyPhysicalName(agent.name))
                   .map((agent) =>
                     toAttrs(agent, {
                       environmentId,
@@ -419,17 +381,14 @@ export const CloudAgentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const props = news ?? ({} as CloudAgentProps);
-      const environmentId =
-        environmentIdOf(props.environment) ?? output?.environmentId;
+      const environmentId = environmentIdOf(props.environment) ?? output?.environmentId;
       if (environmentId === undefined) {
         return yield* new CloudAgentEnvironmentRequired({
-          message:
-            "CloudAgent requires a resolved Railway.Project or Railway.Environment",
+          message: "CloudAgent requires a resolved Railway.Project or Railway.Environment",
         });
       }
       const name = yield* resolveName(id, props.name, output?.name);
-      const projectId =
-        projectIdOf(props.environment) ?? output?.projectId ?? "";
+      const projectId = projectIdOf(props.environment) ?? output?.projectId ?? "";
 
       let current =
         output?.cloudAgentId !== undefined
@@ -446,18 +405,12 @@ export const CloudAgentProvider = () =>
               input: {
                 environmentId,
                 name,
-                ...(props.variables !== undefined
-                  ? { variables: props.variables }
-                  : {}),
+                ...(props.variables !== undefined ? { variables: props.variables } : {}),
               },
             },
             selection,
           )
-          .pipe(
-            railway.catchTags("RailwayValidationError", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(railway.catchTags("RailwayValidationError", () => Effect.succeed(undefined)));
         current =
           created !== undefined && !isGone(created)
             ? created

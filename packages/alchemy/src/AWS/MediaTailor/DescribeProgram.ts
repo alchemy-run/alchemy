@@ -29,12 +29,7 @@ export interface DescribeProgram extends Binding.Service<
   () => Effect.Effect<
     (
       request: mediatailor.DescribeProgramRequest,
-    ) => Effect.Effect<
-      mediatailor.DescribeProgramResponse,
-      mediatailor.DescribeProgramError
-    >
+    ) => Effect.Effect<mediatailor.DescribeProgramResponse, mediatailor.DescribeProgramError>
   >
 > {}
-export const DescribeProgram = Binding.Service<DescribeProgram>(
-  "AWS.MediaTailor.DescribeProgram",
-);
+export const DescribeProgram = Binding.Service<DescribeProgram>("AWS.MediaTailor.DescribeProgram");

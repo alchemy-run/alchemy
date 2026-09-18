@@ -1,9 +1,9 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -112,9 +112,7 @@ describe("Docker.Context", { concurrent: false }, () => {
       expect(context.name).toBe(contextName);
       expect(context.id).toBe(contextName);
       expect(context.description).toBe("created by alchemy tests");
-      expect(extractDockerHost(context.docker)).toBe(
-        "unix:///var/run/docker.sock",
-      );
+      expect(extractDockerHost(context.docker)).toBe("unix:///var/run/docker.sock");
     }),
   );
 
@@ -141,9 +139,7 @@ describe("Docker.Context", { concurrent: false }, () => {
       expect(second.id).toBe(first.id);
       expect(second.name).toBe(first.name);
       expect(second.description).toBe("v2");
-      expect(extractDockerHost(second.docker)).toBe(
-        "unix:///var/run/docker.sock",
-      );
+      expect(extractDockerHost(second.docker)).toBe("unix:///var/run/docker.sock");
     }),
   );
 

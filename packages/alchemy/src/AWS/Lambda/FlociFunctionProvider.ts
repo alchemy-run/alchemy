@@ -37,10 +37,7 @@ import * as Stream from "effect/Stream";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { Assets, AssetsLive } from "../Assets.ts";
-import {
-  flociProvidersUrl,
-  makeDevWatchProvider,
-} from "../Local/DevWatchProvider.ts";
+import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import {
   Function,
   FunctionProvider,
@@ -48,14 +45,10 @@ import {
   type FunctionImageProps,
   type FunctionProps,
 } from "./Function.ts";
-import {
-  makeFunctionBundler,
-  type FunctionBundleResult,
-} from "./FunctionBundle.ts";
+import { makeFunctionBundler, type FunctionBundleResult } from "./FunctionBundle.ts";
 
-const isFunctionImageProps = (
-  props: FunctionProps,
-): props is FunctionImageProps => props.image !== undefined;
+const isFunctionImageProps = (props: FunctionProps): props is FunctionImageProps =>
+  props.image !== undefined;
 
 export const FlociFunctionProvider = () =>
   makeDevWatchProvider<Function, FunctionProps, Function["Attributes"]>(
@@ -214,10 +207,7 @@ export const FlociFunctionProvider = () =>
                   yield* swap(result);
                 }).pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[alchemy dev] ${functionName}: code swap failed`,
-                      cause,
-                    ),
+                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
                   ),
                 ),
               ),
@@ -226,11 +216,7 @@ export const FlociFunctionProvider = () =>
             // The exact rolldown config the deploy used — incremental
             // rebuilds produce the identical artifact shape.
             const plan = yield* bundler.resolveBundlePlan(props);
-            yield* Bundle.watch(
-              plan.inputOptions,
-              plan.outputOptions,
-              plan.extra,
-            ).pipe(
+            yield* Bundle.watch(plan.inputOptions, plan.outputOptions, plan.extra).pipe(
               Stream.runForEach((event) =>
                 Effect.gen(function* () {
                   switch (event._tag) {
@@ -245,19 +231,13 @@ export const FlociFunctionProvider = () =>
                       return;
                     }
                     case "Success": {
-                      const result = yield* bundler.finishBundle(
-                        plan,
-                        event.output,
-                      );
+                      const result = yield* bundler.finishBundle(plan, event.output);
                       yield* swap(result);
                     }
                   }
                 }).pipe(
                   Effect.catchCause((cause) =>
-                    Effect.logWarning(
-                      `[alchemy dev] ${functionName}: code swap failed`,
-                      cause,
-                    ),
+                    Effect.logWarning(`[alchemy dev] ${functionName}: code swap failed`, cause),
                   ),
                 ),
               ),

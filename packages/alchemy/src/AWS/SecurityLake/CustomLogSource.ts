@@ -116,9 +116,7 @@ export interface CustomLogSource extends Resource<
  * });
  * ```
  */
-const CustomLogSourceResource = Resource<CustomLogSource>(
-  "AWS.SecurityLake.CustomLogSource",
-);
+const CustomLogSourceResource = Resource<CustomLogSource>("AWS.SecurityLake.CustomLogSource");
 
 export { CustomLogSourceResource as CustomLogSource };
 
@@ -136,22 +134,14 @@ export const CustomLogSourceProvider = () =>
   Provider.effect(
     CustomLogSourceResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { sourceName?: string },
-      ) {
-        return (
-          props.sourceName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { sourceName?: string }) {
+        return props.sourceName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       // listLogSources reports only the source identity (name + version) for
       // custom sources — the Glue/provider attributes are only returned by
       // createCustomLogSource, so `output` is the cache for those.
-      const findByName = (
-        sourceName: string,
-        sourceVersion: string | undefined,
-      ) =>
+      const findByName = (sourceName: string, sourceVersion: string | undefined) =>
         securitylake.listLogSources.items({}).pipe(
           Stream.map((entry) => entry.sources ?? []),
           Stream.flattenIterable,
@@ -169,18 +159,13 @@ export const CustomLogSourceProvider = () =>
 
       return {
         read: Effect.fn(function* ({ id, olds, output }) {
-          const sourceName =
-            output?.sourceName ?? (yield* createName(id, olds ?? {}));
+          const sourceName = output?.sourceName ?? (yield* createName(id, olds ?? {}));
           const sourceVersion = output?.sourceVersion ?? olds?.sourceVersion;
           // An account that never onboarded Security Lake rejects
           // listLogSources — that means "no source", not a failure.
           const observed = yield* findByName(sourceName, sourceVersion).pipe(
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () => Effect.succeed(undefined),
             ),
           );
@@ -220,11 +205,7 @@ export const CustomLogSourceProvider = () =>
             // An account that never onboarded Security Lake has no data lake
             // to list sources for.
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () => Effect.succeed([]),
             ),
           ),
@@ -235,14 +216,10 @@ export const CustomLogSourceProvider = () =>
           const changed =
             news.sourceName !== olds.sourceName ||
             news.sourceVersion !== olds.sourceVersion ||
-            JSON.stringify(news.eventClasses ?? []) !==
-              JSON.stringify(olds.eventClasses ?? []) ||
-            news.crawlerConfiguration.roleArn !==
-              olds.crawlerConfiguration.roleArn ||
-            news.providerIdentity.principal !==
-              olds.providerIdentity.principal ||
-            news.providerIdentity.externalId !==
-              olds.providerIdentity.externalId;
+            JSON.stringify(news.eventClasses ?? []) !== JSON.stringify(olds.eventClasses ?? []) ||
+            news.crawlerConfiguration.roleArn !== olds.crawlerConfiguration.roleArn ||
+            news.providerIdentity.principal !== olds.providerIdentity.principal ||
+            news.providerIdentity.externalId !== olds.providerIdentity.externalId;
           if (changed) return { action: "replace" } as const;
         }),
 
@@ -269,9 +246,7 @@ export const CustomLogSourceProvider = () =>
               .pipe(
                 Effect.map((response) => response.source),
                 // A concurrent create won the race — keep cached attributes.
-                Effect.catchTag("ConflictException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
               );
             if (created !== undefined) {
               attrs = buildAttrs(created);
@@ -283,10 +258,7 @@ export const CustomLogSourceProvider = () =>
           // create).
           const final = {
             sourceName,
-            sourceVersion:
-              attrs?.sourceVersion ??
-              observed?.sourceVersion ??
-              news.sourceVersion,
+            sourceVersion: attrs?.sourceVersion ?? observed?.sourceVersion ?? news.sourceVersion,
             crawlerArn: attrs?.crawlerArn,
             databaseArn: attrs?.databaseArn,
             tableArn: attrs?.tableArn,
@@ -307,11 +279,7 @@ export const CustomLogSourceProvider = () =>
               retryWhileConflict,
               // Gone already, or the data lake itself was offboarded first.
               Effect.catchTag(
-                [
-                  "AccessDeniedException",
-                  "ResourceNotFoundException",
-                  "UnauthorizedException",
-                ],
+                ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
                 () => Effect.void,
               ),
             );

@@ -1,40 +1,30 @@
-import * as AWS from "@/AWS";
-import { Profile } from "@/AWS/B2BI";
-import * as Test from "@/Test/Alchemy";
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Profile } from "@/AWS/B2BI";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getProfile on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        b2bi.getProfile({ profileId: "p-00000000000000000" }),
-      );
-      expect(["ResourceNotFoundException", "ValidationException"]).toContain(
-        error._tag,
-      );
-    }),
+test.provider("getProfile on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(b2bi.getProfile({ profileId: "p-00000000000000000" }));
+    expect(["ResourceNotFoundException", "ValidationException"]).toContain(error._tag);
+  }),
 );
 
 const assertProfileGone = (profileId: string) =>
   Effect.gen(function* () {
     const result = yield* b2bi.getProfile({ profileId }).pipe(
       Effect.map(() => "present" as const),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (result === "present") {
-      return yield* Effect.fail(
-        new Error(`Profile '${profileId}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`Profile '${profileId}' still exists`));
     }
   }).pipe(
     Effect.retry({

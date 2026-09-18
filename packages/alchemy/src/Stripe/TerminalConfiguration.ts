@@ -22,8 +22,8 @@ import { deepEqual, isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 250;
 const LIST_PAGE_SIZE = 100;
@@ -131,10 +131,7 @@ export interface TerminalRebootWindow {
 }
 
 /** Wi-Fi security type. */
-export type TerminalWifiType =
-  | "enterprise_eap_peap"
-  | "enterprise_eap_tls"
-  | "personal_psk";
+export type TerminalWifiType = "enterprise_eap_peap" | "enterprise_eap_tls" | "personal_psk";
 
 /** WPA-Enterprise EAP-PEAP credentials. */
 export interface TerminalWifiEnterprisePeap {
@@ -459,17 +456,12 @@ type ConfigurationAttributes = TerminalConfiguration["Attributes"];
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
 const isDeletedConfiguration = (
   value: StripeTerminalConfiguration | DeletedTerminalConfiguration,
-): value is DeletedTerminalConfiguration =>
-  "deleted" in value && value.deleted === true;
+): value is DeletedTerminalConfiguration => "deleted" in value && value.deleted === true;
 
 const asConfiguration = (
   value: StripeTerminalConfiguration | DeletedTerminalConfiguration | undefined,
@@ -495,9 +487,7 @@ const toFileId = (value: unknown): string | undefined => {
 };
 
 const toDeviceState = (
-  value:
-    | TerminalConfigurationConfigurationResourceDeviceTypeSpecificConfig
-    | undefined,
+  value: TerminalConfigurationConfigurationResourceDeviceTypeSpecificConfig | undefined,
 ): TerminalDeviceConfig | undefined => {
   if (value === undefined) return undefined;
   const splashscreen = toFileId(value.splashscreen);
@@ -505,15 +495,11 @@ const toDeviceState = (
 };
 
 const toTippingCurrency = (
-  value:
-    | TerminalConfigurationConfigurationResourceCurrencySpecificConfig
-    | undefined,
+  value: TerminalConfigurationConfigurationResourceCurrencySpecificConfig | undefined,
 ): TerminalTippingCurrency | undefined => {
   if (value === undefined) return undefined;
   return {
-    ...(value.fixed_amounts != null
-      ? { fixedAmounts: value.fixed_amounts }
-      : {}),
+    ...(value.fixed_amounts != null ? { fixedAmounts: value.fixed_amounts } : {}),
     ...(value.percentages != null ? { percentages: value.percentages } : {}),
     ...(value.smart_tip_threshold !== undefined
       ? { smartTipThreshold: value.smart_tip_threshold }
@@ -552,22 +538,17 @@ const toWifiState = (
       ? {
           enterpriseEapTls: {
             ssid: wifi.enterprise_eap_tls.ssid,
-            clientCertificateFile:
-              wifi.enterprise_eap_tls.client_certificate_file,
+            clientCertificateFile: wifi.enterprise_eap_tls.client_certificate_file,
             privateKeyFile: wifi.enterprise_eap_tls.private_key_file,
             caCertificateFile: wifi.enterprise_eap_tls.ca_certificate_file,
           },
         }
       : {}),
-    ...(wifi.personal_psk !== undefined
-      ? { personalPsk: { ssid: wifi.personal_psk.ssid } }
-      : {}),
+    ...(wifi.personal_psk !== undefined ? { personalPsk: { ssid: wifi.personal_psk.ssid } } : {}),
   };
 };
 
-const toAttrs = (
-  configuration: StripeTerminalConfiguration,
-): ConfigurationAttributes => {
+const toAttrs = (configuration: StripeTerminalConfiguration): ConfigurationAttributes => {
   const devices = {} as DeviceAttributes;
   for (const [camel, snake] of DEVICE_MAP) {
     devices[camel] = toDeviceState(configuration[snake]);
@@ -599,12 +580,8 @@ const toAttrs = (
 };
 
 const toWireTippingCurrency = (value: TerminalTippingCurrency) => ({
-  ...(value.fixedAmounts !== undefined
-    ? { fixed_amounts: value.fixedAmounts }
-    : {}),
-  ...(value.percentages !== undefined
-    ? { percentages: value.percentages }
-    : {}),
+  ...(value.fixedAmounts !== undefined ? { fixed_amounts: value.fixedAmounts } : {}),
+  ...(value.percentages !== undefined ? { percentages: value.percentages } : {}),
   ...(value.smartTipThreshold !== undefined
     ? { smart_tip_threshold: value.smartTipThreshold }
     : {}),
@@ -623,9 +600,7 @@ const toWireTipping = (
   return out;
 };
 
-const toWireWifi = (
-  wifi: TerminalWifi,
-): CreateTerminalConfigurationRequestWifiCase0 => ({
+const toWireWifi = (wifi: TerminalWifi): CreateTerminalConfigurationRequestWifiCase0 => ({
   type: wifi.type,
   ...(wifi.enterpriseEapPeap !== undefined
     ? {
@@ -650,8 +625,7 @@ const toWireWifi = (
             : {}),
           ...(wifi.enterpriseEapTls.privateKeyFilePassword !== undefined
             ? {
-                private_key_file_password:
-                  wifi.enterpriseEapTls.privateKeyFilePassword,
+                private_key_file_password: wifi.enterpriseEapTls.privateKeyFilePassword,
               }
             : {}),
         },
@@ -668,13 +642,9 @@ const toWireWifi = (
 });
 
 const toWireDevice = (device: TerminalDeviceConfig) =>
-  device.splashscreen !== undefined
-    ? { splashscreen: device.splashscreen }
-    : {};
+  device.splashscreen !== undefined ? { splashscreen: device.splashscreen } : {};
 
-const wifiComparable = (
-  wifi: TerminalWifi | TerminalWifiState | undefined,
-): unknown => {
+const wifiComparable = (wifi: TerminalWifi | TerminalWifiState | undefined): unknown => {
   if (wifi === undefined) return undefined;
   return {
     type: wifi.type,
@@ -684,9 +654,7 @@ const wifiComparable = (
         : {
             ssid: wifi.enterpriseEapPeap.ssid,
             username:
-              "username" in wifi.enterpriseEapPeap
-                ? wifi.enterpriseEapPeap.username
-                : undefined,
+              "username" in wifi.enterpriseEapPeap ? wifi.enterpriseEapPeap.username : undefined,
             caCertificateFile: wifi.enterpriseEapPeap.caCertificateFile,
           },
     enterpriseEapTls:
@@ -698,10 +666,7 @@ const wifiComparable = (
             privateKeyFile: wifi.enterpriseEapTls.privateKeyFile,
             caCertificateFile: wifi.enterpriseEapTls.caCertificateFile,
           },
-    personalPsk:
-      wifi.personalPsk === undefined
-        ? undefined
-        : { ssid: wifi.personalPsk.ssid },
+    personalPsk: wifi.personalPsk === undefined ? undefined : { ssid: wifi.personalPsk.ssid },
   };
 };
 
@@ -763,16 +728,12 @@ const listNonDefault = Effect.fn(function* () {
       break;
     }
   }
-  return configurations.filter(
-    (configuration) => !isAccountDefault(configuration),
-  );
+  return configurations.filter((configuration) => !isAccountDefault(configuration));
 });
 
 const findByName = Effect.fn(function* (name: string) {
   const configurations = yield* listNonDefault();
-  return configurations.find(
-    (configuration) => (configuration.name ?? "") === name,
-  );
+  return configurations.find((configuration) => (configuration.name ?? "") === name);
 });
 
 const observe = Effect.fn(function* (input: { id?: string; name?: string }) {
@@ -869,9 +830,7 @@ export const TerminalConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        current = yield* CreateTerminalConfiguration(
-          toCreatePayload(name, news),
-        ).pipe(
+        current = yield* CreateTerminalConfiguration(toCreatePayload(name, news)).pipe(
           withRequestOptions({
             idempotencyKey: `alchemy-terminal-configuration-${instanceId}`,
           }),
@@ -889,22 +848,15 @@ export const TerminalConfigurationProvider = () =>
       const nameChanged = (current.name ?? "") !== name;
       const offlineChanged = nestedNeedSync(news.offline, attrs.offline);
       const tippingChanged = nestedNeedSync(news.tipping, attrs.tipping);
-      const rebootWindowChanged = nestedNeedSync(
-        news.rebootWindow,
-        attrs.rebootWindow,
-      );
+      const rebootWindowChanged = nestedNeedSync(news.rebootWindow, attrs.rebootWindow);
       const cellularChanged = nestedNeedSync(news.cellular, attrs.cellular);
       const wifiChanged =
         news.wifi === null
           ? attrs.wifi !== undefined
           : news.wifi !== undefined &&
-            nestedNeedSync(
-              wifiComparable(news.wifi),
-              wifiComparable(attrs.wifi),
-            );
+            nestedNeedSync(wifiComparable(news.wifi), wifiComparable(attrs.wifi));
 
-      const changedDevices: Partial<Record<SnakeDeviceKey, DeviceWire | "">> =
-        {};
+      const changedDevices: Partial<Record<SnakeDeviceKey, DeviceWire | "">> = {};
       for (const [camel, snake] of DEVICE_MAP) {
         const desired = news[camel];
         if (desired === undefined) continue;
@@ -929,13 +881,10 @@ export const TerminalConfigurationProvider = () =>
       const updated = yield* UpdateTerminalConfiguration({
         configuration: current.id,
         ...(nameChanged ? { name } : {}),
-        ...(offlineChanged
-          ? { offline: news.offline === null ? "" : news.offline! }
-          : {}),
+        ...(offlineChanged ? { offline: news.offline === null ? "" : news.offline! } : {}),
         ...(tippingChanged
           ? {
-              tipping:
-                news.tipping === null ? "" : toWireTipping(news.tipping!),
+              tipping: news.tipping === null ? "" : toWireTipping(news.tipping!),
             }
           : {}),
         ...(rebootWindowChanged
@@ -949,12 +898,8 @@ export const TerminalConfigurationProvider = () =>
                     },
             }
           : {}),
-        ...(cellularChanged
-          ? { cellular: news.cellular === null ? "" : news.cellular! }
-          : {}),
-        ...(wifiChanged
-          ? { wifi: news.wifi === null ? "" : toWireWifi(news.wifi!) }
-          : {}),
+        ...(cellularChanged ? { cellular: news.cellular === null ? "" : news.cellular! } : {}),
+        ...(wifiChanged ? { wifi: news.wifi === null ? "" : toWireWifi(news.wifi!) } : {}),
         ...changedDevices,
       });
       const next = asConfiguration(updated);

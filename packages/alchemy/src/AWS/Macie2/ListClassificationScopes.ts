@@ -33,7 +33,6 @@ export interface ListClassificationScopes extends Binding.Service<
     >
   >
 > {}
-export const ListClassificationScopes =
-  Binding.Service<ListClassificationScopes>(
-    "AWS.Macie2.ListClassificationScopes",
-  );
+export const ListClassificationScopes = Binding.Service<ListClassificationScopes>(
+  "AWS.Macie2.ListClassificationScopes",
+);

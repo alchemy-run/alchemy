@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { ServerHost } from "@/Server/Process.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import { ServerHost } from "@/Server/Process.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /**
  * End-to-end fixture for `AWS.ECS.Task`: a long-running server.
@@ -65,9 +65,7 @@ export default class TestTask extends AWS.ECS.Task<TestTask>()(
         // runtimes batch on intervals; they must not flush per request.
         if (url.pathname === "/work") {
           const tag = url.searchParams.get("tag") ?? "none";
-          yield* Effect.log(`ecs-work-log:${tag}`).pipe(
-            Effect.withSpan(`work:${tag}`),
-          );
+          yield* Effect.log(`ecs-work-log:${tag}`).pipe(Effect.withSpan(`work:${tag}`));
           return yield* HttpServerResponse.json({
             marker: `ecs-did-work:${tag}`,
           });

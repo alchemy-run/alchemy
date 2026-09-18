@@ -1,5 +1,7 @@
+import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
 import { describe, expect, test } from "alchemy-test";
-
+import * as Effect from "effect/Effect";
+import * as S from "effect/Schema";
 import {
   fromAttributeValue,
   isMapSchemaType,
@@ -8,9 +10,6 @@ import {
   toAttributeType,
   toAttributeValue,
 } from "@/AWS/DynamoDB/AttributeValue";
-import type { AttributeValue } from "@distilled.cloud/aws/dynamodb";
-import * as Effect from "effect/Effect";
-import * as S from "effect/Schema";
 
 describe("toAttributeValue", () => {
   test("undefined -> NULL false", async () => {
@@ -56,9 +55,7 @@ describe("toAttributeValue", () => {
   });
 
   test("mixed array -> L", async () => {
-    const result = await Effect.runPromise(
-      toAttributeValue(["hello", 42, true]),
-    );
+    const result = await Effect.runPromise(toAttributeValue(["hello", 42, true]));
     expect(result).toEqual({
       L: [{ S: "hello" }, { N: "42" }, { BOOL: true }],
     });
@@ -70,9 +67,7 @@ describe("toAttributeValue", () => {
   });
 
   test("object -> M", async () => {
-    const result = await Effect.runPromise(
-      toAttributeValue({ name: "Alice", age: 30 }),
-    );
+    const result = await Effect.runPromise(toAttributeValue({ name: "Alice", age: 30 }));
     expect(result).toEqual({
       M: {
         name: { S: "Alice" },
@@ -114,16 +109,12 @@ describe("toAttributeValue", () => {
   });
 
   test("Set of strings -> SS", async () => {
-    const result = await Effect.runPromise(
-      toAttributeValue(new Set(["a", "b", "c"])),
-    );
+    const result = await Effect.runPromise(toAttributeValue(new Set(["a", "b", "c"])));
     expect(result).toEqual({ SS: ["a", "b", "c"] });
   });
 
   test("Set of numbers -> NS", async () => {
-    const result = await Effect.runPromise(
-      toAttributeValue(new Set([1, 2, 3])),
-    );
+    const result = await Effect.runPromise(toAttributeValue(new Set([1, 2, 3])));
     // NS values are returned as-is (numbers in this case)
     expect(result.NS).toEqual(["1", "2", "3"]);
   });
@@ -134,9 +125,7 @@ describe("toAttributeValue", () => {
   });
 
   test("Set of mixed types -> L", async () => {
-    const result = await Effect.runPromise(
-      toAttributeValue(new Set([1, "two", true])),
-    );
+    const result = await Effect.runPromise(toAttributeValue(new Set([1, "two", true])));
     expect(result).toEqual({
       L: [{ N: "1" }, { S: "two" }, { BOOL: true }],
     });
@@ -206,9 +195,7 @@ describe("toAttributeValue", () => {
     const result = Effect.runPromise(
       toAttributeValue(symbol).pipe(
         Effect.map(() => false),
-        Effect.catchTag("InvalidAttributeValue", (_error) =>
-          Effect.succeed(true),
-        ),
+        Effect.catchTag("InvalidAttributeValue", (_error) => Effect.succeed(true)),
       ),
     );
     await expect(result).resolves.toBe(true);

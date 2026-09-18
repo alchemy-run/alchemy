@@ -1,6 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as Location from "@/AWS/Location";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -9,6 +6,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as Location from "@/AWS/Location";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -34,10 +34,7 @@ export default LocationTestFunction.make(
   },
   Effect.gen(function* () {
     const tracker = yield* Location.Tracker("BindingsTracker", {});
-    const collection = yield* Location.GeofenceCollection(
-      "BindingsCollection",
-      {},
-    );
+    const collection = yield* Location.GeofenceCollection("BindingsCollection", {});
     // HERE (not Esri): SearchPlaceIndexForText only returns PlaceId — needed
     // by the /places/get-place route — for HERE and Grab data providers.
     const index = yield* Location.PlaceIndex("BindingsIndex", {
@@ -73,9 +70,7 @@ export default LocationTestFunction.make(
       { kinds: ["geofence-event", "device-position-event"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `location event: ${event.detail.DeviceId} ${event.detail.EventType}`,
-          ),
+          Effect.log(`location event: ${event.detail.DeviceId} ${event.detail.EventType}`),
         ),
     );
 
@@ -86,8 +81,7 @@ export default LocationTestFunction.make(
     const listPositions = yield* Location.ListDevicePositions(tracker);
     const batchGetPositions = yield* Location.BatchGetDevicePosition(tracker);
     const verifyPosition = yield* Location.VerifyDevicePosition(tracker);
-    const deleteHistory =
-      yield* Location.BatchDeleteDevicePositionHistory(tracker);
+    const deleteHistory = yield* Location.BatchDeleteDevicePositionHistory(tracker);
 
     // Geofence data plane
     const putGeofence = yield* Location.PutGeofence(collection);
@@ -95,8 +89,7 @@ export default LocationTestFunction.make(
     const listGeofences = yield* Location.ListGeofences(collection);
     const batchPutGeofence = yield* Location.BatchPutGeofence(collection);
     const batchDeleteGeofence = yield* Location.BatchDeleteGeofence(collection);
-    const evaluateGeofences =
-      yield* Location.BatchEvaluateGeofences(collection);
+    const evaluateGeofences = yield* Location.BatchEvaluateGeofences(collection);
     const forecastEvents = yield* Location.ForecastGeofenceEvents(collection);
 
     // Places
@@ -433,9 +426,7 @@ export default LocationTestFunction.make(
         }
 
         if (pathname === "/jobs/get-missing") {
-          const result = yield* Effect.result(
-            getJob({ JobId: MISSING_JOB_ID }),
-          );
+          const result = yield* Effect.result(getJob({ JobId: MISSING_JOB_ID }));
           return yield* HttpServerResponse.json(
             Result.isSuccess(result)
               ? { tag: "found" }
@@ -447,9 +438,7 @@ export default LocationTestFunction.make(
         }
 
         if (pathname === "/jobs/cancel-missing") {
-          const result = yield* Effect.result(
-            cancelJob({ JobId: MISSING_JOB_ID }),
-          );
+          const result = yield* Effect.result(cancelJob({ JobId: MISSING_JOB_ID }));
           return yield* HttpServerResponse.json(
             Result.isSuccess(result)
               ? { tag: "cancelled" }
@@ -460,10 +449,7 @@ export default LocationTestFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

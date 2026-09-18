@@ -30,10 +30,7 @@ export interface DeleteResourceConfig extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.DeleteResourceConfigRequest,
-    ) => Effect.Effect<
-      config.DeleteResourceConfigResponse,
-      config.DeleteResourceConfigError
-    >
+    ) => Effect.Effect<config.DeleteResourceConfigResponse, config.DeleteResourceConfigError>
   >
 > {}
 

@@ -1,7 +1,4 @@
-import {
-  DEFAULT_API_BASE_URL,
-  normalizeApiBaseUrl,
-} from "@distilled.cloud/fly-io";
+import { DEFAULT_API_BASE_URL, normalizeApiBaseUrl } from "@distilled.cloud/fly-io";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { getEnv, getEnvRedactedRequired } from "../Auth/Env.ts";

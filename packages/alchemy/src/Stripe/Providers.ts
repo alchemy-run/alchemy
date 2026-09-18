@@ -25,23 +25,17 @@ import { CreateAppsSecretHttp } from "./CreateAppsSecretHttp.ts";
 import { CreateCreditGrantHttp } from "./CreateCreditGrantHttp.ts";
 import { CreateCustomerHttp } from "./CreateCustomerHttp.ts";
 import { CreateFileLinkHttp } from "./CreateFileLinkHttp.ts";
-import { CreateIssuingCardHttp } from "./CreateIssuingCardHttp.ts";
 import { CreateIssuingCardholderHttp } from "./CreateIssuingCardholderHttp.ts";
+import { CreateIssuingCardHttp } from "./CreateIssuingCardHttp.ts";
 import { CreateTerminalReaderHttp } from "./CreateTerminalReaderHttp.ts";
-import { CreditGrant, CreditGrantProvider } from "./CreditGrant.ts";
 import * as Credentials from "./Credentials.ts";
+import { CreditGrant, CreditGrantProvider } from "./CreditGrant.ts";
 import { Customer, CustomerProvider } from "./Customer.ts";
 import { CustomerTaxId, CustomerTaxIdProvider } from "./CustomerTaxId.ts";
-import {
-  EntitlementsFeature,
-  EntitlementsFeatureProvider,
-} from "./EntitlementsFeature.ts";
+import { EntitlementsFeature, EntitlementsFeatureProvider } from "./EntitlementsFeature.ts";
 import { FileLink, FileLinkProvider } from "./FileLink.ts";
 import { IssuingCard, IssuingCardProvider } from "./IssuingCard.ts";
-import {
-  IssuingCardholder,
-  IssuingCardholderProvider,
-} from "./IssuingCardholder.ts";
+import { IssuingCardholder, IssuingCardholderProvider } from "./IssuingCardholder.ts";
 import {
   IssuingPersonalizationDesign,
   IssuingPersonalizationDesignProvider,
@@ -51,24 +45,15 @@ import {
   PaymentMethodConfiguration,
   PaymentMethodConfigurationProvider,
 } from "./PaymentMethodConfiguration.ts";
-import {
-  PaymentMethodDomain,
-  PaymentMethodDomainProvider,
-} from "./PaymentMethodDomain.ts";
+import { PaymentMethodDomain, PaymentMethodDomainProvider } from "./PaymentMethodDomain.ts";
 import { Plan, PlanProvider } from "./Plan.ts";
 import { Price, PriceProvider } from "./Price.ts";
 import { Product, ProductProvider } from "./Product.ts";
 import { ProductFeature, ProductFeatureProvider } from "./ProductFeature.ts";
 import { PromotionCode, PromotionCodeProvider } from "./PromotionCode.ts";
 import { RadarValueList, RadarValueListProvider } from "./RadarValueList.ts";
-import {
-  RadarValueListItem,
-  RadarValueListItemProvider,
-} from "./RadarValueListItem.ts";
-import {
-  RestrictedApiKey,
-  RestrictedApiKeyProvider,
-} from "./RestrictedApiKey.ts";
+import { RadarValueListItem, RadarValueListItemProvider } from "./RadarValueListItem.ts";
+import { RestrictedApiKey, RestrictedApiKeyProvider } from "./RestrictedApiKey.ts";
 import { RetrieveAccountExternalAccountHttp } from "./RetrieveAccountExternalAccountHttp.ts";
 import { RetrieveAccountHttp } from "./RetrieveAccountHttp.ts";
 import { RetrieveAccountPersonHttp } from "./RetrieveAccountPersonHttp.ts";
@@ -83,8 +68,8 @@ import { RetrieveCustomerHttp } from "./RetrieveCustomerHttp.ts";
 import { RetrieveCustomerTaxIdHttp } from "./RetrieveCustomerTaxIdHttp.ts";
 import { RetrieveEntitlementsFeatureHttp } from "./RetrieveEntitlementsFeatureHttp.ts";
 import { RetrieveFileLinkHttp } from "./RetrieveFileLinkHttp.ts";
-import { RetrieveIssuingCardHttp } from "./RetrieveIssuingCardHttp.ts";
 import { RetrieveIssuingCardholderHttp } from "./RetrieveIssuingCardholderHttp.ts";
+import { RetrieveIssuingCardHttp } from "./RetrieveIssuingCardHttp.ts";
 import { RetrieveIssuingPersonalizationDesignHttp } from "./RetrieveIssuingPersonalizationDesignHttp.ts";
 import { RetrievePaymentLinkHttp } from "./RetrievePaymentLinkHttp.ts";
 import { RetrievePaymentMethodConfigurationHttp } from "./RetrievePaymentMethodConfigurationHttp.ts";
@@ -108,28 +93,20 @@ import { ShippingRate, ShippingRateProvider } from "./ShippingRate.ts";
 import { TaxRate, TaxRateProvider } from "./TaxRate.ts";
 import { TaxRegistration, TaxRegistrationProvider } from "./TaxRegistration.ts";
 import { TaxSettings, TaxSettingsProvider } from "./TaxSettings.ts";
-import {
-  TerminalConfiguration,
-  TerminalConfigurationProvider,
-} from "./TerminalConfiguration.ts";
-import {
-  TerminalLocation,
-  TerminalLocationProvider,
-} from "./TerminalLocation.ts";
+import { TerminalConfiguration, TerminalConfigurationProvider } from "./TerminalConfiguration.ts";
+import { TerminalLocation, TerminalLocationProvider } from "./TerminalLocation.ts";
 import { TerminalReader, TerminalReaderProvider } from "./TerminalReader.ts";
 import { UpdateAccountHttp } from "./UpdateAccountHttp.ts";
 import { UpdateCreditGrantHttp } from "./UpdateCreditGrantHttp.ts";
 import { UpdateCustomerHttp } from "./UpdateCustomerHttp.ts";
 import { UpdateFileLinkHttp } from "./UpdateFileLinkHttp.ts";
-import { UpdateIssuingCardHttp } from "./UpdateIssuingCardHttp.ts";
 import { UpdateIssuingCardholderHttp } from "./UpdateIssuingCardholderHttp.ts";
+import { UpdateIssuingCardHttp } from "./UpdateIssuingCardHttp.ts";
 import { UpdateTaxSettingsHttp } from "./UpdateTaxSettingsHttp.ts";
 import { UpdateTerminalReaderHttp } from "./UpdateTerminalReaderHttp.ts";
 import { WebhookEndpoint, WebhookEndpointProvider } from "./WebhookEndpoint.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Stripe",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Stripe") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

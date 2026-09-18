@@ -38,7 +38,6 @@ export interface BatchDeleteDelegationByAssessment extends Binding.Service<
   >
 > {}
 
-export const BatchDeleteDelegationByAssessment =
-  Binding.Service<BatchDeleteDelegationByAssessment>(
-    "AWS.AuditManager.BatchDeleteDelegationByAssessment",
-  );
+export const BatchDeleteDelegationByAssessment = Binding.Service<BatchDeleteDelegationByAssessment>(
+  "AWS.AuditManager.BatchDeleteDelegationByAssessment",
+);

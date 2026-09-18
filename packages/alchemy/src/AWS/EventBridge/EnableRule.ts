@@ -29,12 +29,7 @@ export interface EnableRule extends Binding.Service<
   (
     rule: Rule,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      eventbridge.EnableRuleResponse,
-      eventbridge.EnableRuleError
-    >
+    () => Effect.Effect<eventbridge.EnableRuleResponse, eventbridge.EnableRuleError>
   >
 > {}
-export const EnableRule = Binding.Service<EnableRule>(
-  "AWS.EventBridge.EnableRule",
-);
+export const EnableRule = Binding.Service<EnableRule>("AWS.EventBridge.EnableRule");

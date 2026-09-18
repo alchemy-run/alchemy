@@ -36,7 +36,6 @@ export interface UpdateResourceProfileDetections extends Binding.Service<
     >
   >
 > {}
-export const UpdateResourceProfileDetections =
-  Binding.Service<UpdateResourceProfileDetections>(
-    "AWS.Macie2.UpdateResourceProfileDetections",
-  );
+export const UpdateResourceProfileDetections = Binding.Service<UpdateResourceProfileDetections>(
+  "AWS.Macie2.UpdateResourceProfileDetections",
+);

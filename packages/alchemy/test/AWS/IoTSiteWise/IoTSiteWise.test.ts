@@ -1,48 +1,38 @@
-import * as AWS from "@/AWS";
-import { Asset, AssetModel, Gateway } from "@/AWS/IoTSiteWise";
-import * as Test from "@/Test/Alchemy";
 import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Asset, AssetModel, Gateway } from "@/AWS/IoTSiteWise";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete/wait paths depend on. Runs in
 // every CI pass at near-zero cost.
-test.provider(
-  "describeAssetModel on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sitewise.describeAssetModel({
-          // syntactically valid UUID that does not exist
-          assetModelId: "12345678-1234-4123-8123-123456789012",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeAssetModel on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sitewise.describeAssetModel({
+        // syntactically valid UUID that does not exist
+        assetModelId: "12345678-1234-4123-8123-123456789012",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Bounded wait until a describe reports the resource gone.
-const untilGone = <R>(
-  label: string,
-  probe: Effect.Effect<"gone" | string, never, R>,
-) =>
+const untilGone = <R>(label: string, probe: Effect.Effect<"gone" | string, never, R>) =>
   Effect.gen(function* () {
     const state = yield* probe;
     if (state !== "gone") {
-      return yield* Effect.fail(
-        new Error(`${label} still exists (state: ${state})`),
-      );
+      return yield* Effect.fail(new Error(`${label} still exists (state: ${state})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -95,9 +85,10 @@ test.provider(
         assetModelId: first.model.assetModelId,
       });
       expect(describedModel.assetModelDescription).toBe("pump model v1");
-      expect(
-        describedModel.assetModelProperties.map((p) => p.name).sort(),
-      ).toEqual(["SerialNumber", "Temperature"]);
+      expect(describedModel.assetModelProperties.map((p) => p.name).sort()).toEqual([
+        "SerialNumber",
+        "Temperature",
+      ]);
       const describedAsset = yield* sitewise.describeAsset({
         assetId: first.asset.assetId,
         excludeProperties: true,
@@ -135,9 +126,7 @@ test.provider(
           })
           .pipe(
             Effect.map((r) => r.assetStatus.state as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("gone" as const),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
             Effect.orDie,
           ),
       );
@@ -150,9 +139,7 @@ test.provider(
           })
           .pipe(
             Effect.map((r) => r.assetModelStatus.state as string),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("gone" as const),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
             Effect.orDie,
           ),
       );
@@ -206,9 +193,7 @@ test.provider(
         "replaced gateway",
         sitewise.describeGateway({ gatewayId: first.gateway.gatewayId }).pipe(
           Effect.map(() => "exists"),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
           Effect.orDie,
         ),
       );
@@ -219,9 +204,7 @@ test.provider(
         "gateway",
         sitewise.describeGateway({ gatewayId: second.gateway.gatewayId }).pipe(
           Effect.map(() => "exists"),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed("gone" as const),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
           Effect.orDie,
         ),
       );

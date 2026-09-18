@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Alchemy";
 import RestartStack from "./fixtures/restart/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -13,10 +13,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Image build + push + worker/DO deploy comfortably exceeds the default hook
 // budget, and a restart adds another cold start on top, so be generous.
@@ -27,9 +24,7 @@ const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
 
 // Force `Connection: close` so each attempt opens a fresh connection and can
 // land on an edge that already has the new deploy / restarted container.
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 const readinessSchedule = Schedule.min([
   Schedule.exponential("500 millis"),
@@ -71,22 +66,20 @@ const hit = (url: string) =>
 const waitRunning = (baseUrl: string, name: string, want: boolean) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
-    return yield* client
-      .get(`${baseUrl}/running?name=${encodeURIComponent(name)}`)
-      .pipe(
-        Effect.flatMap((r) =>
-          r.status !== 200
-            ? Effect.fail(new Error(`running not ready: ${r.status}`))
-            : Effect.flatMap(r.json, (body) => {
-                const running = (body as { running?: boolean }).running;
-                return running === want
-                  ? Effect.succeed(running)
-                  : Effect.fail(new Error(`running=${running}, want ${want}`));
-              }),
-        ),
-        Effect.timeout("15 seconds"),
-        Effect.retry({ schedule: readinessSchedule, times: 40 }),
-      );
+    return yield* client.get(`${baseUrl}/running?name=${encodeURIComponent(name)}`).pipe(
+      Effect.flatMap((r) =>
+        r.status !== 200
+          ? Effect.fail(new Error(`running not ready: ${r.status}`))
+          : Effect.flatMap(r.json, (body) => {
+              const running = (body as { running?: boolean }).running;
+              return running === want
+                ? Effect.succeed(running)
+                : Effect.fail(new Error(`running=${running}, want ${want}`));
+            }),
+      ),
+      Effect.timeout("15 seconds"),
+      Effect.retry({ schedule: readinessSchedule, times: 40 }),
+    );
   });
 
 /**
@@ -109,9 +102,7 @@ describe("container auto-restart", () => {
       const name = "stop";
 
       // Start + confirm up.
-      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain(
-        "pong",
-      );
+      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
 
       // Hard-stop it, then confirm it is actually down before re-pinging — so
       // the next ping must go through the restart path.
@@ -119,9 +110,7 @@ describe("container auto-restart", () => {
       yield* waitRunning(url, name, false);
 
       // Next request transparently restarts it.
-      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain(
-        "pong",
-      );
+      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
       expect(yield* waitRunning(url, name, true)).toBe(true);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
@@ -133,9 +122,7 @@ describe("container auto-restart", () => {
       const { url } = yield* stack;
       const name = "crash";
 
-      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain(
-        "pong",
-      );
+      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
 
       // Make the container process exit on its own, then wait for the monitor
       // to observe the exit (running === false).
@@ -143,9 +130,7 @@ describe("container auto-restart", () => {
       yield* waitRunning(url, name, false);
 
       // Next request transparently restarts it.
-      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain(
-        "pong",
-      );
+      expect(yield* fetchReady(`${url}/ping?name=${name}`, "pong")).toContain("pong");
       expect(yield* waitRunning(url, name, true)).toBe(true);
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },

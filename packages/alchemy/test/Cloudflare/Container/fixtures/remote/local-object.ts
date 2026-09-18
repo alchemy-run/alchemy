@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Local-dev twin of `object.ts` with its own logical ids so
@@ -31,9 +31,7 @@ export class LocalRemoteContainerObject extends Cloudflare.DurableObject<LocalRe
       return {
         hello: () =>
           Effect.gen(function* () {
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }),
       };

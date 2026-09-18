@@ -1,11 +1,11 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import RandomEnvWorker from "./fixtures/random-env/worker.ts";
 
 const { test } = Test.make({
@@ -13,10 +13,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 interface RandomEnvBody {
   resolvedType: string;
@@ -63,10 +60,7 @@ test.provider(
           ),
           Effect.retry({
             while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
-            schedule: Schedule.max([
-              Schedule.exponential("500 millis"),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
           }),
         );
         return (yield* res.json) as unknown as RandomEnvBody;

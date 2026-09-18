@@ -1,28 +1,23 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
-  throw new Error(
-    `Refusing GitHub mutations outside the test organizations: ${owner}`,
-  );
+  throw new Error(`Refusing GitHub mutations outside the test organizations: ${owner}`);
 }
 
 const { test } = Test.make({
   providers: GitHub.providers({ baseUrl: "github.com" }),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Public fixtures avoid plan gates and are retained because gh lacks delete_repo.
 const repo = "alchemy-effect-pr-1514-branch-protection";
@@ -108,12 +103,8 @@ test.provider(
       const fetched = yield* getProtection(created.branch);
       expect(fetched?.required_status_checks?.strict).toBe(true);
       expect(fetched?.required_status_checks?.contexts).toEqual(["ci"]);
-      expect(
-        fetched?.required_pull_request_reviews?.required_approving_review_count,
-      ).toEqual(1);
-      expect(
-        fetched?.required_pull_request_reviews?.dismiss_stale_reviews,
-      ).toBe(true);
+      expect(fetched?.required_pull_request_reviews?.required_approving_review_count).toEqual(1);
+      expect(fetched?.required_pull_request_reviews?.dismiss_stale_reviews).toBe(true);
       expect(fetched?.enforce_admins?.enabled).toBe(true);
       expect(fetched?.required_linear_history?.enabled).toBe(true);
       expect(fetched?.required_conversation_resolution?.enabled).toBe(true);
@@ -218,21 +209,16 @@ test.provider(
         }),
       );
       expect(replaced.url).not.toEqual(created.url);
-      expect(replaced.url).toContain(
-        `/repos/${owner}/${replacementRepo}/branches/`,
-      );
+      expect(replaced.url).toContain(`/repos/${owner}/${replacementRepo}/branches/`);
       expect(yield* getProtection(created.branch)).toBeUndefined();
       expect(
-        (yield* getProtection(replaced.branch, replacementRepo))?.enforce_admins
-          ?.enabled,
+        (yield* getProtection(replaced.branch, replacementRepo))?.enforce_admins?.enabled,
       ).toBe(true);
 
       // Both rules must be gone independently of the retained repositories.
       yield* stack.destroy();
       expect(yield* getProtection(created.branch)).toBeUndefined();
-      expect(
-        yield* getProtection(replaced.branch, replacementRepo),
-      ).toBeUndefined();
+      expect(yield* getProtection(replaced.branch, replacementRepo)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

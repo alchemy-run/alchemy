@@ -11,11 +11,7 @@ import {
   type ConnectMySQLClient,
 } from "./ConnectMySQL.ts";
 import { isRailwayHost } from "./MountVolume.ts";
-import {
-  MYSQL_URL_SECRET,
-  MYSQL_PUBLIC_URL_SECRET,
-  type MySQL,
-} from "./MySQL.ts";
+import { MYSQL_URL_SECRET, MYSQL_PUBLIC_URL_SECRET, type MySQL } from "./MySQL.ts";
 
 const runtimeOutput = <A>(
   key: string,

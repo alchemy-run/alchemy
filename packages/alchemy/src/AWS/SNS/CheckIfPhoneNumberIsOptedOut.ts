@@ -33,7 +33,6 @@ export interface CheckIfPhoneNumberIsOptedOut extends Binding.Service<
   >
 > {}
 
-export const CheckIfPhoneNumberIsOptedOut =
-  Binding.Service<CheckIfPhoneNumberIsOptedOut>(
-    "AWS.SNS.CheckIfPhoneNumberIsOptedOut",
-  );
+export const CheckIfPhoneNumberIsOptedOut = Binding.Service<CheckIfPhoneNumberIsOptedOut>(
+  "AWS.SNS.CheckIfPhoneNumberIsOptedOut",
+);

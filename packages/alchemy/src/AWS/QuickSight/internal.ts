@@ -8,9 +8,7 @@ import { diffTags } from "../../Tags.ts";
  * A QuickSight resource whose asynchronous create/update has not converged
  * to a terminal status yet.
  */
-export class QuickSightNotSettled extends Data.TaggedError(
-  "QuickSightNotSettled",
-)<{
+export class QuickSightNotSettled extends Data.TaggedError("QuickSightNotSettled")<{
   readonly resourceId: string;
   readonly status: string | undefined;
 }> {}
@@ -19,9 +17,7 @@ export class QuickSightNotSettled extends Data.TaggedError(
  * A QuickSight resource whose asynchronous create/update converged to a
  * `*_FAILED` status.
  */
-export class QuickSightOperationFailed extends Data.TaggedError(
-  "QuickSightOperationFailed",
-)<{
+export class QuickSightOperationFailed extends Data.TaggedError("QuickSightOperationFailed")<{
   readonly resourceId: string;
   readonly status: string;
   readonly reason: string | undefined;
@@ -58,12 +54,8 @@ export const waitForSettled = <
 ): Effect.Effect<A | undefined, E | QuickSightOperationFailed, R> =>
   Effect.flatMap(
     Effect.repeat(read, {
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(30),
-      ]),
-      until: (observed) =>
-        observed === undefined || !isInProgress(observed.status),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(30)]),
+      until: (observed) => observed === undefined || !isInProgress(observed.status),
     }),
     (observed): Effect.Effect<A | undefined, QuickSightOperationFailed> =>
       observed !== undefined && isFailed(observed.status)
@@ -126,11 +118,7 @@ export const syncQuickSightTags = Effect.fn(function* (
  * QuickSight requires a non-empty `Tags` list when supplied, so an empty
  * record maps to `undefined`.
  */
-export const toWireTags = (
-  tags: Record<string, string>,
-): quicksight.Tag[] | undefined => {
+export const toWireTags = (tags: Record<string, string>): quicksight.Tag[] | undefined => {
   const entries = Object.entries(tags);
-  return entries.length > 0
-    ? entries.map(([Key, Value]) => ({ Key, Value }))
-    : undefined;
+  return entries.length > 0 ? entries.map(([Key, Value]) => ({ Key, Value })) : undefined;
 };

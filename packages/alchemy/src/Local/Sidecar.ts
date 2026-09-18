@@ -23,9 +23,7 @@ RpcServer.launch((group) =>
       Layer.isLayer(module.default)
         ? Effect.succeed(module.default as RpcServer.ProviderLayer)
         : Effect.fail(
-            new Error(
-              `Provider group module ${group} must default-export its provider Layer`,
-            ),
+            new Error(`Provider group module ${group} must default-export its provider Layer`),
           ),
     ),
   ),

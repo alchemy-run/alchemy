@@ -33,12 +33,7 @@ export interface DeleteFaces extends Binding.Service<
   () => Effect.Effect<
     (
       request: rekognition.DeleteFacesRequest,
-    ) => Effect.Effect<
-      rekognition.DeleteFacesResponse,
-      rekognition.DeleteFacesError
-    >
+    ) => Effect.Effect<rekognition.DeleteFacesResponse, rekognition.DeleteFacesError>
   >
 > {}
-export const DeleteFaces = Binding.Service<DeleteFaces>(
-  "AWS.Rekognition.DeleteFaces",
-);
+export const DeleteFaces = Binding.Service<DeleteFaces>("AWS.Rekognition.DeleteFaces");

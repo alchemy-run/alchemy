@@ -1,3 +1,14 @@
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as pathe from "pathe";
 /**
  * Regression test for serving a Vite site on a zone route with a path
  * prefix.
@@ -17,32 +28,17 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Alchemy";
-import * as dns from "@distilled.cloud/cloudflare/dns";
-import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const spaFixtureDir = pathe.resolve(import.meta.dirname, "vite-spa-fixture");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_WORKER_ROUTE_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_WORKER_ROUTE_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-user path prefix on the zone apex (never Date.now()).
 const routePrefix = `alchemy-vite-route-repro-${process.env.PULL_REQUEST ?? process.env.USER}`;
@@ -76,9 +72,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -88,9 +82,7 @@ const resolveZoneId = Effect.gen(function* () {
 const ensureApexPlaceholder = (zoneId: string) =>
   Effect.gen(function* () {
     const existing = yield* dns.listRecords.items({ zoneId }).pipe(
-      Stream.filter(
-        (r) => r.name === zoneName && (r.type === "A" || r.type === "AAAA"),
-      ),
+      Stream.filter((r) => r.name === zoneName && (r.type === "A" || r.type === "AAAA")),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
       Effect.retry({
@@ -118,9 +110,7 @@ const purgeRoutes = (zoneId: string, ...patterns: string[]) =>
       Stream.runCollect,
       Effect.flatMap(
         Effect.forEach((r) =>
-          workers
-            .deleteRoute({ zoneId, routeId: r.id })
-            .pipe(Effect.catch(() => Effect.void)),
+          workers.deleteRoute({ zoneId, routeId: r.id }).pipe(Effect.catch(() => Effect.void)),
         ),
       ),
       Effect.retry({
@@ -244,12 +234,7 @@ describe.concurrent("ViteRoutePrefix", () => {
           path.join(rootDir, "vite.config.ts"),
           `import { defineConfig } from "vite";\n\nexport default defineConfig({ base: "${basePath}/" });\n`,
         );
-        const memoInclude = [
-          "index.html",
-          "src/**",
-          "package.json",
-          "vite.config.ts",
-        ];
+        const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
 
         let workerName: string | undefined;
 
@@ -277,10 +262,7 @@ describe.concurrent("ViteRoutePrefix", () => {
 
           // Control — the same manifest serves under the prefix on
           // workers.dev too (the manifest is nested, not the route).
-          const control = yield* evaluateSite(
-            `${site.url!}${basePath}/`,
-            "workers.dev",
-          );
+          const control = yield* evaluateSite(`${site.url!}${basePath}/`, "workers.dev");
           expect(control.page.status).toBe(200);
           expect(control.page.body).toContain(marker);
           // Vite `base` bakes the prefix into the emitted script URL.
@@ -301,16 +283,12 @@ describe.concurrent("ViteRoutePrefix", () => {
           // be answered by the SPA fallback with the shell, which contains
           // the marker but never that literal.
           expect(routed.script?.body).toContain("(hydrated)");
-          expect(
-            routed.script?.url.startsWith(`https://${zoneName}${basePath}/`),
-          ).toBe(true);
+          expect(routed.script?.url.startsWith(`https://${zoneName}${basePath}/`)).toBe(true);
 
           // Cloudflare's SPA fallback resolves `/index.html` at the manifest
           // root, hard-coded — the shell is aliased back there so client-side
           // routes under the base still boot the app.
-          const deep = yield* probeStable(
-            `https://${zoneName}${basePath}/deep/route`,
-          );
+          const deep = yield* probeStable(`https://${zoneName}${basePath}/deep/route`);
           yield* Effect.log(
             `[spa deep link] ${deep.status} ${deep.contentType ?? "-"} :: ${excerpt(deep.body)}`,
           );
@@ -322,9 +300,7 @@ describe.concurrent("ViteRoutePrefix", () => {
               yield* stack.destroy().pipe(Effect.ignore);
               yield* purgeRoutes(zoneId, routePattern).pipe(Effect.ignore);
               if (workerName) {
-                yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                  Effect.ignore,
-                );
+                yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
               }
             }),
           ),

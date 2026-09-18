@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Budget } from "@/AWS/Budgets/Budget.ts";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as budgets from "@distilled.cloud/aws/budgets";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Budget } from "@/AWS/Budgets/Budget.ts";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,12 +20,8 @@ const getBudget = (accountId: string) =>
 
 const getTags = (arn: string) =>
   budgets.listTagsForResource({ ResourceARN: arn }).pipe(
-    Effect.map((r) =>
-      Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
-    ),
-    Effect.catchTag("NotFoundException", () =>
-      Effect.succeed({} as Record<string, string>),
-    ),
+    Effect.map((r) => Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value]))),
+    Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
   );
 
 // The notification/subscriber listings are eventually consistent for a few
@@ -63,9 +59,7 @@ const getSubscribers = (accountId: string, threshold: number) =>
         // `Subscriber.Address` is sensitive in distilled — unwrap the
         // Redacted for comparison.
         (r.Subscribers ?? []).map((s) =>
-          Redacted.isRedacted(s.Address)
-            ? Redacted.value(s.Address)
-            : s.Address,
+          Redacted.isRedacted(s.Address) ? Redacted.value(s.Address) : s.Address,
         ),
       ),
       Effect.catchTag("NotFoundException", () => Effect.succeed([])),
@@ -118,9 +112,7 @@ test.provider(
       );
 
       const accountId = deployed.accountId;
-      expect(deployed.budgetArn).toBe(
-        `arn:aws:budgets::${accountId}:budget/${budgetName}`,
-      );
+      expect(deployed.budgetArn).toBe(`arn:aws:budgets::${accountId}:budget/${budgetName}`);
 
       // Out-of-band verification via distilled.
       const created = yield* getBudget(accountId);
@@ -141,9 +133,7 @@ test.provider(
       // Tags — user tag plus the internal alchemy brand.
       const createdTags = yield* getTags(deployed.budgetArn);
       expect(createdTags.Team).toBe("alchemy-test");
-      expect(
-        Object.keys(createdTags).some((k) => k.startsWith("alchemy:")),
-      ).toBe(true);
+      expect(Object.keys(createdTags).some((k) => k.startsWith("alchemy:"))).toBe(true);
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(Budget);
@@ -166,8 +156,7 @@ test.provider(
       const subscribers = yield* getSubscribers(accountId, 80).pipe(
         Effect.repeat({
           ...consistencyPolicy,
-          until: (s): boolean =>
-            s.length === 1 && s[0] === "budget-test-updated@example.com",
+          until: (s): boolean => s.length === 1 && s[0] === "budget-test-updated@example.com",
         }),
       );
       expect(subscribers).toEqual(["budget-test-updated@example.com"]);

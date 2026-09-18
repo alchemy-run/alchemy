@@ -37,7 +37,6 @@ export interface StartConfigRulesEvaluation extends Binding.Service<
   >
 > {}
 
-export const StartConfigRulesEvaluation =
-  Binding.Service<StartConfigRulesEvaluation>(
-    "AWS.Config.StartConfigRulesEvaluation",
-  );
+export const StartConfigRulesEvaluation = Binding.Service<StartConfigRulesEvaluation>(
+  "AWS.Config.StartConfigRulesEvaluation",
+);

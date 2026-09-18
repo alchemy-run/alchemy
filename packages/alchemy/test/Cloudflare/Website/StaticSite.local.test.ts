@@ -1,29 +1,22 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
-import {
-  expectWorkerExists,
-  findWorker,
-  waitForWorkerToBeDeleted,
-} from "../Utils/Worker.ts";
+import { expectWorkerExists, findWorker, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
 const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
@@ -73,10 +66,7 @@ describe.concurrent("StaticSite dev", () => {
         });
 
         const marker = "staticsite-dev-command-marker";
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
@@ -106,14 +96,10 @@ describe.concurrent("StaticSite dev", () => {
         });
 
         // `dev.env` reached the spawned child process.
-        yield* expectUrlContains(
-          `${site.url!}/__dev-env`,
-          "staticsite-dev-env-marker",
-          {
-            timeout: "30 seconds",
-            label: "dev.command env passthrough",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/__dev-env`, "staticsite-dev-env-marker", {
+          timeout: "30 seconds",
+          label: "dev.command env passthrough",
+        });
 
         // The build command was skipped — `dist/` was never produced.
         expect(yield* fs.exists(path.join(cwd, "dist"))).toBe(false);
@@ -151,17 +137,11 @@ describe.concurrent("StaticSite dev", () => {
         });
 
         const marker = "staticsite-dev-build-marker";
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "DevBuildSite",
-              staticSiteProps(cwd),
-            );
+            return yield* Cloudflare.Website.StaticSite("DevBuildSite", staticSiteProps(cwd));
           }),
         );
 
@@ -170,9 +150,7 @@ describe.concurrent("StaticSite dev", () => {
         expect(site.url).toMatch(/^http:\/\/localhost:\d+/);
 
         // The build ran — `dist/` exists with the built page.
-        expect(yield* fs.exists(path.join(cwd, "dist", "index.html"))).toBe(
-          true,
-        );
+        expect(yield* fs.exists(path.join(cwd, "dist", "index.html"))).toBe(true);
 
         // The built assets serve through the local Worker simulator.
         yield* expectUrlContains(`${site.url!}/index.html`, marker, {
@@ -210,17 +188,13 @@ describe.concurrent("StaticSite dev", () => {
         });
 
         const marker = "staticsite-dev-remote-marker";
-        yield* fs.writeFileString(
-          path.join(cwd, "src", "index.html"),
-          htmlPage(marker),
-        );
+        yield* fs.writeFileString(path.join(cwd, "src", "index.html"), htmlPage(marker));
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            return yield* Cloudflare.Website.StaticSite(
-              "RemoteSite",
-              staticSiteProps(cwd),
-            ).pipe(Alchemy.remote());
+            return yield* Cloudflare.Website.StaticSite("RemoteSite", staticSiteProps(cwd)).pipe(
+              Alchemy.remote(),
+            );
           }),
         );
 

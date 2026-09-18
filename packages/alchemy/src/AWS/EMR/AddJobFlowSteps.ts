@@ -35,6 +35,4 @@ export interface AddJobFlowSteps extends Binding.Service<
     ) => Effect.Effect<SVC.AddJobFlowStepsOutput, SVC.AddJobFlowStepsError>
   >
 > {}
-export const AddJobFlowSteps = Binding.Service<AddJobFlowSteps>(
-  "AWS.EMR.AddJobFlowSteps",
-);
+export const AddJobFlowSteps = Binding.Service<AddJobFlowSteps>("AWS.EMR.AddJobFlowSteps");

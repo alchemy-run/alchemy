@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Telemetry from "@/Telemetry.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Telemetry from "@/Telemetry.ts";
 
 /**
  * Effect-native Worker exercising the built-in `Telemetry.layerOtlp` binding
@@ -40,9 +40,7 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
         // polls this route until it reports 200 before asserting on
         // exported telemetry.
         if (url.pathname === "/probe") {
-          const endpoint = yield* Config.String("COLLECTOR_URL").pipe(
-            Effect.orDie,
-          );
+          const endpoint = yield* Config.String("COLLECTOR_URL").pipe(Effect.orDie);
           const result = yield* Effect.tryPromise(() =>
             fetch(`${endpoint}/v1/traces`, {
               method: "POST",
@@ -51,11 +49,7 @@ export default class OtelTracedWorker extends Cloudflare.Worker<OtelTracedWorker
               status: r.status,
               body: (await r.text()).slice(0, 200),
             })),
-          ).pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed({ status: -1, body: String(cause) }),
-            ),
-          );
+          ).pipe(Effect.catchCause((cause) => Effect.succeed({ status: -1, body: String(cause) })));
           return yield* HttpServerResponse.json(result);
         }
         return HttpServerResponse.text("otel-traced-ok");

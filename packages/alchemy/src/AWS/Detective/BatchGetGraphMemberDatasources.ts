@@ -33,17 +33,13 @@ export interface BatchGetGraphMemberDatasources extends Binding.Service<
     graph: Graph,
   ) => Effect.Effect<
     (
-      request: Omit<
-        detective.BatchGetGraphMemberDatasourcesRequest,
-        "GraphArn"
-      >,
+      request: Omit<detective.BatchGetGraphMemberDatasourcesRequest, "GraphArn">,
     ) => Effect.Effect<
       detective.BatchGetGraphMemberDatasourcesResponse,
       detective.BatchGetGraphMemberDatasourcesError
     >
   >
 > {}
-export const BatchGetGraphMemberDatasources =
-  Binding.Service<BatchGetGraphMemberDatasources>(
-    "AWS.Detective.BatchGetGraphMemberDatasources",
-  );
+export const BatchGetGraphMemberDatasources = Binding.Service<BatchGetGraphMemberDatasources>(
+  "AWS.Detective.BatchGetGraphMemberDatasources",
+);

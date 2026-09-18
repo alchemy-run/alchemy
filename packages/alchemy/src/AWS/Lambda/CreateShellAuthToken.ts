@@ -3,8 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
-export interface CreateShellAuthTokenRequest
-  extends microvms.CreateMicrovmShellAuthTokenRequest {}
+export interface CreateShellAuthTokenRequest extends microvms.CreateMicrovmShellAuthTokenRequest {}
 
 /**
  * Runtime binding for `CreateMicrovmShellAuthToken`.

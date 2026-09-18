@@ -12,9 +12,7 @@ import {
 import { importPg } from "../SQL/PostgresDriver.ts";
 import { readSqlFile } from "../SQL/SqlFile.ts";
 
-export class PostgresMigrationError extends Data.TaggedError(
-  "Fly.PostgresMigrationError",
-)<{
+export class PostgresMigrationError extends Data.TaggedError("Fly.PostgresMigrationError")<{
   message: string;
   cause?: unknown;
 }> {}
@@ -118,9 +116,7 @@ export const runPgMigrations = (options: {
   runMigrations({
     ...options,
     withExecutor: (apply) =>
-      withPgClient(options.connectionUri, (client) =>
-        apply(makePgMigrationExecutor(client)),
-      ),
+      withPgClient(options.connectionUri, (client) => apply(makePgMigrationExecutor(client))),
   });
 
 /** Run a single SQL script against the database (used for `importFiles`). */

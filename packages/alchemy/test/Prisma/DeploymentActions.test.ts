@@ -1,10 +1,10 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import { PrismaApiError, type PrismaManagementClient } from "@/Prisma/Client";
 import {
   startDeploymentIdempotent,
   stopDeploymentIdempotent,
 } from "@/Prisma/Internal/DeploymentActions";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import {
   type Captured,
   dispatchTo,
@@ -64,9 +64,7 @@ describe("Prisma deployment actions", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const observed = yield* startDeploymentIdempotent("deployment-1").pipe(
-        Effect.flip,
-      );
+      const observed = yield* startDeploymentIdempotent("deployment-1").pipe(Effect.flip);
       // Over the wire the injected conflict decodes into the typed error.
       expect(observed._tag).toBe("Conflict");
       expect(observed.message).toBe("state conflict");
@@ -84,17 +82,14 @@ describe("Prisma deployment actions", () => {
     );
   });
 
-  it.effect(
-    "accepts a stop conflict while teardown is already progressing",
-    () => {
-      const client = {
-        stopDeployment: () => Effect.fail(conflict("stop")),
-        getDeployment: () => Effect.succeed(version("stopping")),
-      } as unknown as PrismaManagementClient;
+  it.effect("accepts a stop conflict while teardown is already progressing", () => {
+    const client = {
+      stopDeployment: () => Effect.fail(conflict("stop")),
+      getDeployment: () => Effect.succeed(version("stopping")),
+    } as unknown as PrismaManagementClient;
 
-      return stopDeploymentIdempotent("deployment-1").pipe(
-        Effect.provide(clientBackedApi(client).layer),
-      );
-    },
-  );
+    return stopDeploymentIdempotent("deployment-1").pipe(
+      Effect.provide(clientBackedApi(client).layer),
+    );
+  });
 });

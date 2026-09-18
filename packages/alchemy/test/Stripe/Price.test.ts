@@ -1,31 +1,22 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
-import {
-  GetPrice,
-  CreateProduct,
-  UpdateProduct,
-} from "@distilled.cloud/stripe/stripe";
+import { GetPrice, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilDeactivated = (id: string) =>
   GetPrice({ price: id }).pipe(
-    Effect.map((price) =>
-      price.active ? ("active" as const) : ("inactive" as const),
-    ),
+    Effect.map((price) => (price.active ? ("active" as const) : ("inactive" as const))),
     Effect.catchIf(isMissing, () => Effect.succeed("inactive" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
@@ -35,9 +26,7 @@ const waitUntilDeactivated = (id: string) =>
   );
 
 const archiveProduct = (id: string) =>
-  UpdateProduct({ id, active: false }).pipe(
-    Effect.catchIf(isMissing, () => Effect.void),
-  );
+  UpdateProduct({ id, active: false }).pipe(Effect.catchIf(isMissing, () => Effect.void));
 
 test.provider(
   "create, update, and deactivate a one-time price",
@@ -78,12 +67,8 @@ test.provider(
       expect(fetched.nickname).toEqual("Launch price");
       expect(fetched.active).toEqual(true);
       expect(fetched.metadata?.tier).toEqual("pro");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(

@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Route53Profiles from "@/AWS/Route53Profiles";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Route53Profiles from "@/AWS/Route53Profiles";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -26,8 +26,7 @@ export default ProfilesTestFunction.make(
     // grants and the ProfileId injection end-to-end.
     const profile = yield* Route53Profiles.Profile("BindingProfile");
 
-    const listProfileAssociations =
-      yield* Route53Profiles.ListProfileAssociations(profile);
+    const listProfileAssociations = yield* Route53Profiles.ListProfileAssociations(profile);
     const listProfileResourceAssociations =
       yield* Route53Profiles.ListProfileResourceAssociations(profile);
 
@@ -57,13 +56,10 @@ export default ProfilesTestFunction.make(
 
         // Profile-scoped list: the ProfileId is injected from the binding.
         if (request.method === "GET" && pathname === "/resource-associations") {
-          const { ProfileResourceAssociations = [] } =
-            yield* listProfileResourceAssociations();
+          const { ProfileResourceAssociations = [] } = yield* listProfileResourceAssociations();
           return yield* HttpServerResponse.json({
             count: ProfileResourceAssociations.length,
-            resourceArns: ProfileResourceAssociations.map(
-              (item) => item.ResourceArn,
-            ),
+            resourceArns: ProfileResourceAssociations.map((item) => item.ResourceArn),
           });
         }
 

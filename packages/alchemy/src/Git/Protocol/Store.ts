@@ -68,9 +68,7 @@ export interface ObjectSource {
     oids: ReadonlyArray<Oid>,
   ) => Effect.Effect<ReadonlyArray<Oid>, StoreError>;
   /** Object metadata, or `undefined` when the object does not exist. */
-  readonly getMeta: (
-    oid: Oid,
-  ) => Effect.Effect<ObjectMeta | undefined, StoreError>;
+  readonly getMeta: (oid: Oid) => Effect.Effect<ObjectMeta | undefined, StoreError>;
   /**
    * Streams the stored compressed bytes (`zlib(content)`, no loose header)
    * regardless of location (row BLOB, R2 get, v1.1 ranged pack read).
@@ -90,9 +88,7 @@ export interface ObjectSource {
    * fall back to one `readZData` per entry (DESIGN §22).
    */
   readonly packEntries?:
-    | ((
-        entries: ReadonlyArray<ManifestEntry>,
-      ) => Stream.Stream<Uint8Array, StoreError>)
+    | ((entries: ReadonlyArray<ManifestEntry>) => Stream.Stream<Uint8Array, StoreError>)
     | undefined;
 }
 
@@ -170,7 +166,5 @@ export interface ClosureResult {
  * plus the full tree/blob closure of the frontier commits.
  */
 export interface ClosureSource {
-  readonly commitClosure: (
-    request: ClosureRequest,
-  ) => Effect.Effect<ClosureResult, StoreError>;
+  readonly commitClosure: (request: ClosureRequest) => Effect.Effect<ClosureResult, StoreError>;
 }

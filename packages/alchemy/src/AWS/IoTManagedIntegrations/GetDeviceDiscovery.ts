@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link GetDeviceDiscovery}.
  */
-export interface GetDeviceDiscoveryRequest
-  extends mi.GetDeviceDiscoveryRequest {}
+export interface GetDeviceDiscoveryRequest extends mi.GetDeviceDiscoveryRequest {}
 
 /**
  * Runtime binding for `iotmanagedintegrations:GetDeviceDiscovery`
@@ -32,10 +31,7 @@ export interface GetDeviceDiscovery extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetDeviceDiscoveryRequest,
-    ) => Effect.Effect<
-      mi.GetDeviceDiscoveryResponse,
-      mi.GetDeviceDiscoveryError
-    >
+    ) => Effect.Effect<mi.GetDeviceDiscoveryResponse, mi.GetDeviceDiscoveryError>
   >
 > {}
 export const GetDeviceDiscovery = Binding.Service<GetDeviceDiscovery>(

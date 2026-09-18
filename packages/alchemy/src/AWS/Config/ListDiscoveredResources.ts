@@ -30,10 +30,7 @@ export interface ListDiscoveredResources extends Binding.Service<
   () => Effect.Effect<
     (
       request: config.ListDiscoveredResourcesRequest,
-    ) => Effect.Effect<
-      config.ListDiscoveredResourcesResponse,
-      config.ListDiscoveredResourcesError
-    >
+    ) => Effect.Effect<config.ListDiscoveredResourcesResponse, config.ListDiscoveredResourcesError>
   >
 > {}
 

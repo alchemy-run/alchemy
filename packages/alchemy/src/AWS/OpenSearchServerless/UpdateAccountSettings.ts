@@ -29,10 +29,7 @@ export interface UpdateAccountSettings extends Binding.Service<
   () => Effect.Effect<
     (
       request: aoss.UpdateAccountSettingsRequest,
-    ) => Effect.Effect<
-      aoss.UpdateAccountSettingsResponse,
-      aoss.UpdateAccountSettingsError
-    >
+    ) => Effect.Effect<aoss.UpdateAccountSettingsResponse, aoss.UpdateAccountSettingsError>
   >
 > {}
 export const UpdateAccountSettings = Binding.Service<UpdateAccountSettings>(

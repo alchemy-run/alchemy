@@ -1,6 +1,6 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { IsolatedContainer } from "./container.ts";
 
 /** Durable Object backing one {@link IsolatedContainer} instance. */
@@ -17,9 +17,7 @@ export class IsolatedObject extends Cloudflare.DurableObject<IsolatedObject>()(
         hello: () =>
           Effect.gen(function* () {
             const { fetch } = yield* container.getTcpPort(3000);
-            const response = yield* fetch(
-              HttpClientRequest.get("http://container/"),
-            );
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
             return yield* response.text;
           }).pipe(Effect.orDie),
       };

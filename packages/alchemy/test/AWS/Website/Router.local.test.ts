@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { flociServices } from "@/AWS/Local/FlociServices.ts";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,6 +8,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as AWS from "@/AWS";
+import { flociServices } from "@/AWS/Local/FlociServices.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
@@ -21,16 +21,8 @@ import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 // built emulator: `ALCHEMY_FLOCI_IMAGE=floci:cf-edge pnpm test …`.
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "staticsite-dev",
-);
-const viteFixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "vite-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "staticsite-dev");
+const viteFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "vite-app");
 // Clone under the alchemy package so `vite` resolves from the workspace's
 // hoisted node_modules (the fixture has no node_modules of its own).
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -50,16 +42,11 @@ const htmlPage = (marker: string) => `<!doctype html>
  * is served on, so a browser (and this test) can just GET it. Needing anything
  * else here would mean the dev URL is not really usable.
  */
-const fetchRouter = Effect.fn("fetchRouter")(function* (
-  routerUrl: string,
-  path: string,
-) {
+const fetchRouter = Effect.fn("fetchRouter")(function* (routerUrl: string, path: string) {
   const client = yield* HttpClient.HttpClient;
   return yield* client
     .get(`${routerUrl}${path}`)
-    .pipe(
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }),
-    );
+    .pipe(Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 6 }));
 });
 
 /**
@@ -67,10 +54,7 @@ const fetchRouter = Effect.fn("fetchRouter")(function* (
  * server serves `site/<prefix>/index.html`, so the site behaves like a real
  * static host mounted under the Router's path prefix.
  */
-const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (
-  prefix: string,
-  marker: string,
-) {
+const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (prefix: string, marker: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cwd = yield* cloneFixture(fixtureDir, {
@@ -79,10 +63,7 @@ const makeSiteFixture = Effect.fn("makeSiteFixture")(function* (
     entries: ["serve.mjs", "site"],
   });
   yield* fs.makeDirectory(path.join(cwd, "site", prefix), { recursive: true });
-  yield* fs.writeFileString(
-    path.join(cwd, "site", prefix, "index.html"),
-    htmlPage(marker),
-  );
+  yield* fs.writeFileString(path.join(cwd, "site", prefix, "index.html"), htmlPage(marker));
   return cwd;
 });
 
@@ -123,23 +104,15 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
     const body = yield* response.text;
     const missing = (options.includes ?? []).filter((m) => !body.includes(m));
     const present = (options.excludes ?? []).filter((m) => body.includes(m));
-    if (
-      response.status !== status ||
-      missing.length > 0 ||
-      present.length > 0
-    ) {
+    if (response.status !== status || missing.length > 0 || present.length > 0) {
       return yield* Effect.fail(
         new RouterBodyMismatch({
           url,
           status: response.status,
           problem: [
-            response.status !== status
-              ? `expected status ${status}`
-              : undefined,
+            response.status !== status ? `expected status ${status}` : undefined,
             missing.length > 0 ? `missing ${missing.join(", ")}` : undefined,
-            present.length > 0
-              ? `unexpectedly present ${present.join(", ")}`
-              : undefined,
+            present.length > 0 ? `unexpectedly present ${present.join(", ")}` : undefined,
           ]
             .filter(Boolean)
             .join("; "),
@@ -153,9 +126,7 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
       schedule: Schedule.exponential("400 millis", 1.4),
       times: 8,
     }),
-    Effect.tapError((error) =>
-      Effect.logError(`expectRouterBody(${path}) failed`, error),
-    ),
+    Effect.tapError((error) => Effect.logError(`expectRouterBody(${path}) failed`, error)),
   );
 });
 
@@ -165,10 +136,7 @@ const expectRouterBody = Effect.fn("expectRouterBody")(function* (
  *
  * Returns the paths of the two files the live-edit assertions rewrite.
  */
-const makeViteFixture = Effect.fn("makeViteFixture")(function* (
-  slug: string,
-  marker: string,
-) {
+const makeViteFixture = Effect.fn("makeViteFixture")(function* (slug: string, marker: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const cwd = yield* cloneFixture(viteFixtureDir, {
@@ -179,10 +147,7 @@ const makeViteFixture = Effect.fn("makeViteFixture")(function* (
   const indexPath = path.join(cwd, "index.html");
   const mainPath = path.join(cwd, "src", "main.ts");
   const index = yield* fs.readFileString(indexPath);
-  yield* fs.writeFileString(
-    indexPath,
-    index.replaceAll("VITE_AWS_PAGE_MARKER", `${marker}_PAGE`),
-  );
+  yield* fs.writeFileString(indexPath, index.replaceAll("VITE_AWS_PAGE_MARKER", `${marker}_PAGE`));
   const main = yield* fs.readFileString(mainPath);
   yield* fs.writeFileString(
     mainPath,
@@ -271,9 +236,7 @@ describe("AWS.Website.Router local", () => {
         // `routeSite` sets x-forwarded-host to the viewer's Host before it
         // rewrites the origin — the site's dev server sees the hostname the
         // request arrived on, exactly as a deployed server origin would.
-        expect(echoed.headers["x-forwarded-host"]).toBe(
-          new URL(routerUrl).host,
-        );
+        expect(echoed.headers["x-forwarded-host"]).toBe(new URL(routerUrl).host);
 
         // ── Live edit: the dev server reads from disk per request, so the
         // next edge request serves the new content without re-applying ─────
@@ -453,10 +416,7 @@ describe("AWS.Website.Router local", () => {
           }),
         );
 
-        const response = yield* fetchRouter(
-          deployed.routerUrl as string,
-          "/anything",
-        );
+        const response = yield* fetchRouter(deployed.routerUrl as string, "/anything");
         expect(response.status).toBe(502);
         const body = yield* response.text;
         expect(body).toContain("fetch is not defined");
@@ -510,8 +470,7 @@ describe("AWS.Website.Router local", () => {
         const result = yield* Effect.gen(function* () {
           const functions = yield* cloudfront.listFunctions({});
           const summary = functions.FunctionList?.Items?.find(
-            (item) =>
-              item.FunctionConfig.Comment === "ParityRouter viewer request",
+            (item) => item.FunctionConfig.Comment === "ParityRouter viewer request",
           );
           expect(summary).toBeDefined();
           const described = yield* cloudfront.describeFunction({
@@ -589,10 +548,7 @@ describe("AWS.Website.Router local", () => {
         );
 
         /** Create, test, and delete a function against whichever endpoint is in scope. */
-        const runThere = Effect.fn("runThere")(function* (
-          suffix: string,
-          code: string,
-        ) {
+        const runThere = Effect.fn("runThere")(function* (suffix: string, code: string) {
           const created = yield* cloudfront.createFunction({
             Name: `${name}-${suffix}`,
             FunctionConfig: { Comment: "parity", Runtime: "cloudfront-js-2.0" },
@@ -614,11 +570,7 @@ describe("AWS.Website.Router local", () => {
           return {
             error: result.TestResult?.FunctionErrorMessage,
             output:
-              raw === undefined
-                ? undefined
-                : typeof raw === "string"
-                  ? raw
-                  : Redacted.value(raw),
+              raw === undefined ? undefined : typeof raw === "string" ? raw : Redacted.value(raw),
           };
         });
 
@@ -628,9 +580,7 @@ describe("AWS.Website.Router local", () => {
   event.request.uri = event.request.uri + "/index.html";
   return event.request;
 }`;
-        const local = yield* runThere("ok", wellBehaved).pipe(
-          Effect.provide(flociServices()),
-        );
+        const local = yield* runThere("ok", wellBehaved).pipe(Effect.provide(flociServices()));
         const real = yield* runThere("ok", wellBehaved);
         expect(local.error).toBeUndefined();
         expect(real.error).toBeUndefined();

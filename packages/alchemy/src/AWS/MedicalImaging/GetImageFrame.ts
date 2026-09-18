@@ -44,12 +44,7 @@ export interface GetImageFrame extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetImageFrameRequest,
-    ) => Effect.Effect<
-      medicalimaging.GetImageFrameResponse,
-      medicalimaging.GetImageFrameError
-    >
+    ) => Effect.Effect<medicalimaging.GetImageFrameResponse, medicalimaging.GetImageFrameError>
   >
 > {}
-export const GetImageFrame = Binding.Service<GetImageFrame>(
-  "AWS.MedicalImaging.GetImageFrame",
-);
+export const GetImageFrame = Binding.Service<GetImageFrame>("AWS.MedicalImaging.GetImageFrame");

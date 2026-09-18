@@ -10,11 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  fetchResolverTags,
-  syncResolverTags,
-  toResolverTagList,
-} from "./internal.ts";
+import { fetchResolverTags, syncResolverTags, toResolverTagList } from "./internal.ts";
 
 export interface ResolverRuleTargetIp {
   /**
@@ -132,9 +128,7 @@ export interface ResolverRule extends Resource<
  *
  * @resource
  */
-export const ResolverRule = Resource<ResolverRule>(
-  "AWS.Route53Resolver.ResolverRule",
-);
+export const ResolverRule = Resource<ResolverRule>("AWS.Route53Resolver.ResolverRule");
 
 /**
  * Creating a FORWARD rule can transiently fail while its OUTBOUND endpoint
@@ -152,9 +146,7 @@ const retryRuleCreateRaces = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "ResourceUnavailableException" ||
-      e._tag === "ResourceExistsException",
+    while: (e) => e._tag === "ResourceUnavailableException" || e._tag === "ResourceExistsException",
     schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
   });
 
@@ -169,9 +161,7 @@ const retryRuleInUse = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
-    while: (e) =>
-      e._tag === "ResourceInUseException" ||
-      e._tag === "InvalidRequestException",
+    while: (e) => e._tag === "ResourceInUseException" || e._tag === "InvalidRequestException",
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
   });
 
@@ -181,32 +171,23 @@ const retryRuleInUse = <A, E extends { _tag: string }, R>(
  *
  * @internal
  */
-const normalizeDomain = (domain: string) =>
-  domain.toLowerCase().replace(/\.+$/, "");
+const normalizeDomain = (domain: string) => domain.toLowerCase().replace(/\.+$/, "");
 
 export const ResolverRuleProvider = () =>
   Provider.effect(
     ResolverRule,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const getRule = (ruleId: string) =>
         r53r.getResolverRule({ ResolverRuleId: ruleId }).pipe(
           Effect.map((r) => r.ResolverRule),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
-      const observe = Effect.fn(function* (
-        name: string,
-        ruleId: string | undefined,
-      ) {
+      const observe = Effect.fn(function* (name: string, ruleId: string | undefined) {
         if (ruleId !== undefined) {
           const byId = yield* getRule(ruleId);
           if (byId !== undefined && byId.Status !== "DELETING") {
@@ -228,15 +209,10 @@ export const ResolverRuleProvider = () =>
       // defaults Route 53 Resolver fills in (port 53, protocol Do53).
       const targetKey = (targets: readonly r53r.TargetAddress[]) =>
         targets
-          .map(
-            (t) =>
-              `${t.Ip ?? ""}|${t.Ipv6 ?? ""}|${t.Port ?? 53}|${t.Protocol ?? "Do53"}`,
-          )
+          .map((t) => `${t.Ip ?? ""}|${t.Ipv6 ?? ""}|${t.Port ?? 53}|${t.Protocol ?? "Do53"}`)
           .sort()
           .join(",");
-      const toWireTargets = (
-        targets: readonly ResolverRuleTargetIp[],
-      ): r53r.TargetAddress[] =>
+      const toWireTargets = (targets: readonly ResolverRuleTargetIp[]): r53r.TargetAddress[] =>
         targets.map((t) => ({
           Ip: t.ip,
           Ipv6: t.ipv6,
@@ -301,10 +277,7 @@ export const ResolverRuleProvider = () =>
           if ((olds.ruleType ?? "FORWARD") !== (news.ruleType ?? "FORWARD")) {
             return { action: "replace" } as const;
           }
-          if (
-            normalizeDomain(olds.domainName) !==
-            normalizeDomain(news.domainName)
-          ) {
+          if (normalizeDomain(olds.domainName) !== normalizeDomain(news.domainName)) {
             return { action: "replace" } as const;
           }
         }),
@@ -326,9 +299,7 @@ export const ResolverRuleProvider = () =>
                 Name: name,
                 RuleType: news.ruleType ?? "FORWARD",
                 DomainName: news.domainName,
-                TargetIps: news.targetIps
-                  ? toWireTargets(news.targetIps)
-                  : undefined,
+                TargetIps: news.targetIps ? toWireTargets(news.targetIps) : undefined,
                 ResolverEndpointId: news.resolverEndpointId,
                 Tags: toResolverTagList(desiredTags),
               }),
@@ -339,9 +310,7 @@ export const ResolverRuleProvider = () =>
           // 3. SYNC — name, target IPs, and the endpoint reference are
           //    mutable via UpdateResolverRule. Diff observed against
           //    desired; skip the API on no-op.
-          const desiredTargets = news.targetIps
-            ? toWireTargets(news.targetIps)
-            : undefined;
+          const desiredTargets = news.targetIps ? toWireTargets(news.targetIps) : undefined;
           const targetsDelta =
             desiredTargets !== undefined &&
             targetKey(rule.TargetIps ?? []) !== targetKey(desiredTargets);
@@ -356,9 +325,7 @@ export const ResolverRuleProvider = () =>
                 Config: {
                   ...(nameDelta ? { Name: name } : {}),
                   ...(targetsDelta ? { TargetIps: desiredTargets } : {}),
-                  ...(endpointDelta
-                    ? { ResolverEndpointId: news.resolverEndpointId }
-                    : {}),
+                  ...(endpointDelta ? { ResolverEndpointId: news.resolverEndpointId } : {}),
                 },
               })
               .pipe(Effect.map((r) => r.ResolverRule ?? rule!));
@@ -382,20 +349,14 @@ export const ResolverRuleProvider = () =>
           // already gone).
           const associations = yield* r53r.listResolverRuleAssociations
             .pages({
-              Filters: [
-                { Name: "ResolverRuleId", Values: [output.resolverRuleId] },
-              ],
+              Filters: [{ Name: "ResolverRuleId", Values: [output.resolverRuleId] }],
             })
             .pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ResolverRuleAssociations ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ResolverRuleAssociations ?? []),
               ),
-              Effect.catch(() =>
-                Effect.succeed([] as r53r.ResolverRuleAssociation[]),
-              ),
+              Effect.catch(() => Effect.succeed([] as r53r.ResolverRuleAssociation[])),
             );
           yield* Effect.forEach(
             associations,
@@ -407,9 +368,7 @@ export const ResolverRuleProvider = () =>
                       VPCId: assoc.VPCId,
                     })
                     .pipe(
-                      Effect.catchTag("ResourceNotFoundException", () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
                       Effect.asVoid,
                     )
                 : Effect.void,

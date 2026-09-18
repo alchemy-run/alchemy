@@ -1,7 +1,7 @@
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "durable-handler.ts");
 
@@ -18,9 +18,7 @@ const main = path.resolve(import.meta.dirname, "durable-handler.ts");
  * self-binds the checkpoint-protocol IAM, and vendors
  * `@aws/durable-execution-sdk-js` into the artifact automatically.
  */
-export class DurableFlow extends Lambda.DurableFunction<DurableFlow>()(
-  "DurableFlow",
-) {}
+export class DurableFlow extends Lambda.DurableFunction<DurableFlow>()("DurableFlow") {}
 
 export default DurableFlow.make(
   {

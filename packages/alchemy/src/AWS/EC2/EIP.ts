@@ -10,13 +10,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
-export type EIPArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
+export type EIPArn = `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
 
 export type AllocationId<ID extends string = string> = `eipalloc-${ID}`;
-export const AllocationId = <ID extends string>(
-  id: ID,
-): ID & AllocationId<ID> => `eipalloc-${id}` as ID & AllocationId<ID>;
+export const AllocationId = <ID extends string>(id: ID): ID & AllocationId<ID> =>
+  `eipalloc-${id}` as ID & AllocationId<ID>;
 
 export interface EIPProps {
   /**
@@ -173,10 +171,7 @@ export const EIPProvider = () =>
   Provider.effect(
     EIP,
     Effect.gen(function* () {
-      const createTags = Effect.fn(function* (
-        id: string,
-        tags?: Record<string, string>,
-      ) {
+      const createTags = Effect.fn(function* (id: string, tags?: Record<string, string>) {
         return {
           Name: id,
           ...(yield* createInternalTags(id)),
@@ -194,10 +189,7 @@ export const EIPProvider = () =>
             // in the account/region in a single response.
             const result = yield* ec2.describeAddresses({});
             return (result.Addresses ?? [])
-              .filter(
-                (a): a is ec2.Address & { AllocationId: string } =>
-                  a.AllocationId != null,
-              )
+              .filter((a): a is ec2.Address & { AllocationId: string } => a.AllocationId != null)
               .map((address): EIP["Attributes"] => ({
                 allocationId: address.AllocationId as AllocationId,
                 eipArn:
@@ -222,9 +214,7 @@ export const EIPProvider = () =>
 
           const address = result.Addresses?.[0];
           if (!address) {
-            return yield* Effect.fail(
-              new Error(`EIP ${output.allocationId} not found`),
-            );
+            return yield* Effect.fail(new Error(`EIP ${output.allocationId} not found`));
           }
 
           return {
@@ -326,8 +316,7 @@ export const EIPProvider = () =>
 
           return {
             allocationId,
-            eipArn:
-              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
+            eipArn: `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
             publicIp: address.PublicIp!,
             publicIpv4Pool: address.PublicIpv4Pool,
             domain: (address.Domain as "vpc" | "standard") ?? "vpc",
@@ -349,10 +338,7 @@ export const EIPProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidAllocationID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidAllocationID.NotFound", () => Effect.void),
               Effect.catchTag("AuthFailure", () => Effect.void),
               Effect.tapError(Effect.logDebug),
               // Retry when EIP is still in use (e.g., NAT Gateway being deleted)
@@ -366,14 +352,9 @@ export const EIPProvider = () =>
                     e._tag === "InvalidIPAddress.InUse"
                   );
                 },
-                schedule: Schedule.max([
-                  Schedule.exponential(1000, 1.5),
-                  Schedule.recurs(20),
-                ]).pipe(
+                schedule: Schedule.max([Schedule.exponential(1000, 1.5), Schedule.recurs(20)]).pipe(
                   Schedule.tap(({ attempt }) =>
-                    session.note(
-                      `EIP still in use, waiting for release... (attempt ${attempt})`,
-                    ),
+                    session.note(`EIP still in use, waiting for release... (attempt ${attempt})`),
                   ),
                 ),
               }),

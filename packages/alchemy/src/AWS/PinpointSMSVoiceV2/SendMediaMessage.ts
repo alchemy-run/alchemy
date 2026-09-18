@@ -46,10 +46,7 @@ export interface SendMediaMessage extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SendMediaMessageRequest,
-    ) => Effect.Effect<
-      smsvoice.SendMediaMessageResult,
-      smsvoice.SendMediaMessageError
-    >
+    ) => Effect.Effect<smsvoice.SendMediaMessageResult, smsvoice.SendMediaMessageError>
   >
 > {}
 export const SendMediaMessage = Binding.Service<SendMediaMessage>(

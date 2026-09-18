@@ -144,13 +144,7 @@ export type Props = {
   vanityNameServers?: string[];
 };
 
-export type Zone = Resource<
-  "Cloudflare.Zone.Zone",
-  Props,
-  Attributes,
-  never,
-  Providers
->;
+export type Zone = Resource<"Cloudflare.Zone.Zone", Props, Attributes, never, Providers>;
 
 /**
  * A Cloudflare Zone (DNS domain) managed by Alchemy.
@@ -320,16 +314,14 @@ export const ZoneProvider = () =>
           Effect.gen(function* () {
             const { accountId } = yield* yield* CloudflareEnvironment;
             // Enumerate every zone in the account, paginating exhaustively.
-            const zoneIds = yield* zones.listZones
-              .pages({ account: { id: accountId } })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.fromIterable(chunk).flatMap((page) =>
-                    (page.result ?? []).map((zone) => zone.id),
-                  ),
+            const zoneIds = yield* zones.listZones.pages({ account: { id: accountId } }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.fromIterable(chunk).flatMap((page) =>
+                  (page.result ?? []).map((zone) => zone.id),
                 ),
-              );
+              ),
+            );
             // Hydrate each into the exact `read` Attributes shape via getZone,
             // tolerating zones that vanish mid-enumeration.
             const rows = yield* Effect.forEach(
@@ -337,9 +329,7 @@ export const ZoneProvider = () =>
               (zoneId) =>
                 zones.getZone({ zoneId }).pipe(
                   Effect.map((result) => toZoneAttributes(result, accountId)),
-                  Effect.catchTag("InvalidZoneIdentifier", () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
                 ),
               { concurrency: 10 },
             );

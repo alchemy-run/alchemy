@@ -2,8 +2,7 @@ import * as omics from "@distilled.cloud/aws/omics";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListVariantImportJobsRequest
-  extends omics.ListVariantImportJobsRequest {}
+export interface ListVariantImportJobsRequest extends omics.ListVariantImportJobsRequest {}
 
 /**
  * Runtime binding for `omics:ListVariantImportJobs`.
@@ -28,10 +27,7 @@ export interface ListVariantImportJobs extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListVariantImportJobsRequest,
-    ) => Effect.Effect<
-      omics.ListVariantImportJobsResponse,
-      omics.ListVariantImportJobsError
-    >
+    ) => Effect.Effect<omics.ListVariantImportJobsResponse, omics.ListVariantImportJobsError>
   >
 > {}
 

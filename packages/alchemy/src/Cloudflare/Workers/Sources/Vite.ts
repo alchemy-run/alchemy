@@ -1,25 +1,17 @@
-import cloudflare, {
-  type CloudflareVitePluginOptions,
-} from "@alchemy.run/cloudflare-runtime/vite";
+import { createRequire } from "node:module";
+import nodePath from "node:path";
+import { pathToFileURL } from "node:url";
+import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
+import cloudflare, { type CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 import * as ConsoleService from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import { createRequire } from "node:module";
-import nodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import type * as vite from "vite";
-import {
-  viteBuildOutputPlugin,
-  type ViteBuildOutput,
-} from "../../../Bundle/Vite.ts";
-import { viteSupportsPortZero } from "@alchemy.run/cloudflare-runtime/core/internal/Port";
-import {
-  makeResourceLogger,
-  makeResourceOutput,
-} from "../../../Util/ResourceOutput.ts";
+import { viteBuildOutputPlugin, type ViteBuildOutput } from "../../../Bundle/Vite.ts";
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
+import { makeResourceLogger } from "../../../Util/ResourceOutput.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
 import { readAssets } from "../Assets.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
@@ -125,9 +117,7 @@ export const viteDev = (
         ? {
             ...serverOptions,
             port: yield* findAvailablePort(
-              typeof serverOptions.host === "string"
-                ? serverOptions.host
-                : undefined,
+              typeof serverOptions.host === "string" ? serverOptions.host : undefined,
             ).pipe(Effect.orDie),
           }
         : serverOptions;
@@ -178,9 +168,7 @@ export const viteBuild = (
         rootDir: nodePath.resolve(initialCwd, rootDir),
         // Only `VITE_`-prefixed entries participate in the build (see
         // `getDefine`); the rest may hold non-serializable values.
-        env: Object.fromEntries(
-          Object.entries(env).filter(([key]) => key.startsWith("VITE_")),
-        ),
+        env: Object.fromEntries(Object.entries(env).filter(([key]) => key.startsWith("VITE_"))),
         main: pluginOptions.main,
         compatibilityDate: pluginOptions.compatibilityDate,
         compatibilityFlags: pluginOptions.compatibilityFlags,
@@ -289,8 +277,7 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
               key,
               typeof value === "string"
                 ? value
-                : Redacted.isRedacted(value) &&
-                    typeof Redacted.value(value) === "string"
+                : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
                   ? Redacted.value(value)
                   : // A `WorkerLoader` is a real Effect that also carries
                     // the `~alchemy/Kind` marker — it is a binding, not a
@@ -304,7 +291,7 @@ const resolveViteEnv = (env: Record<string, unknown>) =>
             ];
           }),
         ),
-      )).filter(([_, value]) => value !== undefined),
+      )).filter(([, value]) => value !== undefined),
     );
   });
 
@@ -329,9 +316,7 @@ export const hashViteInput = Effect.fn(function* <E, R>(
   // Relative paths participate in memo hashes and surface in outputs;
   // keep them POSIX so Windows and CI agree.
   const relativeToRoot = (cwd: string) =>
-    path
-      .relative(resolvedRoot, path.resolve(resolvedRoot, cwd))
-      .replaceAll("\\", "/");
+    path.relative(resolvedRoot, path.resolve(resolvedRoot, cwd)).replaceAll("\\", "/");
   const hashWorkspaceDirectory = (cwd: string, memo?: MemoOptions) =>
     hashDirectory({ cwd: path.resolve(resolvedRoot, cwd), memo }).pipe(
       Effect.map((hash) => `${relativeToRoot(cwd)}:${hash}`),
@@ -342,27 +327,20 @@ export const hashViteInput = Effect.fn(function* <E, R>(
     return yield* Effect.all(
       [
         hashRoot,
-        ...options.workspaces.map(({ cwd, ...options }) =>
-          hashWorkspaceDirectory(cwd, options),
-        ),
+        ...options.workspaces.map(({ cwd, ...options }) => hashWorkspaceDirectory(cwd, options)),
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.flatMap(([root, ...workspaces]) =>
-        sha256Object([root, ...workspaces.sort()]),
-      ),
+      Effect.flatMap(([root, ...workspaces]) => sha256Object([root, ...workspaces.sort()])),
       Effect.map((hash) => ({ hash, workspaces: undefined })),
     );
   }
-  const [root, workspaces] = yield* Effect.all(
-    [hashRoot, additionalWorkspaces],
-    { concurrency: "unbounded" },
-  );
-  const workspaceHashes = yield* Effect.forEach(
-    workspaces,
-    (cwd) => hashWorkspaceDirectory(cwd),
-    { concurrency: "unbounded" },
-  );
+  const [root, workspaces] = yield* Effect.all([hashRoot, additionalWorkspaces], {
+    concurrency: "unbounded",
+  });
+  const workspaceHashes = yield* Effect.forEach(workspaces, (cwd) => hashWorkspaceDirectory(cwd), {
+    concurrency: "unbounded",
+  });
   const hash = yield* sha256Object([root, ...workspaceHashes.sort()]);
   return { hash, workspaces: Array.from(workspaces).map(relativeToRoot) };
 });
@@ -383,32 +361,25 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
     const env = yield* resolveViteEnv(ctx.env ?? {});
-    const { clientDirectory, serverBundle, externalWorkspaces } =
-      yield* viteBuild(
-        vite.rootDir,
-        env,
-        {
-          main: vite.main,
-          compatibilityDate: ctx.compatibility.date,
-          compatibilityFlags: ctx.compatibility.flags,
-          viteEnvironments: vite.viteEnvironments,
-        },
-        ctx.fqn,
-      );
+    const { clientDirectory, serverBundle, externalWorkspaces } = yield* viteBuild(
+      vite.rootDir,
+      env,
+      {
+        main: vite.main,
+        compatibilityDate: ctx.compatibility.date,
+        compatibilityFlags: ctx.compatibility.flags,
+        viteEnvironments: vite.viteEnvironments,
+      },
+      ctx.fqn,
+    );
     const [assets, bundle, input] = yield* Effect.all(
       [
         clientDirectory
           ? readAssets({
-              ...(ctx.assets && typeof ctx.assets !== "string"
-                ? ctx.assets
-                : undefined),
+              ...(ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined),
               // `clientDirectory` from the build child is absolute; the
               // base only matters for the in-process legacy shape.
-              directory: path.resolve(
-                initialCwd,
-                vite.rootDir ?? ".",
-                clientDirectory,
-              ),
+              directory: path.resolve(initialCwd, vite.rootDir ?? ".", clientDirectory),
             })
           : Effect.undefined,
         serverBundle,
@@ -417,9 +388,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
       { concurrency: "unbounded" },
     );
     if (!assets && !bundle) {
-      return yield* Effect.die(
-        new Error("Vite build produced neither assets nor server output"),
-      );
+      return yield* Effect.die(new Error("Vite build produced neither assets nor server output"));
     }
     return {
       bundle,

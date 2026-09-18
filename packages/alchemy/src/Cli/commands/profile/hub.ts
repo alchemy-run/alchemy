@@ -84,9 +84,7 @@ export const profileHub = Effect.fn(function* (options: {
               ...(provider.diagnostic ? [provider.diagnostic.message] : []),
             ],
           })),
-          available: providers
-            .filter(({ connected }) => !connected)
-            .map(({ name }) => name),
+          available: providers.filter(({ connected }) => !connected).map(({ name }) => name),
         };
       }),
     execute: (action) =>
@@ -124,8 +122,7 @@ export const profileHub = Effect.fn(function* (options: {
         if (action.kind === "refresh") {
           yield* Profiles.refresh({
             profile: action.name,
-            providers:
-              action.provider === undefined ? undefined : [action.provider],
+            providers: action.provider === undefined ? undefined : [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
@@ -166,9 +163,7 @@ export const profileHub = Effect.fn(function* (options: {
               envFile,
               action: kind,
             });
-            outcomes.push(
-              `${provider} ${kind === "add" ? "added" : "updated"}`,
-            );
+            outcomes.push(`${provider} ${kind === "add" ? "added" : "updated"}`);
           }
         }
         return {
@@ -184,8 +179,6 @@ export const profileHub = Effect.fn(function* (options: {
           ),
         ),
       ),
-    reloadEntries: refreshEntries.pipe(
-      Effect.catch(() => Ref.get(lastEntries)),
-    ),
+    reloadEntries: refreshEntries.pipe(Effect.catch(() => Ref.get(lastEntries))),
   });
 });

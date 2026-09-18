@@ -1,12 +1,6 @@
 import * as path from "node:path";
-
 import * as ts from "typescript-api/unstable/ast";
-import {
-  API,
-  TypeFlags,
-  type Type,
-  type Project,
-} from "typescript-api/unstable/async";
+import { API, TypeFlags, type Type, type Project } from "typescript-api/unstable/async";
 
 /**
  * Lints every `packages/alchemy/src/{Cloud}/Providers.ts` file and fails if any
@@ -19,10 +13,7 @@ import {
  * call(s) whose requirements include `unknown`.
  */
 
-const tsConfig = path.join(
-  import.meta.dir,
-  "../packages/alchemy/tsconfig.json",
-);
+const tsConfig = path.join(import.meta.dir, "../packages/alchemy/tsconfig.json");
 const srcRoot = path.join(import.meta.dir, "../packages/alchemy/src");
 
 export async function lintProviders(
@@ -32,17 +23,12 @@ export async function lintProviders(
 ): Promise<boolean> {
   const { checker, program } = project;
   const providerPaths = (await program.getSourceFileNames())
-    .filter(
-      (file) =>
-        file.startsWith(`${srcRoot}/`) && file.endsWith("/Providers.ts"),
-    )
+    .filter((file) => file.startsWith(`${srcRoot}/`) && file.endsWith("/Providers.ts"))
     .sort((a, b) => a.localeCompare(b));
 
   // A Layer's requirements are its 3rd type argument: Layer<ROut, E, RIn>.
   async function layerRequirements(type: Type): Promise<Type | undefined> {
-    const args = type.isTypeReference()
-      ? await checker.getTypeArguments(type)
-      : [];
+    const args = type.isTypeReference() ? await checker.getTypeArguments(type) : [];
     if (args.length === 3) return args[2];
     return undefined;
   }
@@ -67,21 +53,15 @@ export async function lintProviders(
       .filter(ts.isVariableStatement)
       .flatMap((statement) => statement.declarationList.declarations)
       .find(
-        (declaration) =>
-          ts.isIdentifier(declaration.name) &&
-          declaration.name.text === "providers",
+        (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === "providers",
       );
     if (!providersVar) continue;
 
     // Overall requirements of the `providers()` factory return value.
     const factoryType = await checker.getTypeAtLocation(providersVar);
     const signature = (await factoryType.getCallSignatures())[0];
-    const returnType = signature
-      ? await checker.getReturnTypeOfSignature(signature)
-      : undefined;
-    const overallReq = returnType
-      ? await layerRequirements(returnType)
-      : undefined;
+    const returnType = signature ? await checker.getReturnTypeOfSignature(signature) : undefined;
+    const overallReq = returnType ? await layerRequirements(returnType) : undefined;
 
     if (!overallReq || !(await containsUnknown(overallReq))) {
       log(`✓ ${rel}`);
@@ -96,10 +76,7 @@ export async function lintProviders(
       if (ts.isCallExpression(node)) {
         const text = node.expression.getText(sourceFile);
         // Composite wrappers inherit unknown from their leaves.
-        if (
-          !/^Layer\.|\.pipe$|collection$/.test(text) &&
-          /Provider$|providers$|Live$/.test(text)
-        ) {
+        if (!/^Layer\.|\.pipe$|collection$/.test(text) && /Provider$|providers$|Live$/.test(text)) {
           calls.push(node);
         }
       }
@@ -108,9 +85,7 @@ export async function lintProviders(
     providersVar.forEachChild(visit);
     const offenders: { text: string; req: string }[] = [];
     for (const call of calls) {
-      const req = await layerRequirements(
-        await checker.getTypeAtLocation(call),
-      );
+      const req = await layerRequirements(await checker.getTypeAtLocation(call));
       if (req && (await containsUnknown(req))) {
         offenders.push({
           text: call.expression.getText(sourceFile),
@@ -121,9 +96,7 @@ export async function lintProviders(
 
     log(`✗ ${rel}  ->  providers() RIn includes \`unknown\``);
     if (offenders.length === 0) {
-      log(
-        "    (could not localize a leaf culprit — inspect the composite layers)",
-      );
+      log("    (could not localize a leaf culprit — inspect the composite layers)");
     }
     for (const o of offenders) {
       log(`    ✗ ${o.text}()  ->  RIn = ${o.req}`);

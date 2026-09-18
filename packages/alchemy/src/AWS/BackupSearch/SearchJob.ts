@@ -184,23 +184,17 @@ export interface SearchJob extends Resource<
  */
 export const SearchJob = Resource<SearchJob>("AWS.BackupSearch.SearchJob");
 
-const encodeTimeCondition = (
-  condition: TimeCondition,
-): backupsearch.TimeCondition => ({
+const encodeTimeCondition = (condition: TimeCondition): backupsearch.TimeCondition => ({
   Value: new Date(condition.value),
   Operator: condition.operator,
 });
 
-const encodeStringCondition = (
-  condition: StringCondition,
-): backupsearch.StringCondition => ({
+const encodeStringCondition = (condition: StringCondition): backupsearch.StringCondition => ({
   Value: condition.value,
   Operator: condition.operator,
 });
 
-const encodeLongCondition = (
-  condition: LongCondition,
-): backupsearch.LongCondition => ({
+const encodeLongCondition = (condition: LongCondition): backupsearch.LongCondition => ({
   Value: condition.value,
   Operator: condition.operator,
 });
@@ -234,8 +228,7 @@ const encodeItemFilters = (filters: ItemFilters): backupsearch.ItemFilters => ({
     FilePaths: filter.filePaths?.map(encodeStringCondition),
     Sizes: filter.sizes?.map(encodeLongCondition),
     CreationTimes: filter.creationTimes?.map(encodeTimeCondition),
-    LastModificationTimes:
-      filter.lastModificationTimes?.map(encodeTimeCondition),
+    LastModificationTimes: filter.lastModificationTimes?.map(encodeTimeCondition),
   })),
 });
 
@@ -243,21 +236,14 @@ export const SearchJobProvider = () =>
   Provider.effect(
     SearchJob,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: SearchJobProps,
-      ) {
+      const createName = Effect.fn(function* (id: string, props: SearchJobProps) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 60 }));
       });
 
       const get = Effect.fn(function* (searchJobIdentifier: string) {
         return yield* backupsearch
           .getSearchJob({ SearchJobIdentifier: searchJobIdentifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (job: backupsearch.GetSearchJobOutput) => ({
@@ -276,12 +262,9 @@ export const SearchJobProvider = () =>
           const newName = yield* createName(id, news);
           if (
             oldName !== newName ||
-            (olds.encryptionKeyArn ?? undefined) !==
-              (news.encryptionKeyArn ?? undefined) ||
-            JSON.stringify(olds.searchScope ?? null) !==
-              JSON.stringify(news.searchScope ?? null) ||
-            JSON.stringify(olds.itemFilters ?? null) !==
-              JSON.stringify(news.itemFilters ?? null)
+            (olds.encryptionKeyArn ?? undefined) !== (news.encryptionKeyArn ?? undefined) ||
+            JSON.stringify(olds.searchScope ?? null) !== JSON.stringify(news.searchScope ?? null) ||
+            JSON.stringify(olds.itemFilters ?? null) !== JSON.stringify(news.itemFilters ?? null)
           ) {
             return { action: "replace" } as const;
           }
@@ -314,9 +297,7 @@ export const SearchJobProvider = () =>
               Name: name,
               EncryptionKeyArn: news.encryptionKeyArn,
               SearchScope: encodeSearchScope(news.searchScope),
-              ItemFilters: news.itemFilters
-                ? encodeItemFilters(news.itemFilters)
-                : undefined,
+              ItemFilters: news.itemFilters ? encodeItemFilters(news.itemFilters) : undefined,
               Tags: desiredTags,
             });
             job = yield* backupsearch.getSearchJob({

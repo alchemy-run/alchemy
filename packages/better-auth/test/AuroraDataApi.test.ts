@@ -100,24 +100,16 @@ describe("AuroraDataApi dialect", () => {
           { label: "count", typeName: "int8" },
         ],
         records: [
-          [
-            { stringValue: "u1" },
-            { stringValue: "2026-08-10 12:00:00" },
-            { longValue: 7 },
-          ],
+          [{ stringValue: "u1" }, { stringValue: "2026-08-10 12:00:00" }, { longValue: 7 }],
           [{ stringValue: "u2" }, { isNull: true }, { isNull: true }],
         ],
       }));
       const db = yield* makeDb(executor);
-      const rows = yield* Effect.promise(() =>
-        db.selectFrom("user").selectAll().execute(),
-      );
+      const rows = yield* Effect.promise(() => db.selectFrom("user").selectAll().execute());
       expect(rows).toHaveLength(2);
       expect(rows[0]!.id).toBe("u1");
       expect(rows[0]!.createdAt).toBeInstanceOf(Date);
-      expect((rows[0]!.createdAt as Date).toISOString()).toBe(
-        "2026-08-10T12:00:00.000Z",
-      );
+      expect((rows[0]!.createdAt as Date).toISOString()).toBe("2026-08-10T12:00:00.000Z");
       expect(rows[0]!.count).toBe(7);
       expect(rows[1]!.createdAt).toBeNull();
     }),
@@ -134,10 +126,7 @@ describe("AuroraDataApi dialect", () => {
         }),
       );
       expect(calls.begun).toBe(1);
-      expect(calls.executed.map((call) => call.transactionId)).toEqual([
-        "tx-1",
-        "tx-1",
-      ]);
+      expect(calls.executed.map((call) => call.transactionId)).toEqual(["tx-1", "tx-1"]);
       expect(calls.committed).toEqual(["tx-1"]);
       expect(calls.rolledBack).toEqual([]);
     }),

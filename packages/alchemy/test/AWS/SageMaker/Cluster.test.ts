@@ -1,29 +1,27 @@
+import * as s3 from "@distilled.cloud/aws/s3";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Role } from "@/AWS/IAM/Role.ts";
 import { Bucket } from "@/AWS/S3/Bucket.ts";
 import { Cluster } from "@/AWS/SageMaker";
 import * as Test from "@/Test/Alchemy";
-import * as s3 from "@distilled.cloud/aws/s3";
-import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove describeCluster returns the typed
 // ResourceNotFound for a nonexistent HyperPod cluster. Runs in every CI pass.
-test.provider(
-  "describeCluster on a nonexistent cluster fails with ResourceNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sagemaker.describeCluster({
-          ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFound");
-    }),
+test.provider("describeCluster on a nonexistent cluster fails with ResourceNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sagemaker.describeCluster({
+        ClusterName: "alchemy-nonexistent-hyperpod-cluster-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFound");
+  }),
 );
 
 const findCluster = (name: string) =>
@@ -61,9 +59,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
               },
             ],
           },
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSageMakerClusterInstanceRolePolicy"],
         });
         return { bucket, role };
       });
@@ -112,9 +108,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SAGEMAKER_HYPERPOD)(
       // Out-of-band verification via distilled.
       const described = yield* findCluster(cluster.clusterName);
       expect(described?.ClusterStatus).toBe("InService");
-      expect(
-        described?.InstanceGroups?.map((g) => g.InstanceGroupName),
-      ).toEqual(["controller"]);
+      expect(described?.InstanceGroups?.map((g) => g.InstanceGroupName)).toEqual(["controller"]);
 
       // Destroy and verify gone.
       yield* stack.destroy();

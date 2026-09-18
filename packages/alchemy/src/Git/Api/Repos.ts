@@ -1,10 +1,10 @@
+import * as Schema from "effect/Schema";
 /**
  * The `repos` group: repo CRUD, fork, import, and compaction
  * (DESIGN.md §5). Every route is an Effect `HttpApiEndpoint`. Who may
  * call it is decided by the middleware applied to its route layer.
  */
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as Schema from "effect/Schema";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import {
@@ -50,23 +50,19 @@ export const GetRepo = HttpApiEndpoint.get("get", "/repos/:owner/:repo", {
 });
 
 /** Patches description / default branch / readOnly / public. */
-export const UpdateRepo = HttpApiEndpoint.patch(
-  "update",
-  "/repos/:owner/:repo",
-  {
-    params: RepoPath,
-    payload: Schema.Struct({
-      description: Schema.optional(Schema.NullOr(Schema.String)),
-      /** Must resolve to an existing branch. */
-      defaultBranch: Schema.optional(Schema.String),
-      readOnly: Schema.optional(Schema.Boolean),
-      /** Anyone can read/clone without a credential when `true`. */
-      public: Schema.optional(Schema.Boolean),
-    }),
-    success: Repo,
-    error: [RepoNotFound, RefNotFound],
-  },
-);
+export const UpdateRepo = HttpApiEndpoint.patch("update", "/repos/:owner/:repo", {
+  params: RepoPath,
+  payload: Schema.Struct({
+    description: Schema.optional(Schema.NullOr(Schema.String)),
+    /** Must resolve to an existing branch. */
+    defaultBranch: Schema.optional(Schema.String),
+    readOnly: Schema.optional(Schema.Boolean),
+    /** Anyone can read/clone without a credential when `true`. */
+    public: Schema.optional(Schema.Boolean),
+  }),
+  success: Repo,
+  error: [RepoNotFound, RefNotFound],
+});
 
 /**
  * Lists repos, optionally filtered by owner. Lists everything the
@@ -78,9 +74,7 @@ export const ListRepos = HttpApiEndpoint.get("list", "/repos", {
     /** Only public repositories when `true`. */
     public: Schema.optional(Schema.Boolean),
     cursor: Schema.optional(Schema.String),
-    limit: Schema.optional(
-      Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 })),
-    ),
+    limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100 }))),
   }),
   success: Paginated(Repo),
 });
@@ -90,33 +84,25 @@ export const ListRepos = HttpApiEndpoint.get("list", "/repos", {
  * flips to `'deleting'`, the name frees after the purge alarm completes
  * (then 404).
  */
-export const DeleteRepo = HttpApiEndpoint.delete(
-  "delete",
-  "/repos/:owner/:repo",
-  {
-    params: RepoPath,
-    success: HttpApiSchema.NoContent,
-    error: [RepoNotFound],
-  },
-);
+export const DeleteRepo = HttpApiEndpoint.delete("delete", "/repos/:owner/:repo", {
+  params: RepoPath,
+  success: HttpApiSchema.NoContent,
+  error: [RepoNotFound],
+});
 
 /**
  * Forks a repo. The fork starts in `status: 'forking'`; poll
  * `GET /repos/:owner/:repo` until `'ready'`.
  */
-export const ForkRepo = HttpApiEndpoint.post(
-  "fork",
-  "/repos/:owner/:repo/fork",
-  {
-    params: RepoPath,
-    payload: Schema.Struct({
-      targetOwner: OwnerName,
-      targetName: RepoName,
-    }),
-    success: RepoCreated,
-    error: [RepoNotFound, RepoAlreadyExists, RepoNotReady],
-  },
-);
+export const ForkRepo = HttpApiEndpoint.post("fork", "/repos/:owner/:repo/fork", {
+  params: RepoPath,
+  payload: Schema.Struct({
+    targetOwner: OwnerName,
+    targetName: RepoName,
+  }),
+  success: RepoCreated,
+  error: [RepoNotFound, RepoAlreadyExists, RepoNotReady],
+});
 
 /**
  * Imports from an external smart-HTTP source. The repo starts in
@@ -145,26 +131,13 @@ export const ImportRepo = HttpApiEndpoint.post("import", "/repos/import", {
  * a push — this is the operator/benchmark handle. Returns immediately; poll
  * `GET /repos/:owner/:repo` and watch `objects.loose` fall to zero.
  */
-export const CompactRepo = HttpApiEndpoint.post(
-  "compact",
-  "/repos/:owner/:repo/compact",
-  {
-    params: RepoPath,
-    success: HttpApiSchema.NoContent,
-    error: [RepoNotFound],
-  },
-);
+export const CompactRepo = HttpApiEndpoint.post("compact", "/repos/:owner/:repo/compact", {
+  params: RepoPath,
+  success: HttpApiSchema.NoContent,
+  error: [RepoNotFound],
+});
 
 /** The `repos` group, mounted at `/api/v1`. */
 export class Repos extends HttpApiGroup.make("repos")
-  .add(
-    CreateRepo,
-    GetRepo,
-    UpdateRepo,
-    ListRepos,
-    DeleteRepo,
-    ForkRepo,
-    ImportRepo,
-    CompactRepo,
-  )
+  .add(CreateRepo, GetRepo, UpdateRepo, ListRepos, DeleteRepo, ForkRepo, ImportRepo, CompactRepo)
   .prefix("/api/v1") {}

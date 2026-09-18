@@ -1,7 +1,7 @@
-import type { WriteBucketClient } from "@/Cloudflare/R2/WriteBucket.ts";
 import * as Effect from "effect/Effect";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { WriteBucketClient } from "@/Cloudflare/R2/WriteBucket.ts";
 
 /**
  * Shared write-side routes exercised by both the binding and HTTP fixtures so
@@ -39,9 +39,7 @@ export const writeRoutes = (
       return yield* HttpServerResponse.json({ ok: true });
     }
     if (request.method === "DELETE" && url.pathname === "/del-many") {
-      const keys = (url.searchParams.get("keys") ?? "")
-        .split(",")
-        .filter((k) => k.length > 0);
+      const keys = (url.searchParams.get("keys") ?? "").split(",").filter((k) => k.length > 0);
       yield* r2.delete(keys).pipe(Effect.orDie);
       return yield* HttpServerResponse.json({ ok: true });
     }
@@ -70,9 +68,7 @@ export const writeRoutes = (
       const key = url.searchParams.get("key") ?? "";
       const part = new Uint8Array(5 * 1024 * 1024).fill(67);
       const created = yield* r2.createMultipartUpload(key).pipe(Effect.orDie);
-      const upload = yield* r2
-        .resumeMultipartUpload(key, created.uploadId)
-        .pipe(Effect.orDie);
+      const upload = yield* r2.resumeMultipartUpload(key, created.uploadId).pipe(Effect.orDie);
       const p1 = yield* upload.uploadPart(1, part).pipe(Effect.orDie);
       const p2 = yield* upload.uploadPart(2, "tail").pipe(Effect.orDie);
       const object = yield* upload.complete([p1, p2]).pipe(Effect.orDie);

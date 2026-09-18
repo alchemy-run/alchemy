@@ -1,9 +1,9 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { DBClusterEndpoint } from "@/AWS/RDS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -56,11 +56,7 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER_ENDPOINT)(
       const all = yield* provider.list();
 
       expect(
-        all.some(
-          (e) =>
-            e.dbClusterEndpointIdentifier ===
-            endpoint.dbClusterEndpointIdentifier,
-        ),
+        all.some((e) => e.dbClusterEndpointIdentifier === endpoint.dbClusterEndpointIdentifier),
       ).toBe(true);
 
       yield* stack.destroy();

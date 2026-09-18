@@ -1,19 +1,16 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const CUSTOM_HOSTNAME = "alchemy-fly-cert-1.example.com";
 const REPLACE_HOSTNAME = "alchemy-fly-cert-2.example.com";
@@ -241,9 +238,7 @@ test.provider(
         hostname: CUSTOM_HOSTNAME,
       });
       expect(fetched.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(
-        fetched.certificates?.some((entry) => entry.source === "custom"),
-      ).toBe(true);
+      expect(fetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -269,16 +264,11 @@ test.provider(
         hostname: CUSTOM_HOSTNAME,
       });
       expect(refetched.hostname).toEqual(CUSTOM_HOSTNAME);
-      expect(
-        refetched.certificates?.some((entry) => entry.source === "custom"),
-      ).toBe(true);
+      expect(refetched.certificates?.some((entry) => entry.source === "custom")).toBe(true);
 
       yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(
-        created.app.appName,
-        CUSTOM_HOSTNAME,
-      );
+      const certGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
       expect(certGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(created.app.appName);
       expect(appGone).toEqual("gone");
@@ -333,18 +323,12 @@ test.provider(
       });
       expect(fetched.hostname).toEqual(REPLACE_HOSTNAME);
 
-      const oldGone = yield* waitUntilCertGone(
-        created.app.appName,
-        CUSTOM_HOSTNAME,
-      );
+      const oldGone = yield* waitUntilCertGone(created.app.appName, CUSTOM_HOSTNAME);
       expect(oldGone).toEqual("gone");
 
       yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(
-        replaced.app.appName,
-        REPLACE_HOSTNAME,
-      );
+      const certGone = yield* waitUntilCertGone(replaced.app.appName, REPLACE_HOSTNAME);
       expect(certGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(replaced.app.appName);
       expect(appGone).toEqual("gone");
@@ -375,19 +359,14 @@ test.provider(
       const provider = yield* Provider.findProvider(Fly.Certificate);
       const all = yield* provider.list();
       const found = all.find(
-        (row) =>
-          row.appName === deployed.app.appName &&
-          row.hostname === CUSTOM_HOSTNAME,
+        (row) => row.appName === deployed.app.appName && row.hostname === CUSTOM_HOSTNAME,
       );
       expect(found).toBeDefined();
       expect(found?.source).toEqual("custom");
 
       yield* stack.destroy();
 
-      const certGone = yield* waitUntilCertGone(
-        deployed.app.appName,
-        CUSTOM_HOSTNAME,
-      );
+      const certGone = yield* waitUntilCertGone(deployed.app.appName, CUSTOM_HOSTNAME);
       expect(certGone).toEqual("gone");
       const appGone = yield* waitUntilAppGone(deployed.app.appName);
       expect(appGone).toEqual("gone");
@@ -414,9 +393,7 @@ test.provider(
       );
 
       if (Result.isFailure(result)) {
-        expect(["BadRequest", "UnprocessableEntity"]).toContain(
-          result.failure._tag,
-        );
+        expect(["BadRequest", "UnprocessableEntity"]).toContain(result.failure._tag);
       } else {
         const hostname = result.success.hostname;
         if (hostname !== undefined && hostname.length > 0) {

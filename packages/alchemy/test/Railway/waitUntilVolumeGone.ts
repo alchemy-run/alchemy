@@ -20,12 +20,8 @@ export const waitUntilVolumeGone = (volumeInstanceId: string) =>
       { deletedAt: true, isPendingDeletion: true, state: true },
     )
     .pipe(
-      Effect.map((instance) =>
-        isGoneInstance(instance) ? ("gone" as const) : ("found" as const),
-      ),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.map((instance) => (isGoneInstance(instance) ? ("gone" as const) : ("found" as const))),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
         until: (status) => status === "gone",

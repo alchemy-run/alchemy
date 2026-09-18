@@ -1,16 +1,13 @@
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Stripe from "@/Stripe";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "creates a logical restricted key with default props",
@@ -74,11 +71,7 @@ test.provider(
       );
 
       expect(updated.id).toEqual(created.id);
-      expect(updated.permissions).toEqual([
-        "customers_read",
-        "customers_write",
-        "products_read",
-      ]);
+      expect(updated.permissions).toEqual(["customers_read", "customers_write", "products_read"]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

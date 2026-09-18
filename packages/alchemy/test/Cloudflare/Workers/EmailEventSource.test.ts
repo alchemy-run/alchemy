@@ -1,14 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import EmailCatchAllWorker from "./fixtures/email-catchall-worker.ts";
 import EmailTestWorker from "./fixtures/email-worker.ts";
 
@@ -17,10 +17,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const INBOX = process.env.CLOUDFLARE_TEST_EMAIL_INBOX || `inbox@${ZONE}`;
@@ -49,9 +46,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — a fresh token intermittently 403s.
-const rideOutAuth = <A, E extends { _tag: string }, R>(
-  effect: Effect.Effect<A, E, R>,
-) =>
+const rideOutAuth = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
@@ -79,9 +74,7 @@ test.provider(
       const { workerName } = yield* stack;
       const zoneId = yield* resolveZoneId;
 
-      const routing = yield* rideOutAuth(
-        emailRouting.getEmailRouting({ zoneId }),
-      );
+      const routing = yield* rideOutAuth(emailRouting.getEmailRouting({ zoneId }));
       expect(routing.enabled).toBe(true);
 
       const rules = yield* rideOutAuth(emailRouting.listRules({ zoneId }));
@@ -92,9 +85,7 @@ test.provider(
       );
       expect(ours).toBeDefined();
       expect(ours!.enabled).toBe(true);
-      expect(ours!.matchers).toEqual([
-        { type: "literal", field: "to", value: INBOX },
-      ]);
+      expect(ours!.matchers).toEqual([{ type: "literal", field: "to", value: INBOX }]);
     }).pipe(logLevel),
   { timeout: 180_000 },
 );
@@ -130,9 +121,7 @@ test.skipIf(skipRoundTrip)(
       }
       const body = (yield* res.json) as { ok: boolean; message?: string };
       if (!body.ok) {
-        return yield* Effect.fail(
-          new Error(`send_email failed: ${body.message}`),
-        );
+        return yield* Effect.fail(new Error(`send_email failed: ${body.message}`));
       }
     }).pipe(
       Effect.retry({
@@ -150,9 +139,7 @@ test.skipIf(skipRoundTrip)(
       if (!Array.isArray(body.received)) return [];
       return body.received.filter(
         (r): r is { subject: string | null; receivedAt: number } =>
-          typeof r === "object" &&
-          r !== null &&
-          (r as { subject?: unknown }).subject === subject,
+          typeof r === "object" && r !== null && (r as { subject?: unknown }).subject === subject,
       );
     }).pipe(
       Effect.catch(() => Effect.succeed([])),
@@ -199,9 +186,7 @@ test.provider(
       const zoneId = yield* resolveZoneId;
 
       // The zone's catch-all singleton now points at the worker.
-      const catchAll = yield* rideOutAuth(
-        emailRouting.getRuleCatchAll({ zoneId }),
-      );
+      const catchAll = yield* rideOutAuth(emailRouting.getRuleCatchAll({ zoneId }));
       expect(catchAll.enabled).toBe(true);
       expect(catchAll.actions?.[0]?.type).toEqual("worker");
       expect(catchAll.actions?.[0]?.value).toEqual([workerName]);

@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import BucketEventSourceFunctionLive, {
   BucketEventSourceFunction,
 } from "./fixtures/event-source-handler.ts";
@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "S3EventSource");
 
 // Lambda function URL cold-start plus IAM propagation can take well over a
 // minute on a fresh deploy under parallel-suite load. Budget ~150s.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let fixtureBucketName: string | undefined;
@@ -29,9 +26,7 @@ let fixtureBucketName: string | undefined;
 describe("S3 Bucket Event Source", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "S3 EventSource test: destroying previous resources",
-      );
+      yield* Effect.logInfo("S3 EventSource test: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("S3 EventSource test: deploying fixture");
@@ -66,15 +61,11 @@ describe("S3 Bucket Event Source", () => {
               ),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `S3 EventSource test: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`S3 EventSource test: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
-      yield* Effect.logInfo(
-        "S3 EventSource test: fixture responded successfully",
-      );
+      yield* Effect.logInfo("S3 EventSource test: fixture responded successfully");
 
       // Capture the fixture's bucket name so afterAll can assert it is
       // really gone after the trailing destroy. The route answers 503 until
@@ -83,9 +74,7 @@ describe("S3 Bucket Event Source", () => {
         Effect.flatMap((response) =>
           response.status === 200
             ? response.json
-            : Effect.fail(
-                new Error(`bucket-name not ready: ${response.status}`),
-              ),
+            : Effect.fail(new Error(`bucket-name not ready: ${response.status}`)),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -121,10 +110,10 @@ describe("S3 Bucket Event Source", () => {
         // Trigger: write an object under `incoming/`, which the Lambda
         // event-source subscription should observe.
         const putResponse = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put`),
-            { key, value: "hello from s3 event source" },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put`), {
+            key,
+            value: "hello from s3 event source",
+          }),
         ).pipe(Effect.flatMap((r) => r.json));
         expect(putResponse).toHaveProperty("ok", true);
 
@@ -148,10 +137,7 @@ describe("S3 Bucket Event Source", () => {
         const processed = yield* fetchProcessed.pipe(
           Effect.retry({
             while: (error) => error._tag === "ProcessedNotReady",
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(48),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(48)]),
           }),
         );
 

@@ -24,10 +24,7 @@ export interface ListCompositions extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ivsrealtime.ListCompositionsRequest,
-    ) => Effect.Effect<
-      ivsrealtime.ListCompositionsResponse,
-      ivsrealtime.ListCompositionsError
-    >
+    ) => Effect.Effect<ivsrealtime.ListCompositionsResponse, ivsrealtime.ListCompositionsError>
   >
 > {}
 export const ListCompositions = Binding.Service<ListCompositions>(

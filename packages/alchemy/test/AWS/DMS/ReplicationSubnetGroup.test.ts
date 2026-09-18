@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { ReplicationSubnetGroup } from "@/AWS/DMS";
-import { Subnet, Vpc } from "@/AWS/EC2";
-import * as Test from "@/Test/Alchemy";
 import * as dms from "@distilled.cloud/aws/database-migration-service";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ReplicationSubnetGroup } from "@/AWS/DMS";
+import { Subnet, Vpc } from "@/AWS/EC2";
+import * as Test from "@/Test/Alchemy";
 import { reapDmsOrphans } from "./reap.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -29,10 +29,7 @@ const assertGone = (identifier: string) =>
         : Effect.fail(new Error(`subnet group '${identifier}' still exists`)),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -120,12 +117,8 @@ test.provider(
       );
 
       // Same subnet group (in-place modify).
-      expect(updated.replicationSubnetGroupIdentifier).toBe(
-        group.replicationSubnetGroupIdentifier,
-      );
-      const observed2 = yield* findGroup(
-        group.replicationSubnetGroupIdentifier,
-      );
+      expect(updated.replicationSubnetGroupIdentifier).toBe(group.replicationSubnetGroupIdentifier);
+      const observed2 = yield* findGroup(group.replicationSubnetGroupIdentifier);
       const observedSubnetIds = (observed2?.Subnets ?? [])
         .map((s) => s.SubnetIdentifier)
         .filter((s): s is string => typeof s === "string");

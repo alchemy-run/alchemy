@@ -81,27 +81,15 @@ export const GroupProvider = () =>
   Provider.effect(
     Group,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<GroupProps, "groupName">,
-      ) {
-        return (
-          props.groupName ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<GroupProps, "groupName">) {
+        return props.groupName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      const getGroup = Effect.fn(function* (
-        userPoolId: string,
-        groupName: string,
-      ) {
-        return yield* cip
-          .getGroup({ UserPoolId: userPoolId, GroupName: groupName })
-          .pipe(
-            Effect.map((r) => r.Group),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+      const getGroup = Effect.fn(function* (userPoolId: string, groupName: string) {
+        return yield* cip.getGroup({ UserPoolId: userPoolId, GroupName: groupName }).pipe(
+          Effect.map((r) => r.Group),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
       });
 
       return Group.Provider.of({
@@ -118,9 +106,7 @@ export const GroupProvider = () =>
           if (userPoolId === undefined) return undefined;
           const name = output?.groupName ?? (yield* createName(id, olds ?? {}));
           const observed = yield* getGroup(userPoolId, name);
-          return observed === undefined
-            ? undefined
-            : { groupName: name, userPoolId };
+          return observed === undefined ? undefined : { groupName: name, userPoolId };
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -151,24 +137,17 @@ export const GroupProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.Group),
-                Effect.catchTag("GroupExistsException", () =>
-                  getGroup(userPoolId, groupName),
-                ),
+                Effect.catchTag("GroupExistsException", () => getGroup(userPoolId, groupName)),
               );
           } else {
             // 3. SYNC — description/role/precedence are mutable in place.
             const drift =
-              (news.description !== undefined &&
-                observed.Description !== news.description) ||
-              (news.roleArn !== undefined &&
-                observed.RoleArn !== news.roleArn) ||
-              (news.precedence !== undefined &&
-                observed.Precedence !== news.precedence) ||
-              (news.description === undefined &&
-                observed.Description !== undefined) ||
+              (news.description !== undefined && observed.Description !== news.description) ||
+              (news.roleArn !== undefined && observed.RoleArn !== news.roleArn) ||
+              (news.precedence !== undefined && observed.Precedence !== news.precedence) ||
+              (news.description === undefined && observed.Description !== undefined) ||
               (news.roleArn === undefined && observed.RoleArn !== undefined) ||
-              (news.precedence === undefined &&
-                observed.Precedence !== undefined);
+              (news.precedence === undefined && observed.Precedence !== undefined);
             if (drift) {
               yield* cip.updateGroup({
                 UserPoolId: userPoolId,
@@ -190,9 +169,7 @@ export const GroupProvider = () =>
               UserPoolId: output.userPoolId,
               GroupName: output.groupName,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

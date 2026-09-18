@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * Worker-runtime config loaded via Effect's `Config`. Captured during the
@@ -19,12 +19,8 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 const ZoneConfig = Config.String("CLOUDFLARE_TEST_DNS_ZONE_NAME").pipe(
   Config.withDefault("alchemy-test-2.us"),
 );
-const InboxConfig = Config.String("CLOUDFLARE_TEST_EMAIL_INBOX").pipe(
-  Config.withDefault(""),
-);
-const SenderConfig = Config.String("CLOUDFLARE_TEST_EMAIL_FROM").pipe(
-  Config.withDefault(""),
-);
+const InboxConfig = Config.String("CLOUDFLARE_TEST_EMAIL_INBOX").pipe(Config.withDefault(""));
+const SenderConfig = Config.String("CLOUDFLARE_TEST_EMAIL_FROM").pipe(Config.withDefault(""));
 
 interface ReceivedMessage {
   from: string;
@@ -44,8 +40,7 @@ export class Inbox extends Cloudflare.DurableObject<Inbox>()(
   Effect.gen(function* () {
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-      let received =
-        (yield* state.storage.get<ReceivedMessage[]>("received")) ?? [];
+      let received = (yield* state.storage.get<ReceivedMessage[]>("received")) ?? [];
       return {
         record: Effect.fn(function* (msg: ReceivedMessage) {
           received = [...received, msg];
@@ -147,9 +142,7 @@ export default class EmailTestWorker extends Cloudflare.Worker<EmailTestWorker>(
               { status: 400 },
             );
           }
-          const subject =
-            url.searchParams.get("subject") ??
-            `alchemy email test ${Date.now()}`;
+          const subject = url.searchParams.get("subject") ?? `alchemy email test ${Date.now()}`;
           const result = yield* sender
             .send({
               from: senderAddress,

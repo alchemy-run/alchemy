@@ -23,8 +23,8 @@ import {
   stripInternalMetadata,
   toMetadata,
 } from "./Metadata.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -39,10 +39,7 @@ export type CustomerUpdateAllowedUpdate =
 
 export type SubscriptionCancelMode = "at_period_end" | "immediately";
 
-export type SubscriptionCancelProrationBehavior =
-  | "always_invoice"
-  | "create_prorations"
-  | "none";
+export type SubscriptionCancelProrationBehavior = "always_invoice" | "create_prorations" | "none";
 
 export type CancellationReasonOption =
   | "customer_service"
@@ -54,23 +51,15 @@ export type CancellationReasonOption =
   | "too_expensive"
   | "unused";
 
-export type SubscriptionUpdateAllowedUpdate =
-  | "price"
-  | "promotion_code"
-  | "quantity";
+export type SubscriptionUpdateAllowedUpdate = "price" | "promotion_code" | "quantity";
 
 export type SubscriptionUpdateBillingCycleAnchor = "now" | "unchanged";
 
-export type SubscriptionUpdateProrationBehavior =
-  | "always_invoice"
-  | "create_prorations"
-  | "none";
+export type SubscriptionUpdateProrationBehavior = "always_invoice" | "create_prorations" | "none";
 
 export type SubscriptionUpdateTrialBehavior = "continue_trial" | "end_trial";
 
-export type ScheduleAtPeriodEndConditionType =
-  | "decreasing_item_amount"
-  | "shortening_interval";
+export type ScheduleAtPeriodEndConditionType = "decreasing_item_amount" | "shortening_interval";
 
 export interface BillingPortalCustomerUpdate {
   /**
@@ -435,9 +424,7 @@ const userMetadata = (
   metadata: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalMetadata(tagRecord(metadata));
 
-const fromObservedFeatures = (
-  features: PortalFeatures,
-): BillingPortalFeaturesState => ({
+const fromObservedFeatures = (features: PortalFeatures): BillingPortalFeaturesState => ({
   customerUpdate: {
     enabled: features.customer_update.enabled,
     allowedUpdates: features.customer_update.allowed_updates,
@@ -459,8 +446,7 @@ const fromObservedFeatures = (
   },
   subscriptionUpdate: {
     enabled: features.subscription_update.enabled,
-    billingCycleAnchor:
-      features.subscription_update.billing_cycle_anchor ?? undefined,
+    billingCycleAnchor: features.subscription_update.billing_cycle_anchor ?? undefined,
     defaultAllowedUpdates: features.subscription_update.default_allowed_updates,
     products:
       features.subscription_update.products?.map((product) => ({
@@ -474,18 +460,15 @@ const fromObservedFeatures = (
       })) ?? undefined,
     prorationBehavior: features.subscription_update.proration_behavior,
     scheduleAtPeriodEnd: {
-      conditions:
-        features.subscription_update.schedule_at_period_end.conditions.map(
-          (condition) => ({ type: condition.type }),
-        ),
+      conditions: features.subscription_update.schedule_at_period_end.conditions.map(
+        (condition) => ({ type: condition.type }),
+      ),
     },
     trialUpdateBehavior: features.subscription_update.trial_update_behavior,
   },
 });
 
-const toAttrs = (
-  configuration: StripeBillingPortalConfiguration,
-): ConfigurationAttributes => ({
+const toAttrs = (configuration: StripeBillingPortalConfiguration): ConfigurationAttributes => ({
   id: configuration.id,
   name: configuration.name ?? undefined,
   active: configuration.active,
@@ -493,10 +476,8 @@ const toAttrs = (
   defaultReturnUrl: configuration.default_return_url ?? undefined,
   businessProfile: {
     headline: configuration.business_profile.headline ?? undefined,
-    privacyPolicyUrl:
-      configuration.business_profile.privacy_policy_url ?? undefined,
-    termsOfServiceUrl:
-      configuration.business_profile.terms_of_service_url ?? undefined,
+    privacyPolicyUrl: configuration.business_profile.privacy_policy_url ?? undefined,
+    termsOfServiceUrl: configuration.business_profile.terms_of_service_url ?? undefined,
   },
   features: fromObservedFeatures(configuration.features),
   loginPage: {
@@ -523,9 +504,7 @@ const toWireFeatures = (
           enabled: features.customerUpdate.enabled,
           ...(features.customerUpdate.allowedUpdates !== undefined
             ? {
-                allowed_updates: emptyOrList(
-                  features.customerUpdate.allowedUpdates,
-                ),
+                allowed_updates: emptyOrList(features.customerUpdate.allowedUpdates),
               }
             : {}),
         },
@@ -538,8 +517,7 @@ const toWireFeatures = (
     ? {
         payment_method_update: {
           enabled: features.paymentMethodUpdate.enabled,
-          ...(features.paymentMethodUpdate.paymentMethodConfiguration !==
-          undefined
+          ...(features.paymentMethodUpdate.paymentMethodConfiguration !== undefined
             ? {
                 payment_method_configuration:
                   features.paymentMethodUpdate.paymentMethodConfiguration,
@@ -557,19 +535,15 @@ const toWireFeatures = (
             : {}),
           ...(features.subscriptionCancel.prorationBehavior !== undefined
             ? {
-                proration_behavior:
-                  features.subscriptionCancel.prorationBehavior,
+                proration_behavior: features.subscriptionCancel.prorationBehavior,
               }
             : {}),
           ...(features.subscriptionCancel.cancellationReason !== undefined
             ? {
                 cancellation_reason: {
-                  enabled:
-                    features.subscriptionCancel.cancellationReason.enabled,
+                  enabled: features.subscriptionCancel.cancellationReason.enabled,
                   options:
-                    emptyOrList(
-                      features.subscriptionCancel.cancellationReason.options,
-                    ) ?? "",
+                    emptyOrList(features.subscriptionCancel.cancellationReason.options) ?? "",
                 },
               }
             : {}),
@@ -582,8 +556,7 @@ const toWireFeatures = (
           enabled: features.subscriptionUpdate.enabled,
           ...(features.subscriptionUpdate.billingCycleAnchor !== undefined
             ? {
-                billing_cycle_anchor:
-                  features.subscriptionUpdate.billingCycleAnchor,
+                billing_cycle_anchor: features.subscriptionUpdate.billingCycleAnchor,
               }
             : {}),
           ...(features.subscriptionUpdate.defaultAllowedUpdates !== undefined
@@ -605,18 +578,14 @@ const toWireFeatures = (
                           ? {
                               adjustable_quantity: {
                                 enabled: product.adjustableQuantity.enabled,
-                                ...(product.adjustableQuantity.maximum !==
-                                undefined
+                                ...(product.adjustableQuantity.maximum !== undefined
                                   ? {
-                                      maximum:
-                                        product.adjustableQuantity.maximum,
+                                      maximum: product.adjustableQuantity.maximum,
                                     }
                                   : {}),
-                                ...(product.adjustableQuantity.minimum !==
-                                undefined
+                                ...(product.adjustableQuantity.minimum !== undefined
                                   ? {
-                                      minimum:
-                                        product.adjustableQuantity.minimum,
+                                      minimum: product.adjustableQuantity.minimum,
                                     }
                                   : {}),
                               },
@@ -627,19 +596,15 @@ const toWireFeatures = (
             : {}),
           ...(features.subscriptionUpdate.prorationBehavior !== undefined
             ? {
-                proration_behavior:
-                  features.subscriptionUpdate.prorationBehavior,
+                proration_behavior: features.subscriptionUpdate.prorationBehavior,
               }
             : {}),
           ...(features.subscriptionUpdate.scheduleAtPeriodEnd !== undefined
             ? {
                 schedule_at_period_end: {
-                  ...(features.subscriptionUpdate.scheduleAtPeriodEnd
-                    .conditions !== undefined
+                  ...(features.subscriptionUpdate.scheduleAtPeriodEnd.conditions !== undefined
                     ? {
-                        conditions:
-                          features.subscriptionUpdate.scheduleAtPeriodEnd
-                            .conditions,
+                        conditions: features.subscriptionUpdate.scheduleAtPeriodEnd.conditions,
                       }
                     : {}),
                 },
@@ -647,8 +612,7 @@ const toWireFeatures = (
             : {}),
           ...(features.subscriptionUpdate.trialUpdateBehavior !== undefined
             ? {
-                trial_update_behavior:
-                  features.subscriptionUpdate.trialUpdateBehavior,
+                trial_update_behavior: features.subscriptionUpdate.trialUpdateBehavior,
               }
             : {}),
         },
@@ -737,10 +701,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllConfigurations = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const configurations: StripeBillingPortalConfiguration[] = [];
   for (const configuration of [...active, ...inactive]) {
@@ -763,10 +726,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  logicalId: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -800,9 +760,7 @@ export const BillingPortalConfigurationProvider = () =>
       });
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing);
-      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata)))
-        ? attrs
-        : Unowned(attrs);
+      return (yield* hasAlchemyMetadata(id, tagRecord(existing.metadata))) ? attrs : Unowned(attrs);
     }),
 
     list: Effect.fn(function* () {
@@ -857,14 +815,12 @@ export const BillingPortalConfigurationProvider = () =>
       const metadataChanged = upsert.length > 0 || removed.length > 0;
       const attrs = toAttrs(current);
       const activeChanged = current.active !== desiredActive;
-      const nameChanged =
-        news.name !== undefined && (current.name ?? "") !== news.name;
+      const nameChanged = news.name !== undefined && (current.name ?? "") !== news.name;
       const defaultReturnUrlChanged =
         news.defaultReturnUrl !== undefined &&
         (current.default_return_url ?? "") !== news.defaultReturnUrl;
       const loginPageChanged =
-        news.loginPage !== undefined &&
-        current.login_page.enabled !== news.loginPage.enabled;
+        news.loginPage !== undefined && current.login_page.enabled !== news.loginPage.enabled;
       const featuresChanged = featuresNeedSync(news.features, attrs.features);
       const businessProfileChanged = businessProfileNeedSync(
         news.businessProfile,
@@ -887,9 +843,7 @@ export const BillingPortalConfigurationProvider = () =>
         configuration: current.id,
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nameChanged ? { name: news.name } : {}),
-        ...(defaultReturnUrlChanged
-          ? { default_return_url: news.defaultReturnUrl }
-          : {}),
+        ...(defaultReturnUrlChanged ? { default_return_url: news.defaultReturnUrl } : {}),
         ...(loginPageChanged && news.loginPage !== undefined
           ? { login_page: { enabled: news.loginPage.enabled } }
           : {}),

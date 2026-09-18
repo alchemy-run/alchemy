@@ -6,12 +6,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface EndpointConfigProps {
@@ -125,14 +120,9 @@ export interface EndpointConfig extends Resource<
  *
  * @resource
  */
-export const EndpointConfig = Resource<EndpointConfig>(
-  "AWS.SageMaker.EndpointConfig",
-);
+export const EndpointConfig = Resource<EndpointConfig>("AWS.SageMaker.EndpointConfig");
 
-const createConfigName = (
-  id: string,
-  props: { endpointConfigName?: string | undefined },
-) =>
+const createConfigName = (id: string, props: { endpointConfigName?: string | undefined }) =>
   props.endpointConfigName
     ? Effect.succeed(props.endpointConfigName)
     : createPhysicalName({ id, maxLength: 63 });
@@ -140,9 +130,7 @@ const createConfigName = (
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -153,11 +141,7 @@ const fetchConfigTags = Effect.fn(function* (arn: string) {
 const readEndpointConfig = Effect.fn(function* (name: string) {
   const described = yield* sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(
-      Effect.catchTag("EndpointConfigNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   return {
     endpointConfigName: described.EndpointConfigName,
@@ -173,19 +157,14 @@ export const EndpointConfigProvider = () =>
         stables: ["endpointConfigName", "endpointConfigArn"],
         list: () =>
           Effect.gen(function* () {
-            const summaries = yield* sagemaker.listEndpointConfigs
-              .pages({})
-              .pipe(
-                EffectStream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap(
-                    (page) => page.EndpointConfigs ?? [],
-                  ),
-                ),
-              );
+            const summaries = yield* sagemaker.listEndpointConfigs.pages({}).pipe(
+              EffectStream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.EndpointConfigs ?? []),
+              ),
+            );
             return summaries.flatMap((s) =>
-              s.EndpointConfigName !== undefined &&
-              s.EndpointConfigArn !== undefined
+              s.EndpointConfigName !== undefined && s.EndpointConfigArn !== undefined
                 ? [
                     {
                       endpointConfigName: s.EndpointConfigName,
@@ -196,15 +175,11 @@ export const EndpointConfigProvider = () =>
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.endpointConfigName ??
-            (yield* createConfigName(id, olds ?? {}));
+          const name = output?.endpointConfigName ?? (yield* createConfigName(id, olds ?? {}));
           const attrs = yield* readEndpointConfig(name);
           if (!attrs) return undefined;
           const tags = yield* fetchConfigTags(attrs.endpointConfigArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -232,12 +207,9 @@ export const EndpointConfigProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker EndpointConfig requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker EndpointConfig requires props"));
           }
-          const name =
-            output?.endpointConfigName ?? (yield* createConfigName(id, news));
+          const name = output?.endpointConfigName ?? (yield* createConfigName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -263,12 +235,7 @@ export const EndpointConfigProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "EndpointConfigAlreadyExists",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("EndpointConfigAlreadyExists", () => Effect.void));
             attrs = yield* readEndpointConfig(name);
             if (attrs === undefined) {
               return yield* Effect.fail(

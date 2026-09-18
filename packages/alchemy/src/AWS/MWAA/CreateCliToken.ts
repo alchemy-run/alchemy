@@ -40,11 +40,7 @@ export interface CreateCliToken extends Binding.Service<
   "AWS.MWAA.CreateCliToken",
   (
     environment: Environment,
-  ) => Effect.Effect<
-    () => Effect.Effect<mwaa.CreateCliTokenResponse, mwaa.CreateCliTokenError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<mwaa.CreateCliTokenResponse, mwaa.CreateCliTokenError>>
 > {}
 
-export const CreateCliToken = Binding.Service<CreateCliToken>(
-  "AWS.MWAA.CreateCliToken",
-);
+export const CreateCliToken = Binding.Service<CreateCliToken>("AWS.MWAA.CreateCliToken");

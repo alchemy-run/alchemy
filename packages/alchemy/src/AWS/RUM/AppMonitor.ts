@@ -173,13 +173,11 @@ export const AppMonitor = Resource<AppMonitor>("AWS.RUM.AppMonitor");
  * Raised when an `AppMonitor` is configured with both or neither of
  * `domain` / `domainList` — the API requires exactly one.
  */
-export class RumAppMonitorInvalidDomains extends Data.TaggedError(
-  "RumAppMonitorInvalidDomains",
-)<{ message: string }> {}
+export class RumAppMonitorInvalidDomains extends Data.TaggedError("RumAppMonitorInvalidDomains")<{
+  message: string;
+}> {}
 
-const validateDomains = (
-  props: Pick<AppMonitorProps, "domain" | "domainList">,
-) => {
+const validateDomains = (props: Pick<AppMonitorProps, "domain" | "domainList">) => {
   const hasDomain = props.domain !== undefined;
   const hasDomainList = (props.domainList?.length ?? 0) > 0;
   if (hasDomain === hasDomainList) {
@@ -194,18 +192,13 @@ const validateDomains = (
   return Effect.void;
 };
 
-const sameStringList = (
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-) => {
+const sameStringList = (a: readonly string[] | undefined, b: readonly string[] | undefined) => {
   const left = [...(a ?? [])].sort();
   const right = [...(b ?? [])].sort();
   return left.length === right.length && left.every((v, i) => v === right[i]);
 };
 
-const desiredConfiguration = (
-  props: AppMonitorProps,
-): rum.AppMonitorConfiguration | undefined => {
+const desiredConfiguration = (props: AppMonitorProps): rum.AppMonitorConfiguration | undefined => {
   const c = props.appMonitorConfiguration;
   if (c === undefined) return undefined;
   return {
@@ -229,8 +222,7 @@ const configurationInSync = (
   if (desired === undefined) return true;
   const o = observed ?? {};
   return (
-    (desired.IdentityPoolId === undefined ||
-      o.IdentityPoolId === desired.IdentityPoolId) &&
+    (desired.IdentityPoolId === undefined || o.IdentityPoolId === desired.IdentityPoolId) &&
     (desired.ExcludedPages === undefined ||
       sameStringList(o.ExcludedPages, desired.ExcludedPages)) &&
     (desired.IncludedPages === undefined ||
@@ -239,14 +231,10 @@ const configurationInSync = (
       sameStringList(o.FavoritePages, desired.FavoritePages)) &&
     (desired.SessionSampleRate === undefined ||
       o.SessionSampleRate === desired.SessionSampleRate) &&
-    (desired.GuestRoleArn === undefined ||
-      o.GuestRoleArn === desired.GuestRoleArn) &&
-    (desired.AllowCookies === undefined ||
-      (o.AllowCookies ?? false) === desired.AllowCookies) &&
-    (desired.Telemetries === undefined ||
-      sameStringList(o.Telemetries, desired.Telemetries)) &&
-    (desired.EnableXRay === undefined ||
-      (o.EnableXRay ?? false) === desired.EnableXRay)
+    (desired.GuestRoleArn === undefined || o.GuestRoleArn === desired.GuestRoleArn) &&
+    (desired.AllowCookies === undefined || (o.AllowCookies ?? false) === desired.AllowCookies) &&
+    (desired.Telemetries === undefined || sameStringList(o.Telemetries, desired.Telemetries)) &&
+    (desired.EnableXRay === undefined || (o.EnableXRay ?? false) === desired.EnableXRay)
   );
 };
 
@@ -261,18 +249,13 @@ export const AppMonitorProvider = () =>
         id: string,
         props: Pick<AppMonitorProps, "appMonitorName">,
       ) {
-        return (
-          props.appMonitorName ??
-          (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.appMonitorName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const observeMonitor = (name: string) =>
         rum.getAppMonitor({ Name: name }).pipe(
           Effect.map((r) => r.AppMonitor),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
 
       return AppMonitor.Provider.of({
@@ -280,20 +263,14 @@ export const AppMonitorProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
-            const summaries = yield* rum.listAppMonitors
-              .items({})
-              .pipe(Stream.runCollect);
+            const summaries = yield* rum.listAppMonitors.items({}).pipe(Stream.runCollect);
             return Array.from(summaries).flatMap((monitor) =>
               monitor.Name !== undefined && monitor.Id !== undefined
                 ? [
                     {
                       appMonitorName: monitor.Name,
                       appMonitorId: monitor.Id,
-                      appMonitorArn: appMonitorArn(
-                        region,
-                        accountId,
-                        monitor.Name,
-                      ),
+                      appMonitorArn: appMonitorArn(region, accountId, monitor.Name),
                     },
                   ]
                 : [],
@@ -301,8 +278,7 @@ export const AppMonitorProvider = () =>
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
-          const name =
-            output?.appMonitorName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.appMonitorName ?? (yield* createName(id, olds ?? {}));
           const found = yield* observeMonitor(name);
           if (found?.Id === undefined) return undefined;
           const attrs = {
@@ -381,11 +357,9 @@ export const AppMonitorProvider = () =>
           const inSync =
             live !== undefined &&
             (news.domain === undefined || live.Domain === news.domain) &&
-            (news.domainList === undefined ||
-              sameStringList(live.DomainList, news.domainList)) &&
+            (news.domainList === undefined || sameStringList(live.DomainList, news.domainList)) &&
             configurationInSync(live.AppMonitorConfiguration, desiredConfig) &&
-            (live.DataStorage?.CwLog?.CwLogEnabled ?? false) ===
-              desiredCwLogEnabled &&
+            (live.DataStorage?.CwLog?.CwLogEnabled ?? false) === desiredCwLogEnabled &&
             (live.CustomEvents?.Status ?? "DISABLED") === desiredCustomEvents;
           if (!inSync) {
             yield* rum.updateAppMonitor({
@@ -452,12 +426,7 @@ export const AppMonitorProvider = () =>
             (logGroupName) =>
               logs
                 .deleteLogGroup({ logGroupName })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
         }),
       });

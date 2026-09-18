@@ -30,10 +30,7 @@ export interface UnarchiveFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.UnarchiveFindingsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.UnarchiveFindingsResponse,
-      guardduty.UnarchiveFindingsError
-    >
+    ) => Effect.Effect<guardduty.UnarchiveFindingsResponse, guardduty.UnarchiveFindingsError>
   >
 > {}
 export const UnarchiveFindings = Binding.Service<UnarchiveFindings>(

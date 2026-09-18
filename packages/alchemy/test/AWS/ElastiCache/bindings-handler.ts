@@ -1,11 +1,11 @@
-import * as ElastiCache from "@/AWS/ElastiCache";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ElastiCache from "@/AWS/ElastiCache";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -38,15 +38,12 @@ export default ElastiCacheBindingsTestFunction.make(
       { kinds: ["cache-limit-approaching", "snapshot-creation-failed"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `elasticache event: ${event["detail-type"]} -> ${event.resources.join(", ")}`,
-          ),
+          Effect.log(`elasticache event: ${event["detail-type"]} -> ${event.resources.join(", ")}`),
         ),
     );
 
     const describeCaches = yield* ElastiCache.DescribeServerlessCaches();
-    const describeSnapshots =
-      yield* ElastiCache.DescribeServerlessCacheSnapshots();
+    const describeSnapshots = yield* ElastiCache.DescribeServerlessCacheSnapshots();
     const deleteSnapshot = yield* ElastiCache.DeleteServerlessCacheSnapshot();
     const copySnapshot = yield* ElastiCache.CopyServerlessCacheSnapshot();
     const exportSnapshot = yield* ElastiCache.ExportServerlessCacheSnapshot();
@@ -102,9 +99,7 @@ export default ElastiCacheBindingsTestFunction.make(
             ServerlessCacheName: name,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("ServerlessCacheNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ServerlessCacheNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -118,10 +113,7 @@ export default ElastiCacheBindingsTestFunction.make(
           }).pipe(
             Effect.map(() => "Deleted"),
             Effect.catchTag(
-              [
-                "ServerlessCacheSnapshotNotFoundFault",
-                "ServiceLinkedRoleNotFoundFault",
-              ],
+              ["ServerlessCacheSnapshotNotFoundFault", "ServiceLinkedRoleNotFoundFault"],
               (e) => Effect.succeed(e._tag),
             ),
           );

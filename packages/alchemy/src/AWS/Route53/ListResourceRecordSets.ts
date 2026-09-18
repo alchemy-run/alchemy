@@ -41,10 +41,7 @@ export interface ListResourceRecordSets extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListResourceRecordSetsRequest,
-    ) => Effect.Effect<
-      route53.ListResourceRecordSetsResponse,
-      route53.ListResourceRecordSetsError
-    >
+    ) => Effect.Effect<route53.ListResourceRecordSetsResponse, route53.ListResourceRecordSetsError>
   >
 > {}
 export const ListResourceRecordSets = Binding.Service<ListResourceRecordSets>(

@@ -63,9 +63,7 @@ export interface StackProps {
    * template creates IAM resources (`CAPABILITY_IAM` /
    * `CAPABILITY_NAMED_IAM`) or uses macros (`CAPABILITY_AUTO_EXPAND`).
    */
-  capabilities?: Array<
-    "CAPABILITY_IAM" | "CAPABILITY_NAMED_IAM" | "CAPABILITY_AUTO_EXPAND"
-  >;
+  capabilities?: Array<"CAPABILITY_IAM" | "CAPABILITY_NAMED_IAM" | "CAPABILITY_AUTO_EXPAND">;
   /**
    * ARN of an IAM role that CloudFormation assumes to create/update/delete
    * the stack's resources. Defaults to the credentials of the deploying
@@ -214,9 +212,7 @@ const toParameters = (
 const toWireTags = (tags: Record<string, string>): cloudformation.Tag[] =>
   Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
 
-const toTagRecord = (
-  tags: cloudformation.Tag[] | undefined,
-): Record<string, string> =>
+const toTagRecord = (tags: cloudformation.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])
       .filter(
@@ -226,9 +222,7 @@ const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
-const toOutputs = (
-  outputs: cloudformation.Output[] | undefined,
-): Record<string, string> =>
+const toOutputs = (outputs: cloudformation.Output[] | undefined): Record<string, string> =>
   Object.fromEntries(
     (outputs ?? []).flatMap((o) =>
       o.OutputKey !== undefined && o.OutputValue !== undefined
@@ -251,25 +245,18 @@ export const StackProvider = () =>
        * `StackNotFound`) or a fully-deleted stack reads as absent.
        */
       const describe = Effect.fn(function* (nameOrId: string) {
-        const response = yield* cloudformation
-          .describeStacks({ StackName: nameOrId })
-          .pipe(
-            Effect.map((r) => r.Stacks ?? []),
-            Effect.catchTag("StackNotFound", () => Effect.succeed([])),
-          );
+        const response = yield* cloudformation.describeStacks({ StackName: nameOrId }).pipe(
+          Effect.map((r) => r.Stacks ?? []),
+          Effect.catchTag("StackNotFound", () => Effect.succeed([])),
+        );
         const stack = response[0];
-        return stack === undefined || stack.StackStatus === "DELETE_COMPLETE"
-          ? undefined
-          : stack;
+        return stack === undefined || stack.StackStatus === "DELETE_COMPLETE" ? undefined : stack;
       });
 
       // Create/update run asynchronously; CloudFormation reports *_IN_PROGRESS
       // while converging. A small stack settles in ~1-2 minutes; budget
       // ~10 min (120 * 5s).
-      const waitForSettled = Effect.fn(function* (
-        stackId: string,
-        stackName: string,
-      ) {
+      const waitForSettled = Effect.fn(function* (stackId: string, stackName: string) {
         const stack = yield* describe(stackId).pipe(
           Effect.flatMap((s) =>
             s !== undefined && isInProgress(s.StackStatus)
@@ -297,37 +284,27 @@ export const StackProvider = () =>
 
       // Deletion is asynchronous too — wait until the stack reports
       // DELETE_COMPLETE (or vanishes) so dependencies can be torn down after.
-      const waitUntilGone = Effect.fn(function* (
-        stackId: string,
-        stackName: string,
-      ) {
+      const waitUntilGone = Effect.fn(function* (stackId: string, stackName: string) {
         yield* retryUntilStackSettled(
           describe(stackId).pipe(
-            Effect.flatMap(
-              (
-                s,
-              ): Effect.Effect<
-                void,
-                StackNotSettled | StackOperationFailed
-              > => {
-                if (s === undefined) return Effect.void;
-                if (s.StackStatus === "DELETE_FAILED") {
-                  return Effect.fail(
-                    new StackOperationFailed({
-                      stackName,
-                      status: "DELETE_FAILED",
-                      reason: s.StackStatusReason,
-                    }),
-                  );
-                }
+            Effect.flatMap((s): Effect.Effect<void, StackNotSettled | StackOperationFailed> => {
+              if (s === undefined) return Effect.void;
+              if (s.StackStatus === "DELETE_FAILED") {
                 return Effect.fail(
-                  new StackNotSettled({
-                    stackId,
-                    status: s.StackStatus ?? "UNKNOWN",
+                  new StackOperationFailed({
+                    stackName,
+                    status: "DELETE_FAILED",
+                    reason: s.StackStatusReason,
                   }),
                 );
-              },
-            ),
+              }
+              return Effect.fail(
+                new StackNotSettled({
+                  stackId,
+                  status: s.StackStatus ?? "UNKNOWN",
+                }),
+              );
+            }),
           ),
         );
       });
@@ -344,17 +321,13 @@ export const StackProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const stack = yield* describe(
-            output?.stackId ?? (yield* toName(id, olds ?? {})),
-          );
+          const stack = yield* describe(output?.stackId ?? (yield* toName(id, olds ?? {})));
           if (stack === undefined) return undefined;
           const attrs = toAttrs(stack);
           const tags = toTagRecord(stack.Tags);
@@ -372,10 +345,7 @@ export const StackProvider = () =>
 
           // A stack left in ROLLBACK_COMPLETE/ROLLBACK_FAILED by a failed
           // create can only be deleted; clear it before recreating.
-          if (
-            observed !== undefined &&
-            isFailedCreateRemnant(observed.StackStatus)
-          ) {
+          if (observed !== undefined && isFailedCreateRemnant(observed.StackStatus)) {
             yield* cloudformation.deleteStack({ StackName: observed.StackId! });
             yield* waitUntilGone(observed.StackId!, name);
             observed = undefined;
@@ -429,9 +399,7 @@ export const StackProvider = () =>
               Effect.catchTag("NoUpdateToPerform", () => Effect.succeed(false)),
             );
 
-          const final = didUpdate
-            ? yield* waitForSettled(observed.StackId!, name)
-            : observed;
+          const final = didUpdate ? yield* waitForSettled(observed.StackId!, name) : observed;
           if (final === undefined) {
             return yield* Effect.fail(
               new StackOperationFailed({

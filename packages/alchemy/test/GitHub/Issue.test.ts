@@ -1,3 +1,6 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as GitHub from "@/GitHub";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,9 +8,6 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -46,9 +46,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = "alchemy-pr-1568-issue-lifecycle";
-      const deployIssue = (
-        props: Omit<GitHub.IssueProps, "owner" | "repository">,
-      ) =>
+      const deployIssue = (props: Omit<GitHub.IssueProps, "owner" | "repository">) =>
         stack.deploy(
           Effect.gen(function* () {
             // Repository deletion needs delete_repo; reuse this retained fixture.
@@ -77,9 +75,7 @@ test.provider(
       expect(initial.state).toBe("closed");
       expect(initial.body).toBe("Initial body\nSecond line");
       expect(
-        initial.labels.map((label) =>
-          typeof label === "string" ? label : label.name,
-        ),
+        initial.labels.map((label) => (typeof label === "string" ? label : label.name)),
       ).toEqual(["bug"]);
 
       const updated = yield* deployIssue({ title: "PR 1568: reopened" });
@@ -119,9 +115,9 @@ test.provider(
               octokit.hook.after("request", (response, options) => {
                 const url = new URL(options.url, "https://api.github.com");
                 if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (
-                    response.data as Array<{ name: string }>
-                  ).filter((repo) => repo.name === name);
+                  response.data = (response.data as Array<{ name: string }>).filter(
+                    (repo) => repo.name === name,
+                  );
                 }
               });
               return octokit;
@@ -131,8 +127,7 @@ test.provider(
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),
           times: 10,
-          until: (issues) =>
-            issues.some((issue) => issue.nodeId === created.nodeId),
+          until: (issues) => issues.some((issue) => issue.nodeId === created.nodeId),
         }),
       );
       expect(listed.map((issue) => issue.nodeId)).toContain(created.nodeId);
@@ -166,23 +161,15 @@ test.provider(
         );
 
       const created = yield* deployIssue("first");
-      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe(
-        "open",
-      );
+      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe("open");
       const replaced = yield* deployIssue("second");
       expect(replaced.nodeId).not.toBe(created.nodeId);
       expect(replaced.htmlUrl).toContain(`/${secondName}/issues/`);
-      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe(
-        "closed",
-      );
-      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe(
-        "open",
-      );
+      expect((yield* getIssue(firstName, created.issueNumber)).state).toBe("closed");
+      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe("open");
 
       yield* stack.destroy();
-      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe(
-        "closed",
-      );
+      expect((yield* getIssue(secondName, replaced.issueNumber)).state).toBe("closed");
       yield* stack.destroy();
     }),
   { timeout: 120_000 },

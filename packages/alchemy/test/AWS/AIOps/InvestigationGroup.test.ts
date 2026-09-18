@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { InvestigationGroup } from "@/AWS/AIOps";
-import type { PolicyStatement } from "@/AWS/IAM/Policy.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as aiops from "@distilled.cloud/aws/aiops";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { InvestigationGroup } from "@/AWS/AIOps";
+import type { PolicyStatement } from "@/AWS/IAM/Policy.ts";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -31,11 +31,7 @@ test.provider(
 const findGroup = (arn: string) =>
   aiops
     .getInvestigationGroup({ identifier: arn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class GroupStillExists extends Data.TaggedError("GroupStillExists")<{
   readonly arn: string;
@@ -44,9 +40,7 @@ class GroupStillExists extends Data.TaggedError("GroupStillExists")<{
 const assertGroupDeleted = (arn: string) =>
   findGroup(arn).pipe(
     Effect.flatMap((group) =>
-      group === undefined
-        ? Effect.void
-        : Effect.fail(new GroupStillExists({ arn })),
+      group === undefined ? Effect.void : Effect.fail(new GroupStillExists({ arn })),
     ),
     Effect.retry({
       while: (e) => e._tag === "GroupStillExists",
@@ -83,9 +77,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
                   },
                 ],
               },
-              managedPolicyArns: [
-                "arn:aws:iam::aws:policy/AIOpsAssistantPolicy",
-              ],
+              managedPolicyArns: ["arn:aws:iam::aws:policy/AIOpsAssistantPolicy"],
             });
             const group = yield* InvestigationGroup("Investigations", {
               roleArn: role.roleArn,
@@ -145,9 +137,9 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
       const policyAfterUpdate = yield* aiops.getInvestigationGroupPolicy({
         identifier: group.arn,
       });
-      expect(
-        JSON.parse(policyAfterUpdate.policy ?? "{}").Statement,
-      ).toMatchObject([alarmPolicyStatement]);
+      expect(JSON.parse(policyAfterUpdate.policy ?? "{}").Statement).toMatchObject([
+        alarmPolicyStatement,
+      ]);
 
       // `policy: []` deletes the attached resource policy.
       yield* deployGroup({
@@ -161,9 +153,7 @@ test.provider.skipIf(!process.env.AWS_TEST_AIOPS)(
         .getInvestigationGroupPolicy({ identifier: group.arn })
         .pipe(
           Effect.map((r) => r.policy),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       expect(policyAfterDelete).toBeUndefined();
 

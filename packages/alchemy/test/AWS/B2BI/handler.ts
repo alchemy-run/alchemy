@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import type { PolicyStatement } from "@/AWS/IAM";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -9,6 +7,8 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import type { PolicyStatement } from "@/AWS/IAM";
 
 // Deterministic bucket for EDI input/output. B2BI accesses the bucket as the
 // service principal, authorized by the bucket policy below.
@@ -115,15 +115,13 @@ export default B2biTestFunction.make(
 
     // --- data-plane bindings under test ---
     const putObject = yield* AWS.S3.PutObject(bucket);
-    const startTransformerJob =
-      yield* AWS.B2BI.StartTransformerJob(transformer);
+    const startTransformerJob = yield* AWS.B2BI.StartTransformerJob(transformer);
     const getTransformerJob = yield* AWS.B2BI.GetTransformerJob(transformer);
     const testMapping = yield* AWS.B2BI.TestMapping();
     const testParsing = yield* AWS.B2BI.TestParsing();
     const testConversion = yield* AWS.B2BI.TestConversion();
     const generateMapping = yield* AWS.B2BI.GenerateMapping();
-    const createStarterMappingTemplate =
-      yield* AWS.B2BI.CreateStarterMappingTemplate();
+    const createStarterMappingTemplate = yield* AWS.B2BI.CreateStarterMappingTemplate();
     const eventsSink = yield* AWS.SQS.QueueSink(eventsQueue);
 
     // Event source under test: forward every B2BI transformation event to
@@ -256,9 +254,7 @@ export default B2biTestFunction.make(
         if (request.method === "POST" && pathname === "/test-conversion") {
           // Round-trip: parse the sample 850 into B2BI's JSON representation,
           // then convert that JSON back into an X12 document.
-          const parsed = yield* parseSampleEdi(
-            "test-conversion/sample-850.edi",
-          );
+          const parsed = yield* parseSampleEdi("test-conversion/sample-850.edi");
           const result = yield* testConversion({
             source: {
               fileFormat: "JSON",
@@ -292,10 +288,7 @@ export default B2biTestFunction.make(
           }).pipe(
             Effect.retry({
               while: (e) => e._tag === "ResourceNotFoundException",
-              schedule: Schedule.max([
-                Schedule.fixed("2 seconds"),
-                Schedule.recurs(5),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
             }),
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
@@ -318,9 +311,7 @@ export default B2biTestFunction.make(
       }).pipe(
         // Surface every failure (typed error or defect) to the test as JSON
         // instead of an opaque 500 — the test asserts `error` is absent.
-        Effect.catchCause((cause) =>
-          HttpServerResponse.json({ error: Cause.pretty(cause) }),
-        ),
+        Effect.catchCause((cause) => HttpServerResponse.json({ error: Cause.pretty(cause) })),
       ),
     };
   }).pipe(

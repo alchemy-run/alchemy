@@ -159,9 +159,7 @@ export const AccountProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Observe — locate the account by ID if known, else by
@@ -206,9 +204,7 @@ export const AccountProvider = () =>
               });
             }
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`account '${news.name}' not found after create`),
-              );
+              return yield* Effect.fail(new Error(`account '${news.name}' not found after create`));
             }
           }
 
@@ -250,9 +246,7 @@ export const AccountProvider = () =>
           const updated = yield* readAccountById(state.accountId);
           if (!updated) {
             return yield* Effect.fail(
-              new Error(
-                `account '${state.accountId}' not found after reconcile`,
-              ),
+              new Error(`account '${state.accountId}' not found after reconcile`),
             );
           }
 
@@ -287,15 +281,10 @@ export const AccountProvider = () =>
             const accounts = yield* listAccounts();
             const rows = yield* Effect.forEach(
               accounts,
-              (account) =>
-                account.Id
-                  ? readAccountById(account.Id)
-                  : Effect.succeed(undefined),
+              (account) => (account.Id ? readAccountById(account.Id) : Effect.succeed(undefined)),
               { concurrency: 10 },
             );
-            return rows.filter(
-              (row): row is Account["Attributes"] => row !== undefined,
-            );
+            return rows.filter((row): row is Account["Attributes"] => row !== undefined);
           }).pipe(
             Effect.catchTag("AWSOrganizationsNotInUseException", () =>
               Effect.succeed([] as Account["Attributes"][]),
@@ -325,9 +314,7 @@ const readAccountById = Effect.fn(function* (accountId: string) {
   const described = yield* retryOrganizations(
     organizations.describeAccount({ AccountId: accountId }).pipe(
       Effect.map((response) => response.Account),
-      Effect.catchTag("AccountNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag("AccountNotFoundException", () => Effect.succeed(undefined)),
     ),
   );
 
@@ -362,8 +349,7 @@ const readAccountByNameOrEmail = Effect.fn(function* ({
 }: Pick<AccountProps, "name" | "email">) {
   const accounts = yield* listAccounts();
   const match = accounts.find(
-    (candidate) =>
-      unredact(candidate.Name) === name || unredact(candidate.Email) === email,
+    (candidate) => unredact(candidate.Name) === name || unredact(candidate.Email) === email,
   );
   return match?.Id ? yield* readAccountById(match.Id) : undefined;
 });
@@ -384,26 +370,19 @@ const waitForCreateAccount = (requestId: string) =>
 
     if (status.State === "FAILED") {
       return yield* Effect.fail(
-        new Error(
-          `account creation failed: ${status.FailureReason ?? "unknown failure"}`,
-        ),
+        new Error(`account creation failed: ${status.FailureReason ?? "unknown failure"}`),
       );
     }
 
     if (!status.AccountId) {
-      return yield* Effect.fail(
-        new Error("account creation succeeded without AccountId"),
-      );
+      return yield* Effect.fail(new Error("account creation succeeded without AccountId"));
     }
 
     return status;
   }).pipe(
     Effect.retry({
       while: (error: any) => error?._tag === "CreateAccountInProgress",
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(120),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(120)]),
     }),
   );
 
@@ -411,8 +390,7 @@ const retryAccountManagement = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.retry({
       while: (error: any) =>
-        error?._tag === "TooManyRequestsException" ||
-        error?._tag === "InternalServerException",
+        error?._tag === "TooManyRequestsException" || error?._tag === "InternalServerException",
       schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );

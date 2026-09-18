@@ -2,8 +2,7 @@ import type * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListDataIntegrationsRequest
-  extends appintegrations.ListDataIntegrationsRequest {}
+export interface ListDataIntegrationsRequest extends appintegrations.ListDataIntegrationsRequest {}
 
 /**
  * Lists the AppIntegrations data integrations in the account

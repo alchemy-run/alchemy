@@ -3,11 +3,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import {
-  LanguageModel as AiLanguageModel,
-  Tool,
-  Toolkit,
-} from "effect/unstable/ai";
+import { LanguageModel as AiLanguageModel, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -29,8 +25,7 @@ const GetWeather = Tool.make("get_weather", {
 const WeatherToolkit = Toolkit.make(GetWeather);
 
 const WeatherToolkitLayer = WeatherToolkit.toLayer({
-  get_weather: ({ city }) =>
-    Effect.succeed({ city, temperatureF: 72, condition: "sunny" }),
+  get_weather: ({ city }) => Effect.succeed({ city, temperatureF: 72, condition: "sunny" }),
 });
 
 export default class ChatFunction extends AWS.Lambda.Function<ChatFunction>()(
@@ -56,12 +51,8 @@ export default class ChatFunction extends AWS.Lambda.Function<ChatFunction>()(
 
         // GET /stream?prompt=... — stream the answer as SSE parts.
         if (url.pathname === "/stream") {
-          const parts = yield* Stream.runCollect(
-            AiLanguageModel.streamText({ prompt }),
-          );
-          const sse = [...parts]
-            .map((part) => `data: ${JSON.stringify(part)}\n\n`)
-            .join("");
+          const parts = yield* Stream.runCollect(AiLanguageModel.streamText({ prompt }));
+          const sse = [...parts].map((part) => `data: ${JSON.stringify(part)}\n\n`).join("");
           return HttpServerResponse.text(sse, {
             headers: { "content-type": "text/event-stream" },
           });
@@ -96,9 +87,7 @@ export default class ChatFunction extends AWS.Lambda.Function<ChatFunction>()(
         const response = yield* AiLanguageModel.generateText({ prompt }).pipe(
           AWS.Bedrock.withModelParameters({
             ...(maxTokens !== null ? { maxTokens: Number(maxTokens) } : {}),
-            ...(temperature !== null
-              ? { temperature: Number(temperature) }
-              : {}),
+            ...(temperature !== null ? { temperature: Number(temperature) } : {}),
           }),
         );
         return yield* HttpServerResponse.json({

@@ -13,9 +13,7 @@ export interface FunctionContext extends BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
-  listen<A, Req = never>(
-    handler: FunctionListener<A, Req>,
-  ): Effect.Effect<void, never, Req>;
+  listen<A, Req = never>(handler: FunctionListener<A, Req>): Effect.Effect<void, never, Req>;
   listen<A, Req = never, InitReq = never>(
     effect: Effect.Effect<FunctionListener<A, Req>, never, InitReq>,
   ): Effect.Effect<void, never, Req | InitReq>;

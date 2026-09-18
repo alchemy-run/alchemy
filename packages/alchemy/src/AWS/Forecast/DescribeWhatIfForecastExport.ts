@@ -39,7 +39,6 @@ export interface DescribeWhatIfForecastExport extends Binding.Service<
     >
   >
 > {}
-export const DescribeWhatIfForecastExport =
-  Binding.Service<DescribeWhatIfForecastExport>(
-    "AWS.Forecast.DescribeWhatIfForecastExport",
-  );
+export const DescribeWhatIfForecastExport = Binding.Service<DescribeWhatIfForecastExport>(
+  "AWS.Forecast.DescribeWhatIfForecastExport",
+);

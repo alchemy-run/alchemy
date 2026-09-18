@@ -1,15 +1,15 @@
-import * as CodePipeline from "@/AWS/CodePipeline";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Output from "@/Output";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as CodePipeline from "@/AWS/CodePipeline";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
+import * as Output from "@/Output";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -42,9 +42,7 @@ const errorTagged = <A, E extends { _tag: string; message?: string }, R>(
 ): Effect.Effect<A | { errorTag: string; errorMessage?: string }, never, R> =>
   effect.pipe(
     Effect.map((a): A | { errorTag: string; errorMessage?: string } => a),
-    Effect.catch((e) =>
-      Effect.succeed({ errorTag: e._tag, errorMessage: e.message }),
-    ),
+    Effect.catch((e) => Effect.succeed({ errorTag: e._tag, errorMessage: e.message })),
   );
 
 export default CodePipelineTestFunction.make(
@@ -146,17 +144,13 @@ export default CodePipelineTestFunction.make(
     const listExecutions = yield* CodePipeline.ListPipelineExecutions(pipeline);
     const listActions = yield* CodePipeline.ListActionExecutions(pipeline);
     const listRules = yield* CodePipeline.ListRuleExecutions(pipeline);
-    const listDeployTargets =
-      yield* CodePipeline.ListDeployActionExecutionTargets(pipeline);
+    const listDeployTargets = yield* CodePipeline.ListDeployActionExecutionTargets(pipeline);
     // Stage plane
     const retryStage = yield* CodePipeline.RetryStageExecution(pipeline);
     const rollbackStage = yield* CodePipeline.RollbackStage(pipeline);
-    const enableTransition =
-      yield* CodePipeline.EnableStageTransition(pipeline);
-    const disableTransition =
-      yield* CodePipeline.DisableStageTransition(pipeline);
-    const overrideCondition =
-      yield* CodePipeline.OverrideStageCondition(pipeline);
+    const enableTransition = yield* CodePipeline.EnableStageTransition(pipeline);
+    const disableTransition = yield* CodePipeline.DisableStageTransition(pipeline);
+    const overrideCondition = yield* CodePipeline.OverrideStageCondition(pipeline);
     // Approval + source-revision plane
     const putApproval = yield* CodePipeline.PutApprovalResult(pipeline);
     const putActionRevision = yield* CodePipeline.PutActionRevision(pipeline);
@@ -174,9 +168,7 @@ export default CodePipelineTestFunction.make(
       { kinds: ["execution"], pipelineNames: [FIXTURE_PIPELINE_NAME] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `codepipeline event: ${event.detail.pipeline} -> ${event.detail.state}`,
-          ),
+          Effect.log(`codepipeline event: ${event.detail.pipeline} -> ${event.detail.state}`),
         ),
     );
 
@@ -203,9 +195,7 @@ export default CodePipelineTestFunction.make(
           case "POST /execution/start": {
             const result = yield* errorTagged(startExecution());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { executionId: result.pipelineExecutionId },
+              "errorTag" in result ? result : { executionId: result.pipelineExecutionId },
             );
           }
           case "POST /execution/stop": {
@@ -221,9 +211,7 @@ export default CodePipelineTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { executionId: result.pipelineExecutionId },
+              "errorTag" in result ? result : { executionId: result.pipelineExecutionId },
             );
           }
           case "GET /state": {
@@ -234,26 +222,19 @@ export default CodePipelineTestFunction.make(
             const approvalState = result.stageStates
               ?.find((s) => s.stageName === APPROVAL_STAGE)
               ?.actionStates?.find((a) => a.actionName === APPROVAL_ACTION);
-            const approveStage = result.stageStates?.find(
-              (s) => s.stageName === APPROVAL_STAGE,
-            );
+            const approveStage = result.stageStates?.find((s) => s.stageName === APPROVAL_STAGE);
             return yield* HttpServerResponse.json({
               pipelineName: result.pipelineName,
               stageNames: (result.stageStates ?? []).map((s) => s.stageName),
               approvalToken: approvalState?.latestExecution?.token,
               approvalStatus: approvalState?.latestExecution?.status,
-              inboundTransitionEnabled:
-                approveStage?.inboundTransitionState?.enabled,
+              inboundTransitionEnabled: approveStage?.inboundTransitionState?.enabled,
             });
           }
           case "GET /execution/get": {
-            const result = yield* errorTagged(
-              getExecution({ pipelineExecutionId: param("id") }),
-            );
+            const result = yield* errorTagged(getExecution({ pipelineExecutionId: param("id") }));
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { status: result.pipelineExecution?.status },
+              "errorTag" in result ? result : { status: result.pipelineExecution?.status },
             );
           }
           case "GET /executions": {
@@ -272,27 +253,21 @@ export default CodePipelineTestFunction.make(
             const executionId = url.searchParams.get("executionId");
             const result = yield* errorTagged(
               listActions(
-                executionId !== null
-                  ? { filter: { pipelineExecutionId: executionId } }
-                  : undefined,
+                executionId !== null ? { filter: { pipelineExecutionId: executionId } } : undefined,
               ),
             );
             return yield* HttpServerResponse.json(
               "errorTag" in result
                 ? result
                 : {
-                    actions: (result.actionExecutionDetails ?? []).map(
-                      (a) => a.actionName,
-                    ),
+                    actions: (result.actionExecutionDetails ?? []).map((a) => a.actionName),
                   },
             );
           }
           case "GET /rules": {
             const result = yield* errorTagged(listRules());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.ruleExecutionDetails ?? []).length },
+              "errorTag" in result ? result : { count: (result.ruleExecutionDetails ?? []).length },
             );
           }
           case "GET /deploy-targets": {
@@ -302,9 +277,7 @@ export default CodePipelineTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.targets ?? []).length },
+              "errorTag" in result ? result : { count: (result.targets ?? []).length },
             );
           }
 
@@ -322,9 +295,7 @@ export default CodePipelineTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { executionId: result.pipelineExecutionId },
+              "errorTag" in result ? result : { executionId: result.pipelineExecutionId },
             );
           }
           case "POST /stage/rollback": {
@@ -339,9 +310,7 @@ export default CodePipelineTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { executionId: result.pipelineExecutionId },
+              "errorTag" in result ? result : { executionId: result.pipelineExecutionId },
             );
           }
           case "POST /transition/disable": {
@@ -355,9 +324,7 @@ export default CodePipelineTestFunction.make(
                 reason: "bindings test freeze",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /transition/enable": {
             const body = (yield* request.json) as unknown as {
@@ -369,9 +336,7 @@ export default CodePipelineTestFunction.make(
                 transitionType: "Inbound",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /condition/override": {
             const body = (yield* request.json) as unknown as {
@@ -385,9 +350,7 @@ export default CodePipelineTestFunction.make(
                 conditionType: "BEFORE_ENTRY",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           // ---- approval + source-revision plane ----
@@ -439,9 +402,7 @@ export default CodePipelineTestFunction.make(
 
           // ---- job-worker plane ----
           case "GET /job/get": {
-            const result = yield* errorTagged(
-              getJobDetails({ jobId: param("id") }),
-            );
+            const result = yield* errorTagged(getJobDetails({ jobId: param("id") }));
             return yield* HttpServerResponse.json(
               "errorTag" in result ? result : { jobId: result.jobDetails?.id },
             );
@@ -450,12 +411,8 @@ export default CodePipelineTestFunction.make(
             const body = (yield* request.json) as unknown as {
               jobId: string;
             };
-            const result = yield* errorTagged(
-              putJobSuccess({ jobId: body.jobId }),
-            );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            const result = yield* errorTagged(putJobSuccess({ jobId: body.jobId }));
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
           case "POST /job/failure": {
             const body = (yield* request.json) as unknown as {
@@ -470,9 +427,7 @@ export default CodePipelineTestFunction.make(
                 },
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "POST /job/poll": {
@@ -490,9 +445,7 @@ export default CodePipelineTestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.jobs ?? []).length },
+              "errorTag" in result ? result : { count: (result.jobs ?? []).length },
             );
           }
           case "POST /job/ack": {
@@ -509,10 +462,7 @@ export default CodePipelineTestFunction.make(
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

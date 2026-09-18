@@ -1,15 +1,13 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import SecretsManagerTestFunctionLive, {
-  SecretsManagerTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import SecretsManagerTestFunctionLive, { SecretsManagerTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -18,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "SecretsManagerBindings");
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load. Budget ~150s
 // of readiness polling so we don't fail the whole suite on a slow init.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -42,19 +37,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -69,9 +59,7 @@ const BINARY_BASE64 = "AAECA/r7/P3+/yoH";
 describe.sequential("SecretsManager Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "SecretsManager test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("SecretsManager test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("SecretsManager test setup: deploying fixture");
@@ -85,9 +73,7 @@ describe.sequential("SecretsManager Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/describe`;
 
-      yield* Effect.logInfo(
-        `SecretsManager test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`SecretsManager test setup: probing readiness at ${readinessUrl}`);
 
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
@@ -96,14 +82,10 @@ describe.sequential("SecretsManager Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tap(() =>
-          Effect.logInfo(
-            "SecretsManager test setup: fixture responded successfully",
-          ),
+          Effect.logInfo("SecretsManager test setup: fixture responded successfully"),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SecretsManager test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SecretsManager test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -138,10 +120,9 @@ describe.sequential("SecretsManager Bindings", () => {
     test.provider("rotates the string secret value", (_stack) =>
       Effect.gen(function* () {
         const put = yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put-string`),
-            { value: "alchemy-sm-rotated-value" },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put-string`), {
+            value: "alchemy-sm-rotated-value",
+          }),
         ).pipe(Effect.flatMap((r) => r.json));
 
         expect((put as any).versionId).toBeTruthy();
@@ -163,10 +144,9 @@ describe.sequential("SecretsManager Bindings", () => {
     test.provider("writes and reads back a binary secret value", (_stack) =>
       Effect.gen(function* () {
         const put = yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put-binary`),
-            { base64: BINARY_BASE64 },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/put-binary`), {
+            base64: BINARY_BASE64,
+          }),
         ).pipe(Effect.flatMap((r) => r.json));
 
         expect((put as any).versionId).toBeTruthy();
@@ -191,15 +171,13 @@ describe.sequential("SecretsManager Bindings", () => {
   describe("DescribeSecret", () => {
     test.provider("describes the bound secret", (_stack) =>
       Effect.gen(function* () {
-        const response = yield* send(
-          HttpClientRequest.get(`${baseUrl}/describe`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const response = yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
 
         expect((response as any).arn).toContain("arn:aws:secretsmanager:");
         expect((response as any).name).toBeTruthy();
-        expect((response as any).description).toBe(
-          "alchemy binding fixture (string value)",
-        );
+        expect((response as any).description).toBe("alchemy binding fixture (string value)");
       }),
     );
   });
@@ -220,19 +198,17 @@ describe.sequential("SecretsManager Bindings", () => {
   describe("ListSecrets", () => {
     test.provider("lists the bound secret by name filter", (_stack) =>
       Effect.gen(function* () {
-        const described = yield* send(
-          HttpClientRequest.get(`${baseUrl}/describe`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const described = yield* send(HttpClientRequest.get(`${baseUrl}/describe`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
         const name = (described as any).name as string;
 
         // ListSecrets is eventually consistent; poll until the freshly
         // created secret surfaces in the filtered listing.
         const response = yield* fetchUntil(
-          send(
-            HttpClientRequest.get(
-              `${baseUrl}/list?name=${encodeURIComponent(name)}`,
-            ),
-          ).pipe(Effect.flatMap((r) => r.json)),
+          send(HttpClientRequest.get(`${baseUrl}/list?name=${encodeURIComponent(name)}`)).pipe(
+            Effect.flatMap((r) => r.json),
+          ),
           (body) => Array.isArray(body?.names) && body.names.includes(name),
         );
 
@@ -245,14 +221,10 @@ describe.sequential("SecretsManager Bindings", () => {
     test.provider("lists the string secret's versions with stages", (_stack) =>
       Effect.gen(function* () {
         const response = yield* fetchUntil(
-          send(HttpClientRequest.get(`${baseUrl}/versions`)).pipe(
-            Effect.flatMap((r) => r.json),
-          ),
+          send(HttpClientRequest.get(`${baseUrl}/versions`)).pipe(Effect.flatMap((r) => r.json)),
           (body) =>
             Array.isArray(body?.versions) &&
-            body.versions.some((version: any) =>
-              version.stages?.includes("AWSCURRENT"),
-            ),
+            body.versions.some((version: any) => version.stages?.includes("AWSCURRENT")),
         );
 
         const current = (response as any).versions.find((version: any) =>
@@ -269,16 +241,13 @@ describe.sequential("SecretsManager Bindings", () => {
         // BatchGetSecretValue is eventually consistent right after the
         // fixture secrets are created; poll until both values are served.
         const response = yield* fetchUntil(
-          send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(
-            Effect.flatMap((r) => r.json),
-          ),
+          send(HttpClientRequest.get(`${baseUrl}/batch`)).pipe(Effect.flatMap((r) => r.json)),
           (body) =>
             Array.isArray(body?.values) &&
             body.values.length === 2 &&
             body.values.every(
               (entry: any) =>
-                typeof entry.secretString === "string" &&
-                entry.secretString.length > 0,
+                typeof entry.secretString === "string" && entry.secretString.length > 0,
             ),
         );
 
@@ -297,9 +266,9 @@ describe.sequential("SecretsManager Bindings", () => {
   describe("RotationEventSource", () => {
     test.provider("rotation is configured on the secret", (_stack) =>
       Effect.gen(function* () {
-        const status = yield* send(
-          HttpClientRequest.get(`${baseUrl}/rotation-status`),
-        ).pipe(Effect.flatMap((r) => r.json));
+        const status = yield* send(HttpClientRequest.get(`${baseUrl}/rotation-status`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
 
         expect((status as any).rotationEnabled).toBe(true);
       }),
@@ -316,9 +285,9 @@ describe.sequential("SecretsManager Bindings", () => {
             (body) => typeof body?.secretString === "string",
           );
 
-          const rotate = yield* send(
-            HttpClientRequest.post(`${baseUrl}/rotate`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const rotate = yield* send(HttpClientRequest.post(`${baseUrl}/rotate`)).pipe(
+            Effect.flatMap((r) => r.json),
+          );
           // The fixture surfaces typed RotateSecret failures as
           // `{ error, message }` — assert none so failures are readable.
           expect(rotate).not.toHaveProperty("error");
@@ -355,15 +324,10 @@ const fetchUntil = <A>(
 ) =>
   fetch.pipe(
     Effect.flatMap((body) =>
-      ready(body)
-        ? Effect.succeed(body as A)
-        : Effect.fail(new BindingNotConsistent()),
+      ready(body) ? Effect.succeed(body as A) : Effect.fail(new BindingNotConsistent()),
     ),
     Effect.retry({
       while: (e) => e._tag === "BindingNotConsistent",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(attempts),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(attempts)]),
     }),
   );

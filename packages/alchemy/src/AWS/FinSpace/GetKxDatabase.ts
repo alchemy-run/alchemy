@@ -30,6 +30,4 @@ export interface GetKxDatabase extends Binding.Service<
     ) => Effect.Effect<SVC.GetKxDatabaseResponse, SVC.GetKxDatabaseError>
   >
 > {}
-export const GetKxDatabase = Binding.Service<GetKxDatabase>(
-  "AWS.FinSpace.GetKxDatabase",
-);
+export const GetKxDatabase = Binding.Service<GetKxDatabase>("AWS.FinSpace.GetKxDatabase");

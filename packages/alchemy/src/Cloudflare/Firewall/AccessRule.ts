@@ -2,7 +2,6 @@ import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -176,8 +175,7 @@ export const AccessRule = Resource<AccessRule>(FirewallAccessRuleTypeId);
  * Returns true if the given value is a AccessRule resource.
  */
 export const isAccessRule = (value: unknown): value is AccessRule =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === FirewallAccessRuleTypeId;
+  Predicate.hasProperty(value, "Type") && value.Type === FirewallAccessRuleTypeId;
 
 export const AccessRuleProvider = () =>
   Provider.succeed(AccessRule, {
@@ -200,11 +198,7 @@ export const AccessRuleProvider = () =>
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -227,11 +221,7 @@ export const AccessRuleProvider = () =>
       // take over unless `adopt` is set.
       const configuration = output?.configuration ?? olds?.configuration;
       if (configuration) {
-        const observed = yield* findByConfiguration(
-          zoneId,
-          acct,
-          configuration,
-        );
+        const observed = yield* findByConfiguration(zoneId, acct, configuration);
         if (observed) return Unowned(toAttributes(observed, zoneId, acct));
       }
       return undefined;
@@ -245,20 +235,14 @@ export const AccessRuleProvider = () =>
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the configuration
       //    scan and then to create.
-      let observed = output?.ruleId
-        ? yield* getRule(zoneId, accountId, output.ruleId)
-        : undefined;
+      let observed = output?.ruleId ? yield* getRule(zoneId, accountId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning the scope for a configuration match.
       //    Ownership has already been verified upstream — `read` reports
       //    existing rules as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       if (!observed) {
-        observed = yield* findByConfiguration(
-          zoneId,
-          accountId,
-          news.configuration,
-        );
+        observed = yield* findByConfiguration(zoneId, accountId, news.configuration);
       }
 
       // 3. Ensure — create when missing. A concurrent create surfaces as
@@ -295,20 +279,16 @@ export const AccessRuleProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const accountRules = yield* firewall.listAccessRulesForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((rule) =>
-                toAttributes(rule, undefined, accountId),
-              ),
-            ),
+      const accountRules = yield* firewall.listAccessRulesForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((rule) => toAttributes(rule, undefined, accountId)),
           ),
-          // No permission to read account-level rules — skip them.
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
+        ),
+        // No permission to read account-level rules — skip them.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
 
       const zones = yield* listAllZones(accountId);
       const zoneRuleGroups = yield* Effect.forEach(
@@ -318,9 +298,7 @@ export const AccessRuleProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((rule) =>
-                  toAttributes(rule, zone.id, accountId),
-                ),
+                (page.result ?? []).map((rule) => toAttributes(rule, zone.id, accountId)),
               ),
             ),
             // Plan-gated / partial zones reject the route; skip them.
@@ -336,11 +314,7 @@ export const AccessRuleProvider = () =>
       // Cloudflare answers DELETE for an already-gone rule with HTTP 200
       // and `result: null` (not an error envelope), which the typed
       // response decode rejects — observe first and treat missing as done.
-      const observed = yield* getRule(
-        output.zoneId,
-        output.accountId,
-        output.ruleId,
-      );
+      const observed = yield* getRule(output.zoneId, output.accountId, output.ruleId);
       if (!observed) return;
       yield* deleteRule(output.zoneId, output.accountId, output.ruleId).pipe(
         Effect.catchTag("AccessRuleNotFound", () => Effect.void),
@@ -358,11 +332,7 @@ type ObservedRule = firewall.GetAccessRuleResponse;
  * Read a rule by id, mapping "gone" (`AccessRuleNotFound`, Cloudflare error
  * code 10001 `firewallaccessrules.api.not_found`) to `undefined`.
  */
-const getRule = (
-  zoneId: string | undefined,
-  accountId: string,
-  ruleId: string,
-) =>
+const getRule = (zoneId: string | undefined, accountId: string, ruleId: string) =>
   (zoneId !== undefined
     ? firewall.getAccessRuleForZone({ zoneId, ruleId })
     : firewall.getAccessRuleForAccount({ accountId, ruleId })
@@ -395,11 +365,7 @@ const findByConfiguration = (
     ),
   );
 
-const createRule = (
-  zoneId: string | undefined,
-  accountId: string,
-  news: AccessRuleProps,
-) =>
+const createRule = (zoneId: string | undefined, accountId: string, news: AccessRuleProps) =>
   zoneId !== undefined
     ? firewall.createAccessRuleForZone({
         zoneId,
@@ -436,11 +402,7 @@ const patchRule = (
         notes: news.notes,
       });
 
-const deleteRule = (
-  zoneId: string | undefined,
-  accountId: string,
-  ruleId: string,
-) =>
+const deleteRule = (zoneId: string | undefined, accountId: string, ruleId: string) =>
   zoneId !== undefined
     ? firewall.deleteAccessRuleForZone({ zoneId, ruleId })
     : firewall.deleteAccessRuleForAccount({ accountId, ruleId });

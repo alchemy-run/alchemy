@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,6 +7,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import LocalSendEmailWorker from "./fixtures/local-worker.ts";
 import RemoteEmailWorker from "./fixtures/remote-email-worker.ts";
 
@@ -20,10 +20,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
@@ -41,10 +38,7 @@ const getReady = (url: string, expected: Array<number>) =>
       Effect.retry({
         while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
         schedule: Schedule.max([
-          Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("2 seconds"),
-          ]),
+          Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
           Schedule.recurs(10),
         ]),
       }),
@@ -107,10 +101,7 @@ test.provider(
             allowedDestinationAddresses: ["allowed@example.com"],
           });
           const worker = yield* Cloudflare.Worker("send-email-local-worker", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/local-email-worker.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/local-email-worker.ts"),
             env: { EMAIL: email },
           });
           return { worker };
@@ -124,10 +115,7 @@ test.provider(
 
       // EmailMessage API: the message is validated and persisted as .eml.
       const marker = yield* Effect.sync(() => crypto.randomUUID());
-      const rawRes = yield* getReady(
-        `${deployed.worker.url}/send-raw?marker=${marker}`,
-        [200],
-      );
+      const rawRes = yield* getReady(`${deployed.worker.url}/send-raw?marker=${marker}`, [200]);
       const rawBody = (yield* rawRes.json) as {
         ok: boolean;
         messageId: string;
@@ -143,10 +131,7 @@ test.provider(
       expect(eml).toContain(`Message-ID: <${marker}@example.com>`);
 
       // MessageBuilder API round-trips too.
-      const builderRes = yield* getReady(
-        `${deployed.worker.url}/send-builder`,
-        [200],
-      );
+      const builderRes = yield* getReady(`${deployed.worker.url}/send-builder`, [200]);
       const builderBody = (yield* builderRes.json) as {
         ok: boolean;
         messageId: string;
@@ -165,9 +150,7 @@ test.provider(
         message: string;
       };
       expect(blockedBody.ok).toBe(false);
-      expect(blockedBody.message).toContain(
-        "email to blocked@example.com not allowed",
-      );
+      expect(blockedBody.message).toContain("email to blocked@example.com not allowed");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -199,23 +182,16 @@ test.provider(
       // The worker itself is served by the local dev proxy.
       expect(deployed.url).toMatch(/^http:\/\/localhost:\d+$/);
 
-      const params =
-        "from=noreply%40alchemy-local-test.invalid&to=nobody%40example.com";
+      const params = "from=noreply%40alchemy-local-test.invalid&to=nobody%40example.com";
 
       // The simulator accepts the unrestricted send without delivering.
-      const stubRes = yield* getReady(
-        `${deployed.url}/send-stub?${params}`,
-        [200],
-      );
+      const stubRes = yield* getReady(`${deployed.url}/send-stub?${params}`, [200]);
       const stub = (yield* stubRes.json) as { ok: boolean };
       expect(stub.ok).toBe(true);
 
       // The remote()-opted binding reaches the live Email service, which
       // rejects the unverified sender/destination pair.
-      const liveRes = yield* getReady(
-        `${deployed.url}/send-live?${params}`,
-        [200],
-      );
+      const liveRes = yield* getReady(`${deployed.url}/send-live?${params}`, [200]);
       const live = (yield* liveRes.json) as { ok: boolean; message?: string };
       expect(live.ok).toBe(false);
 

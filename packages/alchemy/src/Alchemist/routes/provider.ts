@@ -6,11 +6,7 @@ import { getEnv } from "../../Auth/Env.ts";
 import { resolveProfileName } from "../../Auth/Resolve.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { AlchemistInvalidInput } from "../Errors.ts";
-import {
-  collectAuthProviders,
-  DEFAULT_ENTRYPOINT,
-  type Target,
-} from "../Session.ts";
+import { collectAuthProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
 
 export interface CheckEnvironmentInput extends Target {
   /** Providers to check. Omitted means every registered provider. */
@@ -43,13 +39,10 @@ const satisfied = (variable: EnvironmentVariable) =>
  * Verify the environment variables each registered provider's CI contract
  * requires are present.
  */
-export const checkEnvironment = Effect.fn(
-  "Alchemist.provider.checkEnvironment",
-)(function* (input: CheckEnvironmentInput) {
-  const profile = yield* resolveProfileName(
-    Option.fromNullishOr(input.envFile),
-    input.profile,
-  );
+export const checkEnvironment = Effect.fn("Alchemist.provider.checkEnvironment")(function* (
+  input: CheckEnvironmentInput,
+) {
+  const profile = yield* resolveProfileName(Option.fromNullishOr(input.envFile), input.profile);
   const registry = yield* collectAuthProviders({
     main: input.entrypoint ?? DEFAULT_ENTRYPOINT,
     envFile: Option.fromNullishOr(input.envFile),
@@ -58,9 +51,7 @@ export const checkEnvironment = Effect.fn(
   const known = Object.keys(registry).sort();
   const names = yield* input.providers?.length
     ? Effect.forEach(input.providers, (requested) => {
-        const name = known.find(
-          (candidate) => candidate.toLowerCase() === requested.toLowerCase(),
-        );
+        const name = known.find((candidate) => candidate.toLowerCase() === requested.toLowerCase());
         return name === undefined
           ? Effect.fail(
               new AlchemistInvalidInput({
@@ -95,9 +86,7 @@ export const checkEnvironment = Effect.fn(
     }),
   ).pipe(
     Effect.provide(
-      ConfigProvider.layer(
-        yield* loadConfigProvider(Option.fromNullishOr(input.envFile)),
-      ),
+      ConfigProvider.layer(yield* loadConfigProvider(Option.fromNullishOr(input.envFile))),
     ),
   );
   return {

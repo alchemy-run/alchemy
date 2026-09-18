@@ -5,11 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import {
-  Database,
-  type DatabaseService,
-  type DirectDatabase,
-} from "./Database.ts";
+import { Database, type DatabaseService, type DirectDatabase } from "./Database.ts";
 import { BetterAuthMigrationError } from "./Errors.ts";
 
 /**
@@ -51,12 +47,8 @@ export const makeDataApiDialect = (
   executor: DataApiExecutor,
 ): Effect.Effect<import("kysely").Dialect> =>
   Effect.promise(async () => {
-    const {
-      CompiledQuery,
-      PostgresAdapter,
-      PostgresIntrospector,
-      PostgresQueryCompiler,
-    } = await import("kysely");
+    const { CompiledQuery, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } =
+      await import("kysely");
     void CompiledQuery;
 
     class DataApiQueryCompiler extends PostgresQueryCompiler {
@@ -68,19 +60,14 @@ export const makeDataApiDialect = (
     class DataApiConnection {
       transactionId: string | undefined;
 
-      async executeQuery(compiledQuery: {
-        sql: string;
-        parameters: ReadonlyArray<unknown>;
-      }) {
+      async executeQuery(compiledQuery: { sql: string; parameters: ReadonlyArray<unknown> }) {
         const response = await executor.execute({
           sql: compiledQuery.sql,
           parameters: compiledQuery.parameters.map((value, index) =>
             AWS.RDSData.toSqlParameter(`${index + 1}`, value),
           ),
           includeResultMetadata: true,
-          ...(this.transactionId === undefined
-            ? {}
-            : { transactionId: this.transactionId }),
+          ...(this.transactionId === undefined ? {} : { transactionId: this.transactionId }),
         });
         return {
           rows: AWS.RDSData.toRows(response) as never[],
@@ -165,8 +152,7 @@ const transientRetry = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (error) =>
-        error._tag === "DatabaseResumingException" ||
-        error._tag === "DatabaseNotFoundException",
+        error._tag === "DatabaseResumingException" || error._tag === "DatabaseNotFoundException",
       schedule: Schedule.exponential("2 seconds", 1.5),
       times: 8,
     }),
@@ -245,48 +231,23 @@ export const AuroraDataApi = (
       }
       const bindingOptions = {
         secret,
-        ...(options?.database === undefined
-          ? {}
-          : { database: options.database }),
+        ...(options?.database === undefined ? {} : { database: options.database }),
       };
-      const executeStatement = yield* AWS.RDSData.ExecuteStatement(
-        db,
-        bindingOptions,
-      );
-      const beginTransaction = yield* AWS.RDSData.BeginTransaction(
-        db,
-        bindingOptions,
-      );
-      const commitTransaction = yield* AWS.RDSData.CommitTransaction(
-        db,
-        bindingOptions,
-      );
-      const rollbackTransaction = yield* AWS.RDSData.RollbackTransaction(
-        db,
-        bindingOptions,
-      );
+      const executeStatement = yield* AWS.RDSData.ExecuteStatement(db, bindingOptions);
+      const beginTransaction = yield* AWS.RDSData.BeginTransaction(db, bindingOptions);
+      const commitTransaction = yield* AWS.RDSData.CommitTransaction(db, bindingOptions);
+      const rollbackTransaction = yield* AWS.RDSData.RollbackTransaction(db, bindingOptions);
 
       const runtime = Effect.gen(function* () {
         const context = yield* Effect.context<RuntimeContext>();
-        const run = <A, E>(
-          effect: Effect.Effect<A, E, RuntimeContext>,
-        ): Promise<A> =>
-          Effect.runPromise(
-            effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>,
-          );
+        const run = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
+          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
         const dialect = yield* makeDataApiDialect({
           execute: (request) =>
-            run(
-              transientRetry(
-                executeStatement(
-                  request as AWS.RDSData.ExecuteStatementRequest,
-                ),
-              ),
-            ),
+            run(transientRetry(executeStatement(request as AWS.RDSData.ExecuteStatementRequest))),
           begin: () => run(transientRetry(beginTransaction())),
           commit: (transactionId) => run(commitTransaction({ transactionId })),
-          rollback: (transactionId) =>
-            run(rollbackTransaction({ transactionId })),
+          rollback: (transactionId) => run(rollbackTransaction({ transactionId })),
         });
         return { dialect, type: "postgres" as const };
       });
@@ -307,9 +268,7 @@ export const AuroraDataApi = (
               clusterArn: db.dbClusterArn,
               // depend on the WRITER instance too: a cluster with no
               // registered instance answers DatabaseNotFoundException
-              ...(composite === undefined
-                ? {}
-                : { writerArn: composite.writer.dbInstanceArn }),
+              ...(composite === undefined ? {} : { writerArn: composite.writer.dbInstanceArn }),
             } as Record<string, unknown>,
             connect: Effect.gen(function* () {
               // Init half — capture the ARNs as Action dependencies.
@@ -330,15 +289,11 @@ export const AuroraDataApi = (
                 const base = {
                   resourceArn,
                   secretArn: resolvedSecretArn,
-                  ...(options?.database === undefined
-                    ? {}
-                    : { database: options.database }),
+                  ...(options?.database === undefined ? {} : { database: options.database }),
                 };
                 const run = <A>(effect: Effect.Effect<A, any, any>) =>
                   Effect.runPromise(
-                    effect.pipe(
-                      Effect.provideContext(ambient),
-                    ) as Effect.Effect<A>,
+                    effect.pipe(Effect.provideContext(ambient)) as Effect.Effect<A>,
                   );
                 const dialect = yield* makeDataApiDialect({
                   execute: (request) =>
@@ -350,8 +305,7 @@ export const AuroraDataApi = (
                         } as never),
                       ),
                     ),
-                  begin: () =>
-                    run(transientRetry(rdsdata.beginTransaction(base))),
+                  begin: () => run(transientRetry(rdsdata.beginTransaction(base))),
                   commit: (transactionId) =>
                     run(
                       rdsdata.commitTransaction({
@@ -382,11 +336,7 @@ export const AuroraDataApi = (
                 ),
               );
             }) as Effect.Effect<
-              Effect.Effect<
-                DirectDatabase,
-                BetterAuthMigrationError,
-                Scope.Scope
-              >,
+              Effect.Effect<DirectDatabase, BetterAuthMigrationError, Scope.Scope>,
               never,
               RuntimeContext
             >,

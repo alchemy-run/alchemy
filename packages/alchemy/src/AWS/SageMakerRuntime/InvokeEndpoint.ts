@@ -12,10 +12,7 @@ import * as Binding from "../../Binding.ts";
  * the endpoint decides the shape) — there is no auto-marshalling. Set
  * `ContentType`/`Accept` to match your container's serializer.
  */
-export interface InvokeEndpointRequest extends Omit<
-  sagemaker.InvokeEndpointInput,
-  "EndpointName"
-> {
+export interface InvokeEndpointRequest extends Omit<sagemaker.InvokeEndpointInput, "EndpointName"> {
   /**
    * The endpoint to run inference on for this call. Must be one of the
    * endpoint names the binding was created with.
@@ -63,10 +60,7 @@ export interface InvokeEndpoint extends Binding.Service<
   ) => Effect.Effect<
     (
       request: InvokeEndpointRequest,
-    ) => Effect.Effect<
-      sagemaker.InvokeEndpointOutput,
-      sagemaker.InvokeEndpointError
-    >
+    ) => Effect.Effect<sagemaker.InvokeEndpointOutput, sagemaker.InvokeEndpointError>
   >
 > {}
 export const InvokeEndpoint = Binding.Service<InvokeEndpoint>(

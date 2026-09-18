@@ -25,13 +25,6 @@ export interface StopGraph extends Binding.Service<
   "AWS.NeptuneGraph.StopGraph",
   (
     graph: Graph,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      neptunegraph.StopGraphOutput,
-      neptunegraph.StopGraphError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<neptunegraph.StopGraphOutput, neptunegraph.StopGraphError>>
 > {}
-export const StopGraph = Binding.Service<StopGraph>(
-  "AWS.NeptuneGraph.StopGraph",
-);
+export const StopGraph = Binding.Service<StopGraph>("AWS.NeptuneGraph.StopGraph");

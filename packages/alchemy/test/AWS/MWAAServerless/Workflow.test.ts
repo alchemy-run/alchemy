@@ -1,9 +1,3 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Workflow } from "@/AWS/MWAAServerless";
-import { Bucket } from "@/AWS/S3/Bucket.ts";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as s3 from "@distilled.cloud/aws/s3";
@@ -12,26 +6,28 @@ import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Workflow } from "@/AWS/MWAAServerless";
+import { Bucket } from "@/AWS/S3/Bucket.ts";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Typed-error probe: prove the distilled error union carries the not-found
 // tag this provider's read/delete paths depend on, at near-zero cost.
-test.provider(
-  "getWorkflow on a nonexistent workflow fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const identity = yield* sts.getCallerIdentity({});
-      const region = process.env.AWS_REGION ?? "us-west-2";
-      // Workflow ARNs end in `-{10 alnum chars}` (a service-assigned id
-      // suffix) — the API rejects anything else with a ValidationException
-      // before the lookup even runs.
-      const bogusArn = `arn:aws:airflow-serverless:${region}:${identity.Account}:workflow/alchemy-nonexistent-probe-0123456789`;
-      const error = yield* Effect.flip(
-        mwaa.getWorkflow({ WorkflowArn: bogusArn }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getWorkflow on a nonexistent workflow fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const identity = yield* sts.getCallerIdentity({});
+    const region = process.env.AWS_REGION ?? "us-west-2";
+    // Workflow ARNs end in `-{10 alnum chars}` (a service-assigned id
+    // suffix) — the API rejects anything else with a ValidationException
+    // before the lookup even runs.
+    const bogusArn = `arn:aws:airflow-serverless:${region}:${identity.Account}:workflow/alchemy-nonexistent-probe-0123456789`;
+    const error = yield* Effect.flip(mwaa.getWorkflow({ WorkflowArn: bogusArn }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // A deterministic, checked-in workflow definition (YAML DAG using a
@@ -75,10 +71,7 @@ const infrastructure = Effect.gen(function* () {
           {
             Effect: "Allow",
             Action: ["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-            Resource: [
-              bucket.bucketArn,
-              Output.interpolate`${bucket.bucketArn}/*`,
-            ],
+            Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
           },
         ],
       },
@@ -106,11 +99,7 @@ const workflowPhase = (description: string, name?: string) =>
 const findWorkflow = (workflowArn: string) =>
   mwaa
     .getWorkflow({ WorkflowArn: workflowArn })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 class WorkflowStillExists extends Data.TaggedError("WorkflowStillExists")<{
   readonly workflowArn: string;
@@ -132,9 +121,7 @@ const assertLogGroupDeleted = (workflowArn: string) =>
     const found = yield* logs.describeLogGroups({
       logGroupNamePrefix: logGroupName,
     });
-    const exists = (found.logGroups ?? []).some(
-      (group) => group.logGroupName === logGroupName,
-    );
+    const exists = (found.logGroups ?? []).some((group) => group.logGroupName === logGroupName);
     if (exists) {
       return yield* Effect.fail(new LogGroupStillExists({ logGroupName }));
     }
@@ -166,9 +153,7 @@ const reapTestLogGroups = Effect.gen(function* () {
       if (group.logGroupName !== undefined) {
         yield* logs
           .deleteLogGroup({ logGroupName: group.logGroupName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
       }
     }
   }
@@ -183,10 +168,7 @@ const assertWorkflowDeleted = (workflowArn: string) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "WorkflowStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -203,9 +185,7 @@ test.provider(
       yield* s3.putObject({
         Bucket: infra.bucket.bucketName,
         Key: DEFINITION_KEY,
-        Body: new TextEncoder().encode(
-          workflowDefinition(infra.bucket.bucketName),
-        ),
+        Body: new TextEncoder().encode(workflowDefinition(infra.bucket.bucketName)),
         ContentType: "application/yaml",
       });
 
@@ -237,9 +217,7 @@ test.provider(
       const reobserved = yield* mwaa.getWorkflow({
         WorkflowArn: workflow.workflowArn,
       });
-      expect(reobserved.Description).toBe(
-        "alchemy mwaa-serverless test workflow (updated)",
-      );
+      expect(reobserved.Description).toBe("alchemy mwaa-serverless test workflow (updated)");
 
       // Phase 4 — changing the name is a replacement: a new workflow (new
       // ARN) is created and the old one deleted.

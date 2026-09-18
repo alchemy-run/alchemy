@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,15 +6,14 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 const failureJson = (failure: { readonly _tag: string }) => ({
   errorTag: failure._tag,
   errorMessage:
-    "message" in failure && typeof failure.message === "string"
-      ? failure.message
-      : undefined,
+    "message" in failure && typeof failure.message === "string" ? failure.message : undefined,
 });
 
 export class KinesisVideoTestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
@@ -42,15 +40,12 @@ export default KinesisVideoTestFunction.make(
     const getClip = yield* AWS.KinesisVideo.GetClip(stream);
     const getImages = yield* AWS.KinesisVideo.GetImages(stream);
     const listFragments = yield* AWS.KinesisVideo.ListFragments(stream);
-    const getFragmentMedia =
-      yield* AWS.KinesisVideo.GetMediaForFragmentList(stream);
+    const getFragmentMedia = yield* AWS.KinesisVideo.GetMediaForFragmentList(stream);
     const getIceServers = yield* AWS.KinesisVideo.GetIceServerConfig(channel);
     const getMedia = yield* AWS.KinesisVideo.GetMedia(stream);
     const joinStorage = yield* AWS.KinesisVideo.JoinStorageSession(channel);
-    const joinStorageAsViewer =
-      yield* AWS.KinesisVideo.JoinStorageSessionAsViewer(channel);
-    const sendAlexaOffer =
-      yield* AWS.KinesisVideo.SendAlexaOfferToMaster(channel);
+    const joinStorageAsViewer = yield* AWS.KinesisVideo.JoinStorageSessionAsViewer(channel);
+    const sendAlexaOffer = yield* AWS.KinesisVideo.SendAlexaOfferToMaster(channel);
 
     return {
       fetch: Effect.gen(function* () {
@@ -78,9 +73,7 @@ export default KinesisVideoTestFunction.make(
         if (request.method === "GET" && pathname === "/dash") {
           // Same shape as /hls — the empty stream deterministically returns
           // the archived-media data plane's typed no-fragments error.
-          const result = yield* Effect.result(
-            getDash({ PlaybackMode: "LIVE" }),
-          );
+          const result = yield* Effect.result(getDash({ PlaybackMode: "LIVE" }));
           if (Result.isSuccess(result)) {
             return yield* HttpServerResponse.json({
               url: result.success.DASHStreamingSessionURL,
@@ -194,9 +187,7 @@ export default KinesisVideoTestFunction.make(
           // typed error — reaching it proves IAM + endpoint resolution.
           const result = yield* Effect.result(joinStorage());
           return yield* HttpServerResponse.json(
-            Result.isSuccess(result)
-              ? { ok: true }
-              : { ok: false, ...failureJson(result.failure) },
+            Result.isSuccess(result) ? { ok: true } : { ok: false, ...failureJson(result.failure) },
           );
         }
 
@@ -205,9 +196,7 @@ export default KinesisVideoTestFunction.make(
             joinStorageAsViewer({ clientId: "alchemy-test-viewer" }),
           );
           return yield* HttpServerResponse.json(
-            Result.isSuccess(result)
-              ? { ok: true }
-              : { ok: false, ...failureJson(result.failure) },
+            Result.isSuccess(result) ? { ok: true } : { ok: false, ...failureJson(result.failure) },
           );
         }
 
@@ -241,9 +230,7 @@ export default KinesisVideoTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/ice") {
-          const result = yield* Effect.result(
-            getIceServers({ ClientId: "alchemy-test" }),
-          );
+          const result = yield* Effect.result(getIceServers({ ClientId: "alchemy-test" }));
           if (Result.isFailure(result)) {
             return yield* HttpServerResponse.json({
               ok: false,
@@ -253,8 +240,7 @@ export default KinesisVideoTestFunction.make(
           return yield* HttpServerResponse.json({
             servers: (result.success.IceServerList ?? []).map((server) => ({
               uris: server.Uris ?? [],
-              hasCredentials:
-                server.Username !== undefined && server.Password !== undefined,
+              hasCredentials: server.Username !== undefined && server.Password !== undefined,
               ttl: server.Ttl,
             })),
           });
@@ -288,10 +274,7 @@ export default KinesisVideoTestFunction.make(
           });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

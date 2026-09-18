@@ -1,14 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import {
-  makeKVNamespaceBinding,
-  type makeKVNamespaceHelpers,
-} from "./NamespaceBinding.ts";
+import { makeKVNamespaceBinding, type makeKVNamespaceHelpers } from "./NamespaceBinding.ts";
 import { makeReadKVClient } from "./ReadNamespaceBinding.ts";
-import {
-  ReadWriteNamespace,
-  type ReadWriteNamespaceClient,
-} from "./ReadWriteNamespace.ts";
+import { ReadWriteNamespace, type ReadWriteNamespaceClient } from "./ReadWriteNamespace.ts";
 import { makeWriteKVClient } from "./WriteNamespaceBinding.ts";
 
 /**
@@ -17,9 +11,7 @@ import { makeWriteKVClient } from "./WriteNamespaceBinding.ts";
  */
 export const ReadWriteNamespaceBinding = Layer.effect(
   ReadWriteNamespace,
-  Effect.suspend(() =>
-    makeKVNamespaceBinding({ makeClient: makeReadWriteKVClient }),
-  ),
+  Effect.suspend(() => makeKVNamespaceBinding({ makeClient: makeReadWriteKVClient })),
 );
 
 /** Build the read-write binding client from its read and write halves. */

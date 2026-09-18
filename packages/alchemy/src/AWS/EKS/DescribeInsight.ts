@@ -33,6 +33,4 @@ export interface DescribeInsight extends Binding.Service<
     ) => Effect.Effect<eks.DescribeInsightResponse, eks.DescribeInsightError>
   >
 > {}
-export const DescribeInsight = Binding.Service<DescribeInsight>(
-  "AWS.EKS.DescribeInsight",
-);
+export const DescribeInsight = Binding.Service<DescribeInsight>("AWS.EKS.DescribeInsight");

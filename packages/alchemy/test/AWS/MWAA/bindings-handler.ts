@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import * as Output from "@/Output";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 export class MWAATestFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
@@ -114,10 +114,7 @@ export default MWAATestFunction.make(
             {
               Effect: "Allow",
               Action: ["s3:GetObject*", "s3:GetBucket*", "s3:List*"],
-              Resource: [
-                bucket.bucketArn,
-                Output.interpolate`${bucket.bucketArn}/*`,
-              ],
+              Resource: [bucket.bucketArn, Output.interpolate`${bucket.bucketArn}/*`],
             },
             {
               Effect: "Allow",
@@ -160,8 +157,7 @@ export default MWAATestFunction.make(
       sourceBucketArn: bucket.bucketArn,
       dagS3Path: "dags",
       subnetIds,
-      securityGroupIds:
-        securityGroupIds.length > 0 ? securityGroupIds : undefined,
+      securityGroupIds: securityGroupIds.length > 0 ? securityGroupIds : undefined,
       environmentClass: "mw1.small",
       maxWorkers: 2,
       minWorkers: 1,
@@ -171,8 +167,7 @@ export default MWAATestFunction.make(
 
     const getEnvironment = yield* AWS.MWAA.GetEnvironment(environment);
     const createCliToken = yield* AWS.MWAA.CreateCliToken(environment);
-    const createWebLoginToken =
-      yield* AWS.MWAA.CreateWebLoginToken(environment);
+    const createWebLoginToken = yield* AWS.MWAA.CreateWebLoginToken(environment);
     const invokeRestApi = yield* AWS.MWAA.InvokeRestApi(environment);
 
     const bound = {
@@ -231,27 +226,19 @@ export default MWAATestFunction.make(
         }
 
         if (pathname === "/dags") {
-          const result = yield* errorTagged(
-            invokeRestApi({ Method: "GET", Path: "/dags" }),
-          );
+          const result = yield* errorTagged(invokeRestApi({ Method: "GET", Path: "/dags" }));
           return yield* HttpServerResponse.json(
             "errorTag" in result
               ? result
               : {
                   statusCode: result.RestApiStatusCode,
-                  totalEntries: (
-                    result.RestApiResponse as
-                      | { total_entries?: number }
-                      | undefined
-                  )?.total_entries,
+                  totalEntries: (result.RestApiResponse as { total_entries?: number } | undefined)
+                    ?.total_entries,
                 },
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

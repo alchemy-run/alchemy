@@ -112,11 +112,7 @@ export const WorkspaceProvider = () =>
       const arnFor = (accountId: string, region: string, id: string) =>
         `arn:aws:grafana:${region}:${accountId}:/workspaces/${id}`;
 
-      const toAttrs = (
-        accountId: string,
-        region: string,
-        ws: grafana.WorkspaceDescription,
-      ) => ({
+      const toAttrs = (accountId: string, region: string, ws: grafana.WorkspaceDescription) => ({
         workspaceId: ws.id,
         workspaceArn: arnFor(accountId, region, ws.id),
         endpoint: ws.endpoint,
@@ -128,11 +124,7 @@ export const WorkspaceProvider = () =>
       const describe = Effect.fn(function* (id: string) {
         const response = yield* grafana
           .describeWorkspace({ workspaceId: id })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.workspace;
       });
 
@@ -141,18 +133,13 @@ export const WorkspaceProvider = () =>
         const ws = yield* grafana.describeWorkspace({ workspaceId: id }).pipe(
           Effect.map((r) => r.workspace),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("5 seconds"),
-              Schedule.recurs(36),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
             until: (w) => w.status === "ACTIVE" || w.status.endsWith("FAILED"),
           }),
         );
         if (ws.status !== "ACTIVE") {
           return yield* Effect.fail(
-            new Error(
-              `Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`,
-            ),
+            new Error(`Grafana workspace ${id} did not become ACTIVE (status: ${ws.status})`),
           );
         }
         return ws;
@@ -164,9 +151,8 @@ export const WorkspaceProvider = () =>
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           const authChanged =
-            JSON.stringify(
-              [...(olds?.authenticationProviders ?? [])].sort(),
-            ) !== JSON.stringify([...news.authenticationProviders].sort());
+            JSON.stringify([...(olds?.authenticationProviders ?? [])].sort()) !==
+            JSON.stringify([...news.authenticationProviders].sort());
           if (
             authChanged ||
             (olds?.accountAccessType ?? "CURRENT_ACCOUNT") !==
@@ -195,9 +181,7 @@ export const WorkspaceProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
           let ws =
-            output?.workspaceId !== undefined
-              ? yield* describe(output.workspaceId)
-              : undefined;
+            output?.workspaceId !== undefined ? yield* describe(output.workspaceId) : undefined;
 
           // 2. Ensure — create if missing, then wait for ACTIVE.
           if (ws === undefined) {
@@ -241,18 +225,13 @@ export const WorkspaceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* grafana
-            .deleteWorkspace({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
-              }),
-            );
+          yield* grafana.deleteWorkspace({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
+            }),
+          );
         }),
 
         list: () =>

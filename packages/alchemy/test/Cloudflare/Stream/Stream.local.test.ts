@@ -1,5 +1,3 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -8,6 +6,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -16,10 +16,7 @@ const { test } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Mock video bytes — the same checked-in constant the runtime's own Stream
@@ -42,11 +39,7 @@ const postBytesReady = (url: string, bytes: Uint8Array) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     return yield* client
-      .execute(
-        HttpClientRequest.post(url).pipe(
-          HttpClientRequest.bodyUint8Array(bytes),
-        ),
-      )
+      .execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyUint8Array(bytes)))
       .pipe(
         Effect.flatMap((res) =>
           res.status === 200
@@ -60,20 +53,14 @@ const postBytesReady = (url: string, bytes: Uint8Array) =>
         Effect.retry({
           while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
           schedule: Schedule.max([
-            Schedule.min([
-              Schedule.exponential("500 millis"),
-              Schedule.spaced("2 seconds"),
-            ]),
+            Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
             Schedule.recurs(10),
           ]),
         }),
       );
   }).pipe(Effect.orDie);
 
-const fixtureMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/local-worker.ts",
-);
+const fixtureMain = pathe.resolve(import.meta.dirname, "fixtures/local-worker.ts");
 
 interface VideoResponse {
   id: string;
@@ -126,10 +113,7 @@ test.provider(
 
       // Upload through the binding (the local simulator accepts the raw
       // request body bytes in place of a URL, like Miniflare).
-      const uploadRes = yield* postBytesReady(
-        `${deployed.url}/upload`,
-        TEST_VIDEO_BYTES,
-      );
+      const uploadRes = yield* postBytesReady(`${deployed.url}/upload`, TEST_VIDEO_BYTES);
       const video = (yield* uploadRes.json) as unknown as VideoResponse;
       expect(video.id).toBeTruthy();
       expect(video.readyToStream).toBe(true);
@@ -139,24 +123,18 @@ test.provider(
       expect(video.meta).toEqual({ title: "alchemy-local-test" });
       // The preview URL is the local watch route on the runtime entry.
       expect(video.preview).toMatch(
-        new RegExp(
-          `^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`,
-        ),
+        new RegExp(`^http://127\\.0\\.0\\.1:\\d+/cdn-cgi/mf/stream/${video.id}/watch$`),
       );
 
       // Read it back through the binding.
-      const detailsRes = yield* client.get(
-        `${deployed.url}/details?id=${video.id}`,
-      );
+      const detailsRes = yield* client.get(`${deployed.url}/details?id=${video.id}`);
       const details = (yield* detailsRes.json) as unknown as VideoResponse;
       expect(details.id).toBe(video.id);
       expect(details.size).toBe(TEST_VIDEO_BYTES.byteLength);
 
       // The stored bytes are served at the watch route, both through the
       // dev URL (the stream router middleware in front of the user worker)…
-      const watchRes = yield* client.get(
-        `${deployed.url}/cdn-cgi/mf/stream/${video.id}/watch`,
-      );
+      const watchRes = yield* client.get(`${deployed.url}/cdn-cgi/mf/stream/${video.id}/watch`);
       expect(watchRes.status).toBe(200);
       const watchBytes = new Uint8Array(yield* watchRes.arrayBuffer);
       expect(Array.from(watchBytes)).toEqual(Array.from(TEST_VIDEO_BYTES));
@@ -169,15 +147,9 @@ test.provider(
 
       // Delete through the binding; details now surfaces the simulator's
       // typed not-found error (code 10003).
-      const deleteRes = yield* client.get(
-        `${deployed.url}/delete?id=${video.id}`,
-      );
-      expect(((yield* deleteRes.json) as { deleted: boolean }).deleted).toBe(
-        true,
-      );
-      const goneRes = yield* client.get(
-        `${deployed.url}/details?id=${video.id}`,
-      );
+      const deleteRes = yield* client.get(`${deployed.url}/delete?id=${video.id}`);
+      expect(((yield* deleteRes.json) as { deleted: boolean }).deleted).toBe(true);
+      const goneRes = yield* client.get(`${deployed.url}/details?id=${video.id}`);
       const gone = (yield* goneRes.json) as unknown as ErrorEnvelope;
       expect(gone.error).toBe(true);
       expect(gone.message).toContain("Video not found");

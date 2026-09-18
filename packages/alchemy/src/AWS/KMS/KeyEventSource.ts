@@ -28,10 +28,7 @@ export interface KeyEventDetail {
 export type KeyEvent = EventRecord<KeyEventDetail>;
 
 /** Which KMS notifications to subscribe to. */
-export type KeyEventKind =
-  | "rotation"
-  | "deletion"
-  | "imported-key-material-expiration";
+export type KeyEventKind = "rotation" | "deletion" | "imported-key-material-expiration";
 
 const DETAIL_TYPES: Record<KeyEventKind, string> = {
   rotation: "KMS CMK Rotation",
@@ -96,17 +93,14 @@ export interface KeyEventSourceProps extends EventRouteProps {
  */
 export const consumeKeyEvents = <StreamReq = never, Req = never>(
   props: KeyEventSourceProps,
-  process: (
-    events: Stream.Stream<KeyEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<KeyEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "KMSKeyEvents",
     {
       source: ["aws.kms"],
       "detail-type": (
-        props.kinds ??
-        (["rotation", "deletion", "imported-key-material-expiration"] as const)
+        props.kinds ?? (["rotation", "deletion", "imported-key-material-expiration"] as const)
       ).map((kind) => DETAIL_TYPES[kind]),
       ...(props.keyArns !== undefined ? { resources: [...props.keyArns] } : {}),
     },

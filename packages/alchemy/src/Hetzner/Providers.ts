@@ -4,44 +4,36 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { HetznerAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
 import { fromCredentials } from "./Environment.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { FloatingIp, FloatingIpProvider } from "./FloatingIp.ts";
-import {
-  FloatingIpAssignment,
-  FloatingIpAssignmentProvider,
-} from "./FloatingIpAssignment.ts";
+import { FloatingIpAssignment, FloatingIpAssignmentProvider } from "./FloatingIpAssignment.ts";
 import { Image, ImageProvider } from "./Image.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
+import { MountVolumeLive } from "./MountVolume.ts";
 import { Network, NetworkProvider } from "./Network.ts";
 import { PlacementGroup, PlacementGroupProvider } from "./PlacementGroup.ts";
 import { PrimaryIp, PrimaryIpProvider } from "./PrimaryIp.ts";
 import { ReadDnsHttp } from "./ReadDnsHttp.ts";
 import { ReadWriteDnsHttp } from "./ReadWriteDnsHttp.ts";
-import { MountVolumeLive } from "./MountVolume.ts";
 import { RecordSet, RecordSetProvider } from "./RecordSet.ts";
 import { Server, ServerProvider } from "./Server.ts";
 import { Service, ServiceProvider } from "./Service.ts";
 import { SshLive } from "./Ssh.ts";
-import { WriteDnsHttp } from "./WriteDnsHttp.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
-import {
-  VolumeAttachment,
-  VolumeAttachmentProvider,
-} from "./VolumeAttachment.ts";
+import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
+import { WriteDnsHttp } from "./WriteDnsHttp.ts";
 import { Zone, ZoneProvider } from "./Zone.ts";
-import {
-  Server as WebsiteServer,
-  ServerProvider as WebsiteServerProvider,
-} from "../Website/Server.ts";
 
-export class Providers extends Provider.ProviderCollection<Providers>()(
-  "Hetzner",
-) {}
+export class Providers extends Provider.ProviderCollection<Providers>()("Hetzner") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 

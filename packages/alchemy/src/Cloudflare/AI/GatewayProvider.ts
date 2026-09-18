@@ -190,7 +190,7 @@ export const isGatewayProvider = (value: unknown): value is GatewayProvider =>
 export const GatewayProviderProvider = () =>
   Provider.succeed(GatewayProvider, {
     stables: ["providerConfigId", "accountId", "gatewayId"],
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -220,8 +220,7 @@ export const GatewayProviderProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const gatewayId =
-        output?.gatewayId ?? (olds?.gatewayId as string | undefined);
+      const gatewayId = output?.gatewayId ?? (olds?.gatewayId as string | undefined);
       if (gatewayId === undefined) return undefined;
 
       const configs = yield* listProviderConfigs(acct, gatewayId);
@@ -231,9 +230,7 @@ export const GatewayProviderProvider = () =>
           // deterministic alias.
           yield* Effect.gen(function* () {
             const alias = yield* createAlias(id, olds?.alias);
-            return configs.find(
-              (c) => c.alias === alias && c.providerSlug === olds?.providerSlug,
-            );
+            return configs.find((c) => c.alias === alias && c.providerSlug === olds?.providerSlug);
           });
       return match ? toAttributes(match, acct) : undefined;
     }),
@@ -245,8 +242,7 @@ export const GatewayProviderProvider = () =>
       // Absent that, prefer the deployed alias: regenerating would target a
       // different resource if the generator's output for this id ever
       // drifts.
-      const alias =
-        news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
+      const alias = news.alias ?? output?.alias ?? (yield* createAlias(id, undefined));
       return yield* reconcileProviderConfig({
         accountId,
         gatewayId: news.gatewayId as string,
@@ -280,16 +276,12 @@ export const GatewayProviderProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const gatewayIds = yield* aiGateway.listAiGateways
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((gateway) => gateway.id),
-            ),
-          ),
-        );
+      const gatewayIds = yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => (page.result ?? []).map((gateway) => gateway.id)),
+        ),
+      );
 
       const rows = yield* Effect.forEach(
         gatewayIds,
@@ -298,9 +290,7 @@ export const GatewayProviderProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((config) =>
-                  toAttributes(config, accountId),
-                ),
+                (page.result ?? []).map((config) => toAttributes(config, accountId)),
               ),
             ),
           ),

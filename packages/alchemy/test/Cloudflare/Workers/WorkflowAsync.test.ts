@@ -1,6 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import { expect } from "alchemy-test";
@@ -9,16 +6,16 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import Stack from "./fixtures/workflow-async/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(
   deploy(Stack).pipe(
@@ -46,67 +43,55 @@ const runWorkflowToCompletion = (url: string) =>
     // workers.dev URL, so retry until it returns 200 (a fresh URL also
     // returns 404 transiently, which is not an HTTP error so Effect.retry
     // does not catch it unless we explicitly fail on non-200).
-    const { instanceId } = yield* client
-      .post(`${url}/workflow/start/world`)
-      .pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json.pipe(
-                Effect.flatMap((body) => {
-                  const instanceId = (body as { instanceId?: unknown })
-                    .instanceId;
-                  return typeof instanceId === "string"
-                    ? Effect.succeed({ instanceId })
-                    : Effect.fail(new Error("Worker returned no workflow id"));
-                }),
-              )
-            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-        ),
-        Effect.retry({
-          // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
-          // sleep after only six attempts and blow the test timeout.
-          schedule: Schedule.min([
-            Schedule.exponential("500 millis"),
-            Schedule.spaced("3 seconds"),
-          ]),
-          times: 15,
-        }),
-      );
+    const { instanceId } = yield* client.post(`${url}/workflow/start/world`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? res.json.pipe(
+              Effect.flatMap((body) => {
+                const instanceId = (body as { instanceId?: unknown }).instanceId;
+                return typeof instanceId === "string"
+                  ? Effect.succeed({ instanceId })
+                  : Effect.fail(new Error("Worker returned no workflow id"));
+              }),
+            )
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({
+        // Cap the exponential at 3s — uncapped, 15 retries grow past 30s of
+        // sleep after only six attempts and blow the test timeout.
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
+        times: 15,
+      }),
+    );
     expect(instanceId).toBeTypeOf("string");
 
-    const lastStatus = yield* client
-      .get(`${url}/workflow/status/${instanceId}`)
-      .pipe(
-        // The status endpoint transiently returns a 500 (HTML error page, not
-        // JSON) while the freshly-deployed worker's Workflow binding is still
-        // propagating. Only decode JSON on a 200; treat any other status as a
-        // non-terminal "pending" so the poll keeps swinging instead of dying
-        // on a JSON decode error.
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json.pipe(
-                Effect.map((json) => json as unknown as WorkflowStatus),
-              )
-            : Effect.succeed({ status: "pending" } as WorkflowStatus),
-        ),
-        Effect.repeat({
-          // Under full-suite load a fresh workflow instance can sit in
-          // `pending`/`queued` well past 24s before its first step runs;
-          // give each attempt ~60s before handing back to the outer retry.
-          schedule: Schedule.spaced("2 seconds"),
-          until: (s) => s.status === "complete" || s.status === "errored",
-          times: 30,
-        }),
-      );
+    const lastStatus = yield* client.get(`${url}/workflow/status/${instanceId}`).pipe(
+      // The status endpoint transiently returns a 500 (HTML error page, not
+      // JSON) while the freshly-deployed worker's Workflow binding is still
+      // propagating. Only decode JSON on a 200; treat any other status as a
+      // non-terminal "pending" so the poll keeps swinging instead of dying
+      // on a JSON decode error.
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? res.json.pipe(Effect.map((json) => json as unknown as WorkflowStatus))
+          : Effect.succeed({ status: "pending" } as WorkflowStatus),
+      ),
+      Effect.repeat({
+        // Under full-suite load a fresh workflow instance can sit in
+        // `pending`/`queued` well past 24s before its first step runs;
+        // give each attempt ~60s before handing back to the outer retry.
+        schedule: Schedule.spaced("2 seconds"),
+        until: (s) => s.status === "complete" || s.status === "errored",
+        times: 30,
+      }),
+    );
 
     // Surface a non-complete terminal state as a failure so the outer retry
     // can take another swing (a fresh worker occasionally errors a step while
     // its bindings are still propagating).
     if (lastStatus.status !== "complete") {
       return yield* Effect.fail(
-        new Error(
-          `workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`,
-        ),
+        new Error(`workflow ${lastStatus.status}: ${JSON.stringify(lastStatus.error)}`),
       );
     }
     return lastStatus;
@@ -211,26 +196,21 @@ test.provider(
               MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow"),
             },
           });
-          const consumer = yield* Cloudflare.Worker(
-            "consumer-workflow-worker",
-            {
-              script: consumerWorkflowScript,
-              env: {
-                MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
-                  scriptName: host.workerName,
-                }),
-              },
+          const consumer = yield* Cloudflare.Worker("consumer-workflow-worker", {
+            script: consumerWorkflowScript,
+            env: {
+              MY_WORKFLOW: Cloudflare.Workflow("MyWorkflow", {
+                scriptName: host.workerName,
+              }),
             },
-          );
+          });
           return { consumer, host };
         }),
       );
 
       // Start + complete a workflow instance through the CONSUMER's binding,
       // exercising both `create` and `get` across the cross-script reference.
-      const lastStatus = yield* runWorkflowToCompletion(
-        deployed.consumer.url!,
-      ).pipe(
+      const lastStatus = yield* runWorkflowToCompletion(deployed.consumer.url!).pipe(
         Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 2 }),
       );
 
@@ -272,8 +252,7 @@ const readWorkflowName = (scriptName: string) =>
       scriptName,
     });
     const binding = (settings.bindings ?? []).find(
-      (b): b is Extract<typeof b, { type: "workflow" }> =>
-        b.type === "workflow",
+      (b): b is Extract<typeof b, { type: "workflow" }> => b.type === "workflow",
     );
     return binding === undefined
       ? yield* Effect.fail(new Error(`no workflow binding on '${scriptName}'`))
@@ -349,12 +328,9 @@ const waitForAppliedSchedules = (workflowName: string, expected: string[]) =>
     return (workflow.schedules ?? []).map((s) => s.cron);
   }).pipe(
     Effect.flatMap((crons) =>
-      crons.length === expected.length &&
-      crons.every((cron, index) => cron === expected[index])
+      crons.length === expected.length && crons.every((cron, index) => cron === expected[index])
         ? Effect.succeed(crons)
-        : Effect.fail(
-            new Error(`schedules not applied yet: ${JSON.stringify(crons)}`),
-          ),
+        : Effect.fail(new Error(`schedules not applied yet: ${JSON.stringify(crons)}`)),
     ),
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
   );
@@ -385,14 +361,10 @@ test.provider(
 
       const created = yield* deployWith([yearly]);
       const workflowName = yield* readWorkflowName(created.worker.workerName);
-      expect(yield* waitForAppliedSchedules(workflowName, [yearly])).toEqual([
-        yearly,
-      ]);
+      expect(yield* waitForAppliedSchedules(workflowName, [yearly])).toEqual([yearly]);
 
       yield* deployWith([other]);
-      expect(yield* waitForAppliedSchedules(workflowName, [other])).toEqual([
-        other,
-      ]);
+      expect(yield* waitForAppliedSchedules(workflowName, [other])).toEqual([other]);
 
       yield* deployWith([]);
       expect(yield* waitForAppliedSchedules(workflowName, [])).toEqual([]);

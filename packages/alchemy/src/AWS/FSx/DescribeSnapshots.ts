@@ -30,12 +30,7 @@ export interface DescribeSnapshots extends Binding.Service<
   () => Effect.Effect<
     (
       request?: fsx.DescribeSnapshotsRequest,
-    ) => Effect.Effect<
-      fsx.DescribeSnapshotsResponse,
-      fsx.DescribeSnapshotsError
-    >
+    ) => Effect.Effect<fsx.DescribeSnapshotsResponse, fsx.DescribeSnapshotsError>
   >
 > {}
-export const DescribeSnapshots = Binding.Service<DescribeSnapshots>(
-  "AWS.FSx.DescribeSnapshots",
-);
+export const DescribeSnapshots = Binding.Service<DescribeSnapshots>("AWS.FSx.DescribeSnapshots");

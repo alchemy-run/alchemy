@@ -1,12 +1,12 @@
-import * as Axiom from "@/Axiom";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Axiom from "@/Axiom";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Cloudflare/Utils/Http.ts";
 import AxiomTracedWorker, {
   Ingest,
@@ -26,9 +26,7 @@ const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 // data actually landed in Axiom.
 const queryTraces = Effect.gen(function* () {
   const response = yield* HttpClient.execute(
-    HttpClientRequest.post(
-      "https://api.axiom.co/v1/datasets/_apl?format=legacy",
-    ).pipe(
+    HttpClientRequest.post("https://api.axiom.co/v1/datasets/_apl?format=legacy").pipe(
       HttpClientRequest.setHeaders({
         Authorization: `Bearer ${process.env.AXIOM_TOKEN ?? process.env.AXIOM_API_KEY}`,
         "Content-Type": "application/json",

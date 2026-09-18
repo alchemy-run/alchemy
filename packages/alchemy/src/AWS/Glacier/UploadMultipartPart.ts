@@ -44,10 +44,7 @@ export interface UploadMultipartPart extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UploadMultipartPartRequest,
-    ) => Effect.Effect<
-      glacier.UploadMultipartPartOutput,
-      glacier.UploadMultipartPartError
-    >
+    ) => Effect.Effect<glacier.UploadMultipartPartOutput, glacier.UploadMultipartPartError>
   >
 > {}
 export const UploadMultipartPart = Binding.Service<UploadMultipartPart>(

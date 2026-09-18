@@ -40,12 +40,7 @@ export interface DeleteRecord extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteRecordRequest,
-    ) => Effect.Effect<
-      featurestore.DeleteRecordResponse,
-      featurestore.DeleteRecordError
-    >
+    ) => Effect.Effect<featurestore.DeleteRecordResponse, featurestore.DeleteRecordError>
   >
 > {}
-export const DeleteRecord = Binding.Service<DeleteRecord>(
-  "AWS.SageMaker.DeleteRecord",
-);
+export const DeleteRecord = Binding.Service<DeleteRecord>("AWS.SageMaker.DeleteRecord");

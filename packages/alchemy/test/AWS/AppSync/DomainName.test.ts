@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as appsync from "@distilled.cloud/aws/appsync";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,9 +36,7 @@ test.provider(
         // Cross-account/nonexistent cert surfaces as the typed
         // BadRequestException (or AccessDenied depending on validation
         // order) — never an untyped catch-all.
-        expect(["BadRequestException", "AccessDeniedException"]).toContain(
-          result.failure._tag,
-        );
+        expect(["BadRequestException", "AccessDeniedException"]).toContain(result.failure._tag);
       }
     }),
   { timeout: 60_000 },
@@ -83,12 +81,10 @@ test.provider.skipIf(!domainName || !certificateArn)(
 
       yield* stack.destroy();
 
-      const gone = yield* appsync
-        .getDomainName({ domainName: out.domainName })
-        .pipe(
-          Effect.map(() => false),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
-        );
+      const gone = yield* appsync.getDomainName({ domainName: out.domainName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFoundException", () => Effect.succeed(true)),
+      );
       expect(gone).toBe(true);
     }),
   { timeout: 240_000 },

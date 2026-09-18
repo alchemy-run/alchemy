@@ -1,40 +1,27 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import {
-  CERT_1,
-  CERT_2,
-  CERT_7,
-  KEY_1,
-  KEY_2,
-  KEY_7,
-} from "./fixtures/certs.ts";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { CERT_1, CERT_2, CERT_7, KEY_1, KEY_2, KEY_7 } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -83,10 +70,7 @@ const waitForGone = (zoneId: string, certificateId: string) =>
       // the cert was already gone. That overshoot — not genuinely-slow CF —
       // was what blew the test budget. A fixed interval detects the tombstone
       // within one poll of it actually happening.
-      schedule: Schedule.max([
-        Schedule.spaced("3 seconds"),
-        Schedule.recurs(45),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(45)]),
     }),
   );
 
@@ -104,33 +88,26 @@ const purgeCertificates = (zoneId: string) =>
     );
     yield* Effect.forEach(
       (list.result ?? []).filter(
-        (c) =>
-          c.id && c.status !== "deleted" && c.status !== "pending_deletion",
+        (c) => c.id && c.status !== "deleted" && c.status !== "pending_deletion",
       ),
       (c) =>
-        originTls
-          .deleteOriginTlsClientAuth({ zoneId, certificateId: c.id! })
-          .pipe(
-            // A leftover cert still propagating its initial deployment rejects
-            // the delete with code 1434 (pending deployment); ride it out so
-            // the purge actually clears the slate instead of cascading. A
-            // delete racing a sibling per-zone mutation is rejected with HTTP
-            // 409 (`ZoneClientCertConflict`) — retry that too.
-            Effect.retry({
-              while: (e) =>
-                e._tag === "CertificatePendingDeployment" ||
-                e._tag === "ZoneClientCertConflict",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 12,
-            }),
-            // Deletion is idempotent: a cert that flipped into (or past)
-            // deletion between the list and this call answers HTTP 400
-            // "Certificate is already deleted." — both mean it is gone.
-            Effect.catchTag(
-              ["CertificateNotFound", "CertificateAlreadyDeleted"],
-              () => Effect.void,
-            ),
-          ),
+        originTls.deleteOriginTlsClientAuth({ zoneId, certificateId: c.id! }).pipe(
+          // A leftover cert still propagating its initial deployment rejects
+          // the delete with code 1434 (pending deployment); ride it out so
+          // the purge actually clears the slate instead of cascading. A
+          // delete racing a sibling per-zone mutation is rejected with HTTP
+          // 409 (`ZoneClientCertConflict`) — retry that too.
+          Effect.retry({
+            while: (e) =>
+              e._tag === "CertificatePendingDeployment" || e._tag === "ZoneClientCertConflict",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 12,
+          }),
+          // Deletion is idempotent: a cert that flipped into (or past)
+          // deletion between the list and this call answers HTTP 400
+          // "Certificate is already deleted." — both mean it is gone.
+          Effect.catchTag(["CertificateNotFound", "CertificateAlreadyDeleted"], () => Effect.void),
+        ),
     );
   });
 
@@ -170,10 +147,7 @@ describe.sequential("Certificate", () => {
         yield* stack.destroy();
 
         yield* waitForGone(zoneId, cert.certificateId);
-      }).pipe(
-        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-        logLevel,
-      ),
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
     { timeout: 200_000 },
   );
 
@@ -215,10 +189,7 @@ describe.sequential("Certificate", () => {
         yield* stack.destroy();
 
         yield* waitForGone(zoneId, replaced.certificateId);
-      }).pipe(
-        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-        logLevel,
-      ),
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
     { timeout: 200_000 },
   );
 
@@ -246,22 +217,16 @@ describe.sequential("Certificate", () => {
           }),
         );
 
-        const provider = yield* Provider.findProvider(
-          Cloudflare.OriginTlsClientAuth.Certificate,
-        );
+        const provider = yield* Provider.findProvider(Cloudflare.OriginTlsClientAuth.Certificate);
         // A freshly uploaded certificate can lag the zone list endpoint by tens
         // of seconds — especially when the same PEM was recently deleted and
         // re-created (the sibling tests churn CERT_1), so the list endpoint
         // keeps serving the stale "gone" view for a while. Poll list() until it
         // appears, bounded to ~60s, rather than asserting on a single read.
         const found = yield* provider.list().pipe(
-          Effect.map((all) =>
-            all.find((c) => c.certificateId === cert.certificateId),
-          ),
+          Effect.map((all) => all.find((c) => c.certificateId === cert.certificateId)),
           Effect.flatMap((match) =>
-            match
-              ? Effect.succeed(match)
-              : Effect.fail({ _tag: "CertificateNotListed" } as const),
+            match ? Effect.succeed(match) : Effect.fail({ _tag: "CertificateNotListed" } as const),
           ),
           Effect.retry({
             while: (e) => e._tag === "CertificateNotListed",
@@ -274,10 +239,7 @@ describe.sequential("Certificate", () => {
         yield* stack.destroy();
 
         yield* waitForGone(zoneId, cert.certificateId);
-      }).pipe(
-        Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)),
-        logLevel,
-      ),
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie).pipe(Effect.ignore)), logLevel),
     // With the poll backoffs now CAPPED (steady cadence, see
     // `waitForGone`/`forbiddenRetrySchedule`), this test's three sequential
     // eventual-consistency waits are each bounded to ~60s — the list-appear

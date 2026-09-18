@@ -16,9 +16,7 @@ export interface DurableObjectMigrations {
   readonly migrationsTable?: string | undefined;
 }
 
-export interface DurableObjectConfig<
-  TRelations extends AnyRelations = EmptyRelations,
-> extends Omit<
+export interface DurableObjectConfig<TRelations extends AnyRelations = EmptyRelations> extends Omit<
   SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
   "storage"
 > {
@@ -112,10 +110,7 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   // local SQLite storage, so there is no disposable resource behind it.
   const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
   const db = yield* SQLiteDoDrizzle.makeWithDefaults({
-    ...(drizzleConfig as Omit<
-      SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,
-      "storage"
-    >),
+    ...(drizzleConfig as Omit<SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>, "storage">),
     storage,
   }).pipe(Effect.provideContext(services));
   if (migrations !== undefined) {

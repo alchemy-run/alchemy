@@ -1,16 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  ManagedLoginBranding,
-  UserPool,
-  UserPoolClient,
-  UserPoolDomain,
-} from "@/AWS/Cognito";
-import * as Test from "@/Test/Alchemy";
 import * as cip from "@distilled.cloud/aws/cognito-identity-provider";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ManagedLoginBranding, UserPool, UserPoolClient, UserPoolDomain } from "@/AWS/Cognito";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,19 +13,14 @@ class BrandingStillExists extends Data.TaggedError("BrandingStillExists")<{
   readonly managedLoginBrandingId: string;
 }> {}
 
-const assertBrandingDeleted = (
-  userPoolId: string,
-  managedLoginBrandingId: string,
-) =>
+const assertBrandingDeleted = (userPoolId: string, managedLoginBrandingId: string) =>
   cip
     .describeManagedLoginBranding({
       UserPoolId: userPoolId,
       ManagedLoginBrandingId: managedLoginBrandingId,
     })
     .pipe(
-      Effect.flatMap(() =>
-        Effect.fail(new BrandingStillExists({ managedLoginBrandingId })),
-      ),
+      Effect.flatMap(() => Effect.fail(new BrandingStillExists({ managedLoginBrandingId }))),
       Effect.catchTag("ResourceNotFoundException", () => Effect.void),
       Effect.retry({
         while: (e) => e._tag === "BrandingStillExists",
@@ -44,10 +34,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const infra = (
-        useSecondClient: boolean,
-        settings?: Record<string, unknown>,
-      ) =>
+      const infra = (useSecondClient: boolean, settings?: Record<string, unknown>) =>
         Effect.gen(function* () {
           const pool = yield* UserPool("BrandingPool", {});
           const clientA = yield* UserPoolClient("WebA", {
@@ -84,9 +71,7 @@ test.provider(
       expect(byClient.ManagedLoginBranding?.ManagedLoginBrandingId).toBe(
         created.branding.managedLoginBrandingId,
       );
-      expect(byClient.ManagedLoginBranding?.UseCognitoProvidedValues).toBe(
-        true,
-      );
+      expect(byClient.ManagedLoginBranding?.UseCognitoProvidedValues).toBe(true);
 
       // update in place: switch from provided values to custom settings
       // (use the merged provided-values document, the exact designer shape)
@@ -95,23 +80,16 @@ test.provider(
         ManagedLoginBrandingId: created.branding.managedLoginBrandingId,
         ReturnMergedResources: true,
       });
-      const settings = merged.ManagedLoginBranding?.Settings as Record<
-        string,
-        unknown
-      >;
+      const settings = merged.ManagedLoginBranding?.Settings as Record<string, unknown>;
       expect(settings).toBeDefined();
 
       const updated = yield* stack.deploy(infra(false, settings));
-      expect(updated.branding.managedLoginBrandingId).toBe(
-        created.branding.managedLoginBrandingId,
-      );
+      expect(updated.branding.managedLoginBrandingId).toBe(created.branding.managedLoginBrandingId);
       const afterUpdate = yield* cip.describeManagedLoginBranding({
         UserPoolId: created.pool.userPoolId,
         ManagedLoginBrandingId: created.branding.managedLoginBrandingId,
       });
-      expect(afterUpdate.ManagedLoginBranding?.UseCognitoProvidedValues).toBe(
-        false,
-      );
+      expect(afterUpdate.ManagedLoginBranding?.UseCognitoProvidedValues).toBe(false);
 
       // changing the app client replaces the branding style
       const replaced = yield* stack.deploy(infra(true, settings));
@@ -127,9 +105,9 @@ test.provider(
         UserPoolId: created.pool.userPoolId,
         ClientId: created.clientB.clientId,
       });
-      expect(
-        replacedByClient.ManagedLoginBranding?.ManagedLoginBrandingId,
-      ).toBe(replaced.branding.managedLoginBrandingId);
+      expect(replacedByClient.ManagedLoginBranding?.ManagedLoginBrandingId).toBe(
+        replaced.branding.managedLoginBrandingId,
+      );
 
       yield* stack.destroy();
       yield* cip.describeUserPool({ UserPoolId: created.pool.userPoolId }).pipe(
@@ -143,10 +121,7 @@ test.provider(
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         Effect.retry({
           while: (e) => e._tag === "BrandingStillExists",
-          schedule: Schedule.max([
-            Schedule.exponential(500),
-            Schedule.recurs(8),
-          ]),
+          schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
         }),
       );
     }),

@@ -29,10 +29,6 @@ export interface PauseCluster extends Binding.Service<
   "AWS.Redshift.PauseCluster",
   (
     cluster: Cluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<redshift.PauseClusterResult, redshift.PauseClusterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<redshift.PauseClusterResult, redshift.PauseClusterError>>
 > {}
-export const PauseCluster = Binding.Service<PauseCluster>(
-  "AWS.Redshift.PauseCluster",
-);
+export const PauseCluster = Binding.Service<PauseCluster>("AWS.Redshift.PauseCluster");

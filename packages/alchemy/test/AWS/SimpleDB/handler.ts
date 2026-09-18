@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SimpleDB from "@/AWS/SimpleDB";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SimpleDB from "@/AWS/SimpleDB";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -69,9 +69,7 @@ export default SimpleDBTestFunction.make(
           const where = url.searchParams.get("where");
           const result = yield* select({
             SelectExpression: (name) =>
-              where
-                ? `select * from \`${name}\` where ${where}`
-                : `select * from \`${name}\``,
+              where ? `select * from \`${name}\` where ${where}` : `select * from \`${name}\``,
             ConsistentRead: true,
           });
           return yield* HttpServerResponse.json({

@@ -51,7 +51,6 @@ export interface VerifyAuthRequestCryptogram extends Binding.Service<
   >
 > {}
 
-export const VerifyAuthRequestCryptogram =
-  Binding.Service<VerifyAuthRequestCryptogram>(
-    "AWS.PaymentCryptography.VerifyAuthRequestCryptogram",
-  );
+export const VerifyAuthRequestCryptogram = Binding.Service<VerifyAuthRequestCryptogram>(
+  "AWS.PaymentCryptography.VerifyAuthRequestCryptogram",
+);

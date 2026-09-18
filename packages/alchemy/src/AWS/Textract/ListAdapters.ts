@@ -25,12 +25,7 @@ export interface ListAdapters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: textract.ListAdaptersRequest,
-    ) => Effect.Effect<
-      textract.ListAdaptersResponse,
-      textract.ListAdaptersError
-    >
+    ) => Effect.Effect<textract.ListAdaptersResponse, textract.ListAdaptersError>
   >
 > {}
-export const ListAdapters = Binding.Service<ListAdapters>(
-  "AWS.Textract.ListAdapters",
-);
+export const ListAdapters = Binding.Service<ListAdapters>("AWS.Textract.ListAdapters");

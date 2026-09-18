@@ -108,19 +108,13 @@ export const SchemaProvider = () =>
       const describe = Effect.fn(function* (schemaArn: string) {
         const response = yield* personalize
           .describeSchema({ schemaArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.schema;
       });
 
       /** Find an existing schema's ARN by its (deterministic) name. */
       const findArnByName = Effect.fn(function* (name: string) {
-        const pages = yield* personalize.listSchemas
-          .pages({})
-          .pipe(Stream.runCollect);
+        const pages = yield* personalize.listSchemas.pages({}).pipe(Stream.runCollect);
         return Array.from(pages)
           .flatMap((page) => page.schemas ?? [])
           .find((summary) => summary.name === name)?.schemaArn;
@@ -160,9 +154,7 @@ export const SchemaProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output is an ARN cache.
           let schema =
-            output?.schemaArn !== undefined
-              ? yield* describe(output.schemaArn)
-              : undefined;
+            output?.schemaArn !== undefined ? yield* describe(output.schemaArn) : undefined;
 
           // 2. Ensure — schemas are immutable, so only create when missing.
           //    A crashed prior run may have left a same-named schema behind
@@ -179,9 +171,7 @@ export const SchemaProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsException", (error) =>
                   findArnByName(name).pipe(
                     Effect.flatMap((existing) =>
-                      existing === undefined
-                        ? Effect.fail(error)
-                        : Effect.succeed(existing),
+                      existing === undefined ? Effect.fail(error) : Effect.succeed(existing),
                     ),
                   ),
                 ),
@@ -208,10 +198,7 @@ export const SchemaProvider = () =>
             // the referencing datasets finish deleting.
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(40)]),
             }),
           );
         }),
@@ -219,9 +206,7 @@ export const SchemaProvider = () =>
         list: () =>
           personalize.listSchemas.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.schemas ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.schemas ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

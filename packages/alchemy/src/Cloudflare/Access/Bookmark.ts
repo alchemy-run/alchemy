@@ -1,11 +1,9 @@
-import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as crypto from "node:crypto";
-
+import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -103,8 +101,7 @@ export type Bookmark = Resource<
 export const Bookmark = Resource<Bookmark>("Cloudflare.Access.Bookmark");
 
 export const isBookmark = (value: unknown): value is Bookmark =>
-  Predicate.hasProperty(value, "Type") &&
-  value.Type === "Cloudflare.Access.Bookmark";
+  Predicate.hasProperty(value, "Type") && value.Type === "Cloudflare.Access.Bookmark";
 
 export const BookmarkProvider = () =>
   Provider.succeed(Bookmark, {
@@ -169,9 +166,7 @@ export const BookmarkProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Bookmark: created bookmark missing id"),
-          );
+          return yield* Effect.fail(new Error("Bookmark: created bookmark missing id"));
         }
         return toAttrs(created, acct);
       }
@@ -217,9 +212,7 @@ export const BookmarkProvider = () =>
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
             (page.result ?? [])
-              .filter((b): b is ObservedBookmark & { id: string } =>
-                Predicate.isNotNullish(b.id),
-              )
+              .filter((b): b is ObservedBookmark & { id: string } => Predicate.isNotNullish(b.id))
               .map((b) => toAttrs(b, accountId)),
           ),
         ),
@@ -236,11 +229,7 @@ const createBookmarkName = (id: string, name: string | undefined) =>
 const getBookmark = (acct: string, bookmarkId: string) =>
   zeroTrust
     .getAccessBookmark({ accountId: acct, bookmarkId })
-    .pipe(
-      Effect.catchTag("AccessBookmarkNotFound", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
 
 const findBookmarkByName = (acct: string, name: string) =>
   zeroTrust.listAccessBookmarks.items({ accountId: acct }).pipe(

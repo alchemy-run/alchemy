@@ -37,10 +37,7 @@ export interface GetQAppSessionMetadata extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetQAppSessionMetadataRequest,
-    ) => Effect.Effect<
-      qapps.GetQAppSessionMetadataOutput,
-      qapps.GetQAppSessionMetadataError
-    >
+    ) => Effect.Effect<qapps.GetQAppSessionMetadataOutput, qapps.GetQAppSessionMetadataError>
   >
 > {}
 

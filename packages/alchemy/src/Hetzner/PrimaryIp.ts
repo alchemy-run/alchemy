@@ -186,8 +186,7 @@ export class PrimaryIpPlacementRequired extends Data.TaggedError(
 
 type CloudPrimaryIp = GetPrimaryIpResponsePrimaryIp;
 
-const asType = (type: string): PrimaryIpType =>
-  type === "ipv6" ? "ipv6" : "ipv4";
+const asType = (type: string): PrimaryIpType => (type === "ipv6" ? "ipv6" : "ipv4");
 
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
@@ -197,9 +196,7 @@ const userLabels = (
  * Hetzner datacenter names are `{location}-dc{n}` (e.g. `nbg1-dc3`).
  * Numeric ids are passed through — Locations use a different id space.
  */
-export const locationFromDatacenter = (
-  datacenter: string | number,
-): string | number => {
+export const locationFromDatacenter = (datacenter: string | number): string | number => {
   if (typeof datacenter === "number") return datacenter;
   const match = /^([a-z0-9]+)-dc\d+$/i.exec(datacenter);
   return match ? match[1]!.toLowerCase() : datacenter;
@@ -238,8 +235,7 @@ const toAttrs = (
   ip: ip.ip,
   location: ip.location.name,
   locationId: ip.location.id,
-  datacenter:
-    extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
+  datacenter: extras?.datacenter !== undefined ? String(extras.datacenter) : undefined,
   blocked: ip.blocked,
   autoDelete: ip.auto_delete,
   assigneeId: ip.assignee_id,
@@ -249,15 +245,9 @@ const toAttrs = (
   deleteProtection: ip.protection.delete,
 });
 
-const createPrimaryIpName = (
-  id: string,
-  name: string | undefined,
-  existing?: string,
-) =>
+const createPrimaryIpName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: 63 }));
   });
 
 const getById = (id: number) =>
@@ -373,8 +363,7 @@ export const PrimaryIpProvider = () =>
         const placement = resolvePlacement(news);
         if (placement === undefined) {
           return yield* new PrimaryIpPlacementRequired({
-            message:
-              "PrimaryIp requires `location` or `datacenter` when creating",
+            message: "PrimaryIp requires `location` or `datacenter` when creating",
           });
         }
         const location = yield* findLocation(placement);
@@ -429,11 +418,10 @@ export const PrimaryIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } =
-          yield* Services.primaryIpActions.changePrimaryIpProtection({
-            id: current.id,
-            delete: desiredProtection,
-          });
+        const { action } = yield* Services.primaryIpActions.changePrimaryIpProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
         yield* waitForAction(action);
       }
 

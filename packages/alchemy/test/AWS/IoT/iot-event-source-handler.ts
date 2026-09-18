@@ -1,4 +1,3 @@
-import * as AWS from "@/AWS";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -6,6 +5,7 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AWS from "@/AWS";
 
 const main = path.resolve(import.meta.dirname, "iot-event-source-handler.ts");
 
@@ -22,10 +22,9 @@ export class IoTEventSourceFunction extends AWS.Lambda.Function<AWS.Lambda.Funct
   "IoTEventSourceFunction",
 ) {}
 
-export class ResultQueue extends Context.Service<
-  ResultQueue,
-  { result: AWS.SQS.Queue }
->()("IoTResultQueue") {}
+export class ResultQueue extends Context.Service<ResultQueue, { result: AWS.SQS.Queue }>()(
+  "IoTResultQueue",
+) {}
 
 export const ResultQueueLive = Layer.effect(
   ResultQueue,
@@ -85,11 +84,7 @@ export default IoTEventSourceFunction.make(
   }).pipe(
     Effect.provide(
       Layer.provideMerge(
-        Layer.mergeAll(
-          AWS.Lambda.TopicRuleEventSource,
-          AWS.SQS.QueueSinkHttp,
-          AWS.IoT.PublishHttp,
-        ),
+        Layer.mergeAll(AWS.Lambda.TopicRuleEventSource, AWS.SQS.QueueSinkHttp, AWS.IoT.PublishHttp),
         Layer.mergeAll(AWS.SQS.SendMessageBatchHttp, ResultQueueLive),
       ),
     ),

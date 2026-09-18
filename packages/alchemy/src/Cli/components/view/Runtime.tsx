@@ -1,43 +1,17 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import { stripVTControlCharacters } from "node:util";
+import { AnsiText, Box, render, renderToString, Static, useTitle } from "@alchemy.run/sigil";
+import { useSyncExternalStore } from "@alchemy.run/sigil/react";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Semaphore from "effect/Semaphore";
 import type * as Scope from "effect/Scope";
-import {
-  AnsiText,
-  Box,
-  render,
-  renderToString,
-  Static,
-  useTitle,
-} from "@alchemy.run/sigil";
-import { useSyncExternalStore } from "@alchemy.run/sigil/react";
+import * as Semaphore from "effect/Semaphore";
 import type { ReactNode } from "react";
-import { Spinner, Status } from "../ui/Feedback.tsx";
-import { CliEnvironment } from "../ui/Environment.tsx";
-import { useTerminalInput } from "../ui/Interactive.tsx";
-import { LiveStore, useLiveStore } from "../ui/Live.tsx";
-import { CancelledPrompt } from "../ui/Transcript.tsx";
-import { Text } from "../ui/Typography.tsx";
-import {
-  NonInteractiveTerminal,
-  TerminalCancelled,
-} from "../../../Interaction.ts";
-import {
-  confirmScreen,
-  cycleSelectScreen,
-  awaitExternalScreen,
-  menuScreen,
-  multiSelectScreen,
-  passwordScreen,
-  selectScreen,
-  textScreen,
-} from "./Prompts.tsx";
-import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
+import { NonInteractiveTerminal, TerminalCancelled } from "../../../Interaction.ts";
 import { setNativeProgress } from "../../../Util/Terminal.ts";
+import { ApplicationPresentation, CliKit } from "../../CliKit/CliKit.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -51,13 +25,26 @@ import type {
   LiveViewOptions,
   View,
 } from "../types.ts";
+import { CliEnvironment } from "../ui/Environment.tsx";
+import { Spinner, Status } from "../ui/Feedback.tsx";
+import { useTerminalInput } from "../ui/Interactive.tsx";
+import { LiveStore, useLiveStore } from "../ui/Live.tsx";
+import { CancelledPrompt } from "../ui/Transcript.tsx";
+import { Text } from "../ui/Typography.tsx";
+import {
+  confirmScreen,
+  cycleSelectScreen,
+  awaitExternalScreen,
+  menuScreen,
+  multiSelectScreen,
+  passwordScreen,
+  selectScreen,
+  textScreen,
+} from "./Prompts.tsx";
 
-const InApplication = Context.Reference<boolean>(
-  "Alchemy::CliKit/InApplication",
-  {
-    defaultValue: () => false,
-  },
-);
+const InApplication = Context.Reference<boolean>("Alchemy::CliKit/InApplication", {
+  defaultValue: () => false,
+});
 
 /**
  * One rendered block. Views are immutable once mounted — dynamic content
@@ -71,11 +58,7 @@ interface Item {
 }
 
 const normalizeView = (view: View): View => {
-  if (
-    typeof view === "string" ||
-    typeof view === "number" ||
-    typeof view === "bigint"
-  ) {
+  if (typeof view === "string" || typeof view === "number" || typeof view === "bigint") {
     return <Text>{String(view)}</Text>;
   }
   // Contract: an array of primitives renders as ONE Text line with the
@@ -96,10 +79,7 @@ const normalizeView = (view: View): View => {
     return (
       <Text>
         {view
-          .filter(
-            (item) =>
-              item !== null && item !== undefined && typeof item !== "boolean",
-          )
+          .filter((item) => item !== null && item !== undefined && typeof item !== "boolean")
           .map(String)
           .join("")}
       </Text>
@@ -119,9 +99,7 @@ const formatStaticView = (
   // has to flow into the capabilities too, not only into renderToString.
   const columns = options.columns ?? capabilities.columns;
   const output = renderToString(
-    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>
-      {view}
-    </CliEnvironment>,
+    <CliEnvironment capabilities={{ ...capabilities, colors, columns }}>{view}</CliEnvironment>,
     { columns },
   ).replace(/[\s\n]+$/, "");
   return colors ? output : stripVTControlCharacters(output);
@@ -174,11 +152,7 @@ class TerminalStore {
     });
   }
 
-  addLive(
-    key: number,
-    view: View,
-    placement: LiveViewOptions["placement"] = "afterTranscript",
-  ) {
+  addLive(key: number, view: View, placement: LiveViewOptions["placement"] = "afterTranscript") {
     this.commit({
       ...this.state,
       live: [...this.state.live, { key, view, placement }],
@@ -201,10 +175,7 @@ class TerminalStore {
     if (item === undefined) return;
     this.commit({
       ...this.state,
-      [destination]: [
-        ...this.state[destination],
-        { key: this.alloc(), view: item.view },
-      ],
+      [destination]: [...this.state[destination], { key: this.alloc(), view: item.view }],
       live: this.state.live.filter((entry) => entry.key !== key),
     });
   }
@@ -214,8 +185,7 @@ class TerminalStore {
   }
 
   deactivate() {
-    if (this.state.active !== undefined)
-      this.commit({ ...this.state, active: undefined });
+    if (this.state.active !== undefined) this.commit({ ...this.state, active: undefined });
   }
 
   clear() {
@@ -279,17 +249,11 @@ function TerminalRoot({ store }: TerminalRootProps) {
     },
     { active: state.active === undefined },
   );
-  const beforeTranscript = state.live.filter(
-    (item) => item.placement === "beforeTranscript",
-  );
-  const afterTranscript = state.live.filter(
-    (item) => item.placement !== "beforeTranscript",
-  );
+  const beforeTranscript = state.live.filter((item) => item.placement === "beforeTranscript");
+  const afterTranscript = state.live.filter((item) => item.placement !== "beforeTranscript");
   return (
     <Box flexDirection="column">
-      <Static items={state.staticItems}>
-        {(item) => <ItemView key={item.key} item={item} />}
-      </Static>
+      <Static items={state.staticItems}>{(item) => <ItemView key={item.key} item={item} />}</Static>
       {beforeTranscript.map((item) => (
         <ItemView key={item.key} item={item} />
       ))}
@@ -325,9 +289,7 @@ function ProgressView({ store }: ProgressViewProps) {
   const state = useLiveStore(store);
   useTitle(state.options.title);
   return state.final !== undefined ? (
-    <Status variant={state.final.variant}>
-      {state.final.message ?? state.options.label}
-    </Status>
+    <Status variant={state.final.variant}>{state.final.message ?? state.options.label}</Status>
   ) : state.options.spinning === false ? (
     <Status variant="info" detail={state.options.detail}>
       {state.options.label}
@@ -482,9 +444,7 @@ export const makeRuntime = (
             for (const stream of ["stdout", "stderr"] as const) {
               clearPartialFlush(stream);
               if (buffers[stream] !== "") {
-                store.appendStatic(
-                  <AnsiText wrap="none">{buffers[stream]}</AnsiText>,
-                );
+                store.appendStatic(<AnsiText wrap="none">{buffers[stream]}</AnsiText>);
                 buffers[stream] = "";
               }
             }
@@ -513,8 +473,7 @@ export const makeRuntime = (
   const ensureMounted = () => Effect.promise(() => mount());
 
   const waitForRender = () =>
-    mounted?.sigil.waitUntilRenderFlush().catch(() => undefined) ??
-    Promise.resolve();
+    mounted?.sigil.waitUntilRenderFlush().catch(() => undefined) ?? Promise.resolve();
 
   /**
    * Tear down the renderer. Total (never rejects) and re-validated across its
@@ -575,9 +534,7 @@ export const makeRuntime = (
 
   const releaseIfIdle = () =>
     Effect.suspend(() =>
-      applicationMounted || !store.idle
-        ? Effect.void
-        : Effect.promise(() => unmount()),
+      applicationMounted || !store.idle ? Effect.void : Effect.promise(() => unmount()),
     );
 
   const formatView = (view: View, renderOptions: RenderOptions = {}) =>
@@ -601,14 +558,12 @@ export const makeRuntime = (
         yield* Effect.sync(() => store.appendStatic(view));
       } else {
         const output = yield* renderView(view, renderOptions);
-        if (output !== "")
-          yield* Effect.sync(() => stdout.write(`${output}\n`));
+        if (output !== "") yield* Effect.sync(() => stdout.write(`${output}\n`));
       }
     });
 
-  const messageOptions = (
-    message: string | { message: string; detail?: string },
-  ) => (typeof message === "string" ? { message } : message);
+  const messageOptions = (message: string | { message: string; detail?: string }) =>
+    typeof message === "string" ? { message } : message;
 
   const log =
     (variant: "info" | "success" | "warning" | "error") =>
@@ -637,10 +592,7 @@ export const makeRuntime = (
           let completedView: View | undefined;
           return yield* Effect.callback<Value, TerminalCancelled>((resume) => {
             let settled = false;
-            const finish = (
-              result: Effect.Effect<Value, TerminalCancelled>,
-              resultView?: View,
-            ) => {
+            const finish = (result: Effect.Effect<Value, TerminalCancelled>, resultView?: View) => {
               if (settled) return;
               settled = true;
               failActive = undefined;
@@ -663,8 +615,7 @@ export const makeRuntime = (
             store.activate(
               <ScreenCancelGuard onCancel={cancel}>
                 {screen.render({
-                  submit: (value, summary) =>
-                    finish(Effect.succeed(value), summary),
+                  submit: (value, summary) => finish(Effect.succeed(value), summary),
                   cancel,
                 })}
               </ScreenCancelGuard>,
@@ -691,9 +642,7 @@ export const makeRuntime = (
                   ? Effect.void
                   : releaseIfIdle().pipe(
                       Effect.andThen(
-                        completedView === undefined
-                          ? Effect.void
-                          : print(completedView),
+                        completedView === undefined ? Effect.void : print(completedView),
                       ),
                     ),
               ),
@@ -701,15 +650,11 @@ export const makeRuntime = (
           );
         }),
       );
-      return yield* inApplication
-        ? interaction
-        : rendererGate.withPermits(1)(interaction);
+      return yield* inApplication ? interaction : rendererGate.withPermits(1)(interaction);
     });
   };
 
-  const menu = <Value,>(
-    options: MenuOptions<Value>,
-  ): Effect.Effect<Value, InteractionError> =>
+  const menu = <Value,>(options: MenuOptions<Value>): Effect.Effect<Value, InteractionError> =>
     Effect.gen(function* () {
       if (yield* InApplication) yield* Effect.sync(() => store.clear());
       return yield* run(menuScreen(options));
@@ -729,8 +674,7 @@ export const makeRuntime = (
       : Effect.gen(function* () {
           if (yield* InApplication) return yield* effect;
           const presentation = yield* ApplicationPresentation;
-          const alternate =
-            presentation === "alternate" && capabilities.alternateScreen;
+          const alternate = presentation === "alternate" && capabilities.alternateScreen;
           return yield* rendererGate.withPermits(1)(
             Effect.acquireUseRelease(
               Effect.promise(async () => {
@@ -772,15 +716,10 @@ export const makeRuntime = (
   ): Effect.Effect<A, E | NonInteractiveTerminal, R> =>
     Effect.gen(function* () {
       if (!(yield* InApplication)) return yield* app(effect);
-      return yield* effect.pipe(
-        Effect.ensuring(Effect.sync(() => store.clearTranscript())),
-      );
+      return yield* effect.pipe(Effect.ensuring(Effect.sync(() => store.clearTranscript())));
     });
 
-  const makeLive = (
-    initial: View,
-    options: LiveViewOptions = {},
-  ): Effect.Effect<LiveViewHandle> =>
+  const makeLive = (initial: View, options: LiveViewOptions = {}): Effect.Effect<LiveViewHandle> =>
     Effect.gen(function* () {
       if (!capabilities.input) {
         yield* print(initial);
@@ -789,9 +728,7 @@ export const makeRuntime = (
       const inApplication = yield* InApplication;
       const key = store.alloc();
       let closed = false;
-      yield* Effect.sync(() =>
-        store.addLive(key, normalizeView(initial), options.placement),
-      );
+      yield* Effect.sync(() => store.addLive(key, normalizeView(initial), options.placement));
       yield* ensureMounted();
       return {
         close: Effect.suspend(() => {
@@ -800,14 +737,9 @@ export const makeRuntime = (
           // removeLive/completeLive no-op when the row was already cleared
           // by a menu loop or application boundary.
           if (options.persistOnClose)
-            store.completeLive(
-              key,
-              inApplication ? "transcript" : "staticItems",
-            );
+            store.completeLive(key, inApplication ? "transcript" : "staticItems");
           else store.removeLive(key);
-          return Effect.promise(waitForRender).pipe(
-            Effect.andThen(releaseIfIdle()),
-          );
+          return Effect.promise(waitForRender).pipe(Effect.andThen(releaseIfIdle()));
         }),
       };
     });
@@ -828,12 +760,9 @@ export const makeRuntime = (
    * handle mutates the store, React re-renders. Settling swaps the store to
    * its final state and commits the block to scrollback.
    */
-  const makeProgress = (
-    initial: ProgressOptions,
-  ): Effect.Effect<ProgressHandle> =>
+  const makeProgress = (initial: ProgressOptions): Effect.Effect<ProgressHandle> =>
     Effect.gen(function* () {
-      const dynamic =
-        capabilities.input && ((yield* InApplication) || stdout.isTTY === true);
+      const dynamic = capabilities.input && ((yield* InApplication) || stdout.isTTY === true);
       if (!dynamic) {
         let current = initial;
         let closed = false;
@@ -846,9 +775,7 @@ export const makeRuntime = (
           Effect.suspend(() => {
             if (closed) return Effect.void;
             closed = true;
-            return print(
-              <Status variant={variant}>{message ?? current.label}</Status>,
-            );
+            return print(<Status variant={variant}>{message ?? current.label}</Status>);
           });
         return {
           update: (next) =>
@@ -865,9 +792,7 @@ export const makeRuntime = (
       const inApplication = yield* InApplication;
       const progressStore = new LiveStore<ProgressState>({ options: initial });
       const key = store.alloc();
-      yield* Effect.sync(() =>
-        store.addLive(key, <ProgressView store={progressStore} />),
-      );
+      yield* Effect.sync(() => store.addLive(key, <ProgressView store={progressStore} />));
       yield* ensureMounted();
       let settled = false;
       const finishRow = (persist: boolean) =>
@@ -876,15 +801,9 @@ export const makeRuntime = (
           settled = true;
           // completeLive/removeLive no-op when the row was already cleared
           // by a menu loop or application boundary.
-          if (persist)
-            store.completeLive(
-              key,
-              inApplication ? "transcript" : "staticItems",
-            );
+          if (persist) store.completeLive(key, inApplication ? "transcript" : "staticItems");
           else store.removeLive(key);
-          return Effect.promise(waitForRender).pipe(
-            Effect.andThen(releaseIfIdle()),
-          );
+          return Effect.promise(waitForRender).pipe(Effect.andThen(releaseIfIdle()));
         });
       const settle = (variant: "success" | "error", message?: string) =>
         Effect.suspend(() => {
@@ -907,9 +826,7 @@ export const makeRuntime = (
       } satisfies ProgressHandle;
     });
 
-  const progress = (
-    initial: ProgressOptions,
-  ): Effect.Effect<ProgressHandle, never, Scope.Scope> =>
+  const progress = (initial: ProgressOptions): Effect.Effect<ProgressHandle, never, Scope.Scope> =>
     Effect.acquireRelease(makeProgress(initial), (handle) => handle.close);
 
   const service: CliKit["Service"] = {
@@ -937,8 +854,7 @@ export const makeRuntime = (
       select: (selectOptions) => run(selectScreen(selectOptions)),
       multiSelect: (selectOptions) => run(multiSelectScreen(selectOptions)),
       cycle: (selectOptions) => run(cycleSelectScreen(selectOptions)),
-      awaitExternal: (externalOptions) =>
-        run(awaitExternalScreen(externalOptions)),
+      awaitExternal: (externalOptions) => run(awaitExternalScreen(externalOptions)),
       menu,
       custom: run,
     },

@@ -1,11 +1,11 @@
-import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
-import * as Docker from "@/Docker";
-import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
+import * as Docker from "@/Docker";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Docker.providers(),
@@ -20,9 +20,7 @@ const startDind = Effect.fn(function* (name: string, port: number) {
   const docker = yield* Docker.Docker;
   const host = `tcp://127.0.0.1:${port}`;
 
-  yield* Effect.addFinalizer(() =>
-    docker.run(["rm", "-f", name]).pipe(Effect.ignore),
-  );
+  yield* Effect.addFinalizer(() => docker.run(["rm", "-f", name]).pipe(Effect.ignore));
   yield* docker.run(["rm", "-f", name]).pipe(Effect.ignore);
   yield* docker.run([
     "run",
@@ -100,14 +98,10 @@ describe("Docker.Swarm", { concurrent: false }, () => {
           "{{.Swarm.LocalNodeState}}",
         ]);
         expect(state.stdout).toBe("inactive");
-        const contextGone = yield* docker.context
-          .inspect("alchemy-test-dind-swarm-ctx")
-          .pipe(
-            Effect.map(() => false),
-            Effect.catchReason("PlatformError", "NotFound", () =>
-              Effect.succeed(true),
-            ),
-          );
+        const contextGone = yield* docker.context.inspect("alchemy-test-dind-swarm-ctx").pipe(
+          Effect.map(() => false),
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(true)),
+        );
         expect(contextGone).toBe(true);
       }),
     { timeout: 300_000 },
@@ -125,14 +119,7 @@ describe("Docker.Swarm", { concurrent: false }, () => {
         // props must be fully resolved (a plain context name, not a
         // same-plan Context resource) for the engine's adoption probe to
         // run at plan time.
-        yield* docker.run([
-          "-H",
-          host,
-          "swarm",
-          "init",
-          "--advertise-addr",
-          "127.0.0.1",
-        ]);
+        yield* docker.run(["-H", host, "swarm", "init", "--advertise-addr", "127.0.0.1"]);
         const contextName = "alchemy-test-dind-adopt-ctx";
         yield* Effect.addFinalizer(() =>
           docker.context.remove(contextName, true).pipe(Effect.ignore),
@@ -167,9 +154,7 @@ describe("Docker.Swarm", { concurrent: false }, () => {
   );
 });
 
-const findOwnedError = (
-  cause: Cause.Cause<unknown>,
-): OwnedBySomeoneElse | undefined =>
+const findOwnedError = (cause: Cause.Cause<unknown>): OwnedBySomeoneElse | undefined =>
   cause.reasons
     .map((reason) =>
       Cause.isFailReason(reason)
@@ -178,7 +163,4 @@ const findOwnedError = (
           ? reason.defect
           : undefined,
     )
-    .find(
-      (value): value is OwnedBySomeoneElse =>
-        value instanceof OwnedBySomeoneElse,
-    );
+    .find((value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse);

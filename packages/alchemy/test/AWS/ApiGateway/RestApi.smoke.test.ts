@@ -1,14 +1,14 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import * as Output from "@/Output";
-import * as Test from "./Test.ts";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import * as Output from "@/Output";
 import { TestFunction, TestFunctionLive } from "../Lambda/handler.ts";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -80,8 +80,7 @@ test.provider.skipIf(!!process.env.FAST)(
             principal: "apigateway.amazonaws.com",
             sourceArn: Output.map(
               api.restApiId,
-              (id: string) =>
-                `arn:aws:execute-api:${region}:${accountId}:${id}/*/*/*`,
+              (id: string) => `arn:aws:execute-api:${region}:${accountId}:${id}/*/*/*`,
             ),
           });
 
@@ -109,9 +108,7 @@ test.provider.skipIf(!!process.env.FAST)(
             Schedule.exponential(500).pipe(
               Schedule.modifyDelay(({ duration: d }) =>
                 Effect.succeed(
-                  Duration.isGreaterThan(d, Duration.seconds(10))
-                    ? Duration.seconds(10)
-                    : d,
+                  Duration.isGreaterThan(d, Duration.seconds(10)) ? Duration.seconds(10) : d,
                 ),
               ),
             ),

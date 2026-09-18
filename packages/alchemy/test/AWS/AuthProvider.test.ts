@@ -1,15 +1,12 @@
-import {
-  applyEnvRegionOverride,
-  parseAwsSsoLoginOutput,
-} from "@/AWS/AuthProvider.ts";
-import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
-import { PlatformServices } from "@/Util/PlatformServices.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { applyEnvRegionOverride, parseAwsSsoLoginOutput } from "@/AWS/AuthProvider.ts";
+import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
 
 const withEnv = (env: Record<string, string>) =>
   Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env })));
@@ -84,10 +81,7 @@ describe("applyEnvRegionOverride", () => {
           const tempDir = yield* fs.makeTempDirectoryScoped({
             prefix: "alchemy-config-provider-",
           });
-          yield* fs.writeFileString(
-            path.join(tempDir, ".env"),
-            "AWS_REGION=ap-south-1\n",
-          );
+          yield* fs.writeFileString(path.join(tempDir, ".env"), "AWS_REGION=ap-south-1\n");
 
           const originalCwd = process.cwd();
           const originalRegion = process.env.AWS_REGION;

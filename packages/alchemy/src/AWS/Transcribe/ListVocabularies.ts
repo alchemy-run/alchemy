@@ -26,10 +26,7 @@ export interface ListVocabularies extends Binding.Service<
   () => Effect.Effect<
     (
       request?: transcribe.ListVocabulariesRequest,
-    ) => Effect.Effect<
-      transcribe.ListVocabulariesResponse,
-      transcribe.ListVocabulariesError
-    >
+    ) => Effect.Effect<transcribe.ListVocabulariesResponse, transcribe.ListVocabulariesError>
   >
 > {}
 export const ListVocabularies = Binding.Service<ListVocabularies>(

@@ -39,7 +39,6 @@ export interface GetContextKeysForPrincipalPolicy extends Binding.Service<
     >
   >
 > {}
-export const GetContextKeysForPrincipalPolicy =
-  Binding.Service<GetContextKeysForPrincipalPolicy>(
-    "AWS.IAM.GetContextKeysForPrincipalPolicy",
-  );
+export const GetContextKeysForPrincipalPolicy = Binding.Service<GetContextKeysForPrincipalPolicy>(
+  "AWS.IAM.GetContextKeysForPrincipalPolicy",
+);

@@ -77,28 +77,21 @@ export { ExceptionSubscriptionResource as ExceptionSubscription };
 
 // Observation for read/list: an account that never onboarded Security Lake
 // (or has no subscription) yields "missing", not a failure.
-const observeSubscription = securitylake
-  .getDataLakeExceptionSubscription({})
-  .pipe(
-    Effect.map((response) =>
-      response.notificationEndpoint !== undefined &&
-      response.subscriptionProtocol !== undefined
-        ? {
-            subscriptionProtocol: response.subscriptionProtocol,
-            notificationEndpoint: response.notificationEndpoint,
-            exceptionTimeToLive: response.exceptionTimeToLive,
-          }
-        : undefined,
-    ),
-    Effect.catchTag(
-      [
-        "AccessDeniedException",
-        "ResourceNotFoundException",
-        "UnauthorizedException",
-      ],
-      () => Effect.succeed(undefined),
-    ),
-  );
+const observeSubscription = securitylake.getDataLakeExceptionSubscription({}).pipe(
+  Effect.map((response) =>
+    response.notificationEndpoint !== undefined && response.subscriptionProtocol !== undefined
+      ? {
+          subscriptionProtocol: response.subscriptionProtocol,
+          notificationEndpoint: response.notificationEndpoint,
+          exceptionTimeToLive: response.exceptionTimeToLive,
+        }
+      : undefined,
+  ),
+  Effect.catchTag(
+    ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
+    () => Effect.succeed(undefined),
+  ),
+);
 
 export const ExceptionSubscriptionProvider = () =>
   Provider.effect(
@@ -156,9 +149,7 @@ export const ExceptionSubscriptionProvider = () =>
             notificationEndpoint: desired.notificationEndpoint,
             exceptionTimeToLive: desired.exceptionTimeToLive,
           };
-          yield* session.note(
-            `${final.subscriptionProtocol}:${final.notificationEndpoint}`,
-          );
+          yield* session.note(`${final.subscriptionProtocol}:${final.notificationEndpoint}`);
           return final;
         }),
 
@@ -167,11 +158,7 @@ export const ExceptionSubscriptionProvider = () =>
             retryWhileConflict,
             // Gone already, or the account was never onboarded.
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "UnauthorizedException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "UnauthorizedException"],
               () => Effect.void,
             ),
           );

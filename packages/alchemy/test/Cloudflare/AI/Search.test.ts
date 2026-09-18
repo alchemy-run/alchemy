@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Test from "@/Test/Alchemy";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Test from "@/Test/Alchemy";
 import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Type-level coverage: the `AiSearch` construct result *is* an
 // `AiSearchInstance`, so it can be passed anywhere one is expected. These
@@ -56,16 +53,10 @@ const getInstance = (accountId: string, id: string, namespace = "default") =>
 const expectGone = (accountId: string, id: string, namespace = "default") =>
   getInstance(accountId, id, namespace).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "InstanceNotDeleted" } as const)),
-    Effect.catchTag(
-      ["AiSearchInstanceNotFound", "NamespaceNotFound"],
-      () => Effect.void,
-    ),
+    Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 

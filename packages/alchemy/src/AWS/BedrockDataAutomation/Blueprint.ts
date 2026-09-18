@@ -8,12 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readBdaTags,
-  syncBdaTags,
-  toBdaTagList,
-  unredact,
-} from "./internal.ts";
+import { readBdaTags, syncBdaTags, toBdaTagList, unredact } from "./internal.ts";
 
 export interface BlueprintProps {
   /**
@@ -117,9 +112,7 @@ export interface Blueprint extends Resource<
  *
  * @resource
  */
-export const Blueprint = Resource<Blueprint>(
-  "AWS.BedrockDataAutomation.Blueprint",
-);
+export const Blueprint = Resource<Blueprint>("AWS.BedrockDataAutomation.Blueprint");
 
 export const BlueprintProvider = () =>
   Provider.effect(
@@ -129,10 +122,7 @@ export const BlueprintProvider = () =>
         id: string,
         props: Pick<BlueprintProps, "blueprintName">,
       ) {
-        return (
-          props.blueprintName ??
-          (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+        return props.blueprintName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const toAttributes = (blueprint: bda.Blueprint) => ({
@@ -148,9 +138,7 @@ export const BlueprintProvider = () =>
       ) {
         return yield* bda.getBlueprint({ blueprintArn, blueprintStage }).pipe(
           Effect.map((r) => r.blueprint),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
@@ -159,8 +147,7 @@ export const BlueprintProvider = () =>
           .items({ resourceOwner: "ACCOUNT" })
           .pipe(Stream.runCollect);
         return Array.from(summaries).find(
-          (s) =>
-            s.blueprintName !== undefined && unredact(s.blueprintName) === name,
+          (s) => s.blueprintName !== undefined && unredact(s.blueprintName) === name,
         )?.blueprintArn;
       });
 
@@ -187,13 +174,9 @@ export const BlueprintProvider = () =>
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const blueprintArn =
-            output?.blueprintArn ??
-            (yield* findBlueprintArn(yield* createName(id, olds ?? {})));
+            output?.blueprintArn ?? (yield* findBlueprintArn(yield* createName(id, olds ?? {})));
           if (blueprintArn === undefined) return undefined;
-          const found = yield* observeBlueprint(
-            blueprintArn,
-            olds?.blueprintStage,
-          );
+          const found = yield* observeBlueprint(blueprintArn, olds?.blueprintStage);
           if (found === undefined) return undefined;
           const attrs = toAttributes(found);
           const tags = yield* readBdaTags(blueprintArn);
@@ -215,14 +198,12 @@ export const BlueprintProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const blueprintName =
-            output?.blueprintName ?? (yield* createName(id, news));
+          const blueprintName = output?.blueprintName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
-          const cachedArn =
-            output?.blueprintArn ?? (yield* findBlueprintArn(blueprintName));
+          const cachedArn = output?.blueprintArn ?? (yield* findBlueprintArn(blueprintName));
           let live =
             cachedArn === undefined
               ? undefined
@@ -250,9 +231,7 @@ export const BlueprintProvider = () =>
                       arn === undefined
                         ? undefined
                         : yield* observeBlueprint(arn, news.blueprintStage);
-                    return observed === undefined
-                      ? yield* Effect.fail(conflict)
-                      : observed;
+                    return observed === undefined ? yield* Effect.fail(conflict) : observed;
                   }),
                 ),
               );
@@ -295,9 +274,7 @@ export const BlueprintProvider = () =>
                   .map((s) => s.blueprintVersion)
                   .filter((v): v is string => v !== undefined),
               ),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed([] as string[]),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([] as string[])),
             );
           yield* Effect.forEach(
             versions,
@@ -307,19 +284,12 @@ export const BlueprintProvider = () =>
                   blueprintArn: output.blueprintArn,
                   blueprintVersion,
                 })
-                .pipe(
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                ),
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
             { concurrency: 1 },
           );
           yield* bda
             .deleteBlueprint({ blueprintArn: output.blueprintArn })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       });
     }),

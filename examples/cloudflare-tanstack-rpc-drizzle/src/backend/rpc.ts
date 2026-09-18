@@ -22,10 +22,10 @@ export class Todo extends Schema.Class<Todo>("Todo")({
 }) {}
 
 /** Raised when a mutation targets a todo id that no longer exists. */
-export class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()(
-  "TodoNotFound",
-  { message: Schema.String, id: Schema.Number },
-) {}
+export class TodoNotFound extends Schema.TaggedErrorClass<TodoNotFound>()("TodoNotFound", {
+  message: Schema.String,
+  id: Schema.Number,
+}) {}
 
 export class TodoRpcs extends RpcGroup.make(
   Rpc.make("listTodos", {

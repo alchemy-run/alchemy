@@ -1,13 +1,11 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import LifecycleWorker, {
-  type Scenario,
-} from "./fixtures/workflow-lifecycle/worker.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
+import LifecycleWorker, { type Scenario } from "./fixtures/workflow-lifecycle/worker.ts";
 
 const Stack = Alchemy.Stack(
   "WorkflowLifecycleStack",
@@ -26,17 +24,12 @@ interface Status {
   entries: string[];
 }
 
-const request = Effect.fn(function* (
-  url: string,
-  method: "GET" | "POST" = "GET",
-) {
+const request = Effect.fn(function* (url: string, method: "GET" | "POST" = "GET") {
   const client = yield* HttpClient.HttpClient;
   const response = yield* method === "GET" ? client.get(url) : client.post(url);
   const body = yield* response.text;
   if (response.status !== 200) {
-    return yield* Effect.fail(
-      new Error(`${method} ${url}: ${response.status}: ${body}`),
-    );
+    return yield* Effect.fail(new Error(`${method} ${url}: ${response.status}: ${body}`));
   }
   return body;
 });
@@ -48,13 +41,7 @@ const cases: Array<{ scenario: Scenario; entries: string[] }> = [
   },
   {
     scenario: "retry",
-    entries: [
-      "open:1:captured:true",
-      "close:1",
-      "open:2:captured:true",
-      "close:2",
-      "after-task",
-    ],
+    entries: ["open:1:captured:true", "close:1", "open:2:captured:true", "close:2", "after-task"],
   },
   {
     scenario: "interrupt",
@@ -104,13 +91,9 @@ describe.concurrent.each([
       Effect.gen(function* () {
         const { url } = yield* stack;
         const started = yield* request(`${url}/start/${scenario}`, "POST");
-        const { id } = yield* Effect.try(
-          () => JSON.parse(started) as { id: string },
-        );
+        const { id } = yield* Effect.try(() => JSON.parse(started) as { id: string });
         const status = yield* request(`${url}/status/${id}`).pipe(
-          Effect.flatMap((body) =>
-            Effect.try(() => JSON.parse(body) as Status),
-          ),
+          Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             times: 10,

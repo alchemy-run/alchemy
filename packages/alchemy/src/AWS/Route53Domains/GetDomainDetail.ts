@@ -2,8 +2,7 @@ import type * as route53domains from "@distilled.cloud/aws/route-53-domains";
 import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetDomainDetailRequest
-  extends route53domains.GetDomainDetailRequest {}
+export interface GetDomainDetailRequest extends route53domains.GetDomainDetailRequest {}
 
 /**
  * Runtime binding for `route53domains:GetDomainDetail` — return detailed
@@ -47,10 +46,7 @@ export interface GetDomainDetail extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetDomainDetailRequest,
-    ) => Effect.Effect<
-      route53domains.GetDomainDetailResponse,
-      route53domains.GetDomainDetailError
-    >
+    ) => Effect.Effect<route53domains.GetDomainDetailResponse, route53domains.GetDomainDetailError>
   >
 > {}
 export const GetDomainDetail = Binding.Service<GetDomainDetail>(

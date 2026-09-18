@@ -44,9 +44,7 @@ export const QuerySearchLocal = Layer.effect(
     // providers layer). Capture the full context so each HTTP op can be run
     // with the current credentials; no `host.bind`, no minted token.
     const { accountId } = yield* yield* CloudflareEnvironment;
-    const context = yield* Effect.context<
-      Credentials | HttpClient.HttpClient
-    >();
+    const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
 
     const auth: SearchAuth = {
       authorize: (eff) => eff.pipe(Effect.provideContext(context)),
@@ -57,10 +55,7 @@ export const QuerySearchLocal = Layer.effect(
       // Deferred accessors — resolved against the tracker at apply time.
       const instanceId = yield* instance.instanceId;
       const namespace = yield* instance.namespace;
-      return makeLocalSearchClient(
-        auth,
-        Effect.all({ id: instanceId, name: namespace }),
-      );
+      return makeLocalSearchClient(auth, Effect.all({ id: instanceId, name: namespace }));
     });
   }),
 );

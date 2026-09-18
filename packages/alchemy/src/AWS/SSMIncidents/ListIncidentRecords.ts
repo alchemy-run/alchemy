@@ -31,10 +31,7 @@ export interface ListIncidentRecords extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.ListIncidentRecordsInput,
-    ) => Effect.Effect<
-      incidents.ListIncidentRecordsOutput,
-      incidents.ListIncidentRecordsError
-    >
+    ) => Effect.Effect<incidents.ListIncidentRecordsOutput, incidents.ListIncidentRecordsError>
   >
 > {}
 export const ListIncidentRecords = Binding.Service<ListIncidentRecords>(

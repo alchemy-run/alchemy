@@ -1,8 +1,3 @@
-import { adopt } from "@/AdoptPolicy";
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Test from "@/Test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -12,6 +7,11 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { adopt } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 import { getWorkerTags } from "../Utils/Worker.ts";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
@@ -19,10 +19,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
@@ -46,9 +43,7 @@ const readinessRetries = 15;
 // connection, letting it land on an edge that has the new version (this is
 // why a brand-new `curl` sees the update immediately while a kept-alive
 // client does not). See do-rpc DurableObject test investigation.
-const freshConn = HttpClient.mapRequest(
-  HttpClientRequest.setHeader("connection", "close"),
-);
+const freshConn = HttpClient.mapRequest(HttpClientRequest.setHeader("connection", "close"));
 
 test(
   "durable object methods can use binding clients",
@@ -72,9 +67,9 @@ test(
   { timeout: 60_000 },
 );
 
-class DurableObjectLocationNotReady extends Data.TaggedError(
-  "DurableObjectLocationNotReady",
-)<{ readonly message: string }> {}
+class DurableObjectLocationNotReady extends Data.TaggedError("DurableObjectLocationNotReady")<{
+  readonly message: string;
+}> {}
 
 const locationFor = Effect.fn(function* (
   url: string,
@@ -206,9 +201,7 @@ const fetchReady = (url: string, expected: string) =>
           ? Effect.flatMap(r.text, (body) =>
               body === expected
                 ? Effect.succeed(body)
-                : Effect.fail(
-                    new Error(`stale: got ${body}, want ${expected}`),
-                  ),
+                : Effect.fail(new Error(`stale: got ${body}, want ${expected}`)),
             )
           : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
       ),
@@ -226,11 +219,7 @@ const fetchJsonReady = <T>(url: string) =>
       Effect.flatMap((r) =>
         r.status !== 200
           ? Effect.flatMap(r.text, (body) =>
-              Effect.fail(
-                new Error(
-                  `Worker not ready: ${r.status} ${body.slice(0, 500)}`,
-                ),
-              ),
+              Effect.fail(new Error(`Worker not ready: ${r.status} ${body.slice(0, 500)}`)),
             )
           : Effect.flatMap(r.text, (body) =>
               body.includes(DEPLOY_PLACEHOLDER)
@@ -343,9 +332,7 @@ describe.concurrent("scratch", () => {
           }),
         );
 
-        const reset = yield* fetchJsonReady<{ ok: boolean }>(
-          `${deployed.host.url}/reset`,
-        );
+        const reset = yield* fetchJsonReady<{ ok: boolean }>(`${deployed.host.url}/reset`);
         expect(reset.ok).toBe(true);
 
         const first = yield* fetchJsonReady<{ value: number }>(
@@ -353,9 +340,7 @@ describe.concurrent("scratch", () => {
         );
         expect(first.value).toBe(1);
 
-        const second = yield* fetchJsonReady<{ value: number }>(
-          `${deployed.host.url}/get`,
-        );
+        const second = yield* fetchJsonReady<{ value: number }>(`${deployed.host.url}/get`);
         expect(second.value).toBe(1);
 
         yield* scratch.destroy();
@@ -506,9 +491,7 @@ export default { async fetch() { return new Response("v4"); } };
                     Output.map((namespaces) => {
                       const id = namespaces.Counter;
                       if (!id) {
-                        throw new Error(
-                          "Worker did not expose Durable Object namespace Counter.",
-                        );
+                        throw new Error("Worker did not expose Durable Object namespace Counter.");
                       }
                       return id;
                     }),
@@ -540,9 +523,7 @@ export default { async fetch() { return new Response("v4"); } };
 
         // ...and be the same id the consumer resolved from the stub and
         // deployed into its live environment.
-        const body = yield* fetchJsonReady<{ namespaceId: string }>(
-          deployed.consumer.url!,
-        );
+        const body = yield* fetchJsonReady<{ namespaceId: string }>(deployed.consumer.url!);
         expect(body.namespaceId).toBe(finalNamespaceId);
 
         yield* scratch.destroy();
@@ -630,9 +611,7 @@ export default { async fetch() { return new Response("v4"); } };
         // The adopted DO is functional end-to-end: increment round-trips
         // through the reused `Counter` class.
         yield* fetchJsonReady<{ ok: boolean }>(`${adopted.url}/reset`);
-        const first = yield* fetchJsonReady<{ value: number }>(
-          `${adopted.url}/increment`,
-        );
+        const first = yield* fetchJsonReady<{ value: number }>(`${adopted.url}/increment`);
         expect(first.value).toBe(1);
 
         yield* scratch.destroy();
@@ -675,9 +654,7 @@ export default { async fetch() { return new Response("v4"); } };
 
         // Write data while worker-b hosts the namespace.
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-        const written = yield* fetchJsonReady<{ value: number }>(
-          `${v1.b.url}/increment`,
-        );
+        const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
         expect(written.value).toBe(1);
 
         const moved = Effect.gen(function* () {
@@ -705,25 +682,19 @@ export default { async fetch() { return new Response("v4"); } };
         const v2 = yield* scratch.deploy(moved);
 
         // The namespace moved to worker-a with its data intact...
-        const viaA = yield* fetchJsonReady<{ value: number }>(
-          `${v2.a.url}/get`,
-        );
+        const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
         expect(viaA.value).toBe(1);
 
         // ...and worker-b reaches the same objects through the cross-script
         // binding.
-        const viaB = yield* fetchJsonReady<{ value: number }>(
-          `${v2.b.url}/increment`,
-        );
+        const viaB = yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/increment`);
         expect(viaB.value).toBe(2);
 
         // Redeploying the same shape is inert: the class now lives on
         // worker-a (tracked by its alchemy:do tag), so the standing
         // declaration must not re-emit a transfer migration. Data intact.
         const v3 = yield* scratch.deploy(moved);
-        const afterRedeploy = yield* fetchJsonReady<{ value: number }>(
-          `${v3.a.url}/get`,
-        );
+        const afterRedeploy = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/get`);
         expect(afterRedeploy.value).toBe(2);
 
         // ...and once the move has landed everywhere, the declaration can be
@@ -748,9 +719,7 @@ export default { async fetch() { return new Response("v4"); } };
             return { a, b };
           }),
         );
-        const afterRemoval = yield* fetchJsonReady<{ value: number }>(
-          `${v4.a.url}/get`,
-        );
+        const afterRemoval = yield* fetchJsonReady<{ value: number }>(`${v4.a.url}/get`);
         expect(afterRemoval.value).toBe(2);
 
         yield* scratch.destroy();
@@ -788,9 +757,7 @@ export default { async fetch() { return new Response("v4"); } };
         );
 
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-        const written = yield* fetchJsonReady<{ value: number }>(
-          `${v1.b.url}/increment`,
-        );
+        const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
         expect(written.value).toBe(1);
 
         const aScriptName = v1.a.workerName;
@@ -823,9 +790,7 @@ export default { async fetch() { return new Response("v4"); } };
           }),
         );
 
-        const viaA = yield* fetchJsonReady<{ value: number }>(
-          `${v2.a.url}/get`,
-        );
+        const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
         expect(viaA.value).toBe(1);
 
         yield* scratch.destroy();
@@ -925,9 +890,7 @@ export default { async fetch() { return new Response("v4"); } };
         );
 
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
-        const written = yield* fetchJsonReady<{ value: number }>(
-          `${v1.b.url}/increment`,
-        );
+        const written = yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/increment`);
         expect(written.value).toBe(1);
 
         // Phase 1: worker-a takes the class, naming the former host by
@@ -953,9 +916,7 @@ export default { async fetch() { return new Response("v4"); } };
         );
 
         // The namespace moved to worker-a with its data intact.
-        const viaA = yield* fetchJsonReady<{ value: number }>(
-          `${v2.a.url}/get`,
-        );
+        const viaA = yield* fetchJsonReady<{ value: number }>(`${v2.a.url}/get`);
         expect(viaA.value).toBe(1);
 
         // Phase 2: worker-b drops the DO entirely. Its deploy observes the
@@ -977,9 +938,7 @@ export default { async fetch() { return new Response("v4"); } };
           }),
         );
 
-        const afterRemoval = yield* fetchJsonReady<{ value: number }>(
-          `${v3.a.url}/increment`,
-        );
+        const afterRemoval = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/increment`);
         expect(afterRemoval.value).toBe(2);
 
         yield* scratch.destroy();
@@ -1028,9 +987,7 @@ export default { async fetch() { return new Response("${version}"); } };
 
         const tags = yield* getWorkerTags(v1.worker.workerName, accountId);
         expect(tags.length).toBeLessThanOrEqual(10);
-        expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(
-          1,
-        );
+        expect(tags.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
         expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
         // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
@@ -1040,10 +997,7 @@ export default { async fetch() { return new Response("${version}"); } };
             return {
               worker: yield* Cloudflare.Worker("worker", {
                 script: makeScript(
-                  [
-                    "Class0V2",
-                    ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
-                  ],
+                  ["Class0V2", ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`)],
                   "v2",
                 ),
                 env: Object.fromEntries(
@@ -1143,12 +1097,8 @@ export default { async fetch() { return new Response("v2"); } };
 
         // The deploy rewrote the mapping in the packed format.
         const rolledForward = yield* getWorkerTags(scriptName, accountId);
-        expect(
-          rolledForward.filter((t) => t.startsWith("alchemy:dos:")),
-        ).toHaveLength(1);
-        expect(
-          rolledForward.filter((t) => t.startsWith("alchemy:do:")),
-        ).toHaveLength(0);
+        expect(rolledForward.filter((t) => t.startsWith("alchemy:dos:"))).toHaveLength(1);
+        expect(rolledForward.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
@@ -1206,9 +1156,7 @@ export default { async fetch() { return new Response("v2"); } };
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.a.url}/reset`);
         yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
         yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`);
-        const aBefore = (yield* fetchJsonReady<{ value: number }>(
-          `${v1.a.url}/get`,
-        )).value;
+        const aBefore = (yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/get`)).value;
         expect(aBefore).toBeGreaterThanOrEqual(2);
 
         // worker-b now hosts its OWN same-name Counter — an isolated twin.
@@ -1238,9 +1186,7 @@ export default { async fetch() { return new Response("v2"); } };
         // version answers with the twin's empty count.
         yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`).pipe(
           Effect.flatMap((r) =>
-            r.value === 0
-              ? Effect.void
-              : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
+            r.value === 0 ? Effect.void : Effect.fail(new Error(`stale: twin sees ${r.value}`)),
           ),
           Effect.retry({
             schedule: readinessSchedule,
@@ -1272,18 +1218,14 @@ export default { async fetch() { return new Response("v2"); } };
           }),
         );
 
-        const aAfter = yield* fetchJsonReady<{ value: number }>(
-          `${v3.a.url}/get`,
-        );
+        const aAfter = yield* fetchJsonReady<{ value: number }>(`${v3.a.url}/get`);
         expect(aAfter.value).toBe(aBefore);
         // worker-b was a noop in v3, but its v2 upload was only moments ago —
         // an edge metal can still serve the v1 (cross-script) version, whose
         // /get reads worker-a's non-zero counter. Poll until the twin's own
         // empty namespace answers: a genuinely stolen/deleted namespace never
         // reads 0, so the bounded retry still fails in the regression case.
-        const twinAfter = yield* fetchJsonReady<{ value: number }>(
-          `${v3.b.url}/get`,
-        ).pipe(
+        const twinAfter = yield* fetchJsonReady<{ value: number }>(`${v3.b.url}/get`).pipe(
           Effect.flatMap((r) =>
             r.value === 0
               ? Effect.succeed(r)

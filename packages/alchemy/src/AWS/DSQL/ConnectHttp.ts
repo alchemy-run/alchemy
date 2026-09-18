@@ -25,9 +25,7 @@ export const ConnectHttp = Layer.effect(
     // Captured at layer build so the runtime callable only requires
     // RuntimeContext — the presign resolves credentials lazily from the
     // service on every mint, so refreshed execution-role creds are honored.
-    const services = yield* Effect.context<
-      Credentials.Credentials | Region.Region
-    >();
+    const services = yield* Effect.context<Credentials.Credentials | Region.Region>();
 
     return Effect.fn(function* (cluster: Cluster, options?: ConnectOptions) {
       const Host = yield* cluster.endpoint;
@@ -58,9 +56,7 @@ export const ConnectHttp = Layer.effect(
       return Effect.gen(function* () {
         const host = yield* Host;
         if (!host) {
-          return yield* Effect.die(
-            `DSQL endpoint for '${cluster.LogicalId}' is not available yet`,
-          );
+          return yield* Effect.die(`DSQL endpoint for '${cluster.LogicalId}' is not available yet`);
         }
         const password = yield* generateDbAuthToken({
           service: "dsql",

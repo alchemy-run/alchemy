@@ -1,8 +1,4 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Output from "@/Output";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
+import crypto from "node:crypto";
 import * as logpush from "@distilled.cloud/cloudflare/logpush";
 import * as user from "@distilled.cloud/cloudflare/user";
 import { expect } from "alchemy-test";
@@ -10,14 +6,15 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import crypto from "node:crypto";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloudflare's edge intermittently 403s ("Unable to authenticate request")
 // even for established tokens. The blip can hit engine-side calls mid-deploy
@@ -106,17 +103,12 @@ const getJob = (accountId: string, jobId: number) =>
 const waitForDelete = (accountId: string, jobId: number) =>
   getJob(accountId, jobId).pipe(
     Effect.flatMap((job) =>
-      job.id === jobId
-        ? Effect.fail({ _tag: "JobNotDeleted" } as const)
-        : Effect.void,
+      job.id === jobId ? Effect.fail({ _tag: "JobNotDeleted" } as const) : Effect.void,
     ),
     Effect.catchTag("JobNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "JobNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 

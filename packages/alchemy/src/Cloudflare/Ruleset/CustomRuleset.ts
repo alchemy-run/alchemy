@@ -2,7 +2,6 @@ import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -164,8 +163,7 @@ export const CustomRulesetProvider = () =>
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
-      const oldName =
-        output?.name ?? olds.name ?? (yield* createPhysicalName({ id }));
+      const oldName = output?.name ?? olds.name ?? (yield* createPhysicalName({ id }));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a rename.
@@ -188,9 +186,7 @@ export const CustomRulesetProvider = () =>
             rulesetId: output.rulesetId,
           })
           .pipe(
-            Effect.map((ruleset) =>
-              toCustomRulesetAttributes(output.accountId, ruleset),
-            ),
+            Effect.map((ruleset) => toCustomRulesetAttributes(output.accountId, ruleset)),
             Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
           );
       }
@@ -200,23 +196,18 @@ export const CustomRulesetProvider = () =>
       // engine gate takeover behind `--adopt`.
       const name = olds?.name ?? (yield* createPhysicalName({ id }));
       const kind = olds?.kind ?? "custom";
-      const match = yield* rulesets.listRulesetsForAccount
-        .items({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).find(
-              (r) =>
-                r.name === name && r.phase === olds?.phase && r.kind === kind,
-            ),
+      const match = yield* rulesets.listRulesetsForAccount.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).find(
+            (r) => r.name === name && r.phase === olds?.phase && r.kind === kind,
           ),
-        );
+        ),
+      );
       if (match === undefined) return undefined;
       const ruleset = yield* rulesets
         .getRulesetForAccount({ accountId, rulesetId: match.id })
-        .pipe(
-          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
       if (ruleset === undefined) return undefined;
       return Unowned(toCustomRulesetAttributes(accountId, ruleset));
     }),
@@ -225,8 +216,7 @@ export const CustomRulesetProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Prefer the deployed name: regenerating would target a different
       // resource if the generator's output for this id ever drifts.
-      const name =
-        news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
+      const name = news.name ?? output?.name ?? (yield* createPhysicalName({ id }));
       const kind = news.kind ?? "custom";
 
       // 1. Observe — the persisted rulesetId is a cache, not a guarantee.
@@ -237,11 +227,7 @@ export const CustomRulesetProvider = () =>
                 accountId,
                 rulesetId: output.rulesetId,
               })
-              .pipe(
-                Effect.catchTag("RulesetNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
+              .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)))
           : undefined;
 
       // 2. Ensure — create when missing.
@@ -264,10 +250,7 @@ export const CustomRulesetProvider = () =>
       if (
         observedAttributes.name === name &&
         observedAttributes.description === news.description &&
-        deepEqual(
-          normalizeObservedRules(observedAttributes.rules),
-          desiredRules,
-        )
+        deepEqual(normalizeObservedRules(observedAttributes.rules), desiredRules)
       ) {
         return observedAttributes;
       }
@@ -298,34 +281,24 @@ export const CustomRulesetProvider = () =>
     // blips skip that ruleset rather than failing the whole enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const summaries = yield* rulesets.listRulesetsForAccount
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).filter((r) => r.kind === "custom"),
-            ),
+      const summaries = yield* rulesets.listRulesetsForAccount.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).filter((r) => r.kind === "custom"),
           ),
-        );
+        ),
+      );
       const hydrated = yield* Effect.forEach(
         summaries,
         (summary) =>
-          rulesets
-            .getRulesetForAccount({ accountId, rulesetId: summary.id })
-            .pipe(
-              Effect.map((ruleset) =>
-                toCustomRulesetAttributes(accountId, ruleset),
-              ),
-              Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
-                Effect.succeed(undefined),
-              ),
-            ),
+          rulesets.getRulesetForAccount({ accountId, rulesetId: summary.id }).pipe(
+            Effect.map((ruleset) => toCustomRulesetAttributes(accountId, ruleset)),
+            Effect.catchTag(["RulesetNotFound", "Forbidden"], () => Effect.succeed(undefined)),
+          ),
         { concurrency: 10 },
       );
-      return hydrated.filter(
-        (row): row is CustomRulesetAttributes => row !== undefined,
-      );
+      return hydrated.filter((row): row is CustomRulesetAttributes => row !== undefined);
     }),
   });
 
@@ -353,8 +326,7 @@ const toCustomRulesetAttributes = (
  * Strip server-assigned per-rule fields so observed rules can be compared
  * structurally against the desired props.
  */
-const normalizeObservedRules = (rules: OutputRule[]) =>
-  rules.map(({ id: _id, ...rule }) => rule);
+const normalizeObservedRules = (rules: OutputRule[]) => rules.map(({ id: _id, ...rule }) => rule);
 
 const normalizeDesiredRules = (rules: CustomRulesetRule[]) =>
   rules.map(({ id: _id, ...rule }) => rule);

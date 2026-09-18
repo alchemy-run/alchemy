@@ -28,6 +28,4 @@ export interface ListKxVolumes extends Binding.Service<
     ) => Effect.Effect<SVC.ListKxVolumesResponse, SVC.ListKxVolumesError>
   >
 > {}
-export const ListKxVolumes = Binding.Service<ListKxVolumes>(
-  "AWS.FinSpace.ListKxVolumes",
-);
+export const ListKxVolumes = Binding.Service<ListKxVolumes>("AWS.FinSpace.ListKxVolumes");

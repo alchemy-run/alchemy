@@ -23,10 +23,7 @@ export interface CancelImportTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: neptunegraph.CancelImportTaskInput,
-    ) => Effect.Effect<
-      neptunegraph.CancelImportTaskOutput,
-      neptunegraph.CancelImportTaskError
-    >
+    ) => Effect.Effect<neptunegraph.CancelImportTaskOutput, neptunegraph.CancelImportTaskError>
   >
 > {}
 export const CancelImportTask = Binding.Service<CancelImportTask>(

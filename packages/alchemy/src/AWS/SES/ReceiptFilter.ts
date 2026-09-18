@@ -86,9 +86,7 @@ export const ReceiptFilterProvider = () =>
         id: string,
         props: Pick<ReceiptFilterProps, "filterName">,
       ) {
-        return (
-          props.filterName ?? (yield* createPhysicalName({ id, maxLength: 64 }))
-        );
+        return props.filterName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
       const findFilter = Effect.fn(function* (name: string) {
@@ -151,11 +149,7 @@ export const ReceiptFilterProvider = () =>
                   },
                 },
               })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () =>
-                  Effect.succeed({}),
-                ),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.succeed({})));
           }
 
           return { filterName: name };

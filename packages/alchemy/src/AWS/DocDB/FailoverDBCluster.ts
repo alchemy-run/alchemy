@@ -34,12 +34,7 @@ export interface FailoverDBCluster extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<docdb.FailoverDBClusterMessage, "DBClusterIdentifier">,
-    ) => Effect.Effect<
-      docdb.FailoverDBClusterResult,
-      docdb.FailoverDBClusterError
-    >
+    ) => Effect.Effect<docdb.FailoverDBClusterResult, docdb.FailoverDBClusterError>
   >
 > {}
-export const FailoverDBCluster = Binding.Service<FailoverDBCluster>(
-  "AWS.DocDB.FailoverDBCluster",
-);
+export const FailoverDBCluster = Binding.Service<FailoverDBCluster>("AWS.DocDB.FailoverDBCluster");

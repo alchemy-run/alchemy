@@ -1,7 +1,7 @@
 import * as textract from "@distilled.cloud/aws/textract";
 import * as Layer from "effect/Layer";
-import { makeTextractHttpBinding } from "./BindingHttp.ts";
 import { AnalyzeDocument } from "./AnalyzeDocument.ts";
+import { makeTextractHttpBinding } from "./BindingHttp.ts";
 
 export const AnalyzeDocumentHttp = Layer.effect(
   AnalyzeDocument,

@@ -48,7 +48,6 @@ export interface ResetConnectorMetadataCache extends Binding.Service<
   >
 > {}
 
-export const ResetConnectorMetadataCache =
-  Binding.Service<ResetConnectorMetadataCache>(
-    "AWS.AppFlow.ResetConnectorMetadataCache",
-  );
+export const ResetConnectorMetadataCache = Binding.Service<ResetConnectorMetadataCache>(
+  "AWS.AppFlow.ResetConnectorMetadataCache",
+);

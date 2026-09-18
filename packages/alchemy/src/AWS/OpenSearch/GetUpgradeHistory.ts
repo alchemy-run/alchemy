@@ -25,10 +25,7 @@ export interface GetUpgradeHistory extends Binding.Service<
   () => Effect.Effect<
     (
       request: opensearch.GetUpgradeHistoryRequest,
-    ) => Effect.Effect<
-      opensearch.GetUpgradeHistoryResponse,
-      opensearch.GetUpgradeHistoryError
-    >
+    ) => Effect.Effect<opensearch.GetUpgradeHistoryResponse, opensearch.GetUpgradeHistoryError>
   >
 > {}
 export const GetUpgradeHistory = Binding.Service<GetUpgradeHistory>(

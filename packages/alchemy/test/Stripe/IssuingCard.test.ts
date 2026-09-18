@@ -1,25 +1,19 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
-import { isMissingStripeResource } from "@/Stripe/missing.ts";
-import {
-  GetIssuingCards,
-  GetIssuingCard,
-} from "@distilled.cloud/stripe/stripe";
+import { GetIssuingCards, GetIssuingCard } from "@distilled.cloud/stripe/stripe";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
+import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
 const ISSUING_ENABLED = process.env.STRIPE_TEST_ISSUING === "1";
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const billing = {
   address: {
@@ -33,12 +27,8 @@ const billing = {
 
 const waitUntilCanceled = (id: string) =>
   GetIssuingCard({ card: id }).pipe(
-    Effect.map((card) =>
-      card.status === "canceled" ? ("canceled" as const) : ("live" as const),
-    ),
-    Effect.catchIf(isMissingStripeResource, () =>
-      Effect.succeed("canceled" as const),
-    ),
+    Effect.map((card) => (card.status === "canceled" ? ("canceled" as const) : ("live" as const))),
+    Effect.catchIf(isMissingStripeResource, () => Effect.succeed("canceled" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "canceled",
@@ -58,9 +48,7 @@ test.provider(
         expect(Array.isArray(result.success.data)).toBe(true);
       } else {
         expect(result.failure._tag).not.toEqual("UnknownStripeError");
-        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(
-          result.failure._tag,
-        );
+        expect(["InvalidRequestError", "Forbidden", "Unauthorized"]).toContain(result.failure._tag);
         if (result.failure._tag === "InvalidRequestError") {
           expect(result.failure.message).toContain("not set up to use Issuing");
         }
@@ -117,12 +105,8 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(fetched.type).toEqual("virtual");
       expect(fetched.status).toEqual("inactive");
       expect(fetched.metadata?.team).toEqual("ops");
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stack],
-      ).toBeDefined();
-      expect(
-        fetched.metadata?.[Stripe.alchemyMetadataKeys.stage],
-      ).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stack]).toBeDefined();
+      expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.stage]).toBeDefined();
       expect(fetched.metadata?.[Stripe.alchemyMetadataKeys.id]).toBeDefined();
 
       const updated = yield* stack.deploy(
@@ -220,9 +204,7 @@ test.provider.skipIf(!ISSUING_ENABLED)(
       expect(canceled).toEqual("canceled");
 
       const after = yield* provider.list();
-      expect(
-        after.find((card) => card.id === deployed.card.id),
-      ).toBeUndefined();
+      expect(after.find((card) => card.id === deployed.card.id)).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

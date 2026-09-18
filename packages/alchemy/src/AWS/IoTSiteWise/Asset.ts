@@ -97,13 +97,8 @@ export interface Asset extends Resource<
  */
 export const Asset = Resource<Asset>("AWS.IoTSiteWise.Asset");
 
-const createAssetName = (
-  id: string,
-  props: { assetName?: string | undefined },
-) =>
-  props.assetName
-    ? Effect.succeed(props.assetName)
-    : createPhysicalName({ id, maxLength: 256 });
+const createAssetName = (id: string, props: { assetName?: string | undefined }) =>
+  props.assetName ? Effect.succeed(props.assetName) : createPhysicalName({ id, maxLength: 256 });
 
 interface AssetState_ {
   attrs: Asset["Attributes"];
@@ -113,11 +108,7 @@ interface AssetState_ {
 const readAssetById = Effect.fn(function* (assetId: string) {
   const described = yield* sitewise
     .describeAsset({ assetId, excludeProperties: true })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described || described.assetStatus.state === "DELETING") {
     return undefined;
   }
@@ -135,15 +126,10 @@ const readAssetById = Effect.fn(function* (assetId: string) {
   return state;
 });
 
-const findAssetByName = Effect.fn(function* (
-  name: string,
-  assetModelId: string,
-) {
+const findAssetByName = Effect.fn(function* (name: string, assetModelId: string) {
   const summaries = yield* sitewise.listAssets.pages({ assetModelId }).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.assetSummaries),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.assetSummaries)),
     // The model itself may not exist yet on a greenfield deploy.
     Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
   );
@@ -167,9 +153,7 @@ class AssetNotReady extends Data.TaggedError("AssetNotReady")<{
  * An asset whose asynchronous provisioning converged to the terminal
  * `FAILED` state.
  */
-export class AssetProvisioningFailed extends Data.TaggedError(
-  "AssetProvisioningFailed",
-)<{
+export class AssetProvisioningFailed extends Data.TaggedError("AssetProvisioningFailed")<{
   readonly assetId: string;
   readonly message: string | undefined;
 }> {}
@@ -184,11 +168,7 @@ const retryWhileNotReady = <A, E extends { readonly _tag: string }, R>(
     schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(30)]),
   });
 
-const retryThroughConflictingOperation = <
-  A,
-  E extends { readonly _tag: string },
-  R,
->(
+const retryThroughConflictingOperation = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.retry(self, {
@@ -201,11 +181,7 @@ const waitForAssetState = (assetId: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAsset({ assetId, excludeProperties: true })
-        .pipe(
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* Effect.fail(
@@ -239,21 +215,15 @@ export const AssetProvider = () =>
             // first, then each model's assets.
             const models = yield* sitewise.listAssetModels.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.assetModelSummaries),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.assetModelSummaries)),
             );
             const summaries = yield* Effect.forEach(
               models.map((model) => model.id),
               (assetModelId) =>
                 sitewise.listAssets.pages({ assetModelId }).pipe(
                   EffectStream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((page) => page.assetSummaries),
-                  ),
-                  Effect.catchTag("ResourceNotFoundException", () =>
-                    Effect.succeed([]),
-                  ),
+                  Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.assetSummaries)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 3 },
             );
@@ -262,18 +232,13 @@ export const AssetProvider = () =>
               (assetId) => readAssetById(assetId),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.assetId
             ? yield* readAssetById(output.assetId)
             : olds?.assetModelId
-              ? yield* findAssetByName(
-                  yield* createAssetName(id, olds),
-                  olds.assetModelId,
-                )
+              ? yield* findAssetByName(yield* createAssetName(id, olds), olds.assetModelId)
               : undefined;
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
@@ -290,9 +255,7 @@ export const AssetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("IoT SiteWise Asset requires props"),
-            );
+            return yield* Effect.fail(new Error("IoT SiteWise Asset requires props"));
           }
           const name = yield* createAssetName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -316,15 +279,11 @@ export const AssetProvider = () =>
                 tags: desiredTags,
               }),
             );
-            yield* session.note(
-              `Creating asset ${name} (${created.assetId})...`,
-            );
+            yield* session.note(`Creating asset ${name} (${created.assetId})...`);
             yield* waitForAssetState(created.assetId, "ACTIVE");
             state = yield* readAssetById(created.assetId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created asset ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created asset ${name}`));
             }
           }
 
@@ -346,19 +305,13 @@ export const AssetProvider = () =>
           }
 
           // Sync tags — diff against observed cloud tags.
-          yield* syncSiteWiseTags(
-            state.attrs.assetArn,
-            state.attrs.tags,
-            desiredTags,
-          );
+          yield* syncSiteWiseTags(state.attrs.assetArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.assetArn);
 
           const final = yield* readAssetById(state.attrs.assetId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled asset ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled asset ${name}`));
           }
           return final.attrs;
         }),
@@ -370,9 +323,7 @@ export const AssetProvider = () =>
           yield* retryThroughConflictingOperation(
             sitewise
               .deleteAsset({ assetId: output.assetId })
-              .pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              ),
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
           );
           yield* waitForAssetState(output.assetId, "DELETED");
         }),

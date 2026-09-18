@@ -54,7 +54,6 @@ export interface CreateAnonymousWebExperienceUrl extends Binding.Service<
     >
   >
 > {}
-export const CreateAnonymousWebExperienceUrl =
-  Binding.Service<CreateAnonymousWebExperienceUrl>(
-    "AWS.QBusiness.CreateAnonymousWebExperienceUrl",
-  );
+export const CreateAnonymousWebExperienceUrl = Binding.Service<CreateAnonymousWebExperienceUrl>(
+  "AWS.QBusiness.CreateAnonymousWebExperienceUrl",
+);

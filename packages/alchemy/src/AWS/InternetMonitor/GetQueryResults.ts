@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Monitor } from "./Monitor.ts";
 
-export interface GetQueryResultsRequest extends Omit<
-  im.GetQueryResultsInput,
-  "MonitorName"
-> {}
+export interface GetQueryResultsRequest extends Omit<im.GetQueryResultsInput, "MonitorName"> {}
 
 /**
  * Runtime binding for `internetmonitor:GetQueryResults` — fetch the result

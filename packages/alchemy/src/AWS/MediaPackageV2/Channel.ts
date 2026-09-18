@@ -147,14 +147,8 @@ export const ChannelProvider = () =>
   Provider.effect(
     Channel,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { channelName?: string },
-      ) {
-        return (
-          props.channelName ??
-          (yield* createPhysicalName({ id, maxLength: 256 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { channelName?: string }) {
+        return props.channelName ?? (yield* createPhysicalName({ id, maxLength: 256 }));
       });
 
       const toAttrs = (channel: {
@@ -175,20 +169,13 @@ export const ChannelProvider = () =>
       });
 
       /** Get a channel by group + name; typed not-found → undefined. */
-      const getChannel = Effect.fn(function* (
-        channelGroupName: string,
-        channelName: string,
-      ) {
+      const getChannel = Effect.fn(function* (channelGroupName: string, channelName: string) {
         return yield* mediapackagev2
           .getChannel({
             ChannelGroupName: channelGroupName,
             ChannelName: channelName,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       return {
@@ -209,25 +196,20 @@ export const ChannelProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const channelGroupName =
-            output?.channelGroupName ?? olds?.channelGroupName;
+          const channelGroupName = output?.channelGroupName ?? olds?.channelGroupName;
           if (channelGroupName === undefined) return undefined;
-          const channelName =
-            output?.channelName ?? (yield* createName(id, olds ?? {}));
+          const channelName = output?.channelName ?? (yield* createName(id, olds ?? {}));
           const channel = yield* getChannel(channelGroupName, channelName);
           if (channel === undefined) return undefined;
           const attrs = toAttrs(channel);
-          return (yield* hasAlchemyTags(id, toMpTagRecord(channel.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, toMpTagRecord(channel.Tags))) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const channelGroupName = news.channelGroupName;
-          const channelName =
-            output?.channelName ?? (yield* createName(id, news));
+          const channelName = output?.channelName ?? (yield* createName(id, news));
 
           // 1. Observe — cloud state is authoritative; output is an id cache.
           let channel = yield* getChannel(channelGroupName, channelName);
@@ -278,11 +260,7 @@ export const ChannelProvider = () =>
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
-          yield* syncMpTags(
-            channel.Arn,
-            toMpTagRecord(channel.Tags),
-            desiredTags,
-          );
+          yield* syncMpTags(channel.Arn, toMpTagRecord(channel.Tags), desiredTags);
 
           // 3c. Sync the resource policy — observe the live policy (absent
           //     policy is the typed not-found) and apply only the delta.
@@ -293,9 +271,7 @@ export const ChannelProvider = () =>
             })
             .pipe(
               Effect.map((response) => response.Policy as string | undefined),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
             );
           if (news.policy !== undefined) {
             if (!policiesEqual(observedPolicy, news.policy)) {
@@ -321,10 +297,7 @@ export const ChannelProvider = () =>
           // already deleted them; an orphan sweep may not have), then delete
           // the channel. Every step is idempotent and the transient Conflict
           // while just-deleted endpoints are cleaned up is retried.
-          yield* deleteChannelWithEndpoints(
-            output.channelGroupName,
-            output.channelName,
-          );
+          yield* deleteChannelWithEndpoints(output.channelGroupName, output.channelName);
         }),
 
         // Channels are keyed by their parent channel group, so enumerate
@@ -344,9 +317,7 @@ export const ChannelProvider = () =>
               items,
               (item) =>
                 getChannel(item.ChannelGroupName, item.ChannelName).pipe(
-                  Effect.map((channel) =>
-                    channel === undefined ? undefined : toAttrs(channel),
-                  ),
+                  Effect.map((channel) => (channel === undefined ? undefined : toAttrs(channel))),
                 ),
               { concurrency: 5 },
             );

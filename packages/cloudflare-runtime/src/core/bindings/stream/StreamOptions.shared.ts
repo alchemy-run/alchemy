@@ -32,8 +32,7 @@ export const BINDING_STREAM_BLOBS = "STREAM_BLOBS";
 /** Loopback fetcher binding used to resolve the runtime's public URL. */
 export const BINDING_STREAM_LOOPBACK = "STREAM_LOOPBACK";
 /** Set when control endpoints (fake timers, storage inspection) are enabled. */
-export const BINDING_STREAM_ENABLE_CONTROL_ENDPOINTS =
-  "STREAM_ENABLE_CONTROL_ENDPOINTS";
+export const BINDING_STREAM_ENABLE_CONTROL_ENDPOINTS = "STREAM_ENABLE_CONTROL_ENDPOINTS";
 
 /** Reserved header carrying `{ name, args }` control operations in tests. */
 export const HEADER_STREAM_CONTROL_OP = "cf-stream-control-op";

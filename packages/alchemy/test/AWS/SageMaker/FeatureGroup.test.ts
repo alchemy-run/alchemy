@@ -1,25 +1,23 @@
-import * as AWS from "@/AWS";
-import { FeatureGroup } from "@/AWS/SageMaker";
-import * as Test from "@/Test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { FeatureGroup } from "@/AWS/SageMaker";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: FeatureGroup APIs return the model's own typed
 // ResourceNotFound (no patch needed) — prove it stays that way.
-test.provider(
-  "describeFeatureGroup on a nonexistent group fails with ResourceNotFound",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        sagemaker.describeFeatureGroup({
-          FeatureGroupName: "alchemy-nonexistent-feature-group-probe",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFound");
-    }),
+test.provider("describeFeatureGroup on a nonexistent group fails with ResourceNotFound", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      sagemaker.describeFeatureGroup({
+        FeatureGroupName: "alchemy-nonexistent-feature-group-probe",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFound");
+  }),
 );
 
 const findFeatureGroup = (name: string) =>
@@ -71,9 +69,7 @@ test.provider(
 
       // delete waits until the group is fully gone
       yield* stack.destroy();
-      expect(
-        yield* findFeatureGroup(featureGroup.featureGroupName),
-      ).toBeUndefined();
+      expect(yield* findFeatureGroup(featureGroup.featureGroupName)).toBeUndefined();
     }),
   { timeout: 240_000 },
 );

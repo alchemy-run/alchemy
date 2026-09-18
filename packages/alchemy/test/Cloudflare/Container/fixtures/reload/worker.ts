@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { ReloadContainerObject } from "./object.ts";
 
 /** `GET /<file>` proxies to the container's httpd via the DO. */
@@ -18,11 +18,7 @@ export default class ReloadContainerWorker extends Cloudflare.Worker<ReloadConta
         const text = yield* objects
           .getByName("default")
           .read(url.pathname)
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.succeed(`CONTAINER_UNREACHABLE: ${cause}`),
-            ),
-          );
+          .pipe(Effect.catchCause((cause) => Effect.succeed(`CONTAINER_UNREACHABLE: ${cause}`)));
         return HttpServerResponse.text(text);
       }),
     };

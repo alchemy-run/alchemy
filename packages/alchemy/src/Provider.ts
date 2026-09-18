@@ -6,12 +6,12 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Stream from "effect/Stream";
 import type { Artifacts } from "./Artifacts.ts";
-import type { ScopedPlanStatusSession } from "./Report.ts";
 import type { Diff } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import type { InstanceId } from "./InstanceId.ts";
 import type { Platform } from "./Platform.ts";
 import { defaultProviderMode, type ProviderMode } from "./ProviderMode.ts";
+import type { ScopedPlanStatusSession } from "./Report.ts";
 import type {
   ResourceBinding,
   ResourceClass,
@@ -19,9 +19,11 @@ import type {
   ResourceLike,
 } from "./Resource.ts";
 
-export interface Provider<
-  R extends ResourceLike = ResourceLike,
-> extends Effect.Effect<ProviderService<R>, never, Provider<R>> {
+export interface Provider<R extends ResourceLike = ResourceLike> extends Effect.Effect<
+  ProviderService<R>,
+  never,
+  Provider<R>
+> {
   asEffect: () => Effect.Effect<ProviderService<R>, never, Provider<R>>;
   [Symbol.iterator]: () => Effect.EffectIterator<Provider<R>>;
   of: <
@@ -63,14 +65,10 @@ export interface Provider<
 
 type LifecycleServices = InstanceId | Artifacts;
 
-export const Provider = <R extends ResourceLike>(
-  type: R["Type"],
-): Provider<R> =>
+export const Provider = <R extends ResourceLike>(type: R["Type"]): Provider<R> =>
   Context.Service<Provider<R>, ProviderService<R>>()(type) as any;
 
-type BindingData<Res extends ResourceLike> = [Res] extends [
-  { Binding: infer B },
-]
+type BindingData<Res extends ResourceLike> = [Res] extends [{ Binding: infer B }]
   ? ResourceBinding<B>[]
   : any[];
 
@@ -490,10 +488,7 @@ export const succeed = <
 ): Layer.Layer<
   Provider<R>,
   never,
-  Exclude<
-    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
-    LifecycleServices
-  >
+  Exclude<ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq, LifecycleServices>
 > =>
   // @ts-expect-error
   Layer.succeed(Provider(cls.Type), {
@@ -511,9 +506,7 @@ export interface ProviderCollectionShape<Identifier extends string>
     ProviderCollectionLike {}
 
 export interface ProviderCollection<Self, Identifier extends string>
-  extends
-    Context.Service<Self, ProviderCollectionService>,
-    ProviderCollectionLike {
+  extends Context.Service<Self, ProviderCollectionService>, ProviderCollectionLike {
   readonly key: Identifier;
   new (_: never): ProviderCollectionShape<Identifier>;
 }
@@ -521,15 +514,11 @@ export interface ProviderCollection<Self, Identifier extends string>
 export const ProviderCollection =
   <Self>() =>
   <const ProviderId extends string>(id: ProviderId) =>
-    Context.Service<Self, ProviderCollectionService>()(
-      id,
-    ) as ProviderCollection<Self, ProviderId>;
+    Context.Service<Self, ProviderCollectionService>()(id) as ProviderCollection<Self, ProviderId>;
 
 export interface ProviderCollectionService {
   kind: "ProviderCollection";
-  get<Resource extends ResourceLike>(
-    service: string,
-  ): ProviderService<Resource> | undefined;
+  get<Resource extends ResourceLike>(service: string): ProviderService<Resource> | undefined;
   /**
    * Every provider in this collection keyed by its resource type
    * (e.g. `"Cloudflare.Worker"`). Used by account-wide operations such
@@ -557,9 +546,7 @@ export const collection = <
       yield* Effect.all(
         resources.map((resource) =>
           "Provider" in resource
-            ? resource.Provider.pipe(
-                Effect.map((provider) => [resource.Type, provider] as const),
-              )
+            ? resource.Provider.pipe(Effect.map((provider) => [resource.Type, provider] as const))
             : Effect.succeed([
                 (resource as { key: string }).key,
                 context.mapUnsafe.get((resource as { key: string }).key),
@@ -576,9 +563,7 @@ export const collection = <
     };
   }) as any;
 
-export const isProviderCollectionService = (
-  value: unknown,
-): value is ProviderCollectionService => {
+export const isProviderCollectionService = (value: unknown): value is ProviderCollectionService => {
   return (
     Predicate.isObject(value) &&
     Predicate.hasProperty(value, "kind") &&
@@ -615,9 +600,7 @@ export const providerForMode = <R extends ResourceLike>(
   service: ProviderService<R>,
   mode: ProviderMode | undefined,
 ): Effect.Effect<ProviderService<R>> =>
-  mode !== undefined && service.modes !== undefined
-    ? service.modes[mode]
-    : Effect.succeed(service);
+  mode !== undefined && service.modes !== undefined ? service.modes[mode] : Effect.succeed(service);
 
 /**
  * Why a resource's deploy-time binding clients target the data plane they
@@ -668,9 +651,7 @@ export const describeDataPlane = (resource: {
     const mode = resource.Mode ?? (yield* defaultProviderMode);
     if (mode !== "local") {
       const layer = provider.liveDataPlane?.();
-      return layer !== undefined
-        ? { kind: "live" as const, layer }
-        : { kind: "live" as const };
+      return layer !== undefined ? { kind: "live" as const, layer } : { kind: "live" as const };
     }
     if (provider.localDataPlane === undefined) {
       return { kind: "undeclared" as const, providerType: resource.Type };
@@ -732,19 +713,14 @@ export const findProvider: {
  * this error; nothing is deployed or destroyed until the provider is
  * re-registered (or aliased), or the state row is cleared manually.
  */
-export class MissingProviderError extends Data.TaggedError(
-  "MissingProviderError",
-)<{
+export class MissingProviderError extends Data.TaggedError("MissingProviderError")<{
   message: string;
   resourceType: string;
   fqn: string;
 }> {}
 
 /** Build the fatal plan-time error for a zombie state row. */
-export const missingProviderError = (
-  resourceType: string,
-  fqn: string,
-): MissingProviderError =>
+export const missingProviderError = (resourceType: string, fqn: string): MissingProviderError =>
   new MissingProviderError({
     message:
       `No provider is registered for resource type '${resourceType}' ` +
@@ -765,9 +741,7 @@ export const tryFindProviderByType = <R extends ResourceLike>(
   Effect.gen(function* () {
     const found = yield* tryFindProviderRegistrationByType<R>(resourceType);
     if (Option.isNone(found)) return found;
-    return Option.some(
-      yield* providerForMode(found.value, mode ?? (yield* defaultProviderMode)),
-    );
+    return Option.some(yield* providerForMode(found.value, mode ?? (yield* defaultProviderMode)));
   });
 
 /** Inspect registration metadata without constructing either provider variant. */
@@ -777,10 +751,7 @@ export const tryFindProviderRegistrationByType: {
   ): Effect.Effect<Option.Option<ProviderService<R>>>;
 } = Effect.fn(function* <R extends ResourceLike>(resourceType: R["Type"]) {
   const found = yield* Effect.gen(function* () {
-    const Tag = Provider<R>(resourceType) as unknown as Context.Service<
-      Provider<R>,
-      any
-    >;
+    const Tag = Provider<R>(resourceType) as unknown as Context.Service<Provider<R>, any>;
     const direct = yield* Effect.serviceOption(Tag);
     if (Option.isSome(direct)) {
       return direct;
@@ -807,10 +778,7 @@ export const tryFindProviderRegistrationByType: {
             return Option.some(provider);
           }
         }
-      } else if (
-        isProviderService(value) &&
-        value.aliases?.includes(resourceType)
-      ) {
+      } else if (isProviderService(value) && value.aliases?.includes(resourceType)) {
         return Option.some(value);
       }
     }

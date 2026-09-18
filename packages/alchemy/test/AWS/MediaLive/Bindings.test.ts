@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,12 +5,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import MediaLiveChannelTestFunctionLive, {
   MediaLiveChannelTestFunction,
 } from "./fixtures/channel-handler";
-import MediaLiveTestFunctionLive, {
-  MediaLiveTestFunction,
-} from "./fixtures/handler";
+import MediaLiveTestFunctionLive, { MediaLiveTestFunction } from "./fixtures/handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -22,10 +20,7 @@ const channelStack = Core.scratchStack(testOptions, "MediaLiveChannelBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -42,31 +37,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (base: string, path: string) =>
-  send(HttpClientRequest.get(`${base}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${base}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (base: string, path: string) =>
-  send(HttpClientRequest.post(`${base}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${base}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const awaitReady = (readinessUrl: string) =>
   HttpClient.get(readinessUrl).pipe(
@@ -76,9 +62,7 @@ const awaitReady = (readinessUrl: string) =>
         : Effect.fail(new Error(`Function not ready: ${response.status}`)),
     ),
     Effect.tapError((error) =>
-      Effect.logWarning(
-        `MediaLive test setup: fixture not ready yet (${String(error)})`,
-      ),
+      Effect.logWarning(`MediaLive test setup: fixture not ready yet (${String(error)})`),
     ),
     Effect.retry({ schedule: readinessPolicy }),
   );
@@ -89,9 +73,7 @@ let functionArn: string;
 describe.sequential("MediaLive Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "MediaLive test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("MediaLive test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("MediaLive test setup: deploying fixture");
@@ -133,9 +115,7 @@ describe.sequential("MediaLive Bindings", () => {
         };
         expect(["DETACHED", "ATTACHED"]).toContain(response.state);
         expect(response.type).toBe("URL_PULL");
-        expect(response.sourceUrls).toEqual([
-          "https://example.com/stream/index.m3u8",
-        ]);
+        expect(response.sourceUrls).toEqual(["https://example.com/stream/index.m3u8"]);
       }),
     );
   });
@@ -152,31 +132,27 @@ describe.sequential("MediaLive Bindings", () => {
   });
 
   describe("ListInputs", () => {
-    test.provider(
-      "account-level input enumeration sees the fixture input",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* getJson(baseUrl, "/inputs")) as {
-            count: number;
-          };
-          expect(response.count).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("account-level input enumeration sees the fixture input", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson(baseUrl, "/inputs")) as {
+          count: number;
+        };
+        expect(response.count).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 
   describe("consumeChannelEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      () =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeChannelEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", () =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeChannelEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });
@@ -194,14 +170,10 @@ describe.skipIf(!process.env.AWS_TEST_MEDIALIVE)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "MediaLive channel test setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("MediaLive channel test setup: destroying previous resources");
         yield* channelStack.destroy();
 
-        yield* Effect.logInfo(
-          "MediaLive channel test setup: deploying channel fixture",
-        );
+        yield* Effect.logInfo("MediaLive channel test setup: deploying channel fixture");
         const attrs = yield* channelStack.deploy(
           Effect.gen(function* () {
             return yield* MediaLiveChannelTestFunction;
@@ -255,26 +227,22 @@ describe.skipIf(!process.env.AWS_TEST_MEDIALIVE)(
     });
 
     describe("BatchUpdateSchedule + DeleteSchedule", () => {
-      test.provider(
-        "programming and clearing a schedule action roundtrips",
-        () =>
-          Effect.gen(function* () {
-            const response = (yield* postJson(
-              channelBaseUrl,
-              "/schedule-cycle",
-            )) as { created: number; cleared: boolean; tag?: string };
-            // An IDLE channel accepts fixed-time actions on most accounts;
-            // where MediaLive rejects them, the typed tag is the outcome.
-            if (response.tag === undefined) {
-              expect(response.created).toBe(1);
-              expect(response.cleared).toBe(true);
-            } else {
-              expect([
-                "BadRequestException",
-                "UnprocessableEntityException",
-              ]).toContain(response.tag);
-            }
-          }),
+      test.provider("programming and clearing a schedule action roundtrips", () =>
+        Effect.gen(function* () {
+          const response = (yield* postJson(channelBaseUrl, "/schedule-cycle")) as {
+            created: number;
+            cleared: boolean;
+            tag?: string;
+          };
+          // An IDLE channel accepts fixed-time actions on most accounts;
+          // where MediaLive rejects them, the typed tag is the outcome.
+          if (response.tag === undefined) {
+            expect(response.created).toBe(1);
+            expect(response.cleared).toBe(true);
+          } else {
+            expect(["BadRequestException", "UnprocessableEntityException"]).toContain(response.tag);
+          }
+        }),
       );
     });
 
@@ -294,10 +262,10 @@ describe.skipIf(!process.env.AWS_TEST_MEDIALIVE)(
         "an IDLE channel has no thumbnails — empty details or the typed BadRequestException",
         () =>
           Effect.gen(function* () {
-            const response = (yield* getJson(
-              channelBaseUrl,
-              "/thumbnails",
-            )) as { details: number; tag?: string };
+            const response = (yield* getJson(channelBaseUrl, "/thumbnails")) as {
+              details: number;
+              tag?: string;
+            };
             expect(response.details).toBe(0);
             if (response.tag !== undefined) {
               expect(response.tag).toBe("BadRequestException");

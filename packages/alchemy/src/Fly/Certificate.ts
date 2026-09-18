@@ -180,16 +180,12 @@ export type Certificate = Resource<
  */
 export const Certificate = Resource<Certificate>("Fly.Certificate");
 
-export class CertificateNotCreated extends Data.TaggedError(
-  "Fly.CertificateNotCreated",
-)<{
+export class CertificateNotCreated extends Data.TaggedError("Fly.CertificateNotCreated")<{
   appName: string;
   hostname: string;
 }> {}
 
-export class CertificateAppMissing extends Data.TaggedError(
-  "Fly.CertificateAppMissing",
-)<{
+export class CertificateAppMissing extends Data.TaggedError("Fly.CertificateAppMissing")<{
   hostname: string;
 }> {}
 
@@ -220,8 +216,7 @@ const unwrapSecret = (
   return Redacted.isRedacted(value) ? Redacted.value(value) : value;
 };
 
-const normalizePem = (pem: string | undefined): string =>
-  (pem ?? "").replace(/\r\n/g, "\n").trim();
+const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\r\n/g, "\n").trim();
 
 const desiredKind = (props: Pick<CertificateProps, "kind">): CertificateKind =>
   props.kind ?? "acme";
@@ -378,12 +373,7 @@ const createAcme = (appName: string, hostname: string) =>
     })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
 
-const createCustom = (
-  appName: string,
-  hostname: string,
-  fullchain: string,
-  privateKey: string,
-) =>
+const createCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   machines
     .createAppCustomCertificate({
       app_name: appName,
@@ -393,12 +383,7 @@ const createCustom = (
     })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
 
-const replaceCustom = (
-  appName: string,
-  hostname: string,
-  fullchain: string,
-  privateKey: string,
-) =>
+const replaceCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   Effect.gen(function* () {
     yield* machines
       .deleteAppCustomCertificate({
@@ -490,10 +475,7 @@ export const CertificateProvider = () =>
               output.hostname,
             )
           : undefined;
-      if (
-        current === undefined &&
-        (output?.hostname !== hostname || output?.appName !== appName)
-      ) {
+      if (current === undefined && (output?.hostname !== hostname || output?.appName !== appName)) {
         current = yield* getByHostname(appName, hostname);
       }
 
@@ -502,18 +484,9 @@ export const CertificateProvider = () =>
         if (kind === "custom") {
           const fullchain = props.fullchain;
           const privateKey = unwrapSecret(props.privateKey);
-          const missing = requireCustomMaterial(
-            hostname,
-            fullchain,
-            privateKey,
-          );
+          const missing = requireCustomMaterial(hostname, fullchain, privateKey);
           if (missing !== undefined) return yield* missing;
-          const created = yield* createCustom(
-            appName,
-            hostname,
-            fullchain!,
-            privateKey!,
-          );
+          const created = yield* createCustom(appName, hostname, fullchain!, privateKey!);
           current = created ?? (yield* getByHostname(appName, hostname));
         } else {
           const created = yield* createAcme(appName, hostname);
@@ -538,17 +511,11 @@ export const CertificateProvider = () =>
           normalizePem(fullchain) !== normalizePem(previousChain) ||
           normalizePem(privateKey) !== normalizePem(previousKey);
         if (!createdThisPass && materialChanged) {
-          const upserted = yield* createCustom(
-            appName,
-            hostname,
-            fullchain!,
-            privateKey!,
-          );
+          const upserted = yield* createCustom(appName, hostname, fullchain!, privateKey!);
           if (upserted === undefined) {
             yield* replaceCustom(appName, hostname, fullchain!, privateKey!);
           }
-          current =
-            upserted ?? (yield* getByHostname(appName, hostname)) ?? current;
+          current = upserted ?? (yield* getByHostname(appName, hostname)) ?? current;
         }
       } else if (current.configured !== true) {
         const checked = yield* machines
@@ -556,11 +523,7 @@ export const CertificateProvider = () =>
             app_name: appName,
             hostname,
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.succeed(undefined)));
         if (checked !== undefined) {
           current = checked;
         }

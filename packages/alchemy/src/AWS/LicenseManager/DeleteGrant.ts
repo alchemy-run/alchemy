@@ -33,12 +33,7 @@ export interface DeleteGrant extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteGrantRequest,
-    ) => Effect.Effect<
-      licensemanager.DeleteGrantResponse,
-      licensemanager.DeleteGrantError
-    >
+    ) => Effect.Effect<licensemanager.DeleteGrantResponse, licensemanager.DeleteGrantError>
   >
 > {}
-export const DeleteGrant = Binding.Service<DeleteGrant>(
-  "AWS.LicenseManager.DeleteGrant",
-);
+export const DeleteGrant = Binding.Service<DeleteGrant>("AWS.LicenseManager.DeleteGrant");

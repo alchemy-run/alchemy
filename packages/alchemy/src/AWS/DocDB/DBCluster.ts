@@ -8,9 +8,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 import { toWireDays } from "../../Util/Duration.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, diffTags } from "../../Tags.ts";
 
 export interface DBClusterProps {
   /**
@@ -325,11 +325,7 @@ export const DBClusterProvider = () =>
           .describeDBClusters({
             DBClusterIdentifier: clusterId,
           })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusters?.[0];
       });
 
@@ -337,11 +333,7 @@ export const DBClusterProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* docdb
           .listTagsForResource({ ResourceName: arn })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return toTagRecord(response?.TagList);
       });
 
@@ -349,22 +341,15 @@ export const DBClusterProvider = () =>
       // follow-on `modifyDBCluster` doesn't hit `InvalidDBClusterStateFault`.
       // Budgets ~10 min (60 * 10s) for slow provisioning.
       const waitForCluster = Effect.fn(function* (clusterId: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
-              return Effect.fail(
-                new Error(`DB cluster '${clusterId}' not found`),
-              );
+              return Effect.fail(new Error(`DB cluster '${clusterId}' not found`));
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
-                ),
+                new Error(`DB cluster '${clusterId}' not available (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -385,9 +370,7 @@ export const DBClusterProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.DBClusters ?? []).map((cluster) =>
-                  toAttrs({ cluster, tags: {} }),
-                ),
+                (page.DBClusters ?? []).map((cluster) => toAttrs({ cluster, tags: {} })),
               ),
             ),
           ),
@@ -426,8 +409,7 @@ export const DBClusterProvider = () =>
           return toAttrs({ cluster, tags });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
+          const identifier = output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // Redacted end-to-end: distilled's `MasterUserPassword` is
@@ -470,12 +452,7 @@ export const DBClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBClusterAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForCluster(identifier);
           } else {
@@ -519,10 +496,7 @@ export const DBClusterProvider = () =>
               core.AllowMajorVersionUpgrade = true;
             }
             // syncMasterPassword — rotation or explicit password update.
-            if (
-              news.manageMasterUserPassword &&
-              news.rotateMasterUserPassword
-            ) {
+            if (news.manageMasterUserPassword && news.rotateMasterUserPassword) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
             } else if (masterUserPassword !== undefined) {
@@ -587,15 +561,10 @@ export const DBClusterProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBClusterNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(false)),
               ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

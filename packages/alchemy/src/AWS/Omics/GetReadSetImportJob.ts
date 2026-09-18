@@ -34,10 +34,7 @@ export interface GetReadSetImportJob extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetReadSetImportJobRequest,
-    ) => Effect.Effect<
-      omics.GetReadSetImportJobResponse,
-      omics.GetReadSetImportJobError
-    >
+    ) => Effect.Effect<omics.GetReadSetImportJobResponse, omics.GetReadSetImportJobError>
   >
 > {}
 

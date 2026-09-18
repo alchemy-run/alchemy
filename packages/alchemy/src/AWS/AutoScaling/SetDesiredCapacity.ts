@@ -40,10 +40,7 @@ export interface SetDesiredCapacity extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SetDesiredCapacityRequest,
-    ) => Effect.Effect<
-      autoscaling.SetDesiredCapacityResponse,
-      autoscaling.SetDesiredCapacityError
-    >
+    ) => Effect.Effect<autoscaling.SetDesiredCapacityResponse, autoscaling.SetDesiredCapacityError>
   >
 > {}
 

@@ -208,16 +208,10 @@ export const BudgetProvider = () =>
         id: string,
         props: { budgetName?: string | undefined },
       ) {
-        return (
-          props.budgetName ??
-          (yield* createPhysicalName({ id, maxLength: 100 }))
-        );
+        return props.budgetName ?? (yield* createPhysicalName({ id, maxLength: 100 }));
       });
 
-      const buildBudget = (
-        name: string,
-        props: BudgetProps,
-      ): budgets.Budget => ({
+      const buildBudget = (name: string, props: BudgetProps): budgets.Budget => ({
         BudgetName: name,
         BudgetType: props.budgetType ?? "COST",
         TimeUnit: props.timeUnit ?? "MONTHLY",
@@ -239,9 +233,7 @@ export const BudgetProvider = () =>
           })
           .pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Notifications ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Notifications ?? [])),
             Effect.catchTag("NotFoundException", () => Effect.succeed([])),
           );
         const currentKeys = new Set(current.map(notificationKey));
@@ -250,12 +242,10 @@ export const BudgetProvider = () =>
 
         for (const n of desired) {
           const notif = toNotification(n);
-          const desiredSubscribers = n.subscribers.map(
-            (s): budgets.Subscriber => ({
-              SubscriptionType: s.subscriptionType,
-              Address: s.address,
-            }),
-          );
+          const desiredSubscribers = n.subscribers.map((s): budgets.Subscriber => ({
+            SubscriptionType: s.subscriptionType,
+            Address: s.address,
+          }));
           if (!currentKeys.has(notificationKey(notif))) {
             // The notification listing is eventually consistent — right after
             // `createBudget(NotificationsWithSubscribers)` it can come back
@@ -268,9 +258,7 @@ export const BudgetProvider = () =>
                 Notification: notif,
                 Subscribers: desiredSubscribers,
               })
-              .pipe(
-                Effect.catchTag("DuplicateRecordException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("DuplicateRecordException", () => Effect.void));
             continue;
           }
           // The notification already exists — converge its subscribers by
@@ -298,9 +286,7 @@ export const BudgetProvider = () =>
                 Notification: notif,
                 Subscriber: s,
               })
-              .pipe(
-                Effect.catchTag("DuplicateRecordException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("DuplicateRecordException", () => Effect.void));
           }
           for (const s of observedSubscribers) {
             if (desiredSubKeys.has(subscriberKey(s))) continue;
@@ -326,24 +312,15 @@ export const BudgetProvider = () =>
         }
       });
 
-      const syncTags = Effect.fn(function* (
-        arn: string,
-        desired: Record<string, string>,
-      ) {
+      const syncTags = Effect.fn(function* (arn: string, desired: Record<string, string>) {
         // Diff against OBSERVED cloud tags (not olds/output) so adoption and
         // out-of-band drift converge correctly.
-        const observed = yield* budgets
-          .listTagsForResource({ ResourceARN: arn })
-          .pipe(
-            Effect.map((r) =>
-              Object.fromEntries(
-                (r.ResourceTags ?? []).map((t) => [t.Key, t.Value]),
-              ),
-            ),
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-          );
+        const observed = yield* budgets.listTagsForResource({ ResourceARN: arn }).pipe(
+          Effect.map((r) =>
+            Object.fromEntries((r.ResourceTags ?? []).map((t) => [t.Key, t.Value])),
+          ),
+          Effect.catchTag("NotFoundException", () => Effect.succeed({} as Record<string, string>)),
+        );
         const { removed, upsert } = diffTags(observed, desired);
         if (upsert.length > 0) {
           yield* budgets.tagResource({
@@ -364,33 +341,26 @@ export const BudgetProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* budgets.describeBudgets
-              .pages({ AccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.Budgets ?? [])
-                    .map((b) => ({
-                      budgetName: b.BudgetName,
-                      accountId,
-                      budgetArn: budgetArn(accountId, b.BudgetName),
-                    })),
-                ),
-                Effect.catchTag("NotFoundException", () => Effect.succeed([])),
-              );
+            return yield* budgets.describeBudgets.pages({ AccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.Budgets ?? [])
+                  .map((b) => ({
+                    budgetName: b.BudgetName,
+                    accountId,
+                    budgetArn: budgetArn(accountId, b.BudgetName),
+                  })),
+              ),
+              Effect.catchTag("NotFoundException", () => Effect.succeed([])),
+            );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
-          const name =
-            output?.budgetName ?? (yield* createName(id, olds ?? {}));
+          const name = output?.budgetName ?? (yield* createName(id, olds ?? {}));
           const found = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!found?.Budget) return undefined;
           return {
             budgetName: name,
@@ -415,9 +385,7 @@ export const BudgetProvider = () =>
             .describeBudget({ AccountId: accountId, BudgetName: name })
             .pipe(
               Effect.map((r) => r.Budget),
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
             );
 
           if (!live) {

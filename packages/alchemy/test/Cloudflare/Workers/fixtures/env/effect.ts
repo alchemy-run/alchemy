@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Output from "@/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Output from "@/Output";
 
 /**
  * Effect-native Worker fixture that exercises every supported
@@ -55,9 +55,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       Config.Number("CONFIG_NUM"),
     ]);
     // Nested prefix — bound under the flattened `CONFIG_NESTED_HOST` key.
-    const configNested = yield* Config.String("HOST").pipe(
-      Config.nested("CONFIG_NESTED"),
-    );
+    const configNested = yield* Config.String("HOST").pipe(Config.nested("CONFIG_NESTED"));
 
     // Yieldable binding form — attaches the `version_metadata` binding to
     // this Worker and returns a deferred accessor resolved at runtime.
@@ -80,9 +78,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
             OUTPUT_STR: env.OUTPUT_STR,
             SECRET_STR: env.SECRET_STR,
             SECRET_JSON:
-              typeof env.SECRET_JSON === "string"
-                ? JSON.parse(env.SECRET_JSON)
-                : env.SECRET_JSON,
+              typeof env.SECRET_JSON === "string" ? JSON.parse(env.SECRET_JSON) : env.SECRET_JSON,
           });
         }
 
@@ -97,8 +93,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
             CONFIG_NUM: configNum,
             CONFIG_REDACTED: env.CONFIG_REDACTED,
             CONFIG_REDACTED_INIT: Redacted.value(configRedactedInit),
-            CONFIG_REDACTED_INIT_IS_REDACTED:
-              Redacted.isRedacted(configRedactedInit),
+            CONFIG_REDACTED_INIT_IS_REDACTED: Redacted.isRedacted(configRedactedInit),
             CONFIG_ALL_OBJ: {
               str: configAllObj.str,
               num: configAllObj.num,
@@ -132,9 +127,9 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
                 Config.withDefault(999),
               ),
               // Never read during Init, so never bound — the default applies.
-              CONFIG_UNSET_WITH_DEFAULT: yield* Config.Number(
-                "CONFIG_UNSET",
-              ).pipe(Config.withDefault(3000)),
+              CONFIG_UNSET_WITH_DEFAULT: yield* Config.Number("CONFIG_UNSET").pipe(
+                Config.withDefault(3000),
+              ),
               CONFIG_ALL_OBJ: {
                 str: allObj.str,
                 num: allObj.num,
@@ -145,19 +140,14 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
                 Config.String("CONFIG_STR"),
                 Config.Number("CONFIG_NUM"),
               ]),
-              CONFIG_NESTED_HOST: yield* Config.String("HOST").pipe(
-                Config.nested("CONFIG_NESTED"),
-              ),
+              CONFIG_NESTED_HOST: yield* Config.String("HOST").pipe(Config.nested("CONFIG_NESTED")),
             };
           });
-          const redactedAtRuntime = yield* Config.Redacted(
-            "CONFIG_REDACTED_INIT",
-          );
+          const redactedAtRuntime = yield* Config.Redacted("CONFIG_REDACTED_INIT");
           return yield* HttpServerResponse.json({
             ...nested,
             CONFIG_REDACTED_INIT: Redacted.value(redactedAtRuntime),
-            CONFIG_REDACTED_INIT_IS_REDACTED:
-              Redacted.isRedacted(redactedAtRuntime),
+            CONFIG_REDACTED_INIT_IS_REDACTED: Redacted.isRedacted(redactedAtRuntime),
           });
         }
 

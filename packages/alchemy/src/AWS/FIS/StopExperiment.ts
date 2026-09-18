@@ -32,6 +32,4 @@ export interface StopExperiment extends Binding.Service<
     ) => Effect.Effect<fis.StopExperimentResponse, fis.StopExperimentError>
   >
 > {}
-export const StopExperiment = Binding.Service<StopExperiment>(
-  "AWS.FIS.StopExperiment",
-);
+export const StopExperiment = Binding.Service<StopExperiment>("AWS.FIS.StopExperiment");

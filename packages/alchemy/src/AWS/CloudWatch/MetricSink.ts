@@ -62,16 +62,7 @@ export interface MetricSink extends Binding.Service<
   "AWS.CloudWatch.MetricSink",
   (
     props: MetricSinkProps,
-  ) => Effect.Effect<
-    Sink.Sink<
-      void,
-      MetricSinkDatum,
-      readonly MetricSinkDatum[],
-      MetricSinkError
-    >
-  >
+  ) => Effect.Effect<Sink.Sink<void, MetricSinkDatum, readonly MetricSinkDatum[], MetricSinkError>>
 > {}
 
-export const MetricSink = Binding.Service<MetricSink>(
-  "AWS.CloudWatch.MetricSink",
-);
+export const MetricSink = Binding.Service<MetricSink>("AWS.CloudWatch.MetricSink");

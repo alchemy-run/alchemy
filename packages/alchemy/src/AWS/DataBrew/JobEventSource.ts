@@ -87,9 +87,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  */
 export const consumeJobEvents = <StreamReq = never, Req = never>(
   props: JobEventSourceProps,
-  process: (
-    events: Stream.Stream<JobEvent, never, StreamReq>,
-  ) => Effect.Effect<void, never, Req>,
+  process: (events: Stream.Stream<JobEvent, never, StreamReq>) => Effect.Effect<void, never, Req>,
 ) =>
   consumeBusEvents(
     props.id ?? "DataBrewJobEvents",
@@ -99,12 +97,8 @@ export const consumeJobEvents = <StreamReq = never, Req = never>(
       ...(props.jobNames !== undefined || props.states !== undefined
         ? {
             detail: {
-              ...(props.jobNames !== undefined
-                ? { jobName: [...props.jobNames] }
-                : {}),
-              ...(props.states !== undefined
-                ? { state: [...props.states] }
-                : {}),
+              ...(props.jobNames !== undefined ? { jobName: [...props.jobNames] } : {}),
+              ...(props.states !== undefined ? { state: [...props.states] } : {}),
             },
           }
         : {}),

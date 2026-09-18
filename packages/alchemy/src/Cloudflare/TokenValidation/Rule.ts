@@ -2,7 +2,6 @@ import * as tokenValidation from "@distilled.cloud/cloudflare/token-validation";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -122,13 +121,7 @@ export interface RuleAttributes {
   lastUpdated: string | undefined;
 }
 
-export type Rule = Resource<
-  TypeId,
-  RuleProps,
-  RuleAttributes,
-  never,
-  Providers
->;
+export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>;
 
 /**
  * An API Shield JWT validation rule — selects operations/hosts on a zone
@@ -248,9 +241,7 @@ export const RuleProvider = () =>
 
       // 1. Observe — the UUID cached on `output` is a hint, not a
       //    guarantee: a 404 falls through to "missing" and we recreate.
-      const observed = output?.ruleId
-        ? yield* getRule(zoneId, output.ruleId)
-        : undefined;
+      const observed = output?.ruleId ? yield* getRule(zoneId, output.ruleId) : undefined;
 
       // 2. Ensure — greenfield (or out-of-band delete): create with the
       //    full desired body. Titles are not unique on Cloudflare's side,
@@ -300,9 +291,7 @@ export const RuleProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* tokenValidation
         .deleteRule({ zoneId: output.zoneId, ruleId: output.ruleId })
-        .pipe(
-          Effect.catchTag("TokenValidationRuleNotFound", () => Effect.void),
-        );
+        .pipe(Effect.catchTag("TokenValidationRuleNotFound", () => Effect.void));
     }),
 
     list: Effect.fn(function* () {
@@ -318,9 +307,7 @@ export const RuleProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((rule): RuleAttributes =>
-                  toAttributes(rule, zone.id),
-                ),
+                (page.result ?? []).map((rule): RuleAttributes => toAttributes(rule, zone.id)),
               ),
             ),
             // JWT validation is an API Shield (Enterprise) feature; zones
@@ -346,9 +333,7 @@ type ApiSelector = tokenValidation.CreateRuleRequest["selector"];
 const getRule = (zoneId: string, ruleId: string) =>
   tokenValidation.getRule({ zoneId, ruleId }).pipe(
     Effect.map((r): ObservedRule | undefined => r),
-    Effect.catchTag("TokenValidationRuleNotFound", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("TokenValidationRuleNotFound", () => Effect.succeed(undefined)),
   );
 
 /**
@@ -392,18 +377,12 @@ const toApiSelector = (selector: RuleSelector): ApiSelector => ({
 /** Canonical, order-insensitive form of a selector for diffing. */
 const canonicalSelector = (selector: ObservedRule["selector"] | ApiSelector) =>
   JSON.stringify({
-    include: (selector.include ?? [])
-      .map((entry) => [...(entry.host ?? [])].sort())
-      .sort(),
-    exclude: (selector.exclude ?? [])
-      .map((entry) => [...(entry.operationIds ?? [])].sort())
-      .sort(),
+    include: (selector.include ?? []).map((entry) => [...(entry.host ?? [])].sort()).sort(),
+    exclude: (selector.exclude ?? []).map((entry) => [...(entry.operationIds ?? [])].sort()).sort(),
   });
 
-const sameSelector = (
-  observed: ObservedRule["selector"],
-  desired: ApiSelector,
-) => canonicalSelector(observed) === canonicalSelector(desired);
+const sameSelector = (observed: ObservedRule["selector"], desired: ApiSelector) =>
+  canonicalSelector(observed) === canonicalSelector(desired);
 
 const toAttributes = (
   rule:
@@ -432,9 +411,7 @@ const toAttributes = (
     ...(rule.selector.exclude != null
       ? {
           exclude: rule.selector.exclude.map((entry) =>
-            entry.operationIds != null
-              ? { operationIds: [...entry.operationIds] }
-              : {},
+            entry.operationIds != null ? { operationIds: [...entry.operationIds] } : {},
           ),
         }
       : {}),

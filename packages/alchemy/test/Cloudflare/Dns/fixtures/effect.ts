@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { Zone } from "./zone.ts";
 /**
  * Effect-native Worker fixture that exercises the {@link Cloudflare.DNS.ReadWriteDns}
@@ -69,10 +69,7 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
             });
           }).pipe(
             Effect.catchCause((cause) =>
-              HttpServerResponse.json(
-                { error: Cause.pretty(cause) },
-                { status: 500 },
-              ),
+              HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
             ),
           );
         }

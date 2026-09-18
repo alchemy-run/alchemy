@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -24,15 +23,7 @@ export type RuleType = "threshold" | "zscore" | "advanced_ddos";
 /**
  * How long a threshold must be exceeded before an alert fires.
  */
-export type RuleDuration =
-  | "1m"
-  | "5m"
-  | "10m"
-  | "15m"
-  | "20m"
-  | "30m"
-  | "45m"
-  | "60m";
+export type RuleDuration = "1m" | "5m" | "10m" | "15m" | "20m" | "30m" | "45m" | "60m";
 
 export interface RuleProps {
   /**
@@ -125,13 +116,7 @@ export interface RuleAttributes {
   prefixMatch: "exact" | "subnet" | "supernet" | (string & {}) | undefined;
 }
 
-export type Rule = Resource<
-  TypeId,
-  RuleProps,
-  RuleAttributes,
-  never,
-  Providers
->;
+export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>;
 
 /**
  * A Magic Network Monitoring (MNM) rule — alerts when traffic to a set of
@@ -203,8 +188,7 @@ export const RuleProvider = () =>
       if (!isResolved(news)) return undefined;
       // The rule type is immutable — alerting semantics differ entirely.
       const oldType =
-        output?.type ??
-        (olds !== undefined && isResolved(olds) ? olds.type : undefined);
+        output?.type ?? (olds !== undefined && isResolved(olds) ? olds.type : undefined);
       if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
       }
@@ -223,8 +207,7 @@ export const RuleProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct =
-        output?.accountId ??
-        (typeof olds?.accountId === "string" ? olds.accountId : accountId);
+        output?.accountId ?? (typeof olds?.accountId === "string" ? olds.accountId : accountId);
 
       // Owned path: refresh by our persisted rule id.
       if (output?.ruleId) {
@@ -245,19 +228,15 @@ export const RuleProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
-      const { accountId: defaultAccountId } =
-        yield* yield* CloudflareEnvironment;
+      const { accountId: defaultAccountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
-      const accountId =
-        (news.accountId as string | undefined) ?? defaultAccountId;
+      const accountId = (news.accountId as string | undefined) ?? defaultAccountId;
       const name = yield* createRuleName(id, news.name);
 
       // 1. Observe — the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the name scan and
       //    then to create.
-      let observed = output?.ruleId
-        ? yield* getRule(accountId, output.ruleId)
-        : undefined;
+      let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
@@ -287,10 +266,7 @@ export const RuleProvider = () =>
             // config has propagated, so ride out that consistency window.
             Effect.retry({
               while: (e) => e._tag === "MnmConfigMissing",
-              schedule: Schedule.max([
-                Schedule.exponential("500 millis"),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
             }),
             Effect.catchTag("DuplicateMnmRuleName", (error) =>
               findByName(accountId, name).pipe(
@@ -309,20 +285,15 @@ export const RuleProvider = () =>
       const dirty =
         observed.name !== name ||
         !samePrefixes(observed.prefixes, news.prefixes) ||
-        (observed.automaticAdvertisement ?? false) !==
-          (news.automaticAdvertisement ?? false) ||
+        (observed.automaticAdvertisement ?? false) !== (news.automaticAdvertisement ?? false) ||
         (news.bandwidthThreshold !== undefined &&
           observed.bandwidthThreshold !== news.bandwidthThreshold) ||
-        (news.packetThreshold !== undefined &&
-          observed.packetThreshold !== news.packetThreshold) ||
-        (news.duration !== undefined &&
-          normalizeDuration(observed.duration) !== news.duration) ||
+        (news.packetThreshold !== undefined && observed.packetThreshold !== news.packetThreshold) ||
+        (news.duration !== undefined && normalizeDuration(observed.duration) !== news.duration) ||
         (news.zscoreSensitivity !== undefined &&
           observed.zscoreSensitivity !== news.zscoreSensitivity) ||
-        (news.zscoreTarget !== undefined &&
-          observed.zscoreTarget !== news.zscoreTarget) ||
-        (news.prefixMatch !== undefined &&
-          observed.prefixMatch !== news.prefixMatch);
+        (news.zscoreTarget !== undefined && observed.zscoreTarget !== news.zscoreTarget) ||
+        (news.prefixMatch !== undefined && observed.prefixMatch !== news.prefixMatch);
 
       if (!dirty) return toAttributes(observed, accountId);
 
@@ -347,14 +318,12 @@ export const RuleProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* mnm
-        .deleteRule({ accountId: output.accountId, ruleId: output.ruleId })
-        .pipe(
-          // Already gone (`MnmRuleNotFound`, Cloudflare code 1009) — also
-          // covers Cloudflare cascading rule deletion when the account's
-          // MNM config is deleted first.
-          Effect.catchTag("MnmRuleNotFound", () => Effect.void),
-        );
+      yield* mnm.deleteRule({ accountId: output.accountId, ruleId: output.ruleId }).pipe(
+        // Already gone (`MnmRuleNotFound`, Cloudflare code 1009) — also
+        // covers Cloudflare cascading rule deletion when the account's
+        // MNM config is deleted first.
+        Effect.catchTag("MnmRuleNotFound", () => Effect.void),
+      );
     }),
 
     // MNM rules are account-scoped: enumerate every rule in the ambient
@@ -411,10 +380,7 @@ const createRuleName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const samePrefixes = (
-  observed: readonly string[],
-  desired: readonly string[],
-) =>
+const samePrefixes = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
@@ -423,9 +389,7 @@ const samePrefixes = (
  * `60m` → `1h0m0s`) — map the observed value back to the prop vocabulary
  * for diffing.
  */
-const normalizeDuration = (
-  duration: string | null | undefined,
-): RuleDuration | undefined => {
+const normalizeDuration = (duration: string | null | undefined): RuleDuration | undefined => {
   switch (duration) {
     case "1m0s":
     case "1m":

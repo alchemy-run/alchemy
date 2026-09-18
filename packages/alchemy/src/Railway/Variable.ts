@@ -1,4 +1,3 @@
-import { waitUntilDeleted } from "./GraphQL.ts";
 import { createHash } from "node:crypto";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
@@ -9,12 +8,9 @@ import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { waitUntilDeleted } from "./GraphQL.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
-import {
-  ownedProjects,
-  projectEnvironmentIds,
-  type Project,
-} from "./Project.ts";
+import { ownedProjects, projectEnvironmentIds, type Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -107,21 +103,13 @@ const resolveVariableProps = (
       resolved.environment === undefined
         ? undefined
         : Effect.isEffect(resolved.environment)
-          ? yield* resolved.environment as Effect.Effect<
-              VariableEnvironment,
-              never,
-              Providers
-            >
+          ? yield* resolved.environment as Effect.Effect<VariableEnvironment, never, Providers>
           : resolved.environment;
     const service =
       resolved.service === undefined
         ? undefined
         : Effect.isEffect(resolved.service)
-          ? yield* resolved.service as Effect.Effect<
-              VariableService,
-              never,
-              Providers
-            >
+          ? yield* resolved.service as Effect.Effect<VariableService, never, Providers>
           : resolved.service;
     return { ...resolved, project, environment, service };
   });
@@ -280,24 +268,18 @@ const VariableResource = Resource<Variable>("Railway.Variable");
  * @resource
  */
 export const Variable: typeof VariableResource = Object.assign(
-  (
-    id: string,
-    props: VariableProps | Effect.Effect<VariableProps, never, Providers>,
-  ) => VariableResource(id, resolveVariableProps(props)),
+  (id: string, props: VariableProps | Effect.Effect<VariableProps, never, Providers>) =>
+    VariableResource(id, resolveVariableProps(props)),
   VariableResource,
 );
 
-export class VariableNotCreated extends Data.TaggedError(
-  "Railway.VariableNotCreated",
-)<{
+export class VariableNotCreated extends Data.TaggedError("Railway.VariableNotCreated")<{
   projectId: string;
   environmentId: string;
   name: string;
 }> {}
 
-export class VariableProjectRequired extends Data.TaggedError(
-  "Railway.VariableProjectRequired",
-)<{
+export class VariableProjectRequired extends Data.TaggedError("Railway.VariableProjectRequired")<{
   message: string;
 }> {}
 
@@ -310,9 +292,7 @@ export class VariableEnvironmentRequired extends Data.TaggedError(
 const projectIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { projectId?: unknown };
-  return typeof rec.projectId === "string" && rec.projectId.length > 0
-    ? rec.projectId
-    : undefined;
+  return typeof rec.projectId === "string" && rec.projectId.length > 0 ? rec.projectId : undefined;
 };
 
 const environmentIdOf = (value: unknown): string | undefined => {
@@ -326,18 +306,14 @@ const environmentIdOf = (value: unknown): string | undefined => {
 const serviceIdOf = (value: unknown): string | undefined => {
   if (value === null || typeof value !== "object") return undefined;
   const rec = value as { serviceId?: unknown };
-  return typeof rec.serviceId === "string" && rec.serviceId.length > 0
-    ? rec.serviceId
-    : undefined;
+  return typeof rec.serviceId === "string" && rec.serviceId.length > 0 ? rec.serviceId : undefined;
 };
 
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const digestOf = (plain: string) =>
-  Effect.sync(() =>
-    createHash("sha256").update(Buffer.from(plain, "utf8")).digest("hex"),
-  );
+  Effect.sync(() => createHash("sha256").update(Buffer.from(plain, "utf8")).digest("hex"));
 
 const resolveName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
@@ -367,11 +343,7 @@ const asVariableMap = (value: unknown): Record<string, string> => {
   return out;
 };
 
-const listVariableMap = (
-  projectId: string,
-  environmentId: string,
-  serviceId?: string,
-) =>
+const listVariableMap = (projectId: string, environmentId: string, serviceId?: string) =>
   railway
     .variables({
       projectId,
@@ -381,20 +353,11 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed({} as Record<string, string>),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed({} as Record<string, string>)),
     );
 
-const getValue = (
-  projectId: string,
-  environmentId: string,
-  name: string,
-  serviceId?: string,
-) =>
-  listVariableMap(projectId, environmentId, serviceId).pipe(
-    Effect.map((vars) => vars[name]),
-  );
+const getValue = (projectId: string, environmentId: string, name: string, serviceId?: string) =>
+  listVariableMap(projectId, environmentId, serviceId).pipe(Effect.map((vars) => vars[name]));
 
 const upsertVariable = (input: {
   projectId: string;
@@ -414,15 +377,9 @@ const upsertVariable = (input: {
     },
   });
 
-const listEnvironmentIds = (project: {
-  projectId: string;
-  environmentId: string;
-}) =>
+const _listEnvironmentIds = (project: { projectId: string; environmentId: string }) =>
   railway.environments
-    .items(
-      { projectId: project.projectId, first: 50 },
-      { id: true, deletedAt: true },
-    )
+    .items({ projectId: project.projectId, first: 50 }, { id: true, deletedAt: true })
     .pipe(
       Stream.filter((env) => env.deletedAt == null),
       Stream.map((env) => env.id),
@@ -435,9 +392,7 @@ const listEnvironmentIds = (project: {
         return Array.from(set);
       }),
       railway.catchTags(["RailwayNotFound"], () =>
-        Effect.succeed(
-          project.environmentId.length > 0 ? [project.environmentId] : [],
-        ),
+        Effect.succeed(project.environmentId.length > 0 ? [project.environmentId] : []),
       ),
     );
 
@@ -452,27 +407,15 @@ export const VariableProvider = () =>
       const desiredName = news.name !== undefined ? news.name : output.name;
       const nameChanged = desiredName !== output.name;
       const nextProject = projectIdOf(news.project);
-      const projectChanged =
-        nextProject !== undefined && nextProject !== output.projectId;
+      const projectChanged = nextProject !== undefined && nextProject !== output.projectId;
       const nextEnv = environmentIdOf(news.environment);
-      const environmentChanged =
-        nextEnv !== undefined && nextEnv !== output.environmentId;
+      const environmentChanged = nextEnv !== undefined && nextEnv !== output.environmentId;
       const nextService = serviceIdOf(news.service);
-      const serviceChanged =
-        news.service !== undefined && nextService !== output.serviceId;
-      if (
-        nameChanged ||
-        projectChanged ||
-        environmentChanged ||
-        serviceChanged
-      ) {
+      const serviceChanged = news.service !== undefined && nextService !== output.serviceId;
+      if (nameChanged || projectChanged || environmentChanged || serviceChanged) {
         return {
           action: "replace" as const,
-          deleteFirst:
-            nameChanged &&
-            !projectChanged &&
-            !environmentChanged &&
-            !serviceChanged,
+          deleteFirst: nameChanged && !projectChanged && !environmentChanged && !serviceChanged,
         };
       }
       return undefined;
@@ -480,8 +423,7 @@ export const VariableProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const projectId =
-        output?.projectId ??
-        (olds !== undefined ? projectIdOf(olds.project) : undefined);
+        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
       const environmentId =
         output?.environmentId ??
         (olds !== undefined
@@ -492,8 +434,7 @@ export const VariableProvider = () =>
       }
       const name = yield* resolveName(id, olds?.name, output?.name);
       const serviceId =
-        output?.serviceId ??
-        (olds !== undefined ? serviceIdOf(olds.service) : undefined);
+        output?.serviceId ?? (olds !== undefined ? serviceIdOf(olds.service) : undefined);
       const value = yield* getValue(projectId, environmentId, name, serviceId);
       if (value === undefined) return undefined;
       const digest = yield* digestOf(value);
@@ -517,9 +458,7 @@ export const VariableProvider = () =>
             listVariableMap(project.projectId, environmentId).pipe(
               Effect.flatMap((vars) =>
                 Effect.forEach(
-                  Object.keys(vars).filter((name) =>
-                    matchesAlchemyPhysicalName(name),
-                  ),
+                  Object.keys(vars).filter((name) => matchesAlchemyPhysicalName(name)),
                   (name) =>
                     digestOf(vars[name]!).pipe(
                       Effect.map((digest) =>
@@ -561,20 +500,13 @@ export const VariableProvider = () =>
         });
       }
       const serviceId =
-        props.service !== undefined
-          ? serviceIdOf(props.service)
-          : output?.serviceId;
+        props.service !== undefined ? serviceIdOf(props.service) : output?.serviceId;
       const name = yield* resolveName(id, props.name, output?.name);
       const desiredPlain = unwrapSecret(props.value);
 
       let current =
         output !== undefined
-          ? yield* getValue(
-              output.projectId,
-              output.environmentId,
-              output.name,
-              output.serviceId,
-            )
+          ? yield* getValue(output.projectId, output.environmentId, output.name, output.serviceId)
           : undefined;
       if (
         current === undefined &&
@@ -616,9 +548,7 @@ export const VariableProvider = () =>
           value: desiredPlain,
           serviceId,
         });
-        current =
-          (yield* getValue(projectId, environmentId, name, serviceId)) ??
-          desiredPlain;
+        current = (yield* getValue(projectId, environmentId, name, serviceId)) ?? desiredPlain;
       }
 
       const digest = yield* digestOf(current);
@@ -645,21 +575,16 @@ export const VariableProvider = () =>
             projectId: output.projectId,
             environmentId: output.environmentId,
             name: output.name,
-            ...(output.serviceId !== undefined
-              ? { serviceId: output.serviceId }
-              : {}),
+            ...(output.serviceId !== undefined ? { serviceId: output.serviceId } : {}),
           },
         })
         .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
       yield* waitUntilDeleted(
         "Variable",
         `${output.environmentId}/${output.serviceId ?? "shared"}/${output.name}`,
-        getValue(
-          output.projectId,
-          output.environmentId,
-          output.name,
-          output.serviceId,
-        ).pipe(Effect.map((value) => value === undefined)),
+        getValue(output.projectId, output.environmentId, output.name, output.serviceId).pipe(
+          Effect.map((value) => value === undefined),
+        ),
       );
     }),
   });

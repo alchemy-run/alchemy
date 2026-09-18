@@ -39,9 +39,7 @@ export type SshServices =
   | Scope.Scope;
 
 export interface SshClient {
-  exec: (
-    command: string,
-  ) => Effect.Effect<SshExecResult, SshError, SshServices>;
+  exec: (command: string) => Effect.Effect<SshExecResult, SshError, SshServices>;
   scp: (
     local: string | Uint8Array<ArrayBufferLike>,
     remote: string,
@@ -70,10 +68,7 @@ export interface SshClient {
 export interface Ssh extends Binding.Service<
   Ssh,
   "Hetzner.Ssh",
-  (
-    server: Server,
-    options?: SshOptions,
-  ) => Effect.Effect<SshClient, SshError, SshServices>
+  (server: Server, options?: SshOptions) => Effect.Effect<SshClient, SshError, SshServices>
 > {}
 
 export const Ssh = Binding.Service<Ssh>("Hetzner.Ssh");
@@ -253,10 +248,7 @@ export const openSshClient = Effect.fn(function* (input: {
   };
 });
 
-export const sshClientForServer = Effect.fn(function* (
-  server: Server,
-  options?: SshOptions,
-) {
+export const sshClientForServer = Effect.fn(function* (server: Server, options?: SshOptions) {
   const host = ipv4Of(server);
   if (host === undefined) {
     return yield* new SshError({
@@ -264,8 +256,7 @@ export const sshClientForServer = Effect.fn(function* (
     });
   }
   const privateKey =
-    unwrapKey(options?.privateKey) ??
-    unwrapKey((server as { privateKey?: unknown }).privateKey);
+    unwrapKey(options?.privateKey) ?? unwrapKey((server as { privateKey?: unknown }).privateKey);
   if (privateKey === undefined) {
     return yield* new SshError({
       message: `Server '${server.LogicalId}' has no deploy SSH private key`,

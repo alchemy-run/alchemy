@@ -1,11 +1,11 @@
-import * as ApiGateway from "@/AWS/ApiGateway";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ApiGateway from "@/AWS/ApiGateway";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -55,8 +55,7 @@ export default ApiGatewayBindingsFunction.make(
     const getUsage = yield* ApiGateway.GetUsage(plan);
     const updateUsage = yield* ApiGateway.UpdateUsage(plan);
     const flushStageCache = yield* ApiGateway.FlushStageCache(stage);
-    const flushStageAuthorizersCache =
-      yield* ApiGateway.FlushStageAuthorizersCache(stage);
+    const flushStageAuthorizersCache = yield* ApiGateway.FlushStageAuthorizersCache(stage);
 
     return {
       fetch: Effect.gen(function* () {
@@ -101,9 +100,7 @@ export default ApiGatewayBindingsFunction.make(
           const body = (yield* request.json) as unknown as { id: string };
           const key = yield* updateApiKey({
             apiKey: body.id,
-            patchOperations: [
-              { op: "replace", path: "/enabled", value: "false" },
-            ],
+            patchOperations: [{ op: "replace", path: "/enabled", value: "false" }],
           });
           return yield* HttpServerResponse.json({ enabled: key.enabled });
         }
@@ -143,9 +140,7 @@ export default ApiGatewayBindingsFunction.make(
           // AccessDenied instead, failing the route).
           const extended = yield* updateUsage({
             keyId: body.keyId,
-            patchOperations: [
-              { op: "replace", path: "/remaining", value: "100" },
-            ],
+            patchOperations: [{ op: "replace", path: "/remaining", value: "100" }],
           }).pipe(
             Effect.map(() => true),
             Effect.catchTag(["BadRequestException", "NotFoundException"], () =>

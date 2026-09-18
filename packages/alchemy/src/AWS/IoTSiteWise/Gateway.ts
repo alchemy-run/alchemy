@@ -8,11 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  fetchSiteWiseTags,
-  matchesDesired,
-  syncSiteWiseTags,
-} from "./internal.ts";
+import { fetchSiteWiseTags, matchesDesired, syncSiteWiseTags } from "./internal.ts";
 
 export type GatewayPlatform = sitewise.GatewayPlatform;
 
@@ -99,10 +95,7 @@ export interface Gateway extends Resource<
  */
 export const Gateway = Resource<Gateway>("AWS.IoTSiteWise.Gateway");
 
-const createGatewayName = (
-  id: string,
-  props: { gatewayName?: string | undefined },
-) =>
+const createGatewayName = (id: string, props: { gatewayName?: string | undefined }) =>
   props.gatewayName
     ? Effect.succeed(props.gatewayName)
     : createPhysicalName({ id, maxLength: 256 });
@@ -115,11 +108,7 @@ interface GatewayState {
 const readGatewayById = Effect.fn(function* (gatewayId: string) {
   const described = yield* sitewise
     .describeGateway({ gatewayId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!described) return undefined;
   const state: GatewayState = {
     described,
@@ -138,9 +127,7 @@ const readGatewayById = Effect.fn(function* (gatewayId: string) {
 const findGatewayByName = Effect.fn(function* (name: string) {
   const summaries = yield* sitewise.listGateways.pages({}).pipe(
     EffectStream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) => page.gatewaySummaries),
-    ),
+    Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.gatewaySummaries)),
   );
   const match = summaries.find((summary) => summary.gatewayName === name);
   if (!match) return undefined;
@@ -157,25 +144,19 @@ export const GatewayProvider = () =>
           Effect.gen(function* () {
             const summaries = yield* sitewise.listGateways.pages({}).pipe(
               EffectStream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.gatewaySummaries),
-              ),
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.gatewaySummaries)),
             );
             const hydrated = yield* Effect.forEach(
               summaries.map((summary) => summary.gatewayId),
               (gatewayId) => readGatewayById(gatewayId),
               { concurrency: 5 },
             );
-            return hydrated.flatMap((state) =>
-              state === undefined ? [] : [state.attrs],
-            );
+            return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.gatewayId
             ? yield* readGatewayById(output.gatewayId)
-            : yield* findGatewayByName(
-                yield* createGatewayName(id, olds ?? {}),
-              );
+            : yield* findGatewayByName(yield* createGatewayName(id, olds ?? {}));
           if (!state) return undefined;
           return (yield* hasAlchemyTags(id, state.attrs.tags as Tags))
             ? state.attrs
@@ -189,17 +170,14 @@ export const GatewayProvider = () =>
           if (
             !matchesDesired(news.gatewayPlatform, olds.gatewayPlatform) ||
             !matchesDesired(olds.gatewayPlatform, news.gatewayPlatform) ||
-            (news.gatewayVersion !== undefined &&
-              news.gatewayVersion !== olds.gatewayVersion)
+            (news.gatewayVersion !== undefined && news.gatewayVersion !== olds.gatewayVersion)
           ) {
             return { action: "replace" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("IoT SiteWise Gateway requires props"),
-            );
+            return yield* Effect.fail(new Error("IoT SiteWise Gateway requires props"));
           }
           const name = yield* createGatewayName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -226,9 +204,7 @@ export const GatewayProvider = () =>
                     const existing = yield* findGatewayByName(name);
                     if (existing === undefined) {
                       return yield* Effect.fail(
-                        new Error(
-                          `gateway '${name}' already exists but was not found by name`,
-                        ),
+                        new Error(`gateway '${name}' already exists but was not found by name`),
                       );
                     }
                     return {
@@ -238,14 +214,10 @@ export const GatewayProvider = () =>
                   }),
                 ),
               );
-            yield* session.note(
-              `Created gateway ${name} (${created.gatewayId})`,
-            );
+            yield* session.note(`Created gateway ${name} (${created.gatewayId})`);
             state = yield* readGatewayById(created.gatewayId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created gateway ${name}`),
-              );
+              return yield* Effect.fail(new Error(`failed to read created gateway ${name}`));
             }
           }
 
@@ -259,28 +231,20 @@ export const GatewayProvider = () =>
           }
 
           // Sync tags — diff against observed cloud tags.
-          yield* syncSiteWiseTags(
-            state.attrs.gatewayArn,
-            state.attrs.tags,
-            desiredTags,
-          );
+          yield* syncSiteWiseTags(state.attrs.gatewayArn, state.attrs.tags, desiredTags);
 
           yield* session.note(state.attrs.gatewayArn);
 
           const final = yield* readGatewayById(state.attrs.gatewayId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled gateway ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled gateway ${name}`));
           }
           return final.attrs;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* sitewise
             .deleteGateway({ gatewayId: output.gatewayId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

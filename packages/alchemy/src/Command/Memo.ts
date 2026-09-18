@@ -88,8 +88,7 @@ const Memo = Effect.gen(function* () {
     const rules = yield* fs.readFileString(path.join(cwd, ".gitignore")).pipe(
       Effect.map((file) => file.split("\n")),
       Effect.catchIf(
-        (error) =>
-          error._tag === "PlatformError" && error.reason._tag === "NotFound",
+        (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
         () => Effect.succeed([]),
       ),
     );
@@ -164,9 +163,7 @@ const Memo = Effect.gen(function* () {
     // cwd-relative (like the lockfile above) so `hashFiles` resolves them
     // correctly and machine-specific path prefixes never leak into the hash.
     return files
-      .map((file) =>
-        path.isAbsolute(file) ? path.relative(options.cwd, file) : file,
-      )
+      .map((file) => (path.isAbsolute(file) ? path.relative(options.cwd, file) : file))
       .sort();
   });
 
@@ -203,10 +200,7 @@ export const hashDirectory = Effect.fn(function* (props: {
   memo?: MemoOptions;
 }): Effect.fn.Return<string, PlatformError, FileSystem.FileSystem | Path.Path> {
   const service = yield* Memo;
-  const resolvedOptions = yield* service.resolveMemoOptions(
-    props.cwd,
-    props.memo ?? {},
-  );
+  const resolvedOptions = yield* service.resolveMemoOptions(props.cwd, props.memo ?? {});
   const files = yield* service.listFiles(resolvedOptions);
   const hash = yield* service.hashFiles(resolvedOptions.cwd, files);
   return hash;

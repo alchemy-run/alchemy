@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { GraphqlApi } from "@/AWS/AppSync";
-import { WebACL, WebACLAssociation } from "@/AWS/WAFv2";
-import * as Test from "@/Test/Alchemy";
 import * as sts from "@distilled.cloud/aws/sts";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import { expect } from "alchemy-test";
@@ -9,6 +5,10 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { GraphqlApi } from "@/AWS/AppSync";
+import { WebACL, WebACLAssociation } from "@/AWS/WAFv2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -49,10 +49,7 @@ const assertAssociated = (resourceArn: string, expected: string | undefined) =>
     ),
     Effect.retry({
       while: (e) => e._tag === "AssociationPending",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(15),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
     }),
   );
 
@@ -60,23 +57,21 @@ const assertAssociated = (resourceArn: string, expected: string | undefined) =>
 // returns the typed WAFNonexistentItemException — proves the distilled
 // wiring and the typed error union at near-zero cost, without creating
 // any resources.
-test.provider(
-  "associateWebACL surfaces typed WAFNonexistentItemException",
-  () =>
-    Effect.gen(function* () {
-      const identity = yield* sts.getCallerIdentity({});
-      const account = identity.Account;
-      const result = yield* Effect.result(
-        wafv2.associateWebACL({
-          WebACLArn: `arn:aws:wafv2:us-west-2:${account}:regional/webacl/alchemy-probe-nonexistent/00000000-0000-0000-0000-000000000000`,
-          ResourceArn: `arn:aws:appsync:us-west-2:${account}:apis/alchemyprobenonexistent`,
-        }),
-      );
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure._tag).toBe("WAFNonexistentItemException");
-      }
-    }),
+test.provider("associateWebACL surfaces typed WAFNonexistentItemException", () =>
+  Effect.gen(function* () {
+    const identity = yield* sts.getCallerIdentity({});
+    const account = identity.Account;
+    const result = yield* Effect.result(
+      wafv2.associateWebACL({
+        WebACLArn: `arn:aws:wafv2:us-west-2:${account}:regional/webacl/alchemy-probe-nonexistent/00000000-0000-0000-0000-000000000000`,
+        ResourceArn: `arn:aws:appsync:us-west-2:${account}:apis/alchemyprobenonexistent`,
+      }),
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure._tag).toBe("WAFNonexistentItemException");
+    }
+  }),
 );
 
 // Live lifecycle is gated: associating a FRESHLY CREATED web ACL (or

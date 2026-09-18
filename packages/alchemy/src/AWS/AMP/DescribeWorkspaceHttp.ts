@@ -16,26 +16,22 @@ export const DescribeWorkspaceHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AMP.DescribeWorkspace(${workspace}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["aps:DescribeWorkspace"],
-                  Resource: [workspace.workspaceArn],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AMP.DescribeWorkspace(${workspace}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: ["aps:DescribeWorkspace"],
+                Resource: [workspace.workspaceArn],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.AMP.DescribeWorkspace(${workspace.LogicalId})`)(
-        function* () {
-          return yield* describeWorkspace({
-            workspaceId: yield* WorkspaceId,
-          });
-        },
-      );
+      return Effect.fn(`AWS.AMP.DescribeWorkspace(${workspace.LogicalId})`)(function* () {
+        return yield* describeWorkspace({
+          workspaceId: yield* WorkspaceId,
+        });
+      });
     });
   }),
 );

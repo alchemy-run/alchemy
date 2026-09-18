@@ -1,7 +1,7 @@
-import * as AWS from "@/AWS";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
 import { isolatedProject } from "../../../../../IsolatedProject.ts";
 
 /**
@@ -13,9 +13,7 @@ import { isolatedProject } from "../../../../../IsolatedProject.ts";
  */
 export const project = isolatedProject("lambda-microvm", import.meta.filename);
 
-export const IsolatedSandboxBuildRole = AWS.IAM.Role(
-  "IsolatedProjectMicrovmBuildRole",
-);
+export const IsolatedSandboxBuildRole = AWS.IAM.Role("IsolatedProjectMicrovmBuildRole");
 
 /**
  * Minimal effectful MicroVM image bundled from an isolated project: a typed

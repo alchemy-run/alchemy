@@ -40,8 +40,7 @@ export interface MediaPackageV2HarvestJobEventDetail {
 }
 
 /** A MediaPackage v2 harvest-job EventBridge event delivered to the handler. */
-export type MediaPackageV2HarvestJobEvent =
-  EventRecord<MediaPackageV2HarvestJobEventDetail>;
+export type MediaPackageV2HarvestJobEvent = EventRecord<MediaPackageV2HarvestJobEventDetail>;
 
 export interface HarvestJobEventSourceProps extends EventRouteProps {
   /**
@@ -105,9 +104,7 @@ export const consumeHarvestJobEvents = <StreamReq = never, Req = never>(
     {
       source: ["aws.mediapackagev2"],
       "detail-type": ["MediaPackageV2 HarvestJob Notification"],
-      ...(props.harvestJobArns !== undefined
-        ? { resources: [...props.harvestJobArns] }
-        : {}),
+      ...(props.harvestJobArns !== undefined ? { resources: [...props.harvestJobArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

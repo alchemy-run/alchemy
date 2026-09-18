@@ -37,10 +37,7 @@ export interface DeleteConversation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteConversationRequest,
-    ) => Effect.Effect<
-      qbusiness.DeleteConversationResponse,
-      qbusiness.DeleteConversationError
-    >
+    ) => Effect.Effect<qbusiness.DeleteConversationResponse, qbusiness.DeleteConversationError>
   >
 > {}
 export const DeleteConversation = Binding.Service<DeleteConversation>(

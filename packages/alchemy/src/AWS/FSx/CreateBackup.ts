@@ -40,6 +40,4 @@ export interface CreateBackup extends Binding.Service<
     ) => Effect.Effect<fsx.CreateBackupResponse, fsx.CreateBackupError>
   >
 > {}
-export const CreateBackup = Binding.Service<CreateBackup>(
-  "AWS.FSx.CreateBackup",
-);
+export const CreateBackup = Binding.Service<CreateBackup>("AWS.FSx.CreateBackup");

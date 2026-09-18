@@ -1,9 +1,9 @@
-import * as Bundle from "@/Bundle/Bundle";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Bundle from "@/Bundle/Bundle";
 
 /**
  * Rolldown's default `resolve.conditionNames` are import-kind specific
@@ -80,24 +80,20 @@ layer(NodeServices.layer)("bundle conditionNames", (it) => {
       }
     });
 
-  it.effect(
-    "BUN_CONDITION_NAMES: require() resolves the CJS export, import the ESM one",
-    () =>
-      Effect.gen(function* () {
-        const code = yield* bundleWith(Bundle.BUN_CONDITION_NAMES);
-        expect(code).toContain("DUAL_PKG_CJS_ENTRY");
-        expect(code).toContain("DUAL_PKG_ESM_ENTRY");
-      }),
+  it.effect("BUN_CONDITION_NAMES: require() resolves the CJS export, import the ESM one", () =>
+    Effect.gen(function* () {
+      const code = yield* bundleWith(Bundle.BUN_CONDITION_NAMES);
+      expect(code).toContain("DUAL_PKG_CJS_ENTRY");
+      expect(code).toContain("DUAL_PKG_ESM_ENTRY");
+    }),
   );
 
-  it.effect(
-    "NODE_CONDITION_NAMES: require() resolves the CJS export, import the ESM one",
-    () =>
-      Effect.gen(function* () {
-        const code = yield* bundleWith(Bundle.NODE_CONDITION_NAMES);
-        expect(code).toContain("DUAL_PKG_CJS_ENTRY");
-        expect(code).toContain("DUAL_PKG_ESM_ENTRY");
-      }),
+  it.effect("NODE_CONDITION_NAMES: require() resolves the CJS export, import the ESM one", () =>
+    Effect.gen(function* () {
+      const code = yield* bundleWith(Bundle.NODE_CONDITION_NAMES);
+      expect(code).toContain("DUAL_PKG_CJS_ENTRY");
+      expect(code).toContain("DUAL_PKG_ESM_ENTRY");
+    }),
   );
 
   // The control: the former list, with `"import"` baked in, hands the CJS

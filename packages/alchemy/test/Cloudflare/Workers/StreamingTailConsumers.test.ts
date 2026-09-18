@@ -1,6 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -8,15 +5,15 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Producer: logs on every request so each invocation produces a streaming
@@ -56,8 +53,7 @@ interface RecordedTailEvent {
  * Cloudflare ships production delivery (the probe test will fail then) to
  * assert delivery end-to-end.
  */
-const STREAMING_TAIL_DELIVERY =
-  !!process.env.CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY;
+const STREAMING_TAIL_DELIVERY = !!process.env.CLOUDFLARE_TEST_STREAMING_TAIL_DELIVERY;
 
 /**
  * Ungated platform probe: production refuses the experimental
@@ -117,10 +113,7 @@ test.provider(
         Effect.gen(function* () {
           const events = yield* Cloudflare.KV.Namespace("StreamTailEvents");
           const consumer = yield* Cloudflare.Worker("StreamingTailConsumer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/streaming-tail-consumer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/streaming-tail-consumer.ts"),
             env: { EVENTS: events },
           });
           const producer = yield* Cloudflare.Worker("StreamingTailProducer", {
@@ -138,9 +131,7 @@ test.provider(
       // consumers, so there is no out-of-band settings read to assert
       // against — the gated delivery assertion below is the only cloud-side
       // proof of attachment available.
-      expect(v1.producer.streamingTailConsumers).toEqual([
-        { service: v1.consumer.workerName },
-      ]);
+      expect(v1.producer.streamingTailConsumers).toEqual([{ service: v1.consumer.workerName }]);
       expect(v1.producer.tailConsumers ?? []).toEqual([]);
 
       // The producer serves with the streaming consumer attached — the
@@ -185,9 +176,7 @@ test.provider(
           .pipe(
             Effect.flatMap((res) =>
               Effect.tryPromise(() =>
-                new Response(
-                  Stream.toReadableStream(res.body) as BodyInit,
-                ).text(),
+                new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
               ),
             ),
           );

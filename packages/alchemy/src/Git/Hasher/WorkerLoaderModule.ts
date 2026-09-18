@@ -6,36 +6,27 @@
  * nothing else; it has no bindings and no network.
  */
 import * as Effect from "effect/Effect";
-import {
-  decodeDeltaBatch,
-  encodeDeltaResults,
-  encodeScanResult,
-  frame,
-} from "./Protocol.ts";
 import { resolveDeltas, scanPart } from "../Protocol/PartialScan.ts";
+import { decodeDeltaBatch, encodeDeltaResults, encodeScanResult, frame } from "./Protocol.ts";
 
 export default {
   async fetch(request: Request): Promise<Response> {
     const query = new URL(request.url).searchParams;
     if (query.get("mode") === "deltas") {
       const maxObjectSize = Number(query.get("max"));
-      const { bases, jobs } = decodeDeltaBatch(
-        new Uint8Array(await request.arrayBuffer()),
-      );
+      const { bases, jobs } = decodeDeltaBatch(new Uint8Array(await request.arrayBuffer()));
       const resolved = await Effect.runPromise(
         Effect.result(resolveDeltas(bases, jobs, { maxObjectSize })),
       );
       if (resolved._tag === "Failure") {
         const failure = resolved.failure;
-        return new Response(
-          `${failure._tag}: ${"reason" in failure ? failure.reason : ""}`,
-          { status: 422 },
-        );
+        return new Response(`${failure._tag}: ${"reason" in failure ? failure.reason : ""}`, {
+          status: 422,
+        });
       }
-      return new Response(
-        frame(encodeDeltaResults(resolved.success)) as unknown as BodyInit,
-        { headers: { "content-type": "application/octet-stream" } },
-      );
+      return new Response(frame(encodeDeltaResults(resolved.success)) as unknown as BodyInit, {
+        headers: { "content-type": "application/octet-stream" },
+      });
     }
     const base = Number(query.get("base"));
     const remaining = Number(query.get("remaining"));
@@ -57,16 +48,12 @@ export default {
     );
     if (result._tag === "Failure") {
       const failure = result.failure;
-      return new Response(
-        `${failure._tag}: ${"reason" in failure ? failure.reason : ""}`,
-        { status: 422 },
-      );
+      return new Response(`${failure._tag}: ${"reason" in failure ? failure.reason : ""}`, {
+        status: 422,
+      });
     }
-    return new Response(
-      frame(encodeScanResult(result.success)) as unknown as BodyInit,
-      {
-        headers: { "content-type": "application/octet-stream" },
-      },
-    );
+    return new Response(frame(encodeScanResult(result.success)) as unknown as BodyInit, {
+      headers: { "content-type": "application/octet-stream" },
+    });
   },
 };

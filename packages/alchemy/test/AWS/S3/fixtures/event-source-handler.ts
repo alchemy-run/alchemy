@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 // Keys written by the `fetch` route live under `incoming/`; the subscription
 // only listens to that prefix and writes its derived object under `processed/`.
@@ -93,12 +93,8 @@ export default BucketEventSourceFunction.make(
             return HttpServerResponse.text("Missing key", { status: 400 });
           }
           return yield* getObject({ Key: `${PROCESSED_PREFIX}${key}` }).pipe(
-            Effect.flatMap((result) =>
-              Stream.mkString(Stream.decodeText(result.Body!)),
-            ),
-            Effect.flatMap((text) =>
-              HttpServerResponse.json({ processed: JSON.parse(text) }),
-            ),
+            Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+            Effect.flatMap((text) => HttpServerResponse.json({ processed: JSON.parse(text) })),
             // Object not written yet — the test polls until it appears.
             Effect.catchTag("NoSuchKey", () =>
               HttpServerResponse.json({ processed: null }, { status: 404 }),
@@ -106,19 +102,10 @@ export default BucketEventSourceFunction.make(
           );
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Lambda.BucketEventSource,
-        S3.PutObjectHttp,
-        S3.GetObjectHttp,
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(Lambda.BucketEventSource, S3.PutObjectHttp, S3.GetObjectHttp)),
   ),
 );

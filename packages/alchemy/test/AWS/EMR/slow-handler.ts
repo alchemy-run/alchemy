@@ -1,12 +1,12 @@
-import * as EMR from "@/AWS/EMR";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as EMR from "@/AWS/EMR";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "slow-handler.ts");
 
@@ -44,9 +44,7 @@ export default EmrSlowTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole"],
     });
     // EC2 instance role + profile (the job-flow role).
     const ec2Role = yield* IAM.Role("EmrBindingsEc2Role", {
@@ -60,9 +58,7 @@ export default EmrSlowTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceforEC2Role"],
     });
     const instanceProfile = yield* IAM.InstanceProfile("EmrBindingsProfile", {
       roleName: ec2Role.roleName,

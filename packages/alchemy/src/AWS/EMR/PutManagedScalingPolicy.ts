@@ -31,10 +31,7 @@ export interface PutManagedScalingPolicy extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.PutManagedScalingPolicyInput, "ClusterId">,
-    ) => Effect.Effect<
-      SVC.PutManagedScalingPolicyOutput,
-      SVC.PutManagedScalingPolicyError
-    >
+    ) => Effect.Effect<SVC.PutManagedScalingPolicyOutput, SVC.PutManagedScalingPolicyError>
   >
 > {}
 export const PutManagedScalingPolicy = Binding.Service<PutManagedScalingPolicy>(

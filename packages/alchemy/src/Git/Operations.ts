@@ -1,10 +1,9 @@
-/** Repository operations over storage services. HTTP handlers adapt these results. */
-import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Layer from "effect/Layer";
+/** Repository operations over storage services. HTTP handlers adapt these results. */
+import type * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import type {
   CompactRepo,
   Compare,
@@ -51,12 +50,7 @@ import {
   TreeEntry,
   type Oid,
 } from "./Api.ts";
-
-import {
-  parseCommit,
-  parseTree,
-  treeEntryKind,
-} from "./Protocol/ObjectCodec.ts";
+import { parseCommit, parseTree, treeEntryKind } from "./Protocol/ObjectCodec.ts";
 import type { StoreError } from "./Protocol/Store.ts";
 import { RegistryStore, type RegistryEntry } from "./RegistryObject.ts";
 import {
@@ -187,8 +181,7 @@ const registryFallbackRepo = (entry: RegistryEntry): Repo =>
     readOnly: entry.readOnly,
     public: entry.public,
     forkOf: entry.forkOf,
-    status:
-      entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
+    status: entry.deletedAt !== null ? "deleting" : (entry.status as Repo["status"]),
     createdAt: entry.createdAt,
     // No DO to ask (unseeded or mid-purge) — report an empty store.
     objects: new ObjectStats({
@@ -216,8 +209,7 @@ export const makeOperations = Effect.gen(function* () {
   }
   const resolveCache = new Map<string, CacheSlot>();
 
-  const cacheKey = (owner: string, repo: string) =>
-    `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+  const cacheKey = (owner: string, repo: string) => `${owner.toLowerCase()}/${repo.toLowerCase()}`;
 
   const dropCached = (owner: string, repo: string) =>
     Effect.sync(() => {
@@ -277,8 +269,7 @@ export const makeOperations = Effect.gen(function* () {
       ),
     );
 
-  const remoteUrl = (owner: string, name: string) =>
-    Effect.succeed(`/${owner}/${name}.git`);
+  const remoteUrl = (owner: string, name: string) => Effect.succeed(`/${owner}/${name}.git`);
 
   // Accept decoded fields rather than endpoint metadata so these handlers also
   // work with APIs that add middleware or prefixes.
@@ -323,23 +314,17 @@ export const makeOperations = Effect.gen(function* () {
             }
             yield* registryStub()
               .removeRow(existing.repoId)
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
+              .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
             yield* dropCached(input.owner, input.name);
             return yield* registryStub()
               .createRepo(input)
-              .pipe(
-                Effect.catchTag("StoreError", (error) => Effect.die(error)),
-              );
+              .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error)));
           }),
         ),
       );
 
   const reposRoutes = {
-    create: ({
-      payload,
-    }: Pick<HttpApiEndpoint.Request<typeof CreateRepo>, "payload">) =>
+    create: ({ payload }: Pick<HttpApiEndpoint.Request<typeof CreateRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* insertRepoRow({
           owner: payload.owner,
@@ -365,10 +350,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.onError(() =>
               registryStub()
                 .removeRow(entry.repoId)
-                .pipe(
-                  Effect.ignore,
-                  Effect.andThen(dropCached(entry.owner, entry.name)),
-                ),
+                .pipe(Effect.ignore, Effect.andThen(dropCached(entry.owner, entry.name))),
             ),
             Effect.catchTag("StoreError", (error) => Effect.die(error)),
           );
@@ -378,18 +360,13 @@ export const makeOperations = Effect.gen(function* () {
           remote,
         });
       }),
-    get: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetRepo>, "params">) =>
+    get: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetRepo>, "params">) =>
       Effect.gen(function* () {
         // Includes rows mid-purge: GET keeps reporting
         // status "deleting" until the purge alarm frees the name (only
         // then a 404), so "poll GET until 404 then re-create" never
         // races the purge.
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
+        const entry = yield* resolveIncludingDeleting(params.owner, params.repo);
         if (entry.deletedAt !== null) {
           return registryFallbackRepo(entry);
         }
@@ -412,10 +389,7 @@ export const makeOperations = Effect.gen(function* () {
     update: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdateRepo>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdateRepo>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const meta = yield* repos
@@ -439,9 +413,7 @@ export const makeOperations = Effect.gen(function* () {
           );
         return toRepo(meta);
       }),
-    list: ({
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof ListRepos>, "query">) =>
+    list: ({ query }: Pick<HttpApiEndpoint.Request<typeof ListRepos>, "query">) =>
       Effect.gen(function* () {
         // Everything the Registry holds; `public: true` narrows it. Who
         // may list at all was decided in front of the route.
@@ -465,14 +437,9 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    delete: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
+    delete: ({ params }: Pick<HttpApiEndpoint.Request<typeof DeleteRepo>, "params">) =>
       Effect.gen(function* () {
-        const entry = yield* resolveIncludingDeleting(
-          params.owner,
-          params.repo,
-        );
+        const entry = yield* resolveIncludingDeleting(params.owner, params.repo);
         // Always (re-)arm the purge — even when the row is already
         // soft-deleted. A second DELETE mid-drain is an idempotent 204,
         // and re-arming is what recovers a purge whose alarm was lost
@@ -489,9 +456,7 @@ export const makeOperations = Effect.gen(function* () {
             Effect.catchTag("RepoNotFound", () =>
               registryStub()
                 .removeRow(entry.repoId)
-                .pipe(
-                  Effect.catchTag("StoreError", (error) => Effect.die(error)),
-                ),
+                .pipe(Effect.catchTag("StoreError", (error) => Effect.die(error))),
             ),
           );
         yield* registryStub()
@@ -563,9 +528,7 @@ export const makeOperations = Effect.gen(function* () {
           remote,
         });
       }),
-    compact: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof CompactRepo>, "params">) =>
+    compact: ({ params }: Pick<HttpApiEndpoint.Request<typeof CompactRepo>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         yield* repos
@@ -583,9 +546,7 @@ export const makeOperations = Effect.gen(function* () {
             ),
           );
       }),
-    import: ({
-      payload,
-    }: Pick<HttpApiEndpoint.Request<typeof ImportRepo>, "payload">) =>
+    import: ({ payload }: Pick<HttpApiEndpoint.Request<typeof ImportRepo>, "payload">) =>
       Effect.gen(function* () {
         const entry = yield* registryStub()
           .createRepo({
@@ -627,10 +588,7 @@ export const makeOperations = Effect.gen(function* () {
   };
 
   const refsRoutes = {
-    list: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof ListRefs>, "params" | "query">) =>
+    list: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof ListRefs>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -649,10 +607,7 @@ export const makeOperations = Effect.gen(function* () {
           );
         return { head: page.head, refs: page.refs.map(toRef) };
       }),
-    get: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof GetRef>, "params" | "query">) =>
+    get: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof GetRef>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const ref = yield* repos
@@ -675,10 +630,7 @@ export const makeOperations = Effect.gen(function* () {
       params,
       query,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdateRef>,
-      "params" | "query" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdateRef>, "params" | "query" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -705,10 +657,7 @@ export const makeOperations = Effect.gen(function* () {
       params,
       query,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof RemoveRef>,
-      "params" | "query" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof RemoveRef>, "params" | "query" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const stub = repos.getByName(entry.repoId);
@@ -732,9 +681,7 @@ export const makeOperations = Effect.gen(function* () {
   };
 
   const objectsRoutes = {
-    commit: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetCommit>, "params">) =>
+    commit: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetCommit>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -772,10 +719,7 @@ export const makeOperations = Effect.gen(function* () {
           message: parsed.message,
         });
       }),
-    log: ({
-      params,
-      query,
-    }: Pick<HttpApiEndpoint.Request<typeof GetLog>, "params" | "query">) =>
+    log: ({ params, query }: Pick<HttpApiEndpoint.Request<typeof GetLog>, "params" | "query">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const page = yield* repos
@@ -802,9 +746,7 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    tree: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetTree>, "params">) =>
+    tree: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetTree>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -835,9 +777,7 @@ export const makeOperations = Effect.gen(function* () {
           ),
         };
       }),
-    blob: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetBlob>, "params">) =>
+    blob: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetBlob>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -867,9 +807,7 @@ export const makeOperations = Effect.gen(function* () {
           content: Encoding.encodeBase64(data.content),
         };
       }),
-    diff: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetDiff>, "params">) =>
+    diff: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetDiff>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const data = yield* repos
@@ -931,10 +869,7 @@ export const makeOperations = Effect.gen(function* () {
     create: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof CreatePull>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof CreatePull>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos
@@ -988,9 +923,7 @@ export const makeOperations = Effect.gen(function* () {
           hasMore: page.hasMore,
         };
       }),
-    get: ({
-      params,
-    }: Pick<HttpApiEndpoint.Request<typeof GetPull>, "params">) =>
+    get: ({ params }: Pick<HttpApiEndpoint.Request<typeof GetPull>, "params">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const detail = yield* repos
@@ -1012,10 +945,7 @@ export const makeOperations = Effect.gen(function* () {
     update: ({
       params,
       payload,
-    }: Pick<
-      HttpApiEndpoint.Request<typeof UpdatePull>,
-      "params" | "payload"
-    >) =>
+    }: Pick<HttpApiEndpoint.Request<typeof UpdatePull>, "params" | "payload">) =>
       Effect.gen(function* () {
         const entry = yield* resolveOrNotFound(params.owner, params.repo);
         const pull = yield* repos

@@ -1,3 +1,5 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as GitHub from "@/GitHub";
 import { GitHubCredentials } from "@/GitHub/Credentials.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,14 +7,10 @@ import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
-  throw new Error(
-    `Refusing GitHub Ruleset tests for unauthorized owner: ${owner}`,
-  );
+  throw new Error(`Refusing GitHub Ruleset tests for unauthorized owner: ${owner}`);
 }
 
 const { test } = Test.make({
@@ -205,9 +203,9 @@ test.provider("list rulesets across test repositories", (stack) =>
             octokit.hook.after("request", (response, options) => {
               const url = new URL(options.url, "https://api.github.com");
               if (url.pathname === `/orgs/${owner}/repos`) {
-                response.data = (
-                  response.data as Array<{ name: string }>
-                ).filter((repository) => repository.name === repo);
+                response.data = (response.data as Array<{ name: string }>).filter(
+                  (repository) => repository.name === repo,
+                );
               }
             });
             return octokit;
@@ -215,9 +213,7 @@ test.provider("list rulesets across test repositories", (stack) =>
         }),
       ),
     );
-    const found = listed.find(
-      (ruleset) => ruleset.rulesetId === created.rulesetId,
-    );
+    const found = listed.find((ruleset) => ruleset.rulesetId === created.rulesetId);
     expect(found?.name).toBe("listed tag protection");
     expect(found?.nodeId).toBe(created.nodeId);
     expect((yield* getRuleset(repo, created.rulesetId))?.target).toBe("tag");
@@ -252,15 +248,11 @@ test.provider("changing the repository replaces the ruleset", (stack) =>
         }),
       );
     const created = yield* deploy("a");
-    expect((yield* getRuleset(repoA, created.rulesetId))?.name).toBe(
-      "replacement protection",
-    );
+    expect((yield* getRuleset(repoA, created.rulesetId))?.name).toBe("replacement protection");
     const replaced = yield* deploy("b");
     expect(replaced.rulesetId).not.toBe(created.rulesetId);
     expect(yield* getRuleset(repoA, created.rulesetId)).toBeUndefined();
-    expect((yield* getRuleset(repoB, replaced.rulesetId))?.name).toBe(
-      "replacement protection",
-    );
+    expect((yield* getRuleset(repoB, replaced.rulesetId))?.name).toBe("replacement protection");
 
     yield* stack.deploy(fixtures);
     expect(yield* getRuleset(repoB, replaced.rulesetId)).toBeUndefined();

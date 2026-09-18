@@ -37,10 +37,7 @@ export interface DescribeLogStreams extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: DescribeLogStreamsRequest,
-    ) => Effect.Effect<
-      Logs.DescribeLogStreamsResponse,
-      Logs.DescribeLogStreamsError
-    >
+    ) => Effect.Effect<Logs.DescribeLogStreamsResponse, Logs.DescribeLogStreamsError>
   >
 > {}
 export const DescribeLogStreams = Binding.Service<DescribeLogStreams>(

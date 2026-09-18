@@ -35,12 +35,7 @@ export interface GetInvestigation extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<detective.GetInvestigationRequest, "GraphArn">,
-    ) => Effect.Effect<
-      detective.GetInvestigationResponse,
-      detective.GetInvestigationError
-    >
+    ) => Effect.Effect<detective.GetInvestigationResponse, detective.GetInvestigationError>
   >
 > {}
-export const GetInvestigation = Binding.Service<GetInvestigation>(
-  "AWS.Detective.GetInvestigation",
-);
+export const GetInvestigation = Binding.Service<GetInvestigation>("AWS.Detective.GetInvestigation");

@@ -49,10 +49,7 @@ export interface ChangeMessageVisibility extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ChangeMessageVisibilityRequest,
-    ) => Effect.Effect<
-      sqs.ChangeMessageVisibilityResponse,
-      sqs.ChangeMessageVisibilityError
-    >
+    ) => Effect.Effect<sqs.ChangeMessageVisibilityResponse, sqs.ChangeMessageVisibilityError>
   >
 > {}
 

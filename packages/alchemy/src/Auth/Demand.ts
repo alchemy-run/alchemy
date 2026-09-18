@@ -42,12 +42,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { BindingNode, Plan } from "../Plan.ts";
 import { profileCommandHint } from "../Util/interactive.ts";
-import {
-  AuthError,
-  AuthProviders,
-  NeedsReauth,
-  presentEnvironment,
-} from "./AuthProvider.ts";
+import { AuthError, AuthProviders, NeedsReauth, presentEnvironment } from "./AuthProvider.ts";
 import {
   ALCHEMY_PROFILE,
   DEFAULT_PROFILE_NAME,
@@ -87,9 +82,7 @@ export interface CredentialDemand {
  * active profile. The message names the demanding resources and the exact
  * `alchemy profile edit` invocation that fixes it.
  */
-export class CredentialsRequired extends Data.TaggedError(
-  "CredentialsRequired",
-)<{
+export class CredentialsRequired extends Data.TaggedError("CredentialsRequired")<{
   message: string;
   /** Auth-provider name whose credentials are missing (e.g. `"AWS"`). */
   provider: string;
@@ -114,9 +107,7 @@ const describeReason = (reason: CredentialDemandReason): string => {
 const cloudOf = (type: string): string => type.split(".")[0] ?? type;
 
 const resourceLines = (demand: CredentialDemand): string =>
-  demand.resources
-    .map((r) => `  - ${r.fqn} (${describeReason(r.reason)})`)
-    .join("\n");
+  demand.resources.map((r) => `  - ${r.fqn} (${describeReason(r.reason)})`).join("\n");
 
 /**
  * Build the typed {@link CredentialsRequired} failure for a demand.
@@ -154,9 +145,7 @@ const RemoteBindingData = Schema.Struct({
 
 const decodeRemoteBindingData = Schema.decodeUnknownResult(RemoteBindingData);
 
-const bindingDemandsRemote = (
-  bindings: readonly BindingNode[] | undefined,
-): boolean =>
+const bindingDemandsRemote = (bindings: readonly BindingNode[] | undefined): boolean =>
   (bindings ?? []).some((binding) => {
     // A binding being REMOVED needs no runtime proxy — the restarted
     // local instance simply no longer carries it.
@@ -164,9 +153,7 @@ const bindingDemandsRemote = (
     const data = decodeRemoteBindingData(binding.data);
     return (
       Result.isSuccess(data) &&
-      Object.values(data.success.devRemote ?? {}).some(
-        (remote) => remote === true,
-      )
+      Object.values(data.success.devRemote ?? {}).some((remote) => remote === true)
     );
   });
 
@@ -189,14 +176,9 @@ const bindingDemandsRemote = (
  */
 export const collectCredentialDemands = (plan: Plan): CredentialDemand[] => {
   const byProvider = new Map<string, Map<string, CredentialDemandReason>>();
-  const add = (
-    type: string,
-    fqn: string,
-    reason: CredentialDemandReason,
-  ): void => {
+  const add = (type: string, fqn: string, reason: CredentialDemandReason): void => {
     const provider = cloudOf(type);
-    const resources =
-      byProvider.get(provider) ?? new Map<string, CredentialDemandReason>();
+    const resources = byProvider.get(provider) ?? new Map<string, CredentialDemandReason>();
     if (!resources.has(fqn)) resources.set(fqn, reason);
     byProvider.set(provider, resources);
   };
@@ -270,82 +252,70 @@ const attachDemandContext =
  * resolved optionally, so the effect is safe to run in any environment —
  * and a plan with zero demand touches no credentials at all.
  */
-export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(
-  function* (demands: readonly CredentialDemand[]) {
-    if (demands.length === 0) return;
-    const registry = Option.getOrUndefined(
-      yield* Effect.serviceOption(AuthProviders),
-    );
-    const profile = Option.getOrUndefined(
-      yield* Effect.serviceOption(ProfileStore),
-    );
-    if (registry === undefined || profile === undefined) return;
-    const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
-    // CI credentials come exclusively from the environment. Do not require
-    // or inspect a local profile first: CI runners intentionally have no
-    // profile manifest, and doing so would also risk consulting a developer's
-    // stored profiles when this path is exercised locally under Doppler.
-    const configuredProfile = yield* Config.option(ALCHEMY_PROFILE);
-    const profileName = Option.getOrElse(
-      configuredProfile,
-      () => DEFAULT_PROFILE_NAME,
-    );
-    yield* Effect.forEach(
-      demands,
-      (demand) =>
-        Effect.gen(function* () {
-          const auth = registry[demand.provider];
-          if (auth == null) return;
-          if (ci) {
-            if (auth.readEnvironment === undefined) {
-              return yield* credentialsRequired(demand, profileName);
-            }
-            return yield* auth.readEnvironment.pipe(
-              attachDemandContext(demand),
-            );
-          }
-          // Read-only precheck of the two non-CI configuration sources the
-          // resolution precedence below consults: environment credentials
-          // (which win regardless of the selected profile), or a profile
-          // entry. "Nothing configured" fails with the actionable
-          // {@link CredentialsRequired} here, WITHOUT entering
-          // `resolveProviderConfig`: its profile path goes through
-          // `ensureProfile`, which fails a nonexistent profile with a
-          // generic ProfileError that would bury which resources demanded
-          // credentials and what command fixes it.
-          const envUsable =
-            auth.readEnvironment !== undefined &&
-            (yield* presentEnvironment(auth.environment)) !== undefined;
-          const existing = yield* profile.getProfile(profileName);
-          if (existing?.providers[auth.name] == null && !envUsable) {
+export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function* (
+  demands: readonly CredentialDemand[],
+) {
+  if (demands.length === 0) return;
+  const registry = Option.getOrUndefined(yield* Effect.serviceOption(AuthProviders));
+  const profile = Option.getOrUndefined(yield* Effect.serviceOption(ProfileStore));
+  if (registry === undefined || profile === undefined) return;
+  const ci = yield* Config.Boolean("CI").pipe(Config.withDefault(false));
+  // CI credentials come exclusively from the environment. Do not require
+  // or inspect a local profile first: CI runners intentionally have no
+  // profile manifest, and doing so would also risk consulting a developer's
+  // stored profiles when this path is exercised locally under Doppler.
+  const configuredProfile = yield* Config.option(ALCHEMY_PROFILE);
+  const profileName = Option.getOrElse(configuredProfile, () => DEFAULT_PROFILE_NAME);
+  yield* Effect.forEach(
+    demands,
+    (demand) =>
+      Effect.gen(function* () {
+        const auth = registry[demand.provider];
+        if (auth == null) return;
+        if (ci) {
+          if (auth.readEnvironment === undefined) {
             return yield* credentialsRequired(demand, profileName);
           }
-          // Something IS configured — resolve through the same precedence
-          // the run's lazy credential flow uses, so the gate can never
-          // pass something resolution would later reject (or vice versa).
-          // Suppressed missing-config mode turns a check/resolve race into
-          // the typed tag below instead of a generic AuthError; it also
-          // mutes the env-credentials warning here — the run's own
-          // resolution still emits it.
-          const resolved = yield* resolveProviderConfig(demand.provider).pipe(
-            Effect.provideService(AuthProviders, registry),
-            Effect.provideService(ProfileStore, profile),
-            Effect.provideService(SuppressMissingProviderConfig, true),
-            Effect.catchTag("MissingProviderConfig", () =>
-              credentialsRequired(demand, profileName),
-            ),
-            Effect.catchTag(
-              "ProfileError",
-              (error) =>
-                new AuthError({ message: error.message, cause: error }),
-            ),
-          );
-          yield* resolved.resolve.pipe(attachDemandContext(demand));
-        }),
-      { concurrency: 4, discard: true },
-    );
-  },
-);
+          return yield* auth.readEnvironment.pipe(attachDemandContext(demand));
+        }
+        // Read-only precheck of the two non-CI configuration sources the
+        // resolution precedence below consults: environment credentials
+        // (which win regardless of the selected profile), or a profile
+        // entry. "Nothing configured" fails with the actionable
+        // {@link CredentialsRequired} here, WITHOUT entering
+        // `resolveProviderConfig`: its profile path goes through
+        // `ensureProfile`, which fails a nonexistent profile with a
+        // generic ProfileError that would bury which resources demanded
+        // credentials and what command fixes it.
+        const envUsable =
+          auth.readEnvironment !== undefined &&
+          (yield* presentEnvironment(auth.environment)) !== undefined;
+        const existing = yield* profile.getProfile(profileName);
+        if (existing?.providers[auth.name] == null && !envUsable) {
+          return yield* credentialsRequired(demand, profileName);
+        }
+        // Something IS configured — resolve through the same precedence
+        // the run's lazy credential flow uses, so the gate can never
+        // pass something resolution would later reject (or vice versa).
+        // Suppressed missing-config mode turns a check/resolve race into
+        // the typed tag below instead of a generic AuthError; it also
+        // mutes the env-credentials warning here — the run's own
+        // resolution still emits it.
+        const resolved = yield* resolveProviderConfig(demand.provider).pipe(
+          Effect.provideService(AuthProviders, registry),
+          Effect.provideService(ProfileStore, profile),
+          Effect.provideService(SuppressMissingProviderConfig, true),
+          Effect.catchTag("MissingProviderConfig", () => credentialsRequired(demand, profileName)),
+          Effect.catchTag(
+            "ProfileError",
+            (error) => new AuthError({ message: error.message, cause: error }),
+          ),
+        );
+        yield* resolved.resolve.pipe(attachDemandContext(demand));
+      }),
+    { concurrency: 4, discard: true },
+  );
+});
 
 /**
  * Plan-time seam for `Alchemy.remote()` rows. The planner probes every new

@@ -28,10 +28,7 @@ export interface GetKxScalingGroup extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<SVC.GetKxScalingGroupRequest, "environmentId">,
-    ) => Effect.Effect<
-      SVC.GetKxScalingGroupResponse,
-      SVC.GetKxScalingGroupError
-    >
+    ) => Effect.Effect<SVC.GetKxScalingGroupResponse, SVC.GetKxScalingGroupError>
   >
 > {}
 export const GetKxScalingGroup = Binding.Service<GetKxScalingGroup>(

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
-import {
-  SERVER_ENTRY_NAME,
-  makeNextServeEntrySource,
-  makeNodeTarget,
-  target,
-} from "../node.ts";
+import { SERVER_ENTRY_NAME, makeNextServeEntrySource, makeNodeTarget, target } from "../node.ts";
 
 describe("makeNodeTarget", () => {
   it("declares the node platform and a wholesale next build (not OpenNext)", () => {

@@ -35,12 +35,7 @@ export interface SearchListings extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: SearchListingsRequest,
-    ) => Effect.Effect<
-      datazone.SearchListingsOutput,
-      datazone.SearchListingsError
-    >
+    ) => Effect.Effect<datazone.SearchListingsOutput, datazone.SearchListingsError>
   >
 > {}
-export const SearchListings = Binding.Service<SearchListings>(
-  "AWS.DataZone.SearchListings",
-);
+export const SearchListings = Binding.Service<SearchListings>("AWS.DataZone.SearchListings");

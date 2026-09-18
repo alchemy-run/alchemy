@@ -58,38 +58,23 @@ export interface EventTopic extends Resource<
  *
  * @resource
  */
-export const EventTopic = Resource<EventTopic>(
-  "AWS.DirectoryService.EventTopic",
-);
+export const EventTopic = Resource<EventTopic>("AWS.DirectoryService.EventTopic");
 
 export const EventTopicProvider = () =>
   Provider.effect(
     EventTopic,
     Effect.gen(function* () {
-      const readEventTopic = Effect.fn(function* (
-        directoryId: string,
-        topicName: string,
-      ) {
+      const readEventTopic = Effect.fn(function* (directoryId: string, topicName: string) {
         const response = yield* ds
           .describeEventTopics({
             DirectoryId: directoryId,
             TopicNames: [topicName],
           })
-          .pipe(
-            Effect.catchTag("EntityDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        return response?.EventTopics?.find(
-          (topic) => topic.TopicName === topicName,
-        );
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+        return response?.EventTopics?.find((topic) => topic.TopicName === topicName);
       });
 
-      const toAttrs = (
-        directoryId: string,
-        topicName: string,
-        topic: ds.EventTopic,
-      ) => ({
+      const toAttrs = (directoryId: string, topicName: string, topic: ds.EventTopic) => ({
         directoryId,
         topicName,
         topicArn: topic.TopicArn,
@@ -127,10 +112,7 @@ export const EventTopicProvider = () =>
           const props = news!;
 
           // 1. Observe — cloud state is authoritative.
-          let observed = yield* readEventTopic(
-            props.directoryId,
-            props.topicName,
-          );
+          let observed = yield* readEventTopic(props.directoryId, props.topicName);
 
           // 2. Ensure — register if missing. Re-registering an existing
           //    association is treated as a race and tolerated by
@@ -140,10 +122,7 @@ export const EventTopicProvider = () =>
               DirectoryId: props.directoryId,
               TopicName: props.topicName,
             });
-            observed = yield* readEventTopic(
-              props.directoryId,
-              props.topicName,
-            );
+            observed = yield* readEventTopic(props.directoryId, props.topicName);
           }
           if (observed === undefined) {
             return yield* Effect.fail(

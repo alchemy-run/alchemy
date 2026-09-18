@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -132,9 +131,7 @@ export const InfrastructureTarget = Resource<InfrastructureTarget>(TypeId);
 /**
  * Returns true if the given value is an InfrastructureTarget resource.
  */
-export const isInfrastructureTarget = (
-  value: unknown,
-): value is InfrastructureTarget =>
+export const isInfrastructureTarget = (value: unknown): value is InfrastructureTarget =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const InfrastructureTargetProvider = () =>
@@ -143,16 +140,14 @@ export const InfrastructureTargetProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* zeroTrust.listAccessInfrastructureTargets
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((t) => toAttributes(t, accountId)),
-            ),
+      return yield* zeroTrust.listAccessInfrastructureTargets.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((t) => toAttributes(t, accountId)),
           ),
-        );
+        ),
+      );
     }),
 
     diff: Effect.fn(function* ({ output }) {
@@ -181,8 +176,7 @@ export const InfrastructureTargetProvider = () =>
       if (!hostname) return undefined;
       // `olds.ip` may be `undefined` when a `creating` row was persisted
       // before upstream Outputs resolved — fall back to the output hint.
-      const desiredIp =
-        olds?.ip !== undefined ? resolvedIp(olds.ip) : output?.ip;
+      const desiredIp = olds?.ip !== undefined ? resolvedIp(olds.ip) : output?.ip;
       const match = yield* findByIdentity(acct, hostname, desiredIp);
       if (match) return Unowned(toAttributes(match, acct));
       return undefined;
@@ -193,15 +187,9 @@ export const InfrastructureTargetProvider = () =>
       const desired = { hostname: news.hostname, ip: resolvedIp(news.ip) };
 
       // 1. Observe — the cached id is a hint, not a guarantee.
-      let observed = output?.targetId
-        ? yield* getTarget(accountId, output.targetId)
-        : undefined;
+      let observed = output?.targetId ? yield* getTarget(accountId, output.targetId) : undefined;
       if (!observed) {
-        observed = yield* findByIdentity(
-          accountId,
-          desired.hostname,
-          desired.ip,
-        );
+        observed = yield* findByIdentity(accountId, desired.hostname, desired.ip);
       }
 
       // 2. Ensure — create when missing.
@@ -216,8 +204,7 @@ export const InfrastructureTargetProvider = () =>
       // 3. Sync — PUT the full desired state only when the observed
       //    hostname or addresses differ; skip the call on a no-op.
       const dirty =
-        observed.hostname !== desired.hostname ||
-        !ipEquals(observedIp(observed), desired.ip);
+        observed.hostname !== desired.hostname || !ipEquals(observedIp(observed), desired.ip);
       if (dirty) {
         observed = yield* zeroTrust.updateAccessInfrastructureTarget({
           accountId,
@@ -260,16 +247,10 @@ const getTarget = (accountId: string, targetId: string) =>
  * Find a target by exact hostname + address match. Hostnames are
  * non-unique, so the addresses disambiguate.
  */
-const findByIdentity = (
-  accountId: string,
-  hostname: string,
-  ip: ResolvedIp | undefined,
-) =>
+const findByIdentity = (accountId: string, hostname: string, ip: ResolvedIp | undefined) =>
   zeroTrust.listAccessInfrastructureTargets.items({ accountId, hostname }).pipe(
     Stream.filter(
-      (t) =>
-        t.hostname === hostname &&
-        (ip === undefined || ipEquals(observedIp(t), ip)),
+      (t) => t.hostname === hostname && (ip === undefined || ipEquals(observedIp(t), ip)),
     ),
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
@@ -312,9 +293,7 @@ const observedIp = (t: {
     ? {
         ipv4: {
           ipAddr: t.ip.ipv4.ipAddr ?? undefined,
-          ...(t.ip.ipv4.virtualNetworkId
-            ? { virtualNetworkId: t.ip.ipv4.virtualNetworkId }
-            : {}),
+          ...(t.ip.ipv4.virtualNetworkId ? { virtualNetworkId: t.ip.ipv4.virtualNetworkId } : {}),
         },
       }
     : {}),
@@ -322,9 +301,7 @@ const observedIp = (t: {
     ? {
         ipv6: {
           ipAddr: t.ip.ipv6.ipAddr ?? undefined,
-          ...(t.ip.ipv6.virtualNetworkId
-            ? { virtualNetworkId: t.ip.ipv6.virtualNetworkId }
-            : {}),
+          ...(t.ip.ipv6.virtualNetworkId ? { virtualNetworkId: t.ip.ipv6.virtualNetworkId } : {}),
         },
       }
     : {}),
@@ -336,8 +313,7 @@ const observedIp = (t: {
  * account's default virtual network).
  */
 const ipEquals = (observed: ResolvedIp, desired: ResolvedIp): boolean =>
-  familyEquals(observed.ipv4, desired.ipv4) &&
-  familyEquals(observed.ipv6, desired.ipv6);
+  familyEquals(observed.ipv4, desired.ipv4) && familyEquals(observed.ipv6, desired.ipv6);
 
 const familyEquals = (
   observed: { ipAddr?: string; virtualNetworkId?: string } | undefined,

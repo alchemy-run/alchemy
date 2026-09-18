@@ -1,6 +1,3 @@
-import * as Provider from "@/Provider";
-import * as Stripe from "@/Stripe";
-import * as Test from "@/Test/Alchemy";
 import {
   GetEntitlementsFeatures,
   GetProductFeatures,
@@ -13,23 +10,21 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Stripe from "@/Stripe";
 import { isMissingStripeResource } from "@/Stripe/missing.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const isMissing = isMissingStripeResource;
 
 const waitUntilGone = (product: string, id: string) =>
   GetProductFeatures({ product, limit: 100 }).pipe(
     Effect.map((response) =>
-      response.data.some((feature) => feature.id === id)
-        ? ("found" as const)
-        : ("gone" as const),
+      response.data.some((feature) => feature.id === id) ? ("found" as const) : ("gone" as const),
     ),
     Effect.catchIf(isMissing, () => Effect.succeed("gone" as const)),
     Effect.repeat({
@@ -66,9 +61,7 @@ const ensureFeature = (lookupKey: string, name: string) =>
             limit: 1,
           }).pipe(
             Effect.flatMap((res) =>
-              res.data[0] !== undefined
-                ? Effect.succeed(res.data[0])
-                : Effect.fail(e),
+              res.data[0] !== undefined ? Effect.succeed(res.data[0]) : Effect.fail(e),
             ),
           ),
       ),
@@ -90,14 +83,10 @@ const withFeatures = <A, E, R>(
 ) =>
   body.pipe(
     Effect.ensuring(
-      Effect.forEach(
-        features,
-        (feature) => archiveFeature(feature.id).pipe(Effect.ignore),
-        {
-          concurrency: "unbounded",
-          discard: true,
-        },
-      ),
+      Effect.forEach(features, (feature) => archiveFeature(feature.id).pipe(Effect.ignore), {
+        concurrency: "unbounded",
+        discard: true,
+      }),
     ),
   );
 
@@ -160,10 +149,7 @@ test.provider(
 
           yield* stack.destroy();
 
-          const gone = yield* waitUntilGone(
-            created.attachment.product,
-            created.attachment.id,
-          );
+          const gone = yield* waitUntilGone(created.attachment.product, created.attachment.id);
           expect(gone).toEqual("gone");
         }),
       );
@@ -177,10 +163,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const feature = yield* ensureFeature(
-        "alchemy-pf-list-feat",
-        "Alchemy Product Feature List",
-      );
+      const feature = yield* ensureFeature("alchemy-pf-list-feat", "Alchemy Product Feature List");
 
       yield* withFeatures(
         [feature],
@@ -200,26 +183,19 @@ test.provider(
 
           const provider = yield* Provider.findProvider(Stripe.ProductFeature);
           const all = yield* provider.list();
-          const found = all.find(
-            (attachment) => attachment.id === deployed.attachment.id,
-          );
+          const found = all.find((attachment) => attachment.id === deployed.attachment.id);
           expect(found).toBeDefined();
           expect(found?.product).toEqual(deployed.product.id);
           expect(found?.entitlementFeature).toEqual(feature.id);
 
           yield* stack.destroy();
 
-          const gone = yield* waitUntilGone(
-            deployed.attachment.product,
-            deployed.attachment.id,
-          );
+          const gone = yield* waitUntilGone(deployed.attachment.product, deployed.attachment.id);
           expect(gone).toEqual("gone");
 
           const after = yield* provider.list();
           expect(
-            after.find(
-              (attachment) => attachment.id === deployed.attachment.id,
-            ),
+            after.find((attachment) => attachment.id === deployed.attachment.id),
           ).toBeUndefined();
         }),
       );
@@ -283,18 +259,12 @@ test.provider(
           });
           expect(newFetched.entitlement_feature.id).toEqual(featureB.id);
 
-          const oldGone = yield* waitUntilGone(
-            created.attachment.product,
-            created.attachment.id,
-          );
+          const oldGone = yield* waitUntilGone(created.attachment.product, created.attachment.id);
           expect(oldGone).toEqual("gone");
 
           yield* stack.destroy();
 
-          const gone = yield* waitUntilGone(
-            replaced.attachment.product,
-            replaced.attachment.id,
-          );
+          const gone = yield* waitUntilGone(replaced.attachment.product, replaced.attachment.id);
           expect(gone).toEqual("gone");
         }),
       );

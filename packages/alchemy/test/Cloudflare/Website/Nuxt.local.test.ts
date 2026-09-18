@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { isLocalId } from "@/Cloudflare/LocalRuntime";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -14,35 +9,24 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-const fixtureEntries = [
-  ".gitignore",
-  "package.json",
-  "nuxt.config.ts",
-  "app",
-  "server",
-  "public",
-];
+const fixtureEntries = [".gitignore", "package.json", "nuxt.config.ts", "app", "server", "public"];
 
-const memoInclude = [
-  "app/**",
-  "server/**",
-  "public/**",
-  "nuxt.config.ts",
-  "package.json",
-];
+const memoInclude = ["app/**", "server/**", "public/**", "nuxt.config.ts", "package.json"];
 
 // Tests are independent (per-test scratch stacks, private fixture clones),
 // so run them concurrently; suites are sequential by default.
@@ -181,9 +165,7 @@ describe.concurrent("Nuxt dev", () => {
 
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const siteKv = yield* Cloudflare.KV.Namespace(
-              "NuxtDevRemoteKV",
-            ).pipe(Alchemy.remote());
+            const siteKv = yield* Cloudflare.KV.Namespace("NuxtDevRemoteKV").pipe(Alchemy.remote());
             const site = yield* Cloudflare.Website.Nuxt("NuxtRemoteKvLocal", {
               rootDir,
               dev: { port: 0 },
@@ -234,9 +216,7 @@ describe.concurrent("Nuxt dev", () => {
             }),
             Effect.flatMap((res) =>
               Effect.tryPromise(() =>
-                new Response(
-                  Stream.toReadableStream(res.body) as BodyInit,
-                ).text(),
+                new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
               ),
             ),
           );
@@ -278,10 +258,7 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 10,
       }),
     );
@@ -301,10 +278,7 @@ const putJsonReady = <T>(url: string) =>
         : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
     ),
     Effect.retry({
-      schedule: Schedule.min([
-        Schedule.exponential("500 millis"),
-        Schedule.spaced("2 seconds"),
-      ]),
+      schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
       times: 10,
     }),
   );

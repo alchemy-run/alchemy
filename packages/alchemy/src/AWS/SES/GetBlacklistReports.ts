@@ -30,10 +30,7 @@ export interface GetBlacklistReports extends Binding.Service<
   () => Effect.Effect<
     (
       request: sesv2.GetBlacklistReportsRequest,
-    ) => Effect.Effect<
-      sesv2.GetBlacklistReportsResponse,
-      sesv2.GetBlacklistReportsError
-    >
+    ) => Effect.Effect<sesv2.GetBlacklistReportsResponse, sesv2.GetBlacklistReportsError>
   >
 > {}
 export const GetBlacklistReports = Binding.Service<GetBlacklistReports>(

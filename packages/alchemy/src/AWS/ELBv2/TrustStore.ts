@@ -108,9 +108,7 @@ export const TrustStoreProvider = () =>
         stables: ["trustStoreArn", "name"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
@@ -122,11 +120,7 @@ export const TrustStoreProvider = () =>
             .describeTrustStores({
               TrustStoreArns: [output.trustStoreArn],
             })
-            .pipe(
-              Effect.catchTag("TrustStoreNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
           const trustStore = described?.TrustStores?.[0];
           if (!trustStore?.TrustStoreArn) {
             return undefined;
@@ -181,11 +175,7 @@ export const TrustStoreProvider = () =>
           // Observe — look up by deterministic name.
           const described = yield* elbv2
             .describeTrustStores({ Names: [name] })
-            .pipe(
-              Effect.catchTag("TrustStoreNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
           let trustStore = described?.TrustStores?.[0];
 
           // Ensure — create if missing.
@@ -194,8 +184,7 @@ export const TrustStoreProvider = () =>
               Name: name,
               CaCertificatesBundleS3Bucket: news.caCertificatesBundleS3Bucket,
               CaCertificatesBundleS3Key: news.caCertificatesBundleS3Key,
-              CaCertificatesBundleS3ObjectVersion:
-                news.caCertificatesBundleS3ObjectVersion,
+              CaCertificatesBundleS3ObjectVersion: news.caCertificatesBundleS3ObjectVersion,
               Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
                 Key,
                 Value,
@@ -203,9 +192,7 @@ export const TrustStoreProvider = () =>
             });
             trustStore = created.TrustStores?.[0];
             if (!trustStore?.TrustStoreArn) {
-              return yield* Effect.die(
-                new Error("createTrustStore returned no trust store"),
-              );
+              return yield* Effect.die(new Error("createTrustStore returned no trust store"));
             }
           } else {
             // Sync the CA bundle in place.
@@ -213,8 +200,7 @@ export const TrustStoreProvider = () =>
               TrustStoreArn: trustStore.TrustStoreArn,
               CaCertificatesBundleS3Bucket: news.caCertificatesBundleS3Bucket,
               CaCertificatesBundleS3Key: news.caCertificatesBundleS3Key,
-              CaCertificatesBundleS3ObjectVersion:
-                news.caCertificatesBundleS3ObjectVersion,
+              CaCertificatesBundleS3ObjectVersion: news.caCertificatesBundleS3ObjectVersion,
             });
             trustStore = modified.TrustStores?.[0] ?? trustStore;
           }
@@ -222,16 +208,14 @@ export const TrustStoreProvider = () =>
           const trustStoreArn = trustStore.TrustStoreArn as TrustStoreArn;
 
           // Wait until the trust store is ACTIVE (bundle validation completes).
-          const active = yield* elbv2
-            .describeTrustStores({ TrustStoreArns: [trustStoreArn] })
-            .pipe(
-              Effect.map((res) => res.TrustStores?.[0]),
-              Effect.repeat({
-                schedule: Schedule.spaced("3 seconds"),
-                until: (ts) => ts?.Status === "ACTIVE",
-                times: 10,
-              }),
-            );
+          const active = yield* elbv2.describeTrustStores({ TrustStoreArns: [trustStoreArn] }).pipe(
+            Effect.map((res) => res.TrustStores?.[0]),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (ts) => ts?.Status === "ACTIVE",
+              times: 10,
+            }),
+          );
 
           // Sync tags — diff observed cloud tags against desired.
           const observed = yield* observedTags(trustStoreArn);
@@ -255,29 +239,22 @@ export const TrustStoreProvider = () =>
             name: trustStore.Name!,
             status: active?.Status ?? trustStore.Status!,
             numberOfCaCertificates:
-              active?.NumberOfCaCertificates ??
-              trustStore.NumberOfCaCertificates ??
-              0,
+              active?.NumberOfCaCertificates ?? trustStore.NumberOfCaCertificates ?? 0,
             tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* elbv2
-            .deleteTrustStore({ TrustStoreArn: output.trustStoreArn })
-            .pipe(
-              // In-use trust stores must wait for the listener to detach; the
-              // engine deletes dependents first, but retry briefly for the
-              // eventual-consistency window.
-              Effect.retry({
-                while: (e) => e._tag === "TrustStoreInUseException",
-                schedule: Schedule.max([
-                  Schedule.spaced("3 seconds"),
-                  Schedule.recurs(8),
-                ]),
-              }),
-              Effect.catchTag("TrustStoreNotFoundException", () => Effect.void),
-              Effect.catchTag("TrustStoreInUseException", () => Effect.void),
-            );
+          yield* elbv2.deleteTrustStore({ TrustStoreArn: output.trustStoreArn }).pipe(
+            // In-use trust stores must wait for the listener to detach; the
+            // engine deletes dependents first, but retry briefly for the
+            // eventual-consistency window.
+            Effect.retry({
+              while: (e) => e._tag === "TrustStoreInUseException",
+              schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(8)]),
+            }),
+            Effect.catchTag("TrustStoreNotFoundException", () => Effect.void),
+            Effect.catchTag("TrustStoreInUseException", () => Effect.void),
+          );
         }),
       };
     }),

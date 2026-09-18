@@ -1,7 +1,3 @@
-import * as AWS from "@/AWS";
-import { AWSEnvironment } from "@/AWS/Environment";
-import { createInternalTags, hasTags } from "@/Tags.ts";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -11,10 +7,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
+import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment";
+import { createInternalTags, hasTags } from "@/Tags.ts";
 import RestApiEventSourceFunctionLive, {
   RestApiEventSourceFunction,
 } from "./fixtures/rest-api-event-source-handler.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -22,11 +21,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 const readinessSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration: d }) =>
-      Effect.succeed(
-        Duration.isGreaterThan(d, Duration.seconds(5))
-          ? Duration.seconds(5)
-          : d,
-      ),
+      Effect.succeed(Duration.isGreaterThan(d, Duration.seconds(5)) ? Duration.seconds(5) : d),
     ),
   ),
   Schedule.recurs(10),
@@ -49,8 +44,7 @@ const findRestApis = Effect.fn(function* (logicalId: string) {
     Effect.map((pages) =>
       Array.from(pages).flatMap((page) =>
         (page.items ?? []).filter(
-          (api): api is ag.RestApi & { id: string } =>
-            api.id != null && hasTags(tags, api.tags),
+          (api): api is ag.RestApi & { id: string } => api.id != null && hasTags(tags, api.tags),
         ),
       ),
     ),
@@ -134,9 +128,7 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const deleted = yield* ag
         .getRestApi({ restApiId: apis[0].id })
-        .pipe(
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
       expect(deleted).toBeUndefined();
       const leftover = yield* findRestApis("AgEsApi");
       expect(leftover).toHaveLength(0);

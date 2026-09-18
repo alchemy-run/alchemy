@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 
 /**
  * Effect-native Worker fixture that exercises the real Cloudflare RateLimit
@@ -37,9 +37,7 @@ export default class RateLimitEffectWorker extends Cloudflare.Worker<RateLimitEf
 
           const results: boolean[] = [];
           for (let i = 0; i < n; i++) {
-            const { success } = yield* throttle
-              .limit({ key })
-              .pipe(Effect.orDie);
+            const { success } = yield* throttle.limit({ key }).pipe(Effect.orDie);
             results.push(success);
           }
 

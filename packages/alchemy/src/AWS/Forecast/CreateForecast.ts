@@ -32,12 +32,7 @@ export interface CreateForecast extends Binding.Service<
   () => Effect.Effect<
     (
       request: forecast.CreateForecastRequest,
-    ) => Effect.Effect<
-      forecast.CreateForecastResponse,
-      forecast.CreateForecastError
-    >
+    ) => Effect.Effect<forecast.CreateForecastResponse, forecast.CreateForecastError>
   >
 > {}
-export const CreateForecast = Binding.Service<CreateForecast>(
-  "AWS.Forecast.CreateForecast",
-);
+export const CreateForecast = Binding.Service<CreateForecast>("AWS.Forecast.CreateForecast");

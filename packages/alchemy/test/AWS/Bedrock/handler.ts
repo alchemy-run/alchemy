@@ -1,5 +1,3 @@
-import * as Bedrock from "@/AWS/Bedrock";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +6,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Bedrock from "@/AWS/Bedrock";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -41,8 +41,7 @@ export default BedrockTestFunction.make(
     // snapshots the prepared DRAFT into version 1 on create.
     const agent = yield* Bedrock.Agent("BindingsTestAgent", {
       foundationModel: MODEL,
-      instruction:
-        "You are a helpful assistant. Answer every question with one short sentence.",
+      instruction: "You are a helpful assistant. Answer every question with one short sentence.",
       // Long-term memory so GetAgentMemory / DeleteAgentMemory are callable.
       memoryConfiguration: {
         enabledMemoryTypes: ["SESSION_SUMMARY"],
@@ -61,8 +60,7 @@ export default BedrockTestFunction.make(
     const deleteAgentMemory = yield* Bedrock.DeleteAgentMemory(alias);
     const invokeModel = yield* Bedrock.InvokeModel(MODEL);
     const rerank = yield* Bedrock.Rerank(RERANK_MODEL);
-    const invokeModelStream =
-      yield* Bedrock.InvokeModelWithResponseStream(MODEL);
+    const invokeModelStream = yield* Bedrock.InvokeModelWithResponseStream(MODEL);
 
     return {
       fetch: Effect.gen(function* () {
@@ -91,9 +89,7 @@ export default BedrockTestFunction.make(
         if (request.method === "GET" && pathname === "/rerank") {
           const region = yield* Effect.sync(() => process.env.AWS_REGION);
           const result = yield* rerank({
-            queries: [
-              { type: "TEXT", textQuery: { text: "What is alchemy?" } },
-            ],
+            queries: [{ type: "TEXT", textQuery: { text: "What is alchemy?" } }],
             sources: [
               "alchemy is an infrastructure-as-effects framework",
               "bananas are yellow",
@@ -135,10 +131,9 @@ export default BedrockTestFunction.make(
             const bytes = event.chunk?.bytes;
             if (bytes !== undefined) {
               chunkEvents += 1;
-              text += decoder.decode(
-                Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes,
-                { stream: true },
-              );
+              text += decoder.decode(Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes, {
+                stream: true,
+              });
             }
           }
           return yield* HttpServerResponse.json({
@@ -173,9 +168,7 @@ export default BedrockTestFunction.make(
             inferenceConfig: { maxTokens: 64, temperature: 0 },
           });
           return yield* HttpServerResponse.json({
-            text: result.output.message.content
-              .map((block) => block.text ?? "")
-              .join(""),
+            text: result.output.message.content.map((block) => block.text ?? "").join(""),
             stopReason: result.stopReason,
             outputTokens: result.usage.outputTokens,
           });
@@ -187,9 +180,7 @@ export default BedrockTestFunction.make(
             messages: [{ role: "user", content: [{ text: "Say hello." }] }],
             inferenceConfig: { maxTokens: 64, temperature: 0 },
           });
-          const events = yield* Stream.runCollect(
-            result.stream ?? Stream.empty,
-          );
+          const events = yield* Stream.runCollect(result.stream ?? Stream.empty);
           let text = "";
           let deltaEvents = 0;
           let stopReason: string | undefined;
@@ -229,18 +220,15 @@ export default BedrockTestFunction.make(
             const bytes = event.chunk?.bytes;
             if (bytes !== undefined) {
               chunkEvents += 1;
-              raw += decoder.decode(
-                Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes,
-                { stream: true },
-              );
+              raw += decoder.decode(Redacted.isRedacted(bytes) ? Redacted.value(bytes) : bytes, {
+                stream: true,
+              });
             }
           }
           // Each chunk is one JSON event (Nova emits messageStart,
           // contentBlockDelta, ... as separate chunks); aggregate the text
           // deltas out of the raw concatenated JSON events.
-          const text = [...raw.matchAll(/"text"\s*:\s*"([^"]*)"/g)]
-            .map((m) => m[1])
-            .join("");
+          const text = [...raw.matchAll(/"text"\s*:\s*"([^"]*)"/g)].map((m) => m[1]).join("");
           return yield* HttpServerResponse.json({
             contentType: result.contentType,
             chunkEvents,
@@ -269,9 +257,7 @@ export default BedrockTestFunction.make(
           );
           return yield* HttpServerResponse.json({
             contentType: result.contentType,
-            text: (parsed.output?.message?.content ?? [])
-              .map((block) => block.text ?? "")
-              .join(""),
+            text: (parsed.output?.message?.content ?? []).map((block) => block.text ?? "").join(""),
             stopReason: parsed.stopReason,
           });
         }

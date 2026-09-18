@@ -39,14 +39,8 @@ export interface DescribeIngestion extends Binding.Service<
     dataSet: DataSet,
   ) => Effect.Effect<
     (
-      request: Omit<
-        quicksight.DescribeIngestionRequest,
-        "AwsAccountId" | "DataSetId"
-      >,
-    ) => Effect.Effect<
-      quicksight.DescribeIngestionResponse,
-      quicksight.DescribeIngestionError
-    >
+      request: Omit<quicksight.DescribeIngestionRequest, "AwsAccountId" | "DataSetId">,
+    ) => Effect.Effect<quicksight.DescribeIngestionResponse, quicksight.DescribeIngestionError>
   >
 > {}
 export const DescribeIngestion = Binding.Service<DescribeIngestion>(

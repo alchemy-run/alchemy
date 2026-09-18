@@ -33,14 +33,10 @@ export interface ListAccessPreviewFindings extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ListAccessPreviewFindingsRequest,
-    ) => Effect.Effect<
-      aa.ListAccessPreviewFindingsResponse,
-      aa.ListAccessPreviewFindingsError
-    >
+    ) => Effect.Effect<aa.ListAccessPreviewFindingsResponse, aa.ListAccessPreviewFindingsError>
   >
 > {}
 
-export const ListAccessPreviewFindings =
-  Binding.Service<ListAccessPreviewFindings>(
-    "AWS.AccessAnalyzer.ListAccessPreviewFindings",
-  );
+export const ListAccessPreviewFindings = Binding.Service<ListAccessPreviewFindings>(
+  "AWS.AccessAnalyzer.ListAccessPreviewFindings",
+);

@@ -14,8 +14,8 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const NAME_MAX_LENGTH = 100;
 const LIST_PAGE_SIZE = 100;
@@ -207,10 +207,7 @@ export interface PaymentMethodConfigurationProps {
   zip?: PaymentMethodPreferenceInput;
 }
 
-type MethodKey = Exclude<
-  keyof PaymentMethodConfigurationProps,
-  "name" | "active" | "parent"
->;
+type MethodKey = Exclude<keyof PaymentMethodConfigurationProps, "name" | "active" | "parent">;
 
 type SnakeMethodKey = (typeof METHOD_MAP)[number][1];
 
@@ -375,11 +372,7 @@ type WireMethod = {
 
 const toName = (id: string, name: string | undefined, existing?: string) =>
   Effect.gen(function* () {
-    return (
-      name ??
-      existing ??
-      (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }))
-    );
+    return name ?? existing ?? (yield* createPhysicalName({ id, maxLength: NAME_MAX_LENGTH }));
   });
 
 const toMethodState = (
@@ -401,9 +394,7 @@ const readMethod = (
   snake: SnakeMethodKey,
 ): PaymentMethodState | undefined => toMethodState(configuration[snake]);
 
-const toAttrs = (
-  configuration: StripePaymentMethodConfiguration,
-): ConfigurationAttributes => {
+const toAttrs = (configuration: StripePaymentMethodConfiguration): ConfigurationAttributes => {
   const methods = {} as PaymentMethodAttributes;
   for (const [camel, snake] of METHOD_MAP) {
     methods[camel] = readMethod(configuration, snake);
@@ -478,10 +469,9 @@ const listByActive = Effect.fn(function* (active: boolean) {
 });
 
 const listAllConfigurations = Effect.fn(function* () {
-  const [active, inactive] = yield* Effect.all(
-    [listByActive(true), listByActive(false)],
-    { concurrency: 2 },
-  );
+  const [active, inactive] = yield* Effect.all([listByActive(true), listByActive(false)], {
+    concurrency: 2,
+  });
   const seen = new Set<string>();
   const configurations: StripePaymentMethodConfiguration[] = [];
   for (const configuration of [...active, ...inactive]) {
@@ -551,9 +541,7 @@ export const PaymentMethodConfigurationProvider = () =>
       // configurations; deactivated rows stay in Stripe but must not
       // re-enter nuke. The account default is never returned.
       const configurations = yield* listByActive(true);
-      return configurations
-        .filter((configuration) => !configuration.is_default)
-        .map(toAttrs);
+      return configurations.filter((configuration) => !configuration.is_default).map(toAttrs);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output, instanceId }) {

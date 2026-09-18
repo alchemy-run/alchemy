@@ -13,10 +13,7 @@ interface TestEnv {
 
 it("getPlatformProxy provides working bindings from plain Node code", async () => {
   const proxy = await getPlatformProxy<TestEnv>({
-    bindings: [
-      Text.local("TEXT", "from-promise-api"),
-      KvNamespace.local({ binding: "KV" }),
-    ],
+    bindings: [Text.local("TEXT", "from-promise-api"), KvNamespace.local({ binding: "KV" })],
   });
   try {
     expect(proxy.env.TEXT).toBe("from-promise-api");
@@ -24,10 +21,7 @@ it("getPlatformProxy provides working bindings from plain Node code", async () =
     expect(await proxy.env.KV.get("key")).toBe("value");
     expect(proxy.cf.country).toBe("US");
     proxy.ctx.waitUntil(Promise.resolve());
-    await proxy.caches.default.put(
-      "https://example.com/x",
-      new Response("body"),
-    );
+    await proxy.caches.default.put("https://example.com/x", new Response("body"));
     const match = await proxy.caches.default.match("https://example.com/x");
     expect(match && (await match.text())).toBe("body");
   } finally {
@@ -37,10 +31,7 @@ it("getPlatformProxy provides working bindings from plain Node code", async () =
 
 it("dispose is idempotent and shuts the instance down", async () => {
   const proxy = await getPlatformProxy<TestEnv>({
-    bindings: [
-      Text.local("TEXT", "dispose-test"),
-      KvNamespace.local({ binding: "KV" }),
-    ],
+    bindings: [Text.local("TEXT", "dispose-test"), KvNamespace.local({ binding: "KV" })],
   });
   await proxy.env.KV.put("key", "value");
   await proxy.dispose();

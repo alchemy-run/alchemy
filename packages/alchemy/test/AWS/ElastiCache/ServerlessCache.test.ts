@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import { connectEnvPrefix } from "@/AWS/ElastiCache";
-import * as Test from "@/Test/Alchemy";
 import * as ElastiCache from "@distilled.cloud/aws/elasticache";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "alchemy-test";
@@ -8,10 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import ElastiCacheTestFunctionLive, {
-  ElastiCacheTestFunction,
-  FixtureCache,
-} from "./handler.ts";
+import * as AWS from "@/AWS";
+import { connectEnvPrefix } from "@/AWS/ElastiCache";
+import * as Test from "@/Test/Alchemy";
+import ElastiCacheTestFunctionLive, { ElastiCacheTestFunction, FixtureCache } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -42,12 +39,8 @@ const deleteSnapshot = (name: string) =>
     Effect.asVoid,
     Effect.catchTag("ServerlessCacheSnapshotNotFoundFault", () => Effect.void),
     Effect.retry({
-      while: (e): boolean =>
-        e._tag === "InvalidServerlessCacheSnapshotStateFault",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(30),
-      ]),
+      while: (e): boolean => e._tag === "InvalidServerlessCacheSnapshotStateFault",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
     }),
   );
 
@@ -98,9 +91,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Distilled decodes Lambda env values as sensitive (Redacted) strings.
       const envValue = (key: string) => {
         const value = env[key];
-        return value === undefined || typeof value === "string"
-          ? value
-          : Redacted.value(value);
+        return value === undefined || typeof value === "string" ? value : Redacted.value(value);
       };
       expect(envValue(`${prefix}_HOST`)).toBe(cache.endpointAddress);
       expect(envValue(`${prefix}_PORT`)).toBe(String(cache.endpointPort));
@@ -118,17 +109,12 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               ? res.json
               : res.text.pipe(
                   Effect.flatMap((body) =>
-                    Effect.fail(
-                      new Error(`${path} returned ${res.status}: ${body}`),
-                    ),
+                    Effect.fail(new Error(`${path} returned ${res.status}: ${body}`)),
                   ),
                 ),
           ),
           Effect.retry({
-            schedule: Schedule.max([
-              Schedule.fixed("3 seconds"),
-              Schedule.recurs(times),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(times)]),
           }),
         );
       const response = yield* getJson("/connection", 60);
@@ -145,20 +131,18 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
       // Cache-scoped CreateServerlessCacheSnapshot binding: take an
       // on-demand snapshot from inside the deployed function, verify it
       // out-of-band, then delete it (snapshots bill per GB-month).
-      const snapshot = (yield* getJson(
-        `/snapshot?name=${SNAPSHOT_NAME}`,
-        10,
-      )) as { name: string; status: string };
+      const snapshot = (yield* getJson(`/snapshot?name=${SNAPSHOT_NAME}`, 10)) as {
+        name: string;
+        status: string;
+      };
       expect(snapshot.name).toBe(SNAPSHOT_NAME);
       expect(["creating", "available", "exists"]).toContain(snapshot.status);
-      const describedSnapshots =
-        yield* ElastiCache.describeServerlessCacheSnapshots({
-          ServerlessCacheSnapshotName: SNAPSHOT_NAME,
-        });
-      expect(
-        describedSnapshots.ServerlessCacheSnapshots?.[0]
-          ?.ServerlessCacheSnapshotName,
-      ).toBe(SNAPSHOT_NAME);
+      const describedSnapshots = yield* ElastiCache.describeServerlessCacheSnapshots({
+        ServerlessCacheSnapshotName: SNAPSHOT_NAME,
+      });
+      expect(describedSnapshots.ServerlessCacheSnapshots?.[0]?.ServerlessCacheSnapshotName).toBe(
+        SNAPSHOT_NAME,
+      );
       yield* deleteSnapshot(SNAPSHOT_NAME);
 
       // Destroy immediately — serverless caches bill while they exist —
@@ -181,22 +165,15 @@ const assertCacheDeleted = (name: string) =>
       ServerlessCacheName: name,
     }).pipe(
       Effect.map((r) => r.ServerlessCaches?.[0]?.Status ?? "gone"),
-      Effect.catchTag("ServerlessCacheNotFoundFault", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "deleting") {
       return yield* Effect.fail(
-        new Error(
-          `Serverless cache '${name}' still exists (status: ${status})`,
-        ),
+        new Error(`Serverless cache '${name}' still exists (status: ${status})`),
       );
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

@@ -15,10 +15,7 @@ import {
 } from "../Bundle/InstalledPackages.ts";
 import { findCwdForBundle, resolveMainPath } from "../Bundle/TempRoot.ts";
 import type { ResourceBinding } from "../Resource.ts";
-import {
-  createHostRuntimeContext,
-  type HostRuntimeContext,
-} from "../Server/Process.ts";
+import { createHostRuntimeContext, type HostRuntimeContext } from "../Server/Process.ts";
 import {
   contextRootOf,
   extraFileDestination,
@@ -35,9 +32,7 @@ import { openSshClient, type SshClient } from "./Ssh.ts";
 
 export type HetznerHostRuntimeContext = HostRuntimeContext;
 
-class VolumeAttachTimeout extends Data.TaggedError(
-  "Hetzner.VolumeAttachTimeout",
-)<{
+class VolumeAttachTimeout extends Data.TaggedError("Hetzner.VolumeAttachTimeout")<{
   volumeId: number;
   serverId: number;
 }> {}
@@ -92,8 +87,7 @@ const matchesConfiguredExternal = (
 export { extraFileDestination };
 
 const quoteEnvValue = (value: unknown) => {
-  const text =
-    typeof value === "string" ? value : JSON.stringify(value ?? null);
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
   return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
 };
 
@@ -103,12 +97,9 @@ export const renderEnvFile = (env: Record<string, unknown>) =>
     .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
     .join("\n");
 
-export const collectBindingState = (
-  bindings: ResourceBinding<ServiceBinding>[],
-) => {
+export const collectBindingState = (bindings: ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
-    (binding: ResourceBinding<ServiceBinding> & { action?: string }) =>
-      binding.action !== "delete",
+    (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
   const env = active
     .map((binding) => binding?.data?.env)
@@ -132,9 +123,7 @@ const skipExtraPath = (relative: string) =>
     .split("/")
     .some(
       (segment) =>
-        segment === "node_modules" ||
-        segment === ".git" ||
-        segment.startsWith(".alchemy-hetzner"),
+        segment === "node_modules" || segment === ".git" || segment.startsWith(".alchemy-hetzner"),
     );
 
 const toSharedExtraFiles = (extraFiles: ReadonlyArray<ExtraFile> | undefined) =>
@@ -143,9 +132,7 @@ const toSharedExtraFiles = (extraFiles: ReadonlyArray<ExtraFile> | undefined) =>
     dest: file.destination,
   }));
 
-const collectExtraFiles = Effect.fn(function* (
-  extraFiles: ReadonlyArray<ExtraFile> | undefined,
-) {
+const collectExtraFiles = Effect.fn(function* (extraFiles: ReadonlyArray<ExtraFile> | undefined) {
   if (extraFiles === undefined || extraFiles.length === 0) {
     return [] as ZipFile[];
   }
@@ -162,10 +149,7 @@ const collectExtraFiles = Effect.fn(function* (
           relative
             .replaceAll("\\", "/")
             .split("/")
-            .some(
-              (segment) =>
-                segment === ".git" || segment.startsWith(".alchemy-hetzner"),
-            )
+            .some((segment) => segment === ".git" || segment.startsWith(".alchemy-hetzner"))
       : skipExtraPath;
     if (rootStat.type === "File") {
       files.push({
@@ -182,9 +166,7 @@ const collectExtraFiles = Effect.fn(function* (
       if (stat.type !== "File") continue;
       const posixName = name.replaceAll("\\", "/");
       files.push({
-        path: isContextRootDest(dest)
-          ? posixName
-          : `${dest}/${posixName}`.replaceAll(/\/+/g, "/"),
+        path: isContextRootDest(dest) ? posixName : `${dest}/${posixName}`.replaceAll(/\/+/g, "/"),
         content: yield* fs.readFile(full),
       });
     }
@@ -214,9 +196,7 @@ export const createHetznerHostedSupport = ({
 }: {
   stackName: string;
   stage: string;
-  virtualEntryPlugin: (
-    content: (importPath: string) => string,
-  ) => rolldown.Plugin;
+  virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
 }) => {
   const alchemyEnv = {
     ALCHEMY_STACK_NAME: stackName,
@@ -225,10 +205,7 @@ export const createHetznerHostedSupport = ({
     HOST: "0.0.0.0",
   };
 
-  const bundleProgram = Effect.fn(function* (
-    _id: string,
-    props: HostedProgramProps,
-  ) {
+  const bundleProgram = Effect.fn(function* (_id: string, props: HostedProgramProps) {
     const handler = props.handler ?? "default";
     const realMain = yield* resolveMainPath(props.main);
     const cwd = yield* findCwdForBundle(realMain);
@@ -252,12 +229,7 @@ export const createHetznerHostedSupport = ({
             for (const root of installRoots) {
               if (matchesPackageRoot(moduleId, root)) return true;
             }
-            return matchesConfiguredExternal(
-              configuredExternal,
-              moduleId,
-              parentId,
-              isResolved,
-            );
+            return matchesConfiguredExternal(configuredExternal, moduleId, parentId, isResolved);
           },
           resolve: {
             conditionNames: [...Bundle.NODE_CONDITION_NAMES],
@@ -293,11 +265,7 @@ export const createHetznerHostedSupport = ({
     const packageJson =
       install === undefined
         ? undefined
-        : `${JSON.stringify(
-            { private: true, type: "module", dependencies: install },
-            null,
-            2,
-          )}\n`;
+        : `${JSON.stringify({ private: true, type: "module", dependencies: install }, null, 2)}\n`;
     const installFiles =
       packageJson !== undefined
         ? [
@@ -318,13 +286,11 @@ export const createHetznerHostedSupport = ({
       const root = contextRootOf(realMain, extras, pathMod, (source) =>
         resolveExtraSource(source, pathMod),
       );
-      const entryRel =
-        posixRelUnder(root, realMain, pathMod) ?? pathMod.basename(realMain);
+      const entryRel = posixRelUnder(root, realMain, pathMod) ?? pathMod.basename(realMain);
       const entryBytes = yield* fs.readFile(realMain);
       const zipEntries: ZipFile[] = [
         ...extraFiles.filter(
-          (file) =>
-            !(file.path === "package.json" && packageJson !== undefined),
+          (file) => !(file.path === "package.json" && packageJson !== undefined),
         ),
         ...installFiles,
       ];
@@ -332,9 +298,7 @@ export const createHetznerHostedSupport = ({
         zipEntries.push({ path: entryRel, content: entryBytes });
       }
       const archive = yield* zipFiles(zipEntries);
-      const extraHash = yield* hashExtraFiles(
-        toSharedExtraFiles(props.extraFiles),
-      );
+      const extraHash = yield* hashExtraFiles(toSharedExtraFiles(props.extraFiles));
       const hash = yield* sha256Object({
         bundle: yield* sha256(entryBytes),
         extra: extraHash,
@@ -358,9 +322,7 @@ export const createHetznerHostedSupport = ({
       ...installFiles,
     ];
     const archive = yield* zipCode(toBytes(entryFile.content), zipExtras);
-    const extraHash = yield* hashExtraFiles(
-      toSharedExtraFiles(props.extraFiles),
-    );
+    const extraHash = yield* hashExtraFiles(toSharedExtraFiles(props.extraFiles));
     const hash = yield* sha256Object({
       bundle: bundleOutput.hash,
       extra: extraHash,
@@ -369,11 +331,7 @@ export const createHetznerHostedSupport = ({
     return { archive, hash, entryRel: "index.mjs" };
   });
 
-  const renderUnit = (
-    unitName: string,
-    appDir: string,
-    entryRel: string,
-  ) => `[Unit]
+  const renderUnit = (unitName: string, appDir: string, entryRel: string) => `[Unit]
 Description=Alchemy Hetzner Service ${unitName}
 After=network-online.target
 Wants=network-online.target
@@ -435,9 +393,7 @@ WantedBy=multi-user.target
         if (volume.server !== null) {
           yield* Services.volumeActions.detachVolume({ id: volumeId }).pipe(
             Effect.tap(({ action }) =>
-              waitForAction(action).pipe(
-                Effect.catchTag("ActionTimeout", () => Effect.void),
-              ),
+              waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
             ),
             Effect.catchTag(
               ["NotFound", "UnprocessableEntity", "Locked", "Conflict"],
@@ -465,14 +421,9 @@ WantedBy=multi-user.target
               ]),
             }),
             Effect.tap(({ action }) =>
-              waitForAction(action).pipe(
-                Effect.catchTag("ActionTimeout", () => Effect.void),
-              ),
+              waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
             ),
-            Effect.catchTag(
-              ["UnprocessableEntity", "Locked", "Conflict"],
-              () => Effect.void,
-            ),
+            Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
           );
         volume = yield* Services.volumes.getVolume({ id: volumeId }).pipe(
           Effect.flatMap(({ volume }) =>
@@ -482,9 +433,7 @@ WantedBy=multi-user.target
           ),
           Effect.retry({
             while: (e) =>
-              e._tag === "AttachPending" ||
-              e._tag === "TooManyRequests" ||
-              e._tag === "Locked",
+              e._tag === "AttachPending" || e._tag === "TooManyRequests" || e._tag === "Locked",
             times: 10,
             schedule: Schedule.min([
               Schedule.exponential(Duration.millis(500), 1.5),
@@ -589,14 +538,9 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
+    yield* input.ssh.scp(new TextEncoder().encode(renderEnvFile(input.env)), `${appDir}/env`);
     yield* input.ssh.scp(
-      new TextEncoder().encode(renderEnvFile(input.env)),
-      `${appDir}/env`,
-    );
-    yield* input.ssh.scp(
-      new TextEncoder().encode(
-        renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs"),
-      ),
+      new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
     );
     yield* input.ssh.exec(
@@ -613,12 +557,9 @@ WantedBy=multi-user.target
         `systemctl restart ${input.unitName}.service`,
       ].join("\n"),
     );
-    const port =
-      typeof input.env.PORT === "string" ? input.env.PORT : undefined;
+    const port = typeof input.env.PORT === "string" ? input.env.PORT : undefined;
     const health =
-      port !== undefined
-        ? `curl -sf -o /dev/null http://127.0.0.1:${port}/health`
-        : "true";
+      port !== undefined ? `curl -sf -o /dev/null http://127.0.0.1:${port}/health` : "true";
     yield* input.ssh.exec(
       [
         `set -uo pipefail`,
@@ -637,10 +578,7 @@ WantedBy=multi-user.target
     );
   });
 
-  const removeUnit = Effect.fn(function* (input: {
-    ssh: SshClient;
-    unitName: string;
-  }) {
+  const removeUnit = Effect.fn(function* (input: { ssh: SshClient; unitName: string }) {
     const appDir = `/opt/${input.unitName}`;
     yield* input.ssh
       .exec(

@@ -1,3 +1,4 @@
+import { Jose } from "@distilled.cloud/acme";
 /**
  * Keys, PKCS#10 certificate requests and X.509 parsing for the ACME flow.
  * WebCrypto plus the tiny DER codec in `Der.ts` — no native code, so the
@@ -5,7 +6,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { Jose } from "@distilled.cloud/acme";
 import * as Der from "./Der.ts";
 import { PkiError } from "./Errors.ts";
 
@@ -36,9 +36,7 @@ const importParams = (alg: KeyAlgorithm) =>
     : { name: "ECDSA", namedCurve: "P-256" };
 
 const signParams = (alg: KeyAlgorithm) =>
-  alg === "RS256"
-    ? { name: "RSASSA-PKCS1-v1_5" }
-    : { name: "ECDSA", hash: "SHA-256" };
+  alg === "RS256" ? { name: "RSASSA-PKCS1-v1_5" } : { name: "ECDSA", hash: "SHA-256" };
 
 const toPem = (label: string, der: Uint8Array): string => {
   const b64 = btoa(String.fromCharCode(...der));
@@ -87,17 +85,9 @@ export const generateKey = (
   algorithm: KeyAlgorithm = "ES256",
 ): Effect.Effect<GeneratedKey, PkiError> =>
   tryPromise("Generating the certificate key failed.", async () => {
-    const pair = await crypto.subtle.generateKey(
-      keyGenParams(algorithm),
-      true,
-      ["sign", "verify"],
-    );
-    const pkcs8 = new Uint8Array(
-      await crypto.subtle.exportKey("pkcs8", pair.privateKey),
-    );
-    const spki = new Uint8Array(
-      await crypto.subtle.exportKey("spki", pair.publicKey),
-    );
+    const pair = await crypto.subtle.generateKey(keyGenParams(algorithm), true, ["sign", "verify"]);
+    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+    const spki = new Uint8Array(await crypto.subtle.exportKey("spki", pair.publicKey));
     return {
       algorithm,
       privateKeyPem: Redacted.make(toPem("PRIVATE KEY", pkcs8)),
@@ -117,10 +107,7 @@ const algorithmOfPkcs8 = (der: Uint8Array): KeyAlgorithm => {
 /** Import a PKCS#8 PEM private key (ES256 or RS256, detected from the DER). */
 export const importPrivateKey = (
   pem: Redacted.Redacted<string> | string,
-): Effect.Effect<
-  { readonly key: CryptoKey; readonly algorithm: KeyAlgorithm },
-  PkiError
-> =>
+): Effect.Effect<{ readonly key: CryptoKey; readonly algorithm: KeyAlgorithm }, PkiError> =>
   tryPromise("Importing the certificate key failed.", async () => {
     const text = Redacted.isRedacted(pem) ? Redacted.value(pem) : pem;
     const der = fromPem(text);
@@ -142,9 +129,7 @@ export const privateKeyToJwk = (
   importPrivateKey(pem).pipe(
     Effect.flatMap(({ key }) =>
       tryPromise("Exporting the certificate key as a JWK failed.", async () =>
-        Redacted.make(
-          JSON.stringify(await crypto.subtle.exportKey("jwk", key)),
-        ),
+        Redacted.make(JSON.stringify(await crypto.subtle.exportKey("jwk", key))),
       ),
     ),
   );
@@ -152,10 +137,7 @@ export const privateKeyToJwk = (
 /** Raw `r || s` ECDSA signature → DER `SEQUENCE { r INTEGER, s INTEGER }`. */
 const ecdsaToDer = (raw: Uint8Array): Uint8Array => {
   const half = raw.length / 2;
-  return Der.sequence(
-    Der.integer(raw.subarray(0, half)),
-    Der.integer(raw.subarray(half)),
-  );
+  return Der.sequence(Der.integer(raw.subarray(0, half)), Der.integer(raw.subarray(half)));
 };
 
 /**
@@ -173,26 +155,19 @@ export const createCsr = (options: {
       throw new Error("a certificate needs at least one identifier");
     }
     const subject = Der.sequence(
-      Der.set(
-        Der.sequence(Der.oid(OID.commonName), Der.utf8String(identifiers[0]!)),
-      ),
+      Der.set(Der.sequence(Der.oid(OID.commonName), Der.utf8String(identifiers[0]!))),
     );
     const sanExtension = Der.sequence(
       Der.oid(OID.subjectAltName),
       Der.octetString(
         Der.sequence(
-          ...identifiers.map((name) =>
-            Der.contextPrimitive(2, new TextEncoder().encode(name)),
-          ),
+          ...identifiers.map((name) => Der.contextPrimitive(2, new TextEncoder().encode(name))),
         ),
       ),
     );
     const attributes = Der.contextTag(
       0,
-      Der.sequence(
-        Der.oid(OID.extensionRequest),
-        Der.set(Der.sequence(sanExtension)),
-      ),
+      Der.sequence(Der.oid(OID.extensionRequest), Der.set(Der.sequence(sanExtension))),
     );
     const info = Der.sequence(Der.integer(0), subject, key.spki, attributes);
     const rawSignature = new Uint8Array(
@@ -202,8 +177,7 @@ export const createCsr = (options: {
         info as Uint8Array<ArrayBuffer>,
       ),
     );
-    const signature =
-      key.algorithm === "ES256" ? ecdsaToDer(rawSignature) : rawSignature;
+    const signature = key.algorithm === "ES256" ? ecdsaToDer(rawSignature) : rawSignature;
     const algorithm =
       key.algorithm === "ES256"
         ? Der.sequence(Der.oid(OID.ecdsaWithSha256))
@@ -250,9 +224,7 @@ const decodeName = (name: Der.Node): string => {
     }
   }
   // CN first for readability; the rest keep their order.
-  parts.sort((a, b) =>
-    a.startsWith("CN=") ? -1 : b.startsWith("CN=") ? 1 : 0,
-  );
+  parts.sort((a, b) => (a.startsWith("CN=") ? -1 : b.startsWith("CN=") ? 1 : 0));
   return parts.join(", ");
 };
 
@@ -299,6 +271,5 @@ export const parseCertificate = (
         dnsNames,
       };
     },
-    catch: (cause) =>
-      new PkiError({ message: "Parsing the certificate failed.", cause }),
+    catch: (cause) => new PkiError({ message: "Parsing the certificate failed.", cause }),
   });

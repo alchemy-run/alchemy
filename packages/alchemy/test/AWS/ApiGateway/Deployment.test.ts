@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
-import * as Provider from "@/Provider";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { deleteRestApiAndWait } from "@/AWS/ApiGateway/common.ts";
+import * as Provider from "@/Provider";
 import { assertRestApiDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -26,8 +26,7 @@ const reapRestApis = (logicalId: string) =>
       Array.from(chunk).flatMap((page) =>
         (page.items ?? []).filter(
           (api): api is ag.RestApi & { id: string } =>
-            api.id != null &&
-            (api.name?.includes(`-${logicalId}-test-`) ?? false),
+            api.id != null && (api.name?.includes(`-${logicalId}-test-`) ?? false),
         ),
       ),
     ),
@@ -38,37 +37,35 @@ const reapRestApis = (logicalId: string) =>
     Effect.orDie,
   );
 
-test.provider.skipIf(!!process.env.FAST)(
-  "create and delete deployment",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      yield* reapRestApis("AgDepApi");
+test.provider.skipIf(!!process.env.FAST)("create and delete deployment", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* reapRestApis("AgDepApi");
 
-      const { api, deployment } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
-            endpointConfiguration: { types: ["REGIONAL"] },
-          });
-          yield* AWS.ApiGateway.Method("AgDepMock", {
-            restApi: api,
-            httpMethod: "GET",
-            authorizationType: "NONE",
-            integration: { type: "MOCK" },
-          });
-          const deployment = yield* AWS.ApiGateway.Deployment("AgDep", {
-            restApi: api,
-            description: "alchemy-test-deployment",
-          });
-          return { api, deployment };
-        }),
-      );
+    const { api, deployment } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
+          endpointConfiguration: { types: ["REGIONAL"] },
+        });
+        yield* AWS.ApiGateway.Method("AgDepMock", {
+          restApi: api,
+          httpMethod: "GET",
+          authorizationType: "NONE",
+          integration: { type: "MOCK" },
+        });
+        const deployment = yield* AWS.ApiGateway.Deployment("AgDep", {
+          restApi: api,
+          description: "alchemy-test-deployment",
+        });
+        return { api, deployment };
+      }),
+    );
 
-      expect(deployment.deploymentId).toBeDefined();
+    expect(deployment.deploymentId).toBeDefined();
 
-      yield* stack.destroy();
-      yield* assertRestApiDeleted(api.restApiId);
-    }).pipe(Effect.ensuring(reapRestApis("AgDepApi"))),
+    yield* stack.destroy();
+    yield* assertRestApiDeleted(api.restApiId);
+  }).pipe(Effect.ensuring(reapRestApis("AgDepApi"))),
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -125,42 +122,36 @@ test.provider.skipIf(!!process.env.FAST)(
     }).pipe(Effect.ensuring(reapRestApis("AgTrigApi"))),
 );
 
-test.provider.skipIf(!!process.env.FAST)(
-  "list enumerates the deployed deployment",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      yield* reapRestApis("AgListApi");
+test.provider.skipIf(!!process.env.FAST)("list enumerates the deployed deployment", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+    yield* reapRestApis("AgListApi");
 
-      const { api, deployment } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const api = yield* AWS.ApiGateway.RestApi("AgListApi", {
-            endpointConfiguration: { types: ["REGIONAL"] },
-          });
-          yield* AWS.ApiGateway.Method("AgListMock", {
-            restApi: api,
-            httpMethod: "GET",
-            authorizationType: "NONE",
-            integration: { type: "MOCK" },
-          });
-          const deployment = yield* AWS.ApiGateway.Deployment("AgListDep", {
-            restApi: api,
-            description: "alchemy-test-list-deployment",
-          });
-          return { api, deployment };
-        }),
-      );
+    const { api, deployment } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const api = yield* AWS.ApiGateway.RestApi("AgListApi", {
+          endpointConfiguration: { types: ["REGIONAL"] },
+        });
+        yield* AWS.ApiGateway.Method("AgListMock", {
+          restApi: api,
+          httpMethod: "GET",
+          authorizationType: "NONE",
+          integration: { type: "MOCK" },
+        });
+        const deployment = yield* AWS.ApiGateway.Deployment("AgListDep", {
+          restApi: api,
+          description: "alchemy-test-list-deployment",
+        });
+        return { api, deployment };
+      }),
+    );
 
-      const provider = yield* Provider.findProvider(
-        AWS.ApiGateway.DeploymentResource,
-      );
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.DeploymentResource);
+    const all = yield* provider.list();
 
-      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(
-        true,
-      );
+    expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(true);
 
-      yield* stack.destroy();
-      yield* assertRestApiDeleted(api.restApiId);
-    }).pipe(Effect.ensuring(reapRestApis("AgListApi"))),
+    yield* stack.destroy();
+    yield* assertRestApiDeleted(api.restApiId);
+  }).pipe(Effect.ensuring(reapRestApis("AgListApi"))),
 );

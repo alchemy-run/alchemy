@@ -32,10 +32,7 @@ export interface DescribeJobTemplate extends Binding.Service<
   (
     template: JobTemplate,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      emrc.DescribeJobTemplateResponse,
-      emrc.DescribeJobTemplateError
-    >
+    () => Effect.Effect<emrc.DescribeJobTemplateResponse, emrc.DescribeJobTemplateError>
   >
 > {}
 export const DescribeJobTemplate = Binding.Service<DescribeJobTemplate>(

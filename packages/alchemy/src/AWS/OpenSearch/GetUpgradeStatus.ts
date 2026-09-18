@@ -25,10 +25,7 @@ export interface GetUpgradeStatus extends Binding.Service<
   () => Effect.Effect<
     (
       request: opensearch.GetUpgradeStatusRequest,
-    ) => Effect.Effect<
-      opensearch.GetUpgradeStatusResponse,
-      opensearch.GetUpgradeStatusError
-    >
+    ) => Effect.Effect<opensearch.GetUpgradeStatusResponse, opensearch.GetUpgradeStatusError>
   >
 > {}
 export const GetUpgradeStatus = Binding.Service<GetUpgradeStatus>(

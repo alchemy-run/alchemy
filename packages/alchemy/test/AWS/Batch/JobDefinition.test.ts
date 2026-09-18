@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { JobDefinition } from "@/AWS/Batch/JobDefinition.ts";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { JobDefinition } from "@/AWS/Batch/JobDefinition.ts";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,9 +15,7 @@ const activeRevisions = batch.describeJobDefinitions
   .pages({ jobDefinitionName: name, status: "ACTIVE" })
   .pipe(
     Stream.runCollect,
-    Effect.map((pages) =>
-      Array.from(pages).flatMap((p) => p.jobDefinitions ?? []),
-    ),
+    Effect.map((pages) => Array.from(pages).flatMap((p) => p.jobDefinitions ?? [])),
   );
 
 const jobDef = (command: string[]) =>
@@ -33,9 +31,7 @@ const jobDef = (command: string[]) =>
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"],
     });
     return yield* JobDefinition("EchoJobDef", {
       jobDefinitionName: name,
@@ -56,9 +52,7 @@ test.provider(
       expect(created.jobDefinitionName).toBe(name);
       const firstRevision = created.revision;
       expect(firstRevision).toBeGreaterThanOrEqual(1);
-      expect(created.jobDefinitionArn).toContain(
-        `job-definition/${name}:${firstRevision}`,
-      );
+      expect(created.jobDefinitionArn).toContain(`job-definition/${name}:${firstRevision}`);
 
       // Identical content — no new revision registered.
       const unchanged = yield* stack.deploy(jobDef(["echo", "one"]));

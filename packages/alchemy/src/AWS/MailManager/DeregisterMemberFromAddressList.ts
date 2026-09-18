@@ -34,7 +34,6 @@ export interface DeregisterMemberFromAddressList extends Binding.Service<
     >
   >
 > {}
-export const DeregisterMemberFromAddressList =
-  Binding.Service<DeregisterMemberFromAddressList>(
-    "AWS.MailManager.DeregisterMemberFromAddressList",
-  );
+export const DeregisterMemberFromAddressList = Binding.Service<DeregisterMemberFromAddressList>(
+  "AWS.MailManager.DeregisterMemberFromAddressList",
+);

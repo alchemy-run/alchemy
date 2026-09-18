@@ -15,198 +15,142 @@ interface SQLiteErrorProps {
 /**
  * SQLITE_ERROR (1) - Generic error code.
  */
-export class SQLiteError extends Data.TaggedError(
-  "SQLITE_ERROR",
-)<SQLiteErrorProps> {}
+export class SQLiteError extends Data.TaggedError("SQLITE_ERROR")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_INTERNAL (2) - Internal malfunction.
  */
-export class SQLiteInternal extends Data.TaggedError(
-  "SQLITE_INTERNAL",
-)<SQLiteErrorProps> {}
+export class SQLiteInternal extends Data.TaggedError("SQLITE_INTERNAL")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_PERM (3) - Access permission denied.
  */
-export class SQLitePerm extends Data.TaggedError(
-  "SQLITE_PERM",
-)<SQLiteErrorProps> {}
+export class SQLitePerm extends Data.TaggedError("SQLITE_PERM")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_ABORT (4) - Operation aborted.
  */
-export class SQLiteAbort extends Data.TaggedError(
-  "SQLITE_ABORT",
-)<SQLiteErrorProps> {}
+export class SQLiteAbort extends Data.TaggedError("SQLITE_ABORT")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_BUSY (5) - Database file is locked.
  */
-export class SQLiteBusy extends Data.TaggedError(
-  "SQLITE_BUSY",
-)<SQLiteErrorProps> {}
+export class SQLiteBusy extends Data.TaggedError("SQLITE_BUSY")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_LOCKED (6) - A table in the database is locked.
  */
-export class SQLiteLocked extends Data.TaggedError(
-  "SQLITE_LOCKED",
-)<SQLiteErrorProps> {}
+export class SQLiteLocked extends Data.TaggedError("SQLITE_LOCKED")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_NOMEM (7) - Memory allocation failed.
  */
-export class SQLiteNomem extends Data.TaggedError(
-  "SQLITE_NOMEM",
-)<SQLiteErrorProps> {}
+export class SQLiteNomem extends Data.TaggedError("SQLITE_NOMEM")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_READONLY (8) - Attempt to write a readonly database.
  */
-export class SQLiteReadonly extends Data.TaggedError(
-  "SQLITE_READONLY",
-)<SQLiteErrorProps> {}
+export class SQLiteReadonly extends Data.TaggedError("SQLITE_READONLY")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_INTERRUPT (9) - Operation interrupted.
  */
-export class SQLiteInterrupt extends Data.TaggedError(
-  "SQLITE_INTERRUPT",
-)<SQLiteErrorProps> {}
+export class SQLiteInterrupt extends Data.TaggedError("SQLITE_INTERRUPT")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_IOERR (10) - I/O error.
  */
-export class SQLiteIoerr extends Data.TaggedError(
-  "SQLITE_IOERR",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerr extends Data.TaggedError("SQLITE_IOERR")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_CORRUPT (11) - Database disk image is malformed.
  */
-export class SQLiteCorrupt extends Data.TaggedError(
-  "SQLITE_CORRUPT",
-)<SQLiteErrorProps> {}
+export class SQLiteCorrupt extends Data.TaggedError("SQLITE_CORRUPT")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_NOTFOUND (12) - Unknown opcode or table not found.
  */
-export class SQLiteNotfound extends Data.TaggedError(
-  "SQLITE_NOTFOUND",
-)<SQLiteErrorProps> {}
+export class SQLiteNotfound extends Data.TaggedError("SQLITE_NOTFOUND")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_FULL (13) - Database or disk is full.
  */
-export class SQLiteFull extends Data.TaggedError(
-  "SQLITE_FULL",
-)<SQLiteErrorProps> {}
+export class SQLiteFull extends Data.TaggedError("SQLITE_FULL")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_CANTOPEN (14) - Unable to open database file.
  */
-export class SQLiteCantopen extends Data.TaggedError(
-  "SQLITE_CANTOPEN",
-)<SQLiteErrorProps> {}
+export class SQLiteCantopen extends Data.TaggedError("SQLITE_CANTOPEN")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_PROTOCOL (15) - Database lock protocol error.
  */
-export class SQLiteProtocol extends Data.TaggedError(
-  "SQLITE_PROTOCOL",
-)<SQLiteErrorProps> {}
+export class SQLiteProtocol extends Data.TaggedError("SQLITE_PROTOCOL")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_EMPTY (16) - Internal use only.
  */
-export class SQLiteEmpty extends Data.TaggedError(
-  "SQLITE_EMPTY",
-)<SQLiteErrorProps> {}
+export class SQLiteEmpty extends Data.TaggedError("SQLITE_EMPTY")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_SCHEMA (17) - Database schema changed.
  */
-export class SQLiteSchema extends Data.TaggedError(
-  "SQLITE_SCHEMA",
-)<SQLiteErrorProps> {}
+export class SQLiteSchema extends Data.TaggedError("SQLITE_SCHEMA")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_TOOBIG (18) - String or BLOB exceeds size limit.
  */
-export class SQLiteToobig extends Data.TaggedError(
-  "SQLITE_TOOBIG",
-)<SQLiteErrorProps> {}
+export class SQLiteToobig extends Data.TaggedError("SQLITE_TOOBIG")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_CONSTRAINT (19) - Constraint violation.
  */
-export class SQLiteConstraint extends Data.TaggedError(
-  "SQLITE_CONSTRAINT",
-)<SQLiteErrorProps> {}
+export class SQLiteConstraint extends Data.TaggedError("SQLITE_CONSTRAINT")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_MISMATCH (20) - Data type mismatch.
  */
-export class SQLiteMismatch extends Data.TaggedError(
-  "SQLITE_MISMATCH",
-)<SQLiteErrorProps> {}
+export class SQLiteMismatch extends Data.TaggedError("SQLITE_MISMATCH")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_MISUSE (21) - Library used incorrectly.
  */
-export class SQLiteMisuse extends Data.TaggedError(
-  "SQLITE_MISUSE",
-)<SQLiteErrorProps> {}
+export class SQLiteMisuse extends Data.TaggedError("SQLITE_MISUSE")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_NOLFS (22) - Uses OS features not supported on host.
  */
-export class SQLiteNolfs extends Data.TaggedError(
-  "SQLITE_NOLFS",
-)<SQLiteErrorProps> {}
+export class SQLiteNolfs extends Data.TaggedError("SQLITE_NOLFS")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_AUTH (23) - Authorization denied.
  */
-export class SQLiteAuth extends Data.TaggedError(
-  "SQLITE_AUTH",
-)<SQLiteErrorProps> {}
+export class SQLiteAuth extends Data.TaggedError("SQLITE_AUTH")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_FORMAT (24) - Not used.
  */
-export class SQLiteFormat extends Data.TaggedError(
-  "SQLITE_FORMAT",
-)<SQLiteErrorProps> {}
+export class SQLiteFormat extends Data.TaggedError("SQLITE_FORMAT")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_RANGE (25) - 2nd parameter to sqlite3_bind out of range.
  */
-export class SQLiteRange extends Data.TaggedError(
-  "SQLITE_RANGE",
-)<SQLiteErrorProps> {}
+export class SQLiteRange extends Data.TaggedError("SQLITE_RANGE")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_NOTADB (26) - File opened that is not a database file.
  */
-export class SQLiteNotadb extends Data.TaggedError(
-  "SQLITE_NOTADB",
-)<SQLiteErrorProps> {}
+export class SQLiteNotadb extends Data.TaggedError("SQLITE_NOTADB")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_NOTICE (27) - Notifications from sqlite3_log().
  */
-export class SQLiteNotice extends Data.TaggedError(
-  "SQLITE_NOTICE",
-)<SQLiteErrorProps> {}
+export class SQLiteNotice extends Data.TaggedError("SQLITE_NOTICE")<SQLiteErrorProps> {}
 
 /**
  * SQLITE_WARNING (28) - Warnings from sqlite3_log().
  */
-export class SQLiteWarning extends Data.TaggedError(
-  "SQLITE_WARNING",
-)<SQLiteErrorProps> {}
+export class SQLiteWarning extends Data.TaggedError("SQLITE_WARNING")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - ABORT
@@ -220,9 +164,7 @@ export class SQLiteAbortRollback extends Data.TaggedError(
 // Extended Result Codes - AUTH
 // =============================================================================
 
-export class SQLiteAuthUser extends Data.TaggedError(
-  "SQLITE_AUTH_USER",
-)<SQLiteErrorProps> {}
+export class SQLiteAuthUser extends Data.TaggedError("SQLITE_AUTH_USER")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - BUSY
@@ -234,9 +176,7 @@ export class SQLiteBusyRecovery extends Data.TaggedError(
 export class SQLiteBusySnapshot extends Data.TaggedError(
   "SQLITE_BUSY_SNAPSHOT",
 )<SQLiteErrorProps> {}
-export class SQLiteBusyTimeout extends Data.TaggedError(
-  "SQLITE_BUSY_TIMEOUT",
-)<SQLiteErrorProps> {}
+export class SQLiteBusyTimeout extends Data.TaggedError("SQLITE_BUSY_TIMEOUT")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - CANTOPEN
@@ -312,9 +252,7 @@ export class SQLiteCorruptIndex extends Data.TaggedError(
 export class SQLiteCorruptSequence extends Data.TaggedError(
   "SQLITE_CORRUPT_SEQUENCE",
 )<SQLiteErrorProps> {}
-export class SQLiteCorruptVtab extends Data.TaggedError(
-  "SQLITE_CORRUPT_VTAB",
-)<SQLiteErrorProps> {}
+export class SQLiteCorruptVtab extends Data.TaggedError("SQLITE_CORRUPT_VTAB")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - ERROR
@@ -323,9 +261,7 @@ export class SQLiteCorruptVtab extends Data.TaggedError(
 export class SQLiteErrorMissingCollseq extends Data.TaggedError(
   "SQLITE_ERROR_MISSING_COLLSEQ",
 )<SQLiteErrorProps> {}
-export class SQLiteErrorRetry extends Data.TaggedError(
-  "SQLITE_ERROR_RETRY",
-)<SQLiteErrorProps> {}
+export class SQLiteErrorRetry extends Data.TaggedError("SQLITE_ERROR_RETRY")<SQLiteErrorProps> {}
 export class SQLiteErrorSnapshot extends Data.TaggedError(
   "SQLITE_ERROR_SNAPSHOT",
 )<SQLiteErrorProps> {}
@@ -334,12 +270,8 @@ export class SQLiteErrorSnapshot extends Data.TaggedError(
 // Extended Result Codes - IOERR
 // =============================================================================
 
-export class SQLiteIoerrAccess extends Data.TaggedError(
-  "SQLITE_IOERR_ACCESS",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrAuth extends Data.TaggedError(
-  "SQLITE_IOERR_AUTH",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrAccess extends Data.TaggedError("SQLITE_IOERR_ACCESS")<SQLiteErrorProps> {}
+export class SQLiteIoerrAuth extends Data.TaggedError("SQLITE_IOERR_AUTH")<SQLiteErrorProps> {}
 export class SQLiteIoerrBeginAtomic extends Data.TaggedError(
   "SQLITE_IOERR_BEGIN_ATOMIC",
 )<SQLiteErrorProps> {}
@@ -349,9 +281,7 @@ export class SQLiteIoerrBlocked extends Data.TaggedError(
 export class SQLiteIoerrCheckreservedlock extends Data.TaggedError(
   "SQLITE_IOERR_CHECKRESERVEDLOCK",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrClose extends Data.TaggedError(
-  "SQLITE_IOERR_CLOSE",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrClose extends Data.TaggedError("SQLITE_IOERR_CLOSE")<SQLiteErrorProps> {}
 export class SQLiteIoerrCommitAtomic extends Data.TaggedError(
   "SQLITE_IOERR_COMMIT_ATOMIC",
 )<SQLiteErrorProps> {}
@@ -361,12 +291,8 @@ export class SQLiteIoerrConvpath extends Data.TaggedError(
 export class SQLiteIoerrCorruptfs extends Data.TaggedError(
   "SQLITE_IOERR_CORRUPTFS",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrData extends Data.TaggedError(
-  "SQLITE_IOERR_DATA",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrDelete extends Data.TaggedError(
-  "SQLITE_IOERR_DELETE",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrData extends Data.TaggedError("SQLITE_IOERR_DATA")<SQLiteErrorProps> {}
+export class SQLiteIoerrDelete extends Data.TaggedError("SQLITE_IOERR_DELETE")<SQLiteErrorProps> {}
 export class SQLiteIoerrDeleteNoent extends Data.TaggedError(
   "SQLITE_IOERR_DELETE_NOENT",
 )<SQLiteErrorProps> {}
@@ -376,42 +302,24 @@ export class SQLiteIoerrDirClose extends Data.TaggedError(
 export class SQLiteIoerrDirFsync extends Data.TaggedError(
   "SQLITE_IOERR_DIR_FSYNC",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrFstat extends Data.TaggedError(
-  "SQLITE_IOERR_FSTAT",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrFsync extends Data.TaggedError(
-  "SQLITE_IOERR_FSYNC",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrFstat extends Data.TaggedError("SQLITE_IOERR_FSTAT")<SQLiteErrorProps> {}
+export class SQLiteIoerrFsync extends Data.TaggedError("SQLITE_IOERR_FSYNC")<SQLiteErrorProps> {}
 export class SQLiteIoerrGettemppath extends Data.TaggedError(
   "SQLITE_IOERR_GETTEMPPATH",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrLock extends Data.TaggedError(
-  "SQLITE_IOERR_LOCK",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrMmap extends Data.TaggedError(
-  "SQLITE_IOERR_MMAP",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrNomem extends Data.TaggedError(
-  "SQLITE_IOERR_NOMEM",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrRdlock extends Data.TaggedError(
-  "SQLITE_IOERR_RDLOCK",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrRead extends Data.TaggedError(
-  "SQLITE_IOERR_READ",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrLock extends Data.TaggedError("SQLITE_IOERR_LOCK")<SQLiteErrorProps> {}
+export class SQLiteIoerrMmap extends Data.TaggedError("SQLITE_IOERR_MMAP")<SQLiteErrorProps> {}
+export class SQLiteIoerrNomem extends Data.TaggedError("SQLITE_IOERR_NOMEM")<SQLiteErrorProps> {}
+export class SQLiteIoerrRdlock extends Data.TaggedError("SQLITE_IOERR_RDLOCK")<SQLiteErrorProps> {}
+export class SQLiteIoerrRead extends Data.TaggedError("SQLITE_IOERR_READ")<SQLiteErrorProps> {}
 export class SQLiteIoerrRollbackAtomic extends Data.TaggedError(
   "SQLITE_IOERR_ROLLBACK_ATOMIC",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrSeek extends Data.TaggedError(
-  "SQLITE_IOERR_SEEK",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrSeek extends Data.TaggedError("SQLITE_IOERR_SEEK")<SQLiteErrorProps> {}
 export class SQLiteIoerrShmlock extends Data.TaggedError(
   "SQLITE_IOERR_SHMLOCK",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrShmmap extends Data.TaggedError(
-  "SQLITE_IOERR_SHMMAP",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrShmmap extends Data.TaggedError("SQLITE_IOERR_SHMMAP")<SQLiteErrorProps> {}
 export class SQLiteIoerrShmopen extends Data.TaggedError(
   "SQLITE_IOERR_SHMOPEN",
 )<SQLiteErrorProps> {}
@@ -424,15 +332,9 @@ export class SQLiteIoerrShortRead extends Data.TaggedError(
 export class SQLiteIoerrTruncate extends Data.TaggedError(
   "SQLITE_IOERR_TRUNCATE",
 )<SQLiteErrorProps> {}
-export class SQLiteIoerrUnlock extends Data.TaggedError(
-  "SQLITE_IOERR_UNLOCK",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrVnode extends Data.TaggedError(
-  "SQLITE_IOERR_VNODE",
-)<SQLiteErrorProps> {}
-export class SQLiteIoerrWrite extends Data.TaggedError(
-  "SQLITE_IOERR_WRITE",
-)<SQLiteErrorProps> {}
+export class SQLiteIoerrUnlock extends Data.TaggedError("SQLITE_IOERR_UNLOCK")<SQLiteErrorProps> {}
+export class SQLiteIoerrVnode extends Data.TaggedError("SQLITE_IOERR_VNODE")<SQLiteErrorProps> {}
+export class SQLiteIoerrWrite extends Data.TaggedError("SQLITE_IOERR_WRITE")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - LOCKED
@@ -441,9 +343,7 @@ export class SQLiteIoerrWrite extends Data.TaggedError(
 export class SQLiteLockedSharedcache extends Data.TaggedError(
   "SQLITE_LOCKED_SHAREDCACHE",
 )<SQLiteErrorProps> {}
-export class SQLiteLockedVtab extends Data.TaggedError(
-  "SQLITE_LOCKED_VTAB",
-)<SQLiteErrorProps> {}
+export class SQLiteLockedVtab extends Data.TaggedError("SQLITE_LOCKED_VTAB")<SQLiteErrorProps> {}
 
 // =============================================================================
 // Extended Result Codes - NOTICE

@@ -1,27 +1,19 @@
-import * as AWS from "@/AWS";
-import { Subnet } from "@/AWS/EC2";
-import { Listener, ListenerCertificate, LoadBalancer } from "@/AWS/ELBv2";
-import * as Test from "@/Test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as AWS from "@/AWS";
+import { Subnet } from "@/AWS/EC2";
+import { Listener, ListenerCertificate, LoadBalancer } from "@/AWS/ELBv2";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import { deleteCertBestEffort, ensureImportedCert } from "./fixtures/acm.ts";
-import {
-  DEFAULT_CERT_PEM,
-  DEFAULT_KEY_PEM,
-  SNI_CERT_PEM,
-  SNI_KEY_PEM,
-} from "./fixtures/certs.ts";
+import { DEFAULT_CERT_PEM, DEFAULT_KEY_PEM, SNI_CERT_PEM, SNI_KEY_PEM } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Attach an extra SNI certificate to an HTTPS listener via the standalone
 // ListenerCertificate resource, verify out-of-band, then remove the resource
@@ -52,9 +44,9 @@ test.provider(
       yield* Effect.gen(function* () {
         const azResult = yield* EC2.describeAvailabilityZones({});
         const azs =
-          azResult.AvailabilityZones?.filter(
-            (az) => az.State === "available",
-          ).flatMap((az) => (az.ZoneName ? [az.ZoneName] : [])) ?? [];
+          azResult.AvailabilityZones?.filter((az) => az.State === "available").flatMap((az) =>
+            az.ZoneName ? [az.ZoneName] : [],
+          ) ?? [];
         const [az1, az2] = azs;
         expect(az1).toBeTruthy();
         expect(az2).toBeTruthy();
@@ -111,12 +103,8 @@ test.provider(
           .pipe(Effect.map((r) => r.Certificates ?? []));
 
         let certs = yield* describeCerts;
-        expect(
-          certs.some((c) => c.IsDefault && c.CertificateArn === defaultCertArn),
-        ).toBe(true);
-        expect(
-          certs.some((c) => !c.IsDefault && c.CertificateArn === sniCertArn),
-        ).toBe(true);
+        expect(certs.some((c) => c.IsDefault && c.CertificateArn === defaultCertArn)).toBe(true);
+        expect(certs.some((c) => !c.IsDefault && c.CertificateArn === sniCertArn)).toBe(true);
 
         // STAGE 2: remove the ListenerCertificate resource — the SNI cert is
         // detached, the listener and its default certificate survive (and the
@@ -124,12 +112,8 @@ test.provider(
         yield* stage(false);
 
         certs = yield* describeCerts;
-        expect(
-          certs.some((c) => c.IsDefault && c.CertificateArn === defaultCertArn),
-        ).toBe(true);
-        expect(
-          certs.some((c) => !c.IsDefault && c.CertificateArn === sniCertArn),
-        ).toBe(false);
+        expect(certs.some((c) => c.IsDefault && c.CertificateArn === defaultCertArn)).toBe(true);
+        expect(certs.some((c) => !c.IsDefault && c.CertificateArn === sniCertArn)).toBe(false);
 
         yield* stack.destroy();
 
@@ -137,9 +121,7 @@ test.provider(
           .describeListenerCertificates({ ListenerArn: s1.listenerArn })
           .pipe(
             Effect.map((r) => r.Certificates?.length ?? 0),
-            Effect.catchTag("ListenerNotFoundException", () =>
-              Effect.succeed(0),
-            ),
+            Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(0)),
           );
         expect(after).toBe(0);
       }).pipe(

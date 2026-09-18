@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link ListWorkflowVersions} runtime callable.
  * The `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type ListWorkflowVersionsInput = Omit<
-  mwaa.ListWorkflowVersionsRequest,
-  "WorkflowArn"
->;
+export type ListWorkflowVersionsInput = Omit<mwaa.ListWorkflowVersionsRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:ListWorkflowVersions`.
@@ -42,10 +39,7 @@ export interface ListWorkflowVersions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListWorkflowVersionsInput,
-    ) => Effect.Effect<
-      mwaa.ListWorkflowVersionsResponse,
-      mwaa.ListWorkflowVersionsError
-    >
+    ) => Effect.Effect<mwaa.ListWorkflowVersionsResponse, mwaa.ListWorkflowVersionsError>
   >
 > {}
 export const ListWorkflowVersions = Binding.Service<ListWorkflowVersions>(

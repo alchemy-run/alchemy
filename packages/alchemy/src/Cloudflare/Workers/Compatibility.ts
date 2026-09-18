@@ -14,8 +14,7 @@ import type { WorkerProps } from "./Worker.ts";
  * alchemy-bundled workers — and explicitly disabling it is a deploy-time
  * error.
  */
-const CROSS_REQUEST_PROMISE_RESOLUTION =
-  "handle_cross_request_promise_resolution";
+const CROSS_REQUEST_PROMISE_RESOLUTION = "handle_cross_request_promise_resolution";
 
 // The date the flag became default-on. Cloudflare rejects a script that
 // specifies a flag its compatibility date already defaults on ("does not
@@ -68,10 +67,7 @@ export const getCompatibility = (props: WorkerProps) => {
         "handlers live in the Python entry module).",
     );
   }
-  if (
-    !props.isExternal &&
-    userFlags.includes(`no_${CROSS_REQUEST_PROMISE_RESOLUTION}`)
-  ) {
+  if (!props.isExternal && userFlags.includes(`no_${CROSS_REQUEST_PROMISE_RESOLUTION}`)) {
     throw new Error(
       `The "no_${CROSS_REQUEST_PROMISE_RESOLUTION}" compatibility flag is not supported: ` +
         "the alchemy Worker runtime shares its layer build across concurrent " +
@@ -98,9 +94,7 @@ export const getCompatibility = (props: WorkerProps) => {
       // `no_nodejs_compat` opts out — appending
       // `nodejs_compat` alongside it would send Cloudflare a contradictory
       // flag pair.
-      ...(python ||
-      userFlags.includes("no_nodejs_compat") ||
-      date >= NODEJS_COMPAT_DEFAULT_ON
+      ...(python || userFlags.includes("no_nodejs_compat") || date >= NODEJS_COMPAT_DEFAULT_ON
         ? []
         : props.isExternal
           ? // ISO dates compare lexically.

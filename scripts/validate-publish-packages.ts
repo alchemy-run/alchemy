@@ -10,10 +10,7 @@ const publishable: Array<{ name: string; version: string }> = [];
 for (const entry of packageDirectories) {
   if (!entry.isDirectory()) continue;
   const manifestPath = path.join(packagesDirectory, entry.name, "package.json");
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<
-    string,
-    unknown
-  >;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
   if (manifest.private === true) continue;
 
   const missing = [
@@ -29,16 +26,12 @@ for (const entry of packageDirectories) {
     "files",
     "exports",
   ].filter((field) => manifest[field] == null);
-  const publishConfig = manifest.publishConfig as
-    | { access?: unknown }
-    | undefined;
+  const publishConfig = manifest.publishConfig as { access?: unknown } | undefined;
   if (publishConfig?.access !== "public") {
     missing.push("publishConfig.access=public");
   }
   if (missing.length > 0) {
-    throw new Error(
-      `${entry.name}: missing publish metadata: ${missing.join(", ")}`,
-    );
+    throw new Error(`${entry.name}: missing publish metadata: ${missing.join(", ")}`);
   }
 
   publishable.push({
@@ -56,6 +49,4 @@ if (versions.size !== 1) {
   );
 }
 
-console.log(
-  `Validated ${publishable.length} publishable packages at ${publishable[0]?.version}`,
-);
+console.log(`Validated ${publishable.length} publishable packages at ${publishable[0]?.version}`);

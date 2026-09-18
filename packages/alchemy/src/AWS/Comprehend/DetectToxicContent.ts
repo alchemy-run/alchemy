@@ -32,10 +32,7 @@ export interface DetectToxicContent extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectToxicContentRequest,
-    ) => Effect.Effect<
-      comprehend.DetectToxicContentResponse,
-      comprehend.DetectToxicContentError
-    >
+    ) => Effect.Effect<comprehend.DetectToxicContentResponse, comprehend.DetectToxicContentError>
   >
 > {}
 export const DetectToxicContent = Binding.Service<DetectToxicContent>(

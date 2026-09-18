@@ -6,8 +6,8 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBInstanceProps {
   /**
@@ -205,11 +205,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBInstances?.[0];
       });
 
@@ -217,11 +213,7 @@ export const DBInstanceProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* docdb
           .listTagsForResource({ ResourceName: arn })
-          .pipe(
-            Effect.catchTag("DBInstanceNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
         return toTagRecord(response?.TagList);
       });
 
@@ -229,16 +221,11 @@ export const DBInstanceProvider = () =>
       // follow-on `modifyDBInstance` doesn't hit `InvalidDBInstanceStateFault`.
       // Budgets ~10 min (60 * 10s) for slow provisioning.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {
-              return Effect.fail(
-                new Error(`DB instance '${instanceId}' not found`),
-              );
+              return Effect.fail(new Error(`DB instance '${instanceId}' not found`));
             }
             const status = instance.DBInstanceStatus;
             if (
@@ -247,9 +234,7 @@ export const DBInstanceProvider = () =>
               status !== "incompatible-restore"
             ) {
               return Effect.fail(
-                new Error(
-                  `DB instance '${instanceId}' not available (status: ${status})`,
-                ),
+                new Error(`DB instance '${instanceId}' not available (status: ${status})`),
               );
             }
             return Effect.succeed(instance);
@@ -322,8 +307,7 @@ export const DBInstanceProvider = () =>
           return toAttrs({ instance, tags });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          const identifier = output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -352,12 +336,7 @@ export const DBInstanceProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBInstanceAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBInstanceAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForInstance(identifier);
           } else {
@@ -423,9 +402,7 @@ export const DBInstanceProvider = () =>
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
             })
-            .pipe(
-              Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
           // Block until the instance is fully gone so a dependent cluster or
           // subnet group is not torn down while DocumentDB still references it.
           yield* Effect.repeat(
@@ -435,15 +412,10 @@ export const DBInstanceProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBInstanceNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(false)),
               ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

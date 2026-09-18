@@ -1,7 +1,6 @@
 import * as cni from "@distilled.cloud/cloudflare/network-interconnects";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -76,8 +75,7 @@ export type NetworkInterconnectSettings = Resource<
  * @product Network Interconnects
  * @category Network
  */
-export const NetworkInterconnectSettings =
-  Resource<NetworkInterconnectSettings>(TypeId);
+export const NetworkInterconnectSettings = Resource<NetworkInterconnectSettings>(TypeId);
 
 /**
  * Returns true if the given value is a NetworkInterconnectSettings resource.

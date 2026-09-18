@@ -8,10 +8,7 @@ import type { BotAlias } from "./BotAlias.ts";
  * `botAliasId` removed. `localeId` selects the conversation language and
  * `sessionId` identifies the conversation — both remain caller-supplied.
  */
-export interface GetSessionRequest extends Omit<
-  lexr.GetSessionRequest,
-  "botId" | "botAliasId"
-> {}
+export interface GetSessionRequest extends Omit<lexr.GetSessionRequest, "botId" | "botAliasId"> {}
 
 /**
  * Runtime binding for `lex:GetSession` — read the session state (active
@@ -40,9 +37,7 @@ export interface GetSession extends Binding.Service<
   (
     alias: BotAlias,
   ) => Effect.Effect<
-    (
-      request: GetSessionRequest,
-    ) => Effect.Effect<lexr.GetSessionResponse, lexr.GetSessionError>
+    (request: GetSessionRequest) => Effect.Effect<lexr.GetSessionResponse, lexr.GetSessionError>
   >
 > {}
 

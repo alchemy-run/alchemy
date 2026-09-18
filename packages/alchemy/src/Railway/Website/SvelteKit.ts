@@ -2,12 +2,10 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /** The framework-integration package that drives the SvelteKit build. */
-export const SVELTEKIT_FRAMEWORK_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/sveltekit";
+export const SVELTEKIT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit";
 
 /** The Node container deploy target for the SvelteKit build. */
-export const SVELTEKIT_NODE_TARGET_SPECIFIER =
-  "@alchemy.run/frontend-frameworks/sveltekit/node";
+export const SVELTEKIT_NODE_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/sveltekit/node";
 
 export interface SvelteKitProps extends FrameworkSiteProps {
   /**

@@ -2,7 +2,6 @@ import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -147,13 +146,7 @@ export interface GreTunnelAttributes {
   modifiedOn: string | undefined;
 }
 
-export type GreTunnel = Resource<
-  TypeId,
-  GreTunnelProps,
-  GreTunnelAttributes,
-  never,
-  Providers
->;
+export type GreTunnel = Resource<TypeId, GreTunnelProps, GreTunnelAttributes, never, Providers>;
 
 /**
  * A Magic Transit / Magic WAN GRE tunnel between Cloudflare and a customer
@@ -252,9 +245,7 @@ export const GreTunnelProvider = () =>
 
       // Observe — the id on `output` is a hint; fall through to the
       // unique-name lookup when it is gone.
-      let observed = output?.tunnelId
-        ? yield* getTunnel(accountId, output.tunnelId)
-        : undefined;
+      let observed = output?.tunnelId ? yield* getTunnel(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
@@ -277,17 +268,13 @@ export const GreTunnelProvider = () =>
             ? {
                 customerAsn: news.bgp.customerAsn,
                 extraPrefixes: news.bgp.extraPrefixes,
-                md5Key: news.bgp.md5Key
-                  ? Redacted.value(news.bgp.md5Key)
-                  : undefined,
+                md5Key: news.bgp.md5Key ? Redacted.value(news.bgp.md5Key) : undefined,
               }
             : undefined,
           healthCheck: news.healthCheck
             ? {
                 enabled: news.healthCheck.enabled,
-                target: news.healthCheck.target
-                  ? { saved: news.healthCheck.target }
-                  : undefined,
+                target: news.healthCheck.target ? { saved: news.healthCheck.target } : undefined,
               }
             : undefined,
         });
@@ -318,9 +305,7 @@ export const GreTunnelProvider = () =>
                 direction: news.healthCheck.direction,
                 rate: news.healthCheck.rate,
                 type: news.healthCheck.type,
-                target: news.healthCheck.target
-                  ? { saved: news.healthCheck.target }
-                  : undefined,
+                target: news.healthCheck.target ? { saved: news.healthCheck.target } : undefined,
               }
             : undefined,
         });
@@ -353,18 +338,14 @@ export const GreTunnelProvider = () =>
     // Magic Transit, so treat them as non-listable → [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      return yield* magicTransit
-        .listGreTunnels({ accountId, xMagicNewHcTarget: true })
-        .pipe(
-          Effect.map((r): GreTunnelAttributes[] =>
-            (r.greTunnels ?? []).map((tunnel) =>
-              toAttributes(tunnel, accountId),
-            ),
-          ),
-          Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
-            Effect.succeed<GreTunnelAttributes[]>([]),
-          ),
-        );
+      return yield* magicTransit.listGreTunnels({ accountId, xMagicNewHcTarget: true }).pipe(
+        Effect.map((r): GreTunnelAttributes[] =>
+          (r.greTunnels ?? []).map((tunnel) => toAttributes(tunnel, accountId)),
+        ),
+        Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
+          Effect.succeed<GreTunnelAttributes[]>([]),
+        ),
+      );
     }),
   });
 
@@ -382,10 +363,7 @@ interface ObservedGreTunnel {
     direction?: string | null;
     enabled?: boolean | null;
     rate?: string | null;
-    target?:
-      | { effective?: string | null; saved?: string | null }
-      | string
-      | null;
+    target?: { effective?: string | null; saved?: string | null } | string | null;
     type?: string | null;
   } | null;
   createdOn?: string | null;
@@ -397,14 +375,10 @@ interface ObservedGreTunnel {
  * error code 1029) to `undefined`.
  */
 const getTunnel = (accountId: string, greTunnelId: string) =>
-  magicTransit
-    .getGreTunnel({ accountId, greTunnelId, xMagicNewHcTarget: true })
-    .pipe(
-      Effect.map(
-        (r): ObservedGreTunnel | undefined => r.greTunnel ?? undefined,
-      ),
-      Effect.catchTag("GreTunnelNotFound", () => Effect.succeed(undefined)),
-    );
+  magicTransit.getGreTunnel({ accountId, greTunnelId, xMagicNewHcTarget: true }).pipe(
+    Effect.map((r): ObservedGreTunnel | undefined => r.greTunnel ?? undefined),
+    Effect.catchTag("GreTunnelNotFound", () => Effect.succeed(undefined)),
+  );
 
 /**
  * Find a tunnel by exact name. Names are unique per account, so at most
@@ -433,8 +407,7 @@ const dirty = (observed: ObservedGreTunnel, news: GreTunnelProps): boolean =>
   observed.interfaceAddress !== news.interfaceAddress ||
   (news.interfaceAddress6 !== undefined &&
     (observed.interfaceAddress6 ?? undefined) !== news.interfaceAddress6) ||
-  (news.description !== undefined &&
-    (observed.description ?? undefined) !== news.description) ||
+  (news.description !== undefined && (observed.description ?? undefined) !== news.description) ||
   (news.ttl !== undefined && (observed.ttl ?? undefined) !== news.ttl) ||
   (news.mtu !== undefined && (observed.mtu ?? undefined) !== news.mtu) ||
   healthCheckDirty(observed, news.healthCheck);
@@ -446,21 +419,15 @@ const healthCheckDirty = (
   if (desired === undefined) return false;
   const hc = observed.healthCheck ?? {};
   return (
-    (desired.enabled !== undefined &&
-      (hc.enabled ?? undefined) !== desired.enabled) ||
-    (desired.direction !== undefined &&
-      (hc.direction ?? undefined) !== desired.direction) ||
+    (desired.enabled !== undefined && (hc.enabled ?? undefined) !== desired.enabled) ||
+    (desired.direction !== undefined && (hc.direction ?? undefined) !== desired.direction) ||
     (desired.rate !== undefined && (hc.rate ?? undefined) !== desired.rate) ||
     (desired.type !== undefined && (hc.type ?? undefined) !== desired.type) ||
-    (desired.target !== undefined &&
-      observedHealthTarget(hc) !== desired.target)
+    (desired.target !== undefined && observedHealthTarget(hc) !== desired.target)
   );
 };
 
-const sameBgp = (
-  a: MagicTunnelBgp | undefined,
-  b: MagicTunnelBgp | undefined,
-): boolean => {
+const sameBgp = (a: MagicTunnelBgp | undefined, b: MagicTunnelBgp | undefined): boolean => {
   if (a === undefined && b === undefined) return true;
   if (a === undefined || b === undefined) return false;
   const aKey = a.md5Key ? Redacted.value(a.md5Key) : undefined;
@@ -472,10 +439,7 @@ const sameBgp = (
   );
 };
 
-const toAttributes = (
-  tunnel: ObservedGreTunnel,
-  accountId: string,
-): GreTunnelAttributes => ({
+const toAttributes = (tunnel: ObservedGreTunnel, accountId: string): GreTunnelAttributes => ({
   tunnelId: tunnel.id,
   accountId,
   name: tunnel.name,

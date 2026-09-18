@@ -30,12 +30,7 @@ export interface InferRxNorm extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehendmedical.InferRxNormRequest,
-    ) => Effect.Effect<
-      comprehendmedical.InferRxNormResponse,
-      comprehendmedical.InferRxNormError
-    >
+    ) => Effect.Effect<comprehendmedical.InferRxNormResponse, comprehendmedical.InferRxNormError>
   >
 > {}
-export const InferRxNorm = Binding.Service<InferRxNorm>(
-  "AWS.ComprehendMedical.InferRxNorm",
-);
+export const InferRxNorm = Binding.Service<InferRxNorm>("AWS.ComprehendMedical.InferRxNorm");

@@ -27,12 +27,7 @@ export interface ListPolicies extends Binding.Service<
   () => Effect.Effect<
     (
       request: organizations.ListPoliciesRequest,
-    ) => Effect.Effect<
-      organizations.ListPoliciesResponse,
-      organizations.ListPoliciesError
-    >
+    ) => Effect.Effect<organizations.ListPoliciesResponse, organizations.ListPoliciesError>
   >
 > {}
-export const ListPolicies = Binding.Service<ListPolicies>(
-  "AWS.Organizations.ListPolicies",
-);
+export const ListPolicies = Binding.Service<ListPolicies>("AWS.Organizations.ListPolicies");

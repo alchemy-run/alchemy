@@ -1,7 +1,7 @@
-import type { QueryDatabaseClient } from "@/Cloudflare/D1/QueryDatabase.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import type { QueryDatabaseClient } from "@/Cloudflare/D1/QueryDatabase.ts";
 
 /**
  * Modality-agnostic D1 route handlers driving the Effect-native
@@ -36,9 +36,7 @@ export const d1Routes = (db: QueryDatabaseClient, style: string) =>
     }
 
     if (request.method === "POST" && url.pathname === "/seed") {
-      const insert = db.prepare(
-        "INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)",
-      );
+      const insert = db.prepare("INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)");
       const results = yield* db.batch([
         insert.bind(1, style, "alice"),
         insert.bind(2, style, "bob"),
@@ -53,9 +51,7 @@ export const d1Routes = (db: QueryDatabaseClient, style: string) =>
     if (request.method === "POST" && url.pathname === "/users") {
       const body = (yield* request.json) as { id: number; name: string };
       const result = yield* db
-        .prepare(
-          "INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)",
-        )
+        .prepare("INSERT OR REPLACE INTO users (id, style, name) VALUES (?, ?, ?)")
         .bind(body.id, style, body.name)
         .run();
       return yield* HttpServerResponse.json({

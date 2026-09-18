@@ -1,6 +1,6 @@
+import { describe, expect, it } from "vitest";
 import { isDeployTarget } from "../../core/index.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
-import { describe, expect, it } from "vitest";
 import { makeNodeAdapter, makeNodeTarget, target } from "../node.ts";
 
 describe("makeNodeTarget", () => {
@@ -19,9 +19,7 @@ describe("makeNodeTarget", () => {
 
   it("produces the in-memory kit adapter from the adapter hook", () => {
     const adapter = makeNodeAdapter();
-    expect(adapter.name).toBe(
-      "@alchemy.run/frontend-frameworks/sveltekit/node",
-    );
+    expect(adapter.name).toBe("@alchemy.run/frontend-frameworks/sveltekit/node");
     expect(adapter.result.current).toBeUndefined();
     expect(typeof adapter.adapt).toBe("function");
   });

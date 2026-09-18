@@ -33,20 +33,19 @@ export const RetrieveProductFeatureHttp = Layer.effect(
       );
       const id = yield* asStringEffect(feature.id);
       const product = yield* asStringEffect(feature.product);
-      const auth =
-        host !== undefined ? authorizeWith(bound) : ambient.authorize;
+      const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
-      return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(
-        function* (request?: { expand?: string[] }) {
-          return yield* auth(
-            GetProductFeature({
-              ...(request ?? {}),
-              id: yield* id,
-              product: yield* product,
-            }),
-          );
-        },
-      );
+      return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(function* (request?: {
+        expand?: string[];
+      }) {
+        return yield* auth(
+          GetProductFeature({
+            ...(request ?? {}),
+            id: yield* id,
+            product: yield* product,
+          }),
+        );
+      });
     });
   }),
 );

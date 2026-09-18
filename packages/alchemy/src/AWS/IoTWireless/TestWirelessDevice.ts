@@ -7,10 +7,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
  * Request for {@link TestWirelessDevice}. The bound device's id is injected
  * automatically, leaving nothing else to supply.
  */
-export interface TestWirelessDeviceRequest extends Omit<
-  iotw.TestWirelessDeviceRequest,
-  "Id"
-> {}
+export interface TestWirelessDeviceRequest extends Omit<iotw.TestWirelessDeviceRequest, "Id"> {}
 
 /**
  * Runtime binding for `iotwireless:TestWirelessDevice` — simulate a
@@ -44,10 +41,7 @@ export interface TestWirelessDevice extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: TestWirelessDeviceRequest,
-    ) => Effect.Effect<
-      iotw.TestWirelessDeviceResponse,
-      iotw.TestWirelessDeviceError
-    >
+    ) => Effect.Effect<iotw.TestWirelessDeviceResponse, iotw.TestWirelessDeviceError>
   >
 > {}
 export const TestWirelessDevice = Binding.Service<TestWirelessDevice>(

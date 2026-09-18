@@ -94,9 +94,7 @@ export const makeDataZoneEnvironmentHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`arn:aws:datazone:*:*:domain/${environment.domainId}`,
-                ],
+                Resource: [Output.interpolate`arn:aws:datazone:*:*:domain/${environment.domainId}`],
               },
             ],
           });

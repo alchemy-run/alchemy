@@ -34,10 +34,7 @@ export interface ListTaskExecutions extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<datasync.ListTaskExecutionsRequest, "TaskArn">,
-    ) => Effect.Effect<
-      datasync.ListTaskExecutionsResponse,
-      datasync.ListTaskExecutionsError
-    >
+    ) => Effect.Effect<datasync.ListTaskExecutionsResponse, datasync.ListTaskExecutionsError>
   >
 > {}
 export const ListTaskExecutions = Binding.Service<ListTaskExecutions>(

@@ -30,10 +30,7 @@ export interface ListVirtualClusters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: emrc.ListVirtualClustersRequest,
-    ) => Effect.Effect<
-      emrc.ListVirtualClustersResponse,
-      emrc.ListVirtualClustersError
-    >
+    ) => Effect.Effect<emrc.ListVirtualClustersResponse, emrc.ListVirtualClustersError>
   >
 > {}
 export const ListVirtualClusters = Binding.Service<ListVirtualClusters>(

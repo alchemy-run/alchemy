@@ -59,22 +59,19 @@ export const PERMISSION_GROUPS = [
   {
     id: "7ea222f6d5064cfa89ea366d7c1fee89",
     name: "Access: Apps and Policies Read",
-    description:
-      "Grants read access to Cloudflare Access applications and policies",
+    description: "Grants read access to Cloudflare Access applications and policies",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "6db4e222e21248ac96a3f4c2a81e3b41",
     name: "Access: Apps and Policies Revoke",
-    description:
-      "Grants ability to revoke all tokens to Cloudflare Access zone resources",
+    description: "Grants ability to revoke all tokens to Cloudflare Access zone resources",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "6c9d1cfcfc6840a987d1b5bfb880a841",
     name: "Access: Apps and Policies Revoke",
-    description:
-      "Grants ability to revoke Cloudflare Access application tokens",
+    description: "Grants ability to revoke Cloudflare Access application tokens",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -86,8 +83,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "1e13c5124ca64b72b1969a67e8829049",
     name: "Access: Apps and Policies Write",
-    description:
-      "Grants write access to Cloudflare Access applications and policies",
+    description: "Grants write access to Cloudflare Access applications and policies",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -141,8 +137,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "7121a0c7e9ed46e3829f9cca2bb572aa",
     name: "Access: Organizations, Identity Providers, and Groups Revoke",
-    description:
-      "Grants ability to revoke user sessions to Cloudflare Access account resources",
+    description: "Grants ability to revoke user sessions to Cloudflare Access account resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -184,15 +179,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "99ff99e4e30247a99d3777a8c4c18541",
     name: "Access: SSH Auditing Read",
-    description:
-      "Grants read access to Cloudflare Access SSH certificate authorities (CAs)",
+    description: "Grants read access to Cloudflare Access SSH certificate authorities (CAs)",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "d30c9ad8b5224e7cb8d41bcb4757effc",
     name: "Access: SSH Auditing Write",
-    description:
-      "Grants write access to Cloudflare Access SSH certificate authorities (CAs)",
+    description: "Grants write access to Cloudflare Access SSH certificate authorities (CAs)",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -346,15 +339,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "a7a233f9604845c787d4c8c39ac09c21",
     name: "Account: SSL and Certificates Read",
-    description:
-      "Grants read access to SSL MTLS certificates or Certificate Store",
+    description: "Grants read access to SSL MTLS certificates or Certificate Store",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "db37e5f1cb1a4e1aabaef8deaea43575",
     name: "Account: SSL and Certificates Write",
-    description:
-      "Grants read and write access to SSL MTLS certificates or Certificate Store",
+    description: "Grants read and write access to SSL MTLS certificates or Certificate Store",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -584,15 +575,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "00ec19a0d4fa4e4aae23b50bf04c0630",
     name: "Cloudflare CDS Compute Account Read",
-    description:
-      "Grants read access to Cloudflare CDS compute account resources",
+    description: "Grants read access to Cloudflare CDS compute account resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "9bf884ba0de445dab37ea4a3e1a2c9f1",
     name: "Cloudflare CDS Compute Account Write",
-    description:
-      "Grants write access to Cloudflare CDS compute account resources",
+    description: "Grants write access to Cloudflare CDS compute account resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -652,15 +641,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "4f1276d1e7e34c32a5012bbe02ece86d",
     name: "Cloudflare One Networks Read",
-    description:
-      "Grants read access to Cloudflare One routes, subnets, and virtual networks",
+    description: "Grants read access to Cloudflare One routes, subnets, and virtual networks",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "e2980d9241cf4939bbbd74fdc43b9651",
     name: "Cloudflare One Networks Write",
-    description:
-      "Grants write access to Cloudflare One routes, subnets, and virtual networks",
+    description: "Grants write access to Cloudflare One routes, subnets, and virtual networks",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -678,8 +665,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "e0e0edfbe8834df3b51424ba4fb7bb5f",
     name: "Cloudflare Zero Trust Secure DNS Locations Write",
-    description:
-      "Grants access to create and edit secure DNS Locations only in teams (Zero Trust)",
+    description: "Grants access to create and edit secure DNS Locations only in teams (Zero Trust)",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -723,8 +709,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "8764961c1edb4274be129d630b0b2671",
     name: "Connectivity Directory Read",
-    description:
-      "Can view Connectivity Directory services and Cloudflare Tunnels",
+    description: "Can view Connectivity Directory services and Cloudflare Tunnels",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -736,8 +721,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "7c81856725af47ce89a790d5fb36f362",
     name: "Constellation Write",
-    description:
-      "Grants write access to Constellation configuration and models",
+    description: "Grants write access to Constellation configuration and models",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -863,15 +847,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "f0235726de25444a84f704b7c93afadf",
     name: "Domain API Gateway",
-    description:
-      "Grants full access to API-Gateway Management (including API Shield)",
+    description: "Grants full access to API-Gateway Management (including API Shield)",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "6ced5d0d69b1422396909a62c38ab41b",
     name: "Domain API Gateway Read",
-    description:
-      "Grants read access to API-Gateway Management (including API Shield)",
+    description: "Grants read access to API-Gateway Management (including API Shield)",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
@@ -1111,29 +1093,25 @@ export const PERMISSION_GROUPS = [
   {
     id: "59059f0c977b44f8b1c18e0aaf91c369",
     name: "Load Balancers Account Read",
-    description:
-      "Grants read access to account load balancers and associated resources",
+    description: "Grants read access to account load balancers and associated resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "419ec42810af4659ade77716dbe47bc6",
     name: "Load Balancers Account Write",
-    description:
-      "Grants write access to account load balancers and associated resources",
+    description: "Grants write access to account load balancers and associated resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "e9a975f628014f1d85b723993116f7d5",
     name: "Load Balancers Read",
-    description:
-      "Grants read access to load balancers and associated resources",
+    description: "Grants read access to load balancers and associated resources",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "6d7f2f5f5b1d4a0e9081fdc98d432fd1",
     name: "Load Balancers Write",
-    description:
-      "Grants write access to load balancers and associated resources",
+    description: "Grants write access to load balancers and associated resources",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
@@ -1223,8 +1201,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "09c77baecb6341a2b1ca2c62b658d290",
     name: "Magic Network Monitoring Config Write",
-    description:
-      "Grants write access to MNM rules and update access to account settings",
+    description: "Grants write access to MNM rules and update access to account settings",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1392,8 +1369,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "de62b15d79cc4d8d9c7b443c656eadbd",
     name: "Realtime",
-    description:
-      "Grants access to Realtime configuration excluding sensitive data",
+    description: "Grants access to Realtime configuration excluding sensitive data",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1543,8 +1519,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "120f843a9c074f399b830e542e5616b8",
     name: "Trust and Safety Write",
-    description:
-      "Grants access to interact with abuse reports and abuse actions",
+    description: "Grants access to interact with abuse reports and abuse actions",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1664,15 +1639,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "29c629fb7b5e4c408ca0f7b545724fcc",
     name: "Workers Observability Telemetry Write",
-    description:
-      "Grants write access for Telemetry to Cloudflare Workers Observability",
+    description: "Grants write access for Telemetry to Cloudflare Workers Observability",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "82c075da3f4647a2a03becd0fe240f8a",
     name: "Workers Observability Write",
-    description:
-      "Grants read and write access to Cloudflare Workers Observability",
+    description: "Grants read and write access to Cloudflare Workers Observability",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1690,8 +1663,7 @@ export const PERMISSION_GROUPS = [
   {
     id: "f45430d92e2b4a6cb9f94f2594c141b8",
     name: "Workers R2 SQL Read",
-    description:
-      "Grants access to read-only SQL queries against R2 Data Catalog",
+    description: "Grants access to read-only SQL queries against R2 Data Catalog",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1721,15 +1693,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "2072033d694d415a936eaeb94e6405b8",
     name: "Workers Routes Read",
-    description:
-      "Grants read access to Cloudflare Workers and Workers KV Storage",
+    description: "Grants read access to Cloudflare Workers and Workers KV Storage",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
     id: "28f4b596e7d643029c524985477ae49a",
     name: "Workers Routes Write",
-    description:
-      "Grants write access to Cloudflare Workers and Workers KV Storage",
+    description: "Grants write access to Cloudflare Workers and Workers KV Storage",
     scopes: ["com.cloudflare.api.account.zone"],
   },
   {
@@ -1783,15 +1753,13 @@ export const PERMISSION_GROUPS = [
   {
     id: "07f91e3e32b647ffae0178d884f23ee0",
     name: "Zero Trust Resilience Read",
-    description:
-      "Grants read access to Cloudflare Zero Trust Resilience resources",
+    description: "Grants read access to Cloudflare Zero Trust Resilience resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
     id: "cc00ebddebca4b8399607562a78df084",
     name: "Zero Trust Resilience Write",
-    description:
-      "Grants write access to Cloudflare Zero Trust Resilience resources",
+    description: "Grants write access to Cloudflare Zero Trust Resilience resources",
     scopes: ["com.cloudflare.api.account"],
   },
   {
@@ -1896,10 +1864,7 @@ export type PermissionGroupName = (typeof PERMISSION_GROUPS)[number]["name"];
  * sharing a label). We keep the first occurrence; callers that need a specific
  * scope should pass `{ id }` directly instead of using the name shorthand.
  */
-export const PERMISSION_GROUPS_BY_NAME: Record<
-  PermissionGroupName,
-  PermissionGroup
-> = (() => {
+export const PERMISSION_GROUPS_BY_NAME: Record<PermissionGroupName, PermissionGroup> = (() => {
   const map = {} as Record<PermissionGroupName, PermissionGroup>;
   for (const group of PERMISSION_GROUPS) {
     if (!(group.name in map)) {

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { Input } from "../Input.ts";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
@@ -256,14 +256,11 @@ export const WebhookProvider = () =>
           Effect.tryPromise({
             try: async () => {
               try {
-                const hooks = await octokit.paginate(
-                  octokit.rest.repos.listWebhooks,
-                  {
-                    owner: repo.owner.login,
-                    repo: repo.name,
-                    per_page: 100,
-                  },
-                );
+                const hooks = await octokit.paginate(octokit.rest.repos.listWebhooks, {
+                  owner: repo.owner.login,
+                  repo: repo.name,
+                  per_page: 100,
+                });
                 return hooks.map(toAttrs);
               } catch (error: any) {
                 // Repos where the token lacks admin access reject the webhooks

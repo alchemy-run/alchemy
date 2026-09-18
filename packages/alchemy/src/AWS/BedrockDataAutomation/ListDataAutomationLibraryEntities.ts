@@ -50,7 +50,6 @@ export interface ListDataAutomationLibraryEntities extends Binding.Service<
     >
   >
 > {}
-export const ListDataAutomationLibraryEntities =
-  Binding.Service<ListDataAutomationLibraryEntities>(
-    "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
-  );
+export const ListDataAutomationLibraryEntities = Binding.Service<ListDataAutomationLibraryEntities>(
+  "AWS.BedrockDataAutomation.ListDataAutomationLibraryEntities",
+);

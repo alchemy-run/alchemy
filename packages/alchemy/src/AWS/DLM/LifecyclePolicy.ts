@@ -20,16 +20,10 @@ export type LifecyclePolicyState = "ENABLED" | "DISABLED" | "ERROR";
  * The policy type. `EBS_SNAPSHOT_MANAGEMENT` manages the lifecycle of EBS
  * snapshots; `IMAGE_MANAGEMENT` manages the lifecycle of EBS-backed AMIs.
  */
-export type LifecyclePolicyType =
-  | "EBS_SNAPSHOT_MANAGEMENT"
-  | "IMAGE_MANAGEMENT";
+export type LifecyclePolicyType = "EBS_SNAPSHOT_MANAGEMENT" | "IMAGE_MANAGEMENT";
 
 /** Unit for retention intervals. */
-export type LifecyclePolicyRetentionUnit =
-  | "DAYS"
-  | "WEEKS"
-  | "MONTHS"
-  | "YEARS";
+export type LifecyclePolicyRetentionUnit = "DAYS" | "WEEKS" | "MONTHS" | "YEARS";
 
 export interface LifecyclePolicyCreateRule {
   /**
@@ -411,9 +405,7 @@ export interface LifecyclePolicy extends Resource<
  *
  * @resource
  */
-export const LifecyclePolicy = Resource<LifecyclePolicy>(
-  "AWS.DLM.LifecyclePolicy",
-);
+export const LifecyclePolicy = Resource<LifecyclePolicy>("AWS.DLM.LifecyclePolicy");
 
 /** AWS managed policy granting DLM the permissions for snapshot policies. */
 const SNAPSHOT_MANAGED_POLICY_ARN =
@@ -424,9 +416,7 @@ const AMI_MANAGED_POLICY_ARN =
   "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRoleForAMIManagement";
 
 /** Convert a tag record to the DLM wire tag list, sorted for stable diffs. */
-const toWireTagList = (
-  tags: Record<string, string> | undefined,
-): dlm.Tag[] | undefined =>
+const toWireTagList = (tags: Record<string, string> | undefined): dlm.Tag[] | undefined =>
   tags === undefined
     ? undefined
     : Object.entries(tags)
@@ -438,9 +428,7 @@ const fromWireTagMap = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /** Map the camelCase schedule props to the DLM wire shape. */
@@ -516,20 +504,15 @@ const toWireSchedule = (schedule: LifecyclePolicySchedule): dlm.Schedule => ({
           RetainRule: {
             RetentionArchiveTier: {
               Count: schedule.archiveRule.retainRule.retentionArchiveTier.count,
-              Interval:
-                schedule.archiveRule.retainRule.retentionArchiveTier.interval,
-              IntervalUnit:
-                schedule.archiveRule.retainRule.retentionArchiveTier
-                  .intervalUnit,
+              Interval: schedule.archiveRule.retainRule.retentionArchiveTier.interval,
+              IntervalUnit: schedule.archiveRule.retainRule.retentionArchiveTier.intervalUnit,
             },
           },
         },
 });
 
 /** Map the camelCase policy details props to the DLM wire shape. */
-const toWirePolicyDetails = (
-  details: LifecyclePolicyDetails,
-): dlm.PolicyDetails => ({
+const toWirePolicyDetails = (details: LifecyclePolicyDetails): dlm.PolicyDetails => ({
   PolicyType: details.policyType ?? "EBS_SNAPSHOT_MANAGEMENT",
   ResourceTypes: details.resourceTypes,
   ResourceLocations: details.resourceLocations,
@@ -541,9 +524,7 @@ const toWirePolicyDetails = (
       : {
           ExcludeBootVolume: details.parameters.excludeBootVolume,
           NoReboot: details.parameters.noReboot,
-          ExcludeDataVolumeTags: toWireTagList(
-            details.parameters.excludeDataVolumeTags,
-          ),
+          ExcludeDataVolumeTags: toWireTagList(details.parameters.excludeDataVolumeTags),
         },
 });
 
@@ -604,10 +585,7 @@ const projectToDesired = (desired: unknown, observed: unknown): unknown => {
     return Object.fromEntries(
       Object.entries(desired as Record<string, unknown>)
         .filter(([, v]) => v !== undefined)
-        .map(([k, v]) => [
-          k,
-          projectToDesired(v, (observed as Record<string, unknown>)[k]),
-        ]),
+        .map(([k, v]) => [k, projectToDesired(v, (observed as Record<string, unknown>)[k])]),
     );
   }
   return observed;
@@ -643,14 +621,10 @@ export const LifecyclePolicyProvider = () =>
         id: string,
         props: Pick<LifecyclePolicyProps, "description">,
       ) {
-        return (
-          props.description ??
-          (yield* createPhysicalName({ id, maxLength: 500 }))
-        );
+        return props.description ?? (yield* createPhysicalName({ id, maxLength: 500 }));
       });
 
-      const createRoleName = (id: string) =>
-        createPhysicalName({ id, maxLength: 64 });
+      const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
       const managedPolicyArnFor = (details: LifecyclePolicyDetails) =>
         (details.policyType ?? "EBS_SNAPSHOT_MANAGEMENT") === "IMAGE_MANAGEMENT"
@@ -660,16 +634,11 @@ export const LifecyclePolicyProvider = () =>
       const getOrUndefined = Effect.fn(function* (policyId: string) {
         return yield* dlm.getLifecyclePolicy({ PolicyId: policyId }).pipe(
           Effect.map((r) => r.Policy),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         );
       });
 
-      const buildAttrs = (
-        policy: dlm.LifecyclePolicy,
-        roleName: string | undefined,
-      ) => ({
+      const buildAttrs = (policy: dlm.LifecyclePolicy, roleName: string | undefined) => ({
         policyId: policy.PolicyId!,
         policyArn: policy.PolicyArn!,
         state: (policy.State ?? "ENABLED") as LifecyclePolicyState,
@@ -747,8 +716,7 @@ export const LifecyclePolicyProvider = () =>
               { concurrency: 5 },
             );
             return items.filter(
-              (item): item is LifecyclePolicy["Attributes"] =>
-                item !== undefined,
+              (item): item is LifecyclePolicy["Attributes"] => item !== undefined,
             );
           }),
 
@@ -767,17 +735,13 @@ export const LifecyclePolicyProvider = () =>
             return undefined;
           }
           const attrs = buildAttrs(policy, output?.roleName);
-          return (yield* hasAlchemyTags(id, fromWireTagMap(policy.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, fromWireTagMap(policy.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          const oldType =
-            olds?.policyDetails?.policyType ?? "EBS_SNAPSHOT_MANAGEMENT";
-          const newType =
-            news.policyDetails?.policyType ?? "EBS_SNAPSHOT_MANAGEMENT";
+          const oldType = olds?.policyDetails?.policyType ?? "EBS_SNAPSHOT_MANAGEMENT";
+          const newType = news.policyDetails?.policyType ?? "EBS_SNAPSHOT_MANAGEMENT";
           if (oldType !== newType) {
             // The policy type of an existing policy cannot be changed.
             return { action: "replace" } as const;
@@ -810,10 +774,7 @@ export const LifecyclePolicyProvider = () =>
           //    id cache. Policy ids are server-assigned, so with no cached
           //    id the policy is (as far as we can know) missing.
           let policyId = output?.policyId;
-          let observed =
-            policyId === undefined
-              ? undefined
-              : yield* getOrUndefined(policyId);
+          let observed = policyId === undefined ? undefined : yield* getOrUndefined(policyId);
 
           if (observed === undefined) {
             // 2. ENSURE — create. IAM propagation of a fresh role is
@@ -893,9 +854,7 @@ export const LifecyclePolicyProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* dlm
             .deleteLifecyclePolicy({ PolicyId: output.policyId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
 
           // Tear down the managed execution role (absent when the user
           // supplied an explicit executionRoleArn). Every step tolerates
@@ -912,21 +871,14 @@ export const LifecyclePolicyProvider = () =>
                           RoleName: roleName,
                           PolicyArn: policy.PolicyArn,
                         })
-                        .pipe(
-                          Effect.catchTag(
-                            "NoSuchEntityException",
-                            () => Effect.void,
-                          ),
-                        ),
+                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
             );
             yield* iam
               .deleteRole({ RoleName: roleName })
-              .pipe(
-                Effect.catchTag("NoSuchEntityException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
           }
         }),
       });

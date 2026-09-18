@@ -1,3 +1,6 @@
+import { describe, expect, test } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 /**
  * Sideband framing (src/Git/Protocol/Sideband.ts): the single-copy frame, the
  * whole-chunk framer the native pump uses, and the deterministic re-chunker
@@ -11,9 +14,6 @@ import {
   sidebandFramedLength,
   sidebandRechunk,
 } from "@/Git/Protocol/Sideband.ts";
-import { describe, expect, test } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
 
 const bytes = (n: number, seed = 1) => {
   const out = new Uint8Array(n);
@@ -30,10 +30,7 @@ const deframe = (framed: Uint8Array) => {
   const pieces: Array<Uint8Array> = [];
   let pos = 0;
   while (pos < framed.length) {
-    const len = Number.parseInt(
-      new TextDecoder().decode(framed.subarray(pos, pos + 4)),
-      16,
-    );
+    const len = Number.parseInt(new TextDecoder().decode(framed.subarray(pos, pos + 4)), 16);
     expect(len).toBeGreaterThan(5);
     expect(len).toBeLessThanOrEqual(SIDEBAND_DATA_MAX + 5);
     expect(framed[pos + 4]).toBe(1);
@@ -112,22 +109,14 @@ describe("sidebandRechunk", () => {
     expect(Array.from(tiny)).toEqual(Array.from(whole));
     expect(Array.from(uneven)).toEqual(Array.from(whole));
     const back = deframe(whole);
-    expect(back.frames).toEqual([
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-      4567,
-    ]);
+    expect(back.frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX, 4567]);
     expect(Array.from(back.data)).toEqual(Array.from(data));
   });
 
   test("an exact multiple of the frame size has no short tail; empty input frames nothing", async () => {
     const data = bytes(SIDEBAND_DATA_MAX * 2, 3);
     const framed = await run([data.subarray(0, 100), data.subarray(100)]);
-    expect(deframe(framed).frames).toEqual([
-      SIDEBAND_DATA_MAX,
-      SIDEBAND_DATA_MAX,
-    ]);
+    expect(deframe(framed).frames).toEqual([SIDEBAND_DATA_MAX, SIDEBAND_DATA_MAX]);
     expect((await run([])).length).toBe(0);
     expect((await run([new Uint8Array(0)])).length).toBe(0);
   });

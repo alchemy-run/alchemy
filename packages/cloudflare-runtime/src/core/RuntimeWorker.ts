@@ -114,13 +114,7 @@ export type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 export type Module =
   | {
       name: string;
-      type:
-        | "ESModule"
-        | "CommonJsModule"
-        | "Text"
-        | "Json"
-        | "PythonModule"
-        | "PythonRequirement";
+      type: "ESModule" | "CommonJsModule" | "Text" | "Json" | "PythonModule" | "PythonRequirement";
       content: string;
     }
   | {
@@ -133,11 +127,7 @@ export interface Assets {
   directory?: string;
   headers?: string;
   redirects?: string;
-  htmlHandling?:
-    | "auto-trailing-slash"
-    | "force-trailing-slash"
-    | "drop-trailing-slash"
-    | "none";
+  htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   notFoundHandling?: "none" | "404-page" | "single-page-application";
   runWorkerFirst?: Array<string> | boolean;
   serveDirectly?: boolean;

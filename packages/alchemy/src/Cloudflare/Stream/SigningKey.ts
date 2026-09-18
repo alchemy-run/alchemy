@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -39,13 +38,7 @@ export type SigningKeyAttributes = {
   jwk: Redacted.Redacted<string>;
 };
 
-export type SigningKey = Resource<
-  TypeId,
-  SigningKeyProps,
-  SigningKeyAttributes,
-  never,
-  Providers
->;
+export type SigningKey = Resource<TypeId, SigningKeyProps, SigningKeyAttributes, never, Providers>;
 
 /**
  * A Cloudflare Stream signing key — an RSA key pair used to sign viewer
@@ -181,8 +174,4 @@ export const SigningKeyProvider = () =>
 const findKey = (accountId: string, keyId: string) =>
   stream
     .getKey({ accountId })
-    .pipe(
-      Effect.map((response) =>
-        (response.result ?? []).some((key) => key.id === keyId),
-      ),
-    );
+    .pipe(Effect.map((response) => (response.result ?? []).some((key) => key.id === keyId)));

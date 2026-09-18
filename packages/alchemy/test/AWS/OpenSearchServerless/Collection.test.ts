@@ -1,15 +1,11 @@
-import * as AWS from "@/AWS";
-import {
-  AccessPolicy,
-  Collection,
-  SecurityPolicy,
-} from "@/AWS/OpenSearchServerless";
-import * as Test from "@/Test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { AccessPolicy, Collection, SecurityPolicy } from "@/AWS/OpenSearchServerless";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -21,9 +17,7 @@ const NET_POLICY = "alchemy-aoss-net";
 const ACC_POLICY = "alchemy-aoss-acc";
 
 const encryptionPolicy = {
-  Rules: [
-    { ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] },
-  ],
+  Rules: [{ ResourceType: "collection", Resource: [`collection/${COLLECTION_NAME}`] }],
   AWSOwnedKey: true,
 };
 
@@ -65,27 +59,25 @@ const accessPolicy = (principalArn: string) => [
 // not-found tag that the SecurityPolicy/AccessPolicy read + delete paths depend
 // on, and that batchGetCollection decodes the per-item error detail shape used
 // to observe a missing collection.
-test.provider(
-  "typed error semantics on nonexistent policies and collections",
-  () =>
-    Effect.gen(function* () {
-      const policyError = yield* Effect.flip(
-        aoss.getSecurityPolicy({
-          type: "encryption",
-          name: "alchemy-nonexistent-probe",
-        }),
-      );
-      expect(policyError._tag).toBe("ResourceNotFoundException");
+test.provider("typed error semantics on nonexistent policies and collections", () =>
+  Effect.gen(function* () {
+    const policyError = yield* Effect.flip(
+      aoss.getSecurityPolicy({
+        type: "encryption",
+        name: "alchemy-nonexistent-probe",
+      }),
+    );
+    expect(policyError._tag).toBe("ResourceNotFoundException");
 
-      // batchGetCollection does not throw for a missing collection — it reports
-      // it in collectionErrorDetails, which the Collection provider treats as
-      // "not present".
-      const batch = yield* aoss.batchGetCollection({
-        names: ["alchemy-nonexistent-collection-probe"],
-      });
-      expect(batch.collectionDetails ?? []).toHaveLength(0);
-      expect((batch.collectionErrorDetails ?? []).length).toBeGreaterThan(0);
-    }),
+    // batchGetCollection does not throw for a missing collection — it reports
+    // it in collectionErrorDetails, which the Collection provider treats as
+    // "not present".
+    const batch = yield* aoss.batchGetCollection({
+      names: ["alchemy-nonexistent-collection-probe"],
+    });
+    expect(batch.collectionDetails ?? []).toHaveLength(0);
+    expect((batch.collectionErrorDetails ?? []).length).toBeGreaterThan(0);
+  }),
 );
 
 // Security and access policies are FREE (no OCU cost) and provision instantly,
@@ -300,15 +292,10 @@ const assertCollectionGone = (id: string) =>
     const detail = response.collectionDetails?.[0];
     const status = detail?.status ?? "gone";
     if (status !== "gone" && status !== "DELETING") {
-      return yield* Effect.fail(
-        new Error(`Collection '${id}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`Collection '${id}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );

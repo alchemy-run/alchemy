@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `UpdateUser` request with `applicationId` injected from the bound application.
  */
-export interface UpdateUserRequest extends Omit<
-  qbusiness.UpdateUserRequest,
-  "applicationId"
-> {}
+export interface UpdateUserRequest extends Omit<qbusiness.UpdateUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `UpdateUser` operation (IAM action
@@ -43,6 +40,4 @@ export interface UpdateUser extends Binding.Service<
     ) => Effect.Effect<qbusiness.UpdateUserResponse, qbusiness.UpdateUserError>
   >
 > {}
-export const UpdateUser = Binding.Service<UpdateUser>(
-  "AWS.QBusiness.UpdateUser",
-);
+export const UpdateUser = Binding.Service<UpdateUser>("AWS.QBusiness.UpdateUser");

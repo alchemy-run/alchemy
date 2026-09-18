@@ -1,19 +1,15 @@
-import * as AWS from "@/AWS";
-import { AccountSettings } from "@/AWS/SES";
-import * as Test from "@/Test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { AccountSettings } from "@/AWS/SES";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getSuppressedReasons = sesv2
   .getAccount({})
-  .pipe(
-    Effect.map(
-      (response) => response.SuppressionAttributes?.SuppressedReasons ?? [],
-    ),
-  );
+  .pipe(Effect.map((response) => response.SuppressionAttributes?.SuppressedReasons ?? []));
 
 // Account/region-global singleton: capture the live suppression configuration
 // up front and restore it on scope close so the test leaves the account exactly
@@ -41,14 +37,8 @@ test.provider(
           suppression: { reasons: ["BOUNCE", "COMPLAINT"] },
         }),
       );
-      expect([...created.suppressedReasons].sort()).toEqual([
-        "BOUNCE",
-        "COMPLAINT",
-      ]);
-      expect([...(yield* getSuppressedReasons)].sort()).toEqual([
-        "BOUNCE",
-        "COMPLAINT",
-      ]);
+      expect([...created.suppressedReasons].sort()).toEqual(["BOUNCE", "COMPLAINT"]);
+      expect([...(yield* getSuppressedReasons)].sort()).toEqual(["BOUNCE", "COMPLAINT"]);
 
       // Update in place — narrow the suppression list to a single reason.
       const updated = yield* stack.deploy(
@@ -72,9 +62,7 @@ const getSendingEnabled = sesv2
   .pipe(Effect.map((response) => response.SendingEnabled ?? false));
 
 const restoreSendingEnabled = (enabled: boolean) =>
-  sesv2
-    .putAccountSendingAttributes({ SendingEnabled: enabled })
-    .pipe(Effect.ignore);
+  sesv2.putAccountSendingAttributes({ SendingEnabled: enabled }).pipe(Effect.ignore);
 
 // Toggling `sendingEnabled` pauses ALL sending for the account in the run's
 // region. It cannot be isolated to a throwaway region: `AWS.providers()`
@@ -93,16 +81,12 @@ test.provider(
       yield* Effect.addFinalizer(() => restoreSendingEnabled(original));
 
       // Sending starts enabled; converge it to disabled.
-      const disabled = yield* stack.deploy(
-        AccountSettings("Account", { sendingEnabled: false }),
-      );
+      const disabled = yield* stack.deploy(AccountSettings("Account", { sendingEnabled: false }));
       expect(disabled.sendingEnabled).toBe(false);
       expect(yield* getSendingEnabled).toBe(false);
 
       // Re-enable in place — the same reconciler converges either direction.
-      const enabled = yield* stack.deploy(
-        AccountSettings("Account", { sendingEnabled: true }),
-      );
+      const enabled = yield* stack.deploy(AccountSettings("Account", { sendingEnabled: true }));
       expect(enabled.sendingEnabled).toBe(true);
       expect(yield* getSendingEnabled).toBe(true);
 

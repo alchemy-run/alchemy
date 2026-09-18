@@ -1,6 +1,3 @@
-import * as FIS from "@/AWS/FIS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,12 +5,13 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as FIS from "@/AWS/FIS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class FisTestFunction extends Lambda.Function<Lambda.Function>()(
-  "FisTestFunction",
-) {}
+export class FisTestFunction extends Lambda.Function<Lambda.Function>()("FisTestFunction") {}
 
 export default FisTestFunction.make(
   {
@@ -64,8 +62,7 @@ export default FisTestFunction.make(
     const getExperiment = yield* FIS.GetExperiment();
     const stopExperiment = yield* FIS.StopExperiment();
     const listExperiments = yield* FIS.ListExperiments();
-    const listExperimentResolvedTargets =
-      yield* FIS.ListExperimentResolvedTargets();
+    const listExperimentResolvedTargets = yield* FIS.ListExperimentResolvedTargets();
     const listExperimentTemplates = yield* FIS.ListExperimentTemplates();
     const getAction = yield* FIS.GetAction();
     const listActions = yield* FIS.ListActions();
@@ -199,9 +196,7 @@ export default FisTestFunction.make(
         if (request.method === "GET" && pathname === "/target-resource-types") {
           const { targetResourceTypes } = yield* listTargetResourceTypes();
           return yield* HttpServerResponse.json({
-            resourceTypes: (targetResourceTypes ?? []).map(
-              (t) => t.resourceType,
-            ),
+            resourceTypes: (targetResourceTypes ?? []).map((t) => t.resourceType),
           });
         }
 

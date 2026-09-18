@@ -8,12 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
 export type FeatureGroupStatus = sagemaker.FeatureGroupStatus;
@@ -141,14 +136,9 @@ export interface FeatureGroup extends Resource<
  *
  * @resource
  */
-export const FeatureGroup = Resource<FeatureGroup>(
-  "AWS.SageMaker.FeatureGroup",
-);
+export const FeatureGroup = Resource<FeatureGroup>("AWS.SageMaker.FeatureGroup");
 
-const createFeatureGroupName = (
-  id: string,
-  props: { featureGroupName?: string | undefined },
-) =>
+const createFeatureGroupName = (id: string, props: { featureGroupName?: string | undefined }) =>
   props.featureGroupName
     ? Effect.succeed(props.featureGroupName)
     : createPhysicalName({ id, maxLength: 64 });
@@ -156,9 +146,7 @@ const createFeatureGroupName = (
 const fetchFeatureGroupTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(
-      Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -193,9 +181,7 @@ class FeatureGroupNotReady extends Data.TaggedError("FeatureGroupNotReady")<{
  * The feature group's asynchronous creation converged to the terminal
  * `CreateFailed` status.
  */
-export class FeatureGroupCreateFailed extends Data.TaggedError(
-  "FeatureGroupCreateFailed",
-)<{
+export class FeatureGroupCreateFailed extends Data.TaggedError("FeatureGroupCreateFailed")<{
   readonly featureGroupName: string;
   readonly message: string | undefined;
 }> {}
@@ -264,9 +250,7 @@ export const FeatureGroupProvider = () =>
             const summaries = yield* sagemaker.listFeatureGroups.pages({}).pipe(
               EffectStream.runCollect,
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.FeatureGroupSummaries ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.FeatureGroupSummaries ?? []),
               ),
             );
             const hydrated = yield* Effect.forEach(
@@ -280,23 +264,18 @@ export const FeatureGroupProvider = () =>
               { concurrency: 5 },
             );
             return hydrated.filter(
-              (attrs): attrs is FeatureGroup["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is FeatureGroup["Attributes"] => attrs !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.featureGroupName ??
-            (yield* createFeatureGroupName(id, olds ?? {}));
+          const name = output?.featureGroupName ?? (yield* createFeatureGroupName(id, olds ?? {}));
           const described = yield* describeFeatureGroupOrUndefined(name);
           if (!described || described.FeatureGroupStatus === "Deleting") {
             return undefined;
           }
           const attrs = toAttrs(described);
           const tags = yield* fetchFeatureGroupTags(attrs.featureGroupArn);
-          return (yield* hasAlchemyTags(id, tags as Tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags as Tags)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
@@ -324,13 +303,9 @@ export const FeatureGroupProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("SageMaker FeatureGroup requires props"),
-            );
+            return yield* Effect.fail(new Error("SageMaker FeatureGroup requires props"));
           }
-          const name =
-            output?.featureGroupName ??
-            (yield* createFeatureGroupName(id, news));
+          const name = output?.featureGroupName ?? (yield* createFeatureGroupName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -363,16 +338,12 @@ export const FeatureGroupProvider = () =>
           yield* waitForFeatureGroup(name, "Created");
           described = yield* describeFeatureGroupOrUndefined(name);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled feature group ${name}`),
-            );
+            return yield* Effect.fail(new Error(`failed to read reconciled feature group ${name}`));
           }
           const attrs = toAttrs(described);
 
           // Sync tags — diff against OBSERVED cloud tags.
-          const currentTags = yield* fetchFeatureGroupTags(
-            attrs.featureGroupArn,
-          );
+          const currentTags = yield* fetchFeatureGroupTags(attrs.featureGroupArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* sagemaker.deleteTags({

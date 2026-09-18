@@ -8,10 +8,7 @@ import type { ScheduleGroup } from "./ScheduleGroup.ts";
  * The schedule target passed at runtime. `RoleArn` defaults to the execution
  * role the binding was constructed with, so callers normally omit it.
  */
-export interface UpdateScheduleTarget extends Omit<
-  scheduler.Target,
-  "RoleArn"
-> {
+export interface UpdateScheduleTarget extends Omit<scheduler.Target, "RoleArn"> {
   /**
    * Execution role EventBridge Scheduler assumes to invoke the target.
    * @default the execution role bound via `UpdateSchedule(role)`
@@ -81,12 +78,7 @@ export interface UpdateSchedule extends Binding.Service<
   ) => Effect.Effect<
     (
       request: UpdateScheduleRequest,
-    ) => Effect.Effect<
-      scheduler.UpdateScheduleOutput,
-      scheduler.UpdateScheduleError
-    >
+    ) => Effect.Effect<scheduler.UpdateScheduleOutput, scheduler.UpdateScheduleError>
   >
 > {}
-export const UpdateSchedule = Binding.Service<UpdateSchedule>(
-  "AWS.Scheduler.UpdateSchedule",
-);
+export const UpdateSchedule = Binding.Service<UpdateSchedule>("AWS.Scheduler.UpdateSchedule");

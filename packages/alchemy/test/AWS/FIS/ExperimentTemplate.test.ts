@@ -1,21 +1,19 @@
-import * as AWS from "@/AWS";
-import { ExperimentTemplate } from "@/AWS/FIS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import * as Test from "@/Test/Alchemy";
 import * as fis from "@distilled.cloud/aws/fis";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { ExperimentTemplate } from "@/AWS/FIS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const findTemplate = (id: string) =>
   fis.getExperimentTemplate({ id }).pipe(
     Effect.map((r) => r.experimentTemplate),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class TemplateStillExists extends Data.TaggedError("TemplateStillExists")<{
@@ -25,9 +23,7 @@ class TemplateStillExists extends Data.TaggedError("TemplateStillExists")<{
 const assertTemplateDeleted = (id: string) =>
   findTemplate(id).pipe(
     Effect.flatMap((template) =>
-      template === undefined
-        ? Effect.void
-        : Effect.fail(new TemplateStillExists({ id })),
+      template === undefined ? Effect.void : Effect.fail(new TemplateStillExists({ id })),
     ),
     Effect.retry({
       while: (e) => e._tag === "TemplateStillExists",
@@ -53,11 +49,7 @@ const fisRole = Effect.gen(function* () {
         Statement: [
           {
             Effect: "Allow",
-            Action: [
-              "ec2:StopInstances",
-              "ec2:StartInstances",
-              "ec2:DescribeInstances",
-            ],
+            Action: ["ec2:StopInstances", "ec2:StartInstances", "ec2:DescribeInstances"],
             Resource: "*",
           },
         ],
@@ -112,16 +104,12 @@ test.provider(
       expect(created?.description).toBe("alchemy fis test");
       expect(created?.roleArn).toBe(template.roleArn);
       expect(created?.stopConditions).toEqual([{ source: "none" }]);
-      expect(created?.targets?.Instances?.resourceType).toBe(
-        "aws:ec2:instance",
-      );
+      expect(created?.targets?.Instances?.resourceType).toBe("aws:ec2:instance");
       expect(created?.targets?.Instances?.selectionMode).toBe("COUNT(1)");
       expect(created?.targets?.Instances?.resourceTags).toEqual({
         "alchemy:fis-test": "true",
       });
-      expect(created?.actions?.StopInstances?.actionId).toBe(
-        "aws:ec2:stop-instances",
-      );
+      expect(created?.actions?.StopInstances?.actionId).toBe("aws:ec2:stop-instances");
       expect(created?.actions?.StopInstances?.parameters).toEqual({
         startInstancesAfterDuration: "PT2M",
       });
@@ -204,9 +192,7 @@ test.provider(
       const afterTagRemoval = yield* findTemplate(template.id);
       expect(afterTagRemoval?.tags?.Team).toBeUndefined();
       expect(afterTagRemoval?.tags?.Environment).toBe("test");
-      expect(afterTagRemoval?.tags?.["alchemy::id"]).toBe(
-        "StopInstancesTemplate",
-      );
+      expect(afterTagRemoval?.tags?.["alchemy::id"]).toBe("StopInstancesTemplate");
 
       yield* stack.destroy();
       yield* assertTemplateDeleted(template.id);
@@ -222,9 +208,7 @@ test.provider(
 
       // A target-less wait action keeps the template valid under both
       // single-account and multi-account targeting.
-      const waitTemplate = (
-        accountTargeting?: "single-account" | "multi-account",
-      ) =>
+      const waitTemplate = (accountTargeting?: "single-account" | "multi-account") =>
         Effect.gen(function* () {
           const role = yield* fisRole;
           return yield* ExperimentTemplate("WaitTemplate", {
@@ -235,9 +219,7 @@ test.provider(
                 parameters: { duration: "PT1M" },
               },
             },
-            experimentOptions: accountTargeting
-              ? { accountTargeting }
-              : undefined,
+            experimentOptions: accountTargeting ? { accountTargeting } : undefined,
           });
         });
 
@@ -246,9 +228,7 @@ test.provider(
       // the description defaults to the logical id
       const observedFirst = yield* findTemplate(first.id);
       expect(observedFirst?.description).toBe("WaitTemplate");
-      expect(observedFirst?.experimentOptions?.accountTargeting).toBe(
-        "single-account",
-      );
+      expect(observedFirst?.experimentOptions?.accountTargeting).toBe("single-account");
 
       // accountTargeting is create-only → replacement: new physical
       // template, old one deleted.
@@ -256,9 +236,7 @@ test.provider(
       expect(second.id).not.toBe(first.id);
 
       const observedSecond = yield* findTemplate(second.id);
-      expect(observedSecond?.experimentOptions?.accountTargeting).toBe(
-        "multi-account",
-      );
+      expect(observedSecond?.experimentOptions?.accountTargeting).toBe("multi-account");
       yield* assertTemplateDeleted(first.id);
 
       yield* stack.destroy();

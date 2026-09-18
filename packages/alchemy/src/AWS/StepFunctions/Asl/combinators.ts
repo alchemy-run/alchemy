@@ -11,7 +11,6 @@
  * compiled program cannot branch on runtime JS.
  */
 import * as Duration from "effect/Duration";
-import { aslSeconds } from "./compile.ts";
 import type { Expr, UnwrapExpr } from "./Jsonata.ts";
 import type {
   ErrorOutput,
@@ -48,9 +47,7 @@ export const invoke = <A = unknown, E = never>(
  * `arn:aws:states:::sqs:sendMessage`. Provide the exact-ARN policy
  * statements the execution role needs.
  */
-export const integrate = <A = unknown, E = never>(
-  options: IntegrationOptions,
-): SfnEffect<A, E> =>
+export const integrate = <A = unknown, E = never>(options: IntegrationOptions): SfnEffect<A, E> =>
   make({ kind: "integrate", options, waitForTaskToken: false });
 
 /**
@@ -62,8 +59,7 @@ export const integrate = <A = unknown, E = never>(
  */
 export const waitForTaskToken = <A = unknown, E = never>(
   options: IntegrationOptions,
-): SfnEffect<A, E> =>
-  make({ kind: "integrate", options, waitForTaskToken: true });
+): SfnEffect<A, E> => make({ kind: "integrate", options, waitForTaskToken: true });
 
 /**
  * Run programs in parallel (an ASL `Parallel` state) — mirrors
@@ -111,8 +107,7 @@ export const when = <A, E, B = null, E2 = never>(
   condition: Expr<boolean>,
   onTrue: SfnEffect<A, E>,
   onFalse?: SfnEffect<B, E2>,
-): SfnEffect<A | B, E | E2> =>
-  make({ kind: "when", condition, onTrue, onFalse });
+): SfnEffect<A | B, E | E2> => make({ kind: "when", condition, onTrue, onFalse });
 
 /**
  * Branch on a value's literal cases (an ASL `Choice` state with one rule
@@ -128,10 +123,8 @@ export const match = <
   value: Expr<T>,
   cases: Cases,
   otherwise?: SfnEffect<B, E2>,
-): SfnEffect<
-  Success<Cases[keyof Cases]> | B,
-  ErrorOf<Cases[keyof Cases]> | E2
-> => make({ kind: "match", value, cases, otherwise });
+): SfnEffect<Success<Cases[keyof Cases]> | B, ErrorOf<Cases[keyof Cases]> | E2> =>
+  make({ kind: "match", value, cases, otherwise });
 
 /**
  * Produce a value (an ASL `Pass` state) — mirrors `Effect.succeed`. The
@@ -167,10 +160,7 @@ export const fail = <E extends { readonly _tag: string }>(
 export const retry: {
   (options: RetryOptions): <A, E>(self: SfnEffect<A, E>) => SfnEffect<A, E>;
   <A, E>(self: SfnEffect<A, E>, options: RetryOptions): SfnEffect<A, E>;
-} = ((
-  selfOrOptions: SfnEffect<any, any> | RetryOptions,
-  options?: RetryOptions,
-) =>
+} = ((selfOrOptions: SfnEffect<any, any> | RetryOptions, options?: RetryOptions) =>
   isSfn(selfOrOptions)
     ? make({ kind: "retry", inner: selfOrOptions, options: options ?? {} })
     : (self: SfnEffect<any, any>) =>
@@ -185,9 +175,7 @@ export const catchTag: {
   <Tag extends string, A2, E2>(
     tag: Tag | readonly Tag[],
     handler: (error: Expr<ErrorOutput>) => SfnEffect<A2, E2>,
-  ): <A, E>(
-    self: SfnEffect<A, E>,
-  ) => SfnEffect<A | A2, Exclude<E, { _tag: Tag }> | E2>;
+  ): <A, E>(self: SfnEffect<A, E>) => SfnEffect<A | A2, Exclude<E, { _tag: Tag }> | E2>;
   <A, E, Tag extends string, A2, E2>(
     self: SfnEffect<A, E>,
     tag: Tag | readonly Tag[],

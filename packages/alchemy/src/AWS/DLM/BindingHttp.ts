@@ -18,12 +18,7 @@ import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
  * policy's ARN, and the runtime half injects the policy's `PolicyId` into
  * every request.
  */
-export const makeDlmPolicyHttpBinding = <
-  I extends { PolicyId: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeDlmPolicyHttpBinding = <I extends { PolicyId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.DLM.GetLifecyclePolicy`. */
   tag: string;
   /** The distilled operation. */

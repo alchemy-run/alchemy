@@ -1,3 +1,11 @@
+import { spawnSync } from "node:child_process";
+import { describe, expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 /**
  * Mode-scoped local dev for ECS: `Test.make({ dev: true })` routes the
  * dualized `ECS.Cluster` / `ECS.Task` (and `ECS.TaskDefinition` /
@@ -24,17 +32,9 @@
  * Requires Docker (floci runs as a container); skipped when unavailable.
  */
 import * as AWS from "@/AWS";
-import { State, type ResourceState } from "@/State";
 import { Stack } from "@/Stack";
+import { State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import { spawnSync } from "node:child_process";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import EcsDevMainTask from "./fixtures/ecs-dev/main-task.ts";
 import { dockerAvailable, rawAwsJson } from "./fixtures/raw.ts";
@@ -101,8 +101,7 @@ const taskIdOfArn = (arn: string) => arn.split("/").pop()!;
  * architecture so the image runs natively instead of under qemu.
  */
 const hostRuntimePlatform = {
-  cpuArchitecture:
-    process.arch === "arm64" ? ("ARM64" as const) : ("X86_64" as const),
+  cpuArchitecture: process.arch === "arm64" ? ("ARM64" as const) : ("X86_64" as const),
   operatingSystemFamily: "LINUX" as const,
 };
 
@@ -195,21 +194,19 @@ const pollMarker = Effect.fn(function* (options: {
 }) {
   const client = yield* HttpClient.HttpClient;
   const times = options.times ?? 60;
-  const body = yield* client
-    .get(`http://localhost:${options.port}${options.path ?? "/"}`)
-    .pipe(
-      Effect.flatMap((response) => response.text),
-      Effect.retry({
-        while: (): boolean => true,
-        schedule: Schedule.spaced("2 seconds"),
-        times,
-      }),
-      Effect.repeat({
-        schedule: Schedule.spaced("2 seconds"),
-        until: (b): boolean => b.includes(options.marker),
-        times,
-      }),
-    );
+  const body = yield* client.get(`http://localhost:${options.port}${options.path ?? "/"}`).pipe(
+    Effect.flatMap((response) => response.text),
+    Effect.retry({
+      while: (): boolean => true,
+      schedule: Schedule.spaced("2 seconds"),
+      times,
+    }),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (b): boolean => b.includes(options.marker),
+      times,
+    }),
+  );
   expect(body).toContain(options.marker);
 });
 
@@ -228,11 +225,7 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
     Effect.flatMap((names) =>
       names
         .split("\n")
-        .some(
-          (name) =>
-            name.startsWith("floci-ecs-") &&
-            name.endsWith(`-${options.containerName}`),
-        )
+        .some((name) => name.startsWith("floci-ecs-") && name.endsWith(`-${options.containerName}`))
         ? Effect.fail(new Error("family container still running"))
         : Effect.void,
     ),
@@ -242,9 +235,7 @@ const assertFamilyTornDown = Effect.fn(function* (options: {
   const clusters = (yield* (yield* rawEcs("DescribeClusters", {
     clusters: [options.clusterName],
   })).json) as { clusters?: { status?: string }[] };
-  const active = (clusters.clusters ?? []).filter(
-    (cluster) => cluster.status !== "INACTIVE",
-  );
+  const active = (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE");
   expect(active).toEqual([]);
 
   const definition = yield* rawEcs("DescribeTaskDefinition", {
@@ -274,9 +265,7 @@ const assertTornDown = Effect.fn(function* (options: {
   const clusters = (yield* (yield* rawEcs("DescribeClusters", {
     clusters: [options.clusterName],
   })).json) as { clusters?: { status?: string }[] };
-  const active = (clusters.clusters ?? []).filter(
-    (cluster) => cluster.status !== "INACTIVE",
-  );
+  const active = (clusters.clusters ?? []).filter((cluster) => cluster.status !== "INACTIVE");
   expect(active).toEqual([]);
 
   // The task definition revision is gone.
@@ -419,10 +408,9 @@ describe.sequential("EcsDev", () => {
 
         // Clone the fixture so the hot-reload rewrite never touches the
         // repo tree.
-        const clone = yield* cloneFixture(
-          `${import.meta.dirname}/fixtures/ecs-reload`,
-          { prefix: "ecs-reload-" },
-        );
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-reload`, {
+          prefix: "ecs-reload-",
+        });
 
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
@@ -455,18 +443,13 @@ describe.sequential("EcsDev", () => {
         // content-hash tag, registers a new task definition revision, and
         // restarts the running standalone task on it.
         const swapStartedAt = Date.now();
-        yield* fs.writeFileString(
-          path.join(clone, "index.html"),
-          "ecs-reload-v2\n",
-        );
+        yield* fs.writeFileString(path.join(clone, "index.html"), "ecs-reload-v2\n");
         yield* pollMarker({
           port: RELOAD_PORT,
           marker: "ecs-reload-v2",
           times: 90,
         });
-        yield* Effect.log(
-          `context task hot reload observed in ${Date.now() - swapStartedAt}ms`,
-        );
+        yield* Effect.log(`context task hot reload observed in ${Date.now() - swapStartedAt}ms`);
 
         yield* stack.destroy();
         yield* assertFamilyTornDown({
@@ -486,10 +469,9 @@ describe.sequential("EcsDev", () => {
         const path = yield* Path.Path;
         yield* stack.destroy();
 
-        const clone = yield* cloneFixture(
-          `${import.meta.dirname}/fixtures/ecs-reload-main`,
-          { prefix: "ecs-reload-main-" },
-        );
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-reload-main`, {
+          prefix: "ecs-reload-main-",
+        });
         const mainPath = path.join(clone, "server.ts");
 
         const program = Effect.gen(function* () {
@@ -569,10 +551,9 @@ describe.sequential("EcsDev", () => {
         const path = yield* Path.Path;
         yield* stack.destroy();
 
-        const clone = yield* cloneFixture(
-          `${import.meta.dirname}/fixtures/ecs-svc`,
-          { prefix: "ecs-svc-" },
-        );
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-svc`, {
+          prefix: "ecs-svc-",
+        });
 
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
@@ -613,23 +594,16 @@ describe.sequential("EcsDev", () => {
         // The floci service scheduler launched the task itself — a REAL
         // container serving the marker (no manual RunTask).
         yield* pollMarker({ port: SVC_PORT, marker: "ecs-svc-v1", times: 60 });
-        expect(yield* runningContainerNames).toContain(
-          `-${outputs.service.containerName!}`,
-        );
+        expect(yield* runningContainerNames).toContain(`-${outputs.service.containerName!}`);
 
         // Hot reload: rewrite the CLONED context — no deploy in between.
         // The sidecar watcher rebuilds + pushes the new content-hash tag,
         // re-reconciles (updateService onto the new revision), and stops
         // the old-revision task; the floci scheduler relaunches it.
         const swapStartedAt = Date.now();
-        yield* fs.writeFileString(
-          path.join(clone, "index.html"),
-          "ecs-svc-v2\n",
-        );
+        yield* fs.writeFileString(path.join(clone, "index.html"), "ecs-svc-v2\n");
         yield* pollMarker({ port: SVC_PORT, marker: "ecs-svc-v2", times: 90 });
-        yield* Effect.log(
-          `service hot reload observed in ${Date.now() - swapStartedAt}ms`,
-        );
+        yield* Effect.log(`service hot reload observed in ${Date.now() - swapStartedAt}ms`);
 
         // Destroy drains the service (desiredCount 0 → tasks stopped),
         // deletes it, then sweeps the task-definition infrastructure.
@@ -665,10 +639,9 @@ describe.sequential("EcsDev", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const clone = yield* cloneFixture(
-          `${import.meta.dirname}/fixtures/ecs-env`,
-          { prefix: "ecs-env-" },
-        );
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-env`, {
+          prefix: "ecs-env-",
+        });
 
         const declare = (env: string) =>
           Effect.gen(function* () {
@@ -702,18 +675,14 @@ describe.sequential("EcsDev", () => {
         // engine registers a new revision; the running container must roll.
         const swapStartedAt = Date.now();
         const updated = yield* stack.deploy(declare("roll-env-v2"));
-        expect(updated.service.taskDefinitionArn).not.toBe(
-          outputs.service.taskDefinitionArn,
-        );
+        expect(updated.service.taskDefinitionArn).not.toBe(outputs.service.taskDefinitionArn);
         yield* pollMarker({
           port: ENV_PORT,
           marker: "roll-env-v2",
           path: "/env.txt",
           times: 90,
         });
-        yield* Effect.log(
-          `prop-only service roll observed in ${Date.now() - swapStartedAt}ms`,
-        );
+        yield* Effect.log(`prop-only service roll observed in ${Date.now() - swapStartedAt}ms`);
 
         yield* stack.destroy();
         yield* assertFamilyTornDown({
@@ -740,10 +709,9 @@ describe.sequential("EcsDev", () => {
 
         yield* stack.destroy();
 
-        const clone = yield* cloneFixture(
-          `${import.meta.dirname}/fixtures/ecs-ext`,
-          { prefix: "ecs-ext-" },
-        );
+        const clone = yield* cloneFixture(`${import.meta.dirname}/fixtures/ecs-ext`, {
+          prefix: "ecs-ext-",
+        });
 
         const outputs = yield* stack.deploy(
           Effect.gen(function* () {
@@ -780,9 +748,7 @@ describe.sequential("EcsDev", () => {
 
         // Edit the OUT-OF-CONTEXT Dockerfile — no deploy.
         const swapStartedAt = Date.now();
-        const dockerfile = yield* fs.readFileString(
-          path.join(clone, "Dockerfile.ecs"),
-        );
+        const dockerfile = yield* fs.readFileString(path.join(clone, "Dockerfile.ecs"));
         yield* fs.writeFileString(
           path.join(clone, "Dockerfile.ecs"),
           dockerfile.replace("ecs-ext-baked-v1", "ecs-ext-baked-v2"),
@@ -798,10 +764,7 @@ describe.sequential("EcsDev", () => {
         );
 
         // A context file edit still reloads too.
-        yield* fs.writeFileString(
-          path.join(clone, "site", "index.html"),
-          "ecs-ext-content-v2\n",
-        );
+        yield* fs.writeFileString(path.join(clone, "site", "index.html"), "ecs-ext-content-v2\n");
         yield* pollMarker({
           port: EXT_PORT,
           marker: "ecs-ext-content-v2",

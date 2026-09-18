@@ -2,8 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface GetMetricStatisticsRequest
-  extends cloudwatch.GetMetricStatisticsInput {}
+export interface GetMetricStatisticsRequest extends cloudwatch.GetMetricStatisticsInput {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStatistics` — fetch aggregated
@@ -39,10 +38,7 @@ export interface GetMetricStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetMetricStatisticsRequest,
-    ) => Effect.Effect<
-      cloudwatch.GetMetricStatisticsOutput,
-      cloudwatch.GetMetricStatisticsError
-    >
+    ) => Effect.Effect<cloudwatch.GetMetricStatisticsOutput, cloudwatch.GetMetricStatisticsError>
   >
 > {}
 

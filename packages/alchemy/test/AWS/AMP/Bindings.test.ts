@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as amp from "@distilled.cloud/aws/amp";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AmpTestFunctionLive, { AmpTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -17,10 +17,7 @@ const sharedStack = Core.scratchStack(testOptions, "AMPBindings");
 // Deterministic metric name — same on every run of this test file.
 const METRIC = "alchemy_amp_bindings_test_total";
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,26 +34,19 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe("AMP Bindings", () => {
   beforeAll(
@@ -75,9 +65,7 @@ describe("AMP Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/health`;
 
-      yield* Effect.logInfo(
-        `AMP test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`AMP test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -85,9 +73,7 @@ describe("AMP Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `AMP test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`AMP test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -110,9 +96,7 @@ describe("AMP Bindings", () => {
         "AMPBindings",
       );
       const alive = workspaces.filter(
-        (w) =>
-          w.status.statusCode !== "DELETING" &&
-          w.status.statusCode !== "DELETED",
+        (w) => w.status.statusCode !== "DELETING" && w.status.statusCode !== "DELETED",
       );
       expect(alive).toHaveLength(0);
     }),
@@ -123,10 +107,11 @@ describe("AMP Bindings", () => {
     test.provider("pushes a sample into the workspace", (_stack) =>
       Effect.gen(function* () {
         const body = (yield* send(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/remote-write`),
-            { name: METRIC, labels: { source: "bindings-test" }, value: 1 },
-          ),
+          HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/remote-write`), {
+            name: METRIC,
+            labels: { source: "bindings-test" },
+            value: 1,
+          }),
         ).pipe(Effect.flatMap((r) => r.json))) as { success: boolean };
         expect(body.success).toBe(true);
       }),
@@ -140,10 +125,11 @@ describe("AMP Bindings", () => {
         Effect.gen(function* () {
           // Write, then poll the query API until ingestion catches up.
           yield* send(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/remote-write`),
-              { name: METRIC, labels: { source: "bindings-test" }, value: 2 },
-            ),
+            HttpClientRequest.bodyJsonUnsafe(HttpClientRequest.post(`${baseUrl}/remote-write`), {
+              name: METRIC,
+              labels: { source: "bindings-test" },
+              value: 2,
+            }),
           );
 
           const body = (yield* getJson(`/query?query=${METRIC}`).pipe(
@@ -155,9 +141,7 @@ describe("AMP Bindings", () => {
                     result: { resultType: string; result: unknown[] };
                   }
                 ).result;
-                return (
-                  result.resultType === "vector" && result.result.length > 0
-                );
+                return result.resultType === "vector" && result.result.length > 0;
               },
               times: 20,
             }),
@@ -172,9 +156,7 @@ describe("AMP Bindings", () => {
           };
 
           expect(body.result.resultType).toBe("vector");
-          const sample = body.result.result.find(
-            (s) => s.metric.__name__ === METRIC,
-          );
+          const sample = body.result.result.find((s) => s.metric.__name__ === METRIC);
           expect(sample).toBeDefined();
           expect(sample!.metric.source).toBe("bindings-test");
           expect(Number(sample!.value[1])).toBeGreaterThan(0);

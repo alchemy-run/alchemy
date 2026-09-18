@@ -37,10 +37,7 @@ export interface DeregisterTargets extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeregisterTargetsRequest,
-    ) => Effect.Effect<
-      vpclattice.DeregisterTargetsResponse,
-      vpclattice.DeregisterTargetsError
-    >
+    ) => Effect.Effect<vpclattice.DeregisterTargetsResponse, vpclattice.DeregisterTargetsError>
   >
 > {}
 export const DeregisterTargets = Binding.Service<DeregisterTargets>(

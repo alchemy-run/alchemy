@@ -1,3 +1,12 @@
+import { spawnSync } from "node:child_process";
+import { expect } from "alchemy-test";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 /**
  * Credential-free `alchemy dev` for AWS.
  *
@@ -36,15 +45,6 @@ import { Bucket } from "@/AWS/S3";
 import { Queue } from "@/AWS/SQS";
 import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import * as HttpBody from "effect/unstable/http/HttpBody";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { spawnSync } from "node:child_process";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
 
@@ -60,10 +60,7 @@ const NO_CREDS_PROFILE = "credfree-dev-test-does-not-exist";
 // plain boolean.
 const dockerAvailable = (() => {
   try {
-    return (
-      spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 })
-        .status === 0
-    );
+    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
   } catch {
     return false;
   }
@@ -97,9 +94,7 @@ const maskAwsEnv = Layer.effect(
   Effect.gen(function* () {
     const base = yield* ConfigProvider.ConfigProvider;
     return ConfigProvider.make((path) =>
-      path.length === 1 &&
-      typeof path[0] === "string" &&
-      MASKED_AWS_KEYS.has(path[0])
+      path.length === 1 && typeof path[0] === "string" && MASKED_AWS_KEYS.has(path[0])
         ? Effect.succeed(undefined)
         : base.load(path),
     );
@@ -136,10 +131,7 @@ const rawAwsJson = Effect.fn(function* (options: {
         authorization: `AWS4-HMAC-SHA256 Credential=test/20260101/${options.region}/${options.service}/aws4_request, SignedHeaders=host;x-amz-date, Signature=dummy`,
       }),
       HttpClientRequest.setBody(
-        HttpBody.text(
-          JSON.stringify(options.body),
-          "application/x-amz-json-1.0",
-        ),
+        HttpBody.text(JSON.stringify(options.body), "application/x-amz-json-1.0"),
       ),
     ),
   );
@@ -197,11 +189,9 @@ test.provider.skipIf(!dockerAvailable)(
       });
       expect(listQueues.status).toBe(200);
       const queues = (yield* listQueues.json) as { QueueUrls?: string[] };
-      expect(
-        queues.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ),
-      ).toBe(true);
+      expect(queues.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`))).toBe(
+        true,
+      );
 
       // Destroy must be equally credential-free (rows are stamped local).
       yield* stack.destroy();
@@ -214,9 +204,7 @@ test.provider.skipIf(!dockerAvailable)(
       });
       const queuesAfter = (yield* after.json) as { QueueUrls?: string[] };
       expect(
-        queuesAfter.QueueUrls?.some((url) =>
-          url.endsWith(`/${outputs.queue.queueName}`),
-        ) ?? false,
+        queuesAfter.QueueUrls?.some((url) => url.endsWith(`/${outputs.queue.queueName}`)) ?? false,
       ).toBe(false);
     }),
   { timeout: 240_000 },
@@ -256,9 +244,7 @@ const maskCi = Layer.effect(
   Effect.gen(function* () {
     const base = yield* ConfigProvider.ConfigProvider;
     return ConfigProvider.make((path) =>
-      path.length === 1 && path[0] === "CI"
-        ? Effect.succeed(undefined)
-        : base.load(path),
+      path.length === 1 && path[0] === "CI" ? Effect.succeed(undefined) : base.load(path),
     );
   }),
 );
@@ -278,9 +264,7 @@ test.provider(
         stack
           .deploy(
             Effect.gen(function* () {
-              const bucket = yield* Bucket("RemoteBucket").pipe(
-                Alchemy.remote(),
-              );
+              const bucket = yield* Bucket("RemoteBucket").pipe(Alchemy.remote());
               return { bucket };
             }),
           )
@@ -297,9 +281,7 @@ test.provider(
         expect(error._tag).toBe("CredentialsRequired");
         expect(error.provider).toBe("AWS");
         expect(error.reason).toBe("remote");
-        expect(
-          error.resources.some((fqn) => fqn.includes("RemoteBucket")),
-        ).toBe(true);
+        expect(error.resources.some((fqn) => fqn.includes("RemoteBucket"))).toBe(true);
         expect(error.message).toContain("AWS credentials are required");
         expect(error.message).toContain("RemoteBucket");
         expect(error.message).toContain(

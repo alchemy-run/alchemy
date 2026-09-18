@@ -106,21 +106,17 @@ export const makeTranslateStartJobHttpBinding = <
           });
         }
       }
-      return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(
-        function* (
-          request: Omit<I, "DataAccessRoleArn" | "ClientToken"> & {
-            DataAccessRoleArn?: string;
-            ClientToken?: string;
-          },
-        ) {
-          return yield* op({
-            ...request,
-            DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
-            ClientToken:
-              request.ClientToken ??
-              (yield* Effect.sync(() => crypto.randomUUID())),
-          } as I);
+      return Effect.fn(`${options.tag}(${dataAccessRole.LogicalId})`)(function* (
+        request: Omit<I, "DataAccessRoleArn" | "ClientToken"> & {
+          DataAccessRoleArn?: string;
+          ClientToken?: string;
         },
-      );
+      ) {
+        return yield* op({
+          ...request,
+          DataAccessRoleArn: request.DataAccessRoleArn ?? (yield* RoleArn),
+          ClientToken: request.ClientToken ?? (yield* Effect.sync(() => crypto.randomUUID())),
+        } as I);
+      });
     });
   });

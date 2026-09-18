@@ -1,9 +1,9 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import * as Cloudflare from "@/Cloudflare";
 import { WorkerRpcs } from "./group.ts";
 import RpcWorkerRpcHttpObject from "./object.ts";
 
@@ -25,12 +25,9 @@ export default class RpcWorkerRpcHttpWorker extends Cloudflare.RpcWorker<RpcWork
     const objects = yield* RpcWorkerRpcHttpObject;
 
     const handlers = WorkerRpcs.toLayer({
-      Ping: ({ message }) =>
-        Effect.sync(() => ({ echo: message, n: ++counter })),
+      Ping: ({ message }) => Effect.sync(() => ({ echo: message, n: ++counter })),
       Count: ({ upto }) =>
-        Stream.fromIterable(
-          Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1),
-        ),
+        Stream.fromIterable(Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1)),
       PingDO: ({ message }) =>
         Effect.gen(function* () {
           const client = yield* objects.getByName("default");

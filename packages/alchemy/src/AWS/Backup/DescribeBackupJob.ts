@@ -28,12 +28,7 @@ export interface DescribeBackupJob extends Binding.Service<
   () => Effect.Effect<
     (
       request: backup.DescribeBackupJobInput,
-    ) => Effect.Effect<
-      backup.DescribeBackupJobOutput,
-      backup.DescribeBackupJobError
-    >
+    ) => Effect.Effect<backup.DescribeBackupJobOutput, backup.DescribeBackupJobError>
   >
 > {}
-export const DescribeBackupJob = Binding.Service<DescribeBackupJob>(
-  "AWS.Backup.DescribeBackupJob",
-);
+export const DescribeBackupJob = Binding.Service<DescribeBackupJob>("AWS.Backup.DescribeBackupJob");

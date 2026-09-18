@@ -63,9 +63,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
         reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
       ),
     ),
-    Layer.provideMerge(
-      Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info"),
-    ),
+    Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
   );
 
   const handlerEffect: Effect.Effect<unknown, unknown> = Layer.buildWithScope(
@@ -90,9 +88,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
   process.on("SIGTERM", () => {
     console.log("[alchemy] SIGTERM — closing instance scope");
     Effect.runPromise(Scope.close(instanceScope, Exit.void))
-      .catch((error) =>
-        console.error("[alchemy] shutdown finalizers failed", error),
-      )
+      .catch((error) => console.error("[alchemy] shutdown finalizers failed", error))
       .finally(() => process.exit(0));
   });
 

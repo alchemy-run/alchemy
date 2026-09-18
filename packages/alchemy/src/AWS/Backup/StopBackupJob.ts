@@ -28,6 +28,4 @@ export interface StopBackupJob extends Binding.Service<
     ) => Effect.Effect<backup.StopBackupJobResponse, backup.StopBackupJobError>
   >
 > {}
-export const StopBackupJob = Binding.Service<StopBackupJob>(
-  "AWS.Backup.StopBackupJob",
-);
+export const StopBackupJob = Binding.Service<StopBackupJob>("AWS.Backup.StopBackupJob");

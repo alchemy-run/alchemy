@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { Random } from "@/Random";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { Random } from "@/Random";
 
 /**
  * Binds an `Alchemy.Random` output into the worker the way an app consumes a
@@ -26,13 +26,10 @@ export default class RandomEnvWorker extends Cloudflare.Worker<RandomEnvWorker>(
     return {
       fetch: Effect.gen(function* () {
         const resolved = yield* accessor;
-        const value = Redacted.isRedacted(resolved)
-          ? Redacted.value(resolved)
-          : resolved;
+        const value = Redacted.isRedacted(resolved) ? Redacted.value(resolved) : resolved;
         return yield* HttpServerResponse.json({
           resolvedType: typeof value,
-          isHexSecret:
-            typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
+          isHexSecret: typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
         });
       }),
     };

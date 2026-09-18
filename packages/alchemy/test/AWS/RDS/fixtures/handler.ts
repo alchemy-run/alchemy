@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as RDS from "@/AWS/RDS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as RDS from "@/AWS/RDS";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -13,8 +13,7 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // typed error decode at zero cost (no database/snapshot is ever created).
 const NONEXISTENT_CLUSTER_ID = "alchemy-nonexistent-rds-cluster-probe";
 const NONEXISTENT_INSTANCE_ID = "alchemy-nonexistent-rds-instance-probe";
-const NONEXISTENT_CLUSTER_SNAPSHOT_ID =
-  "alchemy-nonexistent-rds-cluster-snapshot-probe";
+const NONEXISTENT_CLUSTER_SNAPSHOT_ID = "alchemy-nonexistent-rds-cluster-snapshot-probe";
 const NONEXISTENT_SNAPSHOT_ID = "alchemy-nonexistent-rds-snapshot-probe";
 
 export class RdsBindingsTestFunction extends Lambda.Function<Lambda.Function>()(
@@ -51,10 +50,8 @@ export default RdsBindingsTestFunction.make(
     const copyDBClusterSnapshot = yield* RDS.CopyDBClusterSnapshot();
     const deleteDBSnapshot = yield* RDS.DeleteDBSnapshot();
     const copyDBSnapshot = yield* RDS.CopyDBSnapshot();
-    const describePendingMaintenanceActions =
-      yield* RDS.DescribePendingMaintenanceActions();
-    const applyPendingMaintenanceAction =
-      yield* RDS.ApplyPendingMaintenanceAction();
+    const describePendingMaintenanceActions = yield* RDS.DescribePendingMaintenanceActions();
+    const applyPendingMaintenanceAction = yield* RDS.ApplyPendingMaintenanceAction();
 
     const bound = {
       describeDBClusters,
@@ -90,9 +87,7 @@ export default RdsBindingsTestFunction.make(
             DBClusterIdentifier: NONEXISTENT_CLUSTER_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBClusterNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -103,9 +98,7 @@ export default RdsBindingsTestFunction.make(
             DBInstanceIdentifier: NONEXISTENT_INSTANCE_ID,
           }).pipe(
             Effect.map(() => "Found"),
-            Effect.catchTag("DBInstanceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBInstanceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -146,10 +139,7 @@ export default RdsBindingsTestFunction.make(
           });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/delete-cluster-snapshot-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/delete-cluster-snapshot-probe") {
           // Deleting a nonexistent cluster snapshot must surface the typed
           // not-found tag — proves the write-side grant without ever
           // creating a snapshot.
@@ -157,17 +147,12 @@ export default RdsBindingsTestFunction.make(
             DBClusterSnapshotIdentifier: NONEXISTENT_CLUSTER_SNAPSHOT_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/copy-cluster-snapshot-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/copy-cluster-snapshot-probe") {
           // Copying from a nonexistent source snapshot must surface the
           // typed not-found tag — proves the copy grant at zero cost.
           const tag = yield* copyDBClusterSnapshot({
@@ -175,34 +160,24 @@ export default RdsBindingsTestFunction.make(
             TargetDBClusterSnapshotIdentifier: `${NONEXISTENT_CLUSTER_SNAPSHOT_ID}-copy`,
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBClusterSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/delete-instance-snapshot-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/delete-instance-snapshot-probe") {
           // Deleting a nonexistent instance snapshot must surface the
           // typed not-found tag.
           const tag = yield* deleteDBSnapshot({
             DBSnapshotIdentifier: NONEXISTENT_SNAPSHOT_ID,
           }).pipe(
             Effect.map(() => "Deleted"),
-            Effect.catchTag("DBSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/copy-instance-snapshot-probe"
-        ) {
+        if (request.method === "GET" && pathname === "/copy-instance-snapshot-probe") {
           // Copying from a nonexistent source snapshot must surface the
           // typed not-found tag.
           const tag = yield* copyDBSnapshot({
@@ -210,9 +185,7 @@ export default RdsBindingsTestFunction.make(
             TargetDBSnapshotIdentifier: `${NONEXISTENT_SNAPSHOT_ID}-copy`,
           }).pipe(
             Effect.map(() => "Copied"),
-            Effect.catchTag("DBSnapshotNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("DBSnapshotNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }
@@ -235,9 +208,7 @@ export default RdsBindingsTestFunction.make(
             OptInType: "next-maintenance",
           }).pipe(
             Effect.map(() => "Applied"),
-            Effect.catchTag("ResourceNotFoundFault", (e) =>
-              Effect.succeed(e._tag),
-            ),
+            Effect.catchTag("ResourceNotFoundFault", (e) => Effect.succeed(e._tag)),
           );
           return yield* HttpServerResponse.json({ tag });
         }

@@ -47,8 +47,7 @@ export const subsetDiffers = (desired: unknown, observed: unknown): boolean => {
     if (typeof observed !== "object" || observed === null) return true;
     return Object.entries(desired).some(
       ([key, value]) =>
-        value !== undefined &&
-        subsetDiffers(value, (observed as Record<string, unknown>)[key]),
+        value !== undefined && subsetDiffers(value, (observed as Record<string, unknown>)[key]),
     );
   }
   return desired !== observed;
@@ -71,24 +70,15 @@ export const repeatUntilDomainState = <E extends { readonly _tag: string }, R>(
   done: (domain: opensearch.DomainStatus | undefined) => boolean,
 ): Effect.Effect<opensearch.DomainStatus | undefined, E, R> =>
   Effect.repeat(read, {
-    schedule: Schedule.max([
-      Schedule.fixed("15 seconds"),
-      Schedule.recurs(120),
-    ]),
+    schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(120)]),
     until: done,
   });
 
 /** A domain is active once created and no config change is being applied. */
-export const isDomainActive = (
-  domain: opensearch.DomainStatus | undefined,
-): boolean =>
+export const isDomainActive = (domain: opensearch.DomainStatus | undefined): boolean =>
   domain === undefined ||
-  (domain.Created === true &&
-    domain.Processing !== true &&
-    domain.Deleted !== true);
+  (domain.Created === true && domain.Processing !== true && domain.Deleted !== true);
 
 /** A domain can be deleted once it is no longer applying a config change. */
-export const isDomainDeletable = (
-  domain: opensearch.DomainStatus | undefined,
-): boolean =>
+export const isDomainDeletable = (domain: opensearch.DomainStatus | undefined): boolean =>
   domain === undefined || domain.Deleted === true || domain.Processing !== true;

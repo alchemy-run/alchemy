@@ -157,11 +157,7 @@ export type StreamEventSourceService = <StreamReq = never, Req = never>(
  * );
  * ```
  */
-export const consumeStreamRecords = <
-  S extends KinesisStream,
-  Req = never,
-  StreamReq = never,
->(
+export const consumeStreamRecords = <S extends KinesisStream, Req = never, StreamReq = never>(
   stream: S,
   props: StreamEventSourceProps = {},
   process: (

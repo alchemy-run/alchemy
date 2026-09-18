@@ -36,10 +36,7 @@ export interface CreateClusterSnapshot extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<redshift.CreateClusterSnapshotMessage, "ClusterIdentifier">,
-    ) => Effect.Effect<
-      redshift.CreateClusterSnapshotResult,
-      redshift.CreateClusterSnapshotError
-    >
+    ) => Effect.Effect<redshift.CreateClusterSnapshotResult, redshift.CreateClusterSnapshotError>
   >
 > {}
 export const CreateClusterSnapshot = Binding.Service<CreateClusterSnapshot>(

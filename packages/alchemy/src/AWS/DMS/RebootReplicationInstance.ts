@@ -29,18 +29,11 @@ export interface RebootReplicationInstance extends Binding.Service<
     instance: ReplicationInstance,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        dms.RebootReplicationInstanceMessage,
-        "ReplicationInstanceArn"
-      >,
-    ) => Effect.Effect<
-      dms.RebootReplicationInstanceResponse,
-      dms.RebootReplicationInstanceError
-    >
+      request?: Omit<dms.RebootReplicationInstanceMessage, "ReplicationInstanceArn">,
+    ) => Effect.Effect<dms.RebootReplicationInstanceResponse, dms.RebootReplicationInstanceError>
   >
 > {}
 
-export const RebootReplicationInstance =
-  Binding.Service<RebootReplicationInstance>(
-    "AWS.DMS.RebootReplicationInstance",
-  );
+export const RebootReplicationInstance = Binding.Service<RebootReplicationInstance>(
+  "AWS.DMS.RebootReplicationInstance",
+);

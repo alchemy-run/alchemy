@@ -1,14 +1,14 @@
+import * as glue from "@distilled.cloud/aws/glue";
+import * as s3 from "@distilled.cloud/aws/s3";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { Job } from "@/AWS/Glue";
 import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as glue from "@distilled.cloud/aws/glue";
-import * as s3 from "@distilled.cloud/aws/s3";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -166,9 +166,7 @@ test.provider.skipIf(!process.env.AWS_TEST_SLOW)(
               times: 20,
             }),
           );
-        yield* Effect.log(
-          `job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`,
-        );
+        yield* Effect.log(`job run state=${finalRun?.JobRunState} error=${finalRun?.ErrorMessage}`);
         if (
           finalRun?.JobRunState !== "SUCCEEDED" &&
           finalRun?.ErrorMessage?.includes("assume role permissions")

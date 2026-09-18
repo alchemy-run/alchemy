@@ -37,7 +37,6 @@ export interface ListIdentityProviderConfigs extends Binding.Service<
     >
   >
 > {}
-export const ListIdentityProviderConfigs =
-  Binding.Service<ListIdentityProviderConfigs>(
-    "AWS.EKS.ListIdentityProviderConfigs",
-  );
+export const ListIdentityProviderConfigs = Binding.Service<ListIdentityProviderConfigs>(
+  "AWS.EKS.ListIdentityProviderConfigs",
+);

@@ -1,25 +1,20 @@
-import * as AWS from "@/AWS";
-import { Policy } from "@/AWS/IoT";
-import * as Test from "@/Test/Alchemy";
 import * as iot from "@distilled.cloud/aws/iot";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Policy } from "@/AWS/IoT";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertPolicyGone = (policyName: string) =>
   iot.getPolicy({ policyName }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new Error(`policy ${policyName} still exists`)),
-    ),
+    Effect.flatMap(() => Effect.fail(new Error(`policy ${policyName} still exists`))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -35,9 +30,7 @@ describe.sequential("AWS.IoT.Policy", () => {
             const policy = yield* Policy("DevicePolicy", {
               policyDocument: {
                 Version: "2012-10-17",
-                Statement: [
-                  { Effect: "Allow", Action: "iot:Connect", Resource: "*" },
-                ],
+                Statement: [{ Effect: "Allow", Action: "iot:Connect", Resource: "*" }],
               },
             });
             return { policyName: policy.policyName };

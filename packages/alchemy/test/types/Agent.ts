@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as Cloudflare from "@/Cloudflare";
 import { Sandbox } from "./Sandbox.ts";
 
 const _agentEff = Effect.gen(function* () {
@@ -135,10 +135,7 @@ export default class Agent extends Cloudflare.DurableObject<Agent>()(
         ) {
           const session = socket.deserializeAttachment<{ id: string }>();
           if (!session) return;
-          const text =
-            typeof message === "string"
-              ? message
-              : new TextDecoder().decode(message);
+          const text = typeof message === "string" ? message : new TextDecoder().decode(message);
           for (const peer of sessions.values()) {
             yield* peer.send(`[${session.id}] ${text}`);
           }

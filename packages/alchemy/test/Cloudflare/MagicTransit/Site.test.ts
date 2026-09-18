@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Magic WAN sites (and their LANs / WANs / ACLs) are entitlement-gated.
 // On the standard testing account every site call fails with the typed
@@ -23,8 +20,7 @@ const logLevel = Effect.provideService(
 // test always runs and pins the typed tag.
 const entitled = !!process.env.CLOUDFLARE_TEST_MAGIC_WAN;
 
-const getSite = (accountId: string, siteId: string) =>
-  magicTransit.getSite({ accountId, siteId });
+const getSite = (accountId: string, siteId: string) => magicTransit.getSite({ accountId, siteId });
 
 // Poll until the site is gone after destroy. Cloudflare answers GET for
 // a missing site with the typed `SiteNotFound` (404).
@@ -34,10 +30,7 @@ const expectGone = (accountId: string, siteId: string) =>
     Effect.catchTag("SiteNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "SiteNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -51,22 +44,16 @@ test.provider(
 
       const canList = yield* magicTransit.listSites({ accountId }).pipe(
         Effect.as(true),
-        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
-          Effect.succeed(false),
-        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () => Effect.succeed(false)),
       );
       if (canList) {
         // Entitled account — the gated lifecycle test covers real behavior.
-        yield* Effect.logInfo(
-          "account is Magic WAN-entitled; probe test is a no-op",
-        );
+        yield* Effect.logInfo("account is Magic WAN-entitled; probe test is a no-op");
         return;
       }
 
       // The typed tag — not UnknownCloudflareError, not a status check.
-      const error = yield* magicTransit
-        .listSites({ accountId })
-        .pipe(Effect.flip);
+      const error = yield* magicTransit.listSites({ accountId }).pipe(Effect.flip);
       expect(["MagicWanUnauthorized", "Forbidden"]).toContain(error._tag);
 
       const createError = yield* magicTransit
@@ -92,9 +79,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MagicTransit.MagicSite,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MagicTransit.MagicSite);
 
       if (!entitled) {
         // Unentitled account — `list()` swallows the typed entitlement /

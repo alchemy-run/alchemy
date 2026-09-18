@@ -96,16 +96,11 @@ export const formatSqlConnectionUrl = (
         : `${encodeURIComponent(options.username)}@`
       : "";
   const port = options.port !== undefined ? `:${options.port}` : "";
-  const database =
-    options.database !== undefined
-      ? `/${encodeURIComponent(options.database)}`
-      : "";
+  const database = options.database !== undefined ? `/${encodeURIComponent(options.database)}` : "";
   const query = new URLSearchParams(options.params);
   if (options.ssl === true) {
     query.set("sslmode", options.sslMode ?? "require");
   }
   const queryString = query.size > 0 ? `?${query.toString()}` : "";
-  return Redacted.make(
-    `${scheme}://${auth}${options.host}${port}${database}${queryString}`,
-  );
+  return Redacted.make(`${scheme}://${auth}${options.host}${port}${database}${queryString}`);
 };

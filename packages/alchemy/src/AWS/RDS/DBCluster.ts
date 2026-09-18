@@ -6,12 +6,12 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
-import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
+import { toWireDays, toWireSeconds } from "../../Util/Duration.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DBClusterProps {
   /**
@@ -564,11 +564,7 @@ export const DBClusterProvider = () =>
           .describeDBClusters({
             DBClusterIdentifier: clusterId,
           })
-          .pipe(
-            Effect.catchTag("DBClusterNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
         return response?.DBClusters?.[0];
       });
 
@@ -580,22 +576,15 @@ export const DBClusterProvider = () =>
         clusterId: string,
         { requireAvailable = true }: { requireAvailable?: boolean } = {},
       ) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readCluster(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.DBClusterArn) {
-              return Effect.fail(
-                new Error(`DB cluster '${clusterId}' not found`),
-              );
+              return Effect.fail(new Error(`DB cluster '${clusterId}' not found`));
             }
             if (requireAvailable && cluster.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `DB cluster '${clusterId}' not available (status: ${cluster.Status})`,
-                ),
+                new Error(`DB cluster '${clusterId}' not available (status: ${cluster.Status})`),
               );
             }
             return Effect.succeed(cluster);
@@ -654,10 +643,7 @@ export const DBClusterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
             output?.dbClusterIdentifier ??
-            (yield* toIdentifier(
-              id,
-              olds ?? ({ engine: "" } as DBClusterProps),
-            ));
+            (yield* toIdentifier(id, olds ?? ({ engine: "" } as DBClusterProps)));
           const cluster = yield* readCluster(identifier);
           if (!cluster?.DBClusterArn) {
             return undefined;
@@ -668,17 +654,14 @@ export const DBClusterProvider = () =>
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const identifier =
-            output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
+          const identifier = output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           const credentials = yield* resolveMasterCredentials(news);
           // Duration props → the exact wire units the RDS API expects.
           const backupRetentionDays = toWireDays(news.backupRetentionPeriod);
           const backtrackWindowSeconds = toWireSeconds(news.backtrackWindow);
-          const monitoringIntervalSeconds = toWireSeconds(
-            news.monitoringInterval,
-          );
+          const monitoringIntervalSeconds = toWireSeconds(news.monitoringInterval);
           const performanceInsightsRetentionDays = toWireDays(
             news.performanceInsightsRetentionPeriod,
           );
@@ -709,20 +692,17 @@ export const DBClusterProvider = () =>
                 BacktrackWindow: backtrackWindowSeconds,
                 OptionGroupName: news.optionGroupName,
                 EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
-                EnableIAMDatabaseAuthentication:
-                  news.enableIAMDatabaseAuthentication,
+                EnableIAMDatabaseAuthentication: news.enableIAMDatabaseAuthentication,
                 EnableHttpEndpoint: news.enableHttpEndpoint,
                 EngineMode: news.engineMode,
                 ScalingConfiguration: news.scalingConfiguration,
-                ServerlessV2ScalingConfiguration:
-                  news.serverlessV2ScalingConfiguration,
+                ServerlessV2ScalingConfiguration: news.serverlessV2ScalingConfiguration,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
                 MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
-                PerformanceInsightsRetentionPeriod:
-                  performanceInsightsRetentionDays,
+                PerformanceInsightsRetentionPeriod: performanceInsightsRetentionDays,
                 NetworkType: news.networkType,
                 CACertificateIdentifier: news.caCertificateIdentifier,
                 MasterUserSecretKmsKeyId: news.masterUserSecretKmsKeyId,
@@ -746,12 +726,7 @@ export const DBClusterProvider = () =>
                 })),
                 ...credentials,
               })
-              .pipe(
-                Effect.catchTag(
-                  "DBClusterAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void));
 
             observed = yield* waitForCluster(identifier);
           } else {
@@ -808,8 +783,7 @@ export const DBClusterProvider = () =>
               coreDirty = true;
             }
             if (news.serverlessV2ScalingConfiguration !== undefined) {
-              core.ServerlessV2ScalingConfiguration =
-                news.serverlessV2ScalingConfiguration;
+              core.ServerlessV2ScalingConfiguration = news.serverlessV2ScalingConfiguration;
               coreDirty = true;
             }
             if (news.vpcSecurityGroupIds !== undefined) {
@@ -820,10 +794,7 @@ export const DBClusterProvider = () =>
               core.AllowMajorVersionUpgrade = true;
             }
             // syncMasterPassword — rotation or explicit password update.
-            if (
-              news.manageMasterUserPassword &&
-              news.rotateMasterUserPassword
-            ) {
+            if (news.manageMasterUserPassword && news.rotateMasterUserPassword) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
             } else if (credentials.MasterUserPassword !== undefined) {
@@ -891,15 +862,10 @@ export const DBClusterProvider = () =>
               })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("DBClusterNotFoundFault", () =>
-                  Effect.succeed(false),
-                ),
+                Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(false)),
               ),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("15 seconds"),
-                Schedule.recurs(40),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(40)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

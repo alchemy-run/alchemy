@@ -1,9 +1,9 @@
+import { describe, expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as Cloudflare from "@/Cloudflare";
 import { STATE_STORE_VERSION } from "@/Cloudflare/StateStore/Api.ts";
 import { State } from "@/State/State.ts";
 import * as Test from "@/Test/Alchemy";
-import { describe, expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 /**
  * Live-API tests for the deployed Cloudflare State Store at
  * `alchemy-state-store`. The State service is wired up via
@@ -151,10 +151,7 @@ describe.sequential("State", () => {
         value: sampleState(fqnB, "inst-b"),
       });
       const fqns = yield* store.list({ stack: STACK, stage: STAGE });
-      expect([...fqns].sort()).toEqual([
-        "stack/scope/resource-a",
-        "stack/scope/resource-b",
-      ]);
+      expect([...fqns].sort()).toEqual(["stack/scope/resource-a", "stack/scope/resource-b"]);
     }),
     { timeout: 60_000 },
   );

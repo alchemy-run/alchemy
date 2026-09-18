@@ -1,22 +1,19 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
-import { poll } from "@/Util/poll.ts";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 import { CA_CERT_1, CA_CERT_2, LEAF_CERT, LEAF_KEY } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cloudflare dedups mTLS certificates by PEM content account-wide and rejects
 // a duplicate upload with `CertificateAlreadyExists` (code 1471). Three of
@@ -58,36 +55,34 @@ describe.sequential("MtlsCertificate", () => {
     }).pipe(logLevel),
   );
 
-  test.provider(
-    "create and delete a leaf certificate with private key",
-    (stack) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider("create and delete a leaf certificate with private key", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        const cert = yield* stack.deploy(
-          Cloudflare.MtlsCertificate.MtlsCertificate("LeafCert", {
-            ca: false,
-            certificates: LEAF_CERT,
-            privateKey: Redacted.make(LEAF_KEY),
-          }),
-        );
+      const cert = yield* stack.deploy(
+        Cloudflare.MtlsCertificate.MtlsCertificate("LeafCert", {
+          ca: false,
+          certificates: LEAF_CERT,
+          privateKey: Redacted.make(LEAF_KEY),
+        }),
+      );
 
-        expect(cert.mtlsCertificateId).toBeDefined();
-        expect(cert.ca).toEqual(false);
+      expect(cert.mtlsCertificateId).toBeDefined();
+      expect(cert.ca).toEqual(false);
 
-        const actual = yield* mtls.getMtlsCertificate({
-          accountId,
-          mtlsCertificateId: cert.mtlsCertificateId,
-        });
-        expect(actual.id).toEqual(cert.mtlsCertificateId);
-        expect(actual.ca).toEqual(false);
+      const actual = yield* mtls.getMtlsCertificate({
+        accountId,
+        mtlsCertificateId: cert.mtlsCertificateId,
+      });
+      expect(actual.id).toEqual(cert.mtlsCertificateId);
+      expect(actual.ca).toEqual(false);
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        yield* waitForDelete(accountId, cert.mtlsCertificateId);
-      }).pipe(logLevel),
+      yield* waitForDelete(accountId, cert.mtlsCertificateId);
+    }).pipe(logLevel),
   );
 
   test.provider("replaces the certificate when the PEM changes", (stack) =>
@@ -111,9 +106,7 @@ describe.sequential("MtlsCertificate", () => {
       );
 
       expect(replaced.mtlsCertificateId).toBeDefined();
-      expect(replaced.mtlsCertificateId).not.toEqual(
-        original.mtlsCertificateId,
-      );
+      expect(replaced.mtlsCertificateId).not.toEqual(original.mtlsCertificateId);
       expect(replaced.serialNumber).not.toEqual(original.serialNumber);
 
       // The old certificate must be gone after the replacement completes.
@@ -144,22 +137,17 @@ describe.sequential("MtlsCertificate", () => {
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.MtlsCertificate.MtlsCertificate,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.MtlsCertificate.MtlsCertificate);
 
       // A freshly-deployed certificate is eventually consistent in the
       // account-wide list(); poll until it appears before asserting.
       const all = yield* poll({
         description: "list() includes the deployed mTLS certificate",
         effect: provider.list(),
-        predicate: (all) =>
-          all.some((c) => c.mtlsCertificateId === cert.mtlsCertificateId),
+        predicate: (all) => all.some((c) => c.mtlsCertificateId === cert.mtlsCertificateId),
       });
 
-      expect(
-        all.some((c) => c.mtlsCertificateId === cert.mtlsCertificateId),
-      ).toBe(true);
+      expect(all.some((c) => c.mtlsCertificateId === cert.mtlsCertificateId)).toBe(true);
 
       yield* stack.destroy();
 
@@ -178,9 +166,6 @@ const waitForDelete = (accountId: string, mtlsCertificateId: string) =>
     Effect.catchTag("CertificateNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "CertificateNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );

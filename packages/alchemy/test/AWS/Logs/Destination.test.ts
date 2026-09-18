@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Stream as KinesisStream } from "@/AWS/Kinesis/Stream.ts";
-import { Destination } from "@/AWS/Logs/Destination.ts";
-import * as Test from "@/Test/Alchemy";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Stream as KinesisStream } from "@/AWS/Kinesis/Stream.ts";
+import { Destination } from "@/AWS/Logs/Destination.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,9 +20,9 @@ const findDestination = Effect.fn(function* (destinationName: string) {
   );
 });
 
-class DestinationStillExists extends Data.TaggedError(
-  "DestinationStillExists",
-)<{ readonly destinationName: string }> {}
+class DestinationStillExists extends Data.TaggedError("DestinationStillExists")<{
+  readonly destinationName: string;
+}> {}
 
 const assertDestinationDeleted = (destinationName: string) =>
   findDestination(destinationName).pipe(

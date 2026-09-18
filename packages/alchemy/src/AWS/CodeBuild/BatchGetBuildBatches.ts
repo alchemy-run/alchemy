@@ -24,10 +24,7 @@ export interface BatchGetBuildBatches extends Binding.Service<
   ) => Effect.Effect<
     (
       request: SVC.BatchGetBuildBatchesInput,
-    ) => Effect.Effect<
-      SVC.BatchGetBuildBatchesOutput,
-      SVC.BatchGetBuildBatchesError
-    >
+    ) => Effect.Effect<SVC.BatchGetBuildBatchesOutput, SVC.BatchGetBuildBatchesError>
   >
 > {}
 export const BatchGetBuildBatches = Binding.Service<BatchGetBuildBatches>(

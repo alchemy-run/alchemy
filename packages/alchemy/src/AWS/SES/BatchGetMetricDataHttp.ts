@@ -1,7 +1,7 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Layer from "effect/Layer";
-import { makeSESHttpBinding } from "./BindingHttp.ts";
 import { BatchGetMetricData } from "./BatchGetMetricData.ts";
+import { makeSESHttpBinding } from "./BindingHttp.ts";
 
 export const BatchGetMetricDataHttp = Layer.effect(
   BatchGetMetricData,

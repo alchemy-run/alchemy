@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // RealtimeKit is beta / entitlement-gated — unentitled accounts get the
 // typed `Forbidden` (403) on every call. Probe and no-op when unentitled;
@@ -66,9 +63,7 @@ test.provider(
     Effect.gen(function* () {
       const entitled = yield* probeEntitlement;
       if (!entitled) {
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; skipping lifecycle",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; skipping lifecycle");
         return;
       }
 
@@ -164,9 +159,7 @@ test.provider(
         // RealtimeKit beta is entitlement-gated: an unentitled account gets the
         // typed `Forbidden` (403) on `getApp`, which `list()` propagates. Skip
         // the live assertion; the App suite pins the typed tag.
-        yield* Effect.logInfo(
-          "account is not RealtimeKit-entitled; skipping list",
-        );
+        yield* Effect.logInfo("account is not RealtimeKit-entitled; skipping list");
         return;
       }
 
@@ -184,16 +177,12 @@ test.provider(
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.RealtimeKit.Preset,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.RealtimeKit.Preset);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (p) => p.presetId === deployed.presetId && p.appId === deployed.appId,
-        ),
-      ).toBe(true);
+      expect(all.some((p) => p.presetId === deployed.presetId && p.appId === deployed.appId)).toBe(
+        true,
+      );
       const found = all.find((p) => p.presetId === deployed.presetId);
       expect(found?.name).toEqual(LIST_PRESET_NAME);
       expect(found?.config.viewType).toEqual("GROUP_CALL");

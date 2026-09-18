@@ -133,9 +133,7 @@ const toName = (id: string, props: { permissionName?: string } = {}) =>
     : createPhysicalName({ id, maxLength: 36 });
 
 /** RAM's inline `{ key, value }` tag list → a plain `Record`. */
-const tagsToRecord = (
-  tags: readonly ram.Tag[] | undefined,
-): Record<string, string> => {
+const tagsToRecord = (tags: readonly ram.Tag[] | undefined): Record<string, string> => {
   const record: Record<string, string> = {};
   for (const tag of tags ?? []) {
     if (tag.key !== undefined && tag.value !== undefined) {
@@ -166,10 +164,7 @@ const canonicalizePolicy = (policy: string | undefined): string => {
       Action?: string | string[];
       Condition?: Record<string, unknown>;
     };
-    const actions =
-      typeof parsed.Action === "string"
-        ? [parsed.Action]
-        : (parsed.Action ?? []);
+    const actions = typeof parsed.Action === "string" ? [parsed.Action] : (parsed.Action ?? []);
     return JSON.stringify({
       Effect: parsed.Effect ?? "Allow",
       Action: [...actions].sort(),
@@ -181,9 +176,7 @@ const canonicalizePolicy = (policy: string | undefined): string => {
 };
 
 const toAttrs = (
-  permission:
-    | ram.ResourceSharePermissionSummary
-    | ram.ResourceSharePermissionDetail,
+  permission: ram.ResourceSharePermissionSummary | ram.ResourceSharePermissionDetail,
 ): Permission["Attributes"] => ({
   permissionArn: permission.arn!,
   name: permission.name!,
@@ -197,23 +190,17 @@ const toAttrs = (
 const readDetail = Effect.fn(function* (arn: string) {
   const detail = yield* ram.getPermission({ permissionArn: arn }).pipe(
     Effect.map((r) => r.permission),
-    Effect.catchTag("UnknownResourceException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("UnknownResourceException", () => Effect.succeed(undefined)),
   );
   return detail && isLive(detail.status) ? detail : undefined;
 });
 
 /** Find a live customer managed permission owned by us with the given name. */
 const readByName = Effect.fn(function* (name: string) {
-  const permissions = yield* ram.listPermissions
-    .pages({ permissionType: "CUSTOMER_MANAGED" })
-    .pipe(
-      Stream.runCollect,
-      Effect.map((chunk) =>
-        Array.fromIterable(chunk).flatMap((page) => page.permissions ?? []),
-      ),
-    );
+  const permissions = yield* ram.listPermissions.pages({ permissionType: "CUSTOMER_MANAGED" }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) => Array.fromIterable(chunk).flatMap((page) => page.permissions ?? [])),
+  );
   const summary = permissions.find((p) => p.name === name && isLive(p.status));
   return summary?.arn ? yield* readDetail(summary.arn) : undefined;
 });
@@ -238,31 +225,22 @@ export const PermissionProvider = () =>
           }
         }),
         list: () =>
-          ram.listPermissions
-            .pages({ permissionType: "CUSTOMER_MANAGED" })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.fromIterable(chunk)
-                  .flatMap((page) => page.permissions ?? [])
-                  .filter(
-                    (p) =>
-                      isLive(p.status) &&
-                      p.arn !== undefined &&
-                      p.name !== undefined,
-                  )
-                  .map(toAttrs),
-              ),
+          ram.listPermissions.pages({ permissionType: "CUSTOMER_MANAGED" }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.fromIterable(chunk)
+                .flatMap((page) => page.permissions ?? [])
+                .filter((p) => isLive(p.status) && p.arn !== undefined && p.name !== undefined)
+                .map(toAttrs),
             ),
+          ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detail = output?.permissionArn
             ? yield* readDetail(output.permissionArn)
             : yield* readByName(yield* toName(id, olds ?? {}));
           if (!detail) return undefined;
           const state = toAttrs(detail);
-          return (yield* hasAlchemyTags(id, state.tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -296,17 +274,13 @@ export const PermissionProvider = () =>
               );
             // Prefer the ARN from the create response; on the AlreadyExists
             // race fall back to the (briefly eventually consistent) list.
-            detail = created?.arn
-              ? yield* readDetail(created.arn)
-              : yield* readByName(name);
+            detail = created?.arn ? yield* readDetail(created.arn) : yield* readByName(name);
             if (!detail?.arn) {
               if (created?.arn) {
                 yield* session.note(created.arn);
                 return { ...toAttrs(created), tags: desiredTags };
               }
-              return yield* Effect.fail(
-                new Error(`permission '${name}' not found after create`),
-              );
+              return yield* Effect.fail(new Error(`permission '${name}' not found after create`));
             }
             yield* session.note(detail.arn);
             return toAttrs(detail);
@@ -335,10 +309,7 @@ export const PermissionProvider = () =>
                 })
                 .pipe(
                   Effect.catchTag(
-                    [
-                      "OperationNotPermittedException",
-                      "InvalidParameterException",
-                    ],
+                    ["OperationNotPermittedException", "InvalidParameterException"],
                     () => Effect.void,
                   ),
                 );
@@ -346,10 +317,7 @@ export const PermissionProvider = () =>
           }
 
           // 3b. SYNC tags — diff against observed cloud tags.
-          const { upsert, removed } = diffTags(
-            tagsToRecord(detail.tags),
-            desiredTags,
-          );
+          const { upsert, removed } = diffTags(tagsToRecord(detail.tags), desiredTags);
           if (upsert.length > 0) {
             yield* ram.tagResource({
               resourceArn: arn,
@@ -363,25 +331,20 @@ export const PermissionProvider = () =>
           // 4. RETURN fresh state.
           const updated = yield* readDetail(arn);
           yield* session.note(arn);
-          return updated
-            ? toAttrs(updated)
-            : { ...toAttrs(detail), tags: desiredTags };
+          return updated ? toAttrs(updated) : { ...toAttrs(detail), tags: desiredTags };
         }),
         delete: Effect.fn(function* ({ output }) {
           // A permission cannot be deleted while attached to a resource
           // share; shares delete asynchronously, so retry briefly on
           // OperationNotPermitted before giving up.
-          yield* ram
-            .deletePermission({ permissionArn: output.permissionArn })
-            .pipe(
-              Effect.retry({
-                while: (e): boolean =>
-                  e._tag === "OperationNotPermittedException",
-                schedule: Schedule.exponential("2 seconds"),
-                times: 8,
-              }),
-              Effect.catchTag("UnknownResourceException", () => Effect.void),
-            );
+          yield* ram.deletePermission({ permissionArn: output.permissionArn }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "OperationNotPermittedException",
+              schedule: Schedule.exponential("2 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("UnknownResourceException", () => Effect.void),
+          );
         }),
       };
     }),

@@ -30,10 +30,7 @@ export interface DescribeProjects extends Binding.Service<
   () => Effect.Effect<
     (
       request?: rekognition.DescribeProjectsRequest,
-    ) => Effect.Effect<
-      rekognition.DescribeProjectsResponse,
-      rekognition.DescribeProjectsError
-    >
+    ) => Effect.Effect<rekognition.DescribeProjectsResponse, rekognition.DescribeProjectsError>
   >
 > {}
 export const DescribeProjects = Binding.Service<DescribeProjects>(

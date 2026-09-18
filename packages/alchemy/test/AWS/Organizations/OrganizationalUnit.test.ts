@@ -1,10 +1,10 @@
+import * as organizations from "@distilled.cloud/aws/organizations";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as AWS from "@/AWS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as organizations from "@distilled.cloud/aws/organizations";
-import * as Stream from "effect/Stream";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,9 +16,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `AccessDeniedException` degrade to `[]`.
 test.provider("list enumerates the organizational units", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(
-      AWS.Organizations.OrganizationalUnit,
-    );
+    const provider = yield* Provider.findProvider(AWS.Organizations.OrganizationalUnit);
     const all = yield* provider.list();
 
     // 0 when the account isn't a management account (or has no OUs); otherwise
@@ -49,9 +47,7 @@ test.provider(
       const roots = yield* organizations.listRoots({});
       const parentId = roots.Roots?.[0]?.Id;
       if (!parentId) {
-        return yield* Effect.fail(
-          new Error("An AWS Organizations root is required"),
-        );
+        return yield* Effect.fail(new Error("An AWS Organizations root is required"));
       }
 
       const makeOU = (phase: string) =>
@@ -60,23 +56,15 @@ test.provider(
           tags: { phase },
         });
       const readTags = (resourceId: string) =>
-        organizations.listTagsForResource
-          .items({ ResourceId: resourceId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((tags) =>
-              Object.fromEntries(tags.map((tag) => [tag.Key!, tag.Value!])),
-            ),
-          );
+        organizations.listTagsForResource.items({ ResourceId: resourceId }).pipe(
+          Stream.runCollect,
+          Effect.map((tags) => Object.fromEntries(tags.map((tag) => [tag.Key!, tag.Value!]))),
+        );
 
       yield* Effect.gen(function* () {
         const created = yield* stack.deploy(makeOU("created"));
         const originalTags = yield* readTags(created.ouId);
-        const ownershipKeys = [
-          "alchemy::stack",
-          "alchemy::stage",
-          "alchemy::id",
-        ];
+        const ownershipKeys = ["alchemy::stack", "alchemy::stage", "alchemy::id"];
         for (const key of ownershipKeys) {
           expect(originalTags[key]).toBeDefined();
         }

@@ -1,27 +1,22 @@
 import * as sprites from "@distilled.cloud/fly-io/sprites";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import Box from "./fixtures/sprite.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (name: string) =>
   sprites.getSprite({ name }).pipe(
     Effect.as("found" as const),
-    Effect.catchTag(["NotFound", "SpritesNotEnabled"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.catchTag(["NotFound", "SpritesNotEnabled"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (status) => status === "gone",
@@ -32,9 +27,7 @@ const waitUntilGone = (name: string) =>
 const fetchSpriteJson = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((res) =>
-      res.status === 200
-        ? res.json
-        : Effect.fail(new Error(`sprite returned ${res.status}`)),
+      res.status === 200 ? res.json : Effect.fail(new Error(`sprite returned ${res.status}`)),
     ),
     Effect.retry({
       schedule: Schedule.exponential("500 millis"),

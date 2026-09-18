@@ -26,10 +26,7 @@ export interface GetExpenseAnalysis extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.GetExpenseAnalysisRequest,
-    ) => Effect.Effect<
-      textract.GetExpenseAnalysisResponse,
-      textract.GetExpenseAnalysisError
-    >
+    ) => Effect.Effect<textract.GetExpenseAnalysisResponse, textract.GetExpenseAnalysisError>
   >
 > {}
 export const GetExpenseAnalysis = Binding.Service<GetExpenseAnalysis>(

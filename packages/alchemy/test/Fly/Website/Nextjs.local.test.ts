@@ -1,18 +1,15 @@
-import * as Fly from "@/Fly";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
-import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import * as Fly from "@/Fly";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 
 const { test } = Test.make({ providers: Fly.providers(), dev: true });
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "../../AWS/Website/fixtures/nextjs-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
   ".gitignore",
   "package.json",
@@ -57,11 +54,9 @@ describe("Fly.Website.Nextjs local", () => {
           timeout: "180 seconds",
           label: "dev home page",
         });
-        yield* expectUrlContains(
-          `${url}/api/hello?echo=roundtrip`,
-          "NEXTJS_AWS_API_MARKER",
-          { label: "api route (dev)" },
-        );
+        yield* expectUrlContains(`${url}/api/hello?echo=roundtrip`, "NEXTJS_AWS_API_MARKER", {
+          label: "api route (dev)",
+        });
         yield* expectUrlContains(`${url}/static`, "NEXTJS_AWS_STATIC_MARKER", {
           label: "extra route (dev)",
         });

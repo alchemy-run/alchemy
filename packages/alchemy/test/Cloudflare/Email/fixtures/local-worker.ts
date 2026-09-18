@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { remote } from "@/ProviderMode.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { remote } from "@/ProviderMode.ts";
 
 /**
  * Dev-mode fixture with two `send_email` bindings side by side: the default
@@ -15,9 +15,7 @@ export default class LocalSendEmailWorker extends Cloudflare.Worker<LocalSendEma
     main: import.meta.url,
   },
   Effect.gen(function* () {
-    const stub = yield* Cloudflare.Email.Send(
-      Cloudflare.Email.SendEmail("STUB_EMAIL"),
-    );
+    const stub = yield* Cloudflare.Email.Send(Cloudflare.Email.SendEmail("STUB_EMAIL"));
     const live = yield* Cloudflare.Email.Send(
       Cloudflare.Email.SendEmail("LIVE_EMAIL").pipe(remote()),
     );

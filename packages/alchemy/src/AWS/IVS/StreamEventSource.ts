@@ -45,10 +45,7 @@ export interface IvsStreamEventDetail {
 export type IvsStreamEvent = EventRecord<IvsStreamEventDetail>;
 
 /** Which Amazon IVS notifications to subscribe to. */
-export type IvsStreamEventKind =
-  | "stream-state-change"
-  | "recording-state-change"
-  | "limit-breach";
+export type IvsStreamEventKind = "stream-state-change" | "recording-state-change" | "limit-breach";
 
 const DETAIL_TYPES: Record<IvsStreamEventKind, string> = {
   "stream-state-change": "IVS Stream State Change",
@@ -125,9 +122,7 @@ export const consumeStreamEvents = <StreamReq = never, Req = never>(
       "detail-type": (props.kinds ?? (["stream-state-change"] as const)).map(
         (kind) => DETAIL_TYPES[kind],
       ),
-      ...(props.channelArns !== undefined
-        ? { resources: [...props.channelArns] }
-        : {}),
+      ...(props.channelArns !== undefined ? { resources: [...props.channelArns] } : {}),
     },
     { description: props.description, state: props.state },
     process,

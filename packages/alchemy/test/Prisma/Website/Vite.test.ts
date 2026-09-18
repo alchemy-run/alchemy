@@ -1,11 +1,11 @@
-import * as Prisma from "@/Prisma/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Prisma from "@/Prisma/index.ts";
+import * as Test from "@/Test/Alchemy.ts";
 import { bodyContaining, copyViteFixture } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
@@ -18,11 +18,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const rootDir = yield* copyViteFixture;
-      const deploy = (
-        fallback:
-          | "single-page-application"
-          | "none" = "single-page-application",
-      ) =>
+      const deploy = (fallback: "single-page-application" | "none" = "single-page-application") =>
         stack.deploy(
           Prisma.Website.Vite("Web", {
             rootDir,
@@ -35,15 +31,10 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       expect(initial.url).toMatch(/^https:\/\//);
       const projectId = initial.compute!.projectId;
       const appId = initial.compute!.appId;
-      yield* bodyContaining(
-        `${initial.url}/client/route`,
-        "Prisma Website fixture",
-      );
+      yield* bodyContaining(`${initial.url}/client/route`, "Prisma Website fixture");
       yield* bodyContaining(`${initial.url}/health`, "ok");
       const unchanged = (yield* deploy()).site;
-      expect(unchanged.compute!.deploymentId).toBe(
-        initial.compute!.deploymentId,
-      );
+      expect(unchanged.compute!.deploymentId).toBe(initial.compute!.deploymentId);
       const indexPath = path.join(rootDir, "index.html");
       const index = yield* fs.readFileString(indexPath);
       yield* fs.writeFileString(
@@ -53,13 +44,9 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const updated = (yield* deploy("none")).site;
       expect(updated.compute!.appId).toBe(appId);
       expect(updated.compute!.projectId).toBe(projectId);
-      expect(updated.compute!.deploymentId).not.toBe(
-        initial.compute!.deploymentId,
-      );
+      expect(updated.compute!.deploymentId).not.toBe(initial.compute!.deploymentId);
       yield* bodyContaining(`${updated.url}/`, "Prisma Website updated");
-      const missing = yield* HttpClient.get(
-        `${updated.url}/missing-client-route`,
-      );
+      const missing = yield* HttpClient.get(`${updated.url}/missing-client-route`);
       expect(missing.status).toBe(404);
       yield* stack.destroy();
       expect(

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { ServerHost } from "@/Server/Process.ts";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as AWS from "@/AWS";
+import { ServerHost } from "@/Server/Process.ts";
 
 /**
  * Alchemy-managed EC2 key pair granting SSH access to the instance. Exported so
@@ -77,9 +77,7 @@ export default class TestInstance extends AWS.EC2.Instance<TestInstance>()(
       port: 3000,
       keyName: key.keyName,
       // SSM access so the instance is manageable via Session Manager.
-      roleManagedPolicyArns: [
-        "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-      ],
+      roleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"],
     };
   }),
   Effect.gen(function* () {

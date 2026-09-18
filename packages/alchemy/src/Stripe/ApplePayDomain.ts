@@ -11,8 +11,8 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import type { Providers } from "./Providers.ts";
 import { isMissingStripeResource } from "./missing.ts";
+import type { Providers } from "./Providers.ts";
 
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
@@ -106,9 +106,7 @@ const toAttrs = (domain: StripeApplePayDomain): ApplePayDomainAttributes => ({
 const isMissing = isMissingStripeResource;
 
 const getById = (domain: string) =>
-  GetApplePayDomain({ domain }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  GetApplePayDomain({ domain }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
 
 const listAllApplePayDomains = Effect.fn(function* () {
   const domains: StripeApplePayDomain[] = [];
@@ -156,10 +154,7 @@ const findByDomainName = Effect.fn(function* (domainName: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: {
-  id?: string;
-  domainName?: string;
-}) {
+const observe = Effect.fn(function* (input: { id?: string; domainName?: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;
@@ -192,8 +187,7 @@ export const ApplePayDomainProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const domainName =
-        output?.domainName ??
-        (typeof olds?.domainName === "string" ? olds.domainName : undefined);
+        output?.domainName ?? (typeof olds?.domainName === "string" ? olds.domainName : undefined);
       const existing = yield* observe({
         id: output?.id,
         domainName,

@@ -89,9 +89,9 @@ export const summarize = (plan: Plan.Plan): PlanSummary => {
  * plan. Planning phases are reported through {@link Progress}; the returned
  * snapshot is what {@link apply} executes.
  */
-export const plan = Effect.fn("Alchemist.stack.plan")(function* <
-  Module = unknown,
->(input: PlanInput) {
+export const plan = Effect.fn("Alchemist.stack.plan")(function* <Module = unknown>(
+  input: PlanInput,
+) {
   type Output = StackModuleOutput<Module>;
   const report = withSpanEvents(yield* Progress);
 
@@ -100,9 +100,7 @@ export const plan = Effect.fn("Alchemist.stack.plan")(function* <
   // boundaries, the engine reports loading-state / computing-plan and the
   // per-node diff events. Re-providing the wrapped reporter is all the
   // route does — no translation layer.
-  const session = yield* open(input.target, input).pipe(
-    Effect.provideService(Progress, report),
-  );
+  const session = yield* open(input.target, input).pipe(Effect.provideService(Progress, report));
   const native = (yield* (
     input.operation === "destroy"
       ? Plan.destroy(session.stack)

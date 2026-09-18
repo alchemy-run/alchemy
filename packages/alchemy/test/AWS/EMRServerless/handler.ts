@@ -1,6 +1,3 @@
-import * as EMRServerless from "@/AWS/EMRServerless";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import type * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -10,6 +7,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as EMRServerless from "@/AWS/EMRServerless";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -21,20 +21,14 @@ const FAKE_SESSION_ID = "00abcdefabcdef01";
 
 // Session authorization can lag behind other EMR APIs on a fresh Lambda role.
 const sessionAuthorizationPolicy = {
-  while: (
-    error:
-      | emr.GetSessionEndpointError
-      | emr.StartSessionError
-      | emr.ListSessionsError,
-  ) => error._tag === "AccessDeniedException",
+  while: (error: emr.GetSessionEndpointError | emr.StartSessionError | emr.ListSessionsError) =>
+    error._tag === "AccessDeniedException",
   schedule: Schedule.spaced("3 seconds"),
   times: 8,
 };
 
 /** Deterministic names shared with the test for out-of-band verification. */
-const stageSuffix = process.env.ALCHEMY_TEST_STAGE
-  ? `-${process.env.ALCHEMY_TEST_STAGE}`
-  : "";
+const stageSuffix = process.env.ALCHEMY_TEST_STAGE ? `-${process.env.ALCHEMY_TEST_STAGE}` : "";
 export const BINDINGS_APP_NAME = `alchemy-test-emrs-bind${stageSuffix}`;
 export const BINDINGS_ROLE_NAME = `alchemy-test-emrs-bind-role${stageSuffix}`;
 
@@ -78,14 +72,10 @@ export default EmrServerlessTestFunction.make(
 
     // Event source: subscribe the host to EMR Serverless job-run state
     // changes. The deploy proves the EventBridge rule + invoke permission.
-    yield* EMRServerless.consumeJobRunEvents(
-      { kinds: ["job-run-state-change"] },
-      (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(
-            `emr-serverless job ${event.detail.jobRunId} -> ${event.detail.state}`,
-          ),
-        ),
+    yield* EMRServerless.consumeJobRunEvents({ kinds: ["job-run-state-change"] }, (events) =>
+      Stream.runForEach(events, (event) =>
+        Effect.log(`emr-serverless job ${event.detail.jobRunId} -> ${event.detail.state}`),
+      ),
     );
 
     const startJobRun = yield* EMRServerless.StartJobRun(app);
@@ -93,8 +83,7 @@ export default EmrServerlessTestFunction.make(
     const cancelJobRun = yield* EMRServerless.CancelJobRun(app);
     const listJobRuns = yield* EMRServerless.ListJobRuns(app);
     const listJobRunAttempts = yield* EMRServerless.ListJobRunAttempts(app);
-    const getDashboardForJobRun =
-      yield* EMRServerless.GetDashboardForJobRun(app);
+    const getDashboardForJobRun = yield* EMRServerless.GetDashboardForJobRun(app);
     const getResourceDashboard = yield* EMRServerless.GetResourceDashboard(app);
     const startApplication = yield* EMRServerless.StartApplication(app);
     const stopApplication = yield* EMRServerless.StopApplication(app);
@@ -125,9 +114,7 @@ export default EmrServerlessTestFunction.make(
     // the error's `_tag` otherwise. Probes assert the tag — a typed
     // service error (not AccessDeniedException) proves the IAM grant and
     // the injected application id both work.
-    const probe = <A, E extends { _tag: string }>(
-      effect: Effect.Effect<A, E>,
-    ) =>
+    const probe = <A, E extends { _tag: string }>(effect: Effect.Effect<A, E>) =>
       effect.pipe(
         Effect.map(() => ({ tag: "ok", detail: "" }) as const),
         Effect.catch((error) =>
@@ -154,9 +141,7 @@ export default EmrServerlessTestFunction.make(
           });
         }
         if (request.method === "GET" && pathname === "/sessions") {
-          return yield* probe(
-            listSessions().pipe(Effect.retry(sessionAuthorizationPolicy)),
-          );
+          return yield* probe(listSessions().pipe(Effect.retry(sessionAuthorizationPolicy)));
         }
 
         // Typed not-found probes on nonexistent sub-resources.
@@ -164,14 +149,10 @@ export default EmrServerlessTestFunction.make(
           return yield* probe(getJobRun({ jobRunId: FAKE_JOB_RUN_ID }));
         }
         if (request.method === "GET" && pathname === "/jobrun-dashboard") {
-          return yield* probe(
-            getDashboardForJobRun({ jobRunId: FAKE_JOB_RUN_ID }),
-          );
+          return yield* probe(getDashboardForJobRun({ jobRunId: FAKE_JOB_RUN_ID }));
         }
         if (request.method === "GET" && pathname === "/jobrun-attempts") {
-          return yield* probe(
-            listJobRunAttempts({ jobRunId: FAKE_JOB_RUN_ID }),
-          );
+          return yield* probe(listJobRunAttempts({ jobRunId: FAKE_JOB_RUN_ID }));
         }
         if (request.method === "POST" && pathname === "/jobrun-cancel-fake") {
           return yield* probe(cancelJobRun({ jobRunId: FAKE_JOB_RUN_ID }));
@@ -238,8 +219,7 @@ export default EmrServerlessTestFunction.make(
             executionRoleArn: roleArn,
             jobDriver: {
               sparkSubmit: {
-                entryPoint:
-                  "local:///usr/lib/spark/examples/src/main/python/pi.py",
+                entryPoint: "local:///usr/lib/spark/examples/src/main/python/pi.py",
               },
             },
             executionTimeoutMinutes: 10,
@@ -257,9 +237,7 @@ export default EmrServerlessTestFunction.make(
               { status: 400 },
             );
           }
-          const cancelled = yield* cancelJobRun({ jobRunId: id }).pipe(
-            Effect.orDie,
-          );
+          const cancelled = yield* cancelJobRun({ jobRunId: id }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             jobRunId: cancelled.jobRunId,
           });
@@ -272,9 +250,7 @@ export default EmrServerlessTestFunction.make(
               { status: 400 },
             );
           }
-          const { jobRun } = yield* getJobRun({ jobRunId: id }).pipe(
-            Effect.orDie,
-          );
+          const { jobRun } = yield* getJobRun({ jobRunId: id }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
             jobRunId: jobRun.jobRunId,
             state: jobRun.state,

@@ -1,6 +1,3 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as ResourceGroups from "@/AWS/ResourceGroups";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,12 +5,13 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as ResourceGroups from "@/AWS/ResourceGroups";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class RGTestFunction extends Lambda.Function<Lambda.Function>()(
-  "RGTestFunction",
-) {}
+export class RGTestFunction extends Lambda.Function<Lambda.Function>()("RGTestFunction") {}
 
 /** Return a typed error tag + message instead of failing the route. */
 const tagOf = <A extends object, E extends { _tag: string; message?: string }>(
@@ -21,9 +19,7 @@ const tagOf = <A extends object, E extends { _tag: string; message?: string }>(
 ) =>
   eff.pipe(
     Effect.map((ok) => ({ ok })),
-    Effect.catch((e) =>
-      Effect.succeed({ errorTag: e._tag, message: e.message }),
-    ),
+    Effect.catch((e) => Effect.succeed({ errorTag: e._tag, message: e.message })),
   );
 
 export default RGTestFunction.make(
@@ -76,21 +72,15 @@ export default RGTestFunction.make(
     yield* ResourceGroups.consumeGroupEvents(
       { kinds: ["state-change", "membership-change"] },
       (events) =>
-        Stream.runForEach(events, (event) =>
-          Effect.log(`group event: ${event["detail-type"]}`),
-        ),
+        Stream.runForEach(events, (event) => Effect.log(`group event: ${event["detail-type"]}`)),
     );
 
     // --- group-scoped bindings ---
     const listGroupResources = yield* ResourceGroups.ListGroupResources(pool);
-    const listGroupingStatuses =
-      yield* ResourceGroups.ListGroupingStatuses(pool);
+    const listGroupingStatuses = yield* ResourceGroups.ListGroupingStatuses(pool);
     const groupResources = yield* ResourceGroups.GroupResources(pool);
     const ungroupResources = yield* ResourceGroups.UngroupResources(pool);
-    const startTagSyncTask = yield* ResourceGroups.StartTagSyncTask(
-      pool,
-      syncRole,
-    );
+    const startTagSyncTask = yield* ResourceGroups.StartTagSyncTask(pool, syncRole);
 
     // --- account-level bindings ---
     const searchResources = yield* ResourceGroups.SearchResources();
@@ -156,9 +146,7 @@ export default RGTestFunction.make(
         // Grouping statuses only exist for application groups (which
         // CreateGroup cannot make) — the typed rejection proves the wire.
         if (request.method === "GET" && pathname === "/grouping-statuses") {
-          return yield* HttpServerResponse.json(
-            yield* tagOf(listGroupingStatuses()),
-          );
+          return yield* HttpServerResponse.json(yield* tagOf(listGroupingStatuses()));
         }
 
         // Account-level ad-hoc query.
@@ -168,9 +156,7 @@ export default RGTestFunction.make(
               Type: "TAG_FILTERS_1_0",
               Query: JSON.stringify({
                 ResourceTypeFilters: ["AWS::AllSupported"],
-                TagFilters: [
-                  { Key: "alchemy::id", Values: ["RGTestFunction"] },
-                ],
+                TagFilters: [{ Key: "alchemy::id", Values: ["RGTestFunction"] }],
               }),
             },
           });
@@ -197,22 +183,16 @@ export default RGTestFunction.make(
         // IAM + wiring for the start/get/cancel operations.
         if (request.method === "POST" && pathname === "/start-tag-sync") {
           return yield* HttpServerResponse.json(
-            yield* tagOf(
-              startTagSyncTask({ TagKey: "alchemy-rg-sync", TagValue: "on" }),
-            ),
+            yield* tagOf(startTagSyncTask({ TagKey: "alchemy-rg-sync", TagValue: "on" })),
           );
         }
         if (request.method === "GET" && pathname === "/tag-sync-task") {
           const taskArn = url.searchParams.get("arn") ?? "";
-          return yield* HttpServerResponse.json(
-            yield* tagOf(getTagSyncTask({ TaskArn: taskArn })),
-          );
+          return yield* HttpServerResponse.json(yield* tagOf(getTagSyncTask({ TaskArn: taskArn })));
         }
         if (request.method === "POST" && pathname === "/cancel-tag-sync") {
           const { arn } = (yield* request.json) as { arn: string };
-          return yield* HttpServerResponse.json(
-            yield* tagOf(cancelTagSyncTask({ TaskArn: arn })),
-          );
+          return yield* HttpServerResponse.json(yield* tagOf(cancelTagSyncTask({ TaskArn: arn })));
         }
 
         return yield* HttpServerResponse.json(

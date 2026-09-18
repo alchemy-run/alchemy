@@ -1,17 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Output from "@/Output";
-import {
-  AppMonitor,
-  type MetricDefinition,
-  MetricsDestination,
-  ResourcePolicy,
-} from "@/AWS/RUM";
-import * as Test from "@/Test/Alchemy";
 import * as rum from "@distilled.cloud/aws/rum";
 import * as sts from "@distilled.cloud/aws/sts";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import * as AWS from "@/AWS";
+import { AppMonitor, type MetricDefinition, MetricsDestination, ResourcePolicy } from "@/AWS/RUM";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -90,10 +85,7 @@ test.provider(
 
       // Create: one extended metric definition + a PutRumEvents policy.
       const created = yield* stack.deploy(
-        program(
-          [{ name: "SessionCount", eventPattern: sessionCountPattern }],
-          "AlchemyRumTest",
-        ),
+        program([{ name: "SessionCount", eventPattern: sessionCountPattern }], "AlchemyRumTest"),
       );
       expect(created.metrics.appMonitorName).toBe(MONITOR_NAME);
       expect(created.metrics.destination).toBe("CloudWatch");
@@ -133,13 +125,10 @@ test.provider(
       expect(updated.policy.policyRevisionId).toBe(firstRevision);
 
       const defsAfterUpdate = yield* listDefinitions();
-      expect(defsAfterUpdate.map((d) => d.Name).sort()).toEqual([
-        "JsErrorCount",
-        "SessionCount",
-      ]);
-      expect(
-        defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys,
-      ).toEqual({ "metadata.browserName": "BrowserName" });
+      expect(defsAfterUpdate.map((d) => d.Name).sort()).toEqual(["JsErrorCount", "SessionCount"]);
+      expect(defsAfterUpdate.find((d) => d.Name === "SessionCount")?.DimensionKeys).toEqual({
+        "metadata.browserName": "BrowserName",
+      });
 
       // Update: drop SessionCount (batch delete) and rotate the policy
       // document (revision changes).
@@ -162,9 +151,7 @@ test.provider(
 
       // Everything died with the stack: the monitor (and with it the
       // destination + policy) is a typed not-found.
-      const gone = yield* Effect.flip(
-        rum.getAppMonitor({ Name: MONITOR_NAME }),
-      );
+      const gone = yield* Effect.flip(rum.getAppMonitor({ Name: MONITOR_NAME }));
       expect(gone._tag).toBe("ResourceNotFoundException");
     }),
   { timeout: 240_000 },

@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SmsVoicePhoneTestFunctionLive, {
   SmsVoicePhoneTestFunction,
 } from "./fixtures/phone-handler.ts";
@@ -15,10 +15,7 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SmsVoicePhoneBindings");
 
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(60),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]);
 
 let baseUrl: string;
 
@@ -33,19 +30,14 @@ const post = (path: string) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(5),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(5)]),
     }),
   );
 
@@ -58,14 +50,10 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
   () => {
     beforeAll(
       Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "SmsVoice phone bindings setup: destroying previous resources",
-        );
+        yield* Effect.logInfo("SmsVoice phone bindings setup: destroying previous resources");
         yield* sharedStack.destroy();
 
-        yield* Effect.logInfo(
-          "SmsVoice phone bindings setup: deploying fixture",
-        );
+        yield* Effect.logInfo("SmsVoice phone bindings setup: deploying fixture");
         const { functionUrl } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SmsVoicePhoneTestFunction;
@@ -83,9 +71,7 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.succeed(response)
-              : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
-                ),
+              : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.tapError((error) =>
             Effect.logWarning(
@@ -105,9 +91,9 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
         "sends an SMS to the simulator destination",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* post("/send-text").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as { messageId?: string };
+            const response = (yield* post("/send-text").pipe(Effect.flatMap((r) => r.json))) as {
+              messageId?: string;
+            };
 
             expect(typeof response.messageId).toBe("string");
             expect(response.messageId!.length).toBeGreaterThan(0);
@@ -121,9 +107,7 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
         "the grant allows the send (typed capability verdict otherwise)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* post("/send-voice").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as {
+            const response = (yield* post("/send-voice").pipe(Effect.flatMap((r) => r.json))) as {
               ok: boolean;
               messageId?: string;
               tag?: string;
@@ -132,9 +116,7 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
 
             // The SIMULATOR number is SMS-only; a typed capability
             // rejection still proves the binding + IAM grant.
-            expect(response.tag, JSON.stringify(response)).not.toBe(
-              "AccessDeniedException",
-            );
+            expect(response.tag, JSON.stringify(response)).not.toBe("AccessDeniedException");
             if (response.ok) {
               expect(response.messageId).toBeTruthy();
             }
@@ -148,18 +130,14 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
         "the grant allows the send (typed capability verdict otherwise)",
         (_stack) =>
           Effect.gen(function* () {
-            const response = (yield* post("/send-media").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as {
+            const response = (yield* post("/send-media").pipe(Effect.flatMap((r) => r.json))) as {
               ok: boolean;
               messageId?: string;
               tag?: string;
               message?: string;
             };
 
-            expect(response.tag, JSON.stringify(response)).not.toBe(
-              "AccessDeniedException",
-            );
+            expect(response.tag, JSON.stringify(response)).not.toBe("AccessDeniedException");
             if (response.ok) {
               expect(response.messageId).toBeTruthy();
             }
@@ -173,15 +151,16 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
         "put, list, and delete a keyword on the number",
         (_stack) =>
           Effect.gen(function* () {
-            const put = (yield* post("/keyword-put").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as { keyword?: string; message?: string };
+            const put = (yield* post("/keyword-put").pipe(Effect.flatMap((r) => r.json))) as {
+              keyword?: string;
+              message?: string;
+            };
             expect(put.keyword).toBe("INFO");
             expect(put.message).toContain("alchemy.run");
 
-            const list = (yield* post("/keyword-list").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as { keywords: string[] };
+            const list = (yield* post("/keyword-list").pipe(Effect.flatMap((r) => r.json))) as {
+              keywords: string[];
+            };
             expect(list.keywords).toContain("INFO");
 
             const deleted = (yield* post("/keyword-delete").pipe(
@@ -189,9 +168,9 @@ describe.skipIf(!process.env.AWS_TEST_PINPOINT_SMS)(
             )) as { deleted?: string };
             expect(deleted.deleted).toBe("INFO");
 
-            const after = (yield* post("/keyword-list").pipe(
-              Effect.flatMap((r) => r.json),
-            )) as { keywords: string[] };
+            const after = (yield* post("/keyword-list").pipe(Effect.flatMap((r) => r.json))) as {
+              keywords: string[];
+            };
             expect(after.keywords).not.toContain("INFO");
           }),
         { timeout: 120_000 },

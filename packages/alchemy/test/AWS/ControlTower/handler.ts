@@ -1,10 +1,10 @@
-import * as ControlTower from "@/AWS/ControlTower";
-import * as Lambda from "@/AWS/Lambda";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as ControlTower from "@/AWS/ControlTower";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -40,10 +40,8 @@ export default ControlTowerTestFunction.make(
     const listControlOperations = yield* ControlTower.ListControlOperations();
     const listLandingZones = yield* ControlTower.ListLandingZones();
     const getLandingZone = yield* ControlTower.GetLandingZone();
-    const getLandingZoneOperation =
-      yield* ControlTower.GetLandingZoneOperation();
-    const listLandingZoneOperations =
-      yield* ControlTower.ListLandingZoneOperations();
+    const getLandingZoneOperation = yield* ControlTower.GetLandingZoneOperation();
+    const listLandingZoneOperations = yield* ControlTower.ListLandingZoneOperations();
 
     const bound = {
       listBaselines,
@@ -80,9 +78,8 @@ export default ControlTowerTestFunction.make(
               ok: true as const,
               names: r.baselines.map((b) => b.name ?? null),
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "UnauthorizedException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "UnauthorizedException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -94,9 +91,7 @@ export default ControlTowerTestFunction.make(
           const result = yield* listBaselines().pipe(
             Effect.flatMap((r) =>
               Effect.gen(function* () {
-                const arn = r.baselines.find(
-                  (b) => b.name === "AWSControlTowerBaseline",
-                )?.arn;
+                const arn = r.baselines.find((b) => b.name === "AWSControlTowerBaseline")?.arn;
                 if (arn === undefined) {
                   return { ok: false as const, tag: "NoCatalog" };
                 }
@@ -105,11 +100,7 @@ export default ControlTowerTestFunction.make(
               }),
             ),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "UnauthorizedException",
-                "ResourceNotFoundException",
-              ],
+              ["AccessDeniedException", "UnauthorizedException", "ResourceNotFoundException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -125,11 +116,7 @@ export default ControlTowerTestFunction.make(
               count: r.enabledBaselines.length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "UnauthorizedException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "UnauthorizedException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -143,11 +130,7 @@ export default ControlTowerTestFunction.make(
               count: r.enabledControls.length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "ResourceNotFoundException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "ResourceNotFoundException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
@@ -163,9 +146,8 @@ export default ControlTowerTestFunction.make(
             // ListControlOperations never throws ResourceNotFoundException
             // (per the distilled union + AWS docs) — only the access/validation
             // family applies here.
-            Effect.catchTag(
-              ["AccessDeniedException", "ValidationException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "ValidationException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
@@ -179,39 +161,28 @@ export default ControlTowerTestFunction.make(
               ok: true as const,
               count: r.landingZones.length,
             })),
-            Effect.catchTag(
-              ["AccessDeniedException", "UnauthorizedException"],
-              (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
+            Effect.catchTag(["AccessDeniedException", "UnauthorizedException"], (e) =>
+              Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/landing-zone-operations"
-        ) {
+        if (request.method === "GET" && pathname === "/landing-zone-operations") {
           const result = yield* listLandingZoneOperations().pipe(
             Effect.map((r) => ({
               ok: true as const,
               count: r.landingZoneOperations.length,
             })),
             Effect.catchTag(
-              [
-                "AccessDeniedException",
-                "UnauthorizedException",
-                "ValidationException",
-              ],
+              ["AccessDeniedException", "UnauthorizedException", "ValidationException"],
               (e) => Effect.succeed({ ok: false as const, tag: e._tag }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/landing-zone-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/landing-zone-not-found") {
           const tag = yield* getLandingZone({
             landingZoneIdentifier: NONEXISTENT_LANDING_ZONE_ARN,
           }).pipe(
@@ -229,30 +200,20 @@ export default ControlTowerTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/control-operation-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/control-operation-not-found") {
           const tag = yield* getControlOperation({
             operationIdentifier: NONEXISTENT_OPERATION_ID,
           }).pipe(
             Effect.map(() => "Found"),
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "ValidationException",
-                "AccessDeniedException",
-              ],
+              ["ResourceNotFoundException", "ValidationException", "AccessDeniedException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/baseline-operation-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/baseline-operation-not-found") {
           const result = yield* getBaselineOperation({
             operationIdentifier: NONEXISTENT_OPERATION_ID,
           }).pipe(
@@ -270,10 +231,7 @@ export default ControlTowerTestFunction.make(
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/landing-zone-operation-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/landing-zone-operation-not-found") {
           const result = yield* getLandingZoneOperation({
             operationIdentifier: NONEXISTENT_OPERATION_ID,
           }).pipe(

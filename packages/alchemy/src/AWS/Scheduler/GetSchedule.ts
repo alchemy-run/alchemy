@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
-export interface GetScheduleRequest extends Omit<
-  scheduler.GetScheduleInput,
-  "GroupName"
-> {}
+export interface GetScheduleRequest extends Omit<scheduler.GetScheduleInput, "GroupName"> {}
 
 /**
  * Runtime binding for `scheduler:GetSchedule`.
@@ -43,6 +40,4 @@ export interface GetSchedule extends Binding.Service<
     ) => Effect.Effect<scheduler.GetScheduleOutput, scheduler.GetScheduleError>
   >
 > {}
-export const GetSchedule = Binding.Service<GetSchedule>(
-  "AWS.Scheduler.GetSchedule",
-);
+export const GetSchedule = Binding.Service<GetSchedule>("AWS.Scheduler.GetSchedule");

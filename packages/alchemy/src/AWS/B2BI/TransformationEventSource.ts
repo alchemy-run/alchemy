@@ -111,13 +111,9 @@ export type TransformationEvent = EventRecord<TransformationEventDetail>;
 /** An acknowledgement EventBridge event delivered to the handler. */
 export type AcknowledgementEvent = EventRecord<AcknowledgementEventDetail>;
 
-export type TransformationEventType =
-  | "Transformation Completed"
-  | "Transformation Failed";
+export type TransformationEventType = "Transformation Completed" | "Transformation Failed";
 
-export type AcknowledgementEventType =
-  | "Acknowledgement Completed"
-  | "Acknowledgement Failed";
+export type AcknowledgementEventType = "Acknowledgement Completed" | "Acknowledgement Failed";
 
 export interface TransformationEventSourceProps extends EventRouteProps {
   /**

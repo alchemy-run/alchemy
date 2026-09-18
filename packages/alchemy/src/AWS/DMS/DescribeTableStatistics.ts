@@ -33,10 +33,7 @@ export interface DescribeTableStatistics extends Binding.Service<
   () => Effect.Effect<
     (
       request: dms.DescribeTableStatisticsMessage,
-    ) => Effect.Effect<
-      dms.DescribeTableStatisticsResponse,
-      dms.DescribeTableStatisticsError
-    >
+    ) => Effect.Effect<dms.DescribeTableStatisticsResponse, dms.DescribeTableStatisticsError>
   >
 > {}
 

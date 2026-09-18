@@ -28,10 +28,7 @@ export interface BatchGetCodeSnippet extends Binding.Service<
   () => Effect.Effect<
     (
       request: inspector2.BatchGetCodeSnippetRequest,
-    ) => Effect.Effect<
-      inspector2.BatchGetCodeSnippetResponse,
-      inspector2.BatchGetCodeSnippetError
-    >
+    ) => Effect.Effect<inspector2.BatchGetCodeSnippetResponse, inspector2.BatchGetCodeSnippetError>
   >
 > {}
 export const BatchGetCodeSnippet = Binding.Service<BatchGetCodeSnippet>(

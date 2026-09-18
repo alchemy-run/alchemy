@@ -32,10 +32,7 @@ export interface GetMemberDetectors extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.GetMemberDetectorsRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.GetMemberDetectorsResponse,
-      guardduty.GetMemberDetectorsError
-    >
+    ) => Effect.Effect<guardduty.GetMemberDetectorsResponse, guardduty.GetMemberDetectorsError>
   >
 > {}
 export const GetMemberDetectors = Binding.Service<GetMemberDetectors>(

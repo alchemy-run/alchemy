@@ -31,10 +31,7 @@ export interface ResetAuthorizersCache extends Binding.Service<
   <S extends ApiGatewayV2Stage>(
     stage: S,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      agw2.ResetAuthorizersCacheResponse,
-      agw2.ResetAuthorizersCacheError
-    >
+    () => Effect.Effect<agw2.ResetAuthorizersCacheResponse, agw2.ResetAuthorizersCacheError>
   >
 > {}
 export const ResetAuthorizersCache = Binding.Service<ResetAuthorizersCache>(

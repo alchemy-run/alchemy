@@ -39,7 +39,6 @@ export interface ListAssociatedAccessPolicies extends Binding.Service<
     >
   >
 > {}
-export const ListAssociatedAccessPolicies =
-  Binding.Service<ListAssociatedAccessPolicies>(
-    "AWS.EKS.ListAssociatedAccessPolicies",
-  );
+export const ListAssociatedAccessPolicies = Binding.Service<ListAssociatedAccessPolicies>(
+  "AWS.EKS.ListAssociatedAccessPolicies",
+);

@@ -1,36 +1,28 @@
-import * as AWS from "@/AWS";
-import { Profile, ProfileAssociation } from "@/AWS/Route53Profiles";
-import * as Test from "@/Test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as profiles from "@distilled.cloud/aws/route53profiles";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Profile, ProfileAssociation } from "@/AWS/Route53Profiles";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const assertAssociationGone = (profileAssociationId: string) =>
-  profiles
-    .getProfileAssociation({ ProfileAssociationId: profileAssociationId })
-    .pipe(
-      Effect.flatMap((r) =>
-        r.ProfileAssociation?.Status === "DELETING" ||
-        r.ProfileAssociation?.Status === "DELETED"
-          ? Effect.void
-          : Effect.fail(
-              new Error(`association still ${r.ProfileAssociation?.Status}`),
-            ),
-      ),
-      Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-      Effect.retry({
-        while: (e) => e instanceof Error,
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(10),
-        ]),
-      }),
-    );
+  profiles.getProfileAssociation({ ProfileAssociationId: profileAssociationId }).pipe(
+    Effect.flatMap((r) =>
+      r.ProfileAssociation?.Status === "DELETING" || r.ProfileAssociation?.Status === "DELETED"
+        ? Effect.void
+        : Effect.fail(new Error(`association still ${r.ProfileAssociation?.Status}`)),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.retry({
+      while: (e) => e instanceof Error,
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
+    }),
+  );
 
 const assertProfileGone = (profileId: string) =>
   profiles.getProfile({ ProfileId: profileId }).pipe(
@@ -42,10 +34,7 @@ const assertProfileGone = (profileId: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e instanceof Error,
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -79,13 +68,9 @@ test.provider(
       const live = yield* profiles.getProfileAssociation({
         ProfileAssociationId: deployed.association.profileAssociationId,
       });
-      expect(live.ProfileAssociation?.ProfileId).toBe(
-        deployed.profile.profileId,
-      );
+      expect(live.ProfileAssociation?.ProfileId).toBe(deployed.profile.profileId);
       expect(live.ProfileAssociation?.ResourceId).toBe(defaultVpc.vpcId);
-      expect(["CREATING", "COMPLETE"]).toContain(
-        live.ProfileAssociation?.Status,
-      );
+      expect(["CREATING", "COMPLETE"]).toContain(live.ProfileAssociation?.Status);
 
       // Re-deploying the same stack is a no-op (idempotent reconcile).
       const again = yield* stack.deploy(

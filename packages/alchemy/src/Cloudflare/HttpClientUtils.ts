@@ -1,7 +1,4 @@
-import {
-  Credentials,
-  fromApiToken,
-} from "@distilled.cloud/cloudflare/Credentials";
+import { Credentials, fromApiToken } from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -15,9 +12,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
  */
 export const authorizeWith =
   (token: { value: Effect.Effect<Redacted.Redacted<string>> }) =>
-  <A, E>(
-    eff: Effect.Effect<A, E, Credentials | HttpClient>,
-  ): Effect.Effect<A, E, RuntimeContext> =>
+  <A, E>(eff: Effect.Effect<A, E, Credentials | HttpClient>): Effect.Effect<A, E, RuntimeContext> =>
     token.value.pipe(
       Effect.flatMap((value) =>
         eff.pipe(

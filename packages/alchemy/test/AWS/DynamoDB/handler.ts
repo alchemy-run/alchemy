@@ -1,11 +1,11 @@
-import * as DynamoDB from "@/AWS/DynamoDB";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as DynamoDB from "@/AWS/DynamoDB";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -53,8 +53,7 @@ export default DynamoDBTestFunction.make(
     const getItem = yield* DynamoDB.GetItem(sourceTable);
     const batchGetItem = yield* DynamoDB.BatchGetItem(sourceTable);
     const batchWriteItem = yield* DynamoDB.BatchWriteItem(sourceTable);
-    const batchExecuteStatement =
-      yield* DynamoDB.BatchExecuteStatement(sourceTable);
+    const batchExecuteStatement = yield* DynamoDB.BatchExecuteStatement(sourceTable);
     const describeTable = yield* DynamoDB.DescribeTable(sourceTable);
     const describeTimeToLive = yield* DynamoDB.DescribeTimeToLive(sourceTable);
     const executeStatement = yield* DynamoDB.ExecuteStatement(sourceTable);
@@ -78,8 +77,7 @@ export default DynamoDBTestFunction.make(
     const describeBackup = yield* DynamoDB.DescribeBackup(sourceTable);
     const listBackups = yield* DynamoDB.ListBackups(sourceTable);
     const deleteBackup = yield* DynamoDB.DeleteBackup(sourceTable);
-    const describeContinuousBackups =
-      yield* DynamoDB.DescribeContinuousBackups(sourceTable);
+    const describeContinuousBackups = yield* DynamoDB.DescribeContinuousBackups(sourceTable);
     const restoreTableFromBackup = yield* DynamoDB.RestoreTableFromBackup(
       sourceTable,
       restoreTargetTable,
@@ -118,9 +116,7 @@ export default DynamoDBTestFunction.make(
               // Natural attributes indexed by the multi-attribute-key GSI —
               // no synthetic concatenated keys.
               ...(body.category ? { category: { S: body.category } } : {}),
-              ...(body.subcategory
-                ? { subcategory: { S: body.subcategory } }
-                : {}),
+              ...(body.subcategory ? { subcategory: { S: body.subcategory } } : {}),
               ...(body.rank ? { rank: { S: body.rank } } : {}),
             },
           });
@@ -209,8 +205,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/batch-write") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.BatchWriteItemRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.BatchWriteItemRequest;
           const result = yield* batchWriteItem(body);
           return yield* HttpServerResponse.json({
             unprocessedItems: result.UnprocessedItems ?? {},
@@ -218,8 +213,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/batch-get") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.BatchGetItemRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.BatchGetItemRequest;
           const result = yield* batchGetItem(body);
           return yield* HttpServerResponse.json({
             responses: result.Responses ?? {},
@@ -228,8 +222,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/transact-write") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.TransactWriteItemsRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.TransactWriteItemsRequest;
           const result = yield* transactWriteItems(body);
           return yield* HttpServerResponse.json({
             success: true,
@@ -238,8 +231,7 @@ export default DynamoDBTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/transact-get") {
-          const body =
-            (yield* request.json) as unknown as DynamoDB.TransactGetItemsRequest;
+          const body = (yield* request.json) as unknown as DynamoDB.TransactGetItemsRequest;
           const result = yield* transactGetItems(body);
           return yield* HttpServerResponse.json({
             responses: result.Responses ?? [],
@@ -280,10 +272,7 @@ export default DynamoDBTestFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/batch-execute-statement"
-        ) {
+        if (request.method === "POST" && pathname === "/batch-execute-statement") {
           const body = (yield* request.json) as unknown as {
             first: { pk: string; sk: string };
             second: { pk: string; sk: string };
@@ -412,9 +401,7 @@ export default DynamoDBTestFunction.make(
         if (request.method === "GET" && pathname === "/list-backups") {
           const result = yield* listBackups();
           return yield* HttpServerResponse.json({
-            backupArns: (result.BackupSummaries ?? []).map(
-              (summary) => summary.BackupArn,
-            ),
+            backupArns: (result.BackupSummaries ?? []).map((summary) => summary.BackupArn),
           });
         }
 
@@ -425,24 +412,18 @@ export default DynamoDBTestFunction.make(
               ok: true as const,
               status: output.BackupDescription?.BackupDetails?.BackupStatus,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ ok: false as const, error: error._tag }),
-            ),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/describe-continuous-backups"
-        ) {
+        if (request.method === "GET" && pathname === "/describe-continuous-backups") {
           const result = yield* describeContinuousBackups();
           return yield* HttpServerResponse.json({
-            continuousBackupsStatus:
-              result.ContinuousBackupsDescription?.ContinuousBackupsStatus,
+            continuousBackupsStatus: result.ContinuousBackupsDescription?.ContinuousBackupsStatus,
             pitrStatus:
-              result.ContinuousBackupsDescription
-                ?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus,
+              result.ContinuousBackupsDescription?.PointInTimeRecoveryDescription
+                ?.PointInTimeRecoveryStatus,
           });
         }
 
@@ -455,9 +436,7 @@ export default DynamoDBTestFunction.make(
               ok: true as const,
               status: output.TableDescription?.TableStatus,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ ok: false as const, error: error._tag }),
-            ),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -470,9 +449,7 @@ export default DynamoDBTestFunction.make(
               ok: true as const,
               exportArn: output.ExportDescription?.ExportArn,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ ok: false as const, error: error._tag }),
-            ),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -480,9 +457,7 @@ export default DynamoDBTestFunction.make(
         if (request.method === "GET" && pathname === "/list-exports") {
           const result = yield* listExports();
           return yield* HttpServerResponse.json({
-            exportArns: (result.ExportSummaries ?? []).map(
-              (summary) => summary.ExportArn,
-            ),
+            exportArns: (result.ExportSummaries ?? []).map((summary) => summary.ExportArn),
           });
         }
 
@@ -496,9 +471,7 @@ export default DynamoDBTestFunction.make(
               ok: true as const,
               status: output.ExportDescription?.ExportStatus,
             })),
-            Effect.catch((error) =>
-              Effect.succeed({ ok: false as const, error: error._tag }),
-            ),
+            Effect.catch((error) => Effect.succeed({ ok: false as const, error: error._tag })),
           );
           return yield* HttpServerResponse.json(result);
         }

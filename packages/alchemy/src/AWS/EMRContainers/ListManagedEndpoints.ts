@@ -31,10 +31,7 @@ export interface ListManagedEndpoints extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<emrc.ListManagedEndpointsRequest, "virtualClusterId">,
-    ) => Effect.Effect<
-      emrc.ListManagedEndpointsResponse,
-      emrc.ListManagedEndpointsError
-    >
+    ) => Effect.Effect<emrc.ListManagedEndpointsResponse, emrc.ListManagedEndpointsError>
   >
 > {}
 export const ListManagedEndpoints = Binding.Service<ListManagedEndpoints>(

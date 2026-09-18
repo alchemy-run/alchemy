@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { OptOutList } from "@/AWS/PinpointSMSVoiceV2";
-import * as Test from "@/Test/Alchemy";
 import * as smsvoice from "@distilled.cloud/aws/pinpoint-sms-voice-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { OptOutList } from "@/AWS/PinpointSMSVoiceV2";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,18 +27,14 @@ test.provider(
 const getOptOutList = (name: string) =>
   smsvoice.describeOptOutLists({ OptOutListNames: [name] }).pipe(
     Effect.map((r) => r.OptOutLists?.[0]),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 const assertOptOutListGone = (name: string) =>
   Effect.gen(function* () {
     const found = yield* getOptOutList(name);
     if (found !== undefined) {
-      return yield* Effect.fail(
-        new Error(`opt-out list '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`opt-out list '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
@@ -70,9 +66,7 @@ test.provider(
       const tags = yield* smsvoice.listTagsForResource({
         ResourceArn: created.optOutListArn,
       });
-      const tagRecord = Object.fromEntries(
-        (tags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const tagRecord = Object.fromEntries((tags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(tagRecord.fixture).toBe("smsvoice-opt-out-list");
       expect(tagRecord["alchemy::id"]).toBe("OptOuts");
 
@@ -91,9 +85,7 @@ test.provider(
       const retags = yield* smsvoice.listTagsForResource({
         ResourceArn: created.optOutListArn,
       });
-      const retagRecord = Object.fromEntries(
-        (retags.Tags ?? []).map((t) => [t.Key, t.Value]),
-      );
+      const retagRecord = Object.fromEntries((retags.Tags ?? []).map((t) => [t.Key, t.Value]));
       expect(retagRecord.fixture).toBe("smsvoice-opt-out-list-v2");
       expect(retagRecord.extra).toBe("1");
 

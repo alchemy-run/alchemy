@@ -142,9 +142,7 @@ export interface AuthorizerType extends Resource<
  *
  * @resource
  */
-export const AuthorizerResource = Resource<AuthorizerType>(
-  "AWS.ApiGatewayV2.Authorizer",
-);
+export const AuthorizerResource = Resource<AuthorizerType>("AWS.ApiGatewayV2.Authorizer");
 
 export interface AuthorizerInputProps extends Omit<
   {
@@ -199,32 +197,21 @@ export const AuthorizerProvider = () =>
   Provider.effect(
     AuthorizerResource,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: Pick<AuthorizerProps, "name">,
-      ) {
-        return (
-          props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }))
-        );
+      const createName = Effect.fn(function* (id: string, props: Pick<AuthorizerProps, "name">) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
       const getAuthorizerSafe = (apiId: string, authorizerId: string) =>
         agw2
           .getAuthorizer({ ApiId: apiId, AuthorizerId: authorizerId })
-          .pipe(
-            Effect.catchTag("NotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
 
       return AuthorizerResource.Provider.of({
         stables: ["apiId", "authorizerId"],
 
         list: () =>
           Effect.gen(function* () {
-            const apis = yield* collectAllPages((NextToken) =>
-              agw2.getApis({ NextToken }),
-            );
+            const apis = yield* collectAllPages((NextToken) => agw2.getApis({ NextToken }));
             const perApi = yield* Effect.forEach(
               apis.filter((api) => api.ApiId != null),
               (api) =>
@@ -247,10 +234,7 @@ export const AuthorizerProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId || !output.authorizerId) return undefined;
-          const auth = yield* getAuthorizerSafe(
-            output.apiId,
-            output.authorizerId,
-          );
+          const auth = yield* getAuthorizerSafe(output.apiId, output.authorizerId);
           if (!auth?.AuthorizerId) return undefined;
           return snapshotFromAuthorizer(output.apiId, auth);
         }),
@@ -281,12 +265,9 @@ export const AuthorizerProvider = () =>
                 IdentitySource: news.identitySource,
                 JwtConfiguration: news.jwtConfiguration,
                 AuthorizerUri: news.authorizerUri,
-                AuthorizerPayloadFormatVersion:
-                  news.authorizerPayloadFormatVersion,
+                AuthorizerPayloadFormatVersion: news.authorizerPayloadFormatVersion,
                 EnableSimpleResponses: news.enableSimpleResponses,
-                AuthorizerResultTtlInSeconds: toWireSeconds(
-                  news.authorizerResultTtl,
-                ),
+                AuthorizerResultTtlInSeconds: toWireSeconds(news.authorizerResultTtl),
                 AuthorizerCredentialsArn: news.authorizerCredentialsArn,
                 IdentityValidationExpression: news.identityValidationExpression,
               }),
@@ -306,16 +287,13 @@ export const AuthorizerProvider = () =>
             (news.jwtConfiguration !== undefined &&
               !deepEqual(snapshot.jwtConfiguration, news.jwtConfiguration)) ||
             snapshot.authorizerUri !== news.authorizerUri ||
-            snapshot.authorizerPayloadFormatVersion !==
-              news.authorizerPayloadFormatVersion ||
+            snapshot.authorizerPayloadFormatVersion !== news.authorizerPayloadFormatVersion ||
             (news.enableSimpleResponses !== undefined &&
               snapshot.enableSimpleResponses !== news.enableSimpleResponses) ||
             (desiredTtlSeconds !== undefined &&
               snapshot.authorizerResultTtlInSeconds !== desiredTtlSeconds) ||
-            snapshot.authorizerCredentialsArn !==
-              news.authorizerCredentialsArn ||
-            snapshot.identityValidationExpression !==
-              news.identityValidationExpression;
+            snapshot.authorizerCredentialsArn !== news.authorizerCredentialsArn ||
+            snapshot.identityValidationExpression !== news.identityValidationExpression;
           if (drift) {
             const updated = yield* retryOnTooManyRequests(
               agw2.updateAuthorizer({
@@ -326,8 +304,7 @@ export const AuthorizerProvider = () =>
                 IdentitySource: news.identitySource,
                 JwtConfiguration: news.jwtConfiguration,
                 AuthorizerUri: news.authorizerUri,
-                AuthorizerPayloadFormatVersion:
-                  news.authorizerPayloadFormatVersion,
+                AuthorizerPayloadFormatVersion: news.authorizerPayloadFormatVersion,
                 EnableSimpleResponses: news.enableSimpleResponses,
                 AuthorizerResultTtlInSeconds: desiredTtlSeconds,
                 AuthorizerCredentialsArn: news.authorizerCredentialsArn,

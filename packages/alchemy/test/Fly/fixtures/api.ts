@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 import { API_PORT, MARKER, MARKER_FILE, Site, VOLUME_PATH } from "./shared.ts";
 
 /**
@@ -31,9 +31,7 @@ export default class Api extends Fly.Service<Api>()(
             path: mount.path,
           });
         }
-        yield* fs
-          .makeDirectory(mount.path, { recursive: true })
-          .pipe(Effect.orDie);
+        yield* fs.makeDirectory(mount.path, { recursive: true }).pipe(Effect.orDie);
         yield* fs.writeFileString(MARKER_FILE, MARKER).pipe(Effect.orDie);
         const text = yield* fs.readFileString(MARKER_FILE).pipe(Effect.orDie);
         return yield* HttpServerResponse.json({

@@ -73,10 +73,7 @@ export interface SelfServiceProps {
  * where the request must hit the worker's `fetch` handler rather than the
  * assets middleware.
  */
-export const self = (
-  binding: string,
-  { entrypoint }: SelfServiceProps = {},
-): BindingHook =>
+export const self = (binding: string, { entrypoint }: SelfServiceProps = {}): BindingHook =>
   Effect.succeed({
     name: binding,
     service: {

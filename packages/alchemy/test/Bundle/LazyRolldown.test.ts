@@ -1,9 +1,9 @@
-import { exec } from "@/Util/exec.ts";
+import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { ChildProcess } from "effect/unstable/process";
-import { fileURLToPath } from "node:url";
+import { exec } from "@/Util/exec.ts";
 
 /**
  * Regression tests for #562: importing alchemy's CLI or provider modules
@@ -20,11 +20,7 @@ import { fileURLToPath } from "node:url";
  * pulled it in.
  */
 
-const entries = [
-  "src/Bundle/index.ts",
-  "src/Cli/main.ts",
-  "src/Cloudflare/index.ts",
-] as const;
+const entries = ["src/Bundle/index.ts", "src/Cli/main.ts", "src/Cloudflare/index.ts"] as const;
 
 const importInSubprocess = (entry: string) => {
   const entryPath = fileURLToPath(new URL(`../../${entry}`, import.meta.url));
@@ -43,22 +39,20 @@ const importInSubprocess = (entry: string) => {
     }
     console.log("no rolldown native binding loaded");
   `;
-  return exec(
-    ChildProcess.make(process.execPath, ["-e", script], { shell: false }),
-  ).pipe(Effect.scoped);
+  return exec(ChildProcess.make(process.execPath, ["-e", script], { shell: false })).pipe(
+    Effect.scoped,
+  );
 };
 
 describe("lazy rolldown (#562)", () => {
   for (const entry of entries) {
-    it.effect(
-      `importing ${entry} does not load rolldown's native binding`,
-      () =>
-        Effect.gen(function* () {
-          const { exitCode, stdout, stderr } = yield* importInSubprocess(entry);
-          expect(stderr).toBe("");
-          expect(stdout).toContain("no rolldown native binding loaded");
-          expect(exitCode).toBe(0);
-        }).pipe(Effect.provide(NodeServices.layer)),
+    it.effect(`importing ${entry} does not load rolldown's native binding`, () =>
+      Effect.gen(function* () {
+        const { exitCode, stdout, stderr } = yield* importInSubprocess(entry);
+        expect(stderr).toBe("");
+        expect(stdout).toContain("no rolldown native binding loaded");
+        expect(exitCode).toBe(0);
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
   }
 });

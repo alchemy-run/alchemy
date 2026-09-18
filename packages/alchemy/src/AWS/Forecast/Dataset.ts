@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readForecastTags,
-  syncForecastTags,
-  toForecastName,
-} from "./internal.ts";
+import { readForecastTags, syncForecastTags, toForecastName } from "./internal.ts";
 
 export interface SchemaAttribute {
   /** Name of the field in the dataset (e.g. `item_id`, `timestamp`). */
@@ -125,19 +121,14 @@ export const DatasetProvider = () =>
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: DatasetProps) {
         return (
-          props.datasetName ??
-          toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
+          props.datasetName ?? toForecastName(yield* createPhysicalName({ id, maxLength: 63 }))
         );
       });
 
       const describe = Effect.fn(function* (datasetArn: string) {
         return yield* forecast
           .describeDataset({ DatasetArn: datasetArn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttrs = (dataset: forecast.DescribeDatasetResponse) => ({
@@ -158,12 +149,9 @@ export const DatasetProvider = () =>
           if (
             oldName !== newName ||
             (olds.domain ?? undefined) !== (news.domain ?? undefined) ||
-            (olds.datasetType ?? undefined) !==
-              (news.datasetType ?? undefined) ||
-            (olds.dataFrequency ?? undefined) !==
-              (news.dataFrequency ?? undefined) ||
-            JSON.stringify(olds.schema ?? null) !==
-              JSON.stringify(news.schema ?? null)
+            (olds.datasetType ?? undefined) !== (news.datasetType ?? undefined) ||
+            (olds.dataFrequency ?? undefined) !== (news.dataFrequency ?? undefined) ||
+            JSON.stringify(olds.schema ?? null) !== JSON.stringify(news.schema ?? null)
           ) {
             return { action: "replace" } as const;
           }
@@ -184,9 +172,7 @@ export const DatasetProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
 
           let dataset =
-            output?.datasetArn !== undefined
-              ? yield* describe(output.datasetArn)
-              : undefined;
+            output?.datasetArn !== undefined ? yield* describe(output.datasetArn) : undefined;
 
           if (dataset === undefined) {
             const created = yield* forecast.createDataset({
@@ -225,10 +211,7 @@ export const DatasetProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
               while: (e) => e._tag === "ResourceInUseException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
         }),
@@ -236,9 +219,7 @@ export const DatasetProvider = () =>
         list: () =>
           forecast.listDatasets.pages({}).pipe(
             Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.Datasets ?? []),
-            ),
+            Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Datasets ?? [])),
             Effect.flatMap(
               Effect.forEach(
                 (summary) =>

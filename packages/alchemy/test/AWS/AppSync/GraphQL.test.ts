@@ -1,5 +1,4 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
+import { fileURLToPath } from "node:url";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -7,13 +6,12 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { fileURLToPath } from "node:url";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-const resolverHandlerPath = fileURLToPath(
-  new URL("./resolver-handler.ts", import.meta.url),
-);
+const resolverHandlerPath = fileURLToPath(new URL("./resolver-handler.ts", import.meta.url));
 
 /**
  * The unit-resolver code: forward the field name + args to the Lambda
@@ -162,20 +160,16 @@ test.provider(
       expect((add as any).data.add).toBe(5);
 
       // 2. Unit resolver with a string result.
-      const greet = (yield* graphql(
-        out.url,
-        apiKey,
-        'query { greet(name: "Alchemy") }',
-      ).pipe(Effect.flatMap((response) => response.json))) as any;
+      const greet = (yield* graphql(out.url, apiKey, 'query { greet(name: "Alchemy") }').pipe(
+        Effect.flatMap((response) => response.json),
+      )) as any;
       expect(greet.data.greet).toBe("Hello, Alchemy! (from Lambda)");
 
       // 3. Pipeline resolver: the step's Lambda result flows through
       //    ctx.prev.result.
-      const double = (yield* graphql(
-        out.url,
-        apiKey,
-        "query { double(n: 21) }",
-      ).pipe(Effect.flatMap((response) => response.json))) as any;
+      const double = (yield* graphql(out.url, apiKey, "query { double(n: 21) }").pipe(
+        Effect.flatMap((response) => response.json),
+      )) as any;
       expect(double.data.double).toBe(42);
 
       // 4. Requests without the api key are rejected.

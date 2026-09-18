@@ -86,22 +86,14 @@ export interface HttpNamespace extends Resource<
  *
  * @resource
  */
-export const HttpNamespace = Resource<HttpNamespace>(
-  "AWS.CloudMap.HttpNamespace",
-);
+export const HttpNamespace = Resource<HttpNamespace>("AWS.CloudMap.HttpNamespace");
 
 export const HttpNamespaceProvider = () =>
   Provider.effect(
     HttpNamespace,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 253, lowercase: true }));
       });
 
       const toAttributes = (namespace: sd.Namespace) => ({
@@ -123,12 +115,7 @@ export const HttpNamespaceProvider = () =>
               .pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.Namespaces ?? [])
-              .filter(
-                (n) =>
-                  n.Id !== undefined &&
-                  n.Arn !== undefined &&
-                  n.Name !== undefined,
-              )
+              .filter((n) => n.Id !== undefined && n.Arn !== undefined && n.Name !== undefined)
               .map((n) => ({
                 namespaceId: n.Id!,
                 namespaceArn: n.Arn!,
@@ -138,13 +125,8 @@ export const HttpNamespaceProvider = () =>
           }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.namespaceName ?? (yield* createName(id, olds ?? {}));
-          const namespace = yield* observeNamespace(
-            "HTTP",
-            name,
-            output?.namespaceId,
-          );
+          const name = output?.namespaceName ?? (yield* createName(id, olds ?? {}));
+          const namespace = yield* observeNamespace("HTTP", name, output?.namespaceId);
           if (namespace?.Id === undefined) {
             return undefined;
           }
@@ -169,11 +151,7 @@ export const HttpNamespaceProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
 
           // 1. OBSERVE
-          let namespace = yield* observeNamespace(
-            "HTTP",
-            name,
-            output?.namespaceId,
-          );
+          let namespace = yield* observeNamespace("HTTP", name, output?.namespaceId);
 
           // 2. ENSURE — create if missing (async operation); the created
           // namespace is observed by the operation's target id, riding out
@@ -202,10 +180,7 @@ export const HttpNamespaceProvider = () =>
           }
 
           // 3. SYNC — description (updateHttpNamespace requires Description)
-          if (
-            news.description !== undefined &&
-            news.description !== namespace.Description
-          ) {
+          if (news.description !== undefined && news.description !== namespace.Description) {
             const update = yield* sd.updateHttpNamespace({
               Id: namespace.Id,
               Namespace: { Description: news.description },
@@ -227,9 +202,7 @@ export const HttpNamespaceProvider = () =>
           const deleted = yield* retryWhileResourceInUse(
             sd.deleteNamespace({ Id: output.namespaceId }),
           ).pipe(
-            Effect.catchTag("NamespaceNotFound", () =>
-              Effect.succeed({ OperationId: undefined }),
-            ),
+            Effect.catchTag("NamespaceNotFound", () => Effect.succeed({ OperationId: undefined })),
             // an identical delete is already in flight — await THAT operation
             // instead of silently skipping the deletion
             Effect.catchTag("DuplicateRequest", (e) =>

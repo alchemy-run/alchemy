@@ -43,7 +43,6 @@ export interface GetEffectivePermissionsForPath extends Binding.Service<
   >
 > {}
 
-export const GetEffectivePermissionsForPath =
-  Binding.Service<GetEffectivePermissionsForPath>(
-    "AWS.LakeFormation.GetEffectivePermissionsForPath",
-  );
+export const GetEffectivePermissionsForPath = Binding.Service<GetEffectivePermissionsForPath>(
+  "AWS.LakeFormation.GetEffectivePermissionsForPath",
+);

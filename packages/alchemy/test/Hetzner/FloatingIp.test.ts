@@ -1,18 +1,15 @@
-import * as Hetzner from "@/Hetzner";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Hetzner from "@/Hetzner";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -62,9 +59,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(fetched.floating_ip.type).toEqual("ipv4");
       expect(fetched.floating_ip.ip).toEqual(created.ip);
       expect(fetched.floating_ip.home_location.name).toEqual("nbg1");
-      expect(fetched.floating_ip.description).toEqual(
-        "alchemy floating ip create",
-      );
+      expect(fetched.floating_ip.description).toEqual("alchemy floating ip create");
       expect(fetched.floating_ip.server).toBeNull();
       expect(fetched.floating_ip.labels.env).toEqual("test");
 
@@ -87,9 +82,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const refetched = yield* Services.floatingIps.getFloatingIp({
         id: updated.id,
       });
-      expect(refetched.floating_ip.description).toEqual(
-        "alchemy floating ip update",
-      );
+      expect(refetched.floating_ip.description).toEqual("alchemy floating ip update");
       expect(refetched.floating_ip.labels.env).toEqual("prod");
       expect(refetched.floating_ip.labels.role).toEqual("edge");
 

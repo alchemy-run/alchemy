@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import GlueTestFunctionLive, { GlueTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "GlueBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -39,31 +36,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("Glue Bindings", () => {
   beforeAll(
@@ -83,9 +71,7 @@ describe.sequential("Glue Bindings", () => {
       functionArn = attrs.functionArn;
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Glue test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Glue test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -93,9 +79,7 @@ describe.sequential("Glue Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Glue test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Glue test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -112,15 +96,10 @@ describe.sequential("Glue Bindings", () => {
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Glue IAM not propagated: ${response.status}`),
-              ),
+            : Effect.fail(new Error(`Glue IAM not propagated: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("5 seconds"),
-            Schedule.recurs(84),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(84)]),
         }),
       );
     }),
@@ -213,29 +192,25 @@ describe.sequential("Glue Bindings", () => {
             stopped: string;
           };
           expect(["started", "already-running"]).toContain(response.started);
-          expect(["stopped", "stopping", "not-running"]).toContain(
-            response.stopped,
-          );
+          expect(["stopped", "stopping", "not-running"]).toContain(response.stopped);
         }),
       { timeout: 120_000 },
     );
   });
 
   describe("GetTable / GetTables", () => {
-    test.provider(
-      "reads the bound table's schema and the database's tables",
-      () =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/table")) as {
-            name: string;
-            columns: string[];
-            partitionKeys: string[];
-            tables: string[];
-          };
-          expect(response.columns).toEqual(["id", "amount"]);
-          expect(response.partitionKeys).toEqual(["dt"]);
-          expect(response.tables).toContain(response.name);
-        }),
+    test.provider("reads the bound table's schema and the database's tables", () =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/table")) as {
+          name: string;
+          columns: string[];
+          partitionKeys: string[];
+          tables: string[];
+        };
+        expect(response.columns).toEqual(["id", "amount"]);
+        expect(response.partitionKeys).toEqual(["dt"]);
+        expect(response.tables).toContain(response.name);
+      }),
     );
   });
 
@@ -270,18 +245,16 @@ describe.sequential("Glue Bindings", () => {
   });
 
   describe("consumeJobEvents / consumeCrawlerEvents", () => {
-    test.provider(
-      "the deploy created EventBridge rules targeting the function",
-      () =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's two consume* calls must
-          // have materialized as rules on the default bus with the Lambda as
-          // target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(2);
-        }),
+    test.provider("the deploy created EventBridge rules targeting the function", () =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's two consume* calls must
+        // have materialized as rules on the default bus with the Lambda as
+        // target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(2);
+      }),
     );
   });
 });

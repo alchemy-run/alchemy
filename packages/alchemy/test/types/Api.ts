@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 import Agent from "./Agent.ts";
 
 export const Api2 = Cloudflare.Worker(
@@ -112,11 +112,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 export class Api3 extends Cloudflare.Worker<
   Api3,
   {
-    getUser: () => Effect.Effect<
-      { id: string; name: string },
-      never,
-      RuntimeContext
-    >;
+    getUser: () => Effect.Effect<{ id: string; name: string }, never, RuntimeContext>;
   }
 >()("Api3") {}
 

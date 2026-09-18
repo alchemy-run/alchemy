@@ -55,9 +55,7 @@ export interface LoggingConfiguration extends Resource<
  *
  * @resource
  */
-export const LoggingConfiguration = Resource<LoggingConfiguration>(
-  "AWS.AMP.LoggingConfiguration",
-);
+export const LoggingConfiguration = Resource<LoggingConfiguration>("AWS.AMP.LoggingConfiguration");
 
 export const LoggingConfigurationProvider = () =>
   Provider.effect(
@@ -67,11 +65,7 @@ export const LoggingConfigurationProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeLoggingConfiguration({ workspaceId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.loggingConfiguration;
       });
 
@@ -83,10 +77,7 @@ export const LoggingConfigurationProvider = () =>
         return yield* amp.describeLoggingConfiguration({ workspaceId }).pipe(
           Effect.map((r) => r.loggingConfiguration),
           Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(20),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(20)]),
             until: (c) => c.status.statusCode === "ACTIVE",
           }),
         );
@@ -154,18 +145,13 @@ export const LoggingConfigurationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* amp
-            .deleteLoggingConfiguration({ workspaceId: output.workspaceId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-              Effect.retry({
-                while: (e) => e._tag === "ConflictException",
-                schedule: Schedule.max([
-                  Schedule.fixed("3 seconds"),
-                  Schedule.recurs(20),
-                ]),
-              }),
-            );
+          yield* amp.deleteLoggingConfiguration({ workspaceId: output.workspaceId }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (e) => e._tag === "ConflictException",
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
+            }),
+          );
         }),
 
         // Singleton sub-resource keyed by its parent workspace.

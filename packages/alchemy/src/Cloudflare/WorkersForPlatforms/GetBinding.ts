@@ -4,11 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchNamespace.ts";
-import {
-  type DispatchNamespaceClient,
-  DispatchNamespaceError,
-  Get,
-} from "./Get.ts";
+import { type DispatchNamespaceClient, DispatchNamespaceError, Get } from "./Get.ts";
 
 /**
  * Implementation of the {@link Get} binding that uses a native

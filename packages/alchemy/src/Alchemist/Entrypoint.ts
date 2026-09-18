@@ -4,9 +4,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { UserFacingError } from "../UserFacingError.ts";
 
-export class StackEntrypointError extends Data.TaggedError(
-  "StackEntrypointError",
-)<{ readonly message: string }> {
+export class StackEntrypointError extends Data.TaggedError("StackEntrypointError")<{
+  readonly message: string;
+}> {
   readonly [UserFacingError] = true;
 }
 

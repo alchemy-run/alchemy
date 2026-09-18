@@ -1,7 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
-import * as Alchemy from "@/index.ts";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -10,11 +6,14 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 import PrismaHyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 
 const wantsLive = process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS === "true";
-const hasLiveCredentials =
-  process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
+const hasLiveCredentials = process.env.ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE === "true";
 const runLive = wantsLive && hasLiveCredentials;
 
 const providers = Layer.merge(Cloudflare.providers(), Prisma.providers());
@@ -50,10 +49,7 @@ const fetchReady = (req: Effect.Effect<any, any, any>) =>
     ),
     Effect.retry({
       while: (e: unknown): e is WorkerNotReady => e instanceof WorkerNotReady,
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(20)]),
     }),
   ) as Effect.Effect<HttpClientResponse, never, HttpClient.HttpClient>;
 
@@ -80,9 +76,7 @@ test.skipIf(!runLive)(
     const body = (yield* read.json) as {
       widgets: Array<{ id: number; name: string }>;
     };
-    expect(body.widgets).toEqual(
-      expect.arrayContaining([{ id: 1, name: "anvil" }]),
-    );
+    expect(body.widgets).toEqual(expect.arrayContaining([{ id: 1, name: "anvil" }]));
   }),
   { timeout: 300_000 },
 );

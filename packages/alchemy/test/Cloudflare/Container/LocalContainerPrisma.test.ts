@@ -1,10 +1,10 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Prisma from "@/Prisma";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Prisma from "@/Prisma";
+import * as Test from "@/Test/Alchemy";
 import PrismaHostStack from "./fixtures/prismahost/stack.ts";
 import { expectDatabaseReachable } from "./fixtures/sqlreach/expect.ts";
 
@@ -14,10 +14,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 240_000;

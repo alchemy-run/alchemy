@@ -33,6 +33,4 @@ export interface DescribeBackups extends Binding.Service<
     ) => Effect.Effect<fsx.DescribeBackupsResponse, fsx.DescribeBackupsError>
   >
 > {}
-export const DescribeBackups = Binding.Service<DescribeBackups>(
-  "AWS.FSx.DescribeBackups",
-);
+export const DescribeBackups = Binding.Service<DescribeBackups>("AWS.FSx.DescribeBackups");

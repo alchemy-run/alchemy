@@ -1,14 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import LambdaBindingsTestFunctionLive, {
-  LambdaBindingsTestFunction,
-} from "./bindings-handler.ts";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import LambdaBindingsTestFunctionLive, { LambdaBindingsTestFunction } from "./bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -26,17 +24,12 @@ const getJson = (path: string, times = 10) =>
         ? response.json
         : response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new Error(`${path} returned ${response.status}: ${body}`),
-              ),
+              Effect.fail(new Error(`${path} returned ${response.status}: ${body}`)),
             ),
           ),
     ),
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.exponential("1 second"),
-        Schedule.recurs(times),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(times)]),
     }),
   );
 
@@ -69,16 +62,11 @@ describe("Lambda Bindings", () => {
             FunctionName: deployedFunctionName,
           }).pipe(
             Effect.flatMap(() =>
-              Effect.fail(
-                new Error(`Function ${deployedFunctionName} still exists`),
-              ),
+              Effect.fail(new Error(`Function ${deployedFunctionName} still exists`)),
             ),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.exponential(500),
-                Schedule.recurs(8),
-              ]),
+              schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
             }),
           ),
           testOptions,
@@ -113,10 +101,9 @@ describe("Lambda Bindings", () => {
         };
         expect(result.statusCode).toBe(200);
         expect(result.complete).toBe(true);
-        expect(
-          result.payload,
-          `event shapes: ${JSON.stringify(result.eventShapes)}`,
-        ).toContain("ok");
+        expect(result.payload, `event shapes: ${JSON.stringify(result.eventShapes)}`).toContain(
+          "ok",
+        );
       }),
     { timeout: 120_000 },
   );

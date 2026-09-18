@@ -7,10 +7,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * Request for {@link GetWhatsAppFlow}. The linked WABA `id` is injected by
  * the binding from the bound {@link LinkedWhatsAppBusinessAccount}.
  */
-export interface GetWhatsAppFlowRequest extends Omit<
-  socialmessaging.GetWhatsAppFlowInput,
-  "id"
-> {}
+export interface GetWhatsAppFlowRequest extends Omit<socialmessaging.GetWhatsAppFlowInput, "id"> {}
 
 /**
  * Runtime binding for `social-messaging:GetWhatsAppFlow`.
@@ -44,10 +41,7 @@ export interface GetWhatsAppFlow extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetWhatsAppFlowRequest,
-    ) => Effect.Effect<
-      socialmessaging.GetWhatsAppFlowOutput,
-      socialmessaging.GetWhatsAppFlowError
-    >
+    ) => Effect.Effect<socialmessaging.GetWhatsAppFlowOutput, socialmessaging.GetWhatsAppFlowError>
   >
 > {}
 export const GetWhatsAppFlow = Binding.Service<GetWhatsAppFlow>(

@@ -28,10 +28,6 @@ export interface StopDBCluster extends Binding.Service<
   "AWS.Neptune.StopDBCluster",
   (
     cluster: DBCluster,
-  ) => Effect.Effect<
-    () => Effect.Effect<neptune.StopDBClusterResult, neptune.StopDBClusterError>
-  >
+  ) => Effect.Effect<() => Effect.Effect<neptune.StopDBClusterResult, neptune.StopDBClusterError>>
 > {}
-export const StopDBCluster = Binding.Service<StopDBCluster>(
-  "AWS.Neptune.StopDBCluster",
-);
+export const StopDBCluster = Binding.Service<StopDBCluster>("AWS.Neptune.StopDBCluster");

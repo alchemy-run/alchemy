@@ -32,6 +32,4 @@ export interface DeleteKxDataview extends Binding.Service<
     ) => Effect.Effect<SVC.DeleteKxDataviewResponse, SVC.DeleteKxDataviewError>
   >
 > {}
-export const DeleteKxDataview = Binding.Service<DeleteKxDataview>(
-  "AWS.FinSpace.DeleteKxDataview",
-);
+export const DeleteKxDataview = Binding.Service<DeleteKxDataview>("AWS.FinSpace.DeleteKxDataview");

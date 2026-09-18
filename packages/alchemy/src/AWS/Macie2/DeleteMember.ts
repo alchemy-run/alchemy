@@ -30,6 +30,4 @@ export interface DeleteMember extends Binding.Service<
     ) => Effect.Effect<macie2.DeleteMemberResponse, macie2.DeleteMemberError>
   >
 > {}
-export const DeleteMember = Binding.Service<DeleteMember>(
-  "AWS.Macie2.DeleteMember",
-);
+export const DeleteMember = Binding.Service<DeleteMember>("AWS.Macie2.DeleteMember");

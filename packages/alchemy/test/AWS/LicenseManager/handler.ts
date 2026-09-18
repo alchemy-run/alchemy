@@ -1,11 +1,11 @@
-import * as LicenseManager from "@/AWS/LicenseManager";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as LicenseManager from "@/AWS/LicenseManager";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -29,33 +29,25 @@ export default LicenseManagerTestFunction.make(
     timeout: Duration.seconds(30),
   },
   Effect.gen(function* () {
-    const licenses = yield* LicenseManager.LicenseConfiguration(
-      "BindingsLicenses",
-      {
-        licenseCountingType: "vCPU",
-        licenseCount: 5,
-        description: "alchemy license-manager bindings fixture",
-      },
-    );
+    const licenses = yield* LicenseManager.LicenseConfiguration("BindingsLicenses", {
+      licenseCountingType: "vCPU",
+      licenseCount: 5,
+      description: "alchemy license-manager bindings fixture",
+    });
 
     // --- configuration-scoped bindings ---
-    const getConfiguration =
-      yield* LicenseManager.GetLicenseConfiguration(licenses);
+    const getConfiguration = yield* LicenseManager.GetLicenseConfiguration(licenses);
     const listAssociations =
       yield* LicenseManager.ListAssociationsForLicenseConfiguration(licenses);
-    const listUsage =
-      yield* LicenseManager.ListUsageForLicenseConfiguration(licenses);
+    const listUsage = yield* LicenseManager.ListUsageForLicenseConfiguration(licenses);
     const listFailures =
-      yield* LicenseManager.ListFailuresForLicenseConfigurationOperations(
-        licenses,
-      );
+      yield* LicenseManager.ListFailuresForLicenseConfigurationOperations(licenses);
 
     // --- checkout data plane (account-level) ---
     const checkoutLicense = yield* LicenseManager.CheckoutLicense();
     const checkInLicense = yield* LicenseManager.CheckInLicense();
     const checkoutBorrowLicense = yield* LicenseManager.CheckoutBorrowLicense();
-    const extendLicenseConsumption =
-      yield* LicenseManager.ExtendLicenseConsumption();
+    const extendLicenseConsumption = yield* LicenseManager.ExtendLicenseConsumption();
     const getAccessToken = yield* LicenseManager.GetAccessToken();
 
     // --- license/grant reads (account-level) ---
@@ -232,11 +224,7 @@ export default LicenseManagerTestFunction.make(
           }).pipe(
             Effect.map(() => "Ok"),
             Effect.catchTag(
-              [
-                "InvalidParameterValueException",
-                "ValidationException",
-                "AuthorizationException",
-              ],
+              ["InvalidParameterValueException", "ValidationException", "AuthorizationException"],
               (e) => Effect.succeed(e._tag),
             ),
           );
@@ -275,10 +263,7 @@ export default LicenseManagerTestFunction.make(
           return yield* HttpServerResponse.json({ tag: result });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/specifications-invalid"
-        ) {
+        if (request.method === "GET" && pathname === "/specifications-invalid") {
           const result = yield* listLicenseSpecificationsForResource({
             ResourceArn: BOGUS_RESOURCE_ARN,
           }).pipe(

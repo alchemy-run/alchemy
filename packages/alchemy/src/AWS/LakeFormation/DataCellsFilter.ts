@@ -110,22 +110,14 @@ export interface DataCellsFilter extends Resource<
  *
  * @resource
  */
-export const DataCellsFilter = Resource<DataCellsFilter>(
-  "AWS.LakeFormation.DataCellsFilter",
-);
+export const DataCellsFilter = Resource<DataCellsFilter>("AWS.LakeFormation.DataCellsFilter");
 
 export const DataCellsFilterProvider = () =>
   Provider.effect(
     DataCellsFilter,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (
-        id: string,
-        props: { name?: string | undefined },
-      ) {
-        return (
-          props.name ??
-          (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }))
-        );
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
+        return props.name ?? (yield* createPhysicalName({ id, maxLength: 255, lowercase: true }));
       });
 
       const observe = Effect.fn(function* (key: {
@@ -143,9 +135,7 @@ export const DataCellsFilterProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.DataCellsFilter),
-            Effect.catchTag("EntityNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
           );
       });
 
@@ -176,9 +166,7 @@ export const DataCellsFilterProvider = () =>
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            const pages = yield* lf.listDataCellsFilter
-              .pages({})
-              .pipe(Stream.runCollect);
+            const pages = yield* lf.listDataCellsFilter.pages({}).pipe(Stream.runCollect);
             return Array.from(pages)
               .flatMap((page) => page.DataCellsFilters ?? [])
               .map((filter) => ({
@@ -198,8 +186,7 @@ export const DataCellsFilterProvider = () =>
             return undefined;
           }
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
-          const tableCatalogId =
-            output?.tableCatalogId ?? olds?.tableCatalogId ?? accountId;
+          const tableCatalogId = output?.tableCatalogId ?? olds?.tableCatalogId ?? accountId;
           const found = yield* observe({
             tableCatalogId,
             databaseName,
@@ -228,8 +215,7 @@ export const DataCellsFilterProvider = () =>
           if (
             news.databaseName !== olds.databaseName ||
             news.tableName !== olds.tableName ||
-            (news.tableCatalogId ?? undefined) !==
-              (olds.tableCatalogId ?? undefined)
+            (news.tableCatalogId ?? undefined) !== (olds.tableCatalogId ?? undefined)
           ) {
             return { action: "replace" } as const;
           }
@@ -255,9 +241,7 @@ export const DataCellsFilterProvider = () =>
           if (found === undefined) {
             yield* lf
               .createDataCellsFilter({ TableData: desired })
-              .pipe(
-                Effect.catchTag("AlreadyExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("AlreadyExistsException", () => Effect.void));
             found = yield* observe(key);
           } else {
             // 3. SYNC — diff observed filter body against desired.
@@ -297,9 +281,7 @@ export const DataCellsFilterProvider = () =>
               TableName: output.tableName,
               Name: output.name,
             })
-            .pipe(
-              Effect.catchTag("EntityNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.void));
         }),
       });
     }),

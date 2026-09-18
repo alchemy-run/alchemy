@@ -37,7 +37,6 @@ export interface BatchDetectDominantLanguage extends Binding.Service<
     >
   >
 > {}
-export const BatchDetectDominantLanguage =
-  Binding.Service<BatchDetectDominantLanguage>(
-    "AWS.Comprehend.BatchDetectDominantLanguage",
-  );
+export const BatchDetectDominantLanguage = Binding.Service<BatchDetectDominantLanguage>(
+  "AWS.Comprehend.BatchDetectDominantLanguage",
+);

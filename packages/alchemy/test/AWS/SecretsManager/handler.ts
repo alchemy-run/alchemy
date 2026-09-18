@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as SecretsManager from "@/AWS/SecretsManager";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -8,28 +6,20 @@ import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as SecretsManager from "@/AWS/SecretsManager";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 // Secrets Manager marks values as sensitive, so the distilled client can hand
 // them back either raw or wrapped in `Redacted` — unwrap for JSON transport.
-const unwrapString = (
-  value: string | Redacted.Redacted<string> | undefined,
-): string | undefined =>
-  value === undefined
-    ? undefined
-    : typeof value === "string"
-      ? value
-      : Redacted.value(value);
+const unwrapString = (value: string | Redacted.Redacted<string> | undefined): string | undefined =>
+  value === undefined ? undefined : typeof value === "string" ? value : Redacted.value(value);
 
 const unwrapBinary = (
   value: Uint8Array | Redacted.Redacted<Uint8Array> | undefined,
 ): Uint8Array | undefined =>
-  value === undefined
-    ? undefined
-    : value instanceof Uint8Array
-      ? value
-      : Redacted.value(value);
+  value === undefined ? undefined : value instanceof Uint8Array ? value : Redacted.value(value);
 
 export class SecretsManagerTestFunction extends Lambda.Function<Lambda.Function>()(
   "SecretsManagerTestFunction",
@@ -60,30 +50,22 @@ export default SecretsManagerTestFunction.make(
     const putStringSecret = yield* SecretsManager.PutSecretValue(stringSecret);
     const getBinarySecret = yield* SecretsManager.GetSecretValue(binarySecret);
     const putBinarySecret = yield* SecretsManager.PutSecretValue(binarySecret);
-    const describeStringSecret =
-      yield* SecretsManager.DescribeSecret(stringSecret);
+    const describeStringSecret = yield* SecretsManager.DescribeSecret(stringSecret);
     const getRandomPassword = yield* SecretsManager.GetRandomPassword();
     const listSecrets = yield* SecretsManager.ListSecrets();
-    const listStringVersions =
-      yield* SecretsManager.ListSecretVersionIds(stringSecret);
+    const listStringVersions = yield* SecretsManager.ListSecretVersionIds(stringSecret);
     const batchGetSecrets = yield* SecretsManager.BatchGetSecretValue([
       stringSecret,
       rotationSecret,
     ]);
 
     // Rotation-protocol bindings for the rotation secret.
-    const getRotationValue =
-      yield* SecretsManager.GetSecretValue(rotationSecret);
-    const putRotationValue =
-      yield* SecretsManager.PutSecretValue(rotationSecret);
-    const describeRotationSecret =
-      yield* SecretsManager.DescribeSecret(rotationSecret);
-    const updateRotationStage =
-      yield* SecretsManager.UpdateSecretVersionStage(rotationSecret);
-    const listRotationVersions =
-      yield* SecretsManager.ListSecretVersionIds(rotationSecret);
-    const rotateRotationSecret =
-      yield* SecretsManager.RotateSecret(rotationSecret);
+    const getRotationValue = yield* SecretsManager.GetSecretValue(rotationSecret);
+    const putRotationValue = yield* SecretsManager.PutSecretValue(rotationSecret);
+    const describeRotationSecret = yield* SecretsManager.DescribeSecret(rotationSecret);
+    const updateRotationStage = yield* SecretsManager.UpdateSecretVersionStage(rotationSecret);
+    const listRotationVersions = yield* SecretsManager.ListSecretVersionIds(rotationSecret);
+    const rotateRotationSecret = yield* SecretsManager.RotateSecret(rotationSecret);
 
     // Register this function as the rotation function for the rotation
     // secret. The handler implements the 4-step protocol against the secret
@@ -137,10 +119,7 @@ export default SecretsManagerTestFunction.make(
           // the IAM-propagation window (bounded).
           Effect.retry({
             while: (e): boolean => e._tag === "AccessDeniedException",
-            schedule: Schedule.max([
-              Schedule.fixed("2 seconds"),
-              Schedule.recurs(8),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(8)]),
           }),
           Effect.asVoid,
           Effect.orDie,

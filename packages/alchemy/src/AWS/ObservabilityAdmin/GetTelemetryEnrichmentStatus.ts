@@ -41,7 +41,6 @@ export interface GetTelemetryEnrichmentStatus extends Binding.Service<
   >
 > {}
 
-export const GetTelemetryEnrichmentStatus =
-  Binding.Service<GetTelemetryEnrichmentStatus>(
-    "AWS.ObservabilityAdmin.GetTelemetryEnrichmentStatus",
-  );
+export const GetTelemetryEnrichmentStatus = Binding.Service<GetTelemetryEnrichmentStatus>(
+  "AWS.ObservabilityAdmin.GetTelemetryEnrichmentStatus",
+);

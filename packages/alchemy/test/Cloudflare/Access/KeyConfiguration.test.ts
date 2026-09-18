@@ -1,21 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 test.provider(
   "pins the rotation interval, updates in place, and restores on destroy",
@@ -82,9 +79,7 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.Access.KeyConfiguration,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.Access.KeyConfiguration);
       const all = yield* provider.list();
 
       expect(all.length).toBe(1);

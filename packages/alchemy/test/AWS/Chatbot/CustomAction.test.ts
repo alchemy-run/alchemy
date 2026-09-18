@@ -1,32 +1,28 @@
-import * as AWS from "@/AWS";
-import { CustomAction } from "@/AWS/Chatbot";
-import * as Test from "@/Test/Alchemy";
 import * as chatbot from "@distilled.cloud/aws/chatbot";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CustomAction } from "@/AWS/Chatbot";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const findAction = (arn: string) =>
   chatbot.getCustomAction({ CustomActionArn: arn }).pipe(
     Effect.map((r) => r.CustomAction),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
-class CustomActionStillExists extends Data.TaggedError(
-  "CustomActionStillExists",
-)<{ readonly arn: string }> {}
+class CustomActionStillExists extends Data.TaggedError("CustomActionStillExists")<{
+  readonly arn: string;
+}> {}
 
 const assertActionDeleted = (arn: string) =>
   findAction(arn).pipe(
     Effect.flatMap((action) =>
-      action === undefined
-        ? Effect.void
-        : Effect.fail(new CustomActionStillExists({ arn })),
+      action === undefined ? Effect.void : Effect.fail(new CustomActionStillExists({ arn })),
     ),
     Effect.retry({
       while: (e) => e._tag === "CustomActionStillExists",
@@ -76,11 +72,7 @@ test.provider(
       const tags = yield* chatbot
         .listTagsForResource({ ResourceARN: action.customActionArn })
         .pipe(
-          Effect.map((r) =>
-            Object.fromEntries(
-              (r.Tags ?? []).map((t) => [t.TagKey, t.TagValue]),
-            ),
-          ),
+          Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.TagKey, t.TagValue]))),
         );
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestAction");
@@ -90,8 +82,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* CustomAction("TestAction", {
-            commandText:
-              "aws cloudwatch describe-alarms --alarm-names $AlarmName",
+            commandText: "aws cloudwatch describe-alarms --alarm-names $AlarmName",
             aliasName: "alchemy-test-describe-alarm",
             attachments: [
               {
@@ -99,9 +90,7 @@ test.provider(
                 // the model marks it optional (patched in distilled).
                 notificationType: "CloudWatch",
                 buttonText: "Describe alarm",
-                criteria: [
-                  { operator: "HAS_VALUE", variableName: "AlarmName" },
-                ],
+                criteria: [{ operator: "HAS_VALUE", variableName: "AlarmName" }],
               },
             ],
             tags: { Environment: "production" },
@@ -117,17 +106,11 @@ test.provider(
       );
       expect(afterUpdate?.AliasName).toBe("alchemy-test-describe-alarm");
       expect(afterUpdate?.Attachments?.[0]?.ButtonText).toBe("Describe alarm");
-      expect(afterUpdate?.Attachments?.[0]?.Criteria?.[0]?.VariableName).toBe(
-        "AlarmName",
-      );
+      expect(afterUpdate?.Attachments?.[0]?.Criteria?.[0]?.VariableName).toBe("AlarmName");
       const updatedTags = yield* chatbot
         .listTagsForResource({ ResourceARN: action.customActionArn })
         .pipe(
-          Effect.map((r) =>
-            Object.fromEntries(
-              (r.Tags ?? []).map((t) => [t.TagKey, t.TagValue]),
-            ),
-          ),
+          Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.TagKey, t.TagValue]))),
         );
       expect(updatedTags.Environment).toBe("production");
 
@@ -152,9 +135,7 @@ test.provider(
         }),
       );
       expect(first.actionName).toBe("alchemy-test-action-a");
-      expect(first.customActionArn).toContain(
-        ":custom-action/alchemy-test-action-a",
-      );
+      expect(first.customActionArn).toContain(":custom-action/alchemy-test-action-a");
 
       // renaming triggers a replacement: new physical action, old one gone
       const second = yield* stack.deploy(

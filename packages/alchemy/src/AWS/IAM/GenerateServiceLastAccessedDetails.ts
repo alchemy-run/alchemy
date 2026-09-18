@@ -42,6 +42,4 @@ export interface GenerateServiceLastAccessedDetails extends Binding.Service<
   >
 > {}
 export const GenerateServiceLastAccessedDetails =
-  Binding.Service<GenerateServiceLastAccessedDetails>(
-    "AWS.IAM.GenerateServiceLastAccessedDetails",
-  );
+  Binding.Service<GenerateServiceLastAccessedDetails>("AWS.IAM.GenerateServiceLastAccessedDetails");

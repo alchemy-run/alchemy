@@ -1,8 +1,8 @@
-import * as Axiom from "@/Axiom";
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Axiom from "@/Axiom";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 /**
  * End-to-end fixture for Axiom telemetry: datasets and an ingest token
@@ -42,9 +42,7 @@ export default class AxiomTracedWorker extends Cloudflare.Worker<AxiomTracedWork
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         if (url.pathname === "/work") {
-          yield* Effect.log("axiom-work-log").pipe(
-            Effect.withSpan("axiom.child-span"),
-          );
+          yield* Effect.log("axiom-work-log").pipe(Effect.withSpan("axiom.child-span"));
           return yield* HttpServerResponse.json({ marker: "axiom-did-work" });
         }
         return HttpServerResponse.text("axiom-ok");

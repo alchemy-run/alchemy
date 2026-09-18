@@ -33,12 +33,7 @@ export interface GenerateQuery extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<cloudtrail.GenerateQueryRequest, "EventDataStores">,
-    ) => Effect.Effect<
-      cloudtrail.GenerateQueryResponse,
-      cloudtrail.GenerateQueryError
-    >
+    ) => Effect.Effect<cloudtrail.GenerateQueryResponse, cloudtrail.GenerateQueryError>
   >
 > {}
-export const GenerateQuery = Binding.Service<GenerateQuery>(
-  "AWS.CloudTrail.GenerateQuery",
-);
+export const GenerateQuery = Binding.Service<GenerateQuery>("AWS.CloudTrail.GenerateQuery");

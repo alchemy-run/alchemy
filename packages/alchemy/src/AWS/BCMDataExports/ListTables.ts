@@ -32,12 +32,8 @@ export interface ListTables extends Binding.Service<
   ListTables,
   "AWS.BCMDataExports.ListTables",
   () => Effect.Effect<
-    (
-      request?: ListTablesRequest,
-    ) => Effect.Effect<bcm.ListTablesResponse, bcm.ListTablesError>
+    (request?: ListTablesRequest) => Effect.Effect<bcm.ListTablesResponse, bcm.ListTablesError>
   >
 > {}
 
-export const ListTables = Binding.Service<ListTables>(
-  "AWS.BCMDataExports.ListTables",
-);
+export const ListTables = Binding.Service<ListTables>("AWS.BCMDataExports.ListTables");

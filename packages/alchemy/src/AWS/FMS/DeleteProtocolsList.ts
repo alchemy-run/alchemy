@@ -5,8 +5,7 @@ import * as Binding from "../../Binding.ts";
 /**
  * Request for {@link DeleteProtocolsList}.
  */
-export interface DeleteProtocolsListRequest
-  extends fms.DeleteProtocolsListRequest {}
+export interface DeleteProtocolsListRequest extends fms.DeleteProtocolsListRequest {}
 
 /**
  * Runtime binding for `fms:DeleteProtocolsList`.
@@ -31,10 +30,7 @@ export interface DeleteProtocolsList extends Binding.Service<
   () => Effect.Effect<
     (
       request: DeleteProtocolsListRequest,
-    ) => Effect.Effect<
-      fms.DeleteProtocolsListResponse,
-      fms.DeleteProtocolsListError
-    >
+    ) => Effect.Effect<fms.DeleteProtocolsListResponse, fms.DeleteProtocolsListError>
   >
 > {}
 

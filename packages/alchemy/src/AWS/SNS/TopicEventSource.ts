@@ -48,9 +48,7 @@ export interface TopicEventSource extends Binding.Service<
   "AWS.SNS.TopicEventSource",
   TopicEventSourceService
 > {}
-export const TopicEventSource = Binding.Service<TopicEventSource>(
-  "AWS.SNS.TopicEventSource",
-);
+export const TopicEventSource = Binding.Service<TopicEventSource>("AWS.SNS.TopicEventSource");
 
 export type TopicEventSourceService = <StreamReq = never, Req = never>(
   topic: Topic,
@@ -85,32 +83,18 @@ type TopicEventSourceHandler<Req, StreamReq> = (
  * );
  * ```
  */
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
   props: TopicEventSourceProps,
   process: TopicEventSourceHandler<Req, StreamReq>,
 ): Effect.Effect<void, never, TopicEventSource>;
-export function consumeTopicNotifications<
-  T extends Topic,
-  Req = never,
-  StreamReq = never,
->(
+export function consumeTopicNotifications<T extends Topic, Req = never, StreamReq = never>(
   topic: T,
-  propsOrProcess:
-    | TopicEventSourceProps
-    | TopicEventSourceHandler<Req, StreamReq>,
+  propsOrProcess: TopicEventSourceProps | TopicEventSourceHandler<Req, StreamReq>,
   maybeProcess?: TopicEventSourceHandler<Req, StreamReq>,
 ) {
   const [props, process] =

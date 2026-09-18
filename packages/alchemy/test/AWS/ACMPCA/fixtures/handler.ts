@@ -1,6 +1,4 @@
-import * as ACMPCA from "@/AWS/ACMPCA";
-import * as Lambda from "@/AWS/Lambda";
-import * as S3 from "@/AWS/S3";
+import crypto from "node:crypto";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,8 +7,10 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import crypto from "node:crypto";
 import path from "pathe";
+import * as ACMPCA from "@/AWS/ACMPCA";
+import * as Lambda from "@/AWS/Lambda";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -44,9 +44,7 @@ Sy1wRo1UPY6ot0Kstqs8TJVA6R220wEk5iUEg/d3Ft1W0T17I60Gx5P6LgxjTJbp
 WDtemfBJScvPotEJ+xTh9kn81whi
 -----END CERTIFICATE REQUEST-----`;
 
-export class ACMPCATestFunction extends Lambda.Function<Lambda.Function>()(
-  "ACMPCATestFunction",
-) {}
+export class ACMPCATestFunction extends Lambda.Function<Lambda.Function>()("ACMPCATestFunction") {}
 
 export default ACMPCATestFunction.make(
   {
@@ -70,10 +68,7 @@ export default ACMPCATestFunction.make(
           Effect: "Allow",
           Principal: { Service: "acm-pca.amazonaws.com" },
           Action: ["s3:PutObject", "s3:GetBucketAcl", "s3:GetBucketLocation"],
-          Resource: [
-            `arn:aws:s3:::${AUDIT_BUCKET_NAME}`,
-            `arn:aws:s3:::${AUDIT_BUCKET_NAME}/*`,
-          ],
+          Resource: [`arn:aws:s3:::${AUDIT_BUCKET_NAME}`, `arn:aws:s3:::${AUDIT_BUCKET_NAME}/*`],
         },
       ],
     });
@@ -88,23 +83,17 @@ export default ACMPCATestFunction.make(
       { kinds: ["issuance", "revocation"] },
       (events) =>
         Stream.runForEach(events, (event) =>
-          Effect.log(
-            `acm-pca event: ${event["detail-type"]} -> ${event.resources.join(",")}`,
-          ),
+          Effect.log(`acm-pca event: ${event["detail-type"]} -> ${event.resources.join(",")}`),
         ),
     );
     const getCsr = yield* ACMPCA.GetCertificateAuthorityCsr(ca);
-    const getCaCertificate =
-      yield* ACMPCA.GetCertificateAuthorityCertificate(ca);
+    const getCaCertificate = yield* ACMPCA.GetCertificateAuthorityCertificate(ca);
     const issueCertificate = yield* ACMPCA.IssueCertificate(ca);
     const getCertificate = yield* ACMPCA.GetCertificate(ca);
-    const importCaCertificate =
-      yield* ACMPCA.ImportCertificateAuthorityCertificate(ca);
+    const importCaCertificate = yield* ACMPCA.ImportCertificateAuthorityCertificate(ca);
     const revokeCertificate = yield* ACMPCA.RevokeCertificate(ca);
-    const createAuditReport =
-      yield* ACMPCA.CreateCertificateAuthorityAuditReport(ca);
-    const describeAuditReport =
-      yield* ACMPCA.DescribeCertificateAuthorityAuditReport(ca);
+    const createAuditReport = yield* ACMPCA.CreateCertificateAuthorityAuditReport(ca);
+    const describeAuditReport = yield* ACMPCA.DescribeCertificateAuthorityAuditReport(ca);
 
     // ACM PCA activation is eventually consistent: for a few seconds after
     // ImportCertificateAuthorityCertificate flips the CA to ACTIVE, other
@@ -115,10 +104,7 @@ export default ACMPCATestFunction.make(
     ): Effect.Effect<A, E, R> =>
       Effect.retry(self, {
         while: (e): boolean => e._tag === "InvalidStateException",
-        schedule: Schedule.max([
-          Schedule.fixed("3 seconds"),
-          Schedule.recurs(10),
-        ]),
+        schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
       });
 
     // Issuance is asynchronous — poll GetCertificate while the typed
@@ -128,12 +114,8 @@ export default ACMPCATestFunction.make(
       getCertificate({ CertificateArn }).pipe(
         Effect.retry({
           while: (e): boolean =>
-            e._tag === "RequestInProgressException" ||
-            e._tag === "InvalidStateException",
-          schedule: Schedule.max([
-            Schedule.fixed("3 seconds"),
-            Schedule.recurs(10),
-          ]),
+            e._tag === "RequestInProgressException" || e._tag === "InvalidStateException",
+          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
         }),
       );
 
@@ -209,8 +191,7 @@ export default ACMPCATestFunction.make(
           };
           const certificate = yield* waitForCertificate(body.certificateArn);
           const serial = yield* Effect.sync(
-            () =>
-              new crypto.X509Certificate(certificate.Certificate!).serialNumber,
+            () => new crypto.X509Certificate(certificate.Certificate!).serialNumber,
           );
           yield* retryInvalidState(
             revokeCertificate({
@@ -254,10 +235,7 @@ export default ACMPCATestFunction.make(
         // Surface the failure to the test instead of a generic Lambda 500 —
         // the suite's `send` helper includes non-200 bodies in its error.
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

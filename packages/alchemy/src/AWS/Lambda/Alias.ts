@@ -9,10 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  syncEventInvokeConfig,
-  type EventInvokeConfig,
-} from "./EventInvokeConfig.ts";
+import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
 import type { Version } from "./Version.ts";
 
 export interface AliasProps {
@@ -144,9 +141,7 @@ const normalizeRoutingConfig = (
       (entry): entry is [string, number] => entry[1] !== undefined,
     ),
   );
-  return Object.keys(weights).length > 0
-    ? { AdditionalVersionWeights: weights }
-    : undefined;
+  return Object.keys(weights).length > 0 ? { AdditionalVersionWeights: weights } : undefined;
 };
 
 export const AliasProvider = () =>
@@ -168,10 +163,7 @@ export const AliasProvider = () =>
         effect.pipe(
           Effect.retry({
             while: (e) => e._tag === "ResourceConflictException",
-            schedule: Schedule.max([
-              Schedule.exponential(500),
-              Schedule.recurs(10),
-            ]),
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
           }),
         );
 
@@ -201,17 +193,10 @@ export const AliasProvider = () =>
           if (!isResolved(news)) return;
           const resolvedOlds = resolvedProps(olds);
           const resolvedNews = resolvedProps(news);
-          const oldAliasName = yield* createAliasName(
-            id,
-            resolvedOlds.aliasName,
-          );
-          const newAliasName = yield* createAliasName(
-            id,
-            resolvedNews.aliasName,
-          );
+          const oldAliasName = yield* createAliasName(id, resolvedOlds.aliasName);
+          const newAliasName = yield* createAliasName(id, resolvedNews.aliasName);
           if (
-            resolvedOlds.version.functionName !==
-              resolvedNews.version.functionName ||
+            resolvedOlds.version.functionName !== resolvedNews.version.functionName ||
             oldAliasName !== newAliasName
           ) {
             return { action: "replace" } as const;
@@ -219,24 +204,16 @@ export const AliasProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const functionName =
-            output?.functionName ??
-            (olds ? resolvedProps(olds).version.functionName : undefined);
+            output?.functionName ?? (olds ? resolvedProps(olds).version.functionName : undefined);
           if (!functionName) return undefined;
           const aliasName =
             output?.aliasName ??
-            (yield* createAliasName(
-              id,
-              olds ? resolvedProps(olds).aliasName : undefined,
-            ));
+            (yield* createAliasName(id, olds ? resolvedProps(olds).aliasName : undefined));
           const { region } = yield* AWSEnvironment.current;
           const alias = yield* Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           return alias ? snapshotAlias(functionName, alias, region) : undefined;
         }),
         list: () =>
@@ -277,19 +254,12 @@ export const AliasProvider = () =>
           const functionVersion = resolvedNews.version.version;
           const { region } = yield* AWSEnvironment.current;
           const aliasName =
-            output?.aliasName ??
-            (yield* createAliasName(id, resolvedNews.aliasName));
-          const desiredRoutingConfig = normalizeRoutingConfig(
-            resolvedNews.routingConfig,
-          );
+            output?.aliasName ?? (yield* createAliasName(id, resolvedNews.aliasName));
+          const desiredRoutingConfig = normalizeRoutingConfig(resolvedNews.routingConfig);
           const getAlias = Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           let alias = yield* getAlias;
 
@@ -300,14 +270,10 @@ export const AliasProvider = () =>
               FunctionVersion: functionVersion,
               Description: resolvedNews.description,
               RoutingConfig: desiredRoutingConfig,
-            }).pipe(
-              Effect.catchTag("ResourceConflictException", () => getAlias),
-            );
+            }).pipe(Effect.catchTag("ResourceConflictException", () => getAlias));
           }
 
-          const observedRoutingConfig = normalizeRoutingConfig(
-            alias?.RoutingConfig,
-          );
+          const observedRoutingConfig = normalizeRoutingConfig(alias?.RoutingConfig);
           if (
             !alias ||
             alias.FunctionVersion !== functionVersion ||
@@ -322,9 +288,7 @@ export const AliasProvider = () =>
                 Description: resolvedNews.description ?? "",
                 RoutingConfig:
                   desiredRoutingConfig ??
-                  (observedRoutingConfig
-                    ? { AdditionalVersionWeights: {} }
-                    : undefined),
+                  (observedRoutingConfig ? { AdditionalVersionWeights: {} } : undefined),
               }),
             );
           }
@@ -342,9 +306,7 @@ export const AliasProvider = () =>
             config: resolvedNews.eventInvokeConfig,
           });
 
-          yield* session.note(
-            `Alias ${attrs.aliasName} on ${attrs.functionName}`,
-          );
+          yield* session.note(`Alias ${attrs.aliasName} on ${attrs.functionName}`);
 
           return attrs;
         }),
@@ -361,9 +323,7 @@ export const AliasProvider = () =>
               FunctionName: output.functionName,
               Name: output.aliasName,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

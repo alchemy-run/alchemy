@@ -8,10 +8,7 @@ import * as Binding from "../Binding.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Account } from "./Account.ts";
 
-export interface UpdateAccountRequest extends Omit<
-  DistilledUpdateAccountRequest,
-  "account"
-> {}
+export interface UpdateAccountRequest extends Omit<DistilledUpdateAccountRequest, "account"> {}
 
 /**
  * Update a bound Stripe Connect Account over HTTP.
@@ -37,6 +34,4 @@ export interface UpdateAccount extends Binding.Service<
   >
 > {}
 
-export const UpdateAccount = Binding.Service<UpdateAccount>(
-  "Stripe.UpdateAccount",
-);
+export const UpdateAccount = Binding.Service<UpdateAccount>("Stripe.UpdateAccount");

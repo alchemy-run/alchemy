@@ -1,15 +1,12 @@
-import { loadInternalWorker } from "../internal/internal-worker.ts";
+import * as NodeCrypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as NodeCrypto from "node:crypto";
+import { loadInternalWorker } from "../internal/internal-worker.ts";
 const RegistryProxyWorker = {
-  worker: () =>
-    loadInternalWorker(
-      "#cloudflare-runtime-core-worker/registry/RegistryProxy.worker",
-    ),
+  worker: () => loadInternalWorker("#cloudflare-runtime-core-worker/registry/RegistryProxy.worker"),
 };
 import {
   defaultDurableObjectUniqueKey,
@@ -94,9 +91,7 @@ export const RegistryProxyLive = Layer.effect(
                   .read(subscribed)
                   .pipe(
                     Effect.flatMap((targets) =>
-                      Effect.promise(() =>
-                        buildWorkerModules(targets, durableObjects),
-                      ),
+                      Effect.promise(() => buildWorkerModules(targets, durableObjects)),
                     ),
                   ),
                 bindings: [
@@ -148,10 +143,7 @@ export const RegistryProxyLive = Layer.effect(
                       },
                       ...published.map((service) => ({
                         ...service,
-                        service:
-                          "service" in service
-                            ? service.service
-                            : SERVICE_USER_WORKER,
+                        service: "service" in service ? service.service : SERVICE_USER_WORKER,
                       })),
                     ],
                   });
@@ -231,10 +223,7 @@ export const RegistryProxyLive = Layer.effect(
 );
 
 /** Generates a stable, variable-safe class name for an external Durable Object. */
-const externalDurableObjectClassName = (
-  scriptName: string,
-  className: string,
-) =>
+const externalDurableObjectClassName = (scriptName: string, className: string) =>
   `ExternalDurableObject_${NodeCrypto.createHash("sha256").update(scriptName).update(className).digest("hex").slice(0, 16)}`;
 
 /** Builds the worker modules for the registry proxy, including a pre-populated registry and proxy classes for each external Durable Object. */

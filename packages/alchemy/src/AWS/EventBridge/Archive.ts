@@ -14,8 +14,7 @@ import type { RegionID } from "../Region.ts";
 export type { ArchiveState } from "@distilled.cloud/aws/eventbridge";
 
 export type ArchiveName = string;
-export type ArchiveArn =
-  `arn:aws:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
+export type ArchiveArn = `arn:aws:events:${RegionID}:${AccountID}:archive/${ArchiveName}`;
 
 export interface ArchiveProps {
   /**
@@ -132,8 +131,7 @@ export const ArchiveProvider = () =>
           }),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
-            until: (r): boolean =>
-              r.State !== "CREATING" && r.State !== "UPDATING",
+            until: (r): boolean => r.State !== "CREATING" && r.State !== "UPDATING",
             times: 10,
           }),
         );
@@ -154,15 +152,10 @@ export const ArchiveProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           // Archives don't support tags; the deterministic physical name is
           // the ownership signal (it embeds app/stage/logical id).
-          const archiveName =
-            output?.archiveName ?? (yield* createArchiveName(id, olds ?? {}));
+          const archiveName = output?.archiveName ?? (yield* createArchiveName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
           if (!described?.ArchiveName || !described.ArchiveArn) {
             return undefined;
           }
@@ -201,22 +194,15 @@ export const ArchiveProvider = () =>
             return attrs;
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const archiveName =
-            output?.archiveName ?? (yield* createArchiveName(id, news));
-          const eventPattern = news.eventPattern
-            ? JSON.stringify(news.eventPattern)
-            : undefined;
+          const archiveName = output?.archiveName ?? (yield* createArchiveName(id, news));
+          const eventPattern = news.eventPattern ? JSON.stringify(news.eventPattern) : undefined;
           const retentionDays = toWireDays(news.retention);
 
           // Observe — live cloud state is authoritative; a vanished archive
           // falls through to create.
           const observed = yield* eventbridge
             .describeArchive({ ArchiveName: archiveName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           if (!observed?.ArchiveArn) {
             // Ensure — create the archive; tolerate an AlreadyExists race
@@ -230,12 +216,7 @@ export const ArchiveProvider = () =>
                 RetentionDays: retentionDays,
                 KmsKeyIdentifier: news.kmsKeyIdentifier,
               })
-              .pipe(
-                Effect.catchTag(
-                  "ResourceAlreadyExistsException",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
           } else {
             // Sync — updateArchive overwrites description, pattern,
             // retention, and KMS key in one shot (idempotent on matching
@@ -250,8 +231,7 @@ export const ArchiveProvider = () =>
           }
 
           const settled = yield* awaitSettled(archiveName);
-          const archiveArn = (settled.ArchiveArn ??
-            observed?.ArchiveArn) as ArchiveArn;
+          const archiveArn = (settled.ArchiveArn ?? observed?.ArchiveArn) as ArchiveArn;
 
           yield* session.note(archiveArn);
           return {
@@ -263,9 +243,7 @@ export const ArchiveProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* eventbridge
             .deleteArchive({ ArchiveName: output.archiveName })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

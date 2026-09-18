@@ -1,3 +1,9 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
 import {
   RpcDecodeError,
   RpcCallError,
@@ -17,12 +23,6 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "@/Cloudflare/Workers/Rpc";
-import { describe, expect, it } from "alchemy-test";
-import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Stream from "effect/Stream";
 
 class MyError extends Data.TaggedError("MyError")<{
   readonly message: string;
@@ -205,9 +205,7 @@ const textToReadableStream = (text: string): ReadableStream<Uint8Array> => {
   });
 };
 
-const bytesToReadableStream = (
-  chunks: Uint8Array[],
-): ReadableStream<Uint8Array> =>
+const bytesToReadableStream = (chunks: Uint8Array[]): ReadableStream<Uint8Array> =>
   new ReadableStream({
     start(controller) {
       for (const chunk of chunks) {
@@ -632,36 +630,32 @@ describe("stream errors", () => {
     }),
   );
 
-  it.effect(
-    "makeRpcStub preserves stream errors (not collapsed to RpcCallError)",
-    () =>
-      Effect.gen(function* () {
-        const errorLine = JSON.stringify({
-          _tag: StreamErrorTag,
-          error: { _tag: "MyError", message: "remote stream err" },
-        });
-        const body = textToReadableStream(`{"n":1}\n${errorLine}\n`);
-        const mockStub = {
-          streamFail: async () => ({
-            _tag: StreamTag,
-            encoding: "jsonl" as const,
-            body,
-          }),
-        };
-        const stub = makeRpcStub<{
-          streamFail: () => Effect.Effect<
-            Stream.Stream<unknown, RpcRemoteStreamError>
-          >;
-        }>(mockStub);
+  it.effect("makeRpcStub preserves stream errors (not collapsed to RpcCallError)", () =>
+    Effect.gen(function* () {
+      const errorLine = JSON.stringify({
+        _tag: StreamErrorTag,
+        error: { _tag: "MyError", message: "remote stream err" },
+      });
+      const body = textToReadableStream(`{"n":1}\n${errorLine}\n`);
+      const mockStub = {
+        streamFail: async () => ({
+          _tag: StreamTag,
+          encoding: "jsonl" as const,
+          body,
+        }),
+      };
+      const stub = makeRpcStub<{
+        streamFail: () => Effect.Effect<Stream.Stream<unknown, RpcRemoteStreamError>>;
+      }>(mockStub);
 
-        const stream = yield* stub.streamFail();
-        const exit = yield* Effect.exit(Stream.runCollect(stream));
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit)) {
-          const reason = exit.cause.reasons.find(Cause.isFailReason);
-          expect(reason).toBeDefined();
-          expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
-        }
-      }),
+      const stream = yield* stub.streamFail();
+      const exit = yield* Effect.exit(Stream.runCollect(stream));
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect(reason).toBeDefined();
+        expect(reason!.error).toBeInstanceOf(RpcRemoteStreamError);
+      }
+    }),
   );
 });

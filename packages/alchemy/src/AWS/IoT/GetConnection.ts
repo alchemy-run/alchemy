@@ -30,13 +30,8 @@ export interface GetConnection extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetConnectionRequest,
-    ) => Effect.Effect<
-      iotdata.GetConnectionResponse,
-      iotdata.GetConnectionError
-    >
+    ) => Effect.Effect<iotdata.GetConnectionResponse, iotdata.GetConnectionError>
   >
 > {}
 
-export const GetConnection = Binding.Service<GetConnection>(
-  "AWS.IoT.GetConnection",
-);
+export const GetConnection = Binding.Service<GetConnection>("AWS.IoT.GetConnection");

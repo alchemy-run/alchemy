@@ -1,11 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
-import * as Provider from "@/Provider";
-import { poll } from "@/Util/poll.ts";
-import { State } from "@/State";
-import type { CreatedResourceState } from "@/State/ResourceState";
-import * as Test from "@/Test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -13,15 +5,20 @@ import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
+import * as Provider from "@/Provider";
+import { State } from "@/State";
+import type { CreatedResourceState } from "@/State/ResourceState";
+import * as Test from "@/Test/Alchemy";
+import { poll } from "@/Util/poll.ts";
 import ConsumerWorker from "./fixtures/dedicated-consumer-worker.ts";
 import ProducerWorker from "./fixtures/dedicated-producer-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Seed a `created` Queue state row whose `queueId` is a `dev:` mock id —
@@ -163,10 +160,7 @@ test.provider("list enumerates the deployed queue", (stack) =>
       description: "list() includes the deployed queue",
       effect: provider.list(),
       predicate: (all) => all.some((q) => q.queueId === deployed.queueId),
-      schedule: Schedule.max([
-        Schedule.spaced("2 seconds"),
-        Schedule.recurs(20),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("2 seconds"), Schedule.recurs(20)]),
     });
 
     expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);
@@ -257,10 +251,7 @@ test.provider.skipIf(!!process.env.FAST)(
           ),
           Effect.retry({
             schedule: Schedule.max([
-              Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("3 seconds"),
-              ]),
+              Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("3 seconds")]),
               Schedule.recurs(10),
             ]),
           }),

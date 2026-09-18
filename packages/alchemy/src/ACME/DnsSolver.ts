@@ -35,13 +35,9 @@ export interface DnsChallengeRecord {
 /** Runtime DNS-01 solver. `R` is whatever context the underlying client needs. */
 export interface DnsSolver<R = never> {
   /** Publish `value` as a TXT record at `fqdn`. Idempotent. */
-  readonly present: (
-    record: DnsChallengeRecord,
-  ) => Effect.Effect<void, DnsSolverError, R>;
+  readonly present: (record: DnsChallengeRecord) => Effect.Effect<void, DnsSolverError, R>;
   /** Remove the record published by `present`. Idempotent; runs in a finalizer. */
-  readonly cleanup: (
-    record: DnsChallengeRecord,
-  ) => Effect.Effect<void, DnsSolverError, R>;
+  readonly cleanup: (record: DnsChallengeRecord) => Effect.Effect<void, DnsSolverError, R>;
   /**
    * Wait until the record is visible. Defaults to polling public DNS over
    * HTTPS; a solver for a private DNS (tests, split-horizon zones) overrides it.
@@ -50,11 +46,7 @@ export interface DnsSolver<R = never> {
     | ((
         record: DnsChallengeRecord,
         options: PropagationOptions,
-      ) => Effect.Effect<
-        void,
-        DnsSolverError | DnsPropagationTimeout,
-        R | HttpClient.HttpClient
-      >)
+      ) => Effect.Effect<void, DnsSolverError | DnsPropagationTimeout, R | HttpClient.HttpClient>)
     | undefined;
 }
 
@@ -88,21 +80,14 @@ export const resolveDnsSolver = (
   });
 
 /** A solver whose methods run with `context` provided (drops `R`). */
-export const provideSolver = <R>(
-  solver: DnsSolver<R>,
-  context: Context.Context<R>,
-): DnsSolver => ({
-  present: (record) =>
-    solver.present(record).pipe(Effect.provideContext(context)),
-  cleanup: (record) =>
-    solver.cleanup(record).pipe(Effect.provideContext(context)),
+export const provideSolver = <R>(solver: DnsSolver<R>, context: Context.Context<R>): DnsSolver => ({
+  present: (record) => solver.present(record).pipe(Effect.provideContext(context)),
+  cleanup: (record) => solver.cleanup(record).pipe(Effect.provideContext(context)),
   propagated:
     solver.propagated === undefined
       ? undefined
       : (record, options) =>
-          solver.propagated!(record, options).pipe(
-            Effect.provideContext(context),
-          ),
+          solver.propagated!(record, options).pipe(Effect.provideContext(context)),
 });
 
 /**
@@ -112,17 +97,13 @@ export const provideSolver = <R>(
  */
 export const dnsSolverLayer = <R>(
   type: string,
-  make: (
-    descriptor: DnsSolverDescriptor,
-  ) => Effect.Effect<DnsSolver<R>, DnsSolverError>,
+  make: (descriptor: DnsSolverDescriptor) => Effect.Effect<DnsSolver<R>, DnsSolverError>,
 ): Layer.Layer<DnsSolverFactory, never, R> =>
   Layer.effect(
     solverService(type),
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
       return (descriptor: DnsSolverDescriptor) =>
-        make(descriptor).pipe(
-          Effect.map((solver) => provideSolver(solver, context)),
-        );
+        make(descriptor).pipe(Effect.map((solver) => provideSolver(solver, context)));
     }),
   );

@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as QBusiness from "@/AWS/QBusiness";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as QBusiness from "@/AWS/QBusiness";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -75,10 +75,8 @@ export default QBusinessTestFunction.make(
     const search = yield* QBusiness.SearchRelevantContent(app);
     const feedback = yield* QBusiness.PutFeedback(app);
     const getControls = yield* QBusiness.GetChatControlsConfiguration(app);
-    const updateControls =
-      yield* QBusiness.UpdateChatControlsConfiguration(app);
-    const deleteControls =
-      yield* QBusiness.DeleteChatControlsConfiguration(app);
+    const updateControls = yield* QBusiness.UpdateChatControlsConfiguration(app);
+    const deleteControls = yield* QBusiness.DeleteChatControlsConfiguration(app);
     const listConversations = yield* QBusiness.ListConversations(app);
     const deleteConversation = yield* QBusiness.DeleteConversation(app);
     const listMessages = yield* QBusiness.ListMessages(app);
@@ -114,8 +112,7 @@ export default QBusinessTestFunction.make(
     const listSyncJobs = yield* QBusiness.ListDataSourceSyncJobs(source);
 
     // Web-experience-scoped binding.
-    const createAnonymousUrl =
-      yield* QBusiness.CreateAnonymousWebExperienceUrl(web);
+    const createAnonymousUrl = yield* QBusiness.CreateAnonymousWebExperienceUrl(web);
 
     // Needed by /search — resolved lazily at request time.
     const retrieverId = yield* retriever.retrieverId;
@@ -189,9 +186,7 @@ export default QBusinessTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { failed: (result.failedDocuments ?? []).length },
+            "errorTag" in result ? result : { failed: (result.failedDocuments ?? []).length },
           );
         }
 
@@ -202,21 +197,15 @@ export default QBusinessTestFunction.make(
               ? result
               : {
                   count: (result.documentDetailList ?? []).length,
-                  statuses: (result.documentDetailList ?? []).map(
-                    (d) => d.status,
-                  ),
+                  statuses: (result.documentDetailList ?? []).map((d) => d.status),
                 },
           );
         }
 
         if (pathname === "/document-content") {
-          const result = yield* errorTagged(
-            getDocumentContent({ documentId: "welcome" }),
-          );
+          const result = yield* errorTagged(getDocumentContent({ documentId: "welcome" }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { hasUrl: typeof result.presignedUrl === "string" },
+            "errorTag" in result ? result : { hasUrl: typeof result.presignedUrl === "string" },
           );
         }
 
@@ -237,9 +226,7 @@ export default QBusinessTestFunction.make(
             deleteDocuments({ documents: [{ documentId: "welcome" }] }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { failed: (result.failedDocuments ?? []).length },
+            "errorTag" in result ? result : { failed: (result.failedDocuments ?? []).length },
           );
         }
 
@@ -269,9 +256,7 @@ export default QBusinessTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.relevantContent ?? []).length },
+            "errorTag" in result ? result : { count: (result.relevantContent ?? []).length },
           );
         }
 
@@ -288,47 +273,35 @@ export default QBusinessTestFunction.make(
               },
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         // -------------------------------------------------- conversations
         if (pathname === "/conversations") {
           const result = yield* errorTagged(listConversations());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.conversations ?? []).length },
+            "errorTag" in result ? result : { count: (result.conversations ?? []).length },
           );
         }
 
         if (pathname === "/delete-conversation") {
           const conversationId = url.searchParams.get("conversationId") ?? "";
-          const result = yield* errorTagged(
-            deleteConversation({ conversationId }),
-          );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          const result = yield* errorTagged(deleteConversation({ conversationId }));
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/messages") {
           const conversationId = url.searchParams.get("conversationId") ?? "";
           const result = yield* errorTagged(listMessages({ conversationId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.messages ?? []).length },
+            "errorTag" in result ? result : { count: (result.messages ?? []).length },
           );
         }
 
         if (pathname === "/attachments") {
           const result = yield* errorTagged(listAttachments());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.attachments ?? []).length },
+            "errorTag" in result ? result : { count: (result.attachments ?? []).length },
           );
         }
 
@@ -339,9 +312,7 @@ export default QBusinessTestFunction.make(
               attachmentId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/media") {
@@ -352,18 +323,14 @@ export default QBusinessTestFunction.make(
               mediaId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         // ------------------------------------------------- admin controls
         if (pathname === "/controls") {
           const result = yield* errorTagged(getControls());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { responseScope: result.responseScope ?? null },
+            "errorTag" in result ? result : { responseScope: result.responseScope ?? null },
           );
         }
 
@@ -371,16 +338,12 @@ export default QBusinessTestFunction.make(
           const result = yield* errorTagged(
             updateControls({ responseScope: "ENTERPRISE_CONTENT_ONLY" }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/delete-controls") {
           const result = yield* errorTagged(deleteControls());
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         // ---------------------------------------------------------- users
@@ -388,27 +351,20 @@ export default QBusinessTestFunction.make(
           // create -> get -> update -> delete round trip through the four
           // user-store bindings (an ANONYMOUS-identity application may
           // reject the user store with a typed error — surfaced as tags).
-          const created = yield* errorTagged(
-            createUser({ userId: "user@example.com" }),
-          );
+          const created = yield* errorTagged(createUser({ userId: "user@example.com" }));
           if ("errorTag" in created) {
             return yield* HttpServerResponse.json(created);
           }
-          const read = yield* errorTagged(
-            getUser({ userId: "user@example.com" }),
-          );
+          const read = yield* errorTagged(getUser({ userId: "user@example.com" }));
           const updated = yield* errorTagged(
             updateUser({
               userId: "user@example.com",
               userAliasesToUpdate: [{ userId: "corp-user" }],
             }),
           );
-          const deleted = yield* errorTagged(
-            deleteUser({ userId: "user@example.com" }),
-          );
+          const deleted = yield* errorTagged(deleteUser({ userId: "user@example.com" }));
           return yield* HttpServerResponse.json({
-            aliases:
-              "errorTag" in read ? read : (read.userAliases ?? []).length,
+            aliases: "errorTag" in read ? read : (read.userAliases ?? []).length,
             updated: !("errorTag" in updated),
             deleted: !("errorTag" in deleted),
           });
@@ -428,20 +384,11 @@ export default QBusinessTestFunction.make(
           if ("errorTag" in put) {
             return yield* HttpServerResponse.json(put);
           }
-          const read = yield* errorTagged(
-            getGroup({ groupName: "engineering" }),
-          );
-          const listed = yield* errorTagged(
-            listGroups({ updatedEarlierThan: new Date() }),
-          );
-          const deleted = yield* errorTagged(
-            deleteGroup({ groupName: "engineering" }),
-          );
+          const read = yield* errorTagged(getGroup({ groupName: "engineering" }));
+          const listed = yield* errorTagged(listGroups({ updatedEarlierThan: new Date() }));
+          const deleted = yield* errorTagged(deleteGroup({ groupName: "engineering" }));
           return yield* HttpServerResponse.json({
-            status:
-              "errorTag" in read
-                ? read.errorTag
-                : (read.status?.status ?? null),
+            status: "errorTag" in read ? read.errorTag : (read.status?.status ?? null),
             listed: "errorTag" in listed ? listed.errorTag : true,
             deleted: !("errorTag" in deleted),
           });
@@ -463,27 +410,21 @@ export default QBusinessTestFunction.make(
               principal: "arn:aws:iam::123456789012:role/AlchemyProbeRole",
             }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         if (pathname === "/disassociate-permission") {
           const result = yield* errorTagged(
             disassociatePermission({ statementId: "alchemy-probe" }),
           );
-          return yield* HttpServerResponse.json(
-            "errorTag" in result ? result : { ok: true },
-          );
+          return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
         }
 
         // -------------------------------------------------- subscriptions
         if (pathname === "/subscriptions") {
           const result = yield* errorTagged(listSubscriptions());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: (result.subscriptions ?? []).length },
+            "errorTag" in result ? result : { count: (result.subscriptions ?? []).length },
           );
         }
 
@@ -523,23 +464,16 @@ export default QBusinessTestFunction.make(
           const stopped = yield* errorTagged(stopSync());
           return yield* HttpServerResponse.json({
             executionId: started.executionId ?? null,
-            jobs:
-              "errorTag" in listed
-                ? listed.errorTag
-                : (listed.history ?? []).length,
+            jobs: "errorTag" in listed ? listed.errorTag : (listed.history ?? []).length,
             stopped: !("errorTag" in stopped),
           });
         }
 
         // -------------------------------------------------- anonymous url
         if (pathname === "/anonymous-url") {
-          const result = yield* errorTagged(
-            createAnonymousUrl({ sessionDuration: "15 minutes" }),
-          );
+          const result = yield* errorTagged(createAnonymousUrl({ sessionDuration: "15 minutes" }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { hasUrl: typeof result.anonymousUrl === "string" },
+            "errorTag" in result ? result : { hasUrl: typeof result.anonymousUrl === "string" },
           );
         }
 

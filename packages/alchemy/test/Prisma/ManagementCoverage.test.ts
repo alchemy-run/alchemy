@@ -1,6 +1,6 @@
+import { describe, expect, it } from "alchemy-test";
 import * as Prisma from "@/Prisma";
 import type { PrismaManagementClient } from "@/Prisma/Client";
-import { describe, expect, it } from "alchemy-test";
 import {
   managementApiContract,
   productionManagementApiRoutes,
@@ -199,12 +199,8 @@ describe("Prisma Management API coverage", () => {
       ),
     ).toBe(true);
     expect(expectedManagementApiRoutes).toHaveLength(78);
-    expect(expectedManagementApiRoutes).toEqual(
-      [...productionManagementApiRoutes].sort(),
-    );
-    expect(
-      expectedManagementApiRoutes.some((route) => route.includes("/__admin")),
-    ).toBe(false);
+    expect(expectedManagementApiRoutes).toEqual([...productionManagementApiRoutes].sort());
+    expect(expectedManagementApiRoutes.some((route) => route.includes("/__admin"))).toBe(false);
   });
 
   it("exports the canonical app and deployment operations", () => {

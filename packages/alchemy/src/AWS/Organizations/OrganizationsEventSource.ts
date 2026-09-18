@@ -125,9 +125,7 @@ export const consumeOrganizationsEvents = <StreamReq = never, Req = never>(
     props.id ?? "OrganizationsEvents",
     {
       source: ["aws.organizations"],
-      ...(props.events !== undefined
-        ? { detail: { eventName: [...props.events] } }
-        : {}),
+      ...(props.events !== undefined ? { detail: { eventName: [...props.events] } } : {}),
     },
     { description: props.description, state: props.state },
     process,

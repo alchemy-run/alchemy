@@ -37,10 +37,7 @@ export interface CreateAccessPreview extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreateAccessPreviewRequest,
-    ) => Effect.Effect<
-      aa.CreateAccessPreviewResponse,
-      aa.CreateAccessPreviewError
-    >
+    ) => Effect.Effect<aa.CreateAccessPreviewResponse, aa.CreateAccessPreviewError>
   >
 > {}
 

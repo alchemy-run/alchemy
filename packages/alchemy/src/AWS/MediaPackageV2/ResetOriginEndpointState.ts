@@ -36,7 +36,6 @@ export interface ResetOriginEndpointState extends Binding.Service<
     >
   >
 > {}
-export const ResetOriginEndpointState =
-  Binding.Service<ResetOriginEndpointState>(
-    "AWS.MediaPackageV2.ResetOriginEndpointState",
-  );
+export const ResetOriginEndpointState = Binding.Service<ResetOriginEndpointState>(
+  "AWS.MediaPackageV2.ResetOriginEndpointState",
+);

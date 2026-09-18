@@ -1,13 +1,13 @@
-import * as AWS from "@/AWS";
-import { DataSource, KnowledgeBase } from "@/AWS/Bedrock";
-import * as S3 from "@/AWS/S3";
-import * as Test from "@/Test/Alchemy";
 import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as AWS from "@/AWS";
+import { DataSource, KnowledgeBase } from "@/AWS/Bedrock";
+import * as S3 from "@/AWS/S3";
+import * as Test from "@/Test/Alchemy";
 import BedrockKbTestFunctionLive, { BedrockKbTestFunction } from "./kb-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -30,18 +30,12 @@ const collectionArn = process.env.BEDROCK_KB_COLLECTION_ARN;
 const indexName = process.env.BEDROCK_KB_INDEX_NAME ?? "bedrock-index";
 const embeddingModelArn = process.env.BEDROCK_KB_EMBEDDING_MODEL_ARN;
 
-const gated =
-  !process.env.AWS_TEST_SLOW ||
-  !roleArn ||
-  !collectionArn ||
-  !embeddingModelArn;
+const gated = !process.env.AWS_TEST_SLOW || !roleArn || !collectionArn || !embeddingModelArn;
 
 const findKb = (knowledgeBaseId: string) =>
   bedrock.getKnowledgeBase({ knowledgeBaseId }).pipe(
     Effect.map((r) => r.knowledgeBase),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
   );
 
 class StillExists extends Data.TaggedError("StillExists")<{
@@ -144,24 +138,17 @@ test.provider.skipIf(gated)(
       // Fresh function URLs take a few seconds to start serving 200s.
       yield* HttpClient.get(`${baseUrl}/ping`).pipe(
         Effect.flatMap((r) =>
-          r.status === 200
-            ? Effect.succeed(r)
-            : Effect.fail(new Error(`not ready: ${r.status}`)),
+          r.status === 200 ? Effect.succeed(r) : Effect.fail(new Error(`not ready: ${r.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("2 seconds"),
-            Schedule.recurs(75),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]),
         }),
       );
 
       const getJson = (path: string) =>
         HttpClient.get(`${baseUrl}${path}`).pipe(Effect.flatMap((r) => r.json));
       const postJson = (path: string) =>
-        HttpClient.post(`${baseUrl}${path}`).pipe(
-          Effect.flatMap((r) => r.json),
-        );
+        HttpClient.post(`${baseUrl}${path}`).pipe(Effect.flatMap((r) => r.json));
 
       // 1. Direct document ingestion into the CUSTOM data source.
       const ingested = (yield* postJson("/ingest")) as { status?: string };

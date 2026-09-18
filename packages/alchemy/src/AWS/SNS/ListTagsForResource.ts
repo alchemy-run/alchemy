@@ -37,10 +37,7 @@ export interface ListTagsForResource extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListTagsForResourceRequest,
-    ) => Effect.Effect<
-      sns.ListTagsForResourceResponse,
-      sns.ListTagsForResourceError
-    >
+    ) => Effect.Effect<sns.ListTagsForResourceResponse, sns.ListTagsForResourceError>
   >
 > {}
 

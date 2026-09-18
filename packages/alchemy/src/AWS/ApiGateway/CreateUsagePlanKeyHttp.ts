@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Output from "../../Output.ts";
 import { registerApiGatewayBinding } from "./BindingHttp.ts";
-import {
-  CreateUsagePlanKey,
-  type CreateUsagePlanKeyRequest,
-} from "./CreateUsagePlanKey.ts";
+import { CreateUsagePlanKey, type CreateUsagePlanKeyRequest } from "./CreateUsagePlanKey.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
 
 /**
@@ -28,9 +25,9 @@ export const CreateUsagePlanKeyHttp = Layer.effect(
           Output.interpolate`arn:aws:apigateway:${region}::/usageplans/${usagePlan.id}/keys`,
         ],
       });
-      return Effect.fn(
-        `AWS.ApiGateway.CreateUsagePlanKey(${usagePlan.LogicalId})`,
-      )(function* (request: CreateUsagePlanKeyRequest) {
+      return Effect.fn(`AWS.ApiGateway.CreateUsagePlanKey(${usagePlan.LogicalId})`)(function* (
+        request: CreateUsagePlanKeyRequest,
+      ) {
         return yield* createUsagePlanKey({
           ...request,
           keyType: request.keyType ?? "API_KEY",

@@ -1,8 +1,8 @@
-import * as Fly from "@/Fly";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Fly from "@/Fly";
 
 /**
  * HTTP Sprite: writes a marker during init and serves it back.
@@ -28,9 +28,7 @@ export default class Box extends Fly.Sprite<Box>()(
         yield* fs
           .writeFileString("/tmp/alchemy-sprite.txt", "hello-from-sprite")
           .pipe(Effect.orDie);
-        const text = yield* fs
-          .readFileString("/tmp/alchemy-sprite.txt")
-          .pipe(Effect.orDie);
+        const text = yield* fs.readFileString("/tmp/alchemy-sprite.txt").pipe(Effect.orDie);
         return yield* HttpServerResponse.json({
           ok: true,
           text,

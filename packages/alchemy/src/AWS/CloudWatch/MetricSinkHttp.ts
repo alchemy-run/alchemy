@@ -4,11 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { makeBatchedSink } from "../internal/BatchedSink.ts";
 import { isBindingHost } from "../Lambda/Function.ts";
-import {
-  MetricSink,
-  type MetricSinkDatum,
-  type MetricSinkProps,
-} from "./MetricSink.ts";
+import { MetricSink, type MetricSinkDatum, type MetricSinkProps } from "./MetricSink.ts";
 import { PutMetricData } from "./PutMetricData.ts";
 
 const encoder = new TextEncoder();
@@ -29,18 +25,16 @@ export const MetricSinkHttp = Layer.effect(
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.CloudWatch.MetricSink(${props.Namespace}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  // PutMetricData does not support resource-level permissions.
-                  Action: ["cloudwatch:PutMetricData"],
-                  Resource: ["*"],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.CloudWatch.MetricSink(${props.Namespace}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                // PutMetricData does not support resource-level permissions.
+                Action: ["cloudwatch:PutMetricData"],
+                Resource: ["*"],
+              },
+            ],
+          });
         }
       }
       const put = yield* putMetricData();

@@ -1,24 +1,21 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
-import * as Fly from "@/Fly";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as Fly from "@/Fly";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
-import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const waitUntilGone = (appName: string, machineId: string) =>
   machines
@@ -87,9 +84,7 @@ test.provider(
       expect(deployed.api.name).toEqual(expect.any(String));
       expect(deployed.api.region).toEqual("iad");
       expect(deployed.api.state).toEqual("started");
-      expect(deployed.api.url).toEqual(
-        `https://${deployed.app.appName}.fly.dev`,
-      );
+      expect(deployed.api.url).toEqual(`https://${deployed.app.appName}.fly.dev`);
       expect(deployed.api.code.hash).toEqual(expect.any(String));
       expect(deployed.api.code.hash.length).toBeGreaterThan(0);
       expect(deployed.api.mounts[0]?.path).toEqual(VOLUME_PATH);
@@ -104,19 +99,11 @@ test.provider(
       expect(fetched.region).toEqual("iad");
       expect(fetched.state).toEqual("started");
       expect(fetched.config?.metadata?.["alchemy.type"]).toEqual("Fly.Service");
-      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(
-        expect.any(String),
-      );
-      expect(fetched.config?.image).toEqual(
-        expect.stringContaining("registry.fly.io/"),
-      );
-      expect(fetched.config?.image).toEqual(
-        expect.stringContaining(deployed.api.code.hash),
-      );
+      expect(fetched.config?.metadata?.["alchemy.stack"]).toEqual(expect.any(String));
+      expect(fetched.config?.image).toEqual(expect.stringContaining("registry.fly.io/"));
+      expect(fetched.config?.image).toEqual(expect.stringContaining(deployed.api.code.hash));
       expect(fetched.config?.mounts?.[0]?.path).toEqual(VOLUME_PATH);
-      expect(fetched.config?.mounts?.[0]?.volume).toEqual(
-        deployed.api.mounts[0]?.volumeId,
-      );
+      expect(fetched.config?.mounts?.[0]?.volume).toEqual(deployed.api.mounts[0]?.volumeId);
       expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
@@ -135,9 +122,7 @@ test.provider(
 
       const provider = yield* Provider.findProvider(Fly.Service);
       const all = yield* provider.list();
-      const found = all.find(
-        (service) => service.machineId === deployed.api.machineId,
-      );
+      const found = all.find((service) => service.machineId === deployed.api.machineId);
       expect(found).toBeDefined();
       expect(found?.appName).toEqual(deployed.api.appName);
       expect(found?.name).toEqual(deployed.api.name);
@@ -145,9 +130,7 @@ test.provider(
 
       const body = yield* HttpClient.get(deployed.api.url!).pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.fail(new Error(`api returned ${res.status}`)),
+          res.status === 200 ? res.json : Effect.fail(new Error(`api returned ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.spaced("4 seconds"),
@@ -160,10 +143,7 @@ test.provider(
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.api.appName,
-        deployed.api.machineId,
-      );
+      const gone = yield* waitUntilGone(deployed.api.appName, deployed.api.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },
@@ -183,14 +163,10 @@ test.provider(
         });
       }
       const live = yield* machines.listMachines({ app_name: app.appName });
-      expect(
-        live.filter((machine) => machine.state !== "destroyed"),
-      ).toHaveLength(1);
+      expect(live.filter((machine) => machine.state !== "destroyed")).toHaveLength(1);
       const volumes = yield* machines.listVolumes({ app_name: app.appName });
       expect(volumes).toHaveLength(2);
-      const attached = volumes.find(
-        (volume) => volume.attached_machine_id === live[0]?.id,
-      );
+      const attached = volumes.find((volume) => volume.attached_machine_id === live[0]?.id);
       expect(attached).toBeDefined();
       const blocked = yield* machines
         .deleteVolume({
@@ -245,21 +221,14 @@ test.provider(
       expect(check?.grace_period).toEqual("20s");
 
       const serviceChecks =
-        live.checks?.filter((check) =>
-          check.name?.startsWith("servicecheck-"),
-        ) ?? [];
+        live.checks?.filter((check) => check.name?.startsWith("servicecheck-")) ?? [];
       expect(serviceChecks).toHaveLength(1);
-      expect(serviceChecks[0]?.name).toEqual(
-        `servicecheck-00-http-${API_PORT}`,
-      );
+      expect(serviceChecks[0]?.name).toEqual(`servicecheck-00-http-${API_PORT}`);
       expect(serviceChecks[0]?.status).toEqual("passing");
 
       yield* stack.destroy();
 
-      const gone = yield* waitUntilGone(
-        deployed.service.appName,
-        deployed.service.machineId,
-      );
+      const gone = yield* waitUntilGone(deployed.service.appName, deployed.service.machineId);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
   { timeout: 180_000 },

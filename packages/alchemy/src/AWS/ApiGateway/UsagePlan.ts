@@ -6,9 +6,8 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
-
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { syncTags, usagePlanArn } from "./common.ts";
 
 export interface UsagePlanProps {
@@ -97,8 +96,7 @@ const generatedName = (id: string, props: UsagePlanProps) =>
         maxLength: 128,
       });
 
-const encodeJsonPointerSegment = (s: string) =>
-  s.replace(/~/g, "~0").replace(/\//g, "~1");
+const encodeJsonPointerSegment = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 const apiStageKey = (stage: ag.ApiStage) => `${stage.apiId}:${stage.stage}`;
 
@@ -116,10 +114,7 @@ const buildApiStageThrottlePatches = (
   prev: { [key: string]: ag.ThrottleSettings | undefined } | undefined,
   next: { [key: string]: ag.ThrottleSettings | undefined } | undefined,
 ): ag.PatchOperation[] => {
-  const keys = new Set([
-    ...Object.keys(prev ?? {}),
-    ...Object.keys(next ?? {}),
-  ]);
+  const keys = new Set([...Object.keys(prev ?? {}), ...Object.keys(next ?? {})]);
   const patches: ag.PatchOperation[] = [];
   for (const key of keys) {
     const old = prev?.[key];
@@ -168,15 +163,11 @@ const buildApiStagePatches = (
     const old = prevMap.get(key);
     if (!old) {
       patches.push({ op: "add", path: "/apiStages", value: key });
-      patches.push(
-        ...buildApiStageThrottlePatches(key, undefined, stage.throttle),
-      );
+      patches.push(...buildApiStageThrottlePatches(key, undefined, stage.throttle));
       continue;
     }
     if (!deepEqual(stage.throttle, old.throttle)) {
-      patches.push(
-        ...buildApiStageThrottlePatches(key, old.throttle, stage.throttle),
-      );
+      patches.push(...buildApiStageThrottlePatches(key, old.throttle, stage.throttle));
     }
   }
   return patches;
@@ -266,11 +257,7 @@ export const UsagePlanProvider = () =>
           if (!output?.id) return undefined;
           const p = yield* ag
             .getUsagePlan({ usagePlanId: output.id })
-            .pipe(
-              Effect.catchTag("NotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
           if (!p?.id) return undefined;
           return {
             id: p.id,
@@ -288,9 +275,7 @@ export const UsagePlanProvider = () =>
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.items ?? [])
-                  .filter(
-                    (p): p is ag.UsagePlan & { id: string } => p.id != null,
-                  )
+                  .filter((p): p is ag.UsagePlan & { id: string } => p.id != null)
                   .map((p) => ({
                     id: p.id,
                     name: p.name,
@@ -319,11 +304,7 @@ export const UsagePlanProvider = () =>
           let observed = output?.id
             ? yield* ag
                 .getUsagePlan({ usagePlanId: output.id })
-                .pipe(
-                  Effect.catchTag("NotFoundException", () =>
-                    Effect.succeed(undefined),
-                  ),
-                )
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
             : undefined;
 
           // Ensure — create the usage plan if missing.
@@ -336,8 +317,7 @@ export const UsagePlanProvider = () =>
               quota: news.quota,
               tags: desiredTags,
             });
-            if (!created.id)
-              return yield* Effect.die("createUsagePlan missing id");
+            if (!created.id) return yield* Effect.die("createUsagePlan missing id");
             yield* session.note(`Created usage plan ${created.id}`);
             observed = yield* ag.getUsagePlan({ usagePlanId: created.id });
           }
@@ -354,12 +334,8 @@ export const UsagePlanProvider = () =>
               value: news.description ?? "",
             });
           }
-          patches.push(
-            ...buildApiStagePatches(observed.apiStages, news.apiStages),
-          );
-          patches.push(
-            ...buildThrottlePatches(observed.throttle, news.throttle),
-          );
+          patches.push(...buildApiStagePatches(observed.apiStages, news.apiStages));
+          patches.push(...buildThrottlePatches(observed.throttle, news.throttle));
           patches.push(...buildQuotaPatches(observed.quota, news.quota));
           if (patches.length > 0) {
             yield* ag.updateUsagePlan({

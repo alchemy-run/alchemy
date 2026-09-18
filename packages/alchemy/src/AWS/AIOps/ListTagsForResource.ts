@@ -29,10 +29,7 @@ export interface ListTagsForResource extends Binding.Service<
   (
     group: InvestigationGroup,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      aiops.ListTagsForResourceOutput,
-      aiops.ListTagsForResourceError
-    >
+    () => Effect.Effect<aiops.ListTagsForResourceOutput, aiops.ListTagsForResourceError>
   >
 > {}
 export const ListTagsForResource = Binding.Service<ListTagsForResource>(

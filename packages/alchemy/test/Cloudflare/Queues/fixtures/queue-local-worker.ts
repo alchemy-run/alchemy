@@ -5,9 +5,7 @@
 interface Env {
   QUEUE: {
     send(body: unknown, options?: { contentType?: string }): Promise<void>;
-    sendBatch(
-      messages: Iterable<{ body: unknown; contentType?: string }>,
-    ): Promise<void>;
+    sendBatch(messages: Iterable<{ body: unknown; contentType?: string }>): Promise<void>;
   };
 }
 

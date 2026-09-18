@@ -1,13 +1,13 @@
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
-import * as MedicalImaging from "@/AWS/MedicalImaging";
-import * as S3 from "@/AWS/S3";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
+import * as MedicalImaging from "@/AWS/MedicalImaging";
+import * as S3 from "@/AWS/S3";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -89,21 +89,15 @@ export default MedicalImagingTestFunction.make(
       tags: { fixture: "medical-imaging-bindings" },
     });
 
-    const startImport = yield* MedicalImaging.StartDICOMImportJob(
-      datastore,
-      role,
-    );
+    const startImport = yield* MedicalImaging.StartDICOMImportJob(datastore, role);
     const getImportJob = yield* MedicalImaging.GetDICOMImportJob(datastore);
     const listImportJobs = yield* MedicalImaging.ListDICOMImportJobs(datastore);
     const searchImageSets = yield* MedicalImaging.SearchImageSets(datastore);
     const getImageSet = yield* MedicalImaging.GetImageSet(datastore);
-    const getImageSetMetadata =
-      yield* MedicalImaging.GetImageSetMetadata(datastore);
+    const getImageSetMetadata = yield* MedicalImaging.GetImageSetMetadata(datastore);
     const getImageFrame = yield* MedicalImaging.GetImageFrame(datastore);
-    const listImageSetVersions =
-      yield* MedicalImaging.ListImageSetVersions(datastore);
-    const updateImageSetMetadata =
-      yield* MedicalImaging.UpdateImageSetMetadata(datastore);
+    const listImageSetVersions = yield* MedicalImaging.ListImageSetVersions(datastore);
+    const updateImageSetMetadata = yield* MedicalImaging.UpdateImageSetMetadata(datastore);
     const copyImageSet = yield* MedicalImaging.CopyImageSet(datastore);
     const deleteImageSet = yield* MedicalImaging.DeleteImageSet(datastore);
 
@@ -129,8 +123,7 @@ export default MedicalImagingTestFunction.make(
         const url = new URL(request.originalUrl);
         const pathname = url.pathname;
         const bucketName = yield* BucketName;
-        const imageSetId =
-          url.searchParams.get("imageSetId") ?? NONEXISTENT_IMAGE_SET;
+        const imageSetId = url.searchParams.get("imageSetId") ?? NONEXISTENT_IMAGE_SET;
 
         if (request.method === "GET" && pathname === "/bindings") {
           return yield* HttpServerResponse.json({
@@ -154,9 +147,7 @@ export default MedicalImagingTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { jobId: result.jobId, status: result.jobStatus },
+            "errorTag" in result ? result : { jobId: result.jobId, status: result.jobStatus },
           );
         }
 
@@ -164,27 +155,21 @@ export default MedicalImagingTestFunction.make(
           const jobId = url.searchParams.get("jobId") ?? "";
           const result = yield* errorTagged(getImportJob({ jobId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { status: result.jobProperties.jobStatus },
+            "errorTag" in result ? result : { status: result.jobProperties.jobStatus },
           );
         }
 
         if (request.method === "GET" && pathname === "/list-imports") {
           const result = yield* errorTagged(listImportJobs());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.jobSummaries.length },
+            "errorTag" in result ? result : { count: result.jobSummaries.length },
           );
         }
 
         if (request.method === "GET" && pathname === "/search") {
           const result = yield* errorTagged(searchImageSets());
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.imageSetsMetadataSummaries.length },
+            "errorTag" in result ? result : { count: result.imageSetsMetadataSummaries.length },
           );
         }
 
@@ -198,13 +183,9 @@ export default MedicalImagingTestFunction.make(
         }
 
         if (request.method === "GET" && pathname === "/get-metadata") {
-          const result = yield* errorTagged(
-            getImageSetMetadata({ imageSetId }),
-          );
+          const result = yield* errorTagged(getImageSetMetadata({ imageSetId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { contentType: result.contentType ?? "unknown" },
+            "errorTag" in result ? result : { contentType: result.contentType ?? "unknown" },
           );
         }
 
@@ -218,20 +199,14 @@ export default MedicalImagingTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { contentType: result.contentType ?? "unknown" },
+            "errorTag" in result ? result : { contentType: result.contentType ?? "unknown" },
           );
         }
 
         if (request.method === "GET" && pathname === "/versions") {
-          const result = yield* errorTagged(
-            listImageSetVersions({ imageSetId }),
-          );
+          const result = yield* errorTagged(listImageSetVersions({ imageSetId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { count: result.imageSetPropertiesList.length },
+            "errorTag" in result ? result : { count: result.imageSetPropertiesList.length },
           );
         }
 
@@ -244,9 +219,7 @@ export default MedicalImagingTestFunction.make(
             }),
           );
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { versionId: result.latestVersionId },
+            "errorTag" in result ? result : { versionId: result.latestVersionId },
           );
         }
 
@@ -271,9 +244,7 @@ export default MedicalImagingTestFunction.make(
         if (request.method === "GET" && pathname === "/delete-image-set") {
           const result = yield* errorTagged(deleteImageSet({ imageSetId }));
           return yield* HttpServerResponse.json(
-            "errorTag" in result
-              ? result
-              : { status: result.imageSetWorkflowStatus },
+            "errorTag" in result ? result : { status: result.imageSetWorkflowStatus },
           );
         }
 

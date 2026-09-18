@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
-import type { RuntimeContext } from "@/index";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
+import type { RuntimeContext } from "@/index";
 
 /**
  * A DO-hosting Effect Worker whose `DEPLOY_N` env var is read from a mutable
@@ -34,11 +34,9 @@ export const HandoffObjectLive = HandoffObject.make(
   }),
 );
 
-export class HandoffWorker extends Cloudflare.Worker<
-  HandoffWorker,
-  {},
-  HandoffObject
->()("HandoffWorker") {}
+export class HandoffWorker extends Cloudflare.Worker<HandoffWorker, {}, HandoffObject>()(
+  "HandoffWorker",
+) {}
 
 export default HandoffWorker.make(
   Effect.sync(() => ({
@@ -59,10 +57,7 @@ export default HandoffWorker.make(
         });
       }).pipe(
         Effect.catchCause((cause) =>
-          HttpServerResponse.json(
-            { error: Cause.pretty(cause) },
-            { status: 500 },
-          ),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };

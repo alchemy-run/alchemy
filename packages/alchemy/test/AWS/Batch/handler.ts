@@ -1,6 +1,3 @@
-import * as Batch from "@/AWS/Batch";
-import * as IAM from "@/AWS/IAM";
-import * as Lambda from "@/AWS/Lambda";
 import type * as batch from "@distilled.cloud/aws/batch";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -9,13 +6,14 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Batch from "@/AWS/Batch";
+import * as IAM from "@/AWS/IAM";
+import * as Lambda from "@/AWS/Lambda";
 import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-export class BatchTestFunction extends Lambda.Function<Lambda.Function>()(
-  "BatchTestFunction",
-) {}
+export class BatchTestFunction extends Lambda.Function<Lambda.Function>()("BatchTestFunction") {}
 
 export default BatchTestFunction.make(
   {
@@ -39,9 +37,7 @@ export default BatchTestFunction.make(
               },
             ],
           },
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole",
-          ],
+          managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole"],
         });
 
     // Fast capability tests only need jobs to reach RUNNABLE, so use an
@@ -74,9 +70,7 @@ export default BatchTestFunction.make(
           },
         ],
       },
-      managedPolicyArns: [
-        "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-      ],
+      managedPolicyArns: ["arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"],
     });
     const jobDefinition = yield* Batch.JobDefinition("EchoJob", {
       image: "public.ecr.aws/docker/library/busybox:latest",
@@ -99,9 +93,7 @@ export default BatchTestFunction.make(
     // submissions from the suite; the test verifies the rule deploys.
     yield* Batch.consumeJobEvents({ kinds: ["job-state"] }, (events) =>
       Stream.runForEach(events, (event) =>
-        Effect.log(
-          `batch job event: ${event.detail.jobId} -> ${event.detail.status}`,
-        ),
+        Effect.log(`batch job event: ${event.detail.jobId} -> ${event.detail.status}`),
       ),
     );
 

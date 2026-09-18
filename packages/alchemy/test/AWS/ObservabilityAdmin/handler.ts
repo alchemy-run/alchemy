@@ -1,5 +1,3 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as ObservabilityAdmin from "@/AWS/ObservabilityAdmin";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Result from "effect/Result";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as ObservabilityAdmin from "@/AWS/ObservabilityAdmin";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -38,10 +38,8 @@ export default ObservabilityAdminBindingsFunction.make(
 
     const bound = {
       listResourceTelemetry: yield* ObservabilityAdmin.ListResourceTelemetry(),
-      getTelemetryEvaluationStatus:
-        yield* ObservabilityAdmin.GetTelemetryEvaluationStatus(),
-      getTelemetryEnrichmentStatus:
-        yield* ObservabilityAdmin.GetTelemetryEnrichmentStatus(),
+      getTelemetryEvaluationStatus: yield* ObservabilityAdmin.GetTelemetryEvaluationStatus(),
+      getTelemetryEnrichmentStatus: yield* ObservabilityAdmin.GetTelemetryEnrichmentStatus(),
       listTelemetryRules: yield* ObservabilityAdmin.ListTelemetryRules(),
       getTelemetryRule: yield* ObservabilityAdmin.GetTelemetryRule(rule),
     };
@@ -93,9 +91,7 @@ export default ObservabilityAdminBindingsFunction.make(
         if (request.method === "GET" && pathname === "/enrichment-status") {
           const status = yield* bound.getTelemetryEnrichmentStatus().pipe(
             Effect.map((r) => r.Status ?? "Stopped"),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed("NotOnboarded"),
-            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("NotOnboarded")),
           );
           return yield* HttpServerResponse.json({ status });
         }
@@ -116,8 +112,7 @@ export default ObservabilityAdminBindingsFunction.make(
           return yield* HttpServerResponse.json({
             ruleName: got.RuleName,
             telemetryType: got.TelemetryRule?.TelemetryType,
-            retentionInDays:
-              got.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
+            retentionInDays: got.TelemetryRule?.DestinationConfiguration?.RetentionInDays,
           });
         }
 

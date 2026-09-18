@@ -177,9 +177,7 @@ export interface LakeFormationResourceSpec {
  * Convert a {@link LakeFormationResourceSpec} to the wire `Resource` union
  * shape expected by the Lake Formation API.
  */
-export const toWireResource = (
-  spec: LakeFormationResourceSpec,
-): lf.Resource => {
+export const toWireResource = (spec: LakeFormationResourceSpec): lf.Resource => {
   const resource: lf.Resource = {};
   if (spec.catalog !== undefined) {
     resource.Catalog = { Id: spec.catalog.id };

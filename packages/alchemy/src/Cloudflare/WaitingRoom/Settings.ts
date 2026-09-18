@@ -2,7 +2,6 @@ import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
-
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -41,13 +40,7 @@ export type SettingsAttributes = {
   initialSearchEngineCrawlerBypass: boolean;
 };
 
-export type Settings = Resource<
-  TypeId,
-  SettingsProps,
-  SettingsAttributes,
-  never,
-  Providers
->;
+export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never, Providers>;
 
 /**
  * Zone-wide Cloudflare Waiting Room settings
@@ -118,10 +111,7 @@ export const SettingsProvider = () =>
             Effect.retry({
               while: (e) => e._tag === "Forbidden",
               schedule: Schedule.max([
-                Schedule.min([
-                  Schedule.exponential("500 millis"),
-                  Schedule.spaced("5 seconds"),
-                ]),
+                Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("5 seconds")]),
                 Schedule.recurs(8),
               ]),
             }),
@@ -147,13 +137,8 @@ export const SettingsProvider = () =>
       const o = olds as SettingsProps;
       const n = news as SettingsProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
-      const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+      const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+      if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -194,11 +179,7 @@ export const SettingsProvider = () =>
       // 3. Sync — PUT only when the observed value differs.
       const desired = news.searchEngineCrawlerBypass ?? false;
       if (observed.searchEngineCrawlerBypass === desired) {
-        return toAttributes(
-          zoneId,
-          observed.searchEngineCrawlerBypass,
-          initial,
-        );
+        return toAttributes(zoneId, observed.searchEngineCrawlerBypass, initial);
       }
       const updated = yield* waitingRooms.putSetting({
         zoneId,
@@ -216,9 +197,7 @@ export const SettingsProvider = () =>
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
-      if (
-        observed.searchEngineCrawlerBypass === initialSearchEngineCrawlerBypass
-      ) {
+      if (observed.searchEngineCrawlerBypass === initialSearchEngineCrawlerBypass) {
         return;
       }
       yield* waitingRooms

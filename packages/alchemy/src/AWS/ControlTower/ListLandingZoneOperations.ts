@@ -39,7 +39,6 @@ export interface ListLandingZoneOperations extends Binding.Service<
   >
 > {}
 
-export const ListLandingZoneOperations =
-  Binding.Service<ListLandingZoneOperations>(
-    "AWS.ControlTower.ListLandingZoneOperations",
-  );
+export const ListLandingZoneOperations = Binding.Service<ListLandingZoneOperations>(
+  "AWS.ControlTower.ListLandingZoneOperations",
+);

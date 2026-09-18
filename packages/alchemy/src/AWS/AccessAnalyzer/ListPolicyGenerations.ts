@@ -24,10 +24,7 @@ export interface ListPolicyGenerations extends Binding.Service<
   () => Effect.Effect<
     (
       request?: aa.ListPolicyGenerationsRequest,
-    ) => Effect.Effect<
-      aa.ListPolicyGenerationsResponse,
-      aa.ListPolicyGenerationsError
-    >
+    ) => Effect.Effect<aa.ListPolicyGenerationsResponse, aa.ListPolicyGenerationsError>
   >
 > {}
 

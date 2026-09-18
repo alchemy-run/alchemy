@@ -48,7 +48,6 @@ export interface GenerateAuthRequestCryptogram extends Binding.Service<
   >
 > {}
 
-export const GenerateAuthRequestCryptogram =
-  Binding.Service<GenerateAuthRequestCryptogram>(
-    "AWS.PaymentCryptography.GenerateAuthRequestCryptogram",
-  );
+export const GenerateAuthRequestCryptogram = Binding.Service<GenerateAuthRequestCryptogram>(
+  "AWS.PaymentCryptography.GenerateAuthRequestCryptogram",
+);

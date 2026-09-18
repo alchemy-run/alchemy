@@ -1,29 +1,21 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import ApplicationSignalsTestFunctionLive, {
-  ApplicationSignalsTestFunction,
-} from "./handler";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
+import ApplicationSignalsTestFunctionLive, { ApplicationSignalsTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(
-  testOptions,
-  "ApplicationSignalsBindings",
-);
+const sharedStack = Core.scratchStack(testOptions, "ApplicationSignalsBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -42,9 +34,7 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
@@ -53,24 +43,17 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       while: (e) => e._tag === "TransientUpstream",
       // Fresh-role IAM propagation can take ~60s right after deploy; the
       // handler's Effect.orDie surfaces a still-propagating grant as a 500.
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 
 const getJson = (path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 describe.sequential("ApplicationSignals Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "ApplicationSignals test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("ApplicationSignals test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("ApplicationSignals test setup: deploying fixture");
@@ -84,9 +67,7 @@ describe.sequential("ApplicationSignals Bindings", () => {
       baseUrl = functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `ApplicationSignals test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`ApplicationSignals test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -109,15 +90,10 @@ describe.sequential("ApplicationSignals Bindings", () => {
         Effect.flatMap((response) =>
           response.status === 200
             ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`IAM not propagated yet: ${response.status}`),
-              ),
+            : Effect.fail(new Error(`IAM not propagated yet: ${response.status}`)),
         ),
         Effect.retry({
-          schedule: Schedule.max([
-            Schedule.fixed("4 seconds"),
-            Schedule.recurs(30),
-          ]),
+          schedule: Schedule.max([Schedule.fixed("4 seconds"), Schedule.recurs(30)]),
         }),
       );
     }),
@@ -145,13 +121,11 @@ describe.sequential("ApplicationSignals Bindings", () => {
   });
 
   describe("GetService", () => {
-    test.provider(
-      "returns an empty service for unknown key attributes",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/service");
-          expect((response as any).discovered).toBe(false);
-        }),
+    test.provider("returns an empty service for unknown key attributes", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/service");
+        expect((response as any).discovered).toBe(false);
+      }),
     );
   });
 
@@ -196,18 +170,16 @@ describe.sequential("ApplicationSignals Bindings", () => {
   });
 
   describe("ListServiceLevelObjectives", () => {
-    test.provider(
-      "lists the account's SLOs including the fixture SLO",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/slos");
-          expect((response as any).count).toBeGreaterThanOrEqual(1);
-          expect(
-            (response as any).names.some((name: string) =>
-              name.toLowerCase().includes("bindingsslo"),
-            ),
-          ).toBe(true);
-        }),
+    test.provider("lists the account's SLOs including the fixture SLO", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/slos");
+        expect((response as any).count).toBeGreaterThanOrEqual(1);
+        expect(
+          (response as any).names.some((name: string) =>
+            name.toLowerCase().includes("bindingsslo"),
+          ),
+        ).toBe(true);
+      }),
     );
   });
 
@@ -233,32 +205,28 @@ describe.sequential("ApplicationSignals Bindings", () => {
   });
 
   describe("BatchUpdateExclusionWindows / ListServiceLevelObjectiveExclusionWindows", () => {
-    test.provider(
-      "adds, observes, and removes a maintenance window",
-      (_stack) =>
-        Effect.gen(function* () {
-          const before = yield* getJson("/exclusion-windows");
-          expect((before as any).count).toBe(0);
+    test.provider("adds, observes, and removes a maintenance window", (_stack) =>
+      Effect.gen(function* () {
+        const before = yield* getJson("/exclusion-windows");
+        expect((before as any).count).toBe(0);
 
-          const response = yield* send(
-            HttpClientRequest.post(`${baseUrl}/exclusion-windows`),
-          ).pipe(Effect.flatMap((r) => r.json));
-          expect((response as any).addErrors).toBe(0);
-          expect((response as any).afterAdd).toBe(1);
-          expect((response as any).removeErrors).toBe(0);
-          expect((response as any).afterRemove).toBe(0);
-        }),
+        const response = yield* send(HttpClientRequest.post(`${baseUrl}/exclusion-windows`)).pipe(
+          Effect.flatMap((r) => r.json),
+        );
+        expect((response as any).addErrors).toBe(0);
+        expect((response as any).afterAdd).toBe(1);
+        expect((response as any).removeErrors).toBe(0);
+        expect((response as any).afterRemove).toBe(0);
+      }),
     );
   });
 
   describe("GetInstrumentationConfigurationStatus", () => {
-    test.provider(
-      "returns the bound configuration's (empty) status history",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = yield* getJson("/ic-status");
-          expect((response as any).events).toBe(0);
-        }),
+    test.provider("returns the bound configuration's (empty) status history", (_stack) =>
+      Effect.gen(function* () {
+        const response = yield* getJson("/ic-status");
+        expect((response as any).events).toBe(0);
+      }),
     );
   });
 });

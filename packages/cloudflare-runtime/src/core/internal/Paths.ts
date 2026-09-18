@@ -10,18 +10,10 @@ import * as System from "./System.ts";
 export class Paths extends Context.Service<
   Paths,
   {
-    readonly cache: (
-      ...prefix: Array<string>
-    ) => Effect.Effect<string, SystemError>;
-    readonly config: (
-      ...prefix: Array<string>
-    ) => Effect.Effect<string, SystemError>;
-    readonly data: (
-      ...prefix: Array<string>
-    ) => Effect.Effect<string, SystemError>;
-    readonly state: (
-      ...prefix: Array<string>
-    ) => Effect.Effect<string, SystemError>;
+    readonly cache: (...prefix: Array<string>) => Effect.Effect<string, SystemError>;
+    readonly config: (...prefix: Array<string>) => Effect.Effect<string, SystemError>;
+    readonly data: (...prefix: Array<string>) => Effect.Effect<string, SystemError>;
+    readonly state: (...prefix: Array<string>) => Effect.Effect<string, SystemError>;
   }
 >()("cloudflare-runtime/Paths") {}
 
@@ -63,14 +55,10 @@ export const PathsLive = Layer.effect(
   }),
 );
 
-export const data = (...prefix: Array<string>) =>
-  Paths.use((Paths) => Paths.data(...prefix));
+export const data = (...prefix: Array<string>) => Paths.use((Paths) => Paths.data(...prefix));
 
-export const config = (...prefix: Array<string>) =>
-  Paths.use((Paths) => Paths.config(...prefix));
+export const config = (...prefix: Array<string>) => Paths.use((Paths) => Paths.config(...prefix));
 
-export const cache = (...prefix: Array<string>) =>
-  Paths.use((Paths) => Paths.cache(...prefix));
+export const cache = (...prefix: Array<string>) => Paths.use((Paths) => Paths.cache(...prefix));
 
-export const state = (...prefix: Array<string>) =>
-  Paths.use((Paths) => Paths.state(...prefix));
+export const state = (...prefix: Array<string>) => Paths.use((Paths) => Paths.state(...prefix));

@@ -1,10 +1,10 @@
-import * as AWS from "@/AWS";
-import { Policy, PolicyStore, PolicyTemplate } from "@/AWS/VerifiedPermissions";
-import * as Test from "@/Test/Alchemy";
 import * as avp from "@distilled.cloud/aws/verifiedpermissions";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { Policy, PolicyStore, PolicyTemplate } from "@/AWS/VerifiedPermissions";
+import * as Test from "@/Test/Alchemy";
 
 const unwrap = (v: string | Redacted.Redacted<string> | undefined) =>
   v === undefined ? undefined : Redacted.isRedacted(v) ? Redacted.value(v) : v;
@@ -14,20 +14,12 @@ const { test } = Test.make({ providers: AWS.providers() });
 const findTemplate = (policyStoreId: string, policyTemplateId: string) =>
   avp
     .getPolicyTemplate({ policyStoreId, policyTemplateId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const findPolicy = (policyStoreId: string, policyId: string) =>
   avp
     .getPolicy({ policyStoreId, policyId })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 const templateStatement = `permit(
   principal == ?principal,
@@ -60,24 +52,16 @@ test.provider(
         });
 
       // create
-      const { store, template, linked } = yield* stack.deploy(
-        makeStack("initial description"),
-      );
+      const { store, template, linked } = yield* stack.deploy(makeStack("initial description"));
       expect(template.policyTemplateId).toBeDefined();
       expect(linked.policyId).toBeDefined();
 
       // out-of-band verify
-      const created = yield* findTemplate(
-        store.policyStoreId,
-        template.policyTemplateId,
-      );
+      const created = yield* findTemplate(store.policyStoreId, template.policyTemplateId);
       expect(unwrap(created?.statement)).toContain("?principal");
       expect(unwrap(created?.description)).toBe("initial description");
 
-      const createdLinked = yield* findPolicy(
-        store.policyStoreId,
-        linked.policyId,
-      );
+      const createdLinked = yield* findPolicy(store.policyStoreId, linked.policyId);
       expect(createdLinked?.policyType).toBe("TEMPLATE_LINKED");
 
       // update the template description in place (ids are stable)
@@ -85,18 +69,12 @@ test.provider(
       expect(updated.template.policyTemplateId).toBe(template.policyTemplateId);
       expect(updated.linked.policyId).toBe(linked.policyId);
 
-      const afterUpdate = yield* findTemplate(
-        store.policyStoreId,
-        template.policyTemplateId,
-      );
+      const afterUpdate = yield* findTemplate(store.policyStoreId, template.policyTemplateId);
       expect(unwrap(afterUpdate?.description)).toBe("updated description");
 
       // destroy — linked policy must delete before the template
       yield* stack.destroy();
-      const goneTemplate = yield* findTemplate(
-        store.policyStoreId,
-        template.policyTemplateId,
-      );
+      const goneTemplate = yield* findTemplate(store.policyStoreId, template.policyTemplateId);
       expect(goneTemplate).toBeUndefined();
     }),
   { timeout: 180_000 },

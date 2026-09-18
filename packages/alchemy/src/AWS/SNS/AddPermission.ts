@@ -3,10 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Topic } from "./Topic.ts";
 
-export interface AddPermissionRequest extends Omit<
-  sns.AddPermissionInput,
-  "TopicArn"
-> {}
+export interface AddPermissionRequest extends Omit<sns.AddPermissionInput, "TopicArn"> {}
 
 /**
  * Runtime binding for `sns:AddPermission`.
@@ -44,6 +41,4 @@ export interface AddPermission extends Binding.Service<
   >
 > {}
 
-export const AddPermission = Binding.Service<AddPermission>(
-  "AWS.SNS.AddPermission",
-);
+export const AddPermission = Binding.Service<AddPermission>("AWS.SNS.AddPermission");

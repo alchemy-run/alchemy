@@ -1,32 +1,25 @@
 import * as railway from "@distilled.cloud/railway";
-import * as Provider from "@/Provider";
-import * as Railway from "@/Railway";
-import { projectServices } from "@/Railway/GraphQL.ts";
-import { suitePartition } from "./suiteProject.ts";
-import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as Provider from "@/Provider";
+import * as Railway from "@/Railway";
+import { projectServices } from "@/Railway/GraphQL.ts";
+import * as Test from "@/Test/Alchemy";
+import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const PUBLIC_TEMPLATE_CODE = "postgres";
 
 const waitUntilServiceGone = (serviceId: string) =>
   railway.service({ id: serviceId }, { deletedAt: true }).pipe(
-    Effect.map((service) =>
-      service.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    railway.catchTags(["RailwayNotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
+    Effect.map((service) => (service.deletedAt != null ? ("gone" as const) : ("found" as const))),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed("gone" as const)),
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
       until: (status) => status === "gone",
@@ -78,9 +71,7 @@ test.provider(
       expect(created.deployed.code).toEqual(PUBLIC_TEMPLATE_CODE);
       expect(created.deployed.name).toEqual(expect.any(String));
       expect(created.deployed.projectId).toEqual(created.project.projectId);
-      expect(created.deployed.environmentId).toEqual(
-        created.environment.environmentId,
-      );
+      expect(created.deployed.environmentId).toEqual(created.environment.environmentId);
       expect(created.deployed.workspaceId).toEqual(created.project.workspaceId);
       expect(created.deployed.ownsProject).toEqual(false);
       expect(created.deployed.serviceIds.length).toBeGreaterThan(0);
@@ -92,9 +83,7 @@ test.provider(
         id: true,
         deletedAt: true,
       });
-      const liveIds = live
-        .filter((node) => node.deletedAt == null)
-        .map((node) => node.id);
+      const liveIds = live.filter((node) => node.deletedAt == null).map((node) => node.id);
       for (const serviceId of created.deployed.serviceIds) {
         expect(liveIds).toContain(serviceId);
       }
@@ -134,9 +123,7 @@ test.provider(
       );
       expect(found).toBeDefined();
       if (found === undefined) {
-        return yield* Effect.fail(
-          new Error("Deployed marketplace template was not listed"),
-        );
+        return yield* Effect.fail(new Error("Deployed marketplace template was not listed"));
       }
       expect(found.templateId).toEqual(created.deployed.templateId);
       expect(found.serviceIds.length).toBeGreaterThan(0);
@@ -151,10 +138,7 @@ test.provider(
         expect(Result.isFailure(metadata)).toBe(true);
         if (Result.isFailure(metadata)) {
           expect(
-            railway.isErrorTag(metadata.failure, [
-              "RailwayForbidden",
-              "RailwayNotFound",
-            ]),
+            railway.isErrorTag(metadata.failure, ["RailwayForbidden", "RailwayNotFound"]),
           ).toBe(true);
         }
       }

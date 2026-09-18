@@ -1,11 +1,11 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Personalize from "@/AWS/Personalize";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Personalize from "@/AWS/Personalize";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -98,8 +98,7 @@ export default PersonalizeTestFunction.make(
     });
 
     const putEvents = yield* Personalize.PutEvents(tracker);
-    const putActionInteractions =
-      yield* Personalize.PutActionInteractions(tracker);
+    const putActionInteractions = yield* Personalize.PutActionInteractions(tracker);
     const putItems = yield* Personalize.PutItems(items);
     const putUsers = yield* Personalize.PutUsers(users);
     // Bound to the Items dataset on purpose: without an Actions dataset the
@@ -107,23 +106,18 @@ export default PersonalizeTestFunction.make(
     const putActions = yield* Personalize.PutActions(items);
     const getRecommendations = yield* Personalize.GetRecommendations();
     const getPersonalizedRanking = yield* Personalize.GetPersonalizedRanking();
-    const getActionRecommendations =
-      yield* Personalize.GetActionRecommendations();
+    const getActionRecommendations = yield* Personalize.GetActionRecommendations();
     const createDatasetImportJob = yield* Personalize.CreateDatasetImportJob();
-    const describeDatasetImportJob =
-      yield* Personalize.DescribeDatasetImportJob();
+    const describeDatasetImportJob = yield* Personalize.DescribeDatasetImportJob();
     const createSolutionVersion = yield* Personalize.CreateSolutionVersion();
-    const describeSolutionVersion =
-      yield* Personalize.DescribeSolutionVersion();
+    const describeSolutionVersion = yield* Personalize.DescribeSolutionVersion();
     const updateCampaign = yield* Personalize.UpdateCampaign();
     const describeCampaign = yield* Personalize.DescribeCampaign();
     const createSolution = yield* Personalize.CreateSolution();
     const createCampaign = yield* Personalize.CreateCampaign();
     const getSolutionMetrics = yield* Personalize.GetSolutionMetrics();
-    const createBatchInferenceJob =
-      yield* Personalize.CreateBatchInferenceJob();
-    const describeBatchInferenceJob =
-      yield* Personalize.DescribeBatchInferenceJob();
+    const createBatchInferenceJob = yield* Personalize.CreateBatchInferenceJob();
+    const describeBatchInferenceJob = yield* Personalize.DescribeBatchInferenceJob();
 
     const bound = {
       putEvents,
@@ -154,8 +148,7 @@ export default PersonalizeTestFunction.make(
         const pathname = url.pathname;
         const arn = url.searchParams.get("arn") ?? "";
         const roleArn =
-          url.searchParams.get("role") ??
-          "arn:aws:iam::000000000000:role/alchemy_probe";
+          url.searchParams.get("role") ?? "arn:aws:iam::000000000000:role/alchemy_probe";
 
         if (pathname === "/bindings") {
           return yield* HttpServerResponse.json({ bound: Object.keys(bound) });
@@ -397,10 +390,7 @@ export default PersonalizeTestFunction.make(
           return yield* HttpServerResponse.json({ tag });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found", pathname },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found", pathname }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

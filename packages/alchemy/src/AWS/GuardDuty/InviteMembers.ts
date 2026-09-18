@@ -33,12 +33,7 @@ export interface InviteMembers extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: Omit<guardduty.InviteMembersRequest, "DetectorId">,
-    ) => Effect.Effect<
-      guardduty.InviteMembersResponse,
-      guardduty.InviteMembersError
-    >
+    ) => Effect.Effect<guardduty.InviteMembersResponse, guardduty.InviteMembersError>
   >
 > {}
-export const InviteMembers = Binding.Service<InviteMembers>(
-  "AWS.GuardDuty.InviteMembers",
-);
+export const InviteMembers = Binding.Service<InviteMembers>("AWS.GuardDuty.InviteMembers");

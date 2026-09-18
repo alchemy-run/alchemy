@@ -7,10 +7,7 @@ import type { Workflow } from "./Workflow.ts";
  * Request accepted by the {@link GetTaskInstance} runtime callable. The
  * `WorkflowArn` is injected from the bound {@link Workflow}.
  */
-export type GetTaskInstanceInput = Omit<
-  mwaa.GetTaskInstanceRequest,
-  "WorkflowArn"
->;
+export type GetTaskInstanceInput = Omit<mwaa.GetTaskInstanceRequest, "WorkflowArn">;
 
 /**
  * Runtime binding for `airflow-serverless:GetTaskInstance`.

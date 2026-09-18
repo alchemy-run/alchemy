@@ -27,12 +27,7 @@ export interface ListAllowLists extends Binding.Service<
   () => Effect.Effect<
     (
       request?: macie2.ListAllowListsRequest,
-    ) => Effect.Effect<
-      macie2.ListAllowListsResponse,
-      macie2.ListAllowListsError
-    >
+    ) => Effect.Effect<macie2.ListAllowListsResponse, macie2.ListAllowListsError>
   >
 > {}
-export const ListAllowLists = Binding.Service<ListAllowLists>(
-  "AWS.Macie2.ListAllowLists",
-);
+export const ListAllowLists = Binding.Service<ListAllowLists>("AWS.Macie2.ListAllowLists");

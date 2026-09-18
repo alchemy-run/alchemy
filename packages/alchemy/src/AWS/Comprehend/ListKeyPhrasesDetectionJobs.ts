@@ -37,7 +37,6 @@ export interface ListKeyPhrasesDetectionJobs extends Binding.Service<
     >
   >
 > {}
-export const ListKeyPhrasesDetectionJobs =
-  Binding.Service<ListKeyPhrasesDetectionJobs>(
-    "AWS.Comprehend.ListKeyPhrasesDetectionJobs",
-  );
+export const ListKeyPhrasesDetectionJobs = Binding.Service<ListKeyPhrasesDetectionJobs>(
+  "AWS.Comprehend.ListKeyPhrasesDetectionJobs",
+);

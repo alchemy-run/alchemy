@@ -38,10 +38,7 @@ export interface ConnectionInfo {
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.
    */
-  refreshPassword?: Effect.Effect<
-    Redacted.Redacted<string>,
-    Presign.PresignError
-  >;
+  refreshPassword?: Effect.Effect<Redacted.Redacted<string>, Presign.PresignError>;
 }
 
 interface ConnectOptionsBase {

@@ -4,11 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
-import {
-  hostAwsAccess,
-  regionFromArn,
-  withRuntimeCredentials,
-} from "./BindingHttp.ts";
+import { hostAwsAccess, regionFromArn, withRuntimeCredentials } from "./BindingHttp.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 // Shared scaffolding for the MicroVM runtime bindings. Every `*Http` impl is
@@ -17,20 +13,14 @@ import type { MicrovmImage } from "./MicrovmImage.ts";
 // NOT exported from `index.ts` — it only backs the per-operation `*Http` files.
 
 /** The distilled operation method, yielded to its request callable. */
-type Operation<Res, Err> = Effect.Effect<
-  (req: any) => Effect.Effect<Res, Err, any>,
-  any,
-  any
->;
+type Operation<Res, Err> = Effect.Effect<(req: any) => Effect.Effect<Res, Err, any>, any, any>;
 
 export interface ImageBindingOptions<Req, Res, Err, Self> {
   /** The `Binding.Service` contract this layer implements. */
   binding: Binding.Service<
     Self,
     string,
-    (
-      image: MicrovmImage,
-    ) => Effect.Effect<(req: Req) => Effect.Effect<Res, Err>>
+    (image: MicrovmImage) => Effect.Effect<(req: Req) => Effect.Effect<Res, Err>>
   >;
   /** Operation name, used for the SID label and tracing, e.g. `"RunMicrovm"`. */
   name: string;
@@ -82,10 +72,7 @@ const networkConnectorGlobs = (imageArn: string): string[] => {
   const prefix = imageArn.replace(/:microvm-image[:/].*$/, "");
   // arn:<partition>:lambda:<region>
   const regionPrefix = prefix.replace(/:[^:]*$/, "");
-  return [
-    `${prefix}:network-connector:*`,
-    `${regionPrefix}:aws:network-connector:*`,
-  ];
+  return [`${prefix}:network-connector:*`, `${regionPrefix}:aws:network-connector:*`];
 };
 
 /** The IAM policy statements an image-scoped MicroVM operation requires. */
@@ -117,12 +104,8 @@ const imagePolicyStatements = <Req, Res, Err, Self>(
           Effect: "Allow" as const,
           Action: ["lambda:PassNetworkConnector"],
           Resource: [
-            image.imageArn.pipe(
-              Output.map((a) => networkConnectorGlobs(a)[0]!),
-            ),
-            image.imageArn.pipe(
-              Output.map((a) => networkConnectorGlobs(a)[1]!),
-            ),
+            image.imageArn.pipe(Output.map((a) => networkConnectorGlobs(a)[0]!)),
+            image.imageArn.pipe(Output.map((a) => networkConnectorGlobs(a)[1]!)),
           ],
         },
       ]
@@ -158,19 +141,19 @@ export const makeImageBinding = <Req, Res, Err, Self>(
           policyStatements: imagePolicyStatements(image, options),
         }));
 
-        return Effect.fn(`AWS.Lambda.${options.name}(${image.LogicalId})`)(
-          function* (request: Req) {
-            return yield* withRuntimeCredentials(
-              access,
-              region,
-              run(
-                options.injectImageIdentifier
-                  ? { ...(request as object), imageIdentifier: yield* imageArn }
-                  : request,
-              ),
-            );
-          },
-        );
+        return Effect.fn(`AWS.Lambda.${options.name}(${image.LogicalId})`)(function* (
+          request: Req,
+        ) {
+          return yield* withRuntimeCredentials(
+            access,
+            region,
+            run(
+              options.injectImageIdentifier
+                ? { ...(request as object), imageIdentifier: yield* imageArn }
+                : request,
+            ),
+          );
+        });
       });
     }),
   ) as unknown as Layer.Layer<Self>;
@@ -201,14 +184,10 @@ export const makeAccountBinding = <Req, Res, Err, Self>(
         const host = yield* Binding.Host;
         const access = yield* hostAwsAccess(host, () => ({
           label: `Allow(${host?.LogicalId}, AWS.Lambda.${options.name}())`,
-          policyStatements: [
-            { Effect: "Allow", Action: options.actions, Resource: ["*"] },
-          ],
+          policyStatements: [{ Effect: "Allow", Action: options.actions, Resource: ["*"] }],
         }));
 
-        return Effect.fn(`AWS.Lambda.${options.name}()`)(function* (
-          request: Req,
-        ) {
+        return Effect.fn(`AWS.Lambda.${options.name}()`)(function* (request: Req) {
           // Account-level operations are global; default the STS/endpoint region.
           const region = Effect.succeed("us-east-1");
           return yield* withRuntimeCredentials(access, region, run(request));

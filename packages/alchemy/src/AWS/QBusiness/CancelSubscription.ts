@@ -38,10 +38,7 @@ export interface CancelSubscription extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CancelSubscriptionRequest,
-    ) => Effect.Effect<
-      qbusiness.CancelSubscriptionResponse,
-      qbusiness.CancelSubscriptionError
-    >
+    ) => Effect.Effect<qbusiness.CancelSubscriptionResponse, qbusiness.CancelSubscriptionError>
   >
 > {}
 export const CancelSubscription = Binding.Service<CancelSubscription>(

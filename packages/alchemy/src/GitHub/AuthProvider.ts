@@ -16,17 +16,9 @@ import {
 } from "../Auth/AuthProvider.ts";
 import { displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
-import {
-  storedSecret,
-  storedValueText,
-  validateFieldValues,
-} from "../Auth/StoredAuthProvider.ts";
+import { storedSecret, storedValueText, validateFieldValues } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
-import {
-  githubHostname,
-  normalizeGitHubBaseUrl,
-  resolveGitHubBaseUrlFromEnv,
-} from "./BaseUrl.ts";
+import { githubHostname, normalizeGitHubBaseUrl, resolveGitHubBaseUrlFromEnv } from "./BaseUrl.ts";
 
 const options: Array<{
   value: GitHubAuthConfig["method"];
@@ -87,12 +79,7 @@ const readEnvTokenFor = (
   Effect.gen(function* () {
     const candidates =
       baseUrl !== undefined
-        ? [
-            "GH_ENTERPRISE_TOKEN",
-            "GITHUB_ENTERPRISE_TOKEN",
-            "GITHUB_ACCESS_TOKEN",
-            "GITHUB_TOKEN",
-          ]
+        ? ["GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GITHUB_ACCESS_TOKEN", "GITHUB_TOKEN"]
         : ["GITHUB_ACCESS_TOKEN", "GITHUB_TOKEN"];
     for (const key of candidates) {
       const token = yield* getEnvRedacted(key);
@@ -169,9 +156,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       const fixed =
         authOptions?.baseUrl !== undefined
           ? {
-              baseUrl: yield* normalizeGitHubBaseUrl(authOptions.baseUrl).pipe(
-                Effect.orDie,
-              ),
+              baseUrl: yield* normalizeGitHubBaseUrl(authOptions.baseUrl).pipe(Effect.orDie),
             }
           : undefined;
 
@@ -186,18 +171,12 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             ? Effect.succeed(config.baseUrl)
             : resolveGitHubBaseUrlFromEnv;
 
-      const ghCliToken = (
-        hostname?: string,
-      ): Effect.Effect<string, AuthError> =>
+      const ghCliToken = (hostname?: string): Effect.Effect<string, AuthError> =>
         Effect.gen(function* () {
           const handle = yield* cp.spawn(
             ChildProcess.make(
               "gh",
-              [
-                "auth",
-                "token",
-                ...(hostname !== undefined ? ["--hostname", hostname] : []),
-              ],
+              ["auth", "token", ...(hostname !== undefined ? ["--hostname", hostname] : [])],
               { shell: false },
             ),
           );
@@ -218,9 +197,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           }
           const token = stdout.trim();
           if (!token) {
-            return yield* Effect.fail(
-              new GhCliError("gh auth token returned empty output"),
-            );
+            return yield* Effect.fail(new GhCliError("gh auth token returned empty output"));
           }
           return token;
         }).pipe(
@@ -240,8 +217,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         const token = yield* interaction.prompt
           .password({
             message: "GitHub Personal Access Token",
-            description:
-              "Requires `repo` scope and `workflow` for GitHub Actions.",
+            description: "Requires `repo` scope and `workflow` for GitHub Actions.",
             validate: (v) => (v.length === 0 ? "Required" : undefined),
           })
           .pipe(mapPromptCancellation);
@@ -264,9 +240,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           mapPromptCancellation,
           Effect.flatMap((input) => {
             const trimmed = (input ?? "").trim();
-            return trimmed === ""
-              ? Effect.succeed(undefined)
-              : normalizeGitHubBaseUrl(trimmed);
+            return trimmed === "" ? Effect.succeed(undefined) : normalizeGitHubBaseUrl(trimmed);
           }),
         );
 
@@ -279,16 +253,11 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
           // The host prompt is skipped when providers({ baseUrl }) pinned it —
           // nothing is stored in the profile config; `read` re-applies the
           // pinned value from code on every resolution.
-          const baseUrl =
-            fixed !== undefined ? undefined : yield* promptBaseUrl;
+          const baseUrl = fixed !== undefined ? undefined : yield* promptBaseUrl;
           const verifyHost = fixed !== undefined ? fixed.baseUrl : baseUrl;
           return yield* Match.value(method).pipe(
             Match.when("gh-cli", () =>
-              ghCliToken(
-                verifyHost !== undefined
-                  ? githubHostname(verifyHost)
-                  : undefined,
-              ).pipe(
+              ghCliToken(verifyHost !== undefined ? githubHostname(verifyHost) : undefined).pipe(
                 Effect.map((token) => ({
                   method: "gh-cli" as const,
                   token,
@@ -322,9 +291,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
       const resolveCredentials = (
         profileName: string,
         config: GitHubAuthConfig,
-        updateConfig?: (
-          config: GitHubAuthConfig,
-        ) => Effect.Effect<void, AuthError>,
+        updateConfig?: (config: GitHubAuthConfig) => Effect.Effect<void, AuthError>,
       ): Effect.Effect<GitHubResolvedCredentials, AuthError | NeedsReauth> =>
         Match.value(config).pipe(
           Match.when(
@@ -385,14 +352,10 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             Match.when({ method: "gh-cli" }, (c) =>
               effectiveBaseUrl(c).pipe(
                 Effect.flatMap((baseUrl) =>
-                  ghCliToken(
-                    baseUrl !== undefined ? githubHostname(baseUrl) : undefined,
-                  ),
+                  ghCliToken(baseUrl !== undefined ? githubHostname(baseUrl) : undefined),
                 ),
                 Effect.tap(() =>
-                  interaction.output.success(
-                    "GitHub: gh CLI authentication available.",
-                  ),
+                  interaction.output.success("GitHub: gh CLI authentication available."),
                 ),
                 Effect.map((token) => ({ ...c, token })),
               ),
@@ -400,18 +363,12 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
             Match.when({ method: "stored" }, (c) => Effect.succeed(c)),
             Match.exhaustive,
           )
-          .pipe(
-            Effect.mapError(
-              (e) => new AuthError({ message: "login failed", cause: e }),
-            ),
-          );
+          .pipe(Effect.mapError((e) => new AuthError({ message: "login failed", cause: e })));
 
       const details = (
         profileName: string,
         config: GitHubAuthConfig,
-        updateConfig?: (
-          config: GitHubAuthConfig,
-        ) => Effect.Effect<void, AuthError>,
+        updateConfig?: (config: GitHubAuthConfig) => Effect.Effect<void, AuthError>,
       ): Effect.Effect<ProviderDetails, AuthError | NeedsReauth> =>
         resolveCredentials(profileName, config, updateConfig).pipe(
           Effect.map((creds) => {
@@ -422,9 +379,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
               lines: [
                 { key: "token", value: displayRedacted(creds.token, 6) },
                 { key: "source", value: sourceStr },
-                ...(creds.baseUrl !== undefined
-                  ? [{ key: "baseUrl", value: creds.baseUrl }]
-                  : []),
+                ...(creds.baseUrl !== undefined ? [{ key: "baseUrl", value: creds.baseUrl }] : []),
               ],
             };
           }),
@@ -437,8 +392,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         {
           name: "token",
           label: "GitHub Personal Access Token",
-          description:
-            "Requires `repo` scope and `workflow` for GitHub Actions.",
+          description: "Requires `repo` scope and `workflow` for GitHub Actions.",
           secret: true,
         },
         {
@@ -462,11 +416,7 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         },
       ): Effect.Effect<GitHubAuthConfig, AuthError, Interaction.Interaction> =>
         input.method === "stored"
-          ? validateFieldValues(
-              GITHUB_AUTH_PROVIDER_NAME,
-              storedFields,
-              input.values,
-            ).pipe(
+          ? validateFieldValues(GITHUB_AUTH_PROVIDER_NAME, storedFields, input.values).pipe(
               Effect.flatMap(
                 Effect.fn(function* (values) {
                   // A hard-coded providers({ baseUrl }) pins the host; nothing
@@ -476,16 +426,10 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
                     fixed !== undefined
                       ? undefined
                       : values.baseUrl !== undefined
-                        ? yield* normalizeGitHubBaseUrl(
-                            storedValueText(values.baseUrl) ?? "",
-                          )
+                        ? yield* normalizeGitHubBaseUrl(storedValueText(values.baseUrl) ?? "")
                         : undefined;
-                  const token = Redacted.value(
-                    storedSecret(values.token) ?? Redacted.make(""),
-                  );
-                  yield* interaction.output.success(
-                    "GitHub: credentials saved.",
-                  );
+                  const token = Redacted.value(storedSecret(values.token) ?? Redacted.make(""));
+                  yield* interaction.output.success("GitHub: credentials saved.");
                   return { method: "stored" as const, token, baseUrl };
                 }),
               ),
@@ -505,19 +449,13 @@ export const makeGitHubAuth = (authOptions?: GitHubAuthOptions) =>
         login,
         details,
         read: resolveCredentials,
-        readEnvironment: readEnvCredentials(
-          fixed !== undefined ? fixed.baseUrl : undefined,
-        ),
+        readEnvironment: readEnvCredentials(fixed !== undefined ? fixed.baseUrl : undefined),
         environment: [
           {
             name: "GITHUB_ACCESS_TOKEN",
             required: true,
             secret: true,
-            alternatives: [
-              "GITHUB_TOKEN",
-              "GH_ENTERPRISE_TOKEN",
-              "GITHUB_ENTERPRISE_TOKEN",
-            ],
+            alternatives: ["GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"],
             description:
               "Personal access token. The enterprise variants are only consulted when a GitHub Enterprise host is configured.",
           },

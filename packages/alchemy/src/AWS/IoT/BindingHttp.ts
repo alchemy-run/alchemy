@@ -16,11 +16,10 @@ import type { Thing } from "./Thing.ts";
  */
 
 const currentEnvironment = Effect.gen(function* () {
-  const { accountId, region } =
-    yield* AWSEnvironment.current as unknown as Effect.Effect<{
-      accountId: string;
-      region: string;
-    }>;
+  const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+    accountId: string;
+    region: string;
+  }>;
   return { accountId, region };
 });
 
@@ -69,12 +68,7 @@ export const makeIotAccountHttpBinding = <I, A, E, R>(options: {
  * physical name as `thingName` and the deploy-time half grants `actions` on
  * the thing ARN.
  */
-export const makeIotThingHttpBinding = <
-  I extends { thingName: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeIotThingHttpBinding = <I extends { thingName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.IoT.GetThingShadow`. */
   tag: string;
   /** The distilled operation; `thingName` is injected from the thing. */
@@ -98,10 +92,7 @@ export const makeIotThingHttpBinding = <
                 // `thing/<name>` authorizes the classic shadow and the
                 // registry; `thing/<name>/*` authorizes NAMED shadows,
                 // whose IAM resource is `thing/<thingName>/<shadowName>`.
-                Resource: [
-                  thing.thingArn,
-                  Output.interpolate`${thing.thingArn}/*`,
-                ],
+                Resource: [thing.thingArn, Output.interpolate`${thing.thingArn}/*`],
               },
             ],
           });
@@ -142,24 +133,18 @@ export const makeIotTopicHttpBinding = <I, A, E, R>(options: {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           const { accountId, region } = yield* currentEnvironment;
-          yield* host.bind`Allow(${host}, ${options.tag}(${topicFilter ?? "*"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [
-                    `arn:aws:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${topicFilter ?? "*"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [`arn:aws:iot:${region}:${accountId}:topic/${topicFilter ?? "*"}`],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`${options.tag}(${topicFilter ?? "*"})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${topicFilter ?? "*"})`)(function* (request: I) {
         return yield* op(request);
       });
     });
@@ -190,24 +175,18 @@ export const makeIotClientHttpBinding = <I, A, E, R>(options: {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           const { accountId, region } = yield* currentEnvironment;
-          yield* host.bind`Allow(${host}, ${options.tag}(${clientIdFilter ?? "*"}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [...options.actions],
-                  Resource: [
-                    `arn:aws:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`,
-                  ],
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, ${options.tag}(${clientIdFilter ?? "*"}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [`arn:aws:iot:${region}:${accountId}:client/${clientIdFilter ?? "*"}`],
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`${options.tag}(${clientIdFilter ?? "*"})`)(function* (
-        request: I,
-      ) {
+      return Effect.fn(`${options.tag}(${clientIdFilter ?? "*"})`)(function* (request: I) {
         return yield* op(request);
       });
     });

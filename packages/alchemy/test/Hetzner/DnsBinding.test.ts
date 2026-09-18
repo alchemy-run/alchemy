@@ -1,18 +1,15 @@
-import { Action } from "@/Action";
-import * as Hetzner from "@/Hetzner";
-import * as Test from "@/Test/Alchemy";
 import { Services } from "@distilled.cloud/hetzner";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { Action } from "@/Action";
+import * as Hetzner from "@/Hetzner";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
@@ -127,9 +124,7 @@ test.provider.skipIf(!hasHetznerCreds)(
         rr_type: "A",
       });
       expect(fetched.rrset.id).toEqual("www/A");
-      expect(fetched.rrset.records.map((record) => record.value)).toEqual([
-        "192.0.2.1",
-      ]);
+      expect(fetched.rrset.records.map((record) => record.value)).toEqual(["192.0.2.1"]);
 
       const apiGone = yield* Services.zoneRrsets
         .getZoneRrset({

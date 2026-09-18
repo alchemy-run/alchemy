@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import type { HttpEffect } from "./Http.ts";
 import type { CallbackFactory } from "./Callback.ts";
+import type { HttpEffect } from "./Http.ts";
 import type { Output } from "./Output.ts";
 
 export interface BaseRuntimeContext {
@@ -51,8 +51,7 @@ export interface BaseRuntimeContext {
  * `Output.toString()` like `"QueueSinkQueue.queueUrl"`). Callers run the key
  * through this before calling `set`/`get` so both sides agree.
  */
-export const sanitizeKey = (key: string): string =>
-  key.replaceAll(/[^a-zA-Z0-9]/g, "_");
+export const sanitizeKey = (key: string): string => key.replaceAll(/[^a-zA-Z0-9]/g, "_");
 
 /**
  * The wire format `RuntimeContext.set`/`get` use to carry a `Redacted` value
@@ -123,12 +122,8 @@ export const packEnvValue = (value: unknown): string =>
  * Secrets Store) instead of leaking them as plain env vars. The inner
  * payload still carries the marker for the runtime `get` accessor.
  */
-export const packEnvValueKeepRedacted = (
-  value: unknown,
-): string | Redacted.Redacted<string> =>
-  Redacted.isRedacted(value)
-    ? Redacted.make(packEnvValue(value))
-    : packEnvValue(value);
+export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Redacted<string> =>
+  Redacted.isRedacted(value) ? Redacted.make(packEnvValue(value)) : packEnvValue(value);
 
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its
@@ -166,10 +161,9 @@ export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
  *
  * E.g. the context of a running Worker, Task, Process, Function
  */
-export class RuntimeContext extends Context.Service<
-  RuntimeContext,
-  BaseRuntimeContext
->()("RuntimeContext") {
+export class RuntimeContext extends Context.Service<RuntimeContext, BaseRuntimeContext>()(
+  "RuntimeContext",
+) {
   static phantom = Layer.empty as Layer.Layer<RuntimeContext>;
 }
 

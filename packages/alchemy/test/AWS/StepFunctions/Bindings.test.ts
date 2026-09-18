@@ -1,6 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -8,6 +5,9 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import SFNTestFunctionLive, { SFNTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -16,10 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "SFNBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy under parallel-suite load.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 let functionArn: string;
@@ -37,44 +34,34 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const postJson = (url: string, body: unknown) =>
-  send(
-    HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
-  ).pipe(Effect.flatMap((r) => r.json));
+  send(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body))).pipe(
+    Effect.flatMap((r) => r.json),
+  );
 
 const getJson = (url: string) =>
   send(HttpClientRequest.get(url)).pipe(Effect.flatMap((r) => r.json));
 
 /** Poll an execution's status via the fixture until it leaves RUNNING. */
 const pollExecution = (route: string, executionArn: string) =>
-  getJson(
-    `${baseUrl}/${route}?executionArn=${encodeURIComponent(executionArn)}`,
-  ).pipe(
+  getJson(`${baseUrl}/${route}?executionArn=${encodeURIComponent(executionArn)}`).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (r) => (r as { status: string }).status !== "RUNNING",
       times: 20,
     }),
-  ) as Effect.Effect<
-    { status: string; output?: string; error?: string },
-    unknown
-  >;
+  ) as Effect.Effect<{ status: string; output?: string; error?: string }, unknown>;
 
 /**
  * Drain the callback queue until we hold the task token for the given
@@ -85,8 +72,7 @@ const receiveTokenFor = (executionArn: string) =>
   getJson(`${baseUrl}/receive-token`).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
-      until: (r) =>
-        (r as { executionArn?: string }).executionArn === executionArn,
+      until: (r) => (r as { executionArn?: string }).executionArn === executionArn,
       times: 15,
     }),
     Effect.map((r) => (r as { token: string }).token),
@@ -110,9 +96,7 @@ describe("StepFunctions Bindings", () => {
       functionArn = deployed.functionArn;
       const readinessUrl = `${baseUrl}/health`;
 
-      yield* Effect.logInfo(
-        `SFN test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`SFN test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -120,9 +104,7 @@ describe("StepFunctions Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `SFN test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`SFN test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -181,10 +163,7 @@ describe("StepFunctions Bindings", () => {
             input: JSON.stringify({ order: 2 }),
           })) as { executionArn: string };
 
-          const final = yield* pollExecution(
-            "describe-standard",
-            started.executionArn,
-          );
+          const final = yield* pollExecution("describe-standard", started.executionArn);
           expect(final.status).toBe("SUCCEEDED");
           expect(JSON.parse(final.output!)).toEqual({ done: true });
         }),
@@ -249,10 +228,9 @@ describe("StepFunctions Bindings", () => {
         "heartbeats then completes a waiting execution",
         (_stack) =>
           Effect.gen(function* () {
-            const started = (yield* postJson(
-              `${baseUrl}/start-callback`,
-              {},
-            )) as { executionArn: string };
+            const started = (yield* postJson(`${baseUrl}/start-callback`, {})) as {
+              executionArn: string;
+            };
 
             const token = yield* receiveTokenFor(started.executionArn);
             expect(token).toBeTruthy();
@@ -269,10 +247,7 @@ describe("StepFunctions Bindings", () => {
             })) as { sent: boolean };
             expect(success.sent).toBe(true);
 
-            const final = yield* pollExecution(
-              "describe-callback",
-              started.executionArn,
-            );
+            const final = yield* pollExecution("describe-callback", started.executionArn);
             expect(final.status).toBe("SUCCEEDED");
             expect(JSON.parse(final.output!)).toEqual({ approved: true });
           }),
@@ -285,10 +260,9 @@ describe("StepFunctions Bindings", () => {
         "fails a waiting execution with a typed error",
         (_stack) =>
           Effect.gen(function* () {
-            const started = (yield* postJson(
-              `${baseUrl}/start-callback`,
-              {},
-            )) as { executionArn: string };
+            const started = (yield* postJson(`${baseUrl}/start-callback`, {})) as {
+              executionArn: string;
+            };
 
             const token = yield* receiveTokenFor(started.executionArn);
 
@@ -299,10 +273,7 @@ describe("StepFunctions Bindings", () => {
             })) as { sent: boolean };
             expect(failed.sent).toBe(true);
 
-            const final = yield* pollExecution(
-              "describe-callback",
-              started.executionArn,
-            );
+            const final = yield* pollExecution("describe-callback", started.executionArn);
             expect(final.status).toBe("FAILED");
             expect(final.error).toBe("ApprovalRejected");
           }),
@@ -315,10 +286,9 @@ describe("StepFunctions Bindings", () => {
         "aborts a running execution",
         (_stack) =>
           Effect.gen(function* () {
-            const started = (yield* postJson(
-              `${baseUrl}/start-callback`,
-              {},
-            )) as { executionArn: string };
+            const started = (yield* postJson(`${baseUrl}/start-callback`, {})) as {
+              executionArn: string;
+            };
 
             // consume this execution's token first so it never pollutes the
             // queue for other flows
@@ -329,10 +299,7 @@ describe("StepFunctions Bindings", () => {
             })) as { stopDate: string };
             expect(stopped.stopDate).toBeTruthy();
 
-            const final = yield* pollExecution(
-              "describe-callback",
-              started.executionArn,
-            );
+            const final = yield* pollExecution("describe-callback", started.executionArn);
             expect(final.status).toBe("ABORTED");
           }),
         { timeout: 120_000 },
@@ -364,18 +331,16 @@ describe("StepFunctions Bindings", () => {
         "polls a scheduled activity task and completes it",
         (_stack) =>
           Effect.gen(function* () {
-            const started = (yield* postJson(
-              `${baseUrl}/start-activity`,
-              {},
-            )) as { executionArn: string };
+            const started = (yield* postJson(`${baseUrl}/start-activity`, {})) as {
+              executionArn: string;
+            };
 
             // GetActivityTask long-polls; repeat until the scheduled task's
             // token arrives.
             const task = yield* getJson(`${baseUrl}/activity-task`).pipe(
               Effect.repeat({
                 schedule: Schedule.spaced("2 seconds"),
-                until: (r): boolean =>
-                  (r as { taskToken: string | null }).taskToken !== null,
+                until: (r): boolean => (r as { taskToken: string | null }).taskToken !== null,
                 times: 8,
               }),
             );
@@ -388,10 +353,7 @@ describe("StepFunctions Bindings", () => {
             })) as { sent: boolean };
             expect(success.sent).toBe(true);
 
-            const final = yield* pollExecution(
-              "describe-activity",
-              started.executionArn,
-            );
+            const final = yield* pollExecution("describe-activity", started.executionArn);
             expect(final.status).toBe("SUCCEEDED");
             expect(JSON.parse(final.output!)).toEqual({
               workedBy: "activity-worker",
@@ -411,10 +373,7 @@ describe("StepFunctions Bindings", () => {
             input: JSON.stringify({ order: 4 }),
           })) as { executionArn: string };
 
-          const final = yield* pollExecution(
-            "describe-standard",
-            started.executionArn,
-          );
+          const final = yield* pollExecution("describe-standard", started.executionArn);
           expect(final.status).toBe("SUCCEEDED");
 
           const list = (yield* getJson(`${baseUrl}/list-executions`)) as {
@@ -451,10 +410,7 @@ describe("StepFunctions Bindings", () => {
             executionArn: string;
           };
 
-          const final = yield* pollExecution(
-            "describe-map",
-            started.executionArn,
-          );
+          const final = yield* pollExecution("describe-map", started.executionArn);
           expect(final.status).toBe("SUCCEEDED");
 
           const runs = (yield* getJson(
@@ -476,27 +432,23 @@ describe("StepFunctions Bindings", () => {
             mapRunArn,
             maxConcurrency: 2,
           })) as { updated: boolean; error?: string };
-          expect(
-            updated.updated || updated.error === "ValidationException",
-          ).toBe(true);
+          expect(updated.updated || updated.error === "ValidationException").toBe(true);
         }),
       { timeout: 120_000 },
     );
   });
 
   describe("consumeExecutionEvents", () => {
-    test.provider(
-      "the deploy created an EventBridge rule targeting the function",
-      (_stack) =>
-        Effect.gen(function* () {
-          // Out-of-band via distilled: the fixture's consumeExecutionEvents
-          // must have materialized as a rule on the default bus with the
-          // Lambda as target.
-          const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
-            TargetArn: functionArn,
-          });
-          expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
-        }),
+    test.provider("the deploy created an EventBridge rule targeting the function", (_stack) =>
+      Effect.gen(function* () {
+        // Out-of-band via distilled: the fixture's consumeExecutionEvents
+        // must have materialized as a rule on the default bus with the
+        // Lambda as target.
+        const { RuleNames } = yield* eventbridge.listRuleNamesByTarget({
+          TargetArn: functionArn,
+        });
+        expect((RuleNames ?? []).length).toBeGreaterThanOrEqual(1);
+      }),
     );
   });
 });

@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Enabling Sippy requires real external-cloud credentials: an AWS S3 (or
 // GCS) source bucket with read credentials, plus an R2 API token with
@@ -54,20 +51,12 @@ const program = (opts: { sippy: boolean }) =>
             provider: "aws",
             bucket: process.env.TEST_SIPPY_AWS_BUCKET!,
             region: process.env.TEST_SIPPY_AWS_REGION!,
-            accessKeyId: Redacted.make(
-              process.env.TEST_SIPPY_AWS_ACCESS_KEY_ID!,
-            ),
-            secretAccessKey: Redacted.make(
-              process.env.TEST_SIPPY_AWS_SECRET_ACCESS_KEY!,
-            ),
+            accessKeyId: Redacted.make(process.env.TEST_SIPPY_AWS_ACCESS_KEY_ID!),
+            secretAccessKey: Redacted.make(process.env.TEST_SIPPY_AWS_SECRET_ACCESS_KEY!),
           },
           destination: {
-            accessKeyId: Redacted.make(
-              process.env.TEST_SIPPY_R2_ACCESS_KEY_ID!,
-            ),
-            secretAccessKey: Redacted.make(
-              process.env.TEST_SIPPY_R2_SECRET_ACCESS_KEY!,
-            ),
+            accessKeyId: Redacted.make(process.env.TEST_SIPPY_R2_ACCESS_KEY_ID!),
+            secretAccessKey: Redacted.make(process.env.TEST_SIPPY_R2_SECRET_ACCESS_KEY!),
           },
         })
       : undefined;
@@ -117,8 +106,7 @@ test.provider(
           destination: {
             provider: "r2",
             accessKeyId: "deadbeefdeadbeefdeadbeefdeadbeef",
-            secretAccessKey:
-              "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            secretAccessKey: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
           },
         })
         .pipe(Effect.flip);
@@ -129,9 +117,7 @@ test.provider(
       // Once the bucket is gone, the Sippy endpoints report the typed
       // `NoSuchBucket` (code 10006) — what `read` maps to undefined and
       // `delete` swallows.
-      const goneError = yield* getSippy(accountId, bucket.bucketName).pipe(
-        Effect.flip,
-      );
+      const goneError = yield* getSippy(accountId, bucket.bucketName).pipe(Effect.flip);
       expect(goneError._tag).toEqual("NoSuchBucket");
 
       // Destroy again — engine-level delete must be idempotent.
@@ -179,11 +165,7 @@ test.provider.skipIf(!sippyCreds)(
       const provider = yield* Provider.findProvider(Cloudflare.R2.BucketSippy);
       const all = yield* provider.list();
 
-      expect(
-        all.some(
-          (s) => s.bucketName === created.bucket.bucketName && s.enabled,
-        ),
-      ).toBe(true);
+      expect(all.some((s) => s.bucketName === created.bucket.bucketName && s.enabled)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -207,9 +189,7 @@ test.provider.skipIf(!sippyCreds)(
       expect(created.sippy!.bucketName).toEqual(created.bucket.bucketName);
       expect(created.sippy!.jurisdiction).toEqual("default");
       expect(created.sippy!.source.provider).toEqual("aws");
-      expect(created.sippy!.source.bucket).toEqual(
-        process.env.TEST_SIPPY_AWS_BUCKET,
-      );
+      expect(created.sippy!.source.bucket).toEqual(process.env.TEST_SIPPY_AWS_BUCKET);
       expect(created.sippy!.destination.provider).toEqual("r2");
 
       // Out-of-band — Sippy is live on the bucket.
@@ -232,10 +212,7 @@ test.provider.skipIf(!sippyCreds)(
 
       yield* stack.destroy();
 
-      const goneError = yield* getSippy(
-        accountId,
-        created.bucket.bucketName,
-      ).pipe(Effect.flip);
+      const goneError = yield* getSippy(accountId, created.bucket.bucketName).pipe(Effect.flip);
       expect(goneError._tag).toEqual("NoSuchBucket");
     }).pipe(logLevel),
   { timeout: 300_000 },

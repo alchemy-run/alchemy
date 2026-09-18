@@ -50,9 +50,7 @@ export default Alchemy.Stack(
                 region: dashboardRegion,
                 stat: "Average",
                 period: 300,
-                metrics: [
-                  ["AWS/Lambda", "Duration", "FunctionName", functionName],
-                ],
+                metrics: [["AWS/Lambda", "Duration", "FunctionName", functionName]],
               },
             },
           ],
@@ -60,8 +58,7 @@ export default Alchemy.Stack(
       ),
     });
     const alarm = yield* AWS.CloudWatch.Alarm("JobFunctionErrorsAlarm", {
-      AlarmDescription:
-        "Alerts when the example Lambda function reports errors.",
+      AlarmDescription: "Alerts when the example Lambda function reports errors.",
       MetricName: "Errors",
       Namespace: "AWS/Lambda",
       Statistic: "Sum",

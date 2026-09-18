@@ -32,12 +32,7 @@ export interface GetLicense extends Binding.Service<
   () => Effect.Effect<
     (
       request: GetLicenseRequest,
-    ) => Effect.Effect<
-      licensemanager.GetLicenseResponse,
-      licensemanager.GetLicenseError
-    >
+    ) => Effect.Effect<licensemanager.GetLicenseResponse, licensemanager.GetLicenseError>
   >
 > {}
-export const GetLicense = Binding.Service<GetLicense>(
-  "AWS.LicenseManager.GetLicense",
-);
+export const GetLicense = Binding.Service<GetLicense>("AWS.LicenseManager.GetLicense");

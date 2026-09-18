@@ -2,8 +2,8 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Input } from "../../Input.ts";
-import { toWireSeconds } from "../../Util/Duration.ts";
 import * as Namespace from "../../Namespace.ts";
+import { toWireSeconds } from "../../Util/Duration.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import * as IAM from "../IAM/index.ts";
@@ -33,11 +33,7 @@ import {
   type DBParameterGroupProps,
   type DBParameterGroup as DBParameterGroupResource,
 } from "./DBParameterGroup.ts";
-import {
-  DBProxy,
-  type DBProxyProps,
-  type DBProxy as DBProxyResource,
-} from "./DBProxy.ts";
+import { DBProxy, type DBProxyProps, type DBProxy as DBProxyResource } from "./DBProxy.ts";
 import {
   DBProxyEndpoint,
   type DBProxyEndpointProps,
@@ -92,10 +88,7 @@ export interface AuroraProxyProps extends Omit<
   /**
    * Additional target-group configuration for the default proxy target group.
    */
-  targetGroup?: Omit<
-    DBProxyTargetGroupProps,
-    "dbProxyName" | "dbClusterIdentifiers"
-  >;
+  targetGroup?: Omit<DBProxyTargetGroupProps, "dbProxyName" | "dbClusterIdentifiers">;
   /**
    * Optional extra endpoint to create for the proxy.
    * Use `true` for sensible defaults.
@@ -375,9 +368,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
         props.secret?.resource ??
         (yield* Secret("Secret", {
           name: props.secret?.name,
-          description:
-            props.secret?.description ??
-            `Credentials for Aurora database ${id}`,
+          description: props.secret?.description ?? `Credentials for Aurora database ${id}`,
           kmsKeyId: props.secret?.kmsKeyId,
           secretString: props.secret?.secretString,
           secretBinary: props.secret?.secretBinary,
@@ -403,8 +394,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
 
       const clusterParameterGroup = props.clusterParameterGroup
         ? yield* DBClusterParameterGroup("ClusterParameterGroup", {
-            dbClusterParameterGroupName:
-              props.clusterParameterGroup.dbClusterParameterGroupName,
+            dbClusterParameterGroupName: props.clusterParameterGroup.dbClusterParameterGroupName,
             family: props.clusterParameterGroup.family,
             description: props.clusterParameterGroup.description,
             tags: mergeTags(commonTags, props.clusterParameterGroup.tags),
@@ -452,44 +442,29 @@ export const Aurora = (id: string, props: AuroraProps) =>
         engineVersion,
         databaseName,
         dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
-        dbClusterParameterGroupName:
-          clusterParameterGroup?.dbClusterParameterGroupName,
+        dbClusterParameterGroupName: clusterParameterGroup?.dbClusterParameterGroupName,
         vpcSecurityGroupIds: securityGroupIds,
         enableHttpEndpoint: props.dataApi ?? true,
         copyTagsToSnapshot: props.cluster?.copyTagsToSnapshot ?? true,
-        deletionProtection:
-          props.cluster?.deletionProtection ??
-          props.deletionProtection ??
-          false,
-        backupRetentionPeriod:
-          props.cluster?.backupRetentionPeriod ?? props.backupRetentionPeriod,
-        preferredBackupWindow:
-          props.cluster?.preferredBackupWindow ?? props.preferredBackupWindow,
+        deletionProtection: props.cluster?.deletionProtection ?? props.deletionProtection ?? false,
+        backupRetentionPeriod: props.cluster?.backupRetentionPeriod ?? props.backupRetentionPeriod,
+        preferredBackupWindow: props.cluster?.preferredBackupWindow ?? props.preferredBackupWindow,
         preferredMaintenanceWindow:
-          props.cluster?.preferredMaintenanceWindow ??
-          props.preferredMaintenanceWindow,
-        storageEncrypted:
-          props.cluster?.storageEncrypted ?? props.storageEncrypted,
+          props.cluster?.preferredMaintenanceWindow ?? props.preferredMaintenanceWindow,
+        storageEncrypted: props.cluster?.storageEncrypted ?? props.storageEncrypted,
         kmsKeyId: props.cluster?.kmsKeyId ?? props.kmsKeyId,
         enableIAMDatabaseAuthentication:
-          props.cluster?.enableIAMDatabaseAuthentication ??
-          props.enableIAMDatabaseAuthentication,
+          props.cluster?.enableIAMDatabaseAuthentication ?? props.enableIAMDatabaseAuthentication,
         enableCloudwatchLogsExports:
-          props.cluster?.enableCloudwatchLogsExports ??
-          props.enableCloudwatchLogsExports,
+          props.cluster?.enableCloudwatchLogsExports ?? props.enableCloudwatchLogsExports,
         caCertificateIdentifier:
-          props.cluster?.caCertificateIdentifier ??
-          props.caCertificateIdentifier,
+          props.cluster?.caCertificateIdentifier ?? props.caCertificateIdentifier,
         port: props.cluster?.port ?? props.port,
-        backtrackWindow:
-          props.cluster?.backtrackWindow ?? props.backtrackWindow,
-        monitoringInterval:
-          props.cluster?.monitoringInterval ?? monitoringInterval,
-        monitoringRoleArn:
-          props.cluster?.monitoringRoleArn ?? monitoringRoleArn,
+        backtrackWindow: props.cluster?.backtrackWindow ?? props.backtrackWindow,
+        monitoringInterval: props.cluster?.monitoringInterval ?? monitoringInterval,
+        monitoringRoleArn: props.cluster?.monitoringRoleArn ?? monitoringRoleArn,
         enablePerformanceInsights:
-          props.cluster?.enablePerformanceInsights ??
-          props.monitoring?.performanceInsights,
+          props.cluster?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
         serverlessV2ScalingConfiguration:
           props.cluster?.serverlessV2ScalingConfiguration ??
           (props.scaling
@@ -507,9 +482,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
       });
 
       const defaultInstanceClass =
-        props.instance?.dbInstanceClass ??
-        props.instanceClass ??
-        "db.serverless";
+        props.instance?.dbInstanceClass ?? props.instanceClass ?? "db.serverless";
 
       const writer = yield* DBInstance("Writer", {
         dbClusterIdentifier: cluster.dbClusterIdentifier,
@@ -524,15 +497,12 @@ export const Aurora = (id: string, props: AuroraProps) =>
         // for the DB Cluster."
         publiclyAccessible: props.instance?.publiclyAccessible ?? false,
         promotionTier: props.instance?.promotionTier ?? 0,
-        autoMinorVersionUpgrade:
-          props.instance?.autoMinorVersionUpgrade ?? true,
+        autoMinorVersionUpgrade: props.instance?.autoMinorVersionUpgrade ?? true,
         copyTagsToSnapshot: props.instance?.copyTagsToSnapshot ?? true,
         monitoringInterval: props.instance?.monitoringInterval ?? monitoringInterval, // prettier-ignore
-        monitoringRoleArn:
-          props.instance?.monitoringRoleArn ?? monitoringRoleArn,
+        monitoringRoleArn: props.instance?.monitoringRoleArn ?? monitoringRoleArn,
         enablePerformanceInsights:
-          props.instance?.enablePerformanceInsights ??
-          props.monitoring?.performanceInsights,
+          props.instance?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
       });
@@ -550,15 +520,12 @@ export const Aurora = (id: string, props: AuroraProps) =>
             // cluster, not its member instances (see Writer above).
             publiclyAccessible: props.instance?.publiclyAccessible ?? false,
             promotionTier: index + 1,
-            autoMinorVersionUpgrade:
-              props.instance?.autoMinorVersionUpgrade ?? true,
+            autoMinorVersionUpgrade: props.instance?.autoMinorVersionUpgrade ?? true,
             copyTagsToSnapshot: props.instance?.copyTagsToSnapshot ?? true,
             monitoringInterval: props.instance?.monitoringInterval ?? monitoringInterval, // prettier-ignore
-            monitoringRoleArn:
-              props.instance?.monitoringRoleArn ?? monitoringRoleArn,
+            monitoringRoleArn: props.instance?.monitoringRoleArn ?? monitoringRoleArn,
             enablePerformanceInsights:
-              props.instance?.enablePerformanceInsights ??
-              props.monitoring?.performanceInsights,
+              props.instance?.enablePerformanceInsights ?? props.monitoring?.performanceInsights,
             tags: mergeTags(commonTags, props.instance?.tags),
             ...props.instance,
           }),
@@ -590,10 +557,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
                     Statement: [
                       {
                         Effect: "Allow",
-                        Action: [
-                          "secretsmanager:GetSecretValue",
-                          "secretsmanager:DescribeSecret",
-                        ],
+                        Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
                         Resource: [secret.secretArn],
                       },
                     ],
@@ -619,23 +583,17 @@ export const Aurora = (id: string, props: AuroraProps) =>
                 idleClientTimeout: proxyConfig.idleClientTimeout,
                 debugLogging: proxyConfig.debugLogging,
                 endpointNetworkType: proxyConfig.endpointNetworkType,
-                targetConnectionNetworkType:
-                  proxyConfig.targetConnectionNetworkType,
+                targetConnectionNetworkType: proxyConfig.targetConnectionNetworkType,
                 tags: mergeTags(commonTags, proxyConfig.tags),
               });
 
-              const targetGroup = yield* DBProxyTargetGroup(
-                "ProxyTargetGroup",
-                {
-                  targetGroupName: proxyConfig.targetGroup?.targetGroupName,
-                  dbProxyName: proxy.dbProxyName,
-                  dbClusterIdentifiers: [cluster.dbClusterIdentifier],
-                  dbInstanceIdentifiers:
-                    proxyConfig.targetGroup?.dbInstanceIdentifiers,
-                  connectionPoolConfig:
-                    proxyConfig.targetGroup?.connectionPoolConfig,
-                },
-              );
+              const targetGroup = yield* DBProxyTargetGroup("ProxyTargetGroup", {
+                targetGroupName: proxyConfig.targetGroup?.targetGroupName,
+                dbProxyName: proxy.dbProxyName,
+                dbClusterIdentifiers: [cluster.dbClusterIdentifier],
+                dbInstanceIdentifiers: proxyConfig.targetGroup?.dbInstanceIdentifiers,
+                connectionPoolConfig: proxyConfig.targetGroup?.connectionPoolConfig,
+              });
 
               const endpoint =
                 proxyConfig.endpoint === undefined
@@ -644,14 +602,10 @@ export const Aurora = (id: string, props: AuroraProps) =>
                       dbProxyName: proxy.dbProxyName,
                       vpcSubnetIds: subnetIds,
                       vpcSecurityGroupIds: securityGroupIds,
-                      ...(proxyConfig.endpoint === true
-                        ? {}
-                        : proxyConfig.endpoint),
+                      ...(proxyConfig.endpoint === true ? {} : proxyConfig.endpoint),
                       tags: mergeTags(
                         commonTags,
-                        proxyConfig.endpoint === true
-                          ? undefined
-                          : proxyConfig.endpoint.tags,
+                        proxyConfig.endpoint === true ? undefined : proxyConfig.endpoint.tags,
                       ),
                     });
 
@@ -671,10 +625,7 @@ export const Aurora = (id: string, props: AuroraProps) =>
         cluster,
         writer,
         readers,
-        instances: [writer, ...readers] as [
-          DBInstanceResource,
-          ...DBInstanceResource[],
-        ],
+        instances: [writer, ...readers] as [DBInstanceResource, ...DBInstanceResource[]],
         proxy,
       } satisfies AuroraDatabase as AuroraDatabase;
     }),

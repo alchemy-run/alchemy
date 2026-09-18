@@ -37,7 +37,6 @@ export interface GetMultiRegionAccessPointRoutes extends Binding.Service<
     >
   >
 > {}
-export const GetMultiRegionAccessPointRoutes =
-  Binding.Service<GetMultiRegionAccessPointRoutes>(
-    "AWS.S3Control.GetMultiRegionAccessPointRoutes",
-  );
+export const GetMultiRegionAccessPointRoutes = Binding.Service<GetMultiRegionAccessPointRoutes>(
+  "AWS.S3Control.GetMultiRegionAccessPointRoutes",
+);

@@ -1,8 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import { isLocalId } from "@/Cloudflare/LocalRuntime.ts";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -14,21 +9,19 @@ import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { isLocalId } from "@/Cloudflare/LocalRuntime.ts";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const fixtureDir = pathe.resolve(
-  import.meta.dirname,
-  "fixtures",
-  "sveltekit-app",
-);
+const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
 /**
@@ -49,9 +42,7 @@ const putTextReady = (url: string, body: string) =>
       )
       .pipe(
         Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.void
-            : Effect.fail(new Error(`PUT not ready: ${res.status}`)),
+          res.status === 200 ? Effect.void : Effect.fail(new Error(`PUT not ready: ${res.status}`)),
         ),
         Effect.retry({
           schedule: Schedule.min([
@@ -78,10 +69,7 @@ const fetchJsonReady = <T>(url: string) =>
           : Effect.fail(new Error(`dev server not ready: ${res.status}`)),
       ),
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("4 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("4 seconds")]),
         times: 15,
       }),
     );
@@ -140,14 +128,10 @@ describe.concurrent("SvelteKit dev", () => {
         });
 
         // API endpoint: node:crypto + platform.env through the dev server.
-        yield* expectUrlContains(
-          `${site.url!}/api/hello`,
-          `"binding":"${bindingMarker}"`,
-          {
-            timeout: "60 seconds",
-            label: "sveltekit dev API route",
-          },
-        );
+        yield* expectUrlContains(`${site.url!}/api/hello`, `"binding":"${bindingMarker}"`, {
+          timeout: "60 seconds",
+          label: "sveltekit dev API route",
+        });
 
         // Static asset from `static/`.
         yield* expectUrlContains(`${site.url!}/robots.txt`, "User-agent", {
@@ -215,21 +199,16 @@ describe.concurrent("SvelteKit dev", () => {
 
         const { site, siteKv } = yield* stack.deploy(
           Effect.gen(function* () {
-            const siteKv = yield* Cloudflare.KV.Namespace("RemoteSiteKV").pipe(
-              Alchemy.remote(),
-            );
-            const site = yield* Cloudflare.Website.SvelteKit(
-              "SvelteKitLocalRemoteKV",
-              {
-                rootDir,
-                dev: { port: 0 },
-                memo: { include: ["src/**", "static/**", "package.json"] },
-                env: {
-                  TEST_BINDING: "sveltekit-dev-remote-marker",
-                  SITE_KV: siteKv,
-                },
+            const siteKv = yield* Cloudflare.KV.Namespace("RemoteSiteKV").pipe(Alchemy.remote());
+            const site = yield* Cloudflare.Website.SvelteKit("SvelteKitLocalRemoteKV", {
+              rootDir,
+              dev: { port: 0 },
+              memo: { include: ["src/**", "static/**", "package.json"] },
+              env: {
+                TEST_BINDING: "sveltekit-dev-remote-marker",
+                SITE_KV: siteKv,
               },
-            );
+            });
             return { site, siteKv };
           }),
         );
@@ -260,9 +239,7 @@ describe.concurrent("SvelteKit dev", () => {
           .pipe(
             Effect.flatMap((res) =>
               Effect.tryPromise(() =>
-                new Response(
-                  Stream.toReadableStream(res.body) as BodyInit,
-                ).text(),
+                new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
               ),
             ),
             Effect.retry({
@@ -299,11 +276,7 @@ describe.concurrent("SvelteKit dev", () => {
   // `platform.env`.
   // ─────────────────────────────────────────────────────────────────────
 
-  const spaFixtureDir = pathe.resolve(
-    import.meta.dirname,
-    "fixtures",
-    "sveltekit-spa-app",
-  );
+  const spaFixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "sveltekit-spa-app");
 
   /** app.html marker in the SPA fixture — identifies the app shell. */
   const SPA_SHELL_MARKER = "sveltekit-spa-shell";
@@ -347,14 +320,10 @@ describe.concurrent("SvelteKit dev", () => {
         // (a) A deep link to a CLIENT route serves the app shell — the
         // shell marker is present and the widget markup (which only ever
         // renders in the browser) is absent.
-        const widgetsBody = yield* expectUrlContains(
-          `${site.url!}/widgets`,
-          SPA_SHELL_MARKER,
-          {
-            timeout: "120 seconds",
-            label: "sveltekit dev SPA deep link serves the shell",
-          },
-        );
+        const widgetsBody = yield* expectUrlContains(`${site.url!}/widgets`, SPA_SHELL_MARKER, {
+          timeout: "120 seconds",
+          label: "sveltekit dev SPA deep link serves the shell",
+        });
         expect(widgetsBody).not.toContain("sveltekit-spa-widgets");
         expect(widgetsBody).not.toContain("sprocket");
 
@@ -367,11 +336,7 @@ describe.concurrent("SvelteKit dev", () => {
         }>(`${site.url!}/api/widgets`);
         expect(widgets.server).toBe(true);
         expect(widgets.message).toBe(bindingMarker);
-        expect(widgets.widgets.map((w) => w.name)).toEqual([
-          "sprocket",
-          "flange",
-          "grommet",
-        ]);
+        expect(widgets.widgets.map((w) => w.name)).toEqual(["sprocket", "flange", "grommet"]);
 
         yield* stack.destroy();
       }).pipe(logLevel),

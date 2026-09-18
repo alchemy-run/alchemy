@@ -1,9 +1,9 @@
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "http-handler.ts");
 
@@ -48,10 +48,7 @@ export default HttpApiTestFunction.make(
 
         if (request.method === "POST" && pathname === "/items") {
           const body = (yield* request.json) as unknown;
-          return yield* HttpServerResponse.json(
-            { received: body },
-            { status: 201 },
-          );
+          return yield* HttpServerResponse.json({ received: body }, { status: 201 });
         }
 
         return yield* HttpServerResponse.json(

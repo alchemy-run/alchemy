@@ -47,6 +47,4 @@ export interface ListAttachedLinks extends Binding.Service<
   >
 > {}
 
-export const ListAttachedLinks = Binding.Service<ListAttachedLinks>(
-  "AWS.OAM.ListAttachedLinks",
-);
+export const ListAttachedLinks = Binding.Service<ListAttachedLinks>("AWS.OAM.ListAttachedLinks");

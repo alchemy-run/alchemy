@@ -164,8 +164,7 @@ export const ComponentProvider = () =>
           ? Effect.succeed(props.componentName)
           : createPhysicalName({ id, maxLength: 126 });
 
-      const toVersion = (props: ComponentProps) =>
-        props.semanticVersion ?? "1.0.0";
+      const toVersion = (props: ComponentProps) => props.semanticVersion ?? "1.0.0";
 
       /**
        * CreateComponent always mints build version 1 for a fresh
@@ -178,20 +177,14 @@ export const ComponentProvider = () =>
       const getComponent = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getComponent({ componentBuildVersionArn: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.component;
       });
 
       const toAttrs = Effect.fn(function* (component: imagebuilder.Component) {
         if (!component.arn || !component.name || !component.version) {
           return yield* Effect.fail(
-            new Error(
-              "Image Builder component is missing its ARN, name, or version",
-            ),
+            new Error("Image Builder component is missing its ARN, name, or version"),
           );
         }
         return {
@@ -232,10 +225,7 @@ export const ComponentProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.componentBuildVersionArn ??
-            (yield* toBuildVersionArn(
-              yield* toName(id, olds),
-              toVersion(olds),
-            ));
+            (yield* toBuildVersionArn(yield* toName(id, olds), toVersion(olds)));
           const component = yield* getComponent(arn);
           if (component === undefined) return undefined;
           const attrs = yield* toAttrs(component);
@@ -260,19 +250,13 @@ export const ComponentProvider = () =>
 
           // 1. Observe — cloud state is authoritative; output only caches
           //    the build-version ARN.
-          const arn =
-            output?.componentBuildVersionArn ??
-            (yield* toBuildVersionArn(name, version));
+          const arn = output?.componentBuildVersionArn ?? (yield* toBuildVersionArn(name, version));
           let observed = yield* getComponent(arn);
 
           // Immutability guard — the version already exists in the cloud
           // with a different document. It cannot be converged in place; the
           // user must bump `semanticVersion` (which replaces the component).
-          if (
-            observed !== undefined &&
-            news.data !== undefined &&
-            observed.data !== news.data
-          ) {
+          if (observed !== undefined && news.data !== undefined && observed.data !== news.data) {
             return yield* new ComponentVersionImmutable({
               message: `Image Builder component '${name}' version '${version}' already exists with a different document — bump semanticVersion to publish the change`,
             });
@@ -298,17 +282,13 @@ export const ComponentProvider = () =>
             });
             if (!created.componentBuildVersionArn) {
               return yield* Effect.fail(
-                new Error(
-                  "CreateComponent returned no componentBuildVersionArn",
-                ),
+                new Error("CreateComponent returned no componentBuildVersionArn"),
               );
             }
             observed = yield* getComponent(created.componentBuildVersionArn);
             if (observed === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `created Image Builder component '${name}' is not readable`,
-                ),
+                new Error(`created Image Builder component '${name}' is not readable`),
               );
             }
           }
@@ -329,9 +309,7 @@ export const ComponentProvider = () =>
             imagebuilder.deleteComponent({
               componentBuildVersionArn: output.componentBuildVersionArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
@@ -371,9 +349,7 @@ export const ComponentProvider = () =>
                         ),
                       ),
                       // Tolerate a delete race — drop the version.
-                      Effect.catchTag("ResourceNotFoundException", () =>
-                        Effect.succeed([]),
-                      ),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                     ),
                 { concurrency: 4 },
               ),

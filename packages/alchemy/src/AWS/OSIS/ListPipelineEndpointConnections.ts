@@ -40,7 +40,6 @@ export interface ListPipelineEndpointConnections extends Binding.Service<
     >
   >
 > {}
-export const ListPipelineEndpointConnections =
-  Binding.Service<ListPipelineEndpointConnections>(
-    "AWS.OSIS.ListPipelineEndpointConnections",
-  );
+export const ListPipelineEndpointConnections = Binding.Service<ListPipelineEndpointConnections>(
+  "AWS.OSIS.ListPipelineEndpointConnections",
+);

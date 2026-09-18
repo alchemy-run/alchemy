@@ -111,17 +111,10 @@ export const TypeProvider = () =>
               Effect.map((n) => n.replaceAll("-", "_").toLowerCase()),
             );
 
-      const readType = Effect.fn(function* (
-        keyspaceName: string,
-        typeName: string,
-      ) {
+      const readType = Effect.fn(function* (keyspaceName: string, typeName: string) {
         return yield* keyspaces
           .getType({ keyspaceName, typeName })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
       });
 
       const toAttributes = (found: keyspaces.GetTypeResponse) => ({
@@ -185,16 +178,11 @@ export const TypeProvider = () =>
             observed = yield* readType(keyspaceName, typeName).pipe(
               Effect.flatMap((t) =>
                 t === undefined
-                  ? Effect.fail(
-                      new Error(`Type '${keyspaceName}.${typeName}' not found`),
-                    )
+                  ? Effect.fail(new Error(`Type '${keyspaceName}.${typeName}' not found`))
                   : Effect.succeed(t),
               ),
               Effect.retry({
-                schedule: Schedule.max([
-                  Schedule.fixed("2 seconds"),
-                  Schedule.recurs(10),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
               }),
             );
           }
@@ -214,10 +202,7 @@ export const TypeProvider = () =>
             // deleted rejects with ConflictException; retry briefly.
             Effect.retry({
               while: (e) => e._tag === "ConflictException",
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
           );
           // Wait (bounded) until the type is gone so the parent keyspace can
@@ -229,10 +214,7 @@ export const TypeProvider = () =>
                 : Effect.fail(new Error(`Type '${typeName}' still deleting`)),
             ),
             Effect.retry({
-              schedule: Schedule.max([
-                Schedule.fixed("3 seconds"),
-                Schedule.recurs(20),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
             }),
             Effect.catch(() => Effect.void),
           );

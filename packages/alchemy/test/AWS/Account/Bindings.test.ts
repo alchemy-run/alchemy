@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import AccountTestFunctionLive, { AccountTestFunction } from "./handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -15,10 +15,7 @@ const sharedStack = Core.scratchStack(testOptions, "AccountBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 let baseUrl: string;
 
@@ -37,19 +34,14 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
@@ -62,8 +54,7 @@ const getJson = (path: string) =>
     Effect.flatMap((r) => r.json),
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (response): boolean =>
-        (response as { tag?: string }).tag !== "AccessDeniedException",
+      until: (response): boolean => (response as { tag?: string }).tag !== "AccessDeniedException",
       times: 10,
     }),
   );
@@ -71,9 +62,7 @@ const getJson = (path: string) =>
 describe.sequential("Account Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Account test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Account test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Account test setup: deploying fixture");
@@ -87,9 +76,7 @@ describe.sequential("Account Bindings", () => {
       baseUrl = attrs.functionUrl!.replace(/\/+$/, "");
 
       const readinessUrl = `${baseUrl}/bindings`;
-      yield* Effect.logInfo(
-        `Account test setup: probing readiness at ${readinessUrl}`,
-      );
+      yield* Effect.logInfo(`Account test setup: probing readiness at ${readinessUrl}`);
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -97,9 +84,7 @@ describe.sequential("Account Bindings", () => {
             : Effect.fail(new Error(`Function not ready: ${response.status}`)),
         ),
         Effect.tapError((error) =>
-          Effect.logWarning(
-            `Account test setup: fixture not ready yet (${String(error)})`,
-          ),
+          Effect.logWarning(`Account test setup: fixture not ready yet (${String(error)})`),
         ),
         Effect.retry({ schedule: readinessPolicy }),
       );
@@ -161,23 +146,21 @@ describe.sequential("Account Bindings", () => {
   });
 
   describe("GetAlternateContact", () => {
-    test.provider(
-      "reads the billing contact or surfaces the typed not-found tag",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson("/alternate-contact")) as
-            | { ok: true; contactType: string | null }
-            | { ok: false; tag: string };
-          if (response.ok) {
-            expect(response.contactType).toBe("BILLING");
-          } else {
-            // The BILLING alternate contact isn't set on the account — the
-            // typed tag proves the grant (an IAM gap would surface
-            // AccessDeniedException, which getJson polls away and would
-            // fail the assertion below).
-            expect(response.tag).toBe("ResourceNotFoundException");
-          }
-        }),
+    test.provider("reads the billing contact or surfaces the typed not-found tag", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson("/alternate-contact")) as
+          | { ok: true; contactType: string | null }
+          | { ok: false; tag: string };
+        if (response.ok) {
+          expect(response.contactType).toBe("BILLING");
+        } else {
+          // The BILLING alternate contact isn't set on the account — the
+          // typed tag proves the grant (an IAM gap would surface
+          // AccessDeniedException, which getJson polls away and would
+          // fail the assertion below).
+          expect(response.tag).toBe("ResourceNotFoundException");
+        }
+      }),
     );
   });
 

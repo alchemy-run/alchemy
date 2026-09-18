@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { NamedQuery } from "@/AWS/Athena/NamedQuery.ts";
-import * as Test from "@/Test/Alchemy";
 import * as athena from "@distilled.cloud/aws/athena";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { NamedQuery } from "@/AWS/Athena/NamedQuery.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 

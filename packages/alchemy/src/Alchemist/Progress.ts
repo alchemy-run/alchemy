@@ -68,9 +68,7 @@ const spanEventOf = (
           "alchemy.resource.logical_id": event.id,
           "alchemy.resource.type": event.type,
           "alchemy.apply.resource.status": event.status,
-          ...(event.message === undefined
-            ? {}
-            : { "alchemy.apply.message": event.message }),
+          ...(event.message === undefined ? {} : { "alchemy.apply.message": event.message }),
         },
       };
     case "apply.resource.note":
@@ -80,9 +78,7 @@ const spanEventOf = (
           "alchemy.resource.fqn": event.fqn,
           "alchemy.resource.logical_id": event.id,
           "alchemy.apply.message": event.message,
-          ...(event.kind === undefined
-            ? {}
-            : { "alchemy.apply.note.kind": event.kind }),
+          ...(event.kind === undefined ? {} : { "alchemy.apply.note.kind": event.kind }),
         },
       };
     case "state.bootstrap.started":
@@ -112,9 +108,7 @@ const spanEventOf = (
         attributes: {
           "alchemy.provider": event.provider,
           "alchemy.nuke.resources": event.resources,
-          ...(event.error === undefined
-            ? {}
-            : { "alchemy.nuke.message": event.error }),
+          ...(event.error === undefined ? {} : { "alchemy.nuke.message": event.error }),
         },
       };
     case "nuke.resource.deleted":
@@ -158,9 +152,7 @@ export const withSpanEvents =
     return Effect.currentSpan.pipe(
       Effect.flatMap((span) =>
         Effect.flatMap(Clock.currentTimeNanos, (now) =>
-          Effect.sync(() =>
-            span.event(spanEvent.name, now, spanEvent.attributes),
-          ),
+          Effect.sync(() => span.event(spanEvent.name, now, spanEvent.attributes)),
         ),
       ),
       Effect.ignore,

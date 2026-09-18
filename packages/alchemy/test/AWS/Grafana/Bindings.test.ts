@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import * as Core from "@/Test/Core";
-import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
+import * as Core from "@/Test/Core";
 import GrafanaTestFunctionLive, { GrafanaTestFunction } from "./handler";
 import GrafanaWorkspaceTestFunctionLive, {
   GrafanaWorkspaceTestFunction,
@@ -18,10 +18,7 @@ const sharedStack = Core.scratchStack(testOptions, "GrafanaBindings");
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take well
 // over 60s on a fresh deploy.
-const readinessPolicy = Schedule.max([
-  Schedule.fixed("2 seconds"),
-  Schedule.recurs(75),
-]);
+const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(75)]);
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -38,31 +35,22 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status >= 500
         ? response.text.pipe(
             Effect.flatMap((body) =>
-              Effect.fail(
-                new TransientUpstream({ status: response.status, body }),
-              ),
+              Effect.fail(new TransientUpstream({ status: response.status, body })),
             ),
           )
         : Effect.succeed(response),
     ),
     Effect.retry({
       while: (e) => e._tag === "TransientUpstream",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(6),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(6)]),
     }),
   );
 
 const getJson = (baseUrl: string, path: string) =>
-  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.get(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const postJson = (baseUrl: string, path: string) =>
-  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(
-    Effect.flatMap((r) => r.json),
-  );
+  send(HttpClientRequest.post(`${baseUrl}${path}`)).pipe(Effect.flatMap((r) => r.json));
 
 const awaitReady = (baseUrl: string) =>
   HttpClient.get(`${baseUrl}/bindings`).pipe(
@@ -79,9 +67,7 @@ let baseUrl: string;
 describe.sequential("Grafana Bindings", () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* Effect.logInfo(
-        "Grafana test setup: destroying previous resources",
-      );
+      yield* Effect.logInfo("Grafana test setup: destroying previous resources");
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("Grafana test setup: deploying fixture");
@@ -117,18 +103,16 @@ describe.sequential("Grafana Bindings", () => {
   });
 
   describe("ListVersions", () => {
-    test.provider(
-      "lists the Grafana versions available for new workspaces",
-      (_stack) =>
-        Effect.gen(function* () {
-          const response = (yield* getJson(baseUrl, "/versions")) as {
-            versions: string[];
-          };
-          expect(response.versions.length).toBeGreaterThan(0);
-          for (const version of response.versions) {
-            expect(version).toMatch(/^\d+(\.\d+)*$/);
-          }
-        }),
+    test.provider("lists the Grafana versions available for new workspaces", (_stack) =>
+      Effect.gen(function* () {
+        const response = (yield* getJson(baseUrl, "/versions")) as {
+          versions: string[];
+        };
+        expect(response.versions.length).toBeGreaterThan(0);
+        for (const version of response.versions) {
+          expect(version).toMatch(/^\d+(\.\d+)*$/);
+        }
+      }),
     );
   });
 
@@ -188,10 +172,7 @@ describe.sequential("Grafana Bindings", () => {
           };
           expect(accounts.count).toBe(0);
 
-          const roundtrip = (yield* postJson(
-            url,
-            "/service-account-roundtrip",
-          )) as {
+          const roundtrip = (yield* postJson(url, "/service-account-roundtrip")) as {
             serviceAccountId: string;
             grafanaRole: string;
             keyPrefix: string;

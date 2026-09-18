@@ -33,9 +33,7 @@ export interface GetJob extends Binding.Service<
   (
     app: App,
   ) => Effect.Effect<
-    (
-      request: GetJobRequest,
-    ) => Effect.Effect<amplify.GetJobResult, amplify.GetJobError>
+    (request: GetJobRequest) => Effect.Effect<amplify.GetJobResult, amplify.GetJobError>
   >
 > {}
 

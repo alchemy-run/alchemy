@@ -1,10 +1,10 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Omics from "@/AWS/Omics";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Omics from "@/AWS/Omics";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
@@ -22,19 +22,15 @@ export default OmicsBindingsFunction.make(
   },
   Effect.gen(function* () {
     const sequenceStore = yield* Omics.SequenceStore("BindingsSequenceStore");
-    const referenceStore = yield* Omics.ReferenceStore(
-      "BindingsReferenceStore",
-    );
+    const referenceStore = yield* Omics.ReferenceStore("BindingsReferenceStore");
 
     // Resource-scoped bindings — the store id is injected automatically.
     const listReadSets = yield* Omics.ListReadSets(sequenceStore);
     const getReadSetMetadata = yield* Omics.GetReadSetMetadata(sequenceStore);
-    const startReadSetImportJob =
-      yield* Omics.StartReadSetImportJob(sequenceStore);
+    const startReadSetImportJob = yield* Omics.StartReadSetImportJob(sequenceStore);
     const batchDeleteReadSet = yield* Omics.BatchDeleteReadSet(sequenceStore);
     const listReferences = yield* Omics.ListReferences(referenceStore);
-    const getReferenceMetadata =
-      yield* Omics.GetReferenceMetadata(referenceStore);
+    const getReferenceMetadata = yield* Omics.GetReferenceMetadata(referenceStore);
 
     // Account-level run-control bindings.
     const listRuns = yield* Omics.ListRuns();
@@ -86,15 +82,11 @@ export default OmicsBindingsFunction.make(
         // The typed-not-found routes prove the grant + injection end-to-end:
         // an IAM gap would surface AccessDeniedException (a 500), while the
         // typed ResourceNotFoundException proves the request reached the API.
-        if (
-          request.method === "GET" &&
-          pathname === "/readset/typed-not-found"
-        ) {
+        if (request.method === "GET" && pathname === "/readset/typed-not-found") {
           const typed = yield* getReadSetMetadata({ id: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              () => Effect.succeed(true),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
+              Effect.succeed(true),
             ),
           );
           return yield* HttpServerResponse.json({ typed });
@@ -103,9 +95,8 @@ export default OmicsBindingsFunction.make(
         if (request.method === "GET" && pathname === "/run/typed-not-found") {
           const typed = yield* getRun({ id: BOGUS_ID }).pipe(
             Effect.map(() => false),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              () => Effect.succeed(true),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
+              Effect.succeed(true),
             ),
           );
           return yield* HttpServerResponse.json({ typed });

@@ -36,10 +36,7 @@ export interface RollbackApplication extends Binding.Service<
   ) => Effect.Effect<
     (
       request: RollbackApplicationRequest,
-    ) => Effect.Effect<
-      SVC.RollbackApplicationResponse,
-      SVC.RollbackApplicationError
-    >
+    ) => Effect.Effect<SVC.RollbackApplicationResponse, SVC.RollbackApplicationError>
   >
 > {}
 export const RollbackApplication = Binding.Service<RollbackApplication>(

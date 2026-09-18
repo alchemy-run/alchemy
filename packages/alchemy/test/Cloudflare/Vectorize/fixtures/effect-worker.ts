@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 import { ensureMetaIndex, TestIndex } from "./index-resource.ts";
 import { seedVectors, vector } from "./vectors.ts";
 
@@ -58,9 +58,7 @@ export default class VectorizeEffectWorker extends Cloudflare.Worker<VectorizeEf
           });
           // Restrict to this worker's own vectors so the shared index doesn't
           // leak the async worker's data into the assertions.
-          const mine = matches.matches.filter((m) =>
-            m.id.startsWith(`${LABEL}-`),
-          );
+          const mine = matches.matches.filter((m) => m.id.startsWith(`${LABEL}-`));
           return yield* HttpServerResponse.json({
             count: mine.length,
             ids: mine.map((m) => m.id),
@@ -73,15 +71,11 @@ export default class VectorizeEffectWorker extends Cloudflare.Worker<VectorizeEf
             returnMetadata: "all",
             filter: { kind: { $eq: "second" } },
           });
-          const mine = matches.matches.filter((m) =>
-            m.id.startsWith(`${LABEL}-`),
-          );
+          const mine = matches.matches.filter((m) => m.id.startsWith(`${LABEL}-`));
           return yield* HttpServerResponse.json({
             count: mine.length,
             ids: mine.map((m) => m.id),
-            kinds: mine.map(
-              (m) => (m.metadata as { kind?: string } | undefined)?.kind,
-            ),
+            kinds: mine.map((m) => (m.metadata as { kind?: string } | undefined)?.kind),
           });
         }
 

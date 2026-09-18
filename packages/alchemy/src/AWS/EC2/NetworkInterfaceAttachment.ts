@@ -2,17 +2,15 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { InstanceId } from "./Instance.ts";
 import type { NetworkInterfaceId } from "./NetworkInterface.ts";
 
-export type NetworkInterfaceAttachmentId<ID extends string = string> =
-  `eni-attach-${ID}`;
+export type NetworkInterfaceAttachmentId<ID extends string = string> = `eni-attach-${ID}`;
 
 export interface NetworkInterfaceAttachmentProps {
   /**
@@ -108,12 +106,7 @@ export const NetworkInterfaceAttachmentProvider = () =>
     NetworkInterfaceAttachment,
     Effect.gen(function* () {
       return {
-        stables: [
-          "attachmentId",
-          "networkInterfaceId",
-          "instanceId",
-          "deviceIndex",
-        ],
+        stables: ["attachmentId", "networkInterfaceId", "instanceId", "deviceIndex"],
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
@@ -196,25 +189,17 @@ export const NetworkInterfaceAttachmentProvider = () =>
               DryRun: false,
             })
             .pipe(
-              Effect.catchTag(
-                "InvalidAttachmentID.NotFound",
-                () => Effect.void,
-              ),
+              Effect.catchTag("InvalidAttachmentID.NotFound", () => Effect.void),
               // The interface can still be in-use momentarily — retry.
               Effect.retry({
                 while: (e) => e._tag === "DependencyViolation",
-                schedule: Schedule.max([
-                  Schedule.fixed(3000),
-                  Schedule.recurs(15),
-                ]),
+                schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(15)]),
               }),
             );
 
           // Wait for the interface to return to 'available'.
           yield* waitForEniDetached(networkInterfaceId, session);
-          yield* session.note(
-            `Network interface ${networkInterfaceId} detached`,
-          );
+          yield* session.note(`Network interface ${networkInterfaceId} detached`);
         }),
       };
     }),
@@ -259,9 +244,7 @@ const waitForEniAttachmentState = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for interface attachment... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for interface attachment... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),
@@ -271,10 +254,7 @@ const waitForEniAttachmentState = (
 /**
  * Wait for the interface to return to `available` after a detach.
  */
-const waitForEniDetached = (
-  networkInterfaceId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForEniDetached = (networkInterfaceId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeNetworkInterfaces({
@@ -302,9 +282,7 @@ const waitForEniDetached = (
       ]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for interface to detach... (${(attempt + 1) * 2}s)`,
-              )
+            ? session.note(`Waiting for interface to detach... (${(attempt + 1) * 2}s)`)
             : Effect.void,
         ),
       ),

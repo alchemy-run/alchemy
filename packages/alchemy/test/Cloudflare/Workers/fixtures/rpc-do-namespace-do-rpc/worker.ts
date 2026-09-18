@@ -1,8 +1,8 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import RpcCounterObject from "./object.ts";
 
 /**
@@ -28,8 +28,7 @@ export default class RpcCounterWorker extends Cloudflare.Worker<RpcCounterWorker
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
         const match = url.pathname.match(/^\/counter\/([^/]+)(?:\/(\w+))?$/);
-        if (!match)
-          return HttpServerResponse.text("Not Found", { status: 404 });
+        if (!match) return HttpServerResponse.text("Not Found", { status: 404 });
         const [, id, action] = match;
 
         if (request.method === "POST" && action === "increment") {

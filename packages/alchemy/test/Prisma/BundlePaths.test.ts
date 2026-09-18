@@ -1,13 +1,11 @@
-import { normalizeBundleFilePath } from "@/Prisma/Internal/BundlePaths";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import { normalizeBundleFilePath } from "@/Prisma/Internal/BundlePaths";
 
 describe("Prisma Compute bundle paths", () => {
   it.effect("accepts normalized relative bundle paths", () =>
     Effect.gen(function* () {
-      expect(yield* normalizeBundleFilePath("chunks/api.js")).toBe(
-        "chunks/api.js",
-      );
+      expect(yield* normalizeBundleFilePath("chunks/api.js")).toBe("chunks/api.js");
     }),
   );
 

@@ -64,31 +64,29 @@ export const makeAppFlowHttpBinding = <
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
-          yield* host.bind`Allow(${host}, AWS.AppFlow.${options.action}(${resource}))`(
-            {
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [`appflow:${options.action}`],
-                  Resource: options.resources(resource),
-                },
-              ],
-            },
-          );
+          yield* host.bind`Allow(${host}, AWS.AppFlow.${options.action}(${resource}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [`appflow:${options.action}`],
+                Resource: options.resources(resource),
+              },
+            ],
+          });
         }
       }
-      return Effect.fn(`AWS.AppFlow.${options.action}(${resource.LogicalId})`)(
-        function* (request?: Omit<I, K>) {
-          // The compiler cannot relate `Omit<I, K>` plus a computed generic
-          // key back to `I`, so the identifier injection carries one
-          // contained cast. Concrete request/response types are still fully
-          // checked where each `Layer.effect(Cap, ...)` matches this factory's
-          // inferred shape against the capability contract.
-          return yield* operation({
-            ...request,
-            [options.requestKey]: yield* Identifier,
-          } as unknown as I);
-        },
-      );
+      return Effect.fn(`AWS.AppFlow.${options.action}(${resource.LogicalId})`)(function* (
+        request?: Omit<I, K>,
+      ) {
+        // The compiler cannot relate `Omit<I, K>` plus a computed generic
+        // key back to `I`, so the identifier injection carries one
+        // contained cast. Concrete request/response types are still fully
+        // checked where each `Layer.effect(Cap, ...)` matches this factory's
+        // inferred shape against the capability contract.
+        return yield* operation({
+          ...request,
+          [options.requestKey]: yield* Identifier,
+        } as unknown as I);
+      });
     });
   });

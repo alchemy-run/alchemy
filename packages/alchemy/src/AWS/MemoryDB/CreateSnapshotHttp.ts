@@ -1,9 +1,6 @@
 import * as memorydb from "@distilled.cloud/aws/memorydb";
 import * as Layer from "effect/Layer";
-import {
-  makeMemoryDBClusterHttpBinding,
-  SNAPSHOT_ARN_WILDCARD,
-} from "./BindingHttp.ts";
+import { makeMemoryDBClusterHttpBinding, SNAPSHOT_ARN_WILDCARD } from "./BindingHttp.ts";
 import { CreateSnapshot } from "./CreateSnapshot.ts";
 
 export const CreateSnapshotHttp = Layer.effect(

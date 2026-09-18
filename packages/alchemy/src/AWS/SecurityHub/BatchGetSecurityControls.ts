@@ -35,7 +35,6 @@ export interface BatchGetSecurityControls extends Binding.Service<
     >
   >
 > {}
-export const BatchGetSecurityControls =
-  Binding.Service<BatchGetSecurityControls>(
-    "AWS.SecurityHub.BatchGetSecurityControls",
-  );
+export const BatchGetSecurityControls = Binding.Service<BatchGetSecurityControls>(
+  "AWS.SecurityHub.BatchGetSecurityControls",
+);

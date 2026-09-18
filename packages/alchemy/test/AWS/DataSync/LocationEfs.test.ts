@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as datasync from "@distilled.cloud/aws/datasync";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -27,8 +27,7 @@ test.provider(
     Effect.gen(function* () {
       const result = yield* datasync
         .describeLocationEfs({
-          LocationArn:
-            "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
+          LocationArn: "arn:aws:datasync:us-west-2:391965393224:location/loc-00000000000000000",
         })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");

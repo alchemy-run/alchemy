@@ -1,3 +1,7 @@
+import * as omics from "@distilled.cloud/aws/omics";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import {
   AnnotationStore,
@@ -8,25 +12,17 @@ import {
   Workflow,
 } from "@/AWS/Omics";
 import * as Test from "@/Test/Alchemy";
-import * as omics from "@distilled.cloud/aws/omics";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag every Omics read/delete path depends on. Runs in every CI
 // pass at near-zero cost, unlike the gated lifecycles below.
-test.provider(
-  "getReferenceStore on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        omics.getReferenceStore({ id: "1234567890" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getReferenceStore on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(omics.getReferenceStore({ id: "1234567890" }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 // Ungated probes for the `analytics-` HealthOmics endpoint (annotation/variant
@@ -34,26 +30,22 @@ test.provider(
 // operation-level `analytics-` hostPrefix routing and the typed not-found tag
 // the AnnotationStore/VariantStore providers depend on. The create path for
 // these two stores is entitlement-gated (see the gated lifecycles below).
-test.provider(
-  "getAnnotationStore on a nonexistent name fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        omics.getAnnotationStore({ name: "alchemy_probe_nonexistent_store" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getAnnotationStore on a nonexistent name fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      omics.getAnnotationStore({ name: "alchemy_probe_nonexistent_store" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
-test.provider(
-  "getVariantStore on a nonexistent name fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        omics.getVariantStore({ name: "alchemy_probe_nonexistent_store" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getVariantStore on a nonexistent name fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      omics.getVariantStore({ name: "alchemy_probe_nonexistent_store" }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const assertReferenceStoreGone = (id: string) =>
@@ -63,16 +55,11 @@ const assertReferenceStoreGone = (id: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`reference store '${id}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`reference store '${id}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -120,16 +107,11 @@ const assertSequenceStoreGone = (id: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`sequence store '${id}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`sequence store '${id}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -176,10 +158,7 @@ const assertRunGroupGone = (id: string) =>
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("3 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
     }),
   );
 
@@ -272,12 +251,7 @@ const buildZip = (fileName: string, content: string): Uint8Array => {
 
   const chunks: number[] = [];
   const push32 = (v: number) => {
-    chunks.push(
-      v & 0xff,
-      (v >>> 8) & 0xff,
-      (v >>> 16) & 0xff,
-      (v >>> 24) & 0xff,
-    );
+    chunks.push(v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff);
   };
   const push16 = (v: number) => chunks.push(v & 0xff, (v >>> 8) & 0xff);
 
@@ -335,21 +309,14 @@ const assertWorkflowGone = (id: string) =>
   Effect.gen(function* () {
     const status = yield* omics.getWorkflow({ id }).pipe(
       Effect.map((w) => w.status ?? "gone"),
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed("gone" as const),
-      ),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed("gone" as const)),
     );
     if (status !== "gone" && status !== "DELETED") {
-      return yield* Effect.fail(
-        new Error(`workflow '${id}' still exists (status: ${status})`),
-      );
+      return yield* Effect.fail(new Error(`workflow '${id}' still exists (status: ${status})`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(12),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(12)]),
     }),
   );
 
@@ -392,16 +359,11 @@ const assertAnnotationStoreGone = (name: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`annotation store '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`annotation store '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
@@ -444,22 +406,15 @@ const assertVariantStoreGone = (name: string) =>
       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(true)),
     );
     if (!gone) {
-      return yield* Effect.fail(
-        new Error(`variant store '${name}' still exists`),
-      );
+      return yield* Effect.fail(new Error(`variant store '${name}' still exists`));
     }
   }).pipe(
     Effect.retry({
-      schedule: Schedule.max([
-        Schedule.fixed("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 
-test.provider.skipIf(
-  !process.env.AWS_TEST_OMICS || !process.env.OMICS_REFERENCE_ARN,
-)(
+test.provider.skipIf(!process.env.AWS_TEST_OMICS || !process.env.OMICS_REFERENCE_ARN)(
   "VariantStore: create with reference, verify ACTIVE, destroy",
   (stack) =>
     Effect.gen(function* () {

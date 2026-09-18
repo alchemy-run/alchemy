@@ -163,25 +163,15 @@ export const ContactProvider = () =>
   Provider.effect(
     ContactResource,
     Effect.gen(function* () {
-      const createAlias = Effect.fn(function* (
-        id: string,
-        props: { alias?: string },
-      ) {
+      const createAlias = Effect.fn(function* (id: string, props: { alias?: string }) {
         // Contact aliases must be lowercase.
-        return (
-          props.alias ??
-          (yield* createPhysicalName({ id, maxLength: 200, lowercase: true }))
-        );
+        return props.alias ?? (yield* createPhysicalName({ id, maxLength: 200, lowercase: true }));
       });
 
       const getContact = (arn: string) =>
         contacts
           .getContact({ ContactId: arn })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       const readTags = (arn: string) =>
         contacts.listTagsForResource({ ResourceARN: arn }).pipe(
@@ -272,10 +262,8 @@ export const ContactProvider = () =>
           // 3. SYNC display name + plan — diff observed against desired.
           //    `plan` is only managed here when the prop is provided, so the
           //    standalone `SSMContacts.Plan` resource can own it otherwise.
-          const displayNameDelta =
-            (contact.DisplayName ?? "") !== (news.displayName ?? "");
-          const planDelta =
-            news.plan !== undefined && !same(contact.Plan, news.plan);
+          const displayNameDelta = (contact.DisplayName ?? "") !== (news.displayName ?? "");
+          const planDelta = news.plan !== undefined && !same(contact.Plan, news.plan);
           if (displayNameDelta || planDelta) {
             yield* contacts.updateContact({
               ContactId: contact.ContactArn,
@@ -288,16 +276,12 @@ export const ContactProvider = () =>
           //     when the prop is provided; there is no delete-policy API.
           if (news.policy !== undefined) {
             const desiredPolicy =
-              typeof news.policy === "string"
-                ? news.policy
-                : JSON.stringify(news.policy);
+              typeof news.policy === "string" ? news.policy : JSON.stringify(news.policy);
             const observedPolicy = yield* contacts
               .getContactPolicy({ ContactArn: contact.ContactArn })
               .pipe(
                 Effect.map((r) => r.Policy),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               );
             if (
               observedPolicy === undefined ||

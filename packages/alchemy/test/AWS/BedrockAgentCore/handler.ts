@@ -1,5 +1,3 @@
-import * as AgentCore from "@/AWS/BedrockAgentCore";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -7,6 +5,8 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as AgentCore from "@/AWS/BedrockAgentCore";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -33,10 +33,7 @@ export default AgentCoreTestFunction.make(
         },
       ],
     });
-    const codeInterpreter = yield* AgentCore.CodeInterpreter(
-      "TestInterpreter",
-      {},
-    );
+    const codeInterpreter = yield* AgentCore.CodeInterpreter("TestInterpreter", {});
     const browser = yield* AgentCore.BrowserCustom("TestBrowser", {});
 
     // memory: events
@@ -48,40 +45,29 @@ export default AgentCoreTestFunction.make(
     const listActors = yield* AgentCore.ListActors(memory);
     // memory: long-term records
     const listMemoryRecords = yield* AgentCore.ListMemoryRecords(memory);
-    const retrieveMemoryRecords =
-      yield* AgentCore.RetrieveMemoryRecords(memory);
+    const retrieveMemoryRecords = yield* AgentCore.RetrieveMemoryRecords(memory);
     const getMemoryRecord = yield* AgentCore.GetMemoryRecord(memory);
     const deleteMemoryRecord = yield* AgentCore.DeleteMemoryRecord(memory);
-    const batchCreateMemoryRecords =
-      yield* AgentCore.BatchCreateMemoryRecords(memory);
-    const batchUpdateMemoryRecords =
-      yield* AgentCore.BatchUpdateMemoryRecords(memory);
-    const batchDeleteMemoryRecords =
-      yield* AgentCore.BatchDeleteMemoryRecords(memory);
+    const batchCreateMemoryRecords = yield* AgentCore.BatchCreateMemoryRecords(memory);
+    const batchUpdateMemoryRecords = yield* AgentCore.BatchUpdateMemoryRecords(memory);
+    const batchDeleteMemoryRecords = yield* AgentCore.BatchDeleteMemoryRecords(memory);
     // memory: extraction jobs
-    const startMemoryExtractionJob =
-      yield* AgentCore.StartMemoryExtractionJob(memory);
-    const listMemoryExtractionJobs =
-      yield* AgentCore.ListMemoryExtractionJobs(memory);
+    const startMemoryExtractionJob = yield* AgentCore.StartMemoryExtractionJob(memory);
+    const listMemoryExtractionJobs = yield* AgentCore.ListMemoryExtractionJobs(memory);
     // code interpreter sessions
-    const startSession =
-      yield* AgentCore.StartCodeInterpreterSession(codeInterpreter);
-    const invokeCodeInterpreter =
-      yield* AgentCore.InvokeCodeInterpreter(codeInterpreter);
-    const getCodeInterpreterSession =
-      yield* AgentCore.GetCodeInterpreterSession(codeInterpreter);
+    const startSession = yield* AgentCore.StartCodeInterpreterSession(codeInterpreter);
+    const invokeCodeInterpreter = yield* AgentCore.InvokeCodeInterpreter(codeInterpreter);
+    const getCodeInterpreterSession = yield* AgentCore.GetCodeInterpreterSession(codeInterpreter);
     const listCodeInterpreterSessions =
       yield* AgentCore.ListCodeInterpreterSessions(codeInterpreter);
-    const stopSession =
-      yield* AgentCore.StopCodeInterpreterSession(codeInterpreter);
+    const stopSession = yield* AgentCore.StopCodeInterpreterSession(codeInterpreter);
     // browser sessions
     const startBrowserSession = yield* AgentCore.StartBrowserSession(browser);
     const getBrowserSession = yield* AgentCore.GetBrowserSession(browser);
     const listBrowserSessions = yield* AgentCore.ListBrowserSessions(browser);
     const invokeBrowser = yield* AgentCore.InvokeBrowser(browser);
     const updateBrowserStream = yield* AgentCore.UpdateBrowserStream(browser);
-    const saveBrowserSessionProfile =
-      yield* AgentCore.SaveBrowserSessionProfile(browser);
+    const saveBrowserSessionProfile = yield* AgentCore.SaveBrowserSessionProfile(browser);
     const stopBrowserSession = yield* AgentCore.StopBrowserSession(browser);
 
     // batchCreate -> get -> batchUpdate -> delete + batchDelete records.
@@ -249,9 +235,7 @@ export default AgentCoreTestFunction.make(
               HttpServerResponse.json(
                 {
                   error: error._tag,
-                  message: String(
-                    (error as { message?: unknown }).message ?? error,
-                  ),
+                  message: String((error as { message?: unknown }).message ?? error),
                 },
                 { status: 500 },
               ),
@@ -339,10 +323,7 @@ export default AgentCoreTestFunction.make(
           return yield* HttpServerResponse.json({ saved: true });
         }
 
-        return yield* HttpServerResponse.json(
-          { error: "Not found" },
-          { status: 404 },
-        );
+        return yield* HttpServerResponse.json({ error: "Not found" }, { status: 404 });
       }).pipe(Effect.orDie),
     };
   }).pipe(

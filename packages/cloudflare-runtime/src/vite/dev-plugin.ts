@@ -1,3 +1,8 @@
+import * as NodeHttp from "node:http";
+import { URL as NodeURL } from "node:url";
+import type * as Context from "effect/Context";
+import * as vite from "vite";
+import type { RuntimeServices } from "../core/index.ts";
 import type { ExportTypes } from "../rolldown/export-types.ts";
 import {
   haveExportTypesChanged,
@@ -8,11 +13,6 @@ import { parseViteEnvironments } from "../rolldown/options.ts";
 import type { OptionsApi } from "../rolldown/plugins/index.ts";
 import { workerEntryId } from "../rolldown/plugins/index.ts";
 import { resolvePluginApi } from "../rolldown/utils.ts";
-import type { RuntimeServices } from "../core/index.ts";
-import type * as Context from "effect/Context";
-import * as NodeHttp from "node:http";
-import { URL as NodeURL } from "node:url";
-import * as vite from "vite";
 import { DistilledDevEnvironment } from "./dev-environment.ts";
 import type { ServerHandle } from "./dev-server.ts";
 import { configuredExportTypes, mergeExportTypes } from "./export-types.ts";
@@ -65,10 +65,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   const plugin: vite.Plugin = {
     name: "distilled-cloudflare:dev",
     configResolved({ plugins }) {
-      optionsApi = resolvePluginApi<OptionsApi>(
-        plugins ?? [],
-        "distilled-cloudflare:options",
-      );
+      optionsApi = resolvePluginApi<OptionsApi>(plugins ?? [], "distilled-cloudflare:options");
     },
     config() {
       const environment: vite.EnvironmentOptions = {
@@ -89,9 +86,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
         },
       };
       return {
-        environments: Object.fromEntries(
-          environmentNames.map((name) => [name, environment]),
-        ),
+        environments: Object.fromEntries(environmentNames.map((name) => [name, environment])),
       };
     },
     async buildEnd() {
@@ -124,8 +119,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           `Expected exactly one entry in the input, got ${inputs.length} entries: ${JSON.stringify(inputs)}`,
         );
       }
-      const { createDefaultContext, startServer } =
-        await import("./dev-server.ts");
+      const { createDefaultContext, startServer } = await import("./dev-server.ts");
       if (!options.context) {
         context ??= await createDefaultContext();
       }
@@ -141,9 +135,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       const entryEnvironments = () =>
         environmentNames
           .map((name) => server.environments[name])
-          .filter(
-            (environment) => environment instanceof DistilledDevEnvironment,
-          );
+          .filter((environment) => environment instanceof DistilledDevEnvironment);
 
       const connect = async (address: ServerHandle["address"]) => {
         for (const environment of entryEnvironments()) {
@@ -206,13 +198,10 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           .catch(() => {})
           .then(restartRuntime)
           .catch((error: unknown) => {
-            server.config.logger.error(
-              `Failed to reload the Worker runtime: ${String(error)}`,
-              {
-                error: error instanceof Error ? error : undefined,
-                timestamp: true,
-              },
-            );
+            server.config.logger.error(`Failed to reload the Worker runtime: ${String(error)}`, {
+              error: error instanceof Error ? error : undefined,
+              timestamp: true,
+            });
           });
         return true;
       };
@@ -236,12 +225,9 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
             if (!isExportTypes(data) || !applyExportTypes(data)) {
               return;
             }
-            server.config.logger.info(
-              "Worker exports changed, reloading the Worker runtime.",
-              {
-                timestamp: true,
-              },
-            );
+            server.config.logger.info("Worker exports changed, reloading the Worker runtime.", {
+              timestamp: true,
+            });
           });
         }
       }
@@ -252,43 +238,32 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
       }
       bindWebSocket();
       return () => {
-        server.middlewares.use(
-          function distilledCloudflareProxyMiddleware(req, res) {
-            const url = new NodeURL(
-              req.originalUrl ?? req.url ?? "/",
-              address.toString(),
-            );
-            const request = NodeHttp.request(url, {
-              method: req.method,
-              headers: proxyRequestHeaders(req, url, proxySharedSecret),
+        server.middlewares.use(function distilledCloudflareProxyMiddleware(req, res) {
+          const url = new NodeURL(req.originalUrl ?? req.url ?? "/", address.toString());
+          const request = NodeHttp.request(url, {
+            method: req.method,
+            headers: proxyRequestHeaders(req, url, proxySharedSecret),
+          });
+          req.pipe(request);
+          request.on("response", (response) => {
+            res.writeHead(response.statusCode ?? 500, response.headers);
+            response.pipe(res);
+          });
+          // Without a listener a connection error is an unhandled `error`
+          // event, which takes down the dev server. Requests in flight while
+          // the Worker runtime is being replaced hit exactly that.
+          request.on("error", (error) => {
+            server.config.logger.error(`Worker request failed: ${error.message}`, {
+              error,
+              timestamp: true,
             });
-            req.pipe(request);
-            request.on("response", (response) => {
-              res.writeHead(response.statusCode ?? 500, response.headers);
-              response.pipe(res);
-            });
-            // Without a listener a connection error is an unhandled `error`
-            // event, which takes down the dev server. Requests in flight while
-            // the Worker runtime is being replaced hit exactly that.
-            request.on("error", (error) => {
-              server.config.logger.error(
-                `Worker request failed: ${error.message}`,
-                {
-                  error,
-                  timestamp: true,
-                },
-              );
-              if (!res.headersSent) {
-                res.writeHead(502, { "content-type": "text/plain" });
-              }
-              res.end("Bad Gateway");
-            });
-          },
-        );
-        if (
-          options.dev?.middlewareOrder === "pre" &&
-          middlewareBoundary !== undefined
-        ) {
+            if (!res.headersSent) {
+              res.writeHead(502, { "content-type": "text/plain" });
+            }
+            res.end("Bad Gateway");
+          });
+        });
+        if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
           // Move the proxy middleware from the end of the stack to directly
           // after Vite's internal middlewares, ahead of the post middlewares
           // other plugins registered.

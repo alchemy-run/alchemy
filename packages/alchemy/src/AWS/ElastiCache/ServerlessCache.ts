@@ -189,9 +189,7 @@ export interface ServerlessCache extends Resource<
  *
  * @resource
  */
-export const ServerlessCache = Resource<ServerlessCache>(
-  "AWS.ElastiCache.ServerlessCache",
-);
+export const ServerlessCache = Resource<ServerlessCache>("AWS.ElastiCache.ServerlessCache");
 
 const toTagRecord = (
   tags: Array<{ Key?: string; Value?: string }> | undefined,
@@ -289,11 +287,7 @@ export const ServerlessCacheProvider = () =>
       const readCache = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeServerlessCaches({ ServerlessCacheName: name })
-          .pipe(
-            Effect.catchTag("ServerlessCacheNotFoundFault", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed(undefined)));
         return response?.ServerlessCaches?.[0];
       });
 
@@ -308,22 +302,15 @@ export const ServerlessCacheProvider = () =>
       // typically completes in 1-3 minutes; budget ~10 min (60 * 10s) like
       // the RDS cluster wait so slow regions still converge.
       const waitForCache = Effect.fn(function* (name: string) {
-        const readinessPolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const readinessPolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (!cache?.ARN) {
-              return Effect.fail(
-                new Error(`Serverless cache '${name}' not found`),
-              );
+              return Effect.fail(new Error(`Serverless cache '${name}' not found`));
             }
             if (cache.Status !== "available") {
               return Effect.fail(
-                new Error(
-                  `Serverless cache '${name}' not available (status: ${cache.Status})`,
-                ),
+                new Error(`Serverless cache '${name}' not available (status: ${cache.Status})`),
               );
             }
             return Effect.succeed(cache);
@@ -335,10 +322,7 @@ export const ServerlessCacheProvider = () =>
       // Wait for a cache to leave a transitional state before delete. Ends
       // when the cache is available, deleting, or gone.
       const waitUntilSettled = Effect.fn(function* (name: string) {
-        const settlePolicy = Schedule.max([
-          Schedule.fixed("10 seconds"),
-          Schedule.recurs(60),
-        ]);
+        const settlePolicy = Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]);
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (
@@ -347,9 +331,7 @@ export const ServerlessCacheProvider = () =>
               cache.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(
-                  `Serverless cache '${name}' still settling (status: ${cache.Status})`,
-                ),
+                new Error(`Serverless cache '${name}' still settling (status: ${cache.Status})`),
               );
             }
             return Effect.succeed(cache);
@@ -393,9 +375,7 @@ export const ServerlessCacheProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
           // Create-only properties force a replacement.
@@ -409,32 +389,22 @@ export const ServerlessCacheProvider = () =>
           if ((news?.kmsKeyId ?? undefined) !== (olds?.kmsKeyId ?? undefined)) {
             return { action: "replace" } as const;
           }
-          if (
-            (news?.networkType ?? undefined) !==
-            (olds?.networkType ?? undefined)
-          ) {
+          if ((news?.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.serverlessCacheName ?? (yield* toName(id, olds ?? {}));
+          const name = output?.serverlessCacheName ?? (yield* toName(id, olds ?? {}));
           const cache = yield* readCache(name);
           // A cache that is still provisioning has no endpoint yet; report
           // it as missing so reconcile (which tolerates the AlreadyExists
           // race and waits for availability) converges it.
-          if (
-            !cache?.ARN ||
-            !cache.Endpoint?.Address ||
-            cache.Endpoint.Port === undefined
-          ) {
+          if (!cache?.ARN || !cache.Endpoint?.Address || cache.Endpoint.Port === undefined) {
             return undefined;
           }
           const attrs = yield* toAttrs(cache);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
@@ -468,12 +438,7 @@ export const ServerlessCacheProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag(
-                  "ServerlessCacheAlreadyExistsFault",
-                  () => Effect.void,
-                ),
-              );
+              .pipe(Effect.catchTag("ServerlessCacheAlreadyExistsFault", () => Effect.void));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -484,10 +449,7 @@ export const ServerlessCacheProvider = () =>
 
           // 3. Sync — compute the modify delta from OBSERVED state.
           const modify: elasticache.ModifyServerlessCacheRequest = {};
-          if (
-            news.description !== undefined &&
-            news.description !== observed.Description
-          ) {
+          if (news.description !== undefined && news.description !== observed.Description) {
             modify.Description = news.description;
           }
           if (usageLimitsDiffer(desiredLimits, observed.CacheUsageLimits)) {
@@ -499,21 +461,14 @@ export const ServerlessCacheProvider = () =>
           ) {
             modify.SecurityGroupIds = news.securityGroupIds;
           }
-          if (
-            news.userGroupId !== undefined &&
-            news.userGroupId !== observed.UserGroupId
-          ) {
+          if (news.userGroupId !== undefined && news.userGroupId !== observed.UserGroupId) {
             modify.UserGroupId = news.userGroupId;
-          } else if (
-            news.userGroupId === undefined &&
-            observed.UserGroupId !== undefined
-          ) {
+          } else if (news.userGroupId === undefined && observed.UserGroupId !== undefined) {
             modify.RemoveUserGroup = true;
           }
           if (
             news.snapshotRetentionLimit !== undefined &&
-            news.snapshotRetentionLimit !==
-              (observed.SnapshotRetentionLimit ?? 0)
+            news.snapshotRetentionLimit !== (observed.SnapshotRetentionLimit ?? 0)
           ) {
             modify.SnapshotRetentionLimit = news.snapshotRetentionLimit;
           }
@@ -574,20 +529,15 @@ export const ServerlessCacheProvider = () =>
           // InvalidServerlessCacheStateFault — wait (bounded) for it to
           // settle first. A cache already deleting (or gone) is success.
           yield* waitUntilSettled(name);
-          yield* elasticache
-            .deleteServerlessCache({ ServerlessCacheName: name })
-            .pipe(
-              Effect.catchTag(
-                "ServerlessCacheNotFoundFault",
-                () => Effect.void,
-              ),
-              Effect.catchTag(
-                "InvalidServerlessCacheStateFault",
-                () =>
-                  // Already deleting — deletion is in progress.
-                  Effect.void,
-              ),
-            );
+          yield* elasticache.deleteServerlessCache({ ServerlessCacheName: name }).pipe(
+            Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.void),
+            Effect.catchTag(
+              "InvalidServerlessCacheStateFault",
+              () =>
+                // Already deleting — deletion is in progress.
+                Effect.void,
+            ),
+          );
         }),
 
         list: () =>
@@ -604,9 +554,7 @@ export const ServerlessCacheProvider = () =>
                 ),
               ),
             ),
-            Effect.flatMap(
-              Effect.forEach((cache) => toAttrs(cache), { concurrency: 4 }),
-            ),
+            Effect.flatMap(Effect.forEach((cache) => toAttrs(cache), { concurrency: 4 })),
           ),
       };
     }),

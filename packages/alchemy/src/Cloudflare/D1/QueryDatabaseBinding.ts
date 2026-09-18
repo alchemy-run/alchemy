@@ -3,11 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Database } from "./Database.ts";
-import {
-  type QueryDatabaseClient,
-  PreparedStatement,
-  QueryDatabase,
-} from "./QueryDatabase.ts";
+import { type QueryDatabaseClient, PreparedStatement, QueryDatabase } from "./QueryDatabase.ts";
 
 export const QueryDatabaseBinding = Layer.effect(
   QueryDatabase,
@@ -36,14 +32,10 @@ export const QueryDatabaseBinding = Layer.effect(
         raw: rawEff,
         prepare: (query: string) => new PreparedStatement(query, [], rawEff),
         exec: (query: string) =>
-          Effect.flatMap(rawEff, (raw) =>
-            Effect.promise(() => raw.exec(query)),
-          ),
+          Effect.flatMap(rawEff, (raw) => Effect.promise(() => raw.exec(query))),
         batch: <T = unknown>(statements: PreparedStatement[]) =>
           Effect.flatMap(rawEff, (raw) =>
-            Effect.promise(() =>
-              raw.batch<T>(statements.map((s) => s._build(raw))),
-            ),
+            Effect.promise(() => raw.batch<T>(statements.map((s) => s._build(raw)))),
           ),
       } satisfies QueryDatabaseClient;
     });

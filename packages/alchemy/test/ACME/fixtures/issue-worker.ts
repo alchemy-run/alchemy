@@ -1,10 +1,10 @@
-import * as ACME from "@/ACME";
-import * as Cloudflare from "@/Cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as ACME from "@/ACME";
+import * as Cloudflare from "@/Cloudflare";
 import { Staging, Zone } from "./shared.ts";
 
 /**
@@ -42,25 +42,17 @@ export default class AcmeIssueWorker extends Cloudflare.Worker<AcmeIssueWorker>(
             notAfter: issued.notAfter,
             serial: issued.serial,
             dnsNames: parsed.dnsNames,
-            hasKey: Redacted.value(issued.privateKey).includes(
-              "BEGIN PRIVATE KEY",
-            ),
+            hasKey: Redacted.value(issued.privateKey).includes("BEGIN PRIVATE KEY"),
             chainLength: ACME.splitPemChain(issued.chain).length,
           });
         }).pipe(
           // Failures and defects alike come back as JSON so the test can
           // show what went wrong inside the Worker.
           Effect.catchCause((cause) =>
-            HttpServerResponse.json(
-              { error: Cause.pretty(cause) },
-              { status: 500 },
-            ),
+            HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
           ),
         );
       }),
     };
-  }).pipe(
-    Effect.provide(ACME.IssueCertificateHttp),
-    Effect.provide(Cloudflare.DNS.WriteDnsHttp),
-  ),
+  }).pipe(Effect.provide(ACME.IssueCertificateHttp), Effect.provide(Cloudflare.DNS.WriteDnsHttp)),
 ) {}

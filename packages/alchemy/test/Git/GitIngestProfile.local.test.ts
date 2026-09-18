@@ -1,3 +1,14 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as Cloudflare from "@/Cloudflare";
+import { GitApi } from "@/Git/Api.ts";
 /**
  * Push-ingest profile against the LOCAL workerd (no cloud deploy): pushes
  * the repository at `GIT_PROFILE_REPO` and prints the server's per-phase
@@ -11,18 +22,7 @@
  * and rewrites ~/.alchemy/profiles.json.
  */
 import * as Alchemy from "@/index.ts";
-import * as Cloudflare from "@/Cloudflare";
-import { GitApi } from "@/Git/Api.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import TestGitHost, { TEST_SECRET } from "./fixtures/stack.ts";
 
 const PROFILE_REPO = process.env.GIT_PROFILE_REPO;
@@ -55,10 +55,7 @@ const git = Effect.fn(function* (cwd: string, ...args: Array<string>) {
 }, Effect.timeout("10 minutes"));
 
 if (PROFILE_REPO === undefined) {
-  test.skip(
-    "profile: set GIT_PROFILE_REPO=/path/to/checkout to run",
-    Effect.void,
-  );
+  test.skip("profile: set GIT_PROFILE_REPO=/path/to/checkout to run", Effect.void);
 } else {
   const stack = beforeAll(deploy(LocalStack));
   afterAll(destroy(LocalStack));
@@ -72,31 +69,20 @@ if (PROFILE_REPO === undefined) {
           r.pipe(HttpClientRequest.bearerToken(TEST_SECRET)),
         ),
       });
-      yield* client.repos
-        .get({ params: { owner: "profile", repo: "repo" } })
-        .pipe(
-          Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }),
-          Effect.catchTag("RepoNotFound", () => Effect.void),
-        );
+      yield* client.repos.get({ params: { owner: "profile", repo: "repo" } }).pipe(
+        Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }),
+        Effect.catchTag("RepoNotFound", () => Effect.void),
+      );
       const created = yield* client.repos.create({
         payload: { owner: "profile", name: "repo" },
       });
       const parsed = new URL(url);
       const remote = `${parsed.protocol}//x:${TEST_SECRET}@${parsed.host}/profile/repo.git`;
       const t0 = performance.now();
-      const push = yield* git(
-        PROFILE_REPO!,
-        "push",
-        "-q",
-        remote,
-        "HEAD:refs/heads/main",
-      );
+      const push = yield* git(PROFILE_REPO!, "push", "-q", remote, "HEAD:refs/heads/main");
       const wall = performance.now() - t0;
       if (push.exitCode !== 0)
-        console.log(
-          "[ingest-profile] PUSH FAILED:",
-          push.stderr.slice(0, 2000),
-        );
+        console.log("[ingest-profile] PUSH FAILED:", push.stderr.slice(0, 2000));
       expect(push.exitCode, push.stderr).toBe(0);
       const meta = yield* client.repos.get({
         params: { owner: "profile", repo: "repo" },
@@ -109,17 +95,11 @@ if (PROFILE_REPO === undefined) {
       });
       const clone = yield* git(tmp, "clone", "-q", remote, "back");
       if (clone.exitCode !== 0)
-        console.log(
-          "[ingest-profile] CLONE FAILED:",
-          clone.stderr.slice(0, 2000),
-        );
+        console.log("[ingest-profile] CLONE FAILED:", clone.stderr.slice(0, 2000));
       expect(clone.exitCode, clone.stderr).toBe(0);
       const fsck = yield* git(`${tmp}/back`, "fsck", "--connectivity-only");
       if (fsck.exitCode !== 0)
-        console.log(
-          "[ingest-profile] FSCK FAILED:",
-          fsck.stderr.slice(0, 2000),
-        );
+        console.log("[ingest-profile] FSCK FAILED:", fsck.stderr.slice(0, 2000));
       expect(fsck.exitCode, fsck.stderr).toBe(0);
       console.log(
         `[ingest-profile] objects: ${JSON.stringify(meta.objects)}; clone back + fsck ok`,

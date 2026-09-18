@@ -1,7 +1,7 @@
-import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare";
 import { DrizzleUsersObject } from "./object.ts";
 
 export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<DrizzleDurableObjectWorker>()(
@@ -16,9 +16,7 @@ export default class DrizzleDurableObjectWorker extends Cloudflare.Worker<Drizzl
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
-        const object = objects.getByName(
-          url.searchParams.get("do") ?? "default",
-        );
+        const object = objects.getByName(url.searchParams.get("do") ?? "default");
 
         if (request.method === "POST" && url.pathname === "/users") {
           const name = url.searchParams.get("name") ?? "anonymous";

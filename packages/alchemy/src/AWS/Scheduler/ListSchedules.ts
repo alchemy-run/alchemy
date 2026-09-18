@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
-export interface ListSchedulesRequest extends Omit<
-  scheduler.ListSchedulesInput,
-  "GroupName"
-> {}
+export interface ListSchedulesRequest extends Omit<scheduler.ListSchedulesInput, "GroupName"> {}
 
 /**
  * Runtime binding for `scheduler:ListSchedules`.
@@ -45,12 +42,7 @@ export interface ListSchedules extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: ListSchedulesRequest,
-    ) => Effect.Effect<
-      scheduler.ListSchedulesOutput,
-      scheduler.ListSchedulesError
-    >
+    ) => Effect.Effect<scheduler.ListSchedulesOutput, scheduler.ListSchedulesError>
   >
 > {}
-export const ListSchedules = Binding.Service<ListSchedules>(
-  "AWS.Scheduler.ListSchedules",
-);
+export const ListSchedules = Binding.Service<ListSchedules>("AWS.Scheduler.ListSchedules");

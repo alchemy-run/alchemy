@@ -32,13 +32,8 @@ export interface ListServices extends Binding.Service<
   () => Effect.Effect<
     (
       request: appsignals.ListServicesInput,
-    ) => Effect.Effect<
-      appsignals.ListServicesOutput,
-      appsignals.ListServicesError
-    >
+    ) => Effect.Effect<appsignals.ListServicesOutput, appsignals.ListServicesError>
   >
 > {}
 
-export const ListServices = Binding.Service<ListServices>(
-  "AWS.ApplicationSignals.ListServices",
-);
+export const ListServices = Binding.Service<ListServices>("AWS.ApplicationSignals.ListServices");

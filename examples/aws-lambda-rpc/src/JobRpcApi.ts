@@ -1,28 +1,20 @@
 import { Effect, Layer, Schema } from "effect";
-import {
-  Rpc,
-  RpcGroup,
-  RpcSerialization,
-  RpcServer,
-} from "effect/unstable/rpc";
+import { Rpc, RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Job, JobId } from "./Job.ts";
 import { JobNotifications } from "./JobNotifications.ts";
 import { JobStorage } from "./JobStorage.ts";
 
-export class JobNotFound extends Schema.TaggedClass<JobNotFound>()(
-  "JobNotFound",
-  { jobId: JobId },
-) {}
+export class JobNotFound extends Schema.TaggedClass<JobNotFound>()("JobNotFound", {
+  jobId: JobId,
+}) {}
 
-export class GetJobFailed extends Schema.TaggedClass<GetJobFailed>()(
-  "GetJobFailed",
-  { message: Schema.String },
-) {}
+export class GetJobFailed extends Schema.TaggedClass<GetJobFailed>()("GetJobFailed", {
+  message: Schema.String,
+}) {}
 
-export class PutJobFailed extends Schema.TaggedClass<PutJobFailed>()(
-  "PutJobFailed",
-  { message: Schema.String },
-) {}
+export class PutJobFailed extends Schema.TaggedClass<PutJobFailed>()("PutJobFailed", {
+  message: Schema.String,
+}) {}
 
 const getJob = Rpc.make("getJob", {
   success: Job,

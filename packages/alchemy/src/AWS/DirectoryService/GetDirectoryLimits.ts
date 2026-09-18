@@ -30,9 +30,7 @@ import * as Binding from "../../Binding.ts";
 export interface GetDirectoryLimits extends Binding.Service<
   GetDirectoryLimits,
   "AWS.DirectoryService.GetDirectoryLimits",
-  () => Effect.Effect<
-    () => Effect.Effect<ds.GetDirectoryLimitsResult, ds.GetDirectoryLimitsError>
-  >
+  () => Effect.Effect<() => Effect.Effect<ds.GetDirectoryLimitsResult, ds.GetDirectoryLimitsError>>
 > {}
 export const GetDirectoryLimits = Binding.Service<GetDirectoryLimits>(
   "AWS.DirectoryService.GetDirectoryLimits",

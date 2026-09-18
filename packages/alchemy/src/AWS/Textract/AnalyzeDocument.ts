@@ -31,12 +31,7 @@ export interface AnalyzeDocument extends Binding.Service<
   () => Effect.Effect<
     (
       request: textract.AnalyzeDocumentRequest,
-    ) => Effect.Effect<
-      textract.AnalyzeDocumentResponse,
-      textract.AnalyzeDocumentError
-    >
+    ) => Effect.Effect<textract.AnalyzeDocumentResponse, textract.AnalyzeDocumentError>
   >
 > {}
-export const AnalyzeDocument = Binding.Service<AnalyzeDocument>(
-  "AWS.Textract.AnalyzeDocument",
-);
+export const AnalyzeDocument = Binding.Service<AnalyzeDocument>("AWS.Textract.AnalyzeDocument");

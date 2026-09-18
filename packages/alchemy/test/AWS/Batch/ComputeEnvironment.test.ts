@@ -1,10 +1,10 @@
+import * as batch from "@distilled.cloud/aws/batch";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
 import * as AWS from "@/AWS";
 import { ComputeEnvironment } from "@/AWS/Batch/ComputeEnvironment.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as batch from "@distilled.cloud/aws/batch";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
 import { BatchTestNetwork } from "./TestNetwork.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -13,11 +13,7 @@ const ceName = "alchemy-test-batch-ce-lifecycle";
 
 const describeCe = batch
   .describeComputeEnvironments({ computeEnvironments: [ceName] })
-  .pipe(
-    Effect.map((res) =>
-      res.computeEnvironments?.find((ce) => ce.status !== "DELETED"),
-    ),
-  );
+  .pipe(Effect.map((res) => res.computeEnvironments?.find((ce) => ce.status !== "DELETED")));
 
 test.provider(
   "lifecycle: create with stack-owned networking, update, destroy",
@@ -37,9 +33,7 @@ test.provider(
           });
         }),
       );
-      expect(deployed.computeEnvironmentArn).toContain(
-        `compute-environment/${ceName}`,
-      );
+      expect(deployed.computeEnvironmentArn).toContain(`compute-environment/${ceName}`);
 
       // Out-of-band verification via distilled.
       const created = yield* describeCe;
@@ -49,9 +43,7 @@ test.provider(
       expect(created?.computeResources?.type).toBe("FARGATE");
       expect(created?.computeResources?.maxvCpus).toBe(4);
       expect(created?.computeResources?.subnets?.length).toBeGreaterThan(0);
-      expect(
-        created?.computeResources?.securityGroupIds?.length,
-      ).toBeGreaterThan(0);
+      expect(created?.computeResources?.securityGroupIds?.length).toBeGreaterThan(0);
 
       // Canonical list() coverage.
       const provider = yield* Provider.findProvider(ComputeEnvironment);

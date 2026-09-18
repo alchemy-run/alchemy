@@ -1,14 +1,14 @@
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import {
   getService,
   createServicePromote,
   createServiceRollback,
 } from "@distilled.cloud/prisma/management";
-import type { ObservedApp } from "./Observed.ts";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import type { PromoteAppResult } from "../Types.ts";
+import type { ObservedApp } from "./Observed.ts";
 
 export interface AppDeploymentTargetObservationOptions {
   readonly timeoutSeconds?: number;
@@ -26,14 +26,10 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
   const timeoutSeconds = options.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
   const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
-    return yield* Effect.fail(
-      new Error("timeoutSeconds must be a positive finite number."),
-    );
+    return yield* Effect.fail(new Error("timeoutSeconds must be a positive finite number."));
   }
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    return yield* Effect.fail(
-      new Error("pollIntervalMs must be a positive finite number."),
-    );
+    return yield* Effect.fail(new Error("pollIntervalMs must be a positive finite number."));
   }
 
   const timeoutMs = timeoutSeconds * 1_000;
@@ -42,9 +38,7 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
   let lastError: unknown;
 
   while (true) {
-    const remainingBeforeObservation = yield* Effect.sync(
-      () => deadline - Date.now(),
-    );
+    const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
     if (remainingBeforeObservation <= 0) break;
 
     const observationOption = yield* getService({ serviceId: appId }).pipe(
@@ -64,13 +58,9 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
       lastError = observation.failure;
     }
 
-    const remainingAfterObservation = yield* Effect.sync(
-      () => deadline - Date.now(),
-    );
+    const remainingAfterObservation = yield* Effect.sync(() => deadline - Date.now());
     if (remainingAfterObservation <= 0) break;
-    yield* Effect.sleep(
-      Duration.millis(Math.min(intervalMs, remainingAfterObservation)),
-    );
+    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, remainingAfterObservation)));
   }
 
   return yield* Effect.fail(
@@ -103,11 +93,9 @@ export const promoteAppObserved = Effect.fn(function* (
     Effect.result,
   );
   if (Result.isSuccess(promoted)) {
-    const observation = yield* waitForAppDeploymentTarget(
-      appId,
-      deploymentId,
-      options,
-    ).pipe(Effect.result);
+    const observation = yield* waitForAppDeploymentTarget(appId, deploymentId, options).pipe(
+      Effect.result,
+    );
     if (Result.isFailure(observation)) {
       return yield* Effect.fail(
         new AggregateError(
@@ -126,10 +114,7 @@ export const promoteAppObserved = Effect.fn(function* (
     Effect.map((response) => response.data),
     Effect.result,
   );
-  if (
-    Result.isSuccess(observation) &&
-    observation.success.latestDeploymentId === deploymentId
-  ) {
+  if (Result.isSuccess(observation) && observation.success.latestDeploymentId === deploymentId) {
     return {
       appEndpointDomain: observation.success.appEndpointDomain,
       reassignedDomains: 0,
@@ -143,9 +128,7 @@ export const promoteAppObserved = Effect.fn(function* (
     Effect.result,
   );
   const repairedObservation = Result.isSuccess(repaired)
-    ? yield* waitForAppDeploymentTarget(appId, deploymentId, options).pipe(
-        Effect.result,
-      )
+    ? yield* waitForAppDeploymentTarget(appId, deploymentId, options).pipe(Effect.result)
     : yield* getService({ serviceId: appId }).pipe(
         Effect.map((response) => response.data),
         Effect.result,

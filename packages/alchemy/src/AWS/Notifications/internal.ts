@@ -11,9 +11,8 @@ import { Region } from "../Region.ts";
  * every distilled operation.
  */
 const US_EAST_1 = "us-east-1";
-export const pinNotificationsRegion = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-) => effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
+export const pinNotificationsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
 
 /**
  * Read the observed tags on a User Notifications resource, tolerating a
@@ -23,9 +22,8 @@ export const readNotificationsTags = Effect.fn(function* (arn: string) {
   return yield* pinNotificationsRegion(
     notifications.listTagsForResource({ arn }).pipe(
       Effect.map((r) => (r.tags ?? {}) as Record<string, string>),
-      Effect.catchTag(
-        ["ResourceNotFoundException", "ValidationException"],
-        () => Effect.succeed({} as Record<string, string>),
+      Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
+        Effect.succeed({} as Record<string, string>),
       ),
     ),
   );
@@ -54,8 +52,6 @@ export const syncNotificationsTags = Effect.fn(function* (
     );
   }
   if (removed.length > 0) {
-    yield* pinNotificationsRegion(
-      notifications.untagResource({ arn, tagKeys: removed }),
-    );
+    yield* pinNotificationsRegion(notifications.untagResource({ arn, tagKeys: removed }));
   }
 });

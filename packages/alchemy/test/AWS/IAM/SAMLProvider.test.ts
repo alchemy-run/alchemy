@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { SAMLProvider } from "@/AWS/IAM";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as AWS from "@/AWS";
+import { SAMLProvider } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 import { testPrivateKey, testSamlMetadataDocument } from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -31,9 +31,7 @@ describe("AWS.IAM.SAMLProvider", () => {
       const provider = yield* Provider.findProvider(SAMLProvider);
       const all = yield* provider.list();
 
-      expect(
-        all.some((x) => x.samlProviderArn === deployed.samlProviderArn),
-      ).toBe(true);
+      expect(all.some((x) => x.samlProviderArn === deployed.samlProviderArn)).toBe(true);
 
       yield* stack.destroy();
 

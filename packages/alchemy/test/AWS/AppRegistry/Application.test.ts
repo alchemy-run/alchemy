@@ -1,11 +1,11 @@
-import * as AWS from "@/AWS";
-import { Application } from "@/AWS/AppRegistry";
-import * as Test from "@/Test/Alchemy";
 import * as appregistry from "@distilled.cloud/aws/service-catalog-appregistry";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Application } from "@/AWS/AppRegistry";
+import * as Test from "@/Test/Alchemy";
 import { makeAppRegistryTestLease } from "./TestLease.ts";
 
 const { test, beforeAll, afterAll } = Test.make({ providers: AWS.providers() });
@@ -43,22 +43,17 @@ test.provider.skipIf(!gated)(
     }),
 );
 
-class ApplicationStillExists extends Data.TaggedError(
-  "ApplicationStillExists",
-)<{ specifier: string }> {}
+class ApplicationStillExists extends Data.TaggedError("ApplicationStillExists")<{
+  specifier: string;
+}> {}
 
 const assertApplicationGone = (specifier: string) =>
   appregistry.getApplication({ application: specifier }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new ApplicationStillExists({ specifier })),
-    ),
+    Effect.flatMap(() => Effect.fail(new ApplicationStillExists({ specifier }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "ApplicationStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(10)]),
     }),
   );
 

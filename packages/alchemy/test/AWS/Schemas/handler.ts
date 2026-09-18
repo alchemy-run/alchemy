@@ -1,6 +1,3 @@
-import { EventBus } from "@/AWS/EventBridge";
-import * as Lambda from "@/AWS/Lambda";
-import * as Schemas from "@/AWS/Schemas";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,6 +5,9 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import { EventBus } from "@/AWS/EventBridge";
+import * as Lambda from "@/AWS/Lambda";
+import * as Schemas from "@/AWS/Schemas";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -162,9 +162,7 @@ export default SchemasTestFunction.make(
         if (request.method === "GET" && pathname === "/versions") {
           const response = yield* listSchemaVersions();
           return yield* HttpServerResponse.json({
-            versions: (response.SchemaVersions ?? []).map(
-              (v) => v.SchemaVersion,
-            ),
+            versions: (response.SchemaVersions ?? []).map((v) => v.SchemaVersion),
           });
         }
 

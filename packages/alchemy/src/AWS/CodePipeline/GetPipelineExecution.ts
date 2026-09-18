@@ -31,10 +31,7 @@ export interface GetPipelineExecution extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetPipelineExecutionRequest,
-    ) => Effect.Effect<
-      SVC.GetPipelineExecutionOutput,
-      SVC.GetPipelineExecutionError
-    >
+    ) => Effect.Effect<SVC.GetPipelineExecutionOutput, SVC.GetPipelineExecutionError>
   >
 > {}
 export const GetPipelineExecution = Binding.Service<GetPipelineExecution>(

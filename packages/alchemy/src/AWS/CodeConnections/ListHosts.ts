@@ -35,13 +35,8 @@ export interface ListHosts extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListHostsRequest,
-    ) => Effect.Effect<
-      codeconnections.ListHostsOutput,
-      codeconnections.ListHostsError
-    >
+    ) => Effect.Effect<codeconnections.ListHostsOutput, codeconnections.ListHostsError>
   >
 > {}
 
-export const ListHosts = Binding.Service<ListHosts>(
-  "AWS.CodeConnections.ListHosts",
-);
+export const ListHosts = Binding.Service<ListHosts>("AWS.CodeConnections.ListHosts");

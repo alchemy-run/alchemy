@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { Bucket } from "@/AWS/S3";
-import { AccessPoint } from "@/AWS/S3Control";
-import * as Test from "@/Test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Bucket } from "@/AWS/S3";
+import { AccessPoint } from "@/AWS/S3Control";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -15,20 +15,16 @@ const ACCOUNT_ID = "391965393224";
 const findAccessPoint = (name: string) =>
   s3control
     .getAccessPoint({ AccountId: ACCOUNT_ID, Name: name })
-    .pipe(
-      Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)),
-    );
+    .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
 
-class AccessPointStillExists extends Data.TaggedError(
-  "AccessPointStillExists",
-)<{ readonly name: string }> {}
+class AccessPointStillExists extends Data.TaggedError("AccessPointStillExists")<{
+  readonly name: string;
+}> {}
 
 const assertAccessPointDeleted = (name: string) =>
   findAccessPoint(name).pipe(
     Effect.flatMap((ap) =>
-      ap === undefined
-        ? Effect.void
-        : Effect.fail(new AccessPointStillExists({ name })),
+      ap === undefined ? Effect.void : Effect.fail(new AccessPointStillExists({ name })),
     ),
     Effect.retry({
       while: (e) => e._tag === "AccessPointStillExists",
@@ -48,9 +44,7 @@ test.provider(
         .pipe(
           Effect.map(() => "found" as const),
           // proves the patched typed union — no cast, no catch-all
-          Effect.catchTag("NoSuchAccessPoint", () =>
-            Effect.succeed("missing" as const),
-          ),
+          Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed("missing" as const)),
         );
       expect(result).toBe("missing");
     }),
@@ -90,11 +84,7 @@ test.provider(
           AccountId: ACCOUNT_ID,
           ResourceArn: deployed.accessPoint.accessPointArn,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(tags.Environment).toBe("test");
       expect(tags["alchemy::id"]).toBe("TestAp");
 
@@ -109,20 +99,14 @@ test.provider(
           return { bucket, accessPoint };
         }),
       );
-      expect(updated.accessPoint.accessPointName).toBe(
-        deployed.accessPoint.accessPointName,
-      );
+      expect(updated.accessPoint.accessPointName).toBe(deployed.accessPoint.accessPointName);
 
       const updatedTags = yield* s3control
         .listTagsForResource({
           AccountId: ACCOUNT_ID,
           ResourceArn: updated.accessPoint.accessPointArn,
         })
-        .pipe(
-          Effect.map((r) =>
-            Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value])),
-          ),
-        );
+        .pipe(Effect.map((r) => Object.fromEntries((r.Tags ?? []).map((t) => [t.Key, t.Value]))));
       expect(updatedTags.Environment).toBe("production");
       expect(updatedTags.Team).toBe("data");
 
@@ -166,13 +150,9 @@ test.provider(
       );
 
       // replacement: new physical name, old access point cleaned up
-      expect(second.accessPoint.accessPointName).not.toBe(
-        first.accessPoint.accessPointName,
-      );
+      expect(second.accessPoint.accessPointName).not.toBe(first.accessPoint.accessPointName);
       const live = yield* findAccessPoint(second.accessPoint.accessPointName);
-      expect(live?.PublicAccessBlockConfiguration?.BlockPublicPolicy).toBe(
-        false,
-      );
+      expect(live?.PublicAccessBlockConfiguration?.BlockPublicPolicy).toBe(false);
       yield* assertAccessPointDeleted(first.accessPoint.accessPointName);
 
       yield* stack.destroy();

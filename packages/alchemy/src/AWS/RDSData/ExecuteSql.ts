@@ -47,11 +47,7 @@ export interface ExecuteSql extends Binding.Service<
   ) => Effect.Effect<
     (
       request: ExecuteSqlRequest,
-    ) => Effect.Effect<
-      rdsdata.ExecuteSqlResponse,
-      rdsdata.ExecuteSqlError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<rdsdata.ExecuteSqlResponse, rdsdata.ExecuteSqlError, RuntimeContext>
   >
 > {}
 

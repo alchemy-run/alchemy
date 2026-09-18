@@ -1,34 +1,27 @@
-import * as AWS from "@/AWS";
-import { Role } from "@/AWS/IAM/Role.ts";
-import { Crl, Profile, TrustAnchor } from "@/AWS/RolesAnywhere";
-import * as Test from "@/Test/Alchemy";
 import * as rolesanywhere from "@distilled.cloud/aws/rolesanywhere";
 import { expect } from "alchemy-test";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import {
-  CA1_CERTIFICATE_PEM,
-  CA2_CERTIFICATE_PEM,
-  CRL1_PEM,
-  CRL2_PEM,
-} from "./fixtures/certs.ts";
+import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM/Role.ts";
+import { Crl, Profile, TrustAnchor } from "@/AWS/RolesAnywhere";
+import * as Test from "@/Test/Alchemy";
+import { CA1_CERTIFICATE_PEM, CA2_CERTIFICATE_PEM, CRL1_PEM, CRL2_PEM } from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's read/delete paths depend on.
-test.provider(
-  "getTrustAnchor on a bogus UUID fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        rolesanywhere.getTrustAnchor({
-          trustAnchorId: "00000000-0000-0000-0000-000000000000",
-        }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("getTrustAnchor on a bogus UUID fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      rolesanywhere.getTrustAnchor({
+        trustAnchorId: "00000000-0000-0000-0000-000000000000",
+      }),
+    );
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 const trustPolicy: AWS.IAM.PolicyDocument = {
@@ -110,18 +103,14 @@ test.provider(
                 : [
                     {
                       certificateField: "x509Subject",
-                      mappingRules: props.subjectSpecifiers.map(
-                        (specifier) => ({ specifier }),
-                      ),
+                      mappingRules: props.subjectSpecifiers.map((specifier) => ({ specifier })),
                     },
                   ],
             tags: { fixture: "rolesanywhere" },
           });
           const crl = yield* Crl("Crl", {
             crlData: props.crlData,
-            trustAnchorArn: props.crlOnAnchorB
-              ? anchorB.trustAnchorArn
-              : anchorA.trustAnchorArn,
+            trustAnchorArn: props.crlOnAnchorB ? anchorB.trustAnchorArn : anchorA.trustAnchorArn,
             enabled: props.crlEnabled,
             tags: { fixture: "rolesanywhere" },
           });
@@ -155,9 +144,7 @@ test.provider(
       const observedAnchor = yield* rolesanywhere.getTrustAnchor({
         trustAnchorId: first.anchorA.trustAnchorId,
       });
-      expect(observedAnchor.trustAnchor.source?.sourceType).toBe(
-        "CERTIFICATE_BUNDLE",
-      );
+      expect(observedAnchor.trustAnchor.source?.sourceType).toBe("CERTIFICATE_BUNDLE");
       expect(
         observedAnchor.trustAnchor.source?.sourceData !== undefined &&
           "x509CertificateData" in observedAnchor.trustAnchor.source.sourceData
@@ -170,18 +157,14 @@ test.provider(
       expect(observedProfile.profile?.durationSeconds).toBe(3600);
       expect(observedProfile.profile?.roleArns).toEqual([first.role.roleArn]);
       // The custom attribute mapping landed (create-time put).
-      const firstSubjectMapping =
-        observedProfile.profile?.attributeMappings?.find(
-          (mapping) => mapping.certificateField === "x509Subject",
-        );
-      expect(
-        firstSubjectMapping?.mappingRules?.map((rule) => rule.specifier),
-      ).toEqual(["CN"]);
+      const firstSubjectMapping = observedProfile.profile?.attributeMappings?.find(
+        (mapping) => mapping.certificateField === "x509Subject",
+      );
+      expect(firstSubjectMapping?.mappingRules?.map((rule) => rule.specifier)).toEqual(["CN"]);
       // The custom notification setting landed (create-time settings).
-      const firstNotification =
-        observedAnchor.trustAnchor.notificationSettings?.find(
-          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
-        );
+      const firstNotification = observedAnchor.trustAnchor.notificationSettings?.find(
+        (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+      );
       expect(firstNotification?.threshold).toBe(40);
 
       // ── Step 2: in-place updates on every mutable aspect ──────────────
@@ -211,10 +194,9 @@ test.provider(
       });
       expect(updatedAnchor.trustAnchor.enabled).toBe(false);
       // putNotificationSettings converged the threshold.
-      const updatedNotification =
-        updatedAnchor.trustAnchor.notificationSettings?.find(
-          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
-        );
+      const updatedNotification = updatedAnchor.trustAnchor.notificationSettings?.find(
+        (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+      );
       expect(updatedNotification?.threshold).toBe(30);
       expect(
         updatedAnchor.trustAnchor.source?.sourceData !== undefined &&
@@ -228,24 +210,20 @@ test.provider(
       expect(updatedProfile.profile?.durationSeconds).toBe(7200);
       expect(updatedProfile.profile?.sessionPolicy).toBe(sessionPolicy);
       // putAttributeMapping converged the mapping rules.
-      const updatedSubjectMapping =
-        updatedProfile.profile?.attributeMappings?.find(
-          (mapping) => mapping.certificateField === "x509Subject",
-        );
-      expect(
-        updatedSubjectMapping?.mappingRules
-          ?.map((rule) => rule.specifier)
-          .sort(),
-      ).toEqual(["CN", "OU"]);
+      const updatedSubjectMapping = updatedProfile.profile?.attributeMappings?.find(
+        (mapping) => mapping.certificateField === "x509Subject",
+      );
+      expect(updatedSubjectMapping?.mappingRules?.map((rule) => rule.specifier).sort()).toEqual([
+        "CN",
+        "OU",
+      ]);
       const updatedCrl = yield* rolesanywhere.getCrl({
         crlId: second.crl.crlId,
       });
       expect(updatedCrl.crl.enabled).toBe(false);
-      expect(
-        new TextDecoder()
-          .decode(updatedCrl.crl.crlData ?? new Uint8Array())
-          .trim(),
-      ).toBe(CRL2_PEM.trim());
+      expect(new TextDecoder().decode(updatedCrl.crl.crlData ?? new Uint8Array()).trim()).toBe(
+        CRL2_PEM.trim(),
+      );
 
       // ── Step 3: moving the CRL to another trust anchor replaces it ────
       // (both anchors stay deployed across the replacement step). Dropping
@@ -273,54 +251,43 @@ test.provider(
       const finalSubjectMapping = finalProfile.profile?.attributeMappings?.find(
         (mapping) => mapping.certificateField === "x509Subject",
       );
-      expect(
-        finalSubjectMapping?.mappingRules?.map((rule) => rule.specifier) ?? [],
-      ).not.toContain("OU");
+      expect(finalSubjectMapping?.mappingRules?.map((rule) => rule.specifier) ?? []).not.toContain(
+        "OU",
+      );
       // The previously managed notification setting was reset to defaults.
       const finalAnchor = yield* rolesanywhere.getTrustAnchor({
         trustAnchorId: third.anchorA.trustAnchorId,
       });
-      const finalNotification =
-        finalAnchor.trustAnchor.notificationSettings?.find(
-          (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
-        );
+      const finalNotification = finalAnchor.trustAnchor.notificationSettings?.find(
+        (setting) => setting.event === "CA_CERTIFICATE_EXPIRY",
+      );
       expect(finalNotification?.threshold).not.toBe(30);
       // The replaced CRL was deleted.
       yield* untilGone(
         rolesanywhere.getCrl({ crlId: second.crl.crlId }).pipe(
           Effect.map((r) => r.crl),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         ),
       );
 
       // ── Destroy and verify everything is gone ─────────────────────────
       yield* stack.destroy();
       yield* untilGone(
-        rolesanywhere
-          .getTrustAnchor({ trustAnchorId: third.anchorA.trustAnchorId })
-          .pipe(
-            Effect.map((r) => r.trustAnchor),
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          ),
+        rolesanywhere.getTrustAnchor({ trustAnchorId: third.anchorA.trustAnchorId }).pipe(
+          Effect.map((r) => r.trustAnchor),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        ),
       );
       yield* untilGone(
         rolesanywhere.getProfile({ profileId: third.profile.profileId }).pipe(
           Effect.map((r) => r.profile),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         ),
       );
       yield* untilGone(
         rolesanywhere.getCrl({ crlId: third.crl.crlId }).pipe(
           Effect.map((r) => r.crl),
-          Effect.catchTag("ResourceNotFoundException", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
         ),
       );
     }),

@@ -1,10 +1,3 @@
-import * as AWS from "@/AWS";
-import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
-import type { PolicyStatement } from "@/AWS/IAM/Policy";
-import { Bucket } from "@/AWS/S3";
-import * as Output from "@/Output";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { describe, expect } from "alchemy-test";
@@ -12,6 +5,13 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
+import type { PolicyStatement } from "@/AWS/IAM/Policy";
+import { Bucket } from "@/AWS/S3";
+import * as Output from "@/Output";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -77,11 +77,9 @@ describe("AWS.CloudFront.Distribution", () => {
               },
             };
 
-            yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`(
-              {
-                policyStatements: [statement],
-              },
-            );
+            yield* bucket.bind`Allow(${distribution}, CloudFront.Read(${bucket}))`({
+              policyStatements: [statement],
+            });
 
             return {
               bucket,
@@ -95,9 +93,7 @@ describe("AWS.CloudFront.Distribution", () => {
           Id: deployed.distribution.distributionId,
         });
         expect(current.Distribution?.Status).toEqual("Deployed");
-        expect(current.Distribution?.DomainName).toEqual(
-          deployed.distribution.domainName,
-        );
+        expect(current.Distribution?.DomainName).toEqual(deployed.distribution.domainName);
         // Duration.Input props reached the wire as whole seconds.
         const config = current.Distribution?.DistributionConfig;
         expect(config?.Origins?.Items?.[0]?.ConnectionTimeout).toEqual(5);
@@ -108,9 +104,7 @@ describe("AWS.CloudFront.Distribution", () => {
         const control = yield* cloudfront.getOriginAccessControl({
           Id: deployed.oac.originAccessControlId,
         });
-        expect(control.OriginAccessControl?.Id).toEqual(
-          deployed.oac.originAccessControlId,
-        );
+        expect(control.OriginAccessControl?.Id).toEqual(deployed.oac.originAccessControlId);
 
         yield* S3.putObject({
           Bucket: deployed.bucket.bucketName,
@@ -189,9 +183,7 @@ describe("AWS.CloudFront.Distribution", () => {
         const provider = yield* Provider.findProvider(Distribution);
         const all = yield* provider.list();
 
-        expect(
-          all.some((d) => d.distributionId === deployed.distributionId),
-        ).toBe(true);
+        expect(all.some((d) => d.distributionId === deployed.distributionId)).toBe(true);
 
         yield* stack.destroy();
         yield* assertDistributionDeleted(deployed.distributionId);
@@ -247,17 +239,14 @@ describe("AWS.CloudFront.Distribution", () => {
         const created = yield* cloudfront.getDistributionConfig({
           Id: deployed.distribution.distributionId,
         });
-        expect(
-          created.DistributionConfig?.Restrictions?.GeoRestriction
-            .RestrictionType,
-        ).toEqual("whitelist");
-        expect(
-          created.DistributionConfig?.Restrictions?.GeoRestriction.Items?.sort(),
-        ).toEqual(["CA", "US"]);
-        expect(
-          created.DistributionConfig?.CustomErrorResponses?.Items?.[0]
-            .ErrorCode,
-        ).toEqual(404);
+        expect(created.DistributionConfig?.Restrictions?.GeoRestriction.RestrictionType).toEqual(
+          "whitelist",
+        );
+        expect(created.DistributionConfig?.Restrictions?.GeoRestriction.Items?.sort()).toEqual([
+          "CA",
+          "US",
+        ]);
+        expect(created.DistributionConfig?.CustomErrorResponses?.Items?.[0].ErrorCode).toEqual(404);
 
         // Update: drop the geo restriction.
         yield* stack.deploy(
@@ -288,10 +277,9 @@ describe("AWS.CloudFront.Distribution", () => {
         const updated = yield* cloudfront.getDistributionConfig({
           Id: deployed.distribution.distributionId,
         });
-        expect(
-          updated.DistributionConfig?.Restrictions?.GeoRestriction
-            .RestrictionType,
-        ).toEqual("none");
+        expect(updated.DistributionConfig?.Restrictions?.GeoRestriction.RestrictionType).toEqual(
+          "none",
+        );
 
         yield* stack.destroy();
         yield* assertDistributionDeleted(deployed.distribution.distributionId);
@@ -383,15 +371,13 @@ describe("AWS.CloudFront.Distribution", () => {
         // Members the props don't express carried over from the observed
         // config instead of being dropped (or rejected) by the update.
         expect(config?.DefaultRootObject).toEqual("index.html");
-        const headers = config?.Origins?.Items?.[0]?.CustomHeaders?.Items?.map(
-          (header) => ({
-            name: header.HeaderName,
-            value:
-              typeof header.HeaderValue === "string"
-                ? header.HeaderValue
-                : Redacted.value(header.HeaderValue),
-          }),
-        );
+        const headers = config?.Origins?.Items?.[0]?.CustomHeaders?.Items?.map((header) => ({
+          name: header.HeaderName,
+          value:
+            typeof header.HeaderValue === "string"
+              ? header.HeaderValue
+              : Redacted.value(header.HeaderValue),
+        }));
         expect(headers).toEqual([{ name: "x-out-of-band", value: "kept" }]);
 
         yield* stack.destroy();
@@ -406,11 +392,7 @@ const assertDistributionDeleted = (distributionId: string) =>
     Effect.flatMap(() => Effect.fail(new Error("DistributionStillExists"))),
     Effect.catchTag("NoSuchDistribution", () => Effect.void),
     Effect.retry({
-      while: (error) =>
-        error instanceof Error && error.message === "DistributionStillExists",
-      schedule: Schedule.max([
-        Schedule.fixed("10 seconds"),
-        Schedule.recurs(60),
-      ]),
+      while: (error) => error instanceof Error && error.message === "DistributionStillExists",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

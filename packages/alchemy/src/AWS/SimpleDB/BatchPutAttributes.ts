@@ -44,11 +44,7 @@ export interface BatchPutAttributes extends Binding.Service<
   ) => Effect.Effect<
     (
       request: BatchPutAttributesRequest,
-    ) => Effect.Effect<
-      sdb.BatchPutAttributesResponse,
-      sdb.BatchPutAttributesError,
-      RuntimeContext
-    >
+    ) => Effect.Effect<sdb.BatchPutAttributesResponse, sdb.BatchPutAttributesError, RuntimeContext>
   >
 > {}
 export const BatchPutAttributes = Binding.Service<BatchPutAttributes>(

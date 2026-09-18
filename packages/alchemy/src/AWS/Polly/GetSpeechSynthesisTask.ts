@@ -36,10 +36,7 @@ export interface GetSpeechSynthesisTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: polly.GetSpeechSynthesisTaskInput,
-    ) => Effect.Effect<
-      polly.GetSpeechSynthesisTaskOutput,
-      polly.GetSpeechSynthesisTaskError
-    >
+    ) => Effect.Effect<polly.GetSpeechSynthesisTaskOutput, polly.GetSpeechSynthesisTaskError>
   >
 > {}
 export const GetSpeechSynthesisTask = Binding.Service<GetSpeechSynthesisTask>(

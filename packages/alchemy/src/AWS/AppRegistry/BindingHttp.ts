@@ -95,22 +95,20 @@ export const makeAttributeGroupScopedHttpBinding = <
               {
                 Effect: "Allow",
                 Action: [...options.actions],
-                Resource: [
-                  Output.interpolate`${attributeGroup.attributeGroupArn}`,
-                ],
+                Resource: [Output.interpolate`${attributeGroup.attributeGroupArn}`],
               },
             ],
           });
         }
       }
-      return Effect.fn(`${options.tag}(${attributeGroup.LogicalId})`)(
-        function* (request?: Omit<I, "attributeGroup">) {
-          return yield* op({
-            ...request,
-            attributeGroup: yield* AttributeGroupId,
-          } as I);
-        },
-      );
+      return Effect.fn(`${options.tag}(${attributeGroup.LogicalId})`)(function* (
+        request?: Omit<I, "attributeGroup">,
+      ) {
+        return yield* op({
+          ...request,
+          attributeGroup: yield* AttributeGroupId,
+        } as I);
+      });
     });
   });
 

@@ -1,24 +1,20 @@
+import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
-import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Deterministic per-test-CASE record names — the same on every run (never
 // Date.now()/random). Cases in this file run CONCURRENTLY, so each case that
@@ -33,9 +29,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -58,11 +52,7 @@ const getTags = (zoneId: string, resourceId: string, resourceType: string) =>
 
 // Cloudflare reports untagged (and unknown) resources as an empty tag
 // set — poll until the set is empty after destroy.
-const expectTagsCleared = (
-  zoneId: string,
-  resourceId: string,
-  resourceType: string,
-) =>
+const expectTagsCleared = (zoneId: string, resourceId: string, resourceType: string) =>
   getTags(zoneId, resourceId, resourceType).pipe(
     Effect.repeat({
       schedule: Schedule.exponential("500 millis"),
@@ -195,17 +185,14 @@ test.provider("list enumerates tagged zone-scoped resources", (stack) =>
       }),
     );
 
-    const provider = yield* Provider.findProvider(
-      Cloudflare.Tags.ZoneResourceTags,
-    );
+    const provider = yield* Provider.findProvider(Cloudflare.Tags.ZoneResourceTags);
 
     // The account-wide tag index is eventually consistent — poll until the
     // freshly-tagged record shows up (bounded so it fails fast).
     const all = yield* provider.list().pipe(
       Effect.repeat({
         schedule: Schedule.exponential("1 second"),
-        until: (rows) =>
-          rows.some((r) => r.resourceId === deployed.record.recordId),
+        until: (rows) => rows.some((r) => r.resourceId === deployed.record.recordId),
         times: 8,
       }),
     );

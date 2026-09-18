@@ -39,12 +39,7 @@ export interface BatchGetMetricData extends Binding.Service<
   () => Effect.Effect<
     (
       request: sesv2.BatchGetMetricDataRequest,
-    ) => Effect.Effect<
-      sesv2.BatchGetMetricDataResponse,
-      sesv2.BatchGetMetricDataError
-    >
+    ) => Effect.Effect<sesv2.BatchGetMetricDataResponse, sesv2.BatchGetMetricDataError>
   >
 > {}
-export const BatchGetMetricData = Binding.Service<BatchGetMetricData>(
-  "AWS.SES.BatchGetMetricData",
-);
+export const BatchGetMetricData = Binding.Service<BatchGetMetricData>("AWS.SES.BatchGetMetricData");

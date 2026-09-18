@@ -89,9 +89,7 @@ export const KeyGroupProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getKeyGroupConfig({ Id: id })
-          .pipe(
-            Effect.catchTag("NoSuchResource", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("NoSuchResource", () => Effect.succeed(undefined)));
         if (!config?.KeyGroupConfig) return undefined;
         return { config: config.KeyGroupConfig, etag: config.ETag };
       });
@@ -103,9 +101,7 @@ export const KeyGroupProvider = () =>
         );
         if (!summary?.KeyGroup?.Id) return undefined;
         return yield* getById(summary.KeyGroup.Id).pipe(
-          Effect.map((found) =>
-            found ? { id: summary.KeyGroup.Id, ...found } : undefined,
-          ),
+          Effect.map((found) => (found ? { id: summary.KeyGroup.Id, ...found } : undefined)),
         );
       });
 
@@ -138,8 +134,9 @@ export const KeyGroupProvider = () =>
             const items: ReturnType<typeof toAttrs>[] = [];
             let marker: string | undefined = undefined;
             do {
-              const listed: cloudfront.ListKeyGroupsResult =
-                yield* cloudfront.listKeyGroups({ Marker: marker });
+              const listed: cloudfront.ListKeyGroupsResult = yield* cloudfront.listKeyGroups({
+                Marker: marker,
+              });
               for (const summary of listed.KeyGroupList?.Items ?? []) {
                 const id = summary.KeyGroup?.Id;
                 const config = summary.KeyGroup?.KeyGroupConfig;
@@ -155,18 +152,14 @@ export const KeyGroupProvider = () =>
           }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* createName(id, olds ?? {})) !==
-            (yield* createName(id, news))
-          ) {
+          if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.keyGroupId) {
             const found = yield* getById(output.keyGroupId);
-            if (found)
-              return toAttrs(output.keyGroupId, found.config, found.etag);
+            if (found) return toAttrs(output.keyGroupId, found.config, found.etag);
           }
           const name = yield* createName(id, olds ?? {});
           const found = yield* getByName(name);
@@ -181,9 +174,7 @@ export const KeyGroupProvider = () =>
           // by name. Trust observed cloud state, not stale `olds`.
           let observed = output?.keyGroupId
             ? yield* getById(output.keyGroupId).pipe(
-                Effect.map((found) =>
-                  found ? { id: output.keyGroupId, ...found } : undefined,
-                ),
+                Effect.map((found) => (found ? { id: output.keyGroupId, ...found } : undefined)),
               )
             : undefined;
           if (!observed) {
@@ -221,16 +212,10 @@ export const KeyGroupProvider = () =>
                 ),
               );
             if (!created.KeyGroup?.Id) {
-              return yield* Effect.fail(
-                new Error("createKeyGroup returned no identifier"),
-              );
+              return yield* Effect.fail(new Error("createKeyGroup returned no identifier"));
             }
             yield* session.note(created.KeyGroup.Id);
-            return toAttrs(
-              created.KeyGroup.Id,
-              created.KeyGroup.KeyGroupConfig,
-              created.ETag,
-            );
+            return toAttrs(created.KeyGroup.Id, created.KeyGroup.KeyGroupConfig, created.ETag);
           }
 
           // Sync — patch the observed config to the desired state. The
@@ -238,23 +223,13 @@ export const KeyGroupProvider = () =>
           const updated = yield* cloudfront.updateKeyGroup({
             Id: observed.id,
             IfMatch: observed.etag,
-            KeyGroupConfig: buildConfig(
-              observed.config.Name,
-              items,
-              news.comment,
-            ),
+            KeyGroupConfig: buildConfig(observed.config.Name, items, news.comment),
           });
           if (!updated.KeyGroup?.Id) {
-            return yield* Effect.fail(
-              new Error("updateKeyGroup returned no identifier"),
-            );
+            return yield* Effect.fail(new Error("updateKeyGroup returned no identifier"));
           }
           yield* session.note(observed.id);
-          return toAttrs(
-            updated.KeyGroup.Id,
-            updated.KeyGroup.KeyGroupConfig,
-            updated.ETag,
-          );
+          return toAttrs(updated.KeyGroup.Id, updated.KeyGroup.KeyGroupConfig, updated.ETag);
         }),
         delete: Effect.fn(function* ({ output }) {
           const current = yield* getById(output.keyGroupId);

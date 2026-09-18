@@ -2,8 +2,7 @@ import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 
-export interface ListPhoneNumbersOptedOutRequest
-  extends sns.ListPhoneNumbersOptedOutInput {}
+export interface ListPhoneNumbersOptedOutRequest extends sns.ListPhoneNumbersOptedOutInput {}
 
 /**
  * Runtime binding for `sns:ListPhoneNumbersOptedOut`.
@@ -26,12 +25,10 @@ export interface ListPhoneNumbersOptedOut extends Binding.Service<
   () => Effect.Effect<
     (
       request?: ListPhoneNumbersOptedOutRequest,
-    ) => Effect.Effect<
-      sns.ListPhoneNumbersOptedOutResponse,
-      sns.ListPhoneNumbersOptedOutError
-    >
+    ) => Effect.Effect<sns.ListPhoneNumbersOptedOutResponse, sns.ListPhoneNumbersOptedOutError>
   >
 > {}
 
-export const ListPhoneNumbersOptedOut =
-  Binding.Service<ListPhoneNumbersOptedOut>("AWS.SNS.ListPhoneNumbersOptedOut");
+export const ListPhoneNumbersOptedOut = Binding.Service<ListPhoneNumbersOptedOut>(
+  "AWS.SNS.ListPhoneNumbersOptedOut",
+);

@@ -1,8 +1,8 @@
-import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as HttpMiddleware from "effect/unstable/http/HttpMiddleware";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { makeRequestEffect } from "@/Cloudflare/Workers/HttpServer.ts";
 
 /**
  * In-process pin of #175 / #404: wrapping a plain fetch handler with
@@ -12,9 +12,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  */
 const ORIGIN = "https://example.test";
 
-const corsHandler = HttpMiddleware.cors()(
-  HttpServerResponse.json({ message: "world" }),
-);
+const corsHandler = HttpMiddleware.cors()(HttpServerResponse.json({ message: "world" }));
 
 const corsRequest = (method: string, extraHeaders?: Record<string, string>) =>
   new Request("https://worker.test/hello", {

@@ -41,10 +41,7 @@ export interface CheckDocumentAccess extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CheckDocumentAccessRequest,
-    ) => Effect.Effect<
-      qbusiness.CheckDocumentAccessResponse,
-      qbusiness.CheckDocumentAccessError
-    >
+    ) => Effect.Effect<qbusiness.CheckDocumentAccessResponse, qbusiness.CheckDocumentAccessError>
   >
 > {}
 export const CheckDocumentAccess = Binding.Service<CheckDocumentAccess>(

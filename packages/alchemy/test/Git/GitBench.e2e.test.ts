@@ -1,3 +1,16 @@
+import { expect } from "alchemy-test";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 /**
  * Throughput benchmarks against a **deployed** git-service stack
  * (DESIGN.md §14–15): turns the estimated scaling table into measured
@@ -15,32 +28,16 @@
  * Skipped under `--fast`.
  */
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { GitApi } from "@/Git/Api.ts";
-import { verifyPackResponse } from "./harness/pack.ts";
+import * as Test from "@/Test/Alchemy";
 import { makeTestStack, TEST_SECRET } from "./fixtures/stack.ts";
+import { verifyPackResponse } from "./harness/pack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = makeTestStack("GitBenchStack");
 
@@ -114,11 +111,7 @@ const edgeRetry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.retry({ schedule: Schedule.spaced("1500 millis"), times: 40 }),
   );
 
-const purgeRepo = Effect.fn(function* (
-  url: string,
-  owner: string,
-  repo: string,
-) {
+const purgeRepo = Effect.fn(function* (url: string, owner: string, repo: string) {
   const admin = yield* makeClient(url, TEST_SECRET);
   yield* admin.repos.delete({ params: { owner, repo } }).pipe(
     Effect.catchTag("RepoNotFound", () => Effect.void),
@@ -150,8 +143,7 @@ const freshRepo = Effect.fn(function* (
       .pipe(edgeRetry);
   }).pipe(
     Effect.retry({
-      while: (error: { readonly _tag?: string }) =>
-        error._tag === "RepoAlreadyExists",
+      while: (error: { readonly _tag?: string }) => error._tag === "RepoAlreadyExists",
       schedule: Schedule.spaced("1 second"),
       times: 3,
     }),
@@ -184,8 +176,7 @@ const measure = <A, E, R>(
     return value;
   });
 
-const perSecond = (count: number, ms: number) =>
-  `${((count / ms) * 1000).toFixed(1)}/s`;
+const perSecond = (count: number, ms: number) => `${((count / ms) * 1000).toFixed(1)}/s`;
 
 const stack = beforeAll(
   deploy(Stack).pipe(
@@ -209,9 +200,7 @@ const stack = beforeAll(
 afterAll(
   Effect.gen(function* () {
     if (results.length > 0) {
-      yield* Effect.logInfo(
-        ["", "═══ git-service throughput ═══", ...results, ""].join("\n"),
-      );
+      yield* Effect.logInfo(["", "═══ git-service throughput ═══", ...results, ""].join("\n"));
     }
   }),
 );
@@ -248,8 +237,7 @@ test.skipIf(skipBench)(
     yield* measure(
       `push ${commits} commits`,
       mustSh(tmp, `cd work && git push origin main`),
-      (_, ms) =>
-        `${(ms / 1000).toFixed(1)}s (${perSecond(commits, ms)} commits)`,
+      (_, ms) => `${(ms / 1000).toFixed(1)}s (${perSecond(commits, ms)} commits)`,
     );
 
     // Cold clone: no bundle yet (the post-push alarm needs a moment), so
@@ -417,9 +405,7 @@ test.skipIf(skipBench)(
     yield* measure(
       `${repos} concurrent repo creates`,
       Effect.all(
-        names.map((name) =>
-          admin.repos.create({ payload: { owner: "bench", name } }),
-        ),
+        names.map((name) => admin.repos.create({ payload: { owner: "bench", name } })),
         { concurrency: repos },
       ),
       (created, ms) => {
@@ -494,17 +480,15 @@ test.skipIf(skipBench)(
         yield* repo.admin.repos.compact({
           params: { owner: "bench", repo: "compact" },
         });
-        return yield* repo.admin.repos
-          .get({ params: { owner: "bench", repo: "compact" } })
-          .pipe(
-            Effect.map((found) => found.objects),
-            Effect.repeat({
-              schedule: Schedule.spaced("500 millis"),
-              until: (objects: { loose: number; packed: number }) =>
-                objects.packed > 0 && objects.loose === 0,
-              times: 120,
-            }),
-          );
+        return yield* repo.admin.repos.get({ params: { owner: "bench", repo: "compact" } }).pipe(
+          Effect.map((found) => found.objects),
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (objects: { loose: number; packed: number }) =>
+              objects.packed > 0 && objects.loose === 0,
+            times: 120,
+          }),
+        );
       }),
       (objects, ms) =>
         `${objects.packed} packed, ${(objects.bytes / 1024 / 1024).toFixed(1)} MiB in ${(ms / 1000).toFixed(1)}s`,
@@ -548,8 +532,7 @@ test.skipIf(skipBench)(
     yield* Effect.sleep("6 seconds"); // let the bundle land
 
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const body = `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`;
 
     /** One full clone over raw HTTP; resolves to bytes received. */
@@ -594,15 +577,10 @@ test.skipIf(skipBench)(
         Effect.map((buffer) => buffer.byteLength),
       );
 
-    const throughput = (
-      sizes: ReadonlyArray<number>,
-      ms: number,
-      n: number,
-    ) => {
+    const throughput = (sizes: ReadonlyArray<number>, ms: number, n: number) => {
       const total = sizes.reduce((sum, bytes) => sum + bytes, 0);
       return (
-        `${perSecond(n, ms)} clones, ` +
-        `${(total / 1024 / 1024 / (ms / 1000)).toFixed(1)} MiB/s`
+        `${perSecond(n, ms)} clones, ` + `${(total / 1024 / 1024 / (ms / 1000)).toFixed(1)} MiB/s`
       );
     };
 
@@ -661,23 +639,20 @@ test.skipIf(skipBench)(
     yield* repo.admin.repos.compact({
       params: { owner: "bench", repo: "subreq" },
     });
-    const packed = yield* repo.admin.repos
-      .get({ params: { owner: "bench", repo: "subreq" } })
-      .pipe(
-        Effect.map((found) => found.objects),
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          until: (objects: { loose: number; packed: number }) =>
-            objects.packed > 1000 && objects.loose === 0,
-          times: 120,
-        }),
-      );
+    const packed = yield* repo.admin.repos.get({ params: { owner: "bench", repo: "subreq" } }).pipe(
+      Effect.map((found) => found.objects),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (objects: { loose: number; packed: number }) =>
+          objects.packed > 1000 && objects.loose === 0,
+        times: 120,
+      }),
+    );
     expect(packed.packed).toBeGreaterThan(1000);
 
     const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
 
     // A `have` the server does not know bypasses the bundle, so this is the
     // dynamic path reading every object out of the pack.
@@ -685,9 +660,7 @@ test.skipIf(skipBench)(
       `dynamic fetch, ${packed.packed} packed objects`,
       client
         .execute(
-          HttpClientRequest.post(
-            `${url}/bench/subreq.git/git-upload-pack`,
-          ).pipe(
+          HttpClientRequest.post(`${url}/bench/subreq.git/git-upload-pack`).pipe(
             HttpClientRequest.setHeaders({
               authorization: `Bearer ${repo.token}`,
               "content-type": "application/x-git-upload-pack-request",
@@ -766,11 +739,7 @@ test.skipIf(skipBench)(
 
     // Uncontended baseline.
     yield* smallPush(1);
-    yield* measure(
-      "small push, uncontended",
-      smallPush(2),
-      (_, ms) => `${ms.toFixed(0)} ms`,
-    );
+    yield* measure("small push, uncontended", smallPush(2), (_, ms) => `${ms.toFixed(0)} ms`);
 
     // Now the same push while a large body is still uploading. Under
     // count-based admission the small push waited for the whole upload;
@@ -787,9 +756,7 @@ test.skipIf(skipBench)(
     );
     // Fork the heavy push so the measurement covers the SMALL push alone,
     // not the pair — timing both together just reports the heavy one.
-    const heavy = yield* Effect.forkChild(
-      mustSh(tmp, `cd work && git push -q origin heavy`),
-    );
+    const heavy = yield* Effect.forkChild(mustSh(tmp, `cd work && git push -q origin heavy`));
     yield* measure(
       `small push, while a ${bigMiB} MiB upload is in flight`,
       smallPush(3),
@@ -829,8 +796,7 @@ test.skipIf(skipBench)(
     yield* Effect.sleep("8 seconds"); // let the bundle land
 
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const request = (head: string) =>
       client.execute(
         HttpClientRequest.post(`${url}/bench/stale.git/git-upload-pack`).pipe(
@@ -838,9 +804,7 @@ test.skipIf(skipBench)(
             authorization: `Bearer ${repo.token}`,
             "content-type": "application/x-git-upload-pack-request",
           }),
-          HttpClientRequest.bodyText(
-            `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
-          ),
+          HttpClientRequest.bodyText(`${pkt(`want ${head}\n`)}0000${pkt("done\n")}`),
         ),
       );
     const cloneAt = (head: string) =>
@@ -851,9 +815,7 @@ test.skipIf(skipBench)(
     /** Which plane answered — `do-bundle:bundle`, `…:spliced`, or none. */
     const planeAt = (head: string) =>
       request(head).pipe(
-        Effect.map(
-          (response) => response.headers["x-git-served-by"] ?? "dynamic",
-        ),
+        Effect.map((response) => response.headers["x-git-served-by"] ?? "dynamic"),
       );
 
     const N = 32 * SCALE;
@@ -922,8 +884,7 @@ test.skipIf(skipBench)(
 
     // Same source as the real-world suite: this monorepo, depth-1, as one
     // root commit — ~13.6k objects, ~36 MiB.
-    const root = (yield* mustSh(process.cwd(), `git rev-parse --show-toplevel`))
-      .stdout;
+    const root = (yield* mustSh(process.cwd(), `git rev-parse --show-toplevel`)).stdout;
     yield* mustSh(
       tmp,
       `
@@ -941,8 +902,7 @@ test.skipIf(skipBench)(
     const head = (yield* mustSh(tmp, `cd src && git rev-parse HEAD`)).stdout;
 
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const request = (body: string) =>
       client.execute(
         HttpClientRequest.post(`${url}/bench/large.git/git-upload-pack`).pipe(
@@ -1008,9 +968,7 @@ test.skipIf(skipBench)(
 
     for (const [name, body] of Object.entries(bodies)) {
       yield* timedClone(body); // warm
-      yield* measure(`large clone x1 — ${name}`, timedClone(body), (r) =>
-        describe(r),
-      );
+      yield* measure(`large clone x1 — ${name}`, timedClone(body), (r) => describe(r));
     }
 
     // Does the streaming path scale with parallel streams, or is it a
@@ -1060,21 +1018,16 @@ test.skipIf(skipBench)(
     yield* Effect.sleep("6 seconds"); // let the bundle land
 
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
 
     // TOKENLESS advertisement — GET info/refs with no Authorization.
-    const advertise = client
-      .get(`${url}/bench/pubread.git/info/refs?service=git-upload-pack`)
-      .pipe(
-        Effect.flatMap((response) => response.arrayBuffer),
-        Effect.map((buffer) => buffer.byteLength),
-      );
+    const advertise = client.get(`${url}/bench/pubread.git/info/refs?service=git-upload-pack`).pipe(
+      Effect.flatMap((response) => response.arrayBuffer),
+      Effect.map((buffer) => buffer.byteLength),
+    );
     // warm + correctness: the advertisement carries the tip AND proves
     // the DO-less path served it (not an accidental DO fall-through).
-    const warmAdv = yield* client.get(
-      `${url}/bench/pubread.git/info/refs?service=git-upload-pack`,
-    );
+    const warmAdv = yield* client.get(`${url}/bench/pubread.git/info/refs?service=git-upload-pack`);
     expect(warmAdv.headers["x-git-served-by"]).toBe("head-snapshot");
     const advBytes = (yield* warmAdv.arrayBuffer).byteLength;
     expect(advBytes).toBeGreaterThan(40);
@@ -1103,9 +1056,7 @@ test.skipIf(skipBench)(
           HttpClientRequest.setHeaders({
             "content-type": "application/x-git-upload-pack-request",
           }),
-          HttpClientRequest.bodyText(
-            `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
-          ),
+          HttpClientRequest.bodyText(`${pkt(`want ${head}\n`)}0000${pkt("done\n")}`),
         ),
       )
       .pipe(
@@ -1118,9 +1069,7 @@ test.skipIf(skipBench)(
         HttpClientRequest.setHeaders({
           "content-type": "application/x-git-upload-pack-request",
         }),
-        HttpClientRequest.bodyText(
-          `${pkt(`want ${head}\n`)}0000${pkt("done\n")}`,
-        ),
+        HttpClientRequest.bodyText(`${pkt(`want ${head}\n`)}0000${pkt("done\n")}`),
       ),
     );
     expect(warmClone.headers["x-git-served-by"]).toBe("head-snapshot:bundle");
@@ -1167,10 +1116,7 @@ test.skipIf(skipBench)(
     const tmp = yield* tempDir;
     const ROUNDS = 6;
 
-    yield* mustSh(
-      tmp,
-      `rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work`,
-    );
+    yield* mustSh(tmp, `rm -rf work && git -c init.defaultBranch=main clone '${repo.remote}' work`);
 
     // ROUNDS x (push a batch, compact it) => ROUNDS separate packs today.
     for (let round = 1; round <= ROUNDS; round++) {
@@ -1187,31 +1133,26 @@ test.skipIf(skipBench)(
         .compact({ params: { owner: "bench", repo: "npack" } })
         .pipe(edgeRetry);
       // wait until the loose rows have drained into the pack
-      yield* repo.admin.repos
-        .get({ params: { owner: "bench", repo: "npack" } })
-        .pipe(
-          edgeRetry,
-          Effect.repeat({
-            schedule: Schedule.spaced("2 seconds"),
-            until: (meta) => meta.objects.loose === 0,
-            times: 45,
-          }),
-        );
+      yield* repo.admin.repos.get({ params: { owner: "bench", repo: "npack" } }).pipe(
+        edgeRetry,
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (meta) => meta.objects.loose === 0,
+          times: 45,
+        }),
+      );
     }
 
     const after = yield* repo.admin.repos
       .get({ params: { owner: "bench", repo: "npack" } })
       .pipe(edgeRetry);
     results.push(
-      `npack repo: ${after.objects.packed} packed objects after ${ROUNDS} compactions`.padEnd(
-        46,
-      ),
+      `npack repo: ${after.objects.packed} packed objects after ${ROUNDS} compactions`.padEnd(46),
     );
 
     const head = (yield* mustSh(tmp, `cd work && git rev-parse HEAD`)).stdout;
     const client = yield* HttpClient.HttpClient;
-    const pkt = (line: string) =>
-      `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
+    const pkt = (line: string) => `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
 
     // Unknown have forces the dynamic path (bundle refused): the closure
     // walk + object reads must range-read across every pack.

@@ -1,17 +1,16 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as Notifications from "@/AWS/Notifications";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as Notifications from "@/AWS/Notifications";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 /** A Date `days` days in the past (UTC). */
-const daysAgo = (days: number) =>
-  Effect.sync(() => new Date(Date.now() - days * 24 * 3600 * 1000));
+const daysAgo = (days: number) => Effect.sync(() => new Date(Date.now() - days * 24 * 3600 * 1000));
 
 /**
  * Fabricate a well-formed same-account notification-event ARN that cannot
@@ -35,19 +34,15 @@ export default NotificationsTestFunction.make(
   Effect.gen(function* () {
     // A configuration owned by the fixture — the ListChannels binding is
     // scoped to it (proving ARN injection + the configuration-scoped grant).
-    const config = yield* Notifications.NotificationConfiguration(
-      "BindingsConfig",
-      { description: "notifications bindings fixture" },
-    );
+    const config = yield* Notifications.NotificationConfiguration("BindingsConfig", {
+      description: "notifications bindings fixture",
+    });
 
     // --- account-level bindings ---
     const getNotificationEvent = yield* Notifications.GetNotificationEvent();
-    const listNotificationEvents =
-      yield* Notifications.ListNotificationEvents();
-    const getManagedNotificationEvent =
-      yield* Notifications.GetManagedNotificationEvent();
-    const listManagedNotificationEvents =
-      yield* Notifications.ListManagedNotificationEvents();
+    const listNotificationEvents = yield* Notifications.ListNotificationEvents();
+    const getManagedNotificationEvent = yield* Notifications.GetManagedNotificationEvent();
+    const listManagedNotificationEvents = yield* Notifications.ListManagedNotificationEvents();
     const getManagedNotificationChildEvent =
       yield* Notifications.GetManagedNotificationChildEvent();
     const listManagedNotificationChildEvents =
@@ -110,9 +105,8 @@ export default NotificationsTestFunction.make(
             arn: fakeEventArn(accountId),
           }).pipe(
             Effect.map(() => "Ok"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag: result });
@@ -183,18 +177,14 @@ export default NotificationsTestFunction.make(
               tag: "Ok",
               count: r.managedNotificationChildEvents.length,
             })),
-            Effect.catchTag(
-              ["ValidationException", "ResourceNotFoundException"],
-              (e) => Effect.succeed({ tag: e._tag, count: 0 }),
+            Effect.catchTag(["ValidationException", "ResourceNotFoundException"], (e) =>
+              Effect.succeed({ tag: e._tag, count: 0 }),
             ),
           );
           return yield* HttpServerResponse.json(result);
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/managed-child-event-nonexistent"
-        ) {
+        if (request.method === "GET" && pathname === "/managed-child-event-nonexistent") {
           // Typed not-found path — proves the grant reaches the API.
           const managedArn = yield* firstManagedConfigArn;
           const accountId = managedArn?.split(":")[4] ?? "000000000000";
@@ -202,18 +192,14 @@ export default NotificationsTestFunction.make(
             arn: fakeEventArn(accountId),
           }).pipe(
             Effect.map(() => "Ok"),
-            Effect.catchTag(
-              ["ResourceNotFoundException", "ValidationException"],
-              (e) => Effect.succeed(e._tag),
+            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], (e) =>
+              Effect.succeed(e._tag),
             ),
           );
           return yield* HttpServerResponse.json({ tag: result });
         }
 
-        if (
-          request.method === "GET" &&
-          pathname === "/managed-channel-associations"
-        ) {
+        if (request.method === "GET" && pathname === "/managed-channel-associations") {
           const arn = yield* firstManagedConfigArn;
           if (arn === undefined) {
             return yield* HttpServerResponse.json({ tag: "NoConfigs" });

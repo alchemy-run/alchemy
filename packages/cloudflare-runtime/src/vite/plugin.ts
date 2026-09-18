@@ -1,3 +1,6 @@
+import type * as Context from "effect/Context";
+import type * as vite from "vite";
+import type { BindingHooks, RuntimeServices, RuntimeWorker } from "../core/index.ts";
 import type { BasePluginOptions } from "../rolldown/options.ts";
 import {
   additionalModulesPlugin,
@@ -9,13 +12,6 @@ import {
   virtualModulesPlugin,
   wasmInitPlugin,
 } from "../rolldown/plugins/index.ts";
-import type {
-  BindingHooks,
-  RuntimeServices,
-  RuntimeWorker,
-} from "../core/index.ts";
-import type * as Context from "effect/Context";
-import type * as vite from "vite";
 import { dev } from "./dev-plugin.ts";
 import { preview } from "./preview-plugin.ts";
 
@@ -42,10 +38,7 @@ export interface CloudflareVitePluginDevOptions {
 export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
 > extends BasePluginOptions {
-  worker?: Omit<
-    RuntimeWorker<B>,
-    "compatibilityDate" | "compatibilityFlags" | "modules"
-  >;
+  worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
   context?: Context.Context<RuntimeServices>;
   dev?: CloudflareVitePluginDevOptions;
 }

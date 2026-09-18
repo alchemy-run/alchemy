@@ -1,20 +1,16 @@
-import * as AWS from "@/AWS";
-import { Keyspace, Table } from "@/AWS/Keyspaces";
-import * as Test from "@/Test/Alchemy";
 import * as keyspaces from "@distilled.cloud/aws/keyspaces";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { Keyspace, Table } from "@/AWS/Keyspaces";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const getTable = (keyspaceName: string, tableName: string) =>
   keyspaces
     .getTable({ keyspaceName, tableName })
-    .pipe(
-      Effect.catchTag("ResourceNotFoundException", () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
 test.provider(
   "create, add column, delete Keyspaces table",
@@ -51,9 +47,7 @@ test.provider(
       const observed = yield* getTable(ksName, "events");
       expect(observed?.status).toEqual("ACTIVE");
       expect(observed?.pointInTimeRecovery?.status).toEqual("ENABLED");
-      const cols = new Set(
-        (observed?.schemaDefinition?.allColumns ?? []).map((c) => c.name),
-      );
+      const cols = new Set((observed?.schemaDefinition?.allColumns ?? []).map((c) => c.name));
       expect(cols.has("device")).toBe(true);
       expect(cols.has("payload")).toBe(true);
 
@@ -78,9 +72,7 @@ test.provider(
         }),
       );
       const reobserved = yield* getTable(ksName, "events");
-      const reCols = new Set(
-        (reobserved?.schemaDefinition?.allColumns ?? []).map((c) => c.name),
-      );
+      const reCols = new Set((reobserved?.schemaDefinition?.allColumns ?? []).map((c) => c.name));
       expect(reCols.has("region")).toBe(true);
 
       // delete

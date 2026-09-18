@@ -28,10 +28,7 @@ export interface DeleteIncidentRecord extends Binding.Service<
   () => Effect.Effect<
     (
       request: incidents.DeleteIncidentRecordInput,
-    ) => Effect.Effect<
-      incidents.DeleteIncidentRecordOutput,
-      incidents.DeleteIncidentRecordError
-    >
+    ) => Effect.Effect<incidents.DeleteIncidentRecordOutput, incidents.DeleteIncidentRecordError>
   >
 > {}
 export const DeleteIncidentRecord = Binding.Service<DeleteIncidentRecord>(

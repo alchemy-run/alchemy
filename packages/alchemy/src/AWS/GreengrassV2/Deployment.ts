@@ -157,9 +157,7 @@ const normalizeTags = (
   tags: { [key: string]: string | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
 /**
@@ -172,9 +170,7 @@ interface ComparableComponentSpec {
 }
 
 const canonicalComponents = (
-  components:
-    | { [key: string]: ComparableComponentSpec | undefined }
-    | undefined,
+  components: { [key: string]: ComparableComponentSpec | undefined } | undefined,
 ): string =>
   JSON.stringify(
     Object.keys(components ?? {})
@@ -215,11 +211,7 @@ export const DeploymentProvider = () =>
       const observeDeployment = (deploymentId: string) =>
         greengrassv2
           .getDeployment({ deploymentId })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // The latest deployment revision for a target (cloud-authoritative).
       const observeLatestForTarget = (targetArn: string) =>
@@ -262,20 +254,14 @@ export const DeploymentProvider = () =>
             // Already completed/canceled/inactive revisions reject the
             // cancellation — that is exactly the state we want.
             Effect.catchTag(
-              [
-                "ResourceNotFoundException",
-                "ConflictException",
-                "ValidationException",
-              ],
+              ["ResourceNotFoundException", "ConflictException", "ValidationException"],
               () => Effect.succeed(undefined),
             ),
           );
           yield* greengrassv2
             .deleteDeployment({ deploymentId })
             .pipe(retryWhileConflict)
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         });
 
       return Deployment.Provider.of({
@@ -295,10 +281,7 @@ export const DeploymentProvider = () =>
               iotJobArn?: string;
             }[] = [];
             for (const deployment of deployments) {
-              if (
-                deployment.deploymentId === undefined ||
-                deployment.targetArn === undefined
-              ) {
+              if (deployment.deploymentId === undefined || deployment.targetArn === undefined) {
                 continue;
               }
               results.push({
@@ -319,13 +302,8 @@ export const DeploymentProvider = () =>
                 ? yield* observeLatestForTarget(olds.targetArn)
                 : undefined;
           if (live?.deploymentId === undefined) return undefined;
-          const attrs = yield* attributesOf(
-            live,
-            output?.targetArn ?? olds?.targetArn ?? "",
-          );
-          return (yield* hasAlchemyTags(id, normalizeTags(live.tags)))
-            ? attrs
-            : Unowned(attrs);
+          const attrs = yield* attributesOf(live, output?.targetArn ?? olds?.targetArn ?? "");
+          return (yield* hasAlchemyTags(id, normalizeTags(live.tags))) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;

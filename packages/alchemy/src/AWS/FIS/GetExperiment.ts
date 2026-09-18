@@ -33,6 +33,4 @@ export interface GetExperiment extends Binding.Service<
     ) => Effect.Effect<fis.GetExperimentResponse, fis.GetExperimentError>
   >
 > {}
-export const GetExperiment = Binding.Service<GetExperiment>(
-  "AWS.FIS.GetExperiment",
-);
+export const GetExperiment = Binding.Service<GetExperiment>("AWS.FIS.GetExperiment");

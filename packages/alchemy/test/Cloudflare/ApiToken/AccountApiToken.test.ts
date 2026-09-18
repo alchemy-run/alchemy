@@ -1,7 +1,3 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -9,12 +5,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 describe.skip("AccountApiToken", () => {
   test.provider("create and delete account token with default props", (stack) =>
@@ -90,10 +87,7 @@ describe.skip("AccountApiToken", () => {
             policies: [
               {
                 effect: "allow",
-                permissionGroups: [
-                  "Workers Scripts Read",
-                  "Workers KV Storage Read",
-                ],
+                permissionGroups: ["Workers Scripts Read", "Workers KV Storage Read"],
                 resources: {
                   [`com.cloudflare.api.account.${accountId}`]: "*",
                 },
@@ -158,10 +152,7 @@ describe.skip("AccountApiToken", () => {
     }).pipe(logLevel),
   );
 
-  const waitForTokenToBeDeleted = Effect.fn(function* (
-    tokenId: string,
-    accountId: string,
-  ) {
+  const waitForTokenToBeDeleted = Effect.fn(function* (tokenId: string, accountId: string) {
     yield* accounts.getToken({ accountId, tokenId }).pipe(
       Effect.flatMap(() => Effect.fail(new TokenStillExists())),
       Effect.retry({
@@ -169,9 +160,7 @@ describe.skip("AccountApiToken", () => {
         schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
       }),
       Effect.catchTag("TokenStillExists", () =>
-        Effect.die(
-          `Cloudflare API token ${tokenId} was not deleted after retries`,
-        ),
+        Effect.die(`Cloudflare API token ${tokenId} was not deleted after retries`),
       ),
       Effect.catchTag("TokenNotFound", () => Effect.void),
       Effect.catchTag("InvalidRoute", () => Effect.void),
@@ -204,9 +193,7 @@ describe("AccountApiToken list", () => {
         }),
       );
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.ApiToken.AccountApiToken,
-      );
+      const provider = yield* Provider.findProvider(Cloudflare.ApiToken.AccountApiToken);
       const all = yield* provider.list();
 
       expect(all.some((t) => t.tokenId === token.tokenId)).toBe(true);

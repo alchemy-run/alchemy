@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "@/Test/Alchemy";
 import * as agw2 from "@distilled.cloud/aws/apigatewayv2";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -7,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as AWS from "@/AWS";
+import * as Test from "@/Test/Alchemy";
 import HttpApiTestFunctionLive, { HttpApiTestFunction } from "./http-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -39,13 +39,11 @@ test.provider(
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const fn = yield* HttpApiTestFunction.pipe(
-            Effect.provide(HttpApiTestFunctionLive),
-          );
-          const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi(
-            "TestHttpApi",
-            { handler: fn, timeout: "29 seconds" },
-          );
+          const fn = yield* HttpApiTestFunction.pipe(Effect.provide(HttpApiTestFunctionLive));
+          const { api, stage, url } = yield* AWS.ApiGatewayV2.HttpApi("TestHttpApi", {
+            handler: fn,
+            timeout: "29 seconds",
+          });
           return {
             url,
             apiId: api.apiId,
@@ -86,9 +84,7 @@ test.provider(
           Effect.flatMap((response) =>
             response.status === 200
               ? response.json
-              : Effect.fail(
-                  new Error(`GET /items/widget-42 returned ${response.status}`),
-                ),
+              : Effect.fail(new Error(`GET /items/widget-42 returned ${response.status}`)),
           ),
         ),
       );
@@ -105,9 +101,7 @@ test.provider(
           Effect.flatMap((response) =>
             response.status === 201
               ? response.json
-              : Effect.fail(
-                  new Error(`POST /items returned ${response.status}`),
-                ),
+              : Effect.fail(new Error(`POST /items returned ${response.status}`)),
           ),
         ),
       );

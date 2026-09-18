@@ -16,9 +16,7 @@ const inspect = Symbol.for("nodejs.util.inspect.custom");
 
 export const of = <R extends ResourceLike>(
   resource: Ref<R> | R,
-): R extends ResourceLike
-  ? ResourceExpr<R["Attributes"]>
-  : RefExpr<R["Attributes"]> => {
+): R extends ResourceLike ? ResourceExpr<R["Attributes"]> : RefExpr<R["Attributes"]> => {
   if (isRef(resource)) {
     const metadata = getRefMetadata(resource);
     return new RefExpr(
@@ -40,11 +38,7 @@ export const of = <R extends ResourceLike>(
 };
 
 export const asOutput = <T>(t: T | Output<T> | Effect.Effect<T>): Output<T> =>
-  isOutput(t)
-    ? t
-    : Effect.isEffect(t)
-      ? new EffectExpr(VoidExpr, () => t)
-      : new LiteralExpr(t);
+  isOutput(t) ? t : Effect.isEffect(t) ? new EffectExpr(VoidExpr, () => t) : new LiteralExpr(t);
 
 /**
  * Lift a plan-time Effect into an {@link Output}.
@@ -64,9 +58,7 @@ export const fromEffect = <A, Req = never>(
 ): ToOutput<A, Req> => new EffectExpr(VoidExpr, () => effect) as any;
 
 export const isOutput = (value: any): value is Output<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
 export interface Output<A = any, Req = any> extends Pipeable {
   /** @internal phantom */
@@ -76,11 +68,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
   /** @internal phantom */
   readonly req: Req;
   /** @internal phantom */
-  [Symbol.iterator](): Iterator<
-    Effect.Effect<void, never, Req>,
-    Accessor<A>,
-    void
-  >;
+  [Symbol.iterator](): Iterator<Effect.Effect<void, never, Req>, Accessor<A>, void>;
   bind(id: string): Effect.Effect<Effect.Effect<A>, never, RuntimeContext>;
   asEffect(): Effect.Effect<Accessor<A>, never, Req>;
   as<T>(): Output<T, Req>;
@@ -112,9 +100,7 @@ export const ExprSymbol = Symbol.for("alchemy/Expr");
 const exprKind = (node: any): unknown => node?.[ExprSymbol]?.kind ?? node?.kind;
 
 export const isExpr = (value: any): value is Expr<any> =>
-  value &&
-  (typeof value === "object" || typeof value === "function") &&
-  ExprSymbol in value;
+  value && (typeof value === "object" || typeof value === "function") && ExprSymbol in value;
 
 export type Expr<A = any, Req = any> =
   | AllExpr<Expr<A, Req>[]>
@@ -139,11 +125,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     return this as any;
   }
 
-  [Symbol.iterator](): Iterator<
-    Effect.Effect<void, never, Req>,
-    Accessor<A>,
-    void
-  > {
+  [Symbol.iterator](): Iterator<Effect.Effect<void, never, Req>, Accessor<A>, void> {
     // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
     return new SingleShotGen(this.asEffect());
   }
@@ -156,9 +138,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     // `set`/`get` store keys verbatim, so canonicalize here (the caller's job).
     const key = sanitizeKey(id);
     return RuntimeContext.pipe(
-      Effect.flatMap((ctx) =>
-        Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k)),
-      ),
+      Effect.flatMap((ctx) => Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k))),
     );
   }
 
@@ -204,11 +184,10 @@ export const isPropExpr = <A = any, Prop extends keyof A = keyof A, Req = any>(
   node: any,
 ): node is PropExpr<A, Prop, Req> => exprKind(node) === "PropExpr";
 
-export class PropExpr<
-  A = any,
-  Id extends keyof A = keyof A,
-  Req = any,
-> extends BaseExpr<A[Id], Req> {
+export class PropExpr<A = any, Id extends keyof A = keyof A, Req = any> extends BaseExpr<
+  A[Id],
+  Req
+> {
   readonly kind = "PropExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -241,13 +220,9 @@ export class LiteralExpr<A> extends BaseExpr<A, never> {
 export const VoidExpr = new LiteralExpr(void 0);
 
 export const map: {
-  <A, B>(
-    fn: (value: A) => B,
-  ): <Req>(output: Output<A, Req>) => ToOutput<B, Req>;
+  <A, B>(fn: (value: A) => B): <Req>(output: Output<A, Req>) => ToOutput<B, Req>;
   <A, B, Req>(output: Output<A, Req>, fn: (value: A) => B): ToOutput<B, Req>;
-} = (<A, B, Req>(
-  ...args: [fn: (value: A) => B] | [output: Output<A, Req>, fn: (value: A) => B]
-) =>
+} = (<A, B, Req>(...args: [fn: (value: A) => B] | [output: Output<A, Req>, fn: (value: A) => B]) =>
   args.length === 1
     ? <Req>(output: Output<A, Req>): ToOutput<B, Req> =>
         new ApplyExpr(output as Expr<A, Req>, args[0]) as any
@@ -300,10 +275,7 @@ export const isFlatMapExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
 ): node is FlatMapExpr<In, Out, Req, Req2> => exprKind(node) === "FlatMapExpr";
 
-export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
-  B,
-  Req | Req2
-> {
+export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req | Req2> {
   readonly kind = "FlatMapExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -321,10 +293,7 @@ export const isEffectExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
 ): node is EffectExpr<In, Out, Req, Req2> => exprKind(node) === "EffectExpr";
 
-export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
-  B,
-  Req
-> {
+export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req> {
   readonly kind = "EffectExpr";
   constructor(
     public readonly expr: Expr<A, Req>,
@@ -338,9 +307,8 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   }
 }
 
-export const isNamedExpr = <A = any, Req = any>(
-  node: any,
-): node is NamedExpr<A, Req> => exprKind(node) === "NamedExpr";
+export const isNamedExpr = <A = any, Req = any>(node: any): node is NamedExpr<A, Req> =>
+  exprKind(node) === "NamedExpr";
 
 /**
  * Wraps another `Expr` and overrides its `toString()` / inspect output.
@@ -363,35 +331,29 @@ export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
   }
 }
 
-export const named = <A, Req>(
-  expr: Output<A, Req>,
-  name: string,
-): Output<A, Req> => new NamedExpr(expr as Expr<A, Req>, name) as any;
+export const named = <A, Req>(expr: Output<A, Req>, name: string): Output<A, Req> =>
+  new NamedExpr(expr as Expr<A, Req>, name) as any;
 
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
   new AllExpr(outs as any) as unknown as All<Outs>;
 
 export type All<Outs extends (Output | Expr)[]> = number extends Outs["length"]
-  ? [Outs[number]] extends [
-      Output<infer V, infer Req> | Expr<infer V, infer Req>,
-    ]
+  ? [Outs[number]] extends [Output<infer V, infer Req> | Expr<infer V, infer Req>]
     ? Output<V, Req>
     : never
   : Tuple<Outs>;
 
-type Tuple<
-  Outs extends (Output | Expr)[],
-  Values extends any[] = [],
-  Req = never,
-> = Outs extends [infer H, ...infer Tail extends (Output | Expr)[]]
+type Tuple<Outs extends (Output | Expr)[], Values extends any[] = [], Req = never> = Outs extends [
+  infer H,
+  ...infer Tail extends (Output | Expr)[],
+]
   ? H extends Output<infer V, infer Req2>
     ? Tuple<Tail, [...Values, V], Req | Req2>
     : never
   : Output<Values, Req>;
 
-export const isAllExpr = <Outs extends Expr[] = Expr[]>(
-  node: any,
-): node is AllExpr<Outs> => exprKind(node) === "AllExpr";
+export const isAllExpr = <Outs extends Expr[] = Expr[]>(node: any): node is AllExpr<Outs> =>
+  exprKind(node) === "AllExpr";
 
 export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   readonly kind = "AllExpr";
@@ -404,8 +366,7 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   }
 }
 
-export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
-  exprKind(node) === "RefExpr";
+export const isRefExpr = <A = any>(node: any): node is RefExpr<A> => exprKind(node) === "RefExpr";
 
 export class RefExpr<A> extends BaseExpr<A, never> {
   readonly kind = "RefExpr";
@@ -449,9 +410,7 @@ export class StackRefExpr<A> extends BaseExpr<A, never> {
     return proxy(this);
   }
   [inspect](): string {
-    return `stackRef(${this.stack}${
-      this.stage ? `, { stage: ${this.stage} }` : ""
-    })`;
+    return `stackRef(${this.stack}${this.stage ? `, { stage: ${this.stage} }` : ""})`;
   }
 }
 
@@ -474,16 +433,13 @@ export const filter = <Outs extends any[]>(...outs: Outs) =>
   outs.filter(isOutput) as unknown as Filter<Outs>;
 
 export type Filter<Outs extends any[]> = number extends Outs["length"]
-  ? Output<
-      Extract<Outs[number], Output>["value"],
-      Extract<Outs[number], Output>["req"]
-    >
+  ? Output<Extract<Outs[number], Output>["value"], Extract<Outs[number], Output>["req"]>
   : FilterTuple<Outs>;
 
-export type FilterTuple<
-  Outs extends (Output | Expr)[],
-  Values extends any[] = [],
-> = Outs extends [infer H, ...infer Tail extends (Output | Expr)[]]
+export type FilterTuple<Outs extends (Output | Expr)[], Values extends any[] = []> = Outs extends [
+  infer H,
+  ...infer Tail extends (Output | Expr)[],
+]
   ? H extends Output<infer V>
     ? FilterTuple<Tail, [...Values, V]>
     : FilterTuple<Tail, Values>
@@ -495,9 +451,7 @@ export const interpolate = <Args extends any[]>(
 ): All<Args> extends Output<any, infer Req> ? Output<string, Req> : never =>
   all(...args.map((arg) => (isOutput(arg) ? arg : literal(arg)))).pipe(
     map((args) =>
-      template
-        .map((str, i) => str + (args[i] == null ? "" : String(args[i])))
-        .join(""),
+      template.map((str, i) => str + (args[i] == null ? "" : String(args[i]))).join(""),
     ),
   ) as any;
 
@@ -553,13 +507,10 @@ function proxy(self: any): any {
           ? self
           : prop === inspect
             ? target[inspect]
-            : (isResourceExpr(self) || isRefExpr(self)) &&
-                self.stables &&
-                prop in self.stables
+            : (isResourceExpr(self) || isRefExpr(self)) && self.stables && prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
               : prop in self
-                ? typeof self[prop as keyof typeof self] === "function" &&
-                  !("kind" in self)
+                ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
                   ? new PropExpr(proxy, prop as never)
                   : self[prop as keyof typeof self]
                 : new PropExpr(proxy, prop as never),
@@ -570,10 +521,7 @@ function proxy(self: any): any {
         // `Output.map` / `Output.mapEffect` / `Output.flatMap` functions.
         if (self.identifier === "map" || self.identifier === "apply") {
           return new ApplyExpr(self.expr, args[0]);
-        } else if (
-          self.identifier === "mapEffect" ||
-          self.identifier === "effect"
-        ) {
+        } else if (self.identifier === "mapEffect" || self.identifier === "effect") {
           return new EffectExpr(self.expr, args[0]);
         } else if (self.identifier === "flatMap") {
           return new FlatMapExpr(self.expr, args[0]);
@@ -592,9 +540,7 @@ export class MissingSourceError extends Data.TaggedError("MissingSourceError")<{
   srcId: string;
 }> {}
 
-export class InvalidReferenceError extends Data.TaggedError(
-  "InvalidReferenceError",
-)<{
+export class InvalidReferenceError extends Data.TaggedError("InvalidReferenceError")<{
   message: string;
   stack: string;
   stage: string;
@@ -653,9 +599,7 @@ export const evaluate: <A, Req = never>(
         const value = yield* evaluate(expr.expr, upstream);
         return yield* evaluate(expr.f(value), upstream);
       } else if (isAllExpr(expr)) {
-        return yield* Effect.all(
-          expr.outs.map((out) => evaluate(out, upstream)),
-        );
+        return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
       } else if (isNamedExpr(expr)) {
@@ -712,16 +656,12 @@ export const evaluate: <A, Req = never>(
       }
       const nested = new Set(ancestors).add(expr);
       if (Array.isArray(expr)) {
-        return yield* Effect.all(
-          expr.map((item) => evaluate(item, upstream, nested)),
-        );
+        return yield* Effect.all(expr.map((item) => evaluate(item, upstream, nested)));
       }
       return Object.fromEntries(
         yield* Effect.all(
           Object.entries(expr).map(([key, value]) =>
-            evaluate(value, upstream, nested).pipe(
-              Effect.map((value) => [key, value]),
-            ),
+            evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
           ),
         ),
       );
@@ -772,10 +712,7 @@ export const upstreamAny = (
     if (alreadySeen(value, seen)) {
       return {};
     }
-    return Object.assign(
-      {},
-      ...Object.values(value).map((value) => resolveUpstream(value, seen)),
-    );
+    return Object.assign({}, ...Object.values(value).map((value) => resolveUpstream(value, seen)));
   }
   return {};
 };
@@ -797,12 +734,7 @@ export const upstream = <E extends Output<any, any>>(
     return upstream(expr.expr, seen);
   } else if (isAllExpr(expr)) {
     return Object.assign({}, ...expr.outs.map((out) => upstream(out, seen)));
-  } else if (
-    isEffectExpr(expr) ||
-    isApplyExpr(expr) ||
-    isFlatMapExpr(expr) ||
-    isNamedExpr(expr)
-  ) {
+  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isFlatMapExpr(expr) || isNamedExpr(expr)) {
     return upstream(expr.expr, seen);
   } else if (isPlainData(expr)) {
     if (alreadySeen(expr, seen)) {
@@ -816,10 +748,7 @@ export const upstream = <E extends Output<any, any>>(
 };
 
 // TODO(sam): add a type
-export const resolveUpstream = <const A>(
-  value: A,
-  seen: WeakSet<object> = new WeakSet(),
-): any => {
+export const resolveUpstream = <const A>(value: A, seen: WeakSet<object> = new WeakSet()): any => {
   if (isPrimitive(value)) {
     return {} as any;
   } else if (isResource(value)) {
@@ -857,8 +786,7 @@ export const toEnvKey = <const ID extends string, const Suffix extends string>(
 export const toUpper = <const S extends string>(str: S) =>
   str.toUpperCase() as string extends S ? S : Uppercase<S>;
 
-const replace = <const S extends string>(str: S) =>
-  str.replace(/-/g, "_") as Replace<S>;
+const replace = <const S extends string>(str: S) => str.replace(/-/g, "_") as Replace<S>;
 
 type Replace<S extends string, Accum extends string = ""> = string extends S
   ? S

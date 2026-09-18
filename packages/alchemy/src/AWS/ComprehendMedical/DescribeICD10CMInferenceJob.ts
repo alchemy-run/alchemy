@@ -34,7 +34,6 @@ export interface DescribeICD10CMInferenceJob extends Binding.Service<
     >
   >
 > {}
-export const DescribeICD10CMInferenceJob =
-  Binding.Service<DescribeICD10CMInferenceJob>(
-    "AWS.ComprehendMedical.DescribeICD10CMInferenceJob",
-  );
+export const DescribeICD10CMInferenceJob = Binding.Service<DescribeICD10CMInferenceJob>(
+  "AWS.ComprehendMedical.DescribeICD10CMInferenceJob",
+);

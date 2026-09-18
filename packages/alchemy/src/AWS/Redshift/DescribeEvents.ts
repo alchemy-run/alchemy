@@ -34,6 +34,4 @@ export interface DescribeEvents extends Binding.Service<
     ) => Effect.Effect<redshift.EventsMessage, redshift.DescribeEventsError>
   >
 > {}
-export const DescribeEvents = Binding.Service<DescribeEvents>(
-  "AWS.Redshift.DescribeEvents",
-);
+export const DescribeEvents = Binding.Service<DescribeEvents>("AWS.Redshift.DescribeEvents");

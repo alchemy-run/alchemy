@@ -4,10 +4,7 @@ import * as Binding from "../../Binding.ts";
 import type { AliasName } from "./Alias.ts";
 import type { Key } from "./Key.ts";
 
-export interface GetPublicKeyRequest extends Omit<
-  kms.GetPublicKeyRequest,
-  "KeyId"
-> {}
+export interface GetPublicKeyRequest extends Omit<kms.GetPublicKeyRequest, "KeyId"> {}
 
 /**
  * Runtime binding for `kms:GetPublicKey`.
@@ -40,6 +37,4 @@ export interface GetPublicKey extends Binding.Service<
   >
 > {}
 
-export const GetPublicKey = Binding.Service<GetPublicKey>(
-  "AWS.KMS.GetPublicKey",
-);
+export const GetPublicKey = Binding.Service<GetPublicKey>("AWS.KMS.GetPublicKey");

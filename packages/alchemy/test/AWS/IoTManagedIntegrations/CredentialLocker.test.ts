@@ -1,12 +1,12 @@
-import * as AWS from "@/AWS";
-import { CredentialLocker } from "@/AWS/IoTManagedIntegrations";
-import { Region } from "@/AWS/Region.ts";
-import * as Test from "@/Test/Alchemy";
 import * as mi from "@distilled.cloud/aws/iot-managed-integrations";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { CredentialLocker } from "@/AWS/IoTManagedIntegrations";
+import { Region } from "@/AWS/Region.ts";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -44,9 +44,7 @@ class LockerStillExists extends Data.TaggedError("LockerStillExists")<{
 
 const assertLockerGone = (credentialLockerId: string) =>
   mi.getCredentialLocker({ Identifier: credentialLockerId }).pipe(
-    Effect.flatMap(() =>
-      Effect.fail(new LockerStillExists({ credentialLockerId })),
-    ),
+    Effect.flatMap(() => Effect.fail(new LockerStillExists({ credentialLockerId }))),
     Effect.catchTag("ResourceNotFoundException", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "LockerStillExists",
@@ -109,9 +107,7 @@ test.provider.skipIf(!process.env.AWS_TEST_IOT_MI)(
         }),
       );
       expect(replaced.credentialLockerId).not.toBe(locker.credentialLockerId);
-      expect(replaced.credentialLockerName).toBe(
-        "alchemy-iot-mi-locker-replacement",
-      );
+      expect(replaced.credentialLockerName).toBe("alchemy-iot-mi-locker-replacement");
       yield* assertLockerGone(locker.credentialLockerId);
 
       yield* stack.destroy();

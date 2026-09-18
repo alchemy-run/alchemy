@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { Unowned } from "../../AdoptPolicy.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -21,10 +20,7 @@ type TypeId = typeof TypeId;
 // calls on that typed tag so reconcile waits out the propagation window.
 const targetVisibleRetry = {
   while: (e: { _tag: string }) => e._tag === "ZoneTagResourceNotFound",
-  schedule: Schedule.max([
-    Schedule.exponential("500 millis"),
-    Schedule.recurs(10),
-  ]),
+  schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
 } as const;
 
 /**
@@ -172,28 +168,24 @@ export const ZoneResourceTagsProvider = () =>
       // zone-scoped variants (the ones this resource manages) are exactly
       // those that carry a `zoneId` in the response union; account-level
       // variants (worker, kv_namespace, …) lack it and are filtered out.
-      return yield* resourceTagging.listResourceTaggings
-        .pages({ accountId })
-        .pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((item): item is ZoneScopedTagging => "zoneId" in item)
-                .map((item): ZoneResourceTagsAttributes => ({
-                  zoneId: item.zoneId,
-                  resourceType: item.type,
-                  resourceId: item.id,
-                  accessApplicationId:
-                    "accessApplicationId" in item
-                      ? item.accessApplicationId
-                      : undefined,
-                  tags: narrowTags(item.tags),
-                  etag: item.etag,
-                })),
-            ),
+      return yield* resourceTagging.listResourceTaggings.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((item): item is ZoneScopedTagging => "zoneId" in item)
+              .map((item): ZoneResourceTagsAttributes => ({
+                zoneId: item.zoneId,
+                resourceType: item.type,
+                resourceId: item.id,
+                accessApplicationId:
+                  "accessApplicationId" in item ? item.accessApplicationId : undefined,
+                tags: narrowTags(item.tags),
+                etag: item.etag,
+              })),
           ),
-        );
+        ),
+      );
     }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
@@ -205,11 +197,7 @@ export const ZoneResourceTagsProvider = () =>
       // zoneId / resourceId / accessApplicationId are Input<string>; by
       // diff time persisted olds are concrete strings — compare only when
       // both sides are.
-      if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
-      ) {
+      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
         return { action: "replace" } as const;
       }
       if (
@@ -230,12 +218,10 @@ export const ZoneResourceTagsProvider = () =>
 
     read: Effect.fn(function* ({ output, olds }) {
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
-      const resourceId =
-        output?.resourceId ?? (olds?.resourceId as string | undefined);
+      const resourceId = output?.resourceId ?? (olds?.resourceId as string | undefined);
       const resourceType = output?.resourceType ?? olds?.resourceType;
       const accessApplicationId =
-        output?.accessApplicationId ??
-        (olds?.accessApplicationId as string | undefined);
+        output?.accessApplicationId ?? (olds?.accessApplicationId as string | undefined);
       if (!zoneId || !resourceId || !resourceType) return undefined;
 
       const observed = yield* resourceTagging
@@ -247,11 +233,7 @@ export const ZoneResourceTagsProvider = () =>
         })
         // A 404 means the target resource no longer exists; its tags are
         // gone with it.
-        .pipe(
-          Effect.catchTag("ZoneTagResourceNotFound", () =>
-            Effect.succeed(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("ZoneTagResourceNotFound", () => Effect.succeed(undefined)));
       if (observed === undefined) return undefined;
       const tags = narrowTags(observed.tags);
       // Cloudflare reports untagged (and unknown) resources as an empty
@@ -276,9 +258,7 @@ export const ZoneResourceTagsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
       const resourceId = news.resourceId as string;
-      const accessApplicationId = news.accessApplicationId as
-        | string
-        | undefined;
+      const accessApplicationId = news.accessApplicationId as string | undefined;
       const desired = resolveTags(news.tags);
 
       // Observe — cloud state is authoritative. The GET never 404s for a
@@ -354,14 +334,8 @@ type ZoneScopedTagging = Extract<
 
 /** Narrow distilled's `Record<string, unknown>` tag values to strings. */
 const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).map(([k, v]) => [k, String(v)] as const),
-  );
+  Object.fromEntries(Object.entries(tags).map(([k, v]) => [k, String(v)] as const));
 
 /** Resolve `Input<string>` tag values (already concrete after Plan). */
-const resolveTags = (
-  tags: Record<string, Input<string>>,
-): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).map(([k, v]) => [k, v as string] as const),
-  );
+const resolveTags = (tags: Record<string, Input<string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(tags).map(([k, v]) => [k, v as string] as const));

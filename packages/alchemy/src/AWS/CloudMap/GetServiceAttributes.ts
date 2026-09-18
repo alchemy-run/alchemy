@@ -28,10 +28,7 @@ export interface GetServiceAttributes extends Binding.Service<
   <S extends Service>(
     service: S,
   ) => Effect.Effect<
-    () => Effect.Effect<
-      SD.GetServiceAttributesResponse,
-      SD.GetServiceAttributesError
-    >
+    () => Effect.Effect<SD.GetServiceAttributesResponse, SD.GetServiceAttributesError>
   >
 > {}
 export const GetServiceAttributes = Binding.Service<GetServiceAttributes>(

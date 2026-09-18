@@ -7,12 +7,7 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import {
-  createInternalTags,
-  diffTags,
-  hasAlchemyTags,
-  type Tags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { withQueryEndpoint } from "./internal.ts";
 
@@ -163,14 +158,9 @@ export interface ScheduledQuery extends Resource<
  *
  * @resource
  */
-export const ScheduledQuery = Resource<ScheduledQuery>(
-  "AWS.Timestream.ScheduledQuery",
-);
+export const ScheduledQuery = Resource<ScheduledQuery>("AWS.Timestream.ScheduledQuery");
 
-const createScheduledQueryName = (
-  id: string,
-  props: { name?: string | undefined },
-) =>
+const createScheduledQueryName = (id: string, props: { name?: string | undefined }) =>
   Effect.gen(function* () {
     if (props.name) {
       return props.name;
@@ -180,17 +170,12 @@ const createScheduledQueryName = (
 
 const toTagRecord = (
   tags: Array<{ Key: string; Value: string }> | undefined,
-): Record<string, string> =>
-  Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
+): Record<string, string> => Object.fromEntries((tags ?? []).map((tag) => [tag.Key, tag.Value]));
 
 const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
   const response = yield* withQueryEndpoint(
     TSQ.describeScheduledQuery({ ScheduledQueryArn: scheduledQueryArn }),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!response?.ScheduledQuery) {
     return undefined;
   }
@@ -200,11 +185,7 @@ const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
       EffectStream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
     ),
-  ).pipe(
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
-  );
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
   if (!tags) {
     return undefined;
   }
@@ -241,9 +222,7 @@ export const ScheduledQueryProvider = () =>
               TSQ.listScheduledQueries.pages({}).pipe(EffectStream.runCollect),
             ).pipe(
               Effect.map((chunk) =>
-                Array.from(chunk).flatMap(
-                  (page) => page.ScheduledQueries ?? [],
-                ),
+                Array.from(chunk).flatMap((page) => page.ScheduledQueries ?? []),
               ),
             );
             const hydrated = yield* Effect.forEach(
@@ -252,20 +231,15 @@ export const ScheduledQueryProvider = () =>
               { concurrency: 5 },
             );
             return hydrated.filter(
-              (attrs): attrs is ScheduledQuery["Attributes"] =>
-                attrs !== undefined,
+              (attrs): attrs is ScheduledQuery["Attributes"] => attrs !== undefined,
             );
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.scheduledQueryArn
             ? yield* readScheduledQuery(output.scheduledQueryArn)
-            : yield* findScheduledQueryByName(
-                yield* createScheduledQueryName(id, olds ?? {}),
-              );
+            : yield* findScheduledQueryByName(yield* createScheduledQueryName(id, olds ?? {}));
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags as Tags))
-            ? state
-            : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags as Tags)) ? state : Unowned(state);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news) || olds === undefined) return;
@@ -290,12 +264,9 @@ export const ScheduledQueryProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(
-              new Error("Timestream ScheduledQuery requires props"),
-            );
+            return yield* Effect.fail(new Error("Timestream ScheduledQuery requires props"));
           }
-          const name =
-            output?.name ?? (yield* createScheduledQueryName(id, news));
+          const name = output?.name ?? (yield* createScheduledQueryName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -351,9 +322,7 @@ export const ScheduledQueryProvider = () =>
                 State: desiredState,
               }),
             );
-            yield* session.note(
-              `Updated scheduled query ${name} state to ${desiredState}`,
-            );
+            yield* session.note(`Updated scheduled query ${name} state to ${desiredState}`);
           }
 
           // Sync tags — diff against observed cloud tags.
@@ -390,9 +359,7 @@ export const ScheduledQueryProvider = () =>
             TSQ.deleteScheduledQuery({
               ScheduledQueryArn: output.scheduledQueryArn,
             }),
-          ).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          );
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

@@ -30,13 +30,6 @@ export interface DescribeTask extends Binding.Service<
   "AWS.DataSync.DescribeTask",
   (
     task: Task,
-  ) => Effect.Effect<
-    () => Effect.Effect<
-      datasync.DescribeTaskResponse,
-      datasync.DescribeTaskError
-    >
-  >
+  ) => Effect.Effect<() => Effect.Effect<datasync.DescribeTaskResponse, datasync.DescribeTaskError>>
 > {}
-export const DescribeTask = Binding.Service<DescribeTask>(
-  "AWS.DataSync.DescribeTask",
-);
+export const DescribeTask = Binding.Service<DescribeTask>("AWS.DataSync.DescribeTask");

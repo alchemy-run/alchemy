@@ -30,17 +30,13 @@ export interface DescribeOrganizationConfiguration extends Binding.Service<
     detector: Detector,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        guardduty.DescribeOrganizationConfigurationRequest,
-        "DetectorId"
-      >,
+      request?: Omit<guardduty.DescribeOrganizationConfigurationRequest, "DetectorId">,
     ) => Effect.Effect<
       guardduty.DescribeOrganizationConfigurationResponse,
       guardduty.DescribeOrganizationConfigurationError
     >
   >
 > {}
-export const DescribeOrganizationConfiguration =
-  Binding.Service<DescribeOrganizationConfiguration>(
-    "AWS.GuardDuty.DescribeOrganizationConfiguration",
-  );
+export const DescribeOrganizationConfiguration = Binding.Service<DescribeOrganizationConfiguration>(
+  "AWS.GuardDuty.DescribeOrganizationConfiguration",
+);

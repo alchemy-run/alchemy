@@ -1,25 +1,21 @@
-import * as AWS from "@/AWS";
-import { Workspace } from "@/AWS/Grafana";
-import * as Test from "@/Test/Alchemy";
 import * as grafana from "@distilled.cloud/aws/grafana";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as AWS from "@/AWS";
+import { Workspace } from "@/AWS/Grafana";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 // Ungated typed-error probe: proves the distilled error union carries the
 // not-found tag the read/delete paths depend on.
-test.provider(
-  "describeWorkspace on a nonexistent id fails with ResourceNotFoundException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        grafana.describeWorkspace({ workspaceId: "g-0000000000" }),
-      );
-      expect(error._tag).toBe("ResourceNotFoundException");
-    }),
+test.provider("describeWorkspace on a nonexistent id fails with ResourceNotFoundException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(grafana.describeWorkspace({ workspaceId: "g-0000000000" }));
+    expect(error._tag).toBe("ResourceNotFoundException");
+  }),
 );
 
 class WorkspaceStillExists extends Data.TaggedError("WorkspaceStillExists")<{
@@ -33,15 +29,10 @@ const assertWorkspaceDeleted = (workspaceId: string) =>
         ? Effect.fail(new WorkspaceStillExists({ workspaceId }))
         : Effect.succeed(undefined),
     ),
-    Effect.catchTag("ResourceNotFoundException", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
     Effect.retry({
       while: (e) => e._tag === "WorkspaceStillExists",
-      schedule: Schedule.max([
-        Schedule.spaced("5 seconds"),
-        Schedule.recurs(24),
-      ]),
+      schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(24)]),
     }),
   );
 

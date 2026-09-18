@@ -1,11 +1,11 @@
-import * as KinesisAnalyticsV2 from "@/AWS/KinesisAnalyticsV2";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as KinesisAnalyticsV2 from "@/AWS/KinesisAnalyticsV2";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -57,28 +57,19 @@ export default KinesisAnalyticsV2TestFunction.make(
       snapshotsEnabled: true,
     });
 
-    const describeApplication =
-      yield* KinesisAnalyticsV2.DescribeApplication(app);
-    const describeApplicationVersion =
-      yield* KinesisAnalyticsV2.DescribeApplicationVersion(app);
-    const listApplicationVersions =
-      yield* KinesisAnalyticsV2.ListApplicationVersions(app);
+    const describeApplication = yield* KinesisAnalyticsV2.DescribeApplication(app);
+    const describeApplicationVersion = yield* KinesisAnalyticsV2.DescribeApplicationVersion(app);
+    const listApplicationVersions = yield* KinesisAnalyticsV2.ListApplicationVersions(app);
     const describeApplicationOperation =
       yield* KinesisAnalyticsV2.DescribeApplicationOperation(app);
-    const listApplicationOperations =
-      yield* KinesisAnalyticsV2.ListApplicationOperations(app);
+    const listApplicationOperations = yield* KinesisAnalyticsV2.ListApplicationOperations(app);
     const startApplication = yield* KinesisAnalyticsV2.StartApplication(app);
     const stopApplication = yield* KinesisAnalyticsV2.StopApplication(app);
-    const rollbackApplication =
-      yield* KinesisAnalyticsV2.RollbackApplication(app);
-    const createApplicationSnapshot =
-      yield* KinesisAnalyticsV2.CreateApplicationSnapshot(app);
-    const describeApplicationSnapshot =
-      yield* KinesisAnalyticsV2.DescribeApplicationSnapshot(app);
-    const listApplicationSnapshots =
-      yield* KinesisAnalyticsV2.ListApplicationSnapshots(app);
-    const deleteApplicationSnapshot =
-      yield* KinesisAnalyticsV2.DeleteApplicationSnapshot(app);
+    const rollbackApplication = yield* KinesisAnalyticsV2.RollbackApplication(app);
+    const createApplicationSnapshot = yield* KinesisAnalyticsV2.CreateApplicationSnapshot(app);
+    const describeApplicationSnapshot = yield* KinesisAnalyticsV2.DescribeApplicationSnapshot(app);
+    const listApplicationSnapshots = yield* KinesisAnalyticsV2.ListApplicationSnapshots(app);
+    const deleteApplicationSnapshot = yield* KinesisAnalyticsV2.DeleteApplicationSnapshot(app);
     const createApplicationPresignedUrl =
       yield* KinesisAnalyticsV2.CreateApplicationPresignedUrl(app);
     // Account-level binding — takes no resource argument.
@@ -136,9 +127,7 @@ export default KinesisAnalyticsV2TestFunction.make(
                 return {
                   count: (listed.ApplicationSummaries ?? []).length,
                   containsSelf: (listed.ApplicationSummaries ?? []).some(
-                    (summary) =>
-                      summary.ApplicationName ===
-                      ApplicationDetail.ApplicationName,
+                    (summary) => summary.ApplicationName === ApplicationDetail.ApplicationName,
                   ),
                 };
               }),
@@ -163,8 +152,7 @@ export default KinesisAnalyticsV2TestFunction.make(
               "errorTag" in result
                 ? result
                 : {
-                    versionId:
-                      result.ApplicationVersionDetail?.ApplicationVersionId,
+                    versionId: result.ApplicationVersionDetail?.ApplicationVersionId,
                   },
             );
           }
@@ -187,17 +175,13 @@ export default KinesisAnalyticsV2TestFunction.make(
                 OperationId: "aaaaaaaaaaaaaaaaaaaaaaaaaa",
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "GET /snapshots": {
             const result = yield* errorTagged(listApplicationSnapshots());
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { count: (result.SnapshotSummaries ?? []).length },
+              "errorTag" in result ? result : { count: (result.SnapshotSummaries ?? []).length },
             );
           }
 
@@ -205,9 +189,7 @@ export default KinesisAnalyticsV2TestFunction.make(
             const result = yield* errorTagged(
               describeApplicationSnapshot({ SnapshotName: "does-not-exist" }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "POST /snapshot/create": {
@@ -217,9 +199,7 @@ export default KinesisAnalyticsV2TestFunction.make(
             const result = yield* errorTagged(
               createApplicationSnapshot({ SnapshotName: "bindings-probe" }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "POST /snapshot/delete": {
@@ -229,9 +209,7 @@ export default KinesisAnalyticsV2TestFunction.make(
                 SnapshotCreationTimestamp: new Date(0),
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "GET /presigned-url": {
@@ -242,9 +220,7 @@ export default KinesisAnalyticsV2TestFunction.make(
               }),
             );
             return yield* HttpServerResponse.json(
-              "errorTag" in result
-                ? result
-                : { hasUrl: typeof result.AuthorizedUrl === "string" },
+              "errorTag" in result ? result : { hasUrl: typeof result.AuthorizedUrl === "string" },
             );
           }
 
@@ -255,22 +231,17 @@ export default KinesisAnalyticsV2TestFunction.make(
               Effect.gen(function* () {
                 const { ApplicationDetail } = yield* describeApplication();
                 return yield* rollbackApplication({
-                  CurrentApplicationVersionId:
-                    ApplicationDetail.ApplicationVersionId,
+                  CurrentApplicationVersionId: ApplicationDetail.ApplicationVersionId,
                 });
               }),
             );
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "POST /stop": {
             // Force-stopping a READY application is a typed no-op rejection.
             const result = yield* errorTagged(stopApplication({ Force: true }));
-            return yield* HttpServerResponse.json(
-              "errorTag" in result ? result : { ok: true },
-            );
+            return yield* HttpServerResponse.json("errorTag" in result ? result : { ok: true });
           }
 
           case "POST /start": {
@@ -299,10 +270,7 @@ export default KinesisAnalyticsV2TestFunction.make(
           }
 
           default:
-            return yield* HttpServerResponse.json(
-              { error: "Not found", route },
-              { status: 404 },
-            );
+            return yield* HttpServerResponse.json({ error: "Not found", route }, { status: 404 });
         }
       }).pipe(Effect.orDie),
     };

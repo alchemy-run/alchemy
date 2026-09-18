@@ -36,13 +36,8 @@ export interface DeleteLibraryItem extends Binding.Service<
   ) => Effect.Effect<
     (
       request: DeleteLibraryItemRequest,
-    ) => Effect.Effect<
-      qapps.DeleteLibraryItemResponse,
-      qapps.DeleteLibraryItemError
-    >
+    ) => Effect.Effect<qapps.DeleteLibraryItemResponse, qapps.DeleteLibraryItemError>
   >
 > {}
 
-export const DeleteLibraryItem = Binding.Service<DeleteLibraryItem>(
-  "AWS.QApps.DeleteLibraryItem",
-);
+export const DeleteLibraryItem = Binding.Service<DeleteLibraryItem>("AWS.QApps.DeleteLibraryItem");

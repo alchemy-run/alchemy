@@ -4,7 +4,6 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -234,9 +233,7 @@ export const ProviderLive = () =>
               } as Mtls,
               dev: output?.dev,
             })),
-            Effect.catchTag("HyperdriveConfigNotFound", () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)),
           );
       }
       const name = yield* createConfigName(id, olds?.name);
@@ -389,8 +386,7 @@ const findByName = (name: string) =>
     );
   });
 
-export const defaultPort = (scheme: Scheme): number =>
-  scheme === "mysql" ? 3306 : 5432;
+export const defaultPort = (scheme: Scheme): number => (scheme === "mysql" ? 3306 : 5432);
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;

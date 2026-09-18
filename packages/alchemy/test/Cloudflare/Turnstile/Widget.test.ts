@@ -1,20 +1,17 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as turnstile from "@distilled.cloud/cloudflare/turnstile";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const zoneName = "alchemy-test-2.us";
 
@@ -39,10 +36,7 @@ const expectGone = (accountId: string, sitekey: string) =>
     Effect.catchTag("WidgetNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "WidgetNotDeleted",
-      schedule: Schedule.max([
-        Schedule.exponential("500 millis"),
-        Schedule.recurs(10),
-      ]),
+      schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(10)]),
     }),
   );
 
@@ -106,16 +100,12 @@ test.provider("update mutable props in place (same sitekey)", (stack) =>
     expect(updated.sitekey).toEqual(initial.sitekey);
     expect(updated.name).toEqual("alchemy-turnstile-update-v2");
     expect(updated.mode).toEqual("invisible");
-    expect([...updated.domains].sort()).toEqual(
-      [zoneName, `www.${zoneName}`].sort(),
-    );
+    expect([...updated.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
 
     const live = yield* getWidget(accountId, updated.sitekey);
     expect(live.name).toEqual("alchemy-turnstile-update-v2");
     expect(live.mode).toEqual("invisible");
-    expect([...live.domains].sort()).toEqual(
-      [zoneName, `www.${zoneName}`].sort(),
-    );
+    expect([...live.domains].sort()).toEqual([zoneName, `www.${zoneName}`].sort());
 
     // Redeploying identical props is a no-op (still the same widget).
     const noop = yield* stack.deploy(

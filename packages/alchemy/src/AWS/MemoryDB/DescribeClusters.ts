@@ -27,12 +27,7 @@ export interface DescribeClusters extends Binding.Service<
   () => Effect.Effect<
     (
       request?: memorydb.DescribeClustersRequest,
-    ) => Effect.Effect<
-      memorydb.DescribeClustersResponse,
-      memorydb.DescribeClustersError
-    >
+    ) => Effect.Effect<memorydb.DescribeClustersResponse, memorydb.DescribeClustersError>
   >
 > {}
-export const DescribeClusters = Binding.Service<DescribeClusters>(
-  "AWS.MemoryDB.DescribeClusters",
-);
+export const DescribeClusters = Binding.Service<DescribeClusters>("AWS.MemoryDB.DescribeClusters");

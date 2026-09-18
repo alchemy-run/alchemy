@@ -2,8 +2,8 @@ import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import * as CliError from "effect/unstable/cli/CliError";
 import { isUserFacing, UserFacingError } from "../../UserFacingError.ts";
 import {
@@ -63,9 +63,7 @@ export const installShutdownFeedback = Effect.sync(() => {
     scheduled = true;
     const timer = setTimeout(() => {
       process.stderr.write(
-        colorsEnabled()
-          ? `\n${ANSI_DIM}Shutting down${ANSI_RESET}\n`
-          : "\nShutting down\n",
+        colorsEnabled() ? `\n${ANSI_DIM}Shutting down${ANSI_RESET}\n` : "\nShutting down\n",
       );
     }, SHUTDOWN_FEEDBACK_DELAY_MS);
     timer.unref();
@@ -78,26 +76,20 @@ export const handleCancellation = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   self.pipe(
     Effect.catchCause((cause) => {
       const cancelled = cause.reasons.some((reason) => {
-        if (Cause.isFailReason(reason))
-          return isPromptCancellation(reason.error);
-        if (Cause.isDieReason(reason))
-          return isPromptCancellation(reason.defect);
+        if (Cause.isFailReason(reason)) return isPromptCancellation(reason.error);
+        if (Cause.isDieReason(reason)) return isPromptCancellation(reason.defect);
         return false;
       });
       return cancelled
         ? Console.log(
-            colorsEnabled()
-              ? `\n${ANSI_DIM}Cancelled.${ANSI_RESET}`
-              : "\nCancelled.",
+            colorsEnabled() ? `\n${ANSI_DIM}Cancelled.${ANSI_RESET}` : "\nCancelled.",
           ).pipe(Effect.andThen(setExitCode(EXIT_CANCELLED)))
         : (Effect.failCause(cause) as Effect.Effect<never, E, never>);
     }),
     Effect.onInterrupt(() =>
       interruptMessagesSuppressed
         ? Effect.void
-        : Console.log(
-            colorsEnabled() ? `\n${ANSI_DIM}Exited.${ANSI_RESET}` : "\nExited.",
-          ),
+        : Console.log(colorsEnabled() ? `\n${ANSI_DIM}Exited.${ANSI_RESET}` : "\nExited."),
     ),
   );
 
@@ -116,9 +108,7 @@ const isUnmarkedUserFacingError = Schema.is(
   }),
 );
 
-const isUserFacingError = (
-  error: unknown,
-): error is { readonly message: string } =>
+const isUserFacingError = (error: unknown): error is { readonly message: string } =>
   isUserFacing(error) || isUnmarkedUserFacingError(error);
 
 export class UserInputError extends Data.TaggedError("UserInputError")<{
@@ -140,9 +130,11 @@ export const handleUserErrors = <A, E, R>(self: Effect.Effect<A, E, R>) =>
           const glyphs = glyphsFor(unicodeEnabled());
           return Console.error(
             `${colorsEnabled() ? `${ansiFg(theme.color.danger)}${glyphs.error} error:${ANSI_RESET}` : "error:"} ${error.message}`,
-          ).pipe(
-            Effect.flatMap(() => Effect.fail(new ReportedCliError(cause))),
-          ) as Effect.Effect<never, E | ReportedCliError, never>;
+          ).pipe(Effect.flatMap(() => Effect.fail(new ReportedCliError(cause)))) as Effect.Effect<
+            never,
+            E | ReportedCliError,
+            never
+          >;
         }
       }
       return Effect.failCause(cause) as Effect.Effect<never, E, never>;
@@ -155,8 +147,6 @@ export const handleCliErrors = <A, E, R>(self: Effect.Effect<A, E, R>) =>
 export const failWithHelp = (commandPath: ReadonlyArray<string>) =>
   setExitCode(1).pipe(
     Effect.andThen(
-      Effect.fail(
-        new CliError.ShowHelp({ commandPath: [...commandPath], errors: [] }),
-      ),
+      Effect.fail(new CliError.ShowHelp({ commandPath: [...commandPath], errors: [] })),
     ),
   );

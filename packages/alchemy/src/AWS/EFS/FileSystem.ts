@@ -252,21 +252,14 @@ export interface FileSystem extends Resource<
  */
 export const FileSystem = Resource<FileSystem>("AWS.EFS.FileSystem");
 
-const isMutableEfsTagKey = (key: string): boolean =>
-  !key.toLowerCase().startsWith("aws:");
+const isMutableEfsTagKey = (key: string): boolean => !key.toLowerCase().startsWith("aws:");
 
 const mutableEfsTags = (tags: Record<string, string>): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(tags).filter(([key]) => isMutableEfsTagKey(key)),
-  );
+  Object.fromEntries(Object.entries(tags).filter(([key]) => isMutableEfsTagKey(key)));
 
-const efsTagsToRecord = (
-  tags: readonly efs.Tag[] | undefined,
-): Record<string, string> =>
+const efsTagsToRecord = (tags: readonly efs.Tag[] | undefined): Record<string, string> =>
   Object.fromEntries(
-    (tags ?? [])
-      .filter((tag) => isMutableEfsTagKey(tag.Key))
-      .map((tag) => [tag.Key, tag.Value]),
+    (tags ?? []).filter((tag) => isMutableEfsTagKey(tag.Key)).map((tag) => [tag.Key, tag.Value]),
   );
 
 /**
@@ -290,10 +283,7 @@ const retryUntilFileSystemAvailable = <E extends { _tag: string }, R>(
     ),
     {
       while: (e) => e._tag === "FileSystemNotAvailable",
-      schedule: Schedule.max([
-        Schedule.fixed("2 seconds"),
-        Schedule.recurs(30),
-      ]),
+      schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(30)]),
     },
   );
 
@@ -327,23 +317,20 @@ const retryWhileFileSystemUpdating = <A, E extends { _tag: string }, R>(
  * Internal marker error used to drive the bounded wait for a file system to
  * reach the `available` lifecycle state.
  */
-export class FileSystemNotAvailable extends Data.TaggedError(
-  "FileSystemNotAvailable",
-)<{ fileSystemId: string; state: string }> {}
+export class FileSystemNotAvailable extends Data.TaggedError("FileSystemNotAvailable")<{
+  fileSystemId: string;
+  state: string;
+}> {}
 
 const toWireLifecyclePolicies = (
   policies: FileSystemLifecyclePolicy[] | undefined,
 ): efs.LifecyclePolicy[] =>
   (policies ?? []).map((p) => ({
-    ...(p.transitionToIA !== undefined
-      ? { TransitionToIA: p.transitionToIA }
-      : {}),
+    ...(p.transitionToIA !== undefined ? { TransitionToIA: p.transitionToIA } : {}),
     ...(p.transitionToPrimaryStorageClass !== undefined
       ? { TransitionToPrimaryStorageClass: p.transitionToPrimaryStorageClass }
       : {}),
-    ...(p.transitionToArchive !== undefined
-      ? { TransitionToArchive: p.transitionToArchive }
-      : {}),
+    ...(p.transitionToArchive !== undefined ? { TransitionToArchive: p.transitionToArchive } : {}),
   }));
 
 const canonicalPolicies = (policies: readonly efs.LifecyclePolicy[]): string =>
@@ -351,8 +338,7 @@ const canonicalPolicies = (policies: readonly efs.LifecyclePolicy[]): string =>
     policies
       .map((p) => ({
         TransitionToIA: p.TransitionToIA ?? null,
-        TransitionToPrimaryStorageClass:
-          p.TransitionToPrimaryStorageClass ?? null,
+        TransitionToPrimaryStorageClass: p.TransitionToPrimaryStorageClass ?? null,
         TransitionToArchive: p.TransitionToArchive ?? null,
       }))
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
@@ -374,21 +360,15 @@ export const FileSystemProvider = () =>
       const findByToken = Effect.fn(function* (token: string) {
         return yield* efs.describeFileSystems({ CreationToken: token }).pipe(
           Effect.map((r) => r.FileSystems?.[0]),
-          Effect.catchTag("FileSystemNotFound", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
         );
       });
 
       const findById = Effect.fn(function* (fileSystemId: string) {
-        return yield* efs
-          .describeFileSystems({ FileSystemId: fileSystemId })
-          .pipe(
-            Effect.map((r) => r.FileSystems?.[0]),
-            Effect.catchTag("FileSystemNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+        return yield* efs.describeFileSystems({ FileSystemId: fileSystemId }).pipe(
+          Effect.map((r) => r.FileSystems?.[0]),
+          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+        );
       });
 
       return FileSystem.Provider.of({
@@ -404,9 +384,7 @@ export const FileSystemProvider = () =>
               Effect.gen(function* () {
                 return {
                   fileSystemId: fs.FileSystemId,
-                  fileSystemArn:
-                    fs.FileSystemArn ??
-                    (yield* fileSystemArnOf(fs.FileSystemId)),
+                  fileSystemArn: fs.FileSystemArn ?? (yield* fileSystemArnOf(fs.FileSystemId)),
                 };
               }),
             );
@@ -421,12 +399,9 @@ export const FileSystemProvider = () =>
           }
           const attrs = {
             fileSystemId: fs.FileSystemId,
-            fileSystemArn:
-              fs.FileSystemArn ?? (yield* fileSystemArnOf(fs.FileSystemId)),
+            fileSystemArn: fs.FileSystemArn ?? (yield* fileSystemArnOf(fs.FileSystemId)),
           };
-          return (yield* hasAlchemyTags(id, efsTagsToRecord(fs.Tags)))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, efsTagsToRecord(fs.Tags))) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ news = {}, olds = {} }) {
@@ -470,9 +445,9 @@ export const FileSystemProvider = () =>
                 ThroughputMode: news.throughputMode,
                 ProvisionedThroughputInMibps: news.provisionedThroughputInMibps,
                 AvailabilityZoneName: news.availabilityZoneName,
-                Tags: Object.entries(
-                  mutableEfsTags({ ...news.tags, ...internalTags }),
-                ).map(([Key, Value]) => ({ Key, Value })),
+                Tags: Object.entries(mutableEfsTags({ ...news.tags, ...internalTags })).map(
+                  ([Key, Value]) => ({ Key, Value }),
+                ),
               })
               .pipe(
                 Effect.catchTag("FileSystemAlreadyExists", (e) =>
@@ -499,8 +474,7 @@ export const FileSystemProvider = () =>
             const modeChanged = fs.ThroughputMode !== news.throughputMode;
             const provisionedChanged =
               news.throughputMode === "provisioned" &&
-              fs.ProvisionedThroughputInMibps !==
-                news.provisionedThroughputInMibps;
+              fs.ProvisionedThroughputInMibps !== news.provisionedThroughputInMibps;
             if (modeChanged || provisionedChanged) {
               yield* retryWhileFileSystemUpdating(
                 efs.updateFileSystem({
@@ -520,13 +494,8 @@ export const FileSystemProvider = () =>
           const observedPolicies = yield* efs
             .describeLifecycleConfiguration({ FileSystemId: fileSystemId })
             .pipe(Effect.map((r) => r.LifecyclePolicies ?? []));
-          const desiredPolicies = toWireLifecyclePolicies(
-            news.lifecyclePolicies,
-          );
-          if (
-            canonicalPolicies(observedPolicies) !==
-            canonicalPolicies(desiredPolicies)
-          ) {
+          const desiredPolicies = toWireLifecyclePolicies(news.lifecyclePolicies);
+          if (canonicalPolicies(observedPolicies) !== canonicalPolicies(desiredPolicies)) {
             yield* retryWhileFileSystemUpdating(
               efs.putLifecycleConfiguration({
                 FileSystemId: fileSystemId,
@@ -544,13 +513,10 @@ export const FileSystemProvider = () =>
               .describeBackupPolicy({ FileSystemId: fileSystemId })
               .pipe(
                 Effect.map((r) => r.BackupPolicy?.Status),
-                Effect.catchTag("PolicyNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
               );
             const observedBackup =
-              observedBackupStatus === "ENABLED" ||
-              observedBackupStatus === "ENABLING";
+              observedBackupStatus === "ENABLED" || observedBackupStatus === "ENABLING";
             if (observedBackup !== news.backup) {
               yield* retryWhileFileSystemUpdating(
                 efs.putBackupPolicy({
@@ -568,14 +534,12 @@ export const FileSystemProvider = () =>
           //     the current protection setting is left alone.
           if (news.replicationOverwriteProtection !== undefined) {
             const observedProtection =
-              fs.FileSystemProtection?.ReplicationOverwriteProtection ??
-              "ENABLED";
+              fs.FileSystemProtection?.ReplicationOverwriteProtection ?? "ENABLED";
             if (observedProtection !== news.replicationOverwriteProtection) {
               yield* retryWhileFileSystemUpdating(
                 efs.updateFileSystemProtection({
                   FileSystemId: fileSystemId,
-                  ReplicationOverwriteProtection:
-                    news.replicationOverwriteProtection,
+                  ReplicationOverwriteProtection: news.replicationOverwriteProtection,
                 }),
               );
             }
@@ -589,9 +553,7 @@ export const FileSystemProvider = () =>
             .describeFileSystemPolicy({ FileSystemId: fileSystemId })
             .pipe(
               Effect.map((r) => r.Policy),
-              Effect.catchTag("PolicyNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("PolicyNotFound", () => Effect.succeed(undefined)),
             );
           const desiredPolicy =
             news.policy === undefined
@@ -607,8 +569,7 @@ export const FileSystemProvider = () =>
             }
           } else if (
             observedPolicy === undefined ||
-            normalizePolicyDocument(observedPolicy) !==
-              normalizePolicyDocument(desiredPolicy)
+            normalizePolicyDocument(observedPolicy) !== normalizePolicyDocument(desiredPolicy)
           ) {
             yield* retryWhileFileSystemUpdating(
               efs.putFileSystemPolicy({
@@ -642,8 +603,7 @@ export const FileSystemProvider = () =>
           yield* session.note(fileSystemId);
           return {
             fileSystemId,
-            fileSystemArn:
-              fs.FileSystemArn ?? (yield* fileSystemArnOf(fileSystemId)),
+            fileSystemArn: fs.FileSystemArn ?? (yield* fileSystemArnOf(fileSystemId)),
           };
         }),
 

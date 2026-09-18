@@ -9,12 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  readQuickSightTags,
-  syncQuickSightTags,
-  toWireTags,
-  waitForSettled,
-} from "./internal.ts";
+import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
 
 /**
  * Properties for an Amazon QuickSight dashboard — a published, read-only view
@@ -132,20 +127,13 @@ export const DashboardProvider = () =>
           ? Effect.succeed(props.dashboardId)
           : createPhysicalName({ id, maxLength: 64 });
 
-      const readDashboard = Effect.fn(function* (
-        accountId: string,
-        dashboardId: string,
-      ) {
+      const readDashboard = Effect.fn(function* (accountId: string, dashboardId: string) {
         const response = yield* quicksight
           .describeDashboard({
             AwsAccountId: accountId,
             DashboardId: dashboardId,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         return response?.Dashboard;
       });
 
@@ -153,9 +141,7 @@ export const DashboardProvider = () =>
         waitForSettled(
           dashboardId,
           readDashboard(accountId, dashboardId).pipe(
-            Effect.map((d) =>
-              d === undefined ? undefined : { ...d, status: d.Version?.Status },
-            ),
+            Effect.map((d) => (d === undefined ? undefined : { ...d, status: d.Version?.Status })),
           ),
         );
 
@@ -211,9 +197,7 @@ export const DashboardProvider = () =>
                 VersionDescription: news.versionDescription,
                 Tags: toWireTags(desiredTags),
               })
-              .pipe(
-                Effect.catchTag("ResourceExistsException", () => Effect.void),
-              );
+              .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
             // 3. Sync — publish a new version.
             yield* quicksight.updateDashboard({
@@ -232,9 +216,7 @@ export const DashboardProvider = () =>
           observed = yield* settle(accountId, dashboardId);
           if (observed === undefined) {
             return yield* Effect.fail(
-              new Error(
-                `QuickSight dashboard '${dashboardId}' not found after reconcile`,
-              ),
+              new Error(`QuickSight dashboard '${dashboardId}' not found after reconcile`),
             );
           }
 
@@ -252,35 +234,31 @@ export const DashboardProvider = () =>
               AwsAccountId: accountId,
               DashboardId: output.dashboardId,
             })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>
           Effect.gen(function* () {
             const { accountId } = yield* AWSEnvironment.current;
-            return yield* quicksight.listDashboards
-              .pages({ AwsAccountId: accountId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk)
-                    .flatMap((page) => page.DashboardSummaryList ?? [])
-                    .flatMap((s) =>
-                      s.DashboardId !== undefined && s.Arn !== undefined
-                        ? [
-                            {
-                              dashboardId: s.DashboardId,
-                              arn: s.Arn,
-                              name: s.Name ?? "",
-                              status: "",
-                            },
-                          ]
-                        : [],
-                    ),
-                ),
-              );
+            return yield* quicksight.listDashboards.pages({ AwsAccountId: accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk)
+                  .flatMap((page) => page.DashboardSummaryList ?? [])
+                  .flatMap((s) =>
+                    s.DashboardId !== undefined && s.Arn !== undefined
+                      ? [
+                          {
+                            dashboardId: s.DashboardId,
+                            arn: s.Arn,
+                            name: s.Name ?? "",
+                            status: "",
+                          },
+                        ]
+                      : [],
+                  ),
+              ),
+            );
           }),
       });
     }),

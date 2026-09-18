@@ -26,12 +26,7 @@ export interface DeleteInsight extends Binding.Service<
   () => Effect.Effect<
     (
       request: devopsguru.DeleteInsightRequest,
-    ) => Effect.Effect<
-      devopsguru.DeleteInsightResponse,
-      devopsguru.DeleteInsightError
-    >
+    ) => Effect.Effect<devopsguru.DeleteInsightResponse, devopsguru.DeleteInsightError>
   >
 > {}
-export const DeleteInsight = Binding.Service<DeleteInsight>(
-  "AWS.DevOpsGuru.DeleteInsight",
-);
+export const DeleteInsight = Binding.Service<DeleteInsight>("AWS.DevOpsGuru.DeleteInsight");

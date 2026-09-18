@@ -63,17 +63,16 @@ export const makeWorkflowBridge =
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
 
-        this.build = build(() => {}).then(
-          ({ context, export: wf, telemetry }) =>
-            wf.make(env).pipe(
-              Effect.provideContext(context),
-              Effect.map((fn) => ({
-                context,
-                fn: fn as WorkflowImpl<unknown, unknown>,
-                telemetry,
-              })),
-              Effect.runPromise,
-            ),
+        this.build = build(() => {}).then(({ context, export: wf, telemetry }) =>
+          wf.make(env).pipe(
+            Effect.provideContext(context),
+            Effect.map((fn) => ({
+              context,
+              fn: fn as WorkflowImpl<unknown, unknown>,
+              telemetry,
+            })),
+            Effect.runPromise,
+          ),
         );
       }
 
@@ -93,9 +92,7 @@ export const makeWorkflowBridge =
                 // scope by `buildEventTelemetry` so buffered telemetry
                 // flushes when the scope closes at the end of the
                 // run-invocation.
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
-                ),
+                Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
               ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
             ),
           ) as Effect.Effect<unknown>,
@@ -124,10 +121,7 @@ export const makeWorkflowBridge =
 
 const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   payload: event.payload,
-  timestamp:
-    event.timestamp instanceof Date
-      ? event.timestamp
-      : new Date(event.timestamp),
+  timestamp: event.timestamp instanceof Date ? event.timestamp : new Date(event.timestamp),
   instanceId: event.instanceId ?? "",
   workflowName: event.workflowName ?? "",
   schedule: event.schedule ?? undefined,
@@ -137,11 +131,7 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
   do: <T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T> => {
     const { name } = options;
     // `task` provides application services; the bridge supplies attempt-local services.
-    const effect = options.effect as Effect.Effect<
-      T,
-      never,
-      WorkflowStepContext | Scope.Scope
-    >;
+    const effect = options.effect as Effect.Effect<T, never, WorkflowStepContext | Scope.Scope>;
     const config = toWorkflowStepConfig(options);
     const rollbackEffect = options.rollback;
     const rollback = rollbackEffect
@@ -175,8 +165,7 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
             ),
           );
         return yield* Effect.promise<T>(() => {
-          if (config && rollback)
-            return step.do(name, config, callback, rollback);
+          if (config && rollback) return step.do(name, config, callback, rollback);
           if (config) return step.do(name, config, callback);
           if (rollback) return step.do(name, callback, rollback);
           return step.do(name, callback);
@@ -188,13 +177,8 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
     Effect.promise(() => step.sleep(name, duration)),
   sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
     Effect.promise(() => step.sleepUntil(name, timestamp)),
-  waitForEvent: <T>(
-    name: string,
-    options: any,
-  ): Effect.Effect<WorkflowStepEvent<T>> =>
-    Effect.promise(
-      () => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>,
-    ),
+  waitForEvent: <T>(name: string, options: any): Effect.Effect<WorkflowStepEvent<T>> =>
+    Effect.promise(() => step.waitForEvent(name, options) as Promise<WorkflowStepEvent<T>>),
 });
 
 const toWorkflowStepConfig = (

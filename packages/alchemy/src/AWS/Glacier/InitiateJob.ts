@@ -46,6 +46,4 @@ export interface InitiateJob extends Binding.Service<
     ) => Effect.Effect<glacier.InitiateJobOutput, glacier.InitiateJobError>
   >
 > {}
-export const InitiateJob = Binding.Service<InitiateJob>(
-  "AWS.Glacier.InitiateJob",
-);
+export const InitiateJob = Binding.Service<InitiateJob>("AWS.Glacier.InitiateJob");

@@ -7,10 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
-import {
-  causeResponse,
-  type HttpServerError,
-} from "effect/unstable/http/HttpServerError";
+import { causeResponse, type HttpServerError } from "effect/unstable/http/HttpServerError";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -72,18 +69,12 @@ export class HttpServer extends Context.Service<
 
 export const safeHttpEffect = <Req = never>(
   handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  Req | HttpServerRequest | Scope
-> =>
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req | HttpServerRequest | Scope> =>
   Effect.catchCause(
     handler.pipe(
       // @ts-expect-error
       Effect.flatMap((response) =>
-        HttpServerResponse.isHttpServerResponse(response)
-          ? Effect.succeed(response)
-          : response,
+        HttpServerResponse.isHttpServerResponse(response) ? Effect.succeed(response) : response,
       ),
     ) as any as HttpEffect<Req>,
     (cause) =>
@@ -117,9 +108,7 @@ const logUnreportedCause = (cause: Cause.Cause<unknown>) => {
   const failures = cause.reasons.filter(
     (reason) =>
       reason._tag !== "Interrupt" &&
-      !ErrorReporter.isIgnored(
-        reason._tag === "Fail" ? reason.error : reason.defect,
-      ),
+      !ErrorReporter.isIgnored(reason._tag === "Fail" ? reason.error : reason.defect),
   );
   return failures.length === 0
     ? Effect.void
@@ -187,13 +176,10 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
         serve: (handler, options) =>
           Effect.gen(function* () {
             const port = yield* resolvePort(options);
-            const server = yield* NodeHttpServerPlatform.make(
-              NodeHttp.createServer,
-              {
-                port,
-                host: serverOptions?.hostname ?? "0.0.0.0",
-              },
-            );
+            const server = yield* NodeHttpServerPlatform.make(NodeHttp.createServer, {
+              port,
+              host: serverOptions?.hostname ?? "0.0.0.0",
+            });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),
       };

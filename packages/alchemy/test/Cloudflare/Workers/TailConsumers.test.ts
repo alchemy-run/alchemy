@@ -1,6 +1,3 @@
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import * as Cloudflare from "@/Cloudflare/index.ts";
-import * as Test from "@/Test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "alchemy-test";
@@ -9,15 +6,15 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Test from "@/Test/Alchemy";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
  * Producer: logs on every request so each invocation produces trace events
@@ -46,10 +43,7 @@ test.provider(
         Effect.gen(function* () {
           const events = yield* Cloudflare.KV.Namespace("TailEvents");
           const consumer = yield* Cloudflare.Worker("TailConsumer", {
-            main: pathe.resolve(
-              import.meta.dirname,
-              "fixtures/tail/tail-consumer.ts",
-            ),
+            main: pathe.resolve(import.meta.dirname, "fixtures/tail/tail-consumer.ts"),
             env: { EVENTS: events },
           });
           const producer = yield* Cloudflare.Worker("TailProducer", {
@@ -62,18 +56,14 @@ test.provider(
       const v1 = yield* stack.deploy(deployStack("attached"));
 
       // The attribute records the consumer by deployed script name.
-      expect(v1.producer.tailConsumers).toEqual([
-        { service: v1.consumer.workerName },
-      ]);
+      expect(v1.producer.tailConsumers).toEqual([{ service: v1.consumer.workerName }]);
 
       // Out-of-band: the producer's script settings carry the tail consumer.
       const settings = yield* workers.getScriptScriptAndVersionSetting({
         accountId,
         scriptName: v1.producer.workerName,
       });
-      expect(settings.tailConsumers?.map((c) => c.service)).toEqual([
-        v1.consumer.workerName,
-      ]);
+      expect(settings.tailConsumers?.map((c) => c.service)).toEqual([v1.consumer.workerName]);
 
       // Invoke the producer (retrying through workers.dev propagation),
       // then poll KV until a tail batch keyed by the producer's script name
@@ -112,9 +102,7 @@ test.provider(
         .pipe(
           Effect.flatMap((res) =>
             Effect.tryPromise(() =>
-              new Response(
-                Stream.toReadableStream(res.body) as BodyInit,
-              ).text(),
+              new Response(Stream.toReadableStream(res.body) as BodyInit).text(),
             ),
           ),
         );

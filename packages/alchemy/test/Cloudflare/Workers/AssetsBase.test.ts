@@ -1,3 +1,8 @@
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { MinimumLogLevel } from "effect/References";
 /**
  * `assets.base` on the precomputed-hash path.
  *
@@ -11,20 +16,12 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import { MinimumLogLevel } from "effect/References";
 import { expectUrlAbsent, expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const marker = "assets-base-rekey-marker";
 
@@ -93,9 +90,7 @@ test.provider(
           Effect.gen(function* () {
             yield* stack.destroy().pipe(Effect.ignore);
             if (workerName) {
-              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(
-                Effect.ignore,
-              );
+              yield* waitForWorkerToBeDeleted(workerName, accountId).pipe(Effect.ignore);
             }
           }),
         ),

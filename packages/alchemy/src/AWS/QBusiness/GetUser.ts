@@ -6,10 +6,7 @@ import type { Application } from "./Application.ts";
 /**
  * `GetUser` request with `applicationId` injected from the bound application.
  */
-export interface GetUserRequest extends Omit<
-  qbusiness.GetUserRequest,
-  "applicationId"
-> {}
+export interface GetUserRequest extends Omit<qbusiness.GetUserRequest, "applicationId"> {}
 
 /**
  * Runtime binding for the `GetUser` operation (IAM action
@@ -35,9 +32,7 @@ export interface GetUser extends Binding.Service<
   (
     application: Application,
   ) => Effect.Effect<
-    (
-      request: GetUserRequest,
-    ) => Effect.Effect<qbusiness.GetUserResponse, qbusiness.GetUserError>
+    (request: GetUserRequest) => Effect.Effect<qbusiness.GetUserResponse, qbusiness.GetUserError>
   >
 > {}
 export const GetUser = Binding.Service<GetUser>("AWS.QBusiness.GetUser");

@@ -140,13 +140,8 @@ export const FlowProvider = () =>
           const name = output?.flowName ?? (yield* toName(id, olds ?? {}));
           const flow = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          if (flow === undefined || flow.flowArn === undefined)
-            return undefined;
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          if (flow === undefined || flow.flowArn === undefined) return undefined;
           const attrs = {
             flowName: name,
             flowArn: flow.flowArn,
@@ -165,11 +160,7 @@ export const FlowProvider = () =>
           // 1. Observe.
           let live = yield* appflow
             .describeFlow({ flowName: name })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
           // 2. Ensure — create if missing. Tolerate an AlreadyExists race by
           // falling back to describe.
@@ -219,9 +210,7 @@ export const FlowProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* appflow
             .deleteFlow({ flowName: output.flowName, forceDelete: true })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
 
         list: () =>

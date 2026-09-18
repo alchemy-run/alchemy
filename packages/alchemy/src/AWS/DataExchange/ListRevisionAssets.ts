@@ -29,10 +29,7 @@ export interface ListRevisionAssets extends Binding.Service<
     revision: Revision,
   ) => Effect.Effect<
     (
-      request?: Omit<
-        dataexchange.ListRevisionAssetsRequest,
-        "DataSetId" | "RevisionId"
-      >,
+      request?: Omit<dataexchange.ListRevisionAssetsRequest, "DataSetId" | "RevisionId">,
     ) => Effect.Effect<
       dataexchange.ListRevisionAssetsResponse,
       dataexchange.ListRevisionAssetsError

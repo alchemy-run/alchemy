@@ -24,12 +24,7 @@ export interface GetImportTask extends Binding.Service<
   () => Effect.Effect<
     (
       request: neptunegraph.GetImportTaskInput,
-    ) => Effect.Effect<
-      neptunegraph.GetImportTaskOutput,
-      neptunegraph.GetImportTaskError
-    >
+    ) => Effect.Effect<neptunegraph.GetImportTaskOutput, neptunegraph.GetImportTaskError>
   >
 > {}
-export const GetImportTask = Binding.Service<GetImportTask>(
-  "AWS.NeptuneGraph.GetImportTask",
-);
+export const GetImportTask = Binding.Service<GetImportTask>("AWS.NeptuneGraph.GetImportTask");

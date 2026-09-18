@@ -1,22 +1,18 @@
-import * as Cloudflare from "@/Cloudflare";
-import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { findZoneByName } from "@/Cloudflare/Zone/lookup";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as lcc from "@distilled.cloud/cloudflare/leaked-credential-checks";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const zoneName =
-  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
 // Custom detection locations are plan-gated — on the testing account's free
 // zone the quota is zero and every create fails with the typed
@@ -29,9 +25,7 @@ const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const zone = yield* findZoneByName({ accountId, name: zoneName });
   if (!zone) {
-    return yield* Effect.die(
-      new Error(`zone "${zoneName}" not found in account`),
-    );
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
   }
   return zone.id;
 });
@@ -63,111 +57,98 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
 
 // Both cases mutate the same zone-level Leaked Credential Check singleton; run them serially so they don't corrupt each other's captured `initialEnabled` under the global concurrent test config.
 describe.sequential("LeakedCredentialCheck", () => {
-  test.provider(
-    "enables leaked credential checks and restores the baseline on destroy",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("enables leaked credential checks and restores the baseline on destroy", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
-        // Known baseline: the check defaults to disabled.
-        yield* setBaseline(zoneId, false);
+      yield* stack.destroy();
+      // Known baseline: the check defaults to disabled.
+      yield* setBaseline(zoneId, false);
 
-        const check = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-              "Lcc",
-              {
-                zoneId,
-              },
-            );
-          }),
-        );
+      const check = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+            zoneId,
+          });
+        }),
+      );
 
-        expect(check.zoneId).toEqual(zoneId);
-        expect(check.enabled).toEqual(true);
-        // The pre-management value was captured for restore-on-destroy.
-        expect(check.initialEnabled).toEqual(false);
+      expect(check.zoneId).toEqual(zoneId);
+      expect(check.enabled).toEqual(true);
+      // The pre-management value was captured for restore-on-destroy.
+      expect(check.initialEnabled).toEqual(false);
 
-        // Out-of-band verification via the distilled API.
-        const live = yield* getCheck(zoneId);
-        expect(live.enabled).toEqual(true);
+      // Out-of-band verification via the distilled API.
+      const live = yield* getCheck(zoneId);
+      expect(live.enabled).toEqual(true);
 
-        // Update in place — same singleton, initialEnabled survives.
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-              "Lcc",
-              {
-                zoneId,
-                enabled: false,
-              },
-            );
-          }),
-        );
-        expect(updated.enabled).toEqual(false);
-        expect(updated.initialEnabled).toEqual(false);
+      // Update in place — same singleton, initialEnabled survives.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+            zoneId,
+            enabled: false,
+          });
+        }),
+      );
+      expect(updated.enabled).toEqual(false);
+      expect(updated.initialEnabled).toEqual(false);
 
-        const disabled = yield* getCheck(zoneId);
-        expect(disabled.enabled).toEqual(false);
+      const disabled = yield* getCheck(zoneId);
+      expect(disabled.enabled).toEqual(false);
 
-        // Flip back on so destroy has something to restore.
-        const reEnabled = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-              "Lcc",
-              {
-                zoneId,
-                enabled: true,
-              },
-            );
-          }),
-        );
-        expect(reEnabled.enabled).toEqual(true);
-        expect(reEnabled.initialEnabled).toEqual(false);
+      // Flip back on so destroy has something to restore.
+      const reEnabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+            zoneId,
+            enabled: true,
+          });
+        }),
+      );
+      expect(reEnabled.enabled).toEqual(true);
+      expect(reEnabled.initialEnabled).toEqual(false);
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        // Destroy restored the value the check had before we managed it.
-        const restored = yield* getCheck(zoneId);
-        expect(restored.enabled).toEqual(false);
-      }).pipe(logLevel),
+      // Destroy restored the value the check had before we managed it.
+      const restored = yield* getCheck(zoneId);
+      expect(restored.enabled).toEqual(false);
+    }).pipe(logLevel),
   );
 
-  test.provider(
-    "surfaces the typed DetectionQuotaExceeded error on unentitled zones",
-    (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+  test.provider("surfaces the typed DetectionQuotaExceeded error on unentitled zones", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
+      yield* stack.destroy();
 
-        // Detection operations require the zone toggle to be on.
-        yield* setBaseline(zoneId, true);
+      // Detection operations require the zone toggle to be on.
+      yield* setBaseline(zoneId, true);
 
-        // The standard testing zone has a zero custom-detection quota — the
-        // distilled call must fail with the typed quota tag.
-        const error = yield* lcc
-          .createDetection({
-            zoneId,
-            username: 'lookup_json_string(http.request.body.raw, "user")',
-            password: 'lookup_json_string(http.request.body.raw, "secret")',
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "Forbidden",
-              schedule: forbiddenRetrySchedule,
-              times: 8,
-            }),
-            Effect.flip,
-          );
-        expect(error._tag).toEqual("DetectionQuotaExceeded");
+      // The standard testing zone has a zero custom-detection quota — the
+      // distilled call must fail with the typed quota tag.
+      const error = yield* lcc
+        .createDetection({
+          zoneId,
+          username: 'lookup_json_string(http.request.body.raw, "user")',
+          password: 'lookup_json_string(http.request.body.raw, "secret")',
+        })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+          Effect.flip,
+        );
+      expect(error._tag).toEqual("DetectionQuotaExceeded");
 
-        // Restore the zone's baseline (toggle off).
-        yield* setBaseline(zoneId, false);
+      // Restore the zone's baseline (toggle off).
+      yield* setBaseline(zoneId, false);
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide
@@ -202,30 +183,21 @@ describe.sequential("LeakedCredentialCheck", () => {
 
         yield* stack.destroy();
 
-        const usernameExpr =
-          'lookup_json_string(http.request.body.raw, "user")';
-        const passwordExpr =
-          'lookup_json_string(http.request.body.raw, "pass")';
+        const usernameExpr = 'lookup_json_string(http.request.body.raw, "user")';
+        const passwordExpr = 'lookup_json_string(http.request.body.raw, "pass")';
 
         const detection = yield* stack.deploy(
           Effect.gen(function* () {
-            const check =
-              yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                "Lcc",
-                {
-                  zoneId,
-                  enabled: true,
-                },
-              );
-            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection(
-              "Det",
-              {
-                // Depend on the check so the toggle deploys first.
-                zoneId: check.zoneId,
-                username: usernameExpr,
-                password: passwordExpr,
-              },
-            );
+            const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+              zoneId,
+              enabled: true,
+            });
+            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("Det", {
+              // Depend on the check so the toggle deploys first.
+              zoneId: check.zoneId,
+              username: usernameExpr,
+              password: passwordExpr,
+            });
           }),
         );
 
@@ -242,26 +214,18 @@ describe.sequential("LeakedCredentialCheck", () => {
         expect(live.username).toEqual(usernameExpr);
 
         // In-place update — the PUT keeps the same detection id.
-        const newPasswordExpr =
-          'lookup_json_string(http.request.body.raw, "secret")';
+        const newPasswordExpr = 'lookup_json_string(http.request.body.raw, "secret")';
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
-            const check =
-              yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck(
-                "Lcc",
-                {
-                  zoneId,
-                  enabled: true,
-                },
-              );
-            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection(
-              "Det",
-              {
-                zoneId: check.zoneId,
-                username: usernameExpr,
-                password: newPasswordExpr,
-              },
-            );
+            const check = yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialCheck("Lcc", {
+              zoneId,
+              enabled: true,
+            });
+            return yield* Cloudflare.LeakedCredentialCheck.LeakedCredentialDetection("Det", {
+              zoneId: check.zoneId,
+              username: usernameExpr,
+              password: newPasswordExpr,
+            });
           }),
         );
         expect(updated.detectionId).toEqual(detection.detectionId);
@@ -273,10 +237,7 @@ describe.sequential("LeakedCredentialCheck", () => {
         const error = yield* lcc
           .getDetection({ zoneId, detectionId: detection.detectionId })
           .pipe(Effect.flip);
-        expect([
-          "DetectionNotFound",
-          "LeakedCredentialChecksDisabled",
-        ]).toContain(error._tag);
+        expect(["DetectionNotFound", "LeakedCredentialChecksDisabled"]).toContain(error._tag);
       }).pipe(logLevel),
   );
 });

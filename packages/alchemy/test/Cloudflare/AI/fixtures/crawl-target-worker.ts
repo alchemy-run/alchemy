@@ -1,12 +1,11 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Cloudflare from "@/Cloudflare/index.ts";
 
 const page = (title: string, body: string) =>
   HttpServerResponse.html(
-    `<!doctype html><html><head><title>${title}</title></head>` +
-      `<body>${body}</body></html>`,
+    `<!doctype html><html><head><title>${title}</title></head>` + `<body>${body}</body></html>`,
   );
 
 /**
@@ -56,10 +55,7 @@ export default class AiSearchCrawlTargetWorker extends Cloudflare.Worker<AiSearc
         }
 
         if (request.url.startsWith("/docs")) {
-          return page(
-            "Docs",
-            "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>",
-          );
+          return page("Docs", "<h1>Alchemy docs</h1><p>Indexable documentation content.</p>");
         }
 
         return page(

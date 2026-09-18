@@ -31,10 +31,7 @@ export interface DetectKeyPhrases extends Binding.Service<
   () => Effect.Effect<
     (
       request: comprehend.DetectKeyPhrasesRequest,
-    ) => Effect.Effect<
-      comprehend.DetectKeyPhrasesResponse,
-      comprehend.DetectKeyPhrasesError
-    >
+    ) => Effect.Effect<comprehend.DetectKeyPhrasesResponse, comprehend.DetectKeyPhrasesError>
   >
 > {}
 export const DetectKeyPhrases = Binding.Service<DetectKeyPhrases>(

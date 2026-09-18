@@ -21,8 +21,7 @@ export interface UserPoolTriggerEventMap {
   UserMigration: lambda.UserMigrationTriggerEvent;
 }
 
-export type UserPoolTriggerEvent<T extends UserPoolTriggerName> =
-  UserPoolTriggerEventMap[T];
+export type UserPoolTriggerEvent<T extends UserPoolTriggerName> = UserPoolTriggerEventMap[T];
 
 /**
  * The `triggerSource` prefix Cognito stamps on invocations of each trigger
@@ -31,10 +30,7 @@ export type UserPoolTriggerEvent<T extends UserPoolTriggerName> =
  * `TokenGeneration_*`). Used by the runtime dispatcher to route events to
  * the registered handler.
  */
-export const userPoolTriggerSourcePrefixes: Record<
-  UserPoolTriggerName,
-  string
-> = {
+export const userPoolTriggerSourcePrefixes: Record<UserPoolTriggerName, string> = {
   PreSignUp: "PreSignUp_",
   PostConfirmation: "PostConfirmation_",
   PreAuthentication: "PreAuthentication_",
@@ -47,9 +43,7 @@ export const userPoolTriggerSourcePrefixes: Record<
   UserMigration: "UserMigration_",
 };
 
-export interface UserPoolTriggerProps<
-  T extends UserPoolTriggerName = UserPoolTriggerName,
-> {
+export interface UserPoolTriggerProps<T extends UserPoolTriggerName = UserPoolTriggerName> {
   /** The trigger slot to handle, e.g. `PreSignUp` or `CustomMessage`. */
   trigger: T;
 }
@@ -59,17 +53,11 @@ export interface UserPoolTriggerProps<
  * the (usually mutated) event, which becomes the Lambda's response back to
  * Cognito. Returning `void` responds with the event as-is.
  */
-export type UserPoolTriggerHandler<
-  T extends UserPoolTriggerName,
-  Req = never,
-> = (
+export type UserPoolTriggerHandler<T extends UserPoolTriggerName, Req = never> = (
   event: UserPoolTriggerEvent<T>,
 ) => Effect.Effect<UserPoolTriggerEvent<T> | void, never, Req>;
 
-export type UserPoolTriggerEventSourceService = <
-  T extends UserPoolTriggerName,
-  Req = never,
->(
+export type UserPoolTriggerEventSourceService = <T extends UserPoolTriggerName, Req = never>(
   userPool: UserPool,
   props: UserPoolTriggerProps<T>,
   handler: UserPoolTriggerHandler<T, Req>,
@@ -118,10 +106,9 @@ export interface UserPoolTriggerEventSource extends Binding.Service<
   UserPoolTriggerEventSourceService
 > {}
 
-export const UserPoolTriggerEventSource =
-  Binding.Service<UserPoolTriggerEventSource>(
-    "AWS.Cognito.UserPoolTriggerEventSource",
-  );
+export const UserPoolTriggerEventSource = Binding.Service<UserPoolTriggerEventSource>(
+  "AWS.Cognito.UserPoolTriggerEventSource",
+);
 
 /**
  * Handle a Cognito user pool Lambda trigger with the current Lambda
@@ -147,9 +134,7 @@ export function onUserPoolTrigger<T extends UserPoolTriggerName, Req = never>(
   props: UserPoolTriggerProps<T>,
   handler: UserPoolTriggerHandler<T, Req>,
 ): Effect.Effect<void, never, UserPoolTriggerEventSource> {
-  return UserPoolTriggerEventSource.use((source) =>
-    source(userPool, props, handler),
-  );
+  return UserPoolTriggerEventSource.use((source) => source(userPool, props, handler));
 }
 
 /**

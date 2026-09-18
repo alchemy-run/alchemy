@@ -1,12 +1,12 @@
+import * as aas from "@distilled.cloud/aws/application-auto-scaling";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as AWS from "@/AWS";
 import { ScalableTarget, ScheduledAction } from "@/AWS/ApplicationAutoScaling";
 import { Table } from "@/AWS/DynamoDB";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import * as aas from "@distilled.cloud/aws/application-auto-scaling";
-import { expect } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -18,9 +18,7 @@ const describeAction = (scheduledActionName: string) =>
     })
     .pipe(
       Effect.map((res) =>
-        res.ScheduledActions?.find(
-          (a) => a.ScheduledActionName === scheduledActionName,
-        ),
+        res.ScheduledActions?.find((a) => a.ScheduledActionName === scheduledActionName),
       ),
     );
 
@@ -99,9 +97,7 @@ test.provider(
       });
       expect(updated.scheduledActionName).toEqual(created.scheduledActionName);
       expect(updated.scheduledActionArn).toEqual(created.scheduledActionArn);
-      const observedAfterUpdate = yield* describeAction(
-        created.scheduledActionName,
-      );
+      const observedAfterUpdate = yield* describeAction(created.scheduledActionName);
       expect(observedAfterUpdate?.Schedule).toBe("at(2030-06-01T00:00:00)");
       expect(observedAfterUpdate?.ScalableTargetAction?.MinCapacity).toBe(3);
 

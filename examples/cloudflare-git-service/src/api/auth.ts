@@ -35,7 +35,6 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
  * Who is calling: the signed-in user, or `null` on an anonymous read of
  * a public repository. Every route runs with it in context.
  */
-export class Session extends Context.Service<
-  Session,
-  { readonly user: typeof User.Type | null }
->()("app/Session") {}
+export class Session extends Context.Service<Session, { readonly user: typeof User.Type | null }>()(
+  "app/Session",
+) {}

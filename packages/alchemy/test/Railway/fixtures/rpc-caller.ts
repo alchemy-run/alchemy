@@ -1,7 +1,7 @@
-import { bindFunction } from "@/Railway/Bind.ts";
-import { Function } from "@/Railway/Function.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { bindFunction } from "@/Railway/Bind.ts";
+import { Function } from "@/Railway/Function.ts";
 import Greeter from "./rpc-greeter.ts";
 import { Partition, Site } from "./rpc-shared.ts";
 
@@ -20,9 +20,7 @@ export default class Caller extends Function<Caller>()(
   Effect.gen(function* () {
     const greeter = yield* bindFunction(Greeter);
     return {
-      fetch: greeter
-        .greet("sam")
-        .pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
+      fetch: greeter.greet("sam").pipe(Effect.map((greeting) => HttpServerResponse.text(greeting))),
     };
   }),
 ) {}

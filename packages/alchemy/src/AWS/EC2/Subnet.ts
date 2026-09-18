@@ -4,29 +4,22 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-
-import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
-import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import * as Provider from "../../Provider.ts";
+import type { ScopedPlanStatusSession } from "../../Report.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags, hasTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
 export type SubnetId<ID extends string = string> = `subnet-${ID}`;
 export const SubnetId = <ID extends string>(id: ID): ID & SubnetId<ID> =>
   `subnet-${id}` as ID & SubnetId<ID>;
 
-export type SubnetArn =
-  `arn:aws:ec2:${RegionID}:${AccountID}:subnet/${SubnetId}`;
+export type SubnetArn = `arn:aws:ec2:${RegionID}:${AccountID}:subnet/${SubnetId}`;
 
 export interface SubnetProps {
   /**
@@ -387,9 +380,7 @@ export const SubnetProvider = () =>
             const lookup = yield* ec2
               .describeSubnets({ SubnetIds: [output.subnetId] })
               .pipe(
-                Effect.catchTag("InvalidSubnetID.NotFound", () =>
-                  Effect.succeed({ Subnets: [] }),
-                ),
+                Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
               );
             subnet = lookup.Subnets?.[0];
           }
@@ -422,13 +413,10 @@ export const SubnetProvider = () =>
                   schedule: Schedule.exponential(100),
                 }),
                 Effect.map((createResult) => {
-                  const newSubnetId = createResult.Subnet!
-                    .SubnetId! as SubnetId;
+                  const newSubnetId = createResult.Subnet!.SubnetId! as SubnetId;
                   return newSubnetId;
                 }),
-                Effect.tap((newSubnetId) =>
-                  session.note(`Subnet created: ${newSubnetId}`),
-                ),
+                Effect.tap((newSubnetId) => session.note(`Subnet created: ${newSubnetId}`)),
                 Effect.catchTag("InvalidSubnet.Conflict", (error) =>
                   Effect.gen(function* () {
                     // The CIDR is occupied. A prior interrupted run may have
@@ -450,9 +438,7 @@ export const SubnetProvider = () =>
                         Stream.filter((s) =>
                           hasTags(
                             alchemyTags,
-                            Object.fromEntries(
-                              (s.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
-                            ),
+                            Object.fromEntries((s.Tags ?? []).map((t) => [t.Key ?? "", t.Value])),
                           ),
                         ),
                         Stream.runHead,
@@ -482,22 +468,16 @@ export const SubnetProvider = () =>
               SubnetId: subnetId,
               MapPublicIpOnLaunch: { Value: desiredMapPublicIp },
             });
-            yield* session.note(
-              `Updated map public IP on launch: ${desiredMapPublicIp}`,
-            );
+            yield* session.note(`Updated map public IP on launch: ${desiredMapPublicIp}`);
           }
 
           const desiredAssignIpv6 = news.assignIpv6AddressOnCreation ?? false;
-          if (
-            (subnet.AssignIpv6AddressOnCreation ?? false) !== desiredAssignIpv6
-          ) {
+          if ((subnet.AssignIpv6AddressOnCreation ?? false) !== desiredAssignIpv6) {
             yield* ec2.modifySubnetAttribute({
               SubnetId: subnetId,
               AssignIpv6AddressOnCreation: { Value: desiredAssignIpv6 },
             });
-            yield* session.note(
-              `Updated assign IPv6 address on creation: ${desiredAssignIpv6}`,
-            );
+            yield* session.note(`Updated assign IPv6 address on creation: ${desiredAssignIpv6}`);
           }
 
           const desiredEnableDns64 = news.enableDns64 ?? false;
@@ -509,13 +489,10 @@ export const SubnetProvider = () =>
             yield* session.note(`Updated DNS64 setting: ${desiredEnableDns64}`);
           }
 
-          const observedHostnameType =
-            subnet.PrivateDnsNameOptionsOnLaunch?.HostnameType;
-          const observedDnsA =
-            subnet.PrivateDnsNameOptionsOnLaunch?.EnableResourceNameDnsARecord;
+          const observedHostnameType = subnet.PrivateDnsNameOptionsOnLaunch?.HostnameType;
+          const observedDnsA = subnet.PrivateDnsNameOptionsOnLaunch?.EnableResourceNameDnsARecord;
           const observedDnsAAAA =
-            subnet.PrivateDnsNameOptionsOnLaunch
-              ?.EnableResourceNameDnsAAAARecord;
+            subnet.PrivateDnsNameOptionsOnLaunch?.EnableResourceNameDnsAAAARecord;
           if (
             observedHostnameType !== news.hostnameType ||
             observedDnsA !== news.enableResourceNameDnsARecordOnLaunch ||
@@ -568,9 +545,7 @@ export const SubnetProvider = () =>
           });
           const final = finalLookup.Subnets?.[0];
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`Subnet ${subnetId} disappeared during reconcile`),
-            );
+            return yield* Effect.fail(new Error(`Subnet ${subnetId} disappeared during reconcile`));
           }
           return toSubnetAttributes(final);
         }),
@@ -648,16 +623,14 @@ const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
   assignIpv6AddressOnCreation: subnet.AssignIpv6AddressOnCreation ?? false,
   defaultForAz: subnet.DefaultForAz ?? false,
   ownerId: subnet.OwnerId,
-  ipv6CidrBlockAssociationSet: subnet.Ipv6CidrBlockAssociationSet?.map(
-    (assoc) => ({
-      associationId: assoc.AssociationId!,
-      ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-      ipv6CidrBlockState: {
-        state: assoc.Ipv6CidrBlockState!.State!,
-        statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-      },
-    }),
-  ),
+  ipv6CidrBlockAssociationSet: subnet.Ipv6CidrBlockAssociationSet?.map((assoc) => ({
+    associationId: assoc.AssociationId!,
+    ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+    ipv6CidrBlockState: {
+      state: assoc.Ipv6CidrBlockState!.State!,
+      statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+    },
+  })),
   enableDns64: subnet.EnableDns64,
   ipv6Native: subnet.Ipv6Native,
   privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
@@ -685,10 +658,7 @@ class SubnetStillExists extends Data.TaggedError("SubnetStillExists")<{
 /**
  * Wait for subnet to be in available state
  */
-const waitForSubnetAvailable = (
-  subnetId: string,
-  session?: ScopedPlanStatusSession,
-) =>
+const waitForSubnetAvailable = (subnetId: string, session?: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2.describeSubnets({ SubnetIds: [subnetId] });
     const subnet = result.Subnets?.[0];
@@ -709,9 +679,7 @@ const waitForSubnetAvailable = (
       schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(30)]).pipe(
         Schedule.tap(({ attempt }) =>
           session
-            ? session.note(
-                `Waiting for subnet to be available... (${attempt * 2}s)`,
-              )
+            ? session.note(`Waiting for subnet to be available... (${attempt * 2}s)`)
             : Effect.void,
         ),
       ),
@@ -721,18 +689,11 @@ const waitForSubnetAvailable = (
 /**
  * Wait for subnet to be deleted
  */
-const waitForSubnetDeleted = (
-  subnetId: string,
-  session: ScopedPlanStatusSession,
-) =>
+const waitForSubnetDeleted = (subnetId: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeSubnets({ SubnetIds: [subnetId] })
-      .pipe(
-        Effect.catchTag("InvalidSubnetID.NotFound", () =>
-          Effect.succeed({ Subnets: [] }),
-        ),
-      );
+      .pipe(Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })));
 
     if (!result.Subnets || result.Subnets.length === 0) {
       return; // Successfully deleted

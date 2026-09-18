@@ -33,7 +33,6 @@ export interface ListDelegatedAdministrators extends Binding.Service<
     >
   >
 > {}
-export const ListDelegatedAdministrators =
-  Binding.Service<ListDelegatedAdministrators>(
-    "AWS.Organizations.ListDelegatedAdministrators",
-  );
+export const ListDelegatedAdministrators = Binding.Service<ListDelegatedAdministrators>(
+  "AWS.Organizations.ListDelegatedAdministrators",
+);

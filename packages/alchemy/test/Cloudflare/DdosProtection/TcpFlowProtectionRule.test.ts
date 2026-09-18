@@ -1,17 +1,14 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Provider from "@/Provider";
-import * as Test from "@/Test/Alchemy";
 import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Advanced TCP Protection is a Magic Transit (Enterprise add-on)
 // entitlement that the testing account does not have — every API call fails
@@ -36,15 +33,12 @@ test.provider.skipIf(!magicTransit)(
       // Create.
       const rule = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
-            "Rule",
-            {
-              scope: "global",
-              mode: "monitoring",
-              burstSensitivity: "medium",
-              rateSensitivity: "medium",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("Rule", {
+            scope: "global",
+            mode: "monitoring",
+            burstSensitivity: "medium",
+            rateSensitivity: "medium",
+          });
         }),
       );
       expect(rule.scope).toEqual("global");
@@ -52,26 +46,22 @@ test.provider.skipIf(!magicTransit)(
       expect(rule.mode).toEqual("monitoring");
 
       // Out-of-band verification via the distilled API.
-      const live =
-        yield* ddos.getAdvancedTcpProtectionTcpFlowProtectionRuleItem({
-          accountId: acct,
-          ruleId: rule.ruleId,
-        });
+      const live = yield* ddos.getAdvancedTcpProtectionTcpFlowProtectionRuleItem({
+        accountId: acct,
+        ruleId: rule.ruleId,
+      });
       expect(live.mode).toEqual("monitoring");
       expect(live.rateSensitivity).toEqual("medium");
 
       // In-place update — mode and sensitivities are patched, id is stable.
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
-            "Rule",
-            {
-              scope: "global",
-              mode: "disabled",
-              burstSensitivity: "low",
-              rateSensitivity: "high",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("Rule", {
+            scope: "global",
+            mode: "disabled",
+            burstSensitivity: "low",
+            rateSensitivity: "high",
+          });
         }),
       );
       expect(updated.ruleId).toEqual(rule.ruleId);
@@ -99,24 +89,20 @@ test.provider.skipIf(!magicTransit)(
 // with the typed `AdvancedTcpProtectionNotEntitled` error (Cloudflare code
 // 8888), which `list()` maps to a well-typed empty array — assert that here,
 // ungated.
-test.provider(
-  "list returns a well-typed empty array without Magic Transit",
-  (stack) =>
-    Effect.gen(function* () {
-      if (magicTransit) return;
+test.provider("list returns a well-typed empty array without Magic Transit", (stack) =>
+  Effect.gen(function* () {
+    if (magicTransit) return;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      const provider = yield* Provider.findProvider(
-        Cloudflare.DdosProtection.TcpFlowProtectionRule,
-      );
-      const all = yield* provider.list();
+    const provider = yield* Provider.findProvider(Cloudflare.DdosProtection.TcpFlowProtectionRule);
+    const all = yield* provider.list();
 
-      expect(Array.isArray(all)).toBe(true);
-      expect(all).toEqual([]);
+    expect(Array.isArray(all)).toBe(true);
+    expect(all).toEqual([]);
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set): deploy a rule and
@@ -130,15 +116,12 @@ test.provider.skipIf(!magicTransit)(
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule(
-            "ListRule",
-            {
-              scope: "global",
-              mode: "monitoring",
-              burstSensitivity: "medium",
-              rateSensitivity: "medium",
-            },
-          );
+          return yield* Cloudflare.DdosProtection.TcpFlowProtectionRule("ListRule", {
+            scope: "global",
+            mode: "monitoring",
+            burstSensitivity: "medium",
+            rateSensitivity: "medium",
+          });
         }),
       );
 

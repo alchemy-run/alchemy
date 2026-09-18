@@ -35,6 +35,4 @@ export interface ListInsights extends Binding.Service<
     ) => Effect.Effect<eks.ListInsightsResponse, eks.ListInsightsError>
   >
 > {}
-export const ListInsights = Binding.Service<ListInsights>(
-  "AWS.EKS.ListInsights",
-);
+export const ListInsights = Binding.Service<ListInsights>("AWS.EKS.ListInsights");

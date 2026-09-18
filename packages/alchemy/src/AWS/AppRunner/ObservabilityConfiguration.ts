@@ -9,12 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  isActiveStatus,
-  readAppRunnerTags,
-  syncAppRunnerTags,
-  toWireTags,
-} from "./internal.ts";
+import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
 /**
  * Tracing configuration for an observability configuration.
@@ -132,23 +127,14 @@ export const ObservabilityConfigurationProvider = () =>
         if (!summary?.ObservabilityConfigurationArn) return undefined;
         const described = yield* apprunner
           .describeObservabilityConfiguration({
-            ObservabilityConfigurationArn:
-              summary.ObservabilityConfigurationArn,
+            ObservabilityConfigurationArn: summary.ObservabilityConfigurationArn,
           })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
         const config = described?.ObservabilityConfiguration;
-        return config !== undefined && isActiveStatus(config.Status)
-          ? config
-          : undefined;
+        return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
 
-      const toAttrs = Effect.fn(function* (
-        config: apprunner.ObservabilityConfiguration,
-      ) {
+      const toAttrs = Effect.fn(function* (config: apprunner.ObservabilityConfiguration) {
         if (
           !config.ObservabilityConfigurationName ||
           !config.ObservabilityConfigurationArn ||
@@ -163,8 +149,7 @@ export const ObservabilityConfigurationProvider = () =>
         return {
           observabilityConfigurationName: config.ObservabilityConfigurationName,
           observabilityConfigurationArn: config.ObservabilityConfigurationArn,
-          observabilityConfigurationRevision:
-            config.ObservabilityConfigurationRevision,
+          observabilityConfigurationRevision: config.ObservabilityConfigurationRevision,
           traceVendor: config.TraceConfiguration?.Vendor,
         };
       });
@@ -201,10 +186,7 @@ export const ObservabilityConfigurationProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
               Effect.retry({
                 while: (e) => e._tag === "InvalidRequestException",
-                schedule: Schedule.max([
-                  Schedule.fixed("5 seconds"),
-                  Schedule.recurs(24),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(24)]),
               }),
             );
         }
@@ -215,29 +197,22 @@ export const ObservabilityConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
-          if (
-            (yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))
-          ) {
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
-          const name =
-            output?.observabilityConfigurationName ??
-            (yield* toName(id, olds ?? {}));
+          const name = output?.observabilityConfigurationName ?? (yield* toName(id, olds ?? {}));
           const config = yield* findLatest(name);
           if (config === undefined) return undefined;
           const attrs = yield* toAttrs(config);
-          const tags = yield* readAppRunnerTags(
-            attrs.observabilityConfigurationArn,
-          );
+          const tags = yield* readAppRunnerTags(attrs.observabilityConfigurationArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const name =
-            output?.observabilityConfigurationName ?? (yield* toName(id, news));
+          const name = output?.observabilityConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
@@ -251,8 +226,7 @@ export const ObservabilityConfigurationProvider = () =>
           const drifted =
             observed !== undefined &&
             news.traceConfiguration !== undefined &&
-            news.traceConfiguration.vendor !==
-              observed.TraceConfiguration?.Vendor;
+            news.traceConfiguration.vendor !== observed.TraceConfiguration?.Vendor;
 
           if (observed === undefined || drifted) {
             const created = yield* apprunner.createObservabilityConfiguration({
@@ -268,10 +242,7 @@ export const ObservabilityConfigurationProvider = () =>
           // 3b. Sync tags on the latest revision ARN — diff against
           // OBSERVED cloud tags.
           if (observed.ObservabilityConfigurationArn) {
-            yield* syncAppRunnerTags(
-              observed.ObservabilityConfigurationArn,
-              desiredTags,
-            );
+            yield* syncAppRunnerTags(observed.ObservabilityConfigurationArn, desiredTags);
           }
 
           // 4. Return fresh attributes.
@@ -284,55 +255,47 @@ export const ObservabilityConfigurationProvider = () =>
         }),
 
         list: () =>
-          apprunner.listObservabilityConfigurations
-            .pages({ LatestOnly: true })
-            .pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.ObservabilityConfigurationSummaryList ?? []).flatMap(
-                    (s) =>
-                      s.ObservabilityConfigurationArn !== undefined &&
-                      // App Runner ships an AWS-managed `DefaultConfiguration`
-                      // revision that always exists and can never be deleted
-                      // — keep it out of enumeration for account-wide
-                      // teardown (nuke).
-                      s.ObservabilityConfigurationName !==
-                        "DefaultConfiguration"
-                        ? [s.ObservabilityConfigurationArn]
-                        : [],
-                  ),
+          apprunner.listObservabilityConfigurations.pages({ LatestOnly: true }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.ObservabilityConfigurationSummaryList ?? []).flatMap((s) =>
+                  s.ObservabilityConfigurationArn !== undefined &&
+                  // App Runner ships an AWS-managed `DefaultConfiguration`
+                  // revision that always exists and can never be deleted
+                  // — keep it out of enumeration for account-wide
+                  // teardown (nuke).
+                  s.ObservabilityConfigurationName !== "DefaultConfiguration"
+                    ? [s.ObservabilityConfigurationArn]
+                    : [],
                 ),
               ),
-              Effect.flatMap(
-                Effect.forEach(
-                  (arn) =>
-                    apprunner
-                      .describeObservabilityConfiguration({
-                        ObservabilityConfigurationArn: arn,
-                      })
-                      .pipe(
-                        Effect.flatMap((r) =>
-                          isActiveStatus(r.ObservabilityConfiguration.Status)
-                            ? Effect.map(
-                                toAttrs(r.ObservabilityConfiguration),
-                                (attrs) =>
-                                  attrs as
-                                    | ObservabilityConfiguration["Attributes"]
-                                    | undefined,
-                              )
-                            : Effect.succeed(undefined),
-                        ),
-                        // Tolerate a delete race — drop the item.
-                        Effect.catchTag("ResourceNotFoundException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
-                  { concurrency: 4 },
-                ),
-              ),
-              Effect.map((items) => items.filter((item) => item !== undefined)),
             ),
+            Effect.flatMap(
+              Effect.forEach(
+                (arn) =>
+                  apprunner
+                    .describeObservabilityConfiguration({
+                      ObservabilityConfigurationArn: arn,
+                    })
+                    .pipe(
+                      Effect.flatMap((r) =>
+                        isActiveStatus(r.ObservabilityConfiguration.Status)
+                          ? Effect.map(
+                              toAttrs(r.ObservabilityConfiguration),
+                              (attrs) =>
+                                attrs as ObservabilityConfiguration["Attributes"] | undefined,
+                            )
+                          : Effect.succeed(undefined),
+                      ),
+                      // Tolerate a delete race — drop the item.
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    ),
+                { concurrency: 4 },
+              ),
+            ),
+            Effect.map((items) => items.filter((item) => item !== undefined)),
+          ),
       };
     }),
   );

@@ -1,9 +1,9 @@
-import * as AWS from "@/AWS";
-import { ServiceQuotaIncreaseRequest } from "@/AWS/ServiceQuotas";
-import * as Test from "@/Test/Alchemy";
 import * as servicequotas from "@distilled.cloud/aws/service-quotas";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as AWS from "@/AWS";
+import { ServiceQuotaIncreaseRequest } from "@/AWS/ServiceQuotas";
+import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -16,18 +16,16 @@ const SUBNETS_PER_VPC = "L-407747CB";
 // Ungated typed-error probe: prove the distilled error union carries the
 // not-found tag this provider's observe/read paths depend on. Runs in every
 // CI pass at near-zero cost, unlike the gated live increase below.
-test.provider(
-  "getServiceQuota with a bogus quota code fails with NoSuchResourceException",
-  () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        servicequotas.getServiceQuota({
-          ServiceCode: "vpc",
-          QuotaCode: "L-00000000",
-        }),
-      );
-      expect(error._tag).toBe("NoSuchResourceException");
-    }),
+test.provider("getServiceQuota with a bogus quota code fails with NoSuchResourceException", () =>
+  Effect.gen(function* () {
+    const error = yield* Effect.flip(
+      servicequotas.getServiceQuota({
+        ServiceCode: "vpc",
+        QuotaCode: "L-00000000",
+      }),
+    );
+    expect(error._tag).toBe("NoSuchResourceException");
+  }),
 );
 
 // Full engine lifecycle on the SAFE path: a desired value at or below the

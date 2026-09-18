@@ -2,10 +2,7 @@ import * as Test from "@/Test/Alchemy";
 import { makeEc2VpcCapacityLease } from "./VpcCapacity.ts";
 
 /** Test adapter for files that create custom VPCs. */
-export const make = <ROut = any>(
-  options: Test.MakeOptions<ROut>,
-  permits: 1 | 2 = 1,
-) => {
+export const make = <ROut = any>(options: Test.MakeOptions<ROut>, permits: 1 | 2 = 1) => {
   const api = Test.make(options);
   const lease = makeEc2VpcCapacityLease(permits);
 

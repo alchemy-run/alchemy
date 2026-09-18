@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
@@ -6,16 +7,13 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Command, Flag } from "effect/unstable/cli";
 import * as Argument from "effect/unstable/cli/Argument";
-import { readFileSync } from "node:fs";
-import { formatElapsed } from "../../Format.ts";
-
 import { Progress } from "../../../Alchemist/Progress.ts";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
 import { getEnv } from "../../../Auth/Env.ts";
-import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
-import * as CliKit from "../../../Cli/CliKit/index.ts";
 import { resolveProfileName } from "../../../Auth/Resolve.ts";
-
+import * as CliKit from "../../../Cli/CliKit/index.ts";
+import { loadConfigProvider } from "../../../Util/ConfigProvider.ts";
+import { formatElapsed } from "../../Format.ts";
 import { exitDeclined, failWithHelp, UserInputError } from "../errors.ts";
 import { config, envFile, profile, yes } from "../flags.ts";
 import { instrumentCommand } from "../instrument.ts";
@@ -28,9 +26,7 @@ import {
 } from "./flows.ts";
 import { profileHub } from "./hub.ts";
 
-const profileName = Argument.String("name").pipe(
-  Argument.withDescription("Profile name"),
-);
+const profileName = Argument.String("name").pipe(Argument.withDescription("Profile name"));
 
 const newProfileName = Argument.String("new-name").pipe(
   Argument.withDescription("New profile name"),
@@ -38,9 +34,7 @@ const newProfileName = Argument.String("new-name").pipe(
 );
 
 const refreshProviders = Flag.String("provider").pipe(
-  Flag.withDescription(
-    "Refresh only this connected provider (repeatable; defaults to all)",
-  ),
+  Flag.withDescription("Refresh only this connected provider (repeatable; defaults to all)"),
   Flag.atLeast(0),
 );
 
@@ -62,9 +56,7 @@ const showCommand = Command.make(
     }),
   ),
 ).pipe(
-  Command.withDescription(
-    "Show connected providers, authentication status, and account details",
-  ),
+  Command.withDescription("Show connected providers, authentication status, and account details"),
 );
 
 const listCommand = Command.make(
@@ -112,13 +104,10 @@ const createCommand = Command.make(
 const renameCommand = Command.make(
   "rename",
   { name: profileName, newName: newProfileName },
-  instrumentCommand(
-    "profile.rename",
-    (a: { name: string; newName: Option.Option<string> }) => ({
-      "alchemy.profile": a.name,
-      "alchemy.profile.new_name": Option.getOrUndefined(a.newName) ?? "",
-    }),
-  )(
+  instrumentCommand("profile.rename", (a: { name: string; newName: Option.Option<string> }) => ({
+    "alchemy.profile": a.name,
+    "alchemy.profile.new_name": Option.getOrUndefined(a.newName) ?? "",
+  }))(
     Effect.fn(function* ({ name, newName }) {
       if (Option.isSome(newName)) {
         yield* Profiles.rename({
@@ -133,11 +122,7 @@ const renameCommand = Command.make(
       yield* renameProfileFlow(name, undefined);
     }),
   ),
-).pipe(
-  Command.withDescription(
-    "Rename a profile and move all credentials stored for it",
-  ),
-);
+).pipe(Command.withDescription("Rename a profile and move all credentials stored for it"));
 
 const addProviders = Flag.String("add").pipe(
   Flag.withDescription("Connect a provider to the profile (repeatable)"),
@@ -145,16 +130,12 @@ const addProviders = Flag.String("add").pipe(
 );
 
 const reconfigureProviders = Flag.String("reconfigure").pipe(
-  Flag.withDescription(
-    "Re-run a connected provider's configuration (repeatable)",
-  ),
+  Flag.withDescription("Re-run a connected provider's configuration (repeatable)"),
   Flag.atLeast(0),
 );
 
 const removeProviders = Flag.String("remove").pipe(
-  Flag.withDescription(
-    "Log out a connected provider and disconnect it (repeatable)",
-  ),
+  Flag.withDescription("Log out a connected provider and disconnect it (repeatable)"),
   Flag.atLeast(0),
 );
 
@@ -197,9 +178,7 @@ const resolveSetValues = Effect.fn(function* (
     const key = entry.slice(0, separator);
     const raw = entry.slice(separator + 1);
     if (key in values) {
-      return yield* Effect.fail(
-        new UserInputError({ message: `Duplicate --set for '${key}'.` }),
-      );
+      return yield* Effect.fail(new UserInputError({ message: `Duplicate --set for '${key}'.` }));
     }
     if (raw === "-") {
       if (stdinUsed) {
@@ -273,20 +252,9 @@ const editCommand = Command.make(
       "alchemy.remove": a.remove.join(","),
     }),
   )(
-    Effect.fn(function* ({
-      profile,
-      add,
-      reconfigure,
-      remove,
-      method,
-      set,
-      envFile,
-      main,
-    }) {
+    Effect.fn(function* ({ profile, add, reconfigure, remove, method, set, envFile, main }) {
       const selectedProfile = yield* resolveProfileName(envFile, profile);
-      let configureInput:
-        | { method?: string; values: Record<string, string> }
-        | undefined;
+      let configureInput: { method?: string; values: Record<string, string> } | undefined;
       if (method !== undefined || set.length > 0) {
         if (add.length + reconfigure.length !== 1 || remove.length > 0) {
           return yield* Effect.fail(
@@ -347,11 +315,7 @@ const editCommand = Command.make(
       });
     }),
   ),
-).pipe(
-  Command.withDescription(
-    "Add, reconfigure, or remove provider accounts in a profile",
-  ),
-);
+).pipe(Command.withDescription("Add, reconfigure, or remove provider accounts in a profile"));
 
 const refreshCommand = Command.make(
   "refresh",
@@ -380,12 +344,8 @@ const refreshCommand = Command.make(
         Effect.provideService(Progress, (event) =>
           event._tag === "provider.refresh.started"
             ? Clock.currentTimeMillis.pipe(
-                Effect.tap((now) =>
-                  Effect.sync(() => refreshStarted.set(event.provider, now)),
-                ),
-                Effect.andThen(
-                  CliKit.accessors.output.info(`Refreshing ${event.provider}`),
-                ),
+                Effect.tap((now) => Effect.sync(() => refreshStarted.set(event.provider, now))),
+                Effect.andThen(CliKit.accessors.output.info(`Refreshing ${event.provider}`)),
               )
             : event._tag === "provider.refresh.completed"
               ? Clock.currentTimeMillis.pipe(
@@ -399,15 +359,11 @@ const refreshCommand = Command.make(
               : Effect.void,
         ),
       );
-      yield* CliKit.accessors.output.success(
-        `Refreshed profile '${selectedProfile}'.`,
-      );
+      yield* CliKit.accessors.output.success(`Refreshed profile '${selectedProfile}'.`);
     }),
   ),
 ).pipe(
-  Command.withDescription(
-    "Refresh credentials for connected providers without reconfiguring them",
-  ),
+  Command.withDescription("Refresh credentials for connected providers without reconfiguring them"),
 );
 
 const currentCommand = Command.make(
@@ -431,9 +387,7 @@ const currentCommand = Command.make(
       }
     }),
   ),
-).pipe(
-  Command.withDescription("Show the effective profile and how it was selected"),
-);
+).pipe(Command.withDescription("Show the effective profile and how it was selected"));
 
 const deleteCommand = Command.make(
   "delete",
@@ -450,9 +404,7 @@ const deleteCommand = Command.make(
       if (!deleted) yield* exitDeclined;
     }),
   ),
-).pipe(
-  Command.withDescription("Delete a profile and all credentials stored for it"),
-);
+).pipe(Command.withDescription("Delete a profile and all credentials stored for it"));
 
 export const profileCommand = Command.make(
   "profile",

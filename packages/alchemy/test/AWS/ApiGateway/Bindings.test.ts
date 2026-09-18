@@ -1,5 +1,3 @@
-import * as AWS from "@/AWS";
-import * as Test from "./Test.ts";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "alchemy-test";
 import * as Duration from "effect/Duration";
@@ -8,11 +6,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-
+import * as AWS from "@/AWS";
+import { assertApiKeyDeleted } from "./assertions.ts";
 import ApiGatewayBindingsFunctionLive, {
   ApiGatewayBindingsFunction,
 } from "./fixtures/bindings-handler.ts";
-import { assertApiKeyDeleted } from "./assertions.ts";
+import * as Test from "./Test.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -27,8 +26,7 @@ const reapApiKeys = ag.getApiKeys.pages({ nameQuery: keyName }).pipe(
   Effect.map((chunk) =>
     Array.from(chunk).flatMap((page) =>
       (page.items ?? []).filter(
-        (key): key is ag.ApiKey & { id: string } =>
-          key.id != null && key.name === keyName,
+        (key): key is ag.ApiKey & { id: string } => key.id != null && key.name === keyName,
       ),
     ),
   ),
@@ -49,11 +47,7 @@ const reapApiKeys = ag.getApiKeys.pages({ nameQuery: keyName }).pipe(
 const readinessSchedule = Schedule.max([
   Schedule.exponential(500).pipe(
     Schedule.modifyDelay(({ duration: d }) =>
-      Effect.succeed(
-        Duration.isGreaterThan(d, Duration.seconds(10))
-          ? Duration.seconds(10)
-          : d,
-      ),
+      Effect.succeed(Duration.isGreaterThan(d, Duration.seconds(10)) ? Duration.seconds(10) : d),
     ),
   ),
   Schedule.recurs(20),
@@ -72,16 +66,12 @@ const sendJson = (method: "POST" | "DELETE", url: string, body?: unknown) =>
   HttpClient.execute(
     body === undefined
       ? HttpClientRequest.make(method)(url)
-      : HttpClientRequest.make(method)(url).pipe(
-          HttpClientRequest.bodyJsonUnsafe(body),
-        ),
+      : HttpClientRequest.make(method)(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)),
   ).pipe(
     Effect.flatMap((response) =>
       response.status === 200
         ? response.json
-        : Effect.fail(
-            new Error(`${method} ${url} returned ${response.status}`),
-          ),
+        : Effect.fail(new Error(`${method} ${url} returned ${response.status}`)),
     ),
   );
 
@@ -122,15 +112,13 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(single.enabled).toBe(true);
 
       // GetApiKeys
-      const listed = (yield* getJson(
-        `${baseUrl}/keys?nameQuery=${keyName}`,
-      )) as { ids: string[] };
+      const listed = (yield* getJson(`${baseUrl}/keys?nameQuery=${keyName}`)) as { ids: string[] };
       expect(listed.ids).toContain(created.id);
 
       // GetUsagePlanKey / GetUsagePlanKeys — enrollment is visible.
-      const enrollment = (yield* getJson(
-        `${baseUrl}/plan-key?id=${created.id}`,
-      )) as { enrolled: boolean };
+      const enrollment = (yield* getJson(`${baseUrl}/plan-key?id=${created.id}`)) as {
+        enrolled: boolean;
+      };
       expect(enrollment.enrolled).toBe(true);
       const planKeys = (yield* getJson(`${baseUrl}/plan-keys`)) as {
         ids: string[];
@@ -139,9 +127,9 @@ test.provider.skipIf(!!process.env.FAST)(
 
       // GetUsage — empty usage window is a valid, IAM-exercising read.
       const today = new Date().toISOString().slice(0, 10);
-      const usage = (yield* getJson(
-        `${baseUrl}/usage?startDate=${today}&endDate=${today}`,
-      )) as { items: Record<string, unknown> };
+      const usage = (yield* getJson(`${baseUrl}/usage?startDate=${today}&endDate=${today}`)) as {
+        items: Record<string, unknown>;
+      };
       expect(usage.items).toBeDefined();
 
       // UpdateUsage — the plan has no quota, so the API answers with a
@@ -169,14 +157,13 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(typeof flushed.authorizers).toBe("boolean");
 
       // DeleteUsagePlanKey + DeleteApiKey — cleanup through the bindings.
-      const deleted = (yield* sendJson(
-        "DELETE",
-        `${baseUrl}/key?id=${created.id}`,
-      )) as { deleted: boolean };
+      const deleted = (yield* sendJson("DELETE", `${baseUrl}/key?id=${created.id}`)) as {
+        deleted: boolean;
+      };
       expect(deleted.deleted).toBe(true);
-      const afterDelete = (yield* getJson(
-        `${baseUrl}/keys?nameQuery=${keyName}`,
-      )) as { ids: string[] };
+      const afterDelete = (yield* getJson(`${baseUrl}/keys?nameQuery=${keyName}`)) as {
+        ids: string[];
+      };
       expect(afterDelete.ids).not.toContain(created.id);
 
       yield* stack.destroy();

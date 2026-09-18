@@ -9,11 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  syncManagedIntegrationsTags,
-  toTagRecord,
-  unwrapSensitive,
-} from "./internal.ts";
+import { syncManagedIntegrationsTags, toTagRecord, unwrapSensitive } from "./internal.ts";
 
 export interface ManagedThingProps {
   /**
@@ -133,27 +129,19 @@ export interface ManagedThing extends Resource<
  *
  * @resource
  */
-export const ManagedThing = Resource<ManagedThing>(
-  "AWS.IoTManagedIntegrations.ManagedThing",
-);
+export const ManagedThing = Resource<ManagedThing>("AWS.IoTManagedIntegrations.ManagedThing");
 
 export const ManagedThingProvider = () =>
   Provider.effect(
     ManagedThing,
     Effect.gen(function* () {
       const toName = (id: string, props: { name?: string } = {}) =>
-        props.name
-          ? Effect.succeed(props.name)
-          : createPhysicalName({ id, maxLength: 64 });
+        props.name ? Effect.succeed(props.name) : createPhysicalName({ id, maxLength: 64 });
 
       const observeById = (identifier: string) =>
         mi
           .getManagedThing({ Identifier: identifier })
-          .pipe(
-            Effect.catchTag("ResourceNotFoundException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
       // Recover an existing managed thing by display name when no Id is
       // cached (e.g. after a state persistence failure).
@@ -168,9 +156,7 @@ export const ManagedThingProvider = () =>
         return yield* observeById(summary.Id);
       });
 
-      const toAttributes = Effect.fn(function* (
-        thing: mi.GetManagedThingResponse,
-      ) {
+      const toAttributes = Effect.fn(function* (thing: mi.GetManagedThingResponse) {
         if (
           thing.Id === undefined ||
           thing.Arn === undefined ||
@@ -178,9 +164,7 @@ export const ManagedThingProvider = () =>
           thing.Role === undefined
         ) {
           return yield* Effect.fail(
-            new Error(
-              "managed thing response is missing Id, Arn, Name, or Role",
-            ),
+            new Error("managed thing response is missing Id, Arn, Name, or Role"),
           );
         }
         return {
@@ -215,9 +199,7 @@ export const ManagedThingProvider = () =>
               : yield* findByName(yield* toName(id, olds ?? {}));
           if (thing === undefined) return undefined;
           const attrs = yield* toAttributes(thing);
-          return (yield* hasAlchemyTags(id, attrs.tags))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
@@ -248,16 +230,12 @@ export const ManagedThingProvider = () =>
               Tags: desiredTags,
             });
             if (created.Id === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to create managed thing '${name}'`),
-              );
+              return yield* Effect.fail(new Error(`failed to create managed thing '${name}'`));
             }
             thing = yield* observeById(created.Id);
             if (thing === undefined) {
               return yield* Effect.fail(
-                new Error(
-                  `managed thing '${created.Id}' vanished after create`,
-                ),
+                new Error(`managed thing '${created.Id}' vanished after create`),
               );
             }
           } else if (thing.Id !== undefined) {
@@ -280,11 +258,8 @@ export const ManagedThingProvider = () =>
               model: news.model,
               classification: news.classification,
             };
-            const changed = (
-              Object.keys(desired) as (keyof typeof desired)[]
-            ).filter(
-              (key) =>
-                desired[key] !== undefined && desired[key] !== observed[key],
+            const changed = (Object.keys(desired) as (keyof typeof desired)[]).filter(
+              (key) => desired[key] !== undefined && desired[key] !== observed[key],
             );
             if (changed.length > 0) {
               yield* mi.updateManagedThing({
@@ -309,11 +284,7 @@ export const ManagedThingProvider = () =>
 
           // Sync tags — diff against OBSERVED cloud tags.
           if (thing.Arn !== undefined) {
-            yield* syncManagedIntegrationsTags(
-              thing.Arn,
-              toTagRecord(thing.Tags),
-              desiredTags,
-            );
+            yield* syncManagedIntegrationsTags(thing.Arn, toTagRecord(thing.Tags), desiredTags);
           }
 
           const attrs = yield* toAttributes(thing);
@@ -330,26 +301,20 @@ export const ManagedThingProvider = () =>
             );
             const things = yield* Effect.forEach(
               summaries.filter(
-                (s): s is mi.ManagedThingSummary & { Id: string } =>
-                  s.Id !== undefined,
+                (s): s is mi.ManagedThingSummary & { Id: string } => s.Id !== undefined,
               ),
               (summary) => observeById(summary.Id),
               { concurrency: 5 },
             );
             return yield* Effect.forEach(
-              things.filter(
-                (thing): thing is mi.GetManagedThingResponse =>
-                  thing !== undefined,
-              ),
+              things.filter((thing): thing is mi.GetManagedThingResponse => thing !== undefined),
               toAttributes,
             );
           }),
         delete: Effect.fn(function* ({ output }) {
           yield* mi
             .deleteManagedThing({ Identifier: output.managedThingId })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };
     }),

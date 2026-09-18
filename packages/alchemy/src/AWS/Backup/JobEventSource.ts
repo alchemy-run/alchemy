@@ -118,9 +118,9 @@ export const consumeBackupEvents = <StreamReq = never, Req = never>(
     props.id ?? "BackupEvents",
     {
       source: ["aws.backup"],
-      "detail-type": (
-        props.kinds ?? (Object.keys(DETAIL_TYPES) as BackupEventKind[])
-      ).map((kind) => DETAIL_TYPES[kind]),
+      "detail-type": (props.kinds ?? (Object.keys(DETAIL_TYPES) as BackupEventKind[])).map(
+        (kind) => DETAIL_TYPES[kind],
+      ),
     },
     { description: props.description, state: props.state },
     process,

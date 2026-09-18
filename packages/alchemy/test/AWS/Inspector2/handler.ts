@@ -1,11 +1,11 @@
-import * as Inspector2 from "@/AWS/Inspector2";
-import * as Lambda from "@/AWS/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Inspector2 from "@/AWS/Inspector2";
+import * as Lambda from "@/AWS/Lambda";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
@@ -27,9 +27,7 @@ const errorTagged = <A, E extends { _tag: string }, R>(
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,
-        errorMessage:
-          (e as { message?: string }).message ??
-          (e as { Message?: string }).Message,
+        errorMessage: (e as { message?: string }).message ?? (e as { Message?: string }).Message,
       }),
     ),
   );
@@ -85,8 +83,7 @@ export default Inspector2TestFunction.make(
     const listAccountPermissions = yield* Inspector2.ListAccountPermissions();
     const getConfiguration = yield* Inspector2.GetConfiguration();
     const updateConfiguration = yield* Inspector2.UpdateConfiguration();
-    const getEc2DeepInspectionConfiguration =
-      yield* Inspector2.GetEc2DeepInspectionConfiguration();
+    const getEc2DeepInspectionConfiguration = yield* Inspector2.GetEc2DeepInspectionConfiguration();
     const updateEc2DeepInspectionConfiguration =
       yield* Inspector2.UpdateEc2DeepInspectionConfiguration();
     const getEncryptionKey = yield* Inspector2.GetEncryptionKey();
@@ -98,18 +95,12 @@ export default Inspector2TestFunction.make(
     const listMembers = yield* Inspector2.ListMembers();
     const associateMember = yield* Inspector2.AssociateMember();
     const disassociateMember = yield* Inspector2.DisassociateMember();
-    const getDelegatedAdminAccount =
-      yield* Inspector2.GetDelegatedAdminAccount();
-    const listDelegatedAdminAccounts =
-      yield* Inspector2.ListDelegatedAdminAccounts();
-    const enableDelegatedAdminAccount =
-      yield* Inspector2.EnableDelegatedAdminAccount();
-    const disableDelegatedAdminAccount =
-      yield* Inspector2.DisableDelegatedAdminAccount();
-    const describeOrganizationConfiguration =
-      yield* Inspector2.DescribeOrganizationConfiguration();
-    const updateOrganizationConfiguration =
-      yield* Inspector2.UpdateOrganizationConfiguration();
+    const getDelegatedAdminAccount = yield* Inspector2.GetDelegatedAdminAccount();
+    const listDelegatedAdminAccounts = yield* Inspector2.ListDelegatedAdminAccounts();
+    const enableDelegatedAdminAccount = yield* Inspector2.EnableDelegatedAdminAccount();
+    const disableDelegatedAdminAccount = yield* Inspector2.DisableDelegatedAdminAccount();
+    const describeOrganizationConfiguration = yield* Inspector2.DescribeOrganizationConfiguration();
+    const updateOrganizationConfiguration = yield* Inspector2.UpdateOrganizationConfiguration();
     const updateOrgEc2DeepInspectionConfiguration =
       yield* Inspector2.UpdateOrgEc2DeepInspectionConfiguration();
     const batchGetMemberEc2DeepInspectionStatus =
@@ -215,9 +206,7 @@ export default Inspector2TestFunction.make(
 
         if (request.method === "GET" && pathname === "/usage") {
           const result = yield* errorTagged(
-            listUsageTotals({}).pipe(
-              Effect.map((r) => ({ totals: (r.totals ?? []).length })),
-            ),
+            listUsageTotals({}).pipe(Effect.map((r) => ({ totals: (r.totals ?? []).length }))),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -279,18 +268,14 @@ export default Inspector2TestFunction.make(
 
         if (request.method === "GET" && pathname === "/cis-scans") {
           const result = yield* errorTagged(
-            listCisScans({}).pipe(
-              Effect.map((r) => ({ scans: (r.scans ?? []).length })),
-            ),
+            listCisScans({}).pipe(Effect.map((r) => ({ scans: (r.scans ?? []).length }))),
           );
           return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "GET" && pathname === "/members") {
           const result = yield* errorTagged(
-            listMembers({}).pipe(
-              Effect.map((r) => ({ members: (r.members ?? []).length })),
-            ),
+            listMembers({}).pipe(Effect.map((r) => ({ members: (r.members ?? []).length }))),
           );
           return yield* HttpServerResponse.json(result);
         }
@@ -324,9 +309,7 @@ export default Inspector2TestFunction.make(
         if (request.method === "GET" && pathname === "/report-status") {
           const result = yield* errorTagged(
             getFindingsReportStatus({
-              reportId:
-                url.searchParams.get("id") ??
-                "00000000-0000-0000-0000-000000000000",
+              reportId: url.searchParams.get("id") ?? "00000000-0000-0000-0000-000000000000",
             }).pipe(Effect.map((r) => ({ status: r.status }))),
           );
           return yield* HttpServerResponse.json(result);

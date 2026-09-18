@@ -3,10 +3,7 @@ import type * as Effect from "effect/Effect";
 import * as Binding from "../../Binding.ts";
 import type { Thing } from "./Thing.ts";
 
-export interface GetThingShadowRequest extends Omit<
-  iotdata.GetThingShadowRequest,
-  "thingName"
-> {}
+export interface GetThingShadowRequest extends Omit<iotdata.GetThingShadowRequest, "thingName"> {}
 
 /**
  * Runtime binding for the IoT data-plane `GetThingShadow` operation (IAM
@@ -43,13 +40,8 @@ export interface GetThingShadow extends Binding.Service<
   ) => Effect.Effect<
     (
       request?: GetThingShadowRequest,
-    ) => Effect.Effect<
-      iotdata.GetThingShadowResponse,
-      iotdata.GetThingShadowError
-    >
+    ) => Effect.Effect<iotdata.GetThingShadowResponse, iotdata.GetThingShadowError>
   >
 > {}
 
-export const GetThingShadow = Binding.Service<GetThingShadow>(
-  "AWS.IoT.GetThingShadow",
-);
+export const GetThingShadow = Binding.Service<GetThingShadow>("AWS.IoT.GetThingShadow");

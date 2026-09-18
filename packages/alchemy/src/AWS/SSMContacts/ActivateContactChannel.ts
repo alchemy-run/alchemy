@@ -29,10 +29,7 @@ export interface ActivateContactChannel extends Binding.Service<
   ) => Effect.Effect<
     (
       request: Omit<ssm.ActivateContactChannelRequest, "ContactChannelId">,
-    ) => Effect.Effect<
-      ssm.ActivateContactChannelResult,
-      ssm.ActivateContactChannelError
-    >
+    ) => Effect.Effect<ssm.ActivateContactChannelResult, ssm.ActivateContactChannelError>
   >
 > {}
 export const ActivateContactChannel = Binding.Service<ActivateContactChannel>(

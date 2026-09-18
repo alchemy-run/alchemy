@@ -20,10 +20,7 @@ import type { SigningProfile } from "./SigningProfile.ts";
  * target job ids chosen per request at runtime, so those bindings are
  * account-level and grant on `Resource: ["*"]`.
  */
-const profilePolicyStatement = (
-  profile: SigningProfile,
-  actions: readonly string[],
-) => ({
+const profilePolicyStatement = (profile: SigningProfile, actions: readonly string[]) => ({
   Effect: "Allow" as const,
   Action: [...actions],
   Resource: [
@@ -39,12 +36,7 @@ const profilePolicyStatement = (
  * and the deploy-time half grants `actions` on the profile ARN (and its
  * version-qualified pattern).
  */
-export const makeSignerProfileHttpBinding = <
-  I extends { profileName?: string },
-  A,
-  E,
-  R,
->(options: {
+export const makeSignerProfileHttpBinding = <I extends { profileName?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.Signer.StartSigningJob`. */
   tag: string;
   /** The distilled operation; `profileName` is injected from the profile. */
@@ -62,9 +54,7 @@ export const makeSignerProfileHttpBinding = <
         const host = yield* Binding.Host;
         if (isBindingHost(host)) {
           yield* host.bind`Allow(${host}, ${options.tag}(${profile}))`({
-            policyStatements: [
-              profilePolicyStatement(profile, options.actions),
-            ],
+            policyStatements: [profilePolicyStatement(profile, options.actions)],
           });
         }
       }

@@ -1,19 +1,16 @@
-import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
-import * as Test from "@/Test/Alchemy";
+import * as Os from "node:os";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Option from "effect/Option";
-import * as Os from "node:os";
-import HandoffWorkerLive, {
-  HandoffWorker,
-  setDeployN,
-} from "./fixtures/handoff-worker.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
+import * as Test from "@/Test/Alchemy";
+import HandoffWorkerLive, { HandoffWorker, setDeployN } from "./fixtures/handoff-worker.ts";
 
 /**
  * `dev: true` runs the local providers in a persistent, file-scoped RPC
@@ -31,10 +28,7 @@ const { test, deploy, destroy } = Test.make({
   dev: true,
 });
 
-const logLevel = Effect.provideService(
-  MinimumLogLevel,
-  process.env.DEBUG ? "Debug" : "Info",
-);
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const Stack = Alchemy.Stack(
   "LocalWorkerHandoffStack",
@@ -54,9 +48,7 @@ const fetchDeploy = (url: string) =>
     const res = yield* client.get(url);
     if (res.status !== 200) {
       const text = yield* res.text;
-      return yield* Effect.fail(
-        new Error(`status ${res.status}: ${text.slice(0, 500)}`),
-      );
+      return yield* Effect.fail(new Error(`status ${res.status}: ${text.slice(0, 500)}`));
     }
     const body = (yield* res.json) as { deploy: string; pong: string };
     expect(body.pong).toBe("pong");
@@ -66,14 +58,8 @@ const fetchDeploy = (url: string) =>
 const registryEntryPath = (workerName: string) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const stateHome =
-      process.env.XDG_STATE_HOME ?? path.join(Os.homedir(), ".local", "state");
-    return path.join(
-      stateHome,
-      "alchemy",
-      "registry",
-      `${encodeURIComponent(workerName)}.json`,
-    );
+    const stateHome = process.env.XDG_STATE_HOME ?? path.join(Os.homedir(), ".local", "state");
+    return path.join(stateHome, "alchemy", "registry", `${encodeURIComponent(workerName)}.json`);
   });
 
 const registryEntryExists = (workerName: string) =>
@@ -121,10 +107,7 @@ test(
     // Wait for the first instance to actually serve (fresh workerd + DO).
     const initial = yield* fetchDeploy(first.url).pipe(
       Effect.retry({
-        schedule: Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("2 seconds"),
-        ]),
+        schedule: Schedule.min([Schedule.exponential("500 millis"), Schedule.spaced("2 seconds")]),
         times: 20,
       }),
     );

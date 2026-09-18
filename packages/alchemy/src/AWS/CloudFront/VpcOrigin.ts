@@ -9,9 +9,7 @@ import { Resource } from "../../Resource.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 
-class VpcOriginPendingDeployment extends Data.TaggedError(
-  "VpcOriginPendingDeployment",
-)<{
+class VpcOriginPendingDeployment extends Data.TaggedError("VpcOriginPendingDeployment")<{
   message: string;
 }> {}
 
@@ -148,9 +146,7 @@ export const VpcOriginProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const result = yield* cloudfront
           .getVpcOrigin({ Id: id })
-          .pipe(
-            Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
         if (!result?.VpcOrigin?.Id) {
           return undefined;
         }
@@ -162,17 +158,16 @@ export const VpcOriginProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         let marker: string | undefined;
         do {
-          const listed: cloudfront.ListVpcOriginsResult =
-            yield* cloudfront.listVpcOrigins({ Marker: marker });
+          const listed: cloudfront.ListVpcOriginsResult = yield* cloudfront.listVpcOrigins({
+            Marker: marker,
+          });
           const summary = listed.VpcOriginList?.Items?.find(
             (item) => item.OriginEndpointArn === arn,
           );
           if (summary?.Id) {
             return yield* getById(summary.Id);
           }
-          marker = listed.VpcOriginList?.IsTruncated
-            ? listed.VpcOriginList.NextMarker
-            : undefined;
+          marker = listed.VpcOriginList?.IsTruncated ? listed.VpcOriginList.NextMarker : undefined;
         } while (marker);
         return undefined;
       });
@@ -202,10 +197,7 @@ export const VpcOriginProvider = () =>
             // CloudFront VPC-origin deployment is slow (global propagation) and
             // routinely exceeds 10 min; budget ~20 min (120 * 10s) so a real
             // deploy doesn't fail spuriously.
-            schedule: Schedule.max([
-              Schedule.fixed("10 seconds"),
-              Schedule.recurs(120),
-            ]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(120)]),
           }),
         );
       });
@@ -265,8 +257,9 @@ export const VpcOriginProvider = () =>
             const items: VpcOrigin["Attributes"][] = [];
             let marker: string | undefined;
             do {
-              const listed: cloudfront.ListVpcOriginsResult =
-                yield* cloudfront.listVpcOrigins({ Marker: marker });
+              const listed: cloudfront.ListVpcOriginsResult = yield* cloudfront.listVpcOrigins({
+                Marker: marker,
+              });
               for (const summary of listed.VpcOriginList?.Items ?? []) {
                 if (!summary.Id) continue;
                 const current = yield* getById(summary.Id);
@@ -295,7 +288,7 @@ export const VpcOriginProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ olds, output }) {
           const existing = output?.vpcOriginId
             ? yield* getById(output.vpcOriginId)
             : yield* getByArn((olds ?? ({} as VpcOriginProps)).arn ?? "");
@@ -313,9 +306,7 @@ export const VpcOriginProvider = () =>
           };
 
           // Observe — locate by cached id or recover by fronted ARN.
-          let observed = output?.vpcOriginId
-            ? yield* getById(output.vpcOriginId)
-            : undefined;
+          let observed = output?.vpcOriginId ? yield* getById(output.vpcOriginId) : undefined;
           if (!observed) {
             observed = yield* getByArn(news.arn);
           }
@@ -334,15 +325,11 @@ export const VpcOriginProvider = () =>
                     ? { vpcOrigin: result.VpcOrigin, etag: result.ETag }
                     : undefined,
                 ),
-                Effect.catchTag("EntityAlreadyExists", () =>
-                  getByArn(news.arn),
-                ),
+                Effect.catchTag("EntityAlreadyExists", () => getByArn(news.arn)),
               );
 
             if (!created?.vpcOrigin.Id) {
-              return yield* Effect.fail(
-                new Error("createVpcOrigin returned no identifier"),
-              );
+              return yield* Effect.fail(new Error("createVpcOrigin returned no identifier"));
             }
 
             yield* session.note(created.vpcOrigin.Id);
@@ -355,12 +342,7 @@ export const VpcOriginProvider = () =>
           // from desired, using the freshly observed ETag for concurrency.
           const desired = desiredEndpointConfig(name, news);
           let current = observed;
-          if (
-            !endpointConfigEquals(
-              observed.vpcOrigin.VpcOriginEndpointConfig,
-              desired,
-            )
-          ) {
+          if (!endpointConfigEquals(observed.vpcOrigin.VpcOriginEndpointConfig, desired)) {
             yield* cloudfront.updateVpcOrigin({
               Id: observed.vpcOrigin.Id,
               IfMatch: observed.etag ?? "",
@@ -416,23 +398,15 @@ export const VpcOriginProvider = () =>
               ),
               Effect.retry({
                 while: (error) => error._tag === "VpcOriginStillInUse",
-                schedule: Schedule.max([
-                  Schedule.fixed("10 seconds"),
-                  Schedule.recurs(30),
-                ]),
+                schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
               }),
             );
           // Block until the origin record is fully gone so dependents (the
           // fronted ALB/VPC, held by CloudFront's ENIs) can be torn down.
           yield* Effect.repeat(
-            getById(output.vpcOriginId).pipe(
-              Effect.map((o) => o !== undefined),
-            ),
+            getById(output.vpcOriginId).pipe(Effect.map((o) => o !== undefined)),
             {
-              schedule: Schedule.max([
-                Schedule.fixed("10 seconds"),
-                Schedule.recurs(30),
-              ]),
+              schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(30)]),
               until: (exists) => exists === false,
             },
           ).pipe(Effect.catch(() => Effect.void));

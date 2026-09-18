@@ -1,17 +1,15 @@
-import * as Lambda from "@/AWS/Lambda";
-import * as MQ from "@/AWS/MQ";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
+import * as Lambda from "@/AWS/Lambda";
+import * as MQ from "@/AWS/MQ";
 
 const main = path.resolve(import.meta.dirname, "bindings-handler.ts");
 
-export class MQBindingsFunction extends Lambda.Function<Lambda.Function>()(
-  "MQBindingsFunction",
-) {}
+export class MQBindingsFunction extends Lambda.Function<Lambda.Function>()("MQBindingsFunction") {}
 
 export default MQBindingsFunction.make(
   {
@@ -113,10 +111,7 @@ export default MQBindingsFunction.make(
           });
         }
 
-        if (
-          request.method === "POST" &&
-          pathname === "/users/typed-not-found"
-        ) {
+        if (request.method === "POST" && pathname === "/users/typed-not-found") {
           // UpdateUser on a nonexistent user round-trips the typed
           // NotFoundException — an IAM gap would surface AccessDenied (500),
           // so the typed tag proves grant + injection end-to-end.
