@@ -52,6 +52,18 @@ An independent skeptical audit found no wrong-file, wrong-branch, missing-await,
 
 These controls establish stale execution after reported readiness even with new connections and a 30-second idle interval. They **do not establish that updates never converge**, that all accounts or regions are affected, or that a longer rollout/drain window cannot explain the observation. The idle interval tests a hypothesis; it is not an acceptance delay or a workaround. The precise serving-side cause and the intended exclusive-cutover guarantee require Neon-side confirmation.
 
+## Five-minute idle control: passed
+
+At the user's request, a separate bounded run left both functions without invocation traffic for **300 seconds** after confirming deployment 2 active/completed. It then sampled eight rounds of GET/POST requests through fresh proxy-bypassing curl processes. **All 32 responses executed B's code and environment**: 16/16 on the previously invoked function and 16/16 on the previously uninvoked function.
+
+- Project: `lingering-river-33900504`; branch: `br-soft-mode-b4ysyb8f`; CLI: `neonctl@5.0.0`.
+- Readiness observed: **2026-09-18 18:01:17.520 UTC**.
+- Sampling: **18:06:17.968–18:06:55.065 UTC**, approximately 300–338 seconds after readiness.
+- Both final management reads recorded `current = active = 2`, `completed`.
+- Normal destruction completed; independent project lookup confirmed absence.
+
+A preceding same-day 30-second-idle rerun still failed (16 A / 0 B on the warmed function; 5 A / 11 B on the other). The five-minute result is evidence that deployment state can converge after an idle interval, not evidence of permanent inability to update. It does not identify the exact convergence time, distinguish elapsed-time propagation from idle-instance retirement, establish behavior under continuous traffic, or guarantee five minutes is always sufficient. The projects were separate; this does not measure one deployment's transition from stale to fresh. No production delay or weakened stable-URL assertion was added, and the full Website matrix was not rerun.
+
 ## Minimal official-CLI reproduction
 
 Use an owned disposable project in `aws-us-east-2`, its default branch, an authorized `NEON_API_KEY` in the environment, and two unused alphanumeric slugs. Never run this against existing application functions. This is a manual reproduction of the completed automated experiment, not an alternative passing acceptance test.
