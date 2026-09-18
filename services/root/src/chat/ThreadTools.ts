@@ -67,8 +67,11 @@ export const post = AI.Tool("post")`
   start a NEW THREAD in ${channel} (filing work IS posting: the root
   is what everyone reads first); pass it to add to an existing
   thread (progress, status, decisions — the thread carries its own
-  history). Takes ${AI.in(text)}; answers ${AI.out(postIdOut)}.
-  Refused with ${EmptyPost} when the text is blank.`(
+  history). When the ask you are answering ALREADY lives in a thread
+  (the dispatch names it), your reply lands there by itself — never
+  post a second thread for the same ask. Takes ${AI.in(text)};
+  answers ${AI.out(postIdOut)}. Refused with ${EmptyPost} when the
+  text is blank.`(
   Effect.gen(function* () {
     const posts = yield* Posts;
     return Effect.fn(function* (p: {

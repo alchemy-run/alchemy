@@ -330,13 +330,36 @@ export const ChannelsApi = Effect.gen(function* () {
         ? ""
         : `${stream}${cards}The message to answer:\n`;
 
+    // WHERE THE ANSWER LANDS. A thread-routed ask arrives with its
+    // thread ALREADY OPEN — the reply becomes the thread's first
+    // message. That fact is an EVENT in the session's history (an
+    // enqueued message the dispatch's round delivers alongside the
+    // ask), not instructions glued onto the human's words — without
+    // it, an agent whose charter teaches "filing is posting" opens a
+    // SECOND thread for the ask it is already inside.
+    const opened =
+      !inline && channel.dm !== true
+        ? sessions.send(
+            target.term,
+            session,
+            `[thread opened] This ask lives in thread ${postId} in ` +
+              `#${channel.name}; your reply becomes the thread's first ` +
+              `message. Never open another thread for this ask — ` +
+              `\`post\` is for filing SEPARATE work.`,
+          )
+        : Effect.void;
+
     yield* exec.waitUntil(
-      sessions
-        .dispatch(target.term, session, {
-          id: postId,
-          author: HUMAN,
-          content: `${preamble}${text}`,
-        })
+      opened
+        .pipe(
+          Effect.andThen(
+            sessions.dispatch(target.term, session, {
+              id: postId,
+              author: HUMAN,
+              content: `${preamble}${text}`,
+            }),
+          ),
+        )
         .pipe(
           Effect.flatMap((outcome) => {
             const answer = typeof outcome === "string" ? outcome.trim() : "";
