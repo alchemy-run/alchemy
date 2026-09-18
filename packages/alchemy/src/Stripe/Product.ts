@@ -336,6 +336,12 @@ export const ProductProvider = () =>
         id: news.id ?? output?.id,
         logicalId: id,
       });
+      // A caller-chosen id names the product exactly. While that id is being
+      // replaced, the ownership-tag fallback finds the outgoing product, which
+      // carries the same tags under its old id, so it is not a match.
+      if (news.id !== undefined && current?.id !== news.id) {
+        current = undefined;
+      }
 
       if (current === undefined) {
         current = yield* CreateProduct({
