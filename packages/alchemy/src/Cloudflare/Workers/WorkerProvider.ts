@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -1238,6 +1239,7 @@ export const LiveWorkerProvider = () =>
 
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
+      const dotAlchemy = yield* dotAlchemyDirectory;
 
       // const createScriptSubdomain = yield* workers.createScriptSubdomain;
       // const deleteScript = yield* workers.deleteScript;
@@ -2548,6 +2550,7 @@ export const LiveWorkerProvider = () =>
           if (props.source) {
             const source = yield* resolveSource(props);
             const ctx = makeSourceContext({
+              dotAlchemy,
               id,
               fqn,
               workerName,
@@ -4750,6 +4753,7 @@ export const LiveWorkerProvider = () =>
           const source = yield* resolveSource(props);
           const slots = yield* source.hash(
             makeSourceContext({
+              dotAlchemy,
               id,
               fqn,
               workerName: output.workerName,
