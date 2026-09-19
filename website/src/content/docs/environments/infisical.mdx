@@ -1,0 +1,136 @@
+---
+title: Infisical
+description: Load an Infisical environment into your Stack — a machine identity on your machine, the platform's own OIDC token in CI.
+---
+
+[Infisical](https://infisical.com) keeps secrets in projects, split
+into environments such as `dev` and `prod`, with folders inside
+each. `Secrets.Infisical` downloads one folder, expands
+[secret references](https://infisical.com/docs/documentation/platform/secret-reference)
+on the server, and makes the result available to `Config` for the
+rest of the deploy. Nothing is written to `process.env` or to disk.
+
+```typescript
+secrets: {
+  providers: [
+    Alchemy.Secrets.Infisical({ project: "my-app", environment: "dev" }),
+  ],
+},
+```
+
+Add it to a stack's [secret providers](/environments/secret-providers)
+and every `Config.String`, `Config.Redacted`, and
+[Worker binding](/environments/secrets) resolves from Infisical.
+
+## Connect your account
+
+Infisical has no browser login for third-party tools; its model for
+anything automated is a
+[machine identity](https://infisical.com/docs/documentation/platform/identities/machine-identities).
+Create one for yourself, attach
+[Universal Auth](https://infisical.com/docs/documentation/platform/identities/universal-auth),
+grant it read access to your dev project, and generate a client
+secret with no expiry. Then run `alchemy profile edit --add Infisical`
+and choose **Machine identity**.
+
+Alchemy verifies the client id and secret with a real login before
+saving them, so a typo fails at the prompt rather than on your next
+deploy. From then on every command exchanges the stored secret for
+a fresh access token silently. The token's lifetime is set on the
+identity in Infisical and never becomes your problem.
+
+The second option, **User token**, takes the short-lived token from
+the dashboard's account menu ("Copy Token"). It is valid for ten
+days and is handy for a quick look, but you will be back at the
+prompt before long.
+
+Both methods accept an API URL for the
+[EU cloud](https://eu.infisical.com) or a self-hosted instance. The
+non-interactive form:
+
+```sh
+alchemy profile edit --add Infisical --method universal-auth \
+  --set clientId=env:INFISICAL_CLIENT_ID \
+  --set clientSecret=env:INFISICAL_CLIENT_SECRET
+```
+
+## Pick an environment per stage
+
+`project` is the project's slug, or its id for a user token, since
+Infisical only resolves slugs for machine identities. `environment`
+is the environment slug. Optional `path`, `recursive`, and
+`includeImports` narrow or widen what is read; imports are included
+by default and a secret defined directly in the folder wins over an
+imported one.
+
+As with every provider, an Effect can choose the options from the
+[stage](/environments/stages):
+
+```typescript
+Alchemy.Secrets.Infisical(
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return {
+      project: "my-app",
+      environment: stage === "prod" ? "prod" : "dev",
+      path: "/api",
+    };
+  }),
+),
+```
+
+## In CI
+
+CI never uses profiles, and there are two ways to authenticate.
+
+The simplest is a ready access token in `INFISICAL_TOKEN`, however
+you obtained it. The better one is to hold no Infisical credential in
+CI at all. Set `INFISICAL_IDENTITY_ID` to a machine identity whose
+[OIDC auth](https://infisical.com/docs/documentation/platform/identities/oidc-auth/general)
+trusts your platform, and Alchemy finds the platform's own identity
+token and exchanges it for an Infisical access token on every run:
+
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write   # lets the job request an OIDC token
+      contents: read
+    steps:
+      - run: bun alchemy deploy --stage prod --yes
+        env:
+          INFISICAL_IDENTITY_ID: ${{ vars.INFISICAL_IDENTITY_ID }}
+```
+
+Detection covers Vercel, GitHub Actions, GitLab CI, Fly.io, and
+Google Cloud. On GitHub the job needs `id-token: write`, as above; on
+GitLab the job needs an
+[`id_tokens`](https://docs.gitlab.com/ee/ci/secrets/id_token_authentication.html)
+block; Vercel, Fly, and Cloud Run need nothing extra. On the
+Infisical side, configure the identity's OIDC auth with the
+platform's issuer, for example
+`https://token.actions.githubusercontent.com` for GitHub, and bind
+the subject claim to your repository so no other workflow can use it.
+If the identity expects a specific audience, put it in
+`INFISICAL_OIDC_AUDIENCE`. A platform that is not detected can hand
+its token over in `INFISICAL_OIDC_TOKEN`.
+
+`INFISICAL_API_URL` selects the EU cloud or a self-hosted instance in
+either mode. `alchemy provider check-env` lists all of these next to
+the other providers' variables.
+
+## When something goes wrong
+
+Failures name Infisical and the selection: a wrong slug reads
+`Infisical could not read project 'my-app' environment 'prod' path
+'/api': ...`, a rejected token says which profile to refresh, and an
+identity id with no usable platform token lists the platforms that
+are supported. `--log-level debug` prints the secret names each
+provider loaded, which quickly settles whether the right folder was
+read.
+
+## Where next
+
+- [Secret providers](/environments/secret-providers) — ordering, schemas, and mixing sources.
+- [Profiles](/environments/profiles) — where the machine identity lives and how to keep a separate one for production.
+- [Infisical docs](https://infisical.com/docs) — projects, environments, and access policies on the Infisical side.

@@ -1,0 +1,102 @@
+---
+title: Doppler
+description: Load a Doppler config into your Stack — log in with the browser on your machine, use a service token in CI.
+---
+
+[Doppler](https://www.doppler.com) organises secrets into projects,
+each with configs such as `dev`, `stg`, and `prd`. `Secrets.Doppler`
+downloads one config and makes every secret in it available to
+`Config` for the rest of the deploy, without writing anything to
+`process.env` or to disk.
+
+```typescript
+secrets: {
+  providers: [
+    Alchemy.Secrets.Doppler({ project: "my-app", config: "dev" }),
+  ],
+},
+```
+
+Add it to a stack's [secret providers](/environments/secret-providers)
+and every `Config.String`, `Config.Redacted`, and
+[Worker binding](/environments/secrets) resolves from Doppler.
+
+## Connect your account
+
+Run `alchemy profile edit --add Doppler`. You are offered two ways in:
+
+- **Login** opens the Doppler dashboard in your browser. Approve the
+  request and Alchemy stores the resulting token in your
+  [profile](/environments/profiles). Nothing else to copy. The token
+  shows up in Doppler as `Alchemy (<your hostname>)`, so you can
+  revoke it from the dashboard at any time, or with
+  `alchemy profile edit --remove Doppler`, which revokes it for you.
+- **API token** takes a token you already have, either a
+  [service token](https://docs.doppler.com/docs/service-tokens)
+  scoped to one config or a
+  [personal token](https://docs.doppler.com/docs/personal-tokens).
+
+Scripts and agents can skip the prompt:
+
+```sh
+alchemy profile edit --add Doppler --method api-token --set token=env:DOPPLER_TOKEN
+```
+
+## Pick a config per stage
+
+A browser login or personal token can see every project, so it must
+be told which one to read: `project` and `config` are required for
+those. Most stacks derive the config from the
+[stage](/environments/stages):
+
+```typescript
+Alchemy.Secrets.Doppler(
+  Effect.gen(function* () {
+    const stage = yield* Stage;
+    return {
+      project: "my-app",
+      config: stage === "prod" ? "prd" : "dev",
+    };
+  }),
+),
+```
+
+Doppler's own [branch configs](https://docs.doppler.com/docs/branch-configs)
+map neatly onto preview stages if you want `pr-42` to inherit from
+`dev` with a few overrides.
+
+A service token is already scoped to a single config, so with one of
+those both options may be omitted and Doppler serves the config the
+token belongs to.
+
+## In CI
+
+CI never uses profiles. Set `DOPPLER_TOKEN` to a service token and
+nothing else changes:
+
+```yaml
+- run: bun alchemy deploy --stage prod --yes
+  env:
+    DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+```
+
+`DOPPLER_TOKEN` also wins on your own machine when it is set, in the
+shell or in `.env`, so a teammate without a browser login can still
+deploy with a token they were handed. `alchemy provider check-env`
+lists it alongside the other providers' variables.
+
+## When something goes wrong
+
+Every failure names Doppler and what was asked for. A wrong slug
+reads `Doppler could not find project 'my-app' config 'prd': ...`, a
+revoked token tells you which profile to refresh, and a login token
+used without `project` and `config` explains that both are required.
+With `--log-level debug` the provider also lists the secret names it
+loaded, which is the quickest way to confirm the right config was
+read.
+
+## Where next
+
+- [Secret providers](/environments/secret-providers) — ordering, schemas, and mixing sources.
+- [Profiles](/environments/profiles) — where the login lives and how to keep a separate one for production.
+- [Doppler docs](https://docs.doppler.com) — projects, configs, and access control on the Doppler side.
