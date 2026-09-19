@@ -114,10 +114,12 @@ async function dispatch(
     });
     return new Response(null, { headers: { ETag: object.httpEtag } });
   }
+  const rangeHeader = request.headers.get("Range");
+  const singleRange = rangeHeader !== null && !rangeHeader.includes(",");
   const body =
     request.method === "HEAD"
       ? null
-      : await bucket.get(key, { range: request.headers });
+      : await bucket.get(key, singleRange ? { range: request.headers } : {});
   const object = request.method === "HEAD" ? await bucket.head(key) : body;
   if (!object)
     return s3Error(404, "NoSuchKey", "The specified key does not exist.");
@@ -141,8 +143,6 @@ async function dispatch(
     if (value !== null) headers.set(name, value);
   }
   if (body) {
-    const rangeHeader = request.headers.get("Range");
-    const singleRange = rangeHeader !== null && !rangeHeader.includes(",");
     const ranges = singleRange
       ? parseRanges(rangeHeader, object.size)
       : undefined;

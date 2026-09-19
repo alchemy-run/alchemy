@@ -179,12 +179,19 @@ layer(workerLayer, { excludeTestServices: true })(
             expect(suffix.headers.get("content-range")).toBe("bytes 0-7/8");
             expect(yield* text(suffix)).toBe("metadata");
           }
-          const multiple = yield* worker.fetch(download.url, {
-            headers: { Range: "bytes=0-1,4-5" },
-          });
-          expect(multiple.status).toBe(200);
-          expect(multiple.headers.get("content-range")).toBeNull();
-          expect(yield* text(multiple)).toBe("metadata");
+          for (const range of [
+            "bytes=0-1,4-5",
+            "bytes=0-1,-0",
+            "bytes=0-1,-999",
+          ]) {
+            const multiple = yield* worker.fetch(download.url, {
+              headers: { Range: range },
+            });
+            expect(multiple.status).toBe(200);
+            expect(multiple.headers.get("content-range")).toBeNull();
+            expect(multiple.headers.get("content-length")).toBe("8");
+            expect(yield* text(multiple)).toBe("metadata");
+          }
         }),
     );
 
