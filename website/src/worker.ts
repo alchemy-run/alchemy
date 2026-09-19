@@ -60,7 +60,7 @@ const REDIRECTS: Record<string, string> = {
   "/tutorial/cloudflare/rpc-durable-object":
     "/cloudflare/compute/durable-objects#schemaless-rpc",
   "/tutorial/cloudflare/rpc-worker":
-    "/cloudflare/compute/workers#schemaless-rpc",
+    "/cloudflare/compute/workers#call-another-worker",
   "/tutorial/cloudflare/ai-gateway": "/cloudflare/ai/ai-gateway",
   "/tutorial/cloudflare/ai-search": "/cloudflare/ai/ai-search",
   "/tutorial/cloudflare/artifacts": "/cloudflare/data/artifacts",
@@ -227,6 +227,16 @@ const REDIRECTS: Record<string, string> = {
   "/integrations/neon": "/neon",
   "/integrations/axiom": "/axiom",
   "/integrations/github": "/github",
+  "/git/auth": "/git/blocks/auth",
+  "/git/storage": "/git/blocks/repositories",
+  "/git/assemblies": "/git/recipes",
+  "/git/assemblies/cloudflare": "/git/recipes/cloudflare",
+  "/git/assemblies/cloudflare-aws": "/git/recipes/cloudflare-aws",
+  "/git/assemblies/one-origin": "/git/tutorial/part-4",
+  "/git/build": "/git/tutorial/part-4",
+  "/git/scale": "/git/recipes/scaling",
+  "/git/scale/pushes": "/git/blocks/hasher",
+  "/git/scale/clones": "/git/blocks/repositories",
 };
 
 const resolveRedirect = (url: URL): string | undefined => {

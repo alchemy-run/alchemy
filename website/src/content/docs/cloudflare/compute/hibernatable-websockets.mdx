@@ -144,8 +144,21 @@ return {
 +    if (attachment) sessions.delete(attachment.id);
 +    yield* ws.close(code, reason);
 +  }),
++  webSocketError: Effect.fn(function* (
++    ws: Cloudflare.WebSocket,
++    error: unknown,
++  ) {
++    // Cloudflare closes an errored socket after this handler runs; only
++    // the session bookkeeping is ours to clean up.
++    const attachment = ws.deserializeAttachment<{ id: string }>();
++    if (attachment) sessions.delete(attachment.id);
++  }),
 };
 ```
+
+`webSocketError` fires when the connection fails instead of closing
+cleanly (a network reset, a protocol error). The runtime closes the
+socket afterwards, so the handler only has to drop the peer's state.
 
 ## Restore sessions after hibernation
 
@@ -187,7 +200,7 @@ first message after hibernation would broadcast to nobody.
 :::note
 The `state` *reference* is resolved in the outer (Construction) Effect, but
 `state.getWebSockets()` is
-[colored with `RuntimeContext`](/infrastructure-as-effects/layers#runtime-as-a-colored-function),
+[colored with `RuntimeContext`](/infrastructure-as-effects/layers#the-types-hold-the-boundary),
 so it can only run in the inner (runtime) Effect — which is exactly
 where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.
@@ -475,16 +488,34 @@ Alice's `"hello bob"` arrives at the Room as a `webSocketMessage`,
 the broadcast loop sends `"[<alice-id>] hello bob"` to every peer,
 and Bob's `next` resolves with it from the queue.
 
-## Schedule a future broadcast (alarms)
+## Register a reminder callback
 
 Durable Objects have **alarms** — single-shot timers backed by the
-DO's storage. Alchemy ships a small SQLite-backed scheduler on top
-so you can register many named events instead of juggling a single
-alarm timestamp yourself. We'll use it to add a
-`/remind <seconds> <message>` chat command.
+DO's storage. `Alchemy.makeCallback` uses SQLite and native alarms to
+persist typed jobs across hibernation. Register a reminder handler in
+the inner Effect, after restoring sessions and defining `broadcast`:
 
-First, recognise the command inside `webSocketMessage` and schedule
-the event:
+```diff lang="typescript"
+// src/room.ts
++import * as Alchemy from "alchemy";
+
+// Inside the inner Effect, after defining broadcast:
++const onReminder = yield* Alchemy.makeCallback(
++  "reminder",
++  Effect.fn(function* (payload: { message: string }) {
++    yield* broadcast(`[reminder] ${payload.message}`);
++  }),
++);
+```
+
+The inner Effect registers this handler again after each hibernation.
+Alchemy invokes it when a persisted job is due, so this example does
+not need a custom `alarm` handler.
+
+## Schedule a future broadcast (alarms)
+
+Recognise `/remind <seconds> <message>` inside `webSocketMessage`
+and schedule a job using the callback handle:
 
 ```diff lang="typescript"
 webSocketMessage: Effect.fn(function* (socket, message) {
@@ -498,9 +529,11 @@ webSocketMessage: Effect.fn(function* (socket, message) {
 +  if (remindMatch) {
 +    const delaySec = parseInt(remindMatch[1], 10);
 +    const reminder = remindMatch[2];
-+    const id = crypto.randomUUID();
-+    const runAt = new Date(Date.now() + delaySec * 1000);
-+    yield* Cloudflare.Workers.scheduleEvent(id, runAt, { message: reminder });
++    const id = yield* Effect.sync(() => crypto.randomUUID());
++    yield* onReminder.schedule(id, {
++      after: `${delaySec} seconds`,
++      payload: { message: reminder },
++    });
 +    yield* socket.send(`[system] Reminder scheduled in ${delaySec}s`);
 +    return;
 +  }
@@ -509,36 +542,28 @@ webSocketMessage: Effect.fn(function* (socket, message) {
 }),
 ```
 
-`scheduleEvent` upserts a row into a DO-local SQLite table and
-sets the DO alarm to the earliest pending timestamp. The `id` is
-the upsert key, so reusing it overwrites the previous schedule.
+Each random ID creates an independent reminder in this Room. Reusing
+an ID would replace its pending reminder; `onReminder.cancel(id)`
+cancels it. The payload is typed by the registered handler.
 
-Now add an `alarm` handler to drain fired events:
+:::caution[Broadcasts can repeat]
+Callback delivery is at least once. If a broadcast reaches some peers
+and then fails, a retry can send the reminder again. For deduplicated
+messages, include a stable message ID and have clients ignore IDs they
+have already received. This example delivers to the peers connected
+when it runs; it does not queue messages for disconnected users.
+:::
 
-```diff lang="typescript"
-return {
-  fetch: /* ... */,
-  webSocketMessage: /* ... */,
-  webSocketClose: /* ... */,
-+  alarm: () =>
-+    Effect.gen(function* () {
-+      const fired = yield* Cloudflare.Workers.processScheduledEvents;
-+      for (const event of fired) {
-+        const payload = event.payload as { message: string };
-+        yield* broadcast(`[reminder] ${payload.message}`);
-+      }
-+    }),
-  broadcast,
-};
-```
+If you previously deployed this tutorial using `scheduleEvent`, keep
+your existing `alarm` handler and `processScheduledEvents` call until
+those jobs drain. Old rows are preserved, not converted to callbacks.
+See [upgrading existing schedules](/cloudflare/compute/durable-objects#upgrade-existing-schedules)
+and the [native alarm retry limitation](/cloudflare/compute/durable-objects#retry-failed-callbacks).
 
-`processScheduledEvents` returns every event whose `runAt <= now`,
-deletes the one-shot ones (or re-schedules repeating ones), and
-re-sets the alarm to the next pending event. All you do is loop
-over the returned events and act on them.
+## Verify the reminder
 
-Verify it with a test that sends `/remind 1 hello` and waits up to
-5 seconds for the broadcast to arrive:
+Add a test that sends `/remind 1 hello` and waits for the callback's
+broadcast:
 
 ```typescript
 // test/integ.test.ts (additions)

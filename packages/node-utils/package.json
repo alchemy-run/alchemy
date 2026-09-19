@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/node-utils",
-  "version": "2.0.0-beta.76",
+  "version": "2.0.0-beta.79",
   "description": "Runtime utilities for Alchemy packages.",
   "homepage": "https://alchemy.run",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -38,11 +38,6 @@
       "bun": "./src/ignore.ts",
       "import": "./lib/ignore.js"
     },
-    "./import-loader": {
-      "types": "./lib/import-loader.d.ts",
-      "bun": "./src/import-loader.ts",
-      "import": "./lib/import-loader.js"
-    },
     "./register-oxc": {
       "types": "./lib/register-oxc.d.ts",
       "bun": "./src/register-oxc.ts",
@@ -60,14 +55,14 @@
     }
   },
   "dependencies": {
-    "chokidar": "^5.0.0",
-    "rolldown": "catalog:build"
+    "chokidar": "catalog:",
+    "rolldown": "catalog:"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
-    "@types/bun": "catalog:tooling",
-    "typescript": "catalog:build"
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
   }
 }

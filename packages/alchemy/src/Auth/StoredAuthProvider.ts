@@ -239,7 +239,7 @@ export const makeStoredAuthProvider = <Resolved>(
             )
           : Effect.fail(
               new AuthError({
-                message: `${provider}: unknown method '${input.method}'. Only 'stored' is supported.`,
+                message: `${provider}: unknown method '${input.method}'. Valid methods: stored.`,
               }),
             );
 

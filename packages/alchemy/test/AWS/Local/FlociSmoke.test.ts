@@ -3,22 +3,25 @@
  *
  * Deploys real AWS resources (S3 Bucket, SQS Queue, DynamoDB Table) through
  * the regular live providers, but pointed at a locally-running floci emulator
- * via the `{ method: "local" }` AWS auth method.
+ * via the floci-scoped environment the local AWS providers carry.
  *
  * ## How local mode is activated
  *
  * The AWS auth method is normally chosen by the profile entry in
  * `~/.alchemy/profiles.json` (written by `alchemy profile edit`). Tests
- * must not depend on the developer's on-disk profiles. Local AWS providers
- * carry their own floci-scoped environment, which resolves dummy credentials
- * (`test`/`test`), accountId `000000000000`, and endpoint
- * `http://localhost:4566`, and `ensureFloci()` guarantees the emulator is
- * serving (starting the `alchemy-floci` container if needed).
+ * must not depend on the developer's on-disk profiles. `Test.make({ dev:
+ * true })` runs the stack the way `alchemy dev` does, so the local AWS
+ * providers are selected; they carry their own floci-scoped environment,
+ * which resolves dummy credentials (`test`/`test`), accountId
+ * `000000000000`, and endpoint `http://localhost:4566`, and `ensureFloci()`
+ * guarantees the emulator is serving (starting the `alchemy-floci`
+ * container if needed). Without `dev: true` the live providers run against
+ * whatever account the profile resolves — the real cloud.
  *
  * ## Why no real-AWS calls can happen
  *
- * The `local` method's credentials are hardcoded dummies and its accountId is
- * fixed — it never calls STS. Every SDK call carries the emulator endpoint
+ * The floci environment's credentials are hardcoded dummies and its accountId
+ * is fixed — it never calls STS. Every SDK call carries the emulator endpoint
  * (via `Endpoint.fromEnvironment`); if any call ever escaped to real AWS it
  * would fail auth immediately (the dummy keys exist in no real account).
  *
@@ -55,7 +58,9 @@ const dockerAvailable = (() => {
 
 const providers = AWS.providers();
 
-const { test } = Test.make({ providers });
+// `dev: true` runs the same topology as the real `alchemy dev` command
+// (including the RPC sidecar default for RPC-backed providers).
+const { test } = Test.make({ providers, dev: true });
 
 /**
  * Raw (non-distilled) call against the emulator gateway — out-of-band proof

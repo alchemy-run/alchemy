@@ -71,6 +71,8 @@ export interface NodeServeEntryOptions {
    * @default "none"
    */
   readonly notFoundHandling?: NodeServeNotFoundHandling | undefined;
+  /** HTML file served for a 404-page fallback, relative to the client directory. @default "404.html" */
+  readonly errorPage?: string | undefined;
   /** @default 3000 */
   readonly defaultPort?: number | undefined;
   /**
@@ -210,14 +212,15 @@ ${
 }  return undefined;
 };
 
+// Never mark files immutable: a service worker, web manifest, or any
+// other unhashed file served with \`immutable\` pins the old app version
+// in the browser until the user clears storage, and every deploy must be
+// able to bust what it ships.
 const sendFile = (res, filePath, status) => {
   const ext = path.extname(filePath).toLowerCase();
-  const immutable = ext !== ".html" && ext !== ".htm";
   res.writeHead(status, {
     "content-type": MIME[ext] ?? "application/octet-stream",
-    "cache-control": immutable
-      ? "public, max-age=31536000, immutable"
-      : "public, max-age=0, must-revalidate",
+    "cache-control": "no-cache",
   });
   fs.createReadStream(filePath).pipe(res);
 };
@@ -253,7 +256,7 @@ ${
     : ""
 }${
         notFoundPage
-          ? `      const notFound = lookupStatic("/404.html");
+          ? `      const notFound = lookupStatic(${JSON.stringify(`/${options.errorPage ?? "404.html"}`)});
       if (notFound !== undefined) {
         if (req.method === "HEAD") {
           res.writeHead(404);

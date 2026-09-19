@@ -176,16 +176,21 @@ const accountIdField: ConfigureField = {
   validate: validateAccountIdField,
 };
 
-/** `--set` fields for `--method api-token`. */
-const apiTokenFields: ReadonlyArray<ConfigureField> = [
-  { name: "apiToken", label: "Cloudflare API Token", secret: true },
-  accountIdField,
-];
-
-/** `--set` fields for `--method api-key`. */
-const apiKeyFields: ReadonlyArray<ConfigureField> = [
-  { name: "apiKey", label: "Cloudflare API Key", secret: true },
-  { name: "email", label: "Cloudflare Email" },
+/**
+ * `--set` fields for `--method stored`. The persisted `credentialType` is
+ * inferred from which secret is supplied: `apiToken` alone, or `apiKey`
+ * together with `email`.
+ */
+const storedFields: ReadonlyArray<ConfigureField> = [
+  {
+    name: "apiToken",
+    label: "Cloudflare API Token",
+    description: "Pass either apiToken, or apiKey together with email.",
+    secret: true,
+    optional: true,
+  },
+  { name: "apiKey", label: "Cloudflare API Key", secret: true, optional: true },
+  { name: "email", label: "Cloudflare Email", optional: true },
   accountIdField,
 ];
 
@@ -194,8 +199,7 @@ const apiKeyFields: ReadonlyArray<ConfigureField> = [
  * interactive-only (browser grant).
  */
 const configureMethods: ReadonlyArray<ConfigureMethod> = [
-  { method: "api-token", fields: apiTokenFields },
-  { method: "api-key", fields: apiKeyFields },
+  { method: "stored", fields: storedFields },
 ];
 
 const promptOAuthScopes = (currentConfig?: CloudflareAuthConfig) =>
@@ -793,10 +797,9 @@ export const CloudflareAuth = AuthProviderLayer<
       );
 
     /**
-     * Persist flag-provided stored credentials (`--method api-token` /
-     * `--method api-key`). Writes the same `cloudflare-stored` file the
-     * interactive stored path writes; OAuth is interactive-only and not
-     * accepted here.
+     * Persist flag-provided stored credentials (`--method stored`). Writes
+     * the same `cloudflare-stored` file the interactive stored path writes;
+     * OAuth is interactive-only and not accepted here.
      */
     const configureWith = (
       profileName: string,
@@ -809,57 +812,57 @@ export const CloudflareAuth = AuthProviderLayer<
         store
           .delete(profileName, STATE_STORE_CREDENTIALS_FILE)
           .pipe(Effect.ignore, Effect.as(config));
-      return Match.value(input.method).pipe(
-        Match.when("api-token", () =>
-          validateFieldValues(
-            CLOUDFLARE_AUTH_PROVIDER_NAME,
-            apiTokenFields,
-            input.values,
-          ).pipe(
-            Effect.flatMap((values) =>
-              persist({
-                method: "stored",
-                credentialType: "apiToken",
-                apiToken: Redacted.value(
-                  storedSecret(values.apiToken) ?? Redacted.make(""),
-                ),
-                accountId: (storedValueText(values.accountId) ?? "")
-                  .trim()
-                  .toLowerCase(),
-              }),
-            ),
-          ),
-        ),
-        Match.when("api-key", () =>
-          validateFieldValues(
-            CLOUDFLARE_AUTH_PROVIDER_NAME,
-            apiKeyFields,
-            input.values,
-          ).pipe(
-            Effect.flatMap((values) =>
-              persist({
-                method: "stored",
-                credentialType: "apiKey",
-                apiKey: Redacted.value(
-                  storedSecret(values.apiKey) ?? Redacted.make(""),
-                ),
-                email: Redacted.value(
-                  storedSecret(values.email) ?? Redacted.make(""),
-                ),
-                accountId: (storedValueText(values.accountId) ?? "")
-                  .trim()
-                  .toLowerCase(),
-              }),
-            ),
-          ),
-        ),
-        Match.orElse(() =>
-          Effect.fail(
+      if (input.method !== "stored") {
+        return Effect.fail(
+          new AuthError({
+            message: `Cloudflare: unknown method '${input.method}'. Valid methods: stored. (OAuth is interactive-only.)`,
+          }),
+        );
+      }
+      return validateFieldValues(
+        CLOUDFLARE_AUTH_PROVIDER_NAME,
+        storedFields,
+        input.values,
+      ).pipe(
+        Effect.flatMap((values) => {
+          const accountId = (storedValueText(values.accountId) ?? "")
+            .trim()
+            .toLowerCase();
+          const apiToken = storedSecret(values.apiToken);
+          const apiKey = storedSecret(values.apiKey);
+          const email = storedValueText(values.email);
+          if (
+            apiToken !== undefined &&
+            apiKey === undefined &&
+            email === undefined
+          ) {
+            return persist({
+              method: "stored",
+              credentialType: "apiToken",
+              apiToken: Redacted.value(apiToken),
+              accountId,
+            });
+          }
+          if (
+            apiToken === undefined &&
+            apiKey !== undefined &&
+            email !== undefined
+          ) {
+            return persist({
+              method: "stored",
+              credentialType: "apiKey",
+              apiKey: Redacted.value(apiKey),
+              email,
+              accountId,
+            });
+          }
+          return Effect.fail(
             new AuthError({
-              message: `Cloudflare: unknown method '${input.method}'. Valid methods: api-token, api-key. (OAuth is interactive-only.)`,
+              message:
+                "Cloudflare: pass either --set apiToken=<token>, or both --set apiKey=<key> and --set email=<email>.",
             }),
-          ),
-        ),
+          );
+        }),
       );
     };
 

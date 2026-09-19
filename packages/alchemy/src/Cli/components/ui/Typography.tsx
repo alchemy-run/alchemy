@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import {
   Hyperlink as SigilHyperlink,
   Text as SigilText,

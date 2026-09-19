@@ -76,6 +76,7 @@ const make = (
     command: string,
     args: Array<string>,
     config: Buffer,
+    configuredAddresses: Array<string>,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
 ) =>
   Workerd.of({
@@ -96,6 +97,24 @@ const make = (
             );
           });
         }
+        const socketOverride = args?.["socket-addr"];
+        const override =
+          typeof socketOverride === "string" ? socketOverride.indexOf("=") : -1;
+        const configuredAddresses = (config.sockets ?? []).flatMap((socket) => {
+          const address =
+            typeof socketOverride === "string" &&
+            override >= 0 &&
+            socketOverride.slice(0, override) === socket.name
+              ? socketOverride.slice(override + 1)
+              : socket.address;
+          return address ? [address] : [];
+        });
+        for (const key of ["debug-port", "inspector-addr"]) {
+          const address = args?.[key];
+          if (typeof address === "string" || typeof address === "number") {
+            configuredAddresses.push(String(address));
+          }
+        }
         const handle = yield* spawn(
           workerd.bin,
           [
@@ -109,6 +128,7 @@ const make = (
             "-",
           ],
           Buffer.from(serializeConfig(config)),
+          configuredAddresses,
         );
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
@@ -197,7 +217,7 @@ const externalEnv = () => {
 };
 
 const makeBun = () =>
-  make((command, args, config) =>
+  make((command, args, config, configuredAddresses) =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
@@ -253,7 +273,12 @@ const makeBun = () =>
               void stderr.done.then(async (text) => {
                 await child.exited.catch(() => null);
                 resume(
-                  classifyWorkerdError(text, child.exitCode, child.signalCode),
+                  classifyWorkerdError(
+                    text,
+                    child.exitCode,
+                    child.signalCode,
+                    configuredAddresses,
+                  ),
                 );
               });
             }),
@@ -269,7 +294,7 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args, config) =>
+  make((command, args, config, configuredAddresses) =>
     Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
@@ -382,6 +407,7 @@ const makeNode = () =>
                   stderr || "Node child process stderr is empty.",
                   child.exitCode,
                   child.signalCode,
+                  configuredAddresses,
                 ),
               );
             };
@@ -447,6 +473,7 @@ const classifyWorkerdError = (
   stderr: string | undefined,
   exitCode: number | null,
   signal: NodeJS.Signals | null,
+  configuredAddresses: Array<string>,
 ): ConfigError | SystemError => {
   const text = (stderr ?? "").trim();
   const detail = { stderr: text, exitCode, signal };
@@ -473,16 +500,18 @@ const classifyWorkerdError = (
   }
 
   // Pattern: address-in-use comes through as a `kj::Exception`. The offending
-  // address is reported via workerd's `toString() = <address>` suffix.
+  // address was reported by the C++ backend; the Rust backend omits it.
   if (/Address already in use/i.test(text)) {
     const address = text.match(/toString\(\) = (\S+)/)?.[1];
     return new ConfigError({
       subtag: ADDRESS_IN_USE_SUBTAG,
       message: address
         ? `The Workers runtime could not bind to ${address} (already in use).`
-        : "The Workers runtime could not bind to the requested address (already in use).",
+        : configuredAddresses.length > 0
+          ? `The Workers runtime could not bind (address already in use). Configured listeners: ${configuredAddresses.join(", ")}.`
+          : "The Workers runtime could not bind to the requested address (already in use).",
       hint: "Pick a different port or stop the process using it.",
-      detail: { ...detail, address },
+      detail: { ...detail, address, configuredAddresses },
     });
   }
 

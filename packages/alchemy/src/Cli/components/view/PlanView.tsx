@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 /**
  * THE plan renderer. Every surface that shows a plan tree — `alchemy plan`
  * output, the approval prompt, and the live apply/dev/destroy progress —
@@ -17,7 +17,8 @@
  * - Property diffs (`detailed`) render in every mode, and the window is
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
-import { useMemo, useSyncExternalStore, type JSX, type ReactNode } from "react";
+import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { JSX, ReactNode } from "react";
 import {
   Box,
   KeyBar,
@@ -36,7 +37,12 @@ import type { ActionVerb, PlanSummaryCounts } from "../../NamespaceTree.ts";
 import { formatModeNote } from "../../ModeTag.ts";
 import { theme } from "../../CliKit/index.ts";
 import { formatElapsed } from "../../Format.ts";
-import { actionStyle, applyStatusColor, isInProgress } from "./statusStyle.ts";
+import {
+  actionStyle,
+  applyStatusColor,
+  isInProgress,
+  isTerminalStatus,
+} from "./statusStyle.ts";
 import { matchYamlChange, matchYamlKey } from "../../PropertyDiff.ts";
 import { NamespaceRow, namespaceStyle } from "./PlanRow.tsx";
 import { StackOutputs } from "./StackOutputs.tsx";
@@ -290,8 +296,10 @@ function PlanContent(props: {
             row={row}
             mode={tree.mode}
             detailed={tree.detailed}
-            state={state.tasks.get(row.key)}
-            defaultMode={tree.plan.defaultMode}
+            state={state.tasks.get(
+              row.type === "binding" ? row.hostKey : row.key,
+            )}
+            defaultMode={tree.defaultMode}
           />
         ))
       ) : (
@@ -303,8 +311,10 @@ function PlanContent(props: {
               mode={tree.mode}
               detailed={tree.detailed}
               includeYaml={false}
-              state={state.tasks.get(line.row.key)}
-              defaultMode={tree.plan.defaultMode}
+              state={state.tasks.get(
+                line.row.type === "binding" ? line.row.hostKey : line.row.key,
+              )}
+              defaultMode={tree.defaultMode}
             />
           ) : line.kind === "yaml" ? (
             <YamlLine
@@ -367,27 +377,26 @@ function PlanRowView(props: {
         </Row>
       );
     }
-    const status: ApplyStatus =
-      state?.status ?? (row.action === "noop" ? "created" : "pending");
-    const displayStatus =
-      row.action === "noop" && (status === "created" || status === "updated")
-        ? ("no change" as const)
-        : status;
+    // `state` is the HOST resource's row state: a binding is reconciled by
+    // the resource that carries it, so it settles exactly when the host does.
+    const hostStatus: ApplyStatus = state?.status ?? "pending";
+    const status: ApplyStatus | "no change" =
+      row.action === "noop" ? "no change" : hostStatus;
     const color =
-      row.action === "delete"
-        ? theme.color.muted
-        : applyStatusColor(displayStatus);
+      row.action === "delete" ? theme.color.muted : applyStatusColor(status);
     const bindingStatus =
       row.action !== "delete"
-        ? displayStatus
-        : status === "deleted"
-          ? "unbound"
-          : status === "deleting"
-            ? "unbinding"
-            : "unbind";
+        ? status
+        : hostStatus === "fail"
+          ? "fail"
+          : isTerminalStatus(hostStatus)
+            ? "unbound"
+            : isInProgress(hostStatus)
+              ? "unbinding"
+              : "unbind";
     return (
       <TaskRow
-        spinning={isInProgress(status)}
+        spinning={status !== "no change" && isInProgress(hostStatus)}
         icon={
           status === "pending"
             ? glyphs.bullet
@@ -405,13 +414,9 @@ function PlanRowView(props: {
             {row.id}
           </Text>
         }
-        detail={rowDetail(status, state?.message)}
         depth={row.depth}
       >
         <Text color={color}>{bindingStatus}</Text>
-        {state?.elapsedMs === undefined ? null : (
-          <Text tone="muted">({formatElapsed(state.elapsedMs)})</Text>
-        )}
       </TaskRow>
     );
   }
@@ -496,9 +501,12 @@ function PlanRowView(props: {
             </Text>
           }
           depth={row.depth}
+          detail={row.detail}
         >
           {modeNote && <Text tone="muted">({modeNote})</Text>}
-          <Text tone="muted">({row.resourceType})</Text>
+          {row.id !== row.resourceType ? (
+            <Text tone="muted">({row.resourceType})</Text>
+          ) : null}
         </TaskRow>
         {yaml}
       </Box>
@@ -530,8 +538,11 @@ function PlanRowView(props: {
               <Text tone="muted">{row.id}</Text>
             ) : (
               row.id
-            )}{" "}
-            <Text tone="muted">({row.resourceType})</Text>
+            )}
+            {row.id !== row.resourceType ? (
+              <Text tone="muted"> ({row.resourceType})</Text>
+            ) : null}
+            {row.detail ? <Text tone="muted"> · {row.detail}</Text> : null}
           </>
         }
         detail={rowDetail(rowState.status, rowState.message)}

@@ -1,7 +1,7 @@
 /**
  * Credential-free `alchemy dev` for AWS.
  *
- * THE RULING: `{ method: "local" }` is invisible plumbing — `alchemy dev`
+ * THE RULING: local emulation is invisible plumbing — `alchemy dev`
  * with zero AWS credentials must work, landing every emulatable resource in
  * the local floci emulator, while `Alchemy.remote()` resources demand real
  * credentials up front with a typed, actionable error.

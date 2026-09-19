@@ -9,7 +9,7 @@ import type { Output } from "../../Output.ts";
 // @cloudflare/workers-types, referenced above) stays reachable for
 // `Rpc.DurableObjectBranded`.
 import type { Rpc as AlchemyRpc } from "../../Rpc.ts";
-import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
 // circular re-export when the barrel does `export * from "./Workers/index.ts"`
@@ -50,16 +50,18 @@ export type InferEnv<W> =
     ? InferEnv<A>
     : W extends Worker<any>
       ? InferEnv<Exclude<W["Props"]["env"], undefined>>
-      : {
-          [k in keyof W]: GetBindingType<W[k]>;
-        };
+      : W extends { readonly "~alchemy/WorkerEnv": infer Env }
+        ? InferEnv<Env>
+        : {
+            [k in keyof W]: GetBindingType<W[k]>;
+          };
 
 export type GetBindingType<T> =
   // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
   // Tested first: the marker *contains* a Worker, so the later Worker
   // branches must never see it.
-  T extends WorkerEntrypointBinding
-    ? Fetcher
+  T extends WorkerEntrypointBinding<infer Entrypoint>
+    ? Service<Entrypoint>
     : // A Container bound in `env` is a container-backed Durable Object class —
       // the runtime binding is the class's namespace. Must be tested BEFORE the
       // generic Effect unwrap: a Container declaration is itself an Effect.
@@ -128,9 +130,13 @@ export type GetBindingType<T> =
                                                       ? WorkerVersionMetadata
                                                       : T extends WorkerLoaderResource
                                                         ? WorkerLoader
-                                                        : T extends WorkflowLike<
-                                                              infer Params
-                                                            >
+                                                        : T extends
+                                                              | WorkflowLike<
+                                                                  infer Params
+                                                                >
+                                                              | WorkflowBinding<
+                                                                  infer Params
+                                                                >
                                                           ? Workflow<Params>
                                                           : T extends DurableObjectLike
                                                             ? DurableObjectNamespace<

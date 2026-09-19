@@ -8,6 +8,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
+import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {
@@ -51,6 +52,9 @@ export const devCommand = Command.make(
       // hits both processes and the interrupt message prints twice.
       yield* suppressInterruptMessages;
       const options = yield* Schema.encodeEffect(DevOptions)(args);
+      // A missing entry is this process's error to report, not a stack
+      // trace out of the exec child.
+      yield* resolveStackEntrypoint(options.main);
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
@@ -66,33 +70,21 @@ export const devCommand = Command.make(
       // Bun (which cannot evict evaluated modules) it tears down and exits
       // with DEV_RELOAD_EXIT_CODE, and this supervisor starts a fresh child.
       let command: [string, ...string[]];
+      const entry = fileURLToPath(import.meta.resolve("alchemy/bin/exec.js"));
       if (typeof globalThis.Bun !== "undefined") {
-        command = [
-          "bun",
-          "run",
-          ...process.execArgv,
-          fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
-        ];
+        command = ["bun", "run", ...process.execArgv, entry];
       } else {
         // Node: the exec entry runs with alchemy's Oxc loader hooks,
-        // exactly as bin/cli.js started this process (checkout: the
-        // .ts entry plus src-condition resolution; published: the .js
-        // bundle plus the loader for the user's stack). Node's own
-        // TypeScript support is never relied on. `process.execPath`,
+        // exactly as bin/cli.js started this process. Select the loader from
+        // this module's source or compiled location; the entry is always JS.
+        // Node's own TypeScript support is never relied on. `process.execPath`,
         // not "node": the hooks are gated on THIS node's version. A
         // duplicate --import inherited via execArgv is harmless — the
         // second import of the same URL hits the module cache.
-        const entry = fileURLToPath(
-          import.meta.resolve(
-            import.meta.url.endsWith(".ts")
-              ? "alchemy/bin/exec.ts"
-              : "alchemy/bin/exec.js",
-          ),
-        );
         command = [
           process.execPath,
           ...process.execArgv,
-          ...nodeLoaderArgs(entry),
+          ...nodeLoaderArgs(import.meta.url),
           entry,
         ];
       }
