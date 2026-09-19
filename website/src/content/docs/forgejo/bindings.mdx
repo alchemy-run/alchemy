@@ -1,0 +1,298 @@
+---
+title: HTTP bindings & repository events
+description: Use provider-independent Forgejo HTTP clients with automatically provisioned tokens, and receive signed repository events.
+---
+
+Forgejo's `*Http` layers work across Alchemy runtime providers. Configure
+your [Forgejo profile](/forgejo/setup), declare a repository, and provide
+the HTTP layers for the capabilities your handler uses. Alchemy creates
+restricted API tokens, binds them through the shared runtime APIs, and
+revokes managed tokens when their bindings are removed. The same layers
+are used in Workers, Lambda functions, and other Alchemy runtime hosts.
+
+Repository event subscriptions also generate and persist their own
+signing secret. You do not need to create a token, set a webhook secret,
+or copy either value into the host's environment.
+
+## Declare a repository
+
+```typescript
+// repository.ts
+import * as Forgejo from "alchemy/Forgejo";
+
+export const Repository = Forgejo.Repository("Repository", {
+  owner: "acme",
+  name: "api",
+  private: true,
+  autoInit: true,
+});
+```
+
+An existing repository requires [explicit adoption](/forgejo/repository#adopt-an-existing-repository).
+The resource supplies the instance and repository identity to its clients.
+
+## Read from a Worker
+
+```typescript
+// worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Forgejo from "alchemy/Forgejo";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Repository } from "./repository.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const repo = yield* Repository;
+    const repository = yield* Forgejo.ReadRepository(repo);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const details = yield* repository.get().pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(details);
+      }),
+    };
+  }).pipe(Effect.provide(Forgejo.ReadRepositoryHttp)),
+) {}
+```
+
+The binding is acquired during initialization. Its client methods run
+inside the handler and require `Alchemy.RuntimeContext`.
+`Forgejo.ReadRepositoryHttp` supplies the read client implementation and
+creates credentials only when you bind a repository. The example turns
+SDK errors into handler failures with `Effect.orDie`; applications can
+instead handle the SDK's typed error tags.
+
+## Register both providers
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Forgejo from "alchemy/Forgejo";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./worker.ts";
+
+export default Alchemy.Stack(
+  "ForgejoApp",
+  {
+    providers: Layer.mergeAll(
+      Cloudflare.providers(),
+      Forgejo.providers(),
+    ),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+The stack provider layers provision infrastructure. The implementation
+layer on the Worker supplies its runtime capabilities. The deployment
+profile credential remains deployment-only; the Worker receives its
+own repository-restricted token.
+
+## Choose an access level
+
+| Capability | HTTP layer | Methods |
+| --- | --- | --- |
+| `Forgejo.ReadRepository(repo)` | `Forgejo.ReadRepositoryHttp` | `get`, `getTopics`, `getContent` |
+| `Forgejo.WriteRepository(repo)` | `Forgejo.WriteRepositoryHttp` | `setTopics`, `createFile`, `updateFile`, `deleteFile` |
+| `Forgejo.ReadWriteRepository(repo)` | `Forgejo.ReadWriteRepositoryHttp` | Repository read and write methods |
+| `Forgejo.ReadIssues(repo)` | `Forgejo.ReadIssuesHttp` | `list`, `get`, `listComments` |
+| `Forgejo.WriteIssues(repo)` | `Forgejo.WriteIssuesHttp` | `create`, `update`, `createComment` |
+| `Forgejo.ReadWriteIssues(repo)` | `Forgejo.ReadWriteIssuesHttp` | Issue read and write methods |
+
+Read clients use `read:repository` or `read:issue`; write clients use
+the corresponding write scope. Forgejo scopes are the server's
+permission boundary: a small client interface does not make the token
+more restrictive than that server scope. Tokens are restricted to the
+bound repository, and read-only clients do not reuse a write client's
+token.
+
+For example, bind an issue writer during initialization:
+
+```typescript
+const issues = yield* Forgejo.WriteIssues(repo);
+```
+
+Use it inside a runtime handler:
+
+```typescript
+const issue = yield* issues.create({
+  title: "Deployment failed",
+  body: "The deployment health check failed.",
+});
+```
+
+The binding supplies the owner and repository. Request and response
+types otherwise follow the generated SDK.
+
+Forgejo 16.0.3 denies topic changes made with repository-restricted
+tokens, even with `write:repository`. `setTopics` therefore returns the
+SDK's typed `Forbidden` error with automatically provisioned credentials.
+Manage topics through the repository resource, or explicitly supply an
+external credential authorized for that operation. Alchemy does not
+broaden a managed token to bypass this server restriction. If a runtime
+manages topics with external credentials, omit `topics` from the resource
+to avoid competing desired-state declarations.
+
+## Use the same clients in Lambda
+
+Provide the same `Forgejo.ReadRepositoryHttp` layer on an Effect-native
+Lambda implementation; the HTTP client has no Lambda-specific implementation:
+
+```typescript
+import * as Lambda from "alchemy/AWS/Lambda";
+import * as Forgejo from "alchemy/Forgejo";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Repository } from "./repository.ts";
+
+export class Api extends Lambda.Function<Api>()("Api") {}
+
+export default Api.make(
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const repo = yield* Repository;
+    const repository = yield* Forgejo.ReadRepository(repo);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const details = yield* repository.get().pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(details);
+      }),
+    };
+  }).pipe(Effect.provide(Forgejo.ReadRepositoryHttp)),
+);
+```
+
+Register the Lambda implementation on the stack effect:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Forgejo from "alchemy/Forgejo";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import ApiLive, { Api } from "./lambda.ts";
+
+export default Alchemy.Stack(
+  "ForgejoLambdaApp",
+  {
+    providers: Layer.mergeAll(AWS.providers(), Forgejo.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.functionUrl };
+  }).pipe(Effect.provide(ApiLive)),
+);
+```
+
+`Api.make` returns the implementation layer for the declared Function.
+The client API is the same as the Worker's; the host layer handles environment
+and secret bindings.
+
+## Rotate a managed token
+
+Change the binding's `rotation` value to request a new managed token:
+
+```typescript
+const repository = yield* Forgejo.ReadRepository(repo, {
+  rotation: "credentials-v2",
+});
+```
+
+Keep the value unchanged between rotations. Alchemy provisions the
+successor token, updates the host, and then revokes the predecessor.
+An unchanged deployment preserves the existing token.
+
+For an externally managed token, pass `token` and a stable, non-secret
+`credentialId` instead:
+
+```typescript
+const repository = yield* Forgejo.ReadRepository(repo, {
+  token: Config.Redacted("FORGEJO_READER_TOKEN"),
+  credentialId: "repository-reader",
+});
+```
+
+Import `Config` from `effect/Config`. Give each distinct external credential
+on a host a different identifier, and keep that identifier unchanged across
+deployments. It keeps clients associated with the correct token even when
+initialization order changes. Alchemy binds the value but does not create or
+revoke it; automatic provisioning remains the default when `token` is omitted.
+
+## Receive signed repository events
+
+Receiving webhooks is separate from the outbound HTTP clients. A receiver
+adapter registers the host's incoming request handler and public URL. For a
+Worker, yield this subscription effect during initialization, before returning
+its handlers:
+
+```typescript
+import { RepositoryEventSourceCloudflare } from "alchemy/Forgejo/RepositoryEventSourceCloudflare";
+
+const subscribe = Effect.gen(function* () {
+  const repo = yield* Repository;
+  yield* Forgejo.RepositoryEventSource(
+    repo,
+    { events: ["push", "issues"] },
+    (event) =>
+      Effect.gen(function* () {
+        if (event.name === "push") {
+          yield* Effect.log(`Push ${event.id}: ${event.payload.ref}`);
+        } else {
+          yield* Effect.log(`Issue event ${event.id}`);
+        }
+      }),
+  );
+}).pipe(Effect.provide(RepositoryEventSourceCloudflare));
+```
+
+For Lambda, provide `RepositoryEventSourceLambda` from
+`alchemy/Forgejo/RepositoryEventSourceLambda` instead. These adapters only
+receive events; repository and issue clients still use the same `*Http` layers.
+
+The binding creates a signing secret and a Webhook targeting the host,
+then verifies signatures before invoking the handler. The generated
+secret is persisted in state and reused on unchanged deployments.
+Missing or invalid signatures are rejected; unrelated routes continue
+to the application's handler. Event selection narrows the validated
+payload type. The supported event types are `push` and `issues`.
+
+An optional `secret` input lets an application use an externally managed
+signing secret. Omitting it generates one automatically; it never disables
+verification. Forgejo 16.0.3 cannot edit a hook's signing secret, so a
+secret change replaces the hook and can interrupt delivery during
+replacement. A failed replacement can extend that gap until recovery.
+
+## Bootstrap permissions and cleanup
+
+Automatic token creation uses Forgejo's administrator token API. The
+configured deployment credential must have the corresponding admin
+permission and access to the target repository. An ordinary non-admin
+personal access token cannot mint child tokens through that API.
+Alchemy reports insufficient provisioning permissions rather than
+forwarding the deployment credential to a runtime. Webhook-only
+subscriptions need permission to manage hooks, not to mint API tokens.
+
+Managed tokens and hooks belong to their bindings. Removing the binding
+or destroying its host removes that authentication infrastructure, even
+when the repository itself is retained. Generated tokens use distinct
+physical names so a replacement can be provisioned and delivered to
+consumers before its predecessor is revoked. Protect the state store:
+Forgejo returns token plaintext only once.
+
+## Next steps
+
+- [Setup](/forgejo/setup) — configure the deployment profile.
+- [Repositories](/forgejo/repository) — ownership, settings, and retention.
+- [Actions secrets & variables](/forgejo/actions-config) — configure Forgejo Actions rather than a Worker or Lambda.

@@ -1,0 +1,184 @@
+---
+title: Setup
+description: Connect alchemy to a self-hosted Forgejo instance — instance URL, token, and scopes.
+---
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Forgejo from "alchemy/Forgejo";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Forgejo.providers()),
+```
+
+Then connect the provider:
+
+```sh
+alchemy profile edit --add Forgejo
+```
+
+Forgejo is self-hosted, so the instance URL is part of the credential
+rather than a constant. The prompt asks for both, and stores them
+together under `~/.alchemy/credentials/<profile>/` — one profile names
+both which instance to talk to and how to authenticate against it.
+`alchemy profile show` renders the stored URL in the clear and redacts
+the token.
+
+To configure it non-interactively:
+
+```sh
+alchemy profile edit --add Forgejo --method stored \
+  --set baseUrl=https://git.example.com \
+  --set token=<access token>
+```
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## CI
+
+When `CI=true`, profiles are bypassed and alchemy reads the
+environment directly:
+
+```sh
+FORGEJO_URL=https://git.example.com
+FORGEJO_TOKEN=<access token>
+```
+
+`FORGEJO_URL` may be the instance origin or its API base — both
+`https://git.example.com` and `https://git.example.com/api/v1`
+resolve to the same API root.
+
+## Pin credentials in code
+
+Pass them explicitly when they come from somewhere other than the
+environment:
+
+```typescript
+providers: Forgejo.providers({
+  baseUrl: "https://git.example.com",
+  token: process.env.FORGEJO_TOKEN!,
+}),
+```
+
+`token` accepts a plain string or a `Redacted` value.
+
+## Token scopes
+
+Generate a token under **Settings → Applications → Access Tokens** on
+your instance. Grant only what the stack touches:
+
+- `write:repository` — [repositories](/forgejo/repository), labels,
+  branch protection, webhooks, and repository-scoped
+  [Actions secrets and variables](/forgejo/actions-config).
+- `write:organization` — [teams and their membership](/forgejo/organizations),
+  and organization-scoped Actions configuration.
+- `write:user` — user-scoped Actions configuration.
+- `write:admin` — required to create [organizations](/forgejo/organizations)
+  and `ApiToken` resources, which go through Forgejo's `/admin` endpoints.
+
+Deleting a repository needs no extra scope, but repositories default
+to retain on removal, so you only reach that path if you opt in with
+`destroy()`.
+
+## Automatic runtime credentials
+
+[HTTP bindings](/forgejo/bindings) use this profile at
+deployment to create their own repository-restricted tokens. Configure
+the deployment profile with administrator token-management permission
+when using API clients. A non-admin personal access token cannot create
+child tokens through Forgejo's administrator API.
+
+The host receives only the restricted runtime token, never this profile's
+credential. Repository-event bindings generate their signing secret and
+configure the webhook automatically; webhook-only subscriptions do not
+need token-minting permission. There is no extra webhook-secret profile
+field or runtime token environment variable to configure manually.
+
+## Programmatic credentials
+
+Build the credentials layer directly from a token you already have —
+useful in tests:
+
+```typescript
+Effect.provide(Forgejo.fromToken({
+  baseUrl: "https://git.example.com",
+  token,
+}))
+```
+
+`Forgejo.fromEnv()` builds the same layer from `FORGEJO_URL` and
+`FORGEJO_TOKEN`, failing with `MissingForgejoEnvironment` when either
+is unset or empty, and `Forgejo.fromAuthProvider()` is the
+profile-backed layer `providers()` uses by default, failing with
+`IncompleteForgejoProfile` when the stored profile resolves but leaves
+the instance URL or token blank. All three provide the `Credentials`
+service of [`@distilled.cloud/forgejo`](https://github.com/alchemy-run/distilled),
+the generated SDK every resource calls through.
+
+The SDK resolves `HttpClient` from the environment rather than
+constructing one, and `providers()` hands the client it is built with to
+every resource, so a test can point the whole collection at an in-memory
+instance by providing its own:
+
+```typescript
+Forgejo.providers({ baseUrl, token }).pipe(Layer.provide(myHttpClient))
+```
+
+## Errors
+
+Every failure is a tagged error, so lifecycle code and your own stack
+code can branch on it without inspecting HTTP status codes. Most come
+from the generated SDK, whose per-operation error unions carry exactly
+the failures each endpoint declares. Alchemy also reports ownership,
+validation, and API limitations with the provider errors below:
+
+| Tag | Meaning |
+| --- | --- |
+| `NotFound` | The resource does not exist (404) |
+| `Unauthorized` | Missing, malformed, or expired credential (401) |
+| `Forbidden` | Valid credential without permission (403) |
+| `Conflict` | Already exists, or conflicts with current state (409) |
+| `UnprocessableEntity` | Forgejo rejected the payload (422) |
+| `Locked` | The repository is archived (423) |
+| `OrganizationOwnsRepositories` | An organization delete refused while it still owns repositories; Forgejo reports this as a 500 |
+| `InternalServerError`, `BadGateway`, … | Forgejo returned 5xx |
+| `UnknownForgejoError` | Any other unsuccessful status |
+| `HttpClientError` | Connection failure |
+| `UnsupportedOwnerChange` | A deployed organization's `owner` changed, and Forgejo has no ownership-transfer endpoint |
+| `UnrecoverableApiToken` | A token of that name already exists but no state records it, and Forgejo returns a token's secret only once |
+| `MissingGeneratedToken` | Forgejo accepted a token create but omitted the generated secret |
+| `ForgejoPaginationLimit` | A list ran past the page cap, so enumeration would be incomplete |
+| `OwnedBySomeoneElse` | A matching resource exists without ownership evidence; explicit adoption is required |
+| `ForgejoTokenBootstrapDenied` | Automatic token provisioning requires an administrator profile with `write:admin` and `read:user` scopes |
+| `InvalidApiToken` | Scopes or repository restrictions are invalid; the existing token is preserved |
+| `InvalidBranchProtection` | Push and whitelist settings contradict each other |
+| `OrganizationSettingsNotApplied` | Forgejo ignored a requested organization setting |
+| `AmbiguousWebhook` | Several existing webhooks match; Alchemy cannot safely choose one |
+| `UnverifiableWebhookSecret` | An existing webhook's signing secret cannot be verified during adoption |
+
+`UnknownForgejoError` indicates an SDK error-model gap, not a tag to
+catch by inspecting its HTTP status. Report it with the operation and
+sanitized error so the SDK's typed union can be corrected.
+
+## Recovery and enumeration
+
+Access-token plaintext is returned only once. If creation succeeds but
+the token output is lost, Alchemy cannot retrieve it from Forgejo and
+will report `UnrecoverableApiToken` rather than silently revoke an
+unknown token. Protect the stack's state store.
+
+Forgejo cannot list user-scoped Actions secrets, and account-wide token
+enumeration is not available through this provider. Organization
+listing is limited to memberships visible to the credential. A provider
+list operation is therefore not a complete instance-wide inventory.
+
+Forgejo 16.0.3 does not apply some transitions from private or limited
+organization visibility to public through its edit API. Alchemy reports
+`OrganizationSettingsNotApplied` instead of recording false success.
+
+## Next steps
+
+- [Forgejo overview](/forgejo) — resources and compositions.
+- [Repositories](/forgejo/repository) — creating, renaming, deleting.

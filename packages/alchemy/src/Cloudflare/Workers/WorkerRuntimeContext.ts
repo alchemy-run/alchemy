@@ -22,12 +22,17 @@ import {
 import type { WorkflowExport } from "../Workflows/Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
+  /** Claim a matching fetch request before application handlers run. */
+  listenFetch<Req = never>(
+    handler: (event: WorkerEvent) => Effect.Effect<Response, never, Req> | void,
+  ): Effect.Effect<void, never, Req>;
   export(name: string, value: any): Effect.Effect<void>;
   shape: () => Record<string, any>;
 }
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  const fetchListeners: Serverless.FunctionListener<Response, any>[] = [];
   const exports: Record<string, DurableObjectExport | WorkflowExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
@@ -65,6 +70,14 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       if (options?.shape) userShape = options.shape;
       return ctx.listen(makeRequestHandler(handler));
     },
+    listenFetch: <Req = never>(
+      handler: (
+        event: WorkerEvent,
+      ) => Effect.Effect<Response, never, Req> | void,
+    ): Effect.Effect<void, never, Req> =>
+      Effect.sync(() => {
+        fetchListeners.push(handler);
+      }),
     listen: ((
       handler:
         | Serverless.FunctionListener
@@ -102,6 +115,12 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             env,
             context,
           };
+          if (type === "fetch") {
+            for (const handler of fetchListeners) {
+              const effect = handler(event);
+              if (Effect.isEffect(effect)) return [effect, services];
+            }
+          }
           const effects: Effect.Effect<unknown>[] = [];
           for (const handler of handlers) {
             const eff = handler(event);

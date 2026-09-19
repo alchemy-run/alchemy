@@ -67,6 +67,7 @@
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
+    "./Forgejo": "./src/Forgejo/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
@@ -246,6 +247,11 @@
         "bun": "./src/GitHub/index.ts",
         "default": "./lib/GitHub/index.js"
       },
+      "./Forgejo": {
+        "types": "./lib/Forgejo/index.d.ts",
+        "bun": "./src/Forgejo/index.ts",
+        "default": "./lib/Forgejo/index.js"
+      },
       "./Endpoint": {
         "types": "./lib/Endpoint/index.d.ts",
         "bun": "./src/Endpoint/index.ts",
@@ -366,6 +372,7 @@
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
+    "@distilled.cloud/forgejo": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
