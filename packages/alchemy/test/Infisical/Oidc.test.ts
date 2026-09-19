@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider.ts";
@@ -13,6 +14,7 @@ import {
   type InfisicalResolvedCredentials,
 } from "@/Infisical/AuthProvider.ts";
 import { detectOidcToken } from "@/Infisical/Oidc.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 
 /** Decode the JSON body encoded onto an outgoing request. */
 const readJsonBody = (request: HttpClientRequest.HttpClientRequest) =>
@@ -26,7 +28,21 @@ const readJsonBody = (request: HttpClientRequest.HttpClientRequest) =>
 
 type Handler = (
   request: HttpClientRequest.HttpClientRequest,
-) => Effect.Effect<Response>;
+) => Effect.Effect<Response, unknown>;
+
+/** An HttpClient backed by `handler`; a handler failure becomes a transport error. */
+const fakeClient = (handler: Handler) =>
+  HttpClient.make((request) =>
+    handler(request).pipe(
+      Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+      Effect.mapError(
+        (cause) =>
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.TransportError({ request, cause }),
+          }),
+      ),
+    ),
+  );
 
 /** Run the detector against a fake environment and a fake HTTP world. */
 const detect = (
@@ -38,16 +54,7 @@ const detect = (
       ConfigProvider.ConfigProvider,
       ConfigProvider.fromEnv({ env }),
     ),
-    Effect.provideService(
-      HttpClient.HttpClient,
-      HttpClient.make((request) =>
-        handler(request).pipe(
-          Effect.map((response) =>
-            HttpClientResponse.fromWeb(request, response),
-          ),
-        ),
-      ),
-    ),
+    Effect.provideService(HttpClient.HttpClient, fakeClient(handler)),
   );
 
 it.effect("returns nothing on a plain laptop", () =>
@@ -192,16 +199,8 @@ const readEnvironmentWith = (env: Record<string, string>, handler: Handler) =>
       ConfigProvider.ConfigProvider,
       ConfigProvider.fromEnv({ env }),
     ),
-    Effect.provideService(
-      HttpClient.HttpClient,
-      HttpClient.make((request) =>
-        handler(request).pipe(
-          Effect.map((response) =>
-            HttpClientResponse.fromWeb(request, response),
-          ),
-        ),
-      ),
-    ),
+    Effect.provideService(HttpClient.HttpClient, fakeClient(handler)),
+    Effect.provide(NodeServices.layer),
   );
 
 it.effect(

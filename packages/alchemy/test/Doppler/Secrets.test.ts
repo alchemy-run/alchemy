@@ -39,12 +39,16 @@ interface FakeDoppler {
   token?: string;
   /** HTTP status the fake Doppler API answers with. */
   status?: number;
-  /** Secrets the fake API returns; may depend on the request (e.g. its token). */
+  /**
+   * Response body of the fake API: the secrets on success, or Doppler's
+   * `{ messages }` error envelope alongside a non-2xx `status`. May depend
+   * on the request (e.g. its token).
+   */
   secrets?:
-    | Record<string, string>
+    | Record<string, unknown>
     | ((
         request: HttpClientRequest.HttpClientRequest,
-      ) => Record<string, string>);
+      ) => Record<string, unknown>);
   /** Inspect (or reject) every request that reaches the fake API. */
   check?: (request: HttpClientRequest.HttpClientRequest) => void;
 }

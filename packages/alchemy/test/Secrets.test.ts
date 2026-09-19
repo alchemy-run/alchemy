@@ -1,4 +1,10 @@
-import { Secrets, Stack, Stage, inMemoryState } from "@/index.ts";
+import {
+  Secrets,
+  Stack,
+  Stage,
+  inMemoryState,
+  type StackSecrets,
+} from "@/index.ts";
 import { evalStack } from "@/Stack.ts";
 import * as TestCore from "@/Test/Core.ts";
 import { loadConfigProvider } from "@/Util/ConfigProvider.ts";
@@ -457,7 +463,7 @@ describe("stack secrets", () => {
         ALCHEMY_DOTENV_TEST_VALUE: Schema.String,
         ALCHEMY_DOTENV_TEST_PORT: Schema.Int,
       });
-      const stack = (providers: ReadonlyArray<Layer.Layer<never, unknown>>) =>
+      const stack = (providers: NonNullable<StackSecrets["providers"]>) =>
         Stack(
           "dotenv-schema",
           {
