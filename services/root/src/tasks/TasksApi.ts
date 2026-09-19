@@ -15,15 +15,26 @@ import {
   type TaskState,
 } from "./TasksDO.ts";
 
+/** The wire's tags — an array of non-empty strings, or nothing. */
+const parseTags = (raw: unknown): ReadonlyArray<string> | undefined =>
+  Array.isArray(raw)
+    ? raw
+        .filter((tag): tag is string => typeof tag === "string")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0)
+    : undefined;
+
 /**
  * The TASKS surface — the board over HTTP:
  *
  * - `GET  /api/tasks/queues`             — registered queues + desk states
  * - `GET  /api/tasks/:queue`             — the board (tasks by state)
  * - `GET  /api/tasks/:queue/:id`         — one task + its timeline
- * - `POST /api/tasks`                    — file `{title, body, queue?}`
- *   (the router assigns when `queue` is absent; unsure lands in inbox)
+ * - `POST /api/tasks`                    — file `{title, body, tags?}`
+ *   (the router assigns the area tag when `tags` is absent; unsure
+ *   lands in inbox, untagged)
  * - `POST /api/tasks/:queue/:id/route`   — human override `{state, desk?}`
+ * - `POST /api/tasks/:queue/:id/retag`   — replace the tags `{tags}`
  * - `POST /api/tasks/:queue/:id/comment` — a comment into the task thread
  *
  * Every mutation pumps the queue's desks (Desks.ts) and schedules a
@@ -128,7 +139,7 @@ export const TasksApi = Effect.gen(function* () {
     )) as {
       title?: string;
       body?: string;
-      queue?: string;
+      tags?: unknown;
       origin?: string;
       priority?: number;
     };
@@ -139,10 +150,11 @@ export const TasksApi = Effect.gen(function* () {
         { status: 400 },
       );
     }
+    const tags = parseTags(body.tags);
     const task = yield* intake.file({
       title,
       body: typeof body.body === "string" ? body.body : "",
-      ...(typeof body.queue === "string" ? { queue: body.queue } : {}),
+      ...(tags === undefined || tags.length === 0 ? {} : { tags }),
       ...(typeof body.origin === "string" ? { origin: body.origin } : {}),
       ...(typeof body.priority === "number"
         ? { priority: body.priority }
@@ -192,6 +204,38 @@ export const TasksApi = Effect.gen(function* () {
       return yield* HttpServerResponse.json(
         { error: "no such task or illegal transition" },
         { status: 409 },
+      );
+    }
+    yield* rearm(queue.slug);
+    return yield* HttpServerResponse.json({ task });
+  });
+
+  const retag = Effect.gen(function* () {
+    const queue = yield* knownQueue;
+    if (queue === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such queue" },
+        { status: 404 },
+      );
+    }
+    const params = yield* HttpRouter.params;
+    const id = String(params.id ?? "");
+    const request = yield* HttpServerRequest;
+    const body = (yield* request.json.pipe(
+      Effect.catch(() => Effect.succeed({})),
+    )) as { tags?: unknown };
+    const tags = parseTags(body.tags);
+    if (tags === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "tags required" },
+        { status: 400 },
+      );
+    }
+    const task = yield* tasks.retag(queue.slug, id, tags, HUMAN);
+    if (task === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such task" },
+        { status: 404 },
       );
     }
     yield* rearm(queue.slug);
@@ -248,6 +292,7 @@ export const TasksApi = Effect.gen(function* () {
     HttpRouter.add("GET", "/api/tasks/:queue/:id", one),
     HttpRouter.add("POST", "/api/tasks", file),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/route", route),
+    HttpRouter.add("POST", "/api/tasks/:queue/:id/retag", retag),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/comment", comment),
   );
 });

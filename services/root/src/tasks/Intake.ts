@@ -12,21 +12,21 @@ import { mintTaskId, Tasks, type TaskRow } from "./TasksDO.ts";
 
 /**
  * FILING — the one door every intake takes (the API's "New task",
- * Triage's singles, an agent's explicit filing): route the task to a
- * queue (Router.ts — the rubrics are the queues' own missions),
- * create its conversation thread (a root post in the `tasks:<queue>`
- * channel), insert the board row, and pump the queue's desks in the
- * background (`ctx.waitUntil`) — filing never waits on a desk round.
+ * Triage's singles, an agent's explicit filing): tag the task with
+ * its area (Router.ts — the rubrics are code, Tags.ts), create its
+ * conversation thread (a root post in the `tasks:<queue>` channel),
+ * insert the board row, and pump the queue's desks in the background
+ * (`ctx.waitUntil`) — filing never waits on a desk round.
  *
- * An unsure route files to the FIRST registered queue's INBOX — the
- * human routes it from the board; a confident route (or an explicit
- * `queue`) files READY.
+ * Everything files into the ONE registered queue. An unsure route
+ * files to its INBOX, untagged — the human tags and routes it from
+ * the board; a confident route (or explicit `tags`) files READY.
  */
 export interface FileTaskInput {
   readonly title: string;
   readonly body: string;
-  /** Explicit queue slug — skips the router. */
-  readonly queue?: string;
+  /** Explicit area tags — skips the router; tags[0] is the area. */
+  readonly tags?: ReadonlyArray<string>;
   readonly origin?: string;
   readonly priority?: number;
   readonly actor: string;
@@ -63,21 +63,19 @@ export const TaskIntakeLive: Layer.Layer<
         Effect.gen(function* () {
           const queues = desks.queues();
           if (queues.length === 0) return undefined;
-          const explicit = queues.find(
-            (queue) => queue.slug === input.queue,
-          )?.slug;
+          // ONE queue — the router assigns the area TAG, not a lane
+          const target = queues[0]!.slug;
           const routed =
-            explicit ??
-            (yield* routeTask(
-              query,
-              {
-                title: input.title,
-                body: input.body,
-                ...(input.origin === undefined ? {} : { origin: input.origin }),
-              },
-              queues,
-            ).pipe(inWorker));
-          const target = routed ?? queues[0]!.slug;
+            input.tags !== undefined && input.tags.length > 0
+              ? input.tags[0]
+              : yield* routeTask(query, {
+                  title: input.title,
+                  body: input.body,
+                  ...(input.origin === undefined
+                    ? {}
+                    : { origin: input.origin }),
+                }).pipe(inWorker);
+          const tags = input.tags ?? (routed === undefined ? [] : [routed]);
           const state = routed === undefined ? "inbox" : "ready";
           const id = yield* mintTaskId;
           // the task's conversation: a thread root in the queue's
@@ -99,6 +97,7 @@ export const TaskIntakeLive: Layer.Layer<
             title: input.title,
             body: input.body,
             state,
+            tags,
             rootPost,
             actor: input.actor,
             ...(input.origin === undefined ? {} : { origin: input.origin }),

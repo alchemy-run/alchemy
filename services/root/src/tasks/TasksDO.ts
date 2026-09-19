@@ -84,6 +84,8 @@ export interface TaskRow {
   readonly title: string;
   readonly body: string;
   readonly state: TaskState;
+  /** The task's AREA tags (Tags.ts) — tags[0] is the router's pick. */
+  readonly tags: ReadonlyArray<string>;
   /** The member slug working/last working it (`engineer`). */
   readonly desk?: string;
   /** The task's thread root in ChatDO (`tasks:<queue>` channel). */
@@ -100,7 +102,7 @@ export interface TaskEventRow {
   readonly id: number;
   readonly task: string;
   /** routed|assigned|started|posted|parked|review_requested|
-   *  changes_requested|approved|done|dropped|filed */
+   *  changes_requested|approved|done|dropped|filed|tagged */
   readonly kind: string;
   readonly actor: string;
   /** JSON payload (post id, session key, verdict, reason…). */
@@ -109,10 +111,14 @@ export interface TaskEventRow {
 }
 
 /** What a desk looks like from the outside: its working task and the
- *  recent titles it touched — the scheduler's affinity signal. */
+ *  recent tasks it touched (title + tags) — the scheduler's affinity
+ *  signal. */
 export interface DeskView {
   readonly working?: TaskRow;
-  readonly recent: ReadonlyArray<string>;
+  readonly recent: ReadonlyArray<{
+    readonly title: string;
+    readonly tags: ReadonlyArray<string>;
+  }>;
 }
 
 /** Mint a task id the way Posts mints post ids — never `Date.now()`
@@ -133,6 +139,7 @@ const TABLES = [
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     state TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '[]',
     desk TEXT,
     root_post TEXT,
     origin TEXT,
@@ -163,6 +170,7 @@ interface TaskDbRow extends Record<string, Cloudflare.SqlStorageValue> {
   title: string;
   body: string;
   state: string;
+  tags: string;
   desk: string | null;
   root_post: string | null;
   origin: string | null;
@@ -181,12 +189,23 @@ interface EventDbRow extends Record<string, Cloudflare.SqlStorageValue> {
   at: number;
 }
 
+/** The tags column, parsed defensively — a bad row reads as none. */
+const tagsOf = (raw: string): ReadonlyArray<string> => {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
 const toTask = (row: TaskDbRow): TaskRow => ({
   id: row.id,
   queue: row.queue,
   title: row.title,
   body: row.body,
   state: row.state as TaskState,
+  tags: tagsOf(row.tags),
   ...(row.desk === null ? {} : { desk: row.desk }),
   ...(row.root_post === null ? {} : { rootPost: row.root_post }),
   ...(row.origin === null ? {} : { origin: row.origin }),
@@ -213,6 +232,9 @@ export interface FileInput {
   /** `inbox` when routing was unsure (a human routes), `ready` when
    *  the router (or the human) already placed it. */
   readonly state: "inbox" | "ready";
+  /** The area tags — tags[0] is the router's pick; empty when the
+   *  router was unsure. */
+  readonly tags?: ReadonlyArray<string>;
   readonly origin?: string;
   readonly priority?: number;
   readonly rootPost?: string;
@@ -235,6 +257,11 @@ interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly route: (
     id: string,
     input: RouteInput,
+  ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
+  readonly retag: (
+    id: string,
+    tags: ReadonlyArray<string>,
+    actor: string,
   ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
   readonly list: (
     state?: TaskState,
@@ -329,12 +356,13 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
         file: Effect.fn(function* (input) {
           const at = yield* Clock.currentTimeMillis;
           yield* sql.exec(
-            "INSERT INTO tasks (id, queue, title, body, state, root_post, origin, priority, at, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks (id, queue, title, body, state, tags, root_post, origin, priority, at, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             input.id,
             input.queue,
             input.title,
             input.body,
             input.state,
+            JSON.stringify(input.tags ?? []),
             input.rootPost ?? null,
             input.origin ?? null,
             input.priority ?? 2,
@@ -345,7 +373,7 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             input.id,
             "filed",
             input.actor,
-            JSON.stringify({ state: input.state }),
+            JSON.stringify({ state: input.state, tags: input.tags ?? [] }),
           );
           return (yield* taskOf(input.id))!;
         }),
@@ -355,6 +383,22 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
           if (task === undefined) return undefined;
           if (!transition(task.state, input.state)) return undefined;
           return yield* move(task, input);
+        }),
+
+        // retag is not a state hop — the tags column and a `tagged`
+        // timeline event, nothing else moves
+        retag: Effect.fn(function* (id, tags, actor) {
+          const task = yield* taskOf(id);
+          if (task === undefined) return undefined;
+          const at = yield* Clock.currentTimeMillis;
+          yield* sql.exec(
+            "UPDATE tasks SET tags = ?, updated = ? WHERE id = ?",
+            JSON.stringify(tags),
+            at,
+            id,
+          );
+          yield* event(id, "tagged", actor, JSON.stringify({ tags }));
+          return yield* taskOf(id);
         }),
 
         list: Effect.fn(function* (state?: TaskState) {
@@ -431,7 +475,10 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             ...(working[0] === undefined
               ? {}
               : { working: toTask(working[0]) }),
-            recent: recent.map((row) => row.title),
+            recent: recent.map((row) => ({
+              title: row.title,
+              tags: tagsOf(row.tags),
+            })),
           };
         }),
 
@@ -473,6 +520,12 @@ export class Tasks extends Context.Service<
       queue: string,
       id: string,
       input: RouteInput,
+    ) => Effect.Effect<TaskRow | undefined>;
+    readonly retag: (
+      queue: string,
+      id: string,
+      tags: ReadonlyArray<string>,
+      actor: string,
     ) => Effect.Effect<TaskRow | undefined>;
     readonly list: (
       queue: string,
@@ -518,6 +571,8 @@ export const TasksLive: Layer.Layer<Tasks, never, Cloudflare.Worker> =
       return Tasks.of({
         file: (queue, input) => inWorker(stub(queue).file(input)),
         route: (queue, id, input) => inWorker(stub(queue).route(id, input)),
+        retag: (queue, id, tags, actor) =>
+          inWorker(stub(queue).retag(id, tags, actor)),
         list: (queue, state) => inWorker(stub(queue).list(state)),
         get: (queue, id) => inWorker(stub(queue).get(id)),
         events: (queue, id) => inWorker(stub(queue).events(id)),

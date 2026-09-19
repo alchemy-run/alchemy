@@ -14,6 +14,7 @@ import { type Post } from "@/components/post-thread";
 import {
   elapsedOf,
   OriginChip,
+  TagChip,
   TaskStateBadge,
   useQueues,
 } from "@/components/task-board";
@@ -21,6 +22,8 @@ import {
   commentTask,
   deskSessionId,
   fetchTask,
+  KNOWN_TAGS,
+  retagTask,
   routeTask,
   TRANSITIONS,
   type TaskEventRow,
@@ -39,6 +42,7 @@ import {
   Loader2,
   PauseCircle,
   Play,
+  Tag,
   UserPlus,
   Wrench,
 } from "lucide-react";
@@ -170,6 +174,19 @@ const TaskEvent = ({ event }: { event: TaskEventRow }) => {
       return (
         <EventRow icon={PauseCircle} when={event.at}>
           {b(event.actor)} parked this{note !== undefined && <> — {note}</>}
+        </EventRow>
+      );
+    }
+    case "tagged": {
+      const data = dataOf(event);
+      const tags =
+        typeof data === "object" && Array.isArray(data.tags)
+          ? data.tags.map(String).join(", ")
+          : "";
+      return (
+        <EventRow icon={Tag} when={event.at}>
+          {b(event.actor)} retagged this
+          {tags.length > 0 && <> — {tags}</>}
         </EventRow>
       );
     }
@@ -492,6 +509,45 @@ export const TaskPage = ({ queue, id }: { queue: string; id: string }) => {
             >
               {task.queue}
             </button>
+          </div>
+          <div>
+            <div className="pb-1.5 font-semibold text-muted-foreground">
+              Tags
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              {task.tags.length === 0 ? (
+                <span className="text-muted-foreground">untagged</span>
+              ) : (
+                task.tags.map((candidate) => (
+                  <TagChip key={candidate} tag={candidate} />
+                ))
+              )}
+              <button
+                type="button"
+                disabled={busy}
+                title={`retag — comma-separated (${KNOWN_TAGS.join(", ")})`}
+                onClick={() => {
+                  const raw = window.prompt(
+                    `Tags, comma-separated (${KNOWN_TAGS.join(", ")}):`,
+                    task.tags.join(", "),
+                  );
+                  if (raw === null) return;
+                  const tags = raw
+                    .split(",")
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry.length > 0);
+                  setBusy(true);
+                  retagTask(queue, id, tags)
+                    .then(() => fetchTask(queue, id).then(setView))
+                    .catch(() => {})
+                    .finally(() => setBusy(false));
+                }}
+                className="flex cursor-pointer items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+              >
+                <Tag className="size-3" />
+                retag
+              </button>
+            </div>
           </div>
           <div>
             <div className="pb-1.5 font-semibold text-muted-foreground">

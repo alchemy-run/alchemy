@@ -34,12 +34,25 @@ export const TRANSITIONS: Record<TaskState, ReadonlyArray<TaskState>> = {
   dropped: [],
 };
 
+/** The declared area tags, in rubric order (src/tasks/Tags.ts) —
+ *  the board's filter pills; tags found in data extend the list. */
+export const KNOWN_TAGS: ReadonlyArray<string> = [
+  "cloudflare",
+  "fly",
+  "aws",
+  "distilled",
+  "forge",
+  "org",
+];
+
 export interface TaskRow {
   readonly id: string;
   readonly queue: string;
   readonly title: string;
   readonly body: string;
   readonly state: TaskState;
+  /** The task's area tags — tags[0] is the router's pick. */
+  readonly tags: ReadonlyArray<string>;
   /** The member slug working/last working it (`engineer`). */
   readonly desk?: string;
   /** The task's thread root in the `tasks:<queue>` channel. */
@@ -56,7 +69,7 @@ export interface TaskEventRow {
   readonly id: number;
   readonly task: string;
   /** routed|assigned|started|posted|parked|review_requested|
-   *  changes_requested|approved|done|dropped|filed */
+   *  changes_requested|approved|done|dropped|filed|tagged */
   readonly kind: string;
   readonly actor: string;
   /** JSON payload (post id, desk, reason…) — or a plain note. */
@@ -73,8 +86,12 @@ export interface DeskSummary {
   readonly deskKey: string;
   /** The id of the task the desk is working, if any. */
   readonly working?: string;
-  /** Recent titles the desk touched — the affinity signal. */
-  readonly recent: ReadonlyArray<string>;
+  /** Recent tasks the desk touched (title + tags) — the affinity
+   *  signal. */
+  readonly recent: ReadonlyArray<{
+    readonly title: string;
+    readonly tags: ReadonlyArray<string>;
+  }>;
 }
 
 export interface QueueSummary {
@@ -84,7 +101,7 @@ export interface QueueSummary {
   readonly desks: ReadonlyArray<DeskSummary>;
 }
 
-/** A desk's SESSION id (`Engineer:root::tasks::cloudflare::engineer`)
+/** A desk's SESSION id (`Engineer:root::tasks::engineering::engineer`)
  *  — what `?panes=a:<id>`, `/api/chats/:id/*` address. */
 export const deskSessionId = (desk: DeskSummary): string =>
   `${desk.term}:${desk.deskKey}`;
@@ -133,6 +150,21 @@ export const routeTask = (
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ state, ...options }),
+    },
+  );
+
+/** Replace the task's tags — a `tagged` timeline event on the server. */
+export const retagTask = (
+  queue: string,
+  id: string,
+  tags: ReadonlyArray<string>,
+): Promise<Response> =>
+  fetch(
+    `/api/tasks/${encodeURIComponent(queue)}/${encodeURIComponent(id)}/retag`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tags }),
     },
   );
 

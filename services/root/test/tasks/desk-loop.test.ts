@@ -25,8 +25,8 @@ import {
 } from "../../src/tasks/TasksDO.ts";
 
 const QUEUE: QueueSpec = {
-  name: "Cloudflare",
-  slug: "cloudflare",
+  name: "Engineering",
+  slug: "engineering",
   worker: { term: "Engineer", slug: "engineer" },
   reviewer: { term: "Reviewer", slug: "reviewer" },
 };
@@ -47,6 +47,7 @@ const deskWorld = () => {
     title: string;
     body: string;
     state: TaskState;
+    tags: ReadonlyArray<string>;
     desk?: string;
     rootPost?: string;
     origin?: string;
@@ -157,7 +158,7 @@ const deskWorld = () => {
             .filter((row) => row.desk === desk && row.state !== "working")
             .sort((a, b) => b.updated - a.updated)
             .slice(0, 5)
-            .map((row) => row.title),
+            .map((row) => ({ title: row.title, tags: row.tags })),
         };
       }),
     events: (id) =>
@@ -245,19 +246,25 @@ const deskWorld = () => {
     dispatches,
     digests,
     digestSends,
-    file: (id: string, title: string, body: string) => {
+    file: (
+      id: string,
+      title: string,
+      body: string,
+      tags: ReadonlyArray<string> = [],
+    ) => {
       rows.set(id, {
         id,
         queue: QUEUE.slug,
         title,
         body,
         state: "ready",
+        tags,
         rootPost: `p-${id}`,
         priority: 2,
         at: tick(),
         updated: now,
       });
-      event(id, "filed", "sam", JSON.stringify({ state: "ready" }));
+      event(id, "filed", "sam", JSON.stringify({ state: "ready", tags }));
     },
     answer: (member: string, reply: string) => {
       (scripts[member] ??= []).push(reply);
@@ -276,8 +283,15 @@ const run = (world: ReturnType<typeof deskWorld>) =>
 describe("the desk loop", () => {
   test("two tasks flow claim → complete → review → done, serially", async () => {
     const world = deskWorld();
-    world.file("t-1", "fix(r2): CORS drift", "Bucket CORS rules drift on adopt.");
-    world.file("t-2", "fix(do): alarm eviction", "Alarms drop on eviction.");
+    world.file(
+      "t-1",
+      "fix(r2): CORS drift",
+      "Bucket CORS rules drift on adopt.",
+      ["cloudflare"],
+    );
+    world.file("t-2", "fix(do): alarm eviction", "Alarms drop on eviction.", [
+      "cloudflare",
+    ]);
 
     world.answer(
       "engineer",
@@ -343,11 +357,16 @@ describe("the desk loop", () => {
       world.posts.filter((post) => post.replyTo === "p-t-1").length,
     ).toBeGreaterThanOrEqual(2);
 
+    // the task CARD wears its tags — the desk reads the area
+    expect(world.dispatches[0]!.ask).toContain(
+      "[task t-1 · queue engineering · tags cloudflare]",
+    );
+
     // the digest: delivered on every claim, SENT once per desk
     expect(world.digests.length).toBe(6);
     expect(world.digestSends).toEqual([
-      { term: "Engineer", key: "root::tasks::cloudflare::engineer" },
-      { term: "Reviewer", key: "root::tasks::cloudflare::reviewer" },
+      { term: "Engineer", key: "root::tasks::engineering::engineer" },
+      { term: "Reviewer", key: "root::tasks::engineering::reviewer" },
     ]);
   });
 
@@ -357,11 +376,13 @@ describe("the desk loop", () => {
       "t-park",
       "feat(magic): magic transit resource",
       "Requires the Magic Transit entitlement.",
+      ["cloudflare"],
     );
     world.file(
       "t-hand",
-      "fix(fly): machine restart loop",
-      "Fly machines restart-loop on deploy.",
+      "fix(infra): dns registrar renewal",
+      "The registrar renewal is manual, human-owned work.",
+      ["org"],
     );
     world.answer(
       "engineer",
@@ -369,7 +390,7 @@ describe("the desk loop", () => {
     );
     world.answer(
       "engineer",
-      "This is Fly provider work, not Cloudflare.\nDISPOSITION: handoff — belongs to the fly stream",
+      "This is human-owned registrar work, not desk work.\nDISPOSITION: handoff — belongs to a human owner",
     );
 
     await run(world);

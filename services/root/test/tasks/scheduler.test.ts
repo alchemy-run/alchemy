@@ -2,8 +2,8 @@
  * THE SCHEDULER'S SCORECARD — judged against the REAL System One API
  * (gate.test.ts's pattern; gated on `TYPESAFE_API_KEY`). The claim
  * under test: context AFFINITY beats FIFO — an idle desk with recent
- * focus picks the adjacent task, not the oldest — and `none` wins on
- * an empty or unworthy board.
+ * focus picks the adjacent task (same TAG first), not the oldest —
+ * and `none` wins on an empty or unworthy board.
  */
 import * as TS from "@distilled.cloud/typesafe-ai";
 import { RuntimeContext } from "alchemy";
@@ -26,8 +26,15 @@ const card = (
   id: string,
   title: string,
   body: string,
+  tags: ReadonlyArray<string> = [],
   priority = 2,
-): TaskCard => ({ id, title, body, priority });
+): TaskCard => ({ id, title, body, tags, priority });
+
+/** A desk's recent entry — title + the tags it wore. */
+const worked = (
+  title: string,
+  ...tags: ReadonlyArray<string>
+): { title: string; tags: ReadonlyArray<string> } => ({ title, tags });
 
 interface Scenario {
   readonly name: string;
@@ -46,8 +53,11 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
     desk: {
       desk: "engineer",
       recent: [
-        "fix(r2): bucket CORS rules drift on adopt",
-        "feat(r2): event notifications on object create",
+        worked("fix(r2): bucket CORS rules drift on adopt", "cloudflare"),
+        worked(
+          "feat(r2): event notifications on object create",
+          "cloudflare",
+        ),
       ],
     },
     ready: [
@@ -55,55 +65,89 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
         "t-d1",
         "fix(d1): remote migration fails on uppercase BEGIN",
         "The remote D1 parser only accepts LF-only lowercase begin; our migration runner sends CRLF uppercase.",
+        ["cloudflare"],
       ),
       card(
         "t-r2",
         "fix(r2): multipart upload rejects part numbers over 1000",
         "R2 multipart uploads fail with InvalidPart when the part index exceeds 1000; the provider should chunk accordingly.",
+        ["cloudflare"],
       ),
     ],
     want: ["t-r2"],
   },
   {
-    name: "DO desk picks the DO alarm task over the older queues one",
+    // TAG affinity on the one queue: the fly-fresh desk stays on the
+    // fly-tagged task even though the cloudflare one is older
+    name: "fly-fresh desk picks the fly task over the older cloudflare one",
     desk: {
       desk: "engineer",
       recent: [
-        "fix(do): websocket hibernation drops attachments",
-        "fix(do): storage transaction retries on conflict",
+        worked("fix(fly): machine restart loop on deploy", "fly"),
+        worked("feat(fly): volume snapshot resource", "fly"),
       ],
     },
     ready: [
       card(
-        "t-queues",
-        "feat(queues): consumer batch size configuration",
-        "Expose max_batch_size and max_batch_timeout on the queue consumer binding.",
+        "t-cf",
+        "fix(kv): list pagination cursor expires early",
+        "KV list cursors return expired after 60s instead of the documented 5 minutes.",
+        ["cloudflare"],
       ),
       card(
-        "t-alarms",
-        "fix(do): alarms are not re-registered after eviction",
-        "A Durable Object that set an alarm loses it when evicted mid-window; the constructor must re-register.",
+        "t-fly",
+        "fix(fly): blue/green promotes before health checks settle",
+        "The deploy promotes the green machine set before every health check reports passing.",
+        ["fly"],
       ),
     ],
-    want: ["t-alarms"],
+    want: ["t-fly"],
+  },
+  {
+    // and the mirror: a cloudflare-fresh desk stays on cloudflare
+    name: "cloudflare-fresh desk picks the cloudflare task over the older fly one",
+    desk: {
+      desk: "engineer",
+      recent: [
+        worked("fix(do): websocket hibernation drops attachments", "cloudflare"),
+        worked("fix(do): storage transaction retries on conflict", "cloudflare"),
+      ],
+    },
+    ready: [
+      card(
+        "t-fly2",
+        "feat(fly): machine autostop configuration",
+        "Expose autostop and autostart on the machine resource props.",
+        ["fly"],
+      ),
+      card(
+        "t-do",
+        "fix(do): alarms are not re-registered after eviction",
+        "A Durable Object that set an alarm loses it when evicted mid-window; the constructor must re-register.",
+        ["cloudflare"],
+      ),
+    ],
+    want: ["t-do"],
   },
   {
     name: "an urgent priority-1 task outranks the adjacent priority-3",
     desk: {
       desk: "engineer",
-      recent: ["fix(kv): metadata size limit off by one"],
+      recent: [worked("fix(kv): metadata size limit off by one", "cloudflare")],
     },
     ready: [
       card(
         "t-outage",
         "fix(workers): deploys failing on main — every push red",
         "Every deploy of the worker fails at upload; the whole pipeline is blocked for everyone.",
+        ["cloudflare"],
         1,
       ),
       card(
         "t-kv",
         "fix(kv): list pagination cursor expires early",
         "KV list cursors return expired after 60s instead of the documented 5 minutes.",
+        ["cloudflare"],
         3,
       ),
     ],
@@ -117,11 +161,13 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
         "t-a",
         "fix(r2): bucket lifecycle rules ignored on update",
         "Updating lifecycle rules on an existing bucket silently no-ops.",
+        ["cloudflare"],
       ),
       card(
         "t-b",
         "fix(d1): migration runner drops comments",
         "SQL comments in migration files are stripped, breaking checksum verification.",
+        ["cloudflare"],
       ),
     ],
     // either real task is a fine pick — the assertion is: not none
@@ -131,7 +177,7 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
     name: "an unworthy board picks none",
     desk: {
       desk: "engineer",
-      recent: ["fix(r2): bucket CORS rules drift on adopt"],
+      recent: [worked("fix(r2): bucket CORS rules drift on adopt", "cloudflare")],
     },
     ready: [
       card(

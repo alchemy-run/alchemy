@@ -45,9 +45,8 @@ import { ProposalsLive } from "./proposals/ProposalsDO.ts";
 import { RootChart } from "./Root.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
-import { CloudflareTasksLive } from "./tasks/Cloudflare.ts";
 import { DesksLive } from "./tasks/Desks.ts";
-import { FlyTasksLive } from "./tasks/Fly.ts";
+import { EngineeringTasksLive } from "./tasks/Engineering.ts";
 import { TaskIntakeLive } from "./tasks/Intake.ts";
 import { TasksLive } from "./tasks/TasksDO.ts";
 
@@ -202,12 +201,13 @@ const HeadWorker = Layer.suspend(() => HeadLive).pipe(
 //   Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
 // );
 
-/** The WORK STREAMS — queues declared in code (their splices are the
- *  desks), the per-queue board (TasksDO), the desk loop, and the one
- *  filing door every intake takes. The queue Layers require their
- *  member agents' implementations — the same Worker layers the
- *  engineering group provides (memoized by reference, one build). */
-const TasksQueues = Layer.mergeAll(CloudflareTasksLive, FlyTasksLive).pipe(
+/** The WORK STREAM — ONE queue declared in code (its splices are the
+ *  desks; tasks wear area TAGS, Tags.ts), the board (TasksDO), the
+ *  desk loop, and the one filing door every intake takes. The queue
+ *  Layer requires its member agents' implementations — the same
+ *  Worker layers the engineering group provides (memoized by
+ *  reference, one build). */
+const TasksQueues = EngineeringTasksLive.pipe(
   Layer.provide(EngineerWorker),
   Layer.provide(ReviewerWorker),
 );

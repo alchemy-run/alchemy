@@ -1,10 +1,11 @@
 /**
- * The BOARD (`/tasks/:queue`) — one queue's work stream, six columns
- * (inbox | ready | working | review | parked | done), the queue
- * switcher, and the DESK STRIP: each desk's agent with the task it
- * is working (live elapsed) or "idle". Cards click into the task
- * page; the ⋯ menu is the human override (a `routed` event with
- * actor `sam`); desk entries click into the desk view.
+ * The BOARD (`/tasks/:queue`) — the ONE work stream, six columns
+ * (inbox | ready | working | review | parked | done), TAG filter
+ * pills (All + every known/seen area tag), and the DESK STRIP: each
+ * desk's agent with the task it is working (live elapsed) or "idle".
+ * Cards wear small tag chips and click into the task page; the ⋯
+ * menu is the human override (a `routed` event with actor `sam`);
+ * desk entries click into the desk view.
  */
 import { Avatar } from "@/components/avatar";
 import { PostRef } from "@/components/post-thread";
@@ -18,6 +19,7 @@ import {
   BOARD_STATES,
   fetchBoard,
   fetchQueues,
+  KNOWN_TAGS,
   parseOrigin,
   routeTask,
   TRANSITIONS,
@@ -134,6 +136,14 @@ export const OriginChip = ({ origin }: { origin: string }) => {
   );
 };
 
+/** A task's small AREA tag chip — the board card's and the task
+ *  page's shared token. */
+export const TagChip = ({ tag }: { tag: string }) => (
+  <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] text-primary/90">
+    {tag}
+  </span>
+);
+
 /** The human override — Move to… every hop the state machine allows.
  *  Park prompts for the reason it rides. */
 const MoveMenu = ({
@@ -214,6 +224,9 @@ const TaskCard = ({
       <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
         {task.id}
       </span>
+      {task.tags.map((tag) => (
+        <TagChip key={tag} tag={tag} />
+      ))}
       {task.origin !== undefined && <OriginChip origin={task.origin} />}
       {task.priority !== 2 && (
         <span
@@ -287,6 +300,8 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
       ? undefined
       : (queues.find((candidate) => candidate.slug === queue) ?? queues[0]);
 
+  /** The tag FILTER — undefined shows everything. */
+  const [tag, setTag] = useState<string | undefined>();
   const [board, setBoard] = useState<
     Record<TaskState, ReadonlyArray<TaskRow>> | undefined
   >();
@@ -337,28 +352,52 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
     board !== undefined &&
     BOARD_STATES.every((state) => (board[state] ?? []).length === 0);
 
+  // the filter pills: every declared tag plus any tag the data wears
+  const tags = [
+    ...KNOWN_TAGS,
+    ...(board === undefined
+      ? []
+      : BOARD_STATES.flatMap((state) =>
+          (board[state] ?? []).flatMap((task) => task.tags),
+        ).filter((candidate) => !KNOWN_TAGS.includes(candidate))),
+  ].filter((candidate, index, all) => all.indexOf(candidate) === index);
+
   return (
     <section
       aria-label={`task board ${selected.slug}`}
       className="flex min-h-0 min-w-0 flex-1 flex-col"
     >
-      {/* the queue switcher + the desk strip */}
+      {/* the tag filter pills + the desk strip */}
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-        <div className="flex items-center gap-1">
-          {queues.map((candidate) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setTag(undefined)}
+            className={cn(
+              "cursor-pointer rounded-md px-2 py-0.5 text-xs",
+              tag === undefined
+                ? "bg-accent font-semibold"
+                : "text-muted-foreground hover:bg-accent/60",
+            )}
+          >
+            All
+          </button>
+          {tags.map((candidate) => (
             <button
-              key={candidate.slug}
+              key={candidate}
               type="button"
-              title={candidate.prose}
-              onClick={() => showTasks(candidate.slug)}
+              title={`show only ${candidate} tasks`}
+              onClick={() =>
+                setTag(candidate === tag ? undefined : candidate)
+              }
               className={cn(
-                "cursor-pointer rounded-md px-2 py-0.5 text-xs",
-                candidate.slug === selected.slug
+                "cursor-pointer rounded-md px-2 py-0.5 font-mono text-xs",
+                candidate === tag
                   ? "bg-accent font-semibold"
                   : "text-muted-foreground hover:bg-accent/60",
               )}
             >
-              {candidate.name}
+              {candidate}
             </button>
           ))}
         </div>
@@ -388,7 +427,9 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
           </div>
         ) : (
           BOARD_STATES.map((state) => {
-            const rows = board[state] ?? [];
+            const rows = (board[state] ?? []).filter(
+              (task) => tag === undefined || task.tags.includes(tag),
+            );
             // done keeps its count; the column shows the last 5
             const shown =
               state === "done"

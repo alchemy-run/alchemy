@@ -9,8 +9,7 @@ import { Posts } from "../chat/Posts.ts";
 import { tryQuery } from "../engineering/Swarm.ts";
 import { inWorker } from "../platform/Database.ts";
 import { lineage } from "../Lineage.ts";
-import { CloudflareTasks } from "./Cloudflare.ts";
-import { FlyTasks } from "./Fly.ts";
+import { EngineeringTasks } from "./Engineering.ts";
 import { reviewVerdict } from "./Review.ts";
 import { nextTask } from "./Scheduler.ts";
 import {
@@ -207,7 +206,9 @@ const channelOf = (queue: QueueSpec) => `tasks:${queue.slug}`;
 
 /** The task card + the disposition contract, as the desk reads it. */
 const workAsk = (queue: QueueSpec, task: TaskRow): string =>
-  `[task ${task.id} · queue ${queue.slug}] ${task.title}\n\n` +
+  `[task ${task.id} · queue ${queue.slug}${
+    task.tags.length === 0 ? "" : ` · tags ${task.tags.join(", ")}`
+  }] ${task.title}\n\n` +
   `${task.body}\n` +
   (task.origin === undefined ? "" : `\nOrigin: ${task.origin}\n`) +
   (task.rootPost === undefined
@@ -287,6 +288,7 @@ const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
             title: task.title,
             body: task.body,
             priority: task.priority,
+            tags: task.tags,
             ...(task.origin === undefined ? {} : { origin: task.origin }),
           })),
         )
@@ -423,7 +425,7 @@ export class Desks extends Context.Service<
 const active = new Set<string>();
 
 /**
- * The live desk loop over the registered queues (Cloudflare, Fly),
+ * The live desk loop over the ONE registered queue (Engineering),
  * the board, the chat's posts, and the driver's sessions. Digest
  * delivery builds the identity seam per member on demand — the same
  * `selfKey` shape ApiWorker's `identity(name)` uses, so the desk
@@ -432,8 +434,7 @@ const active = new Set<string>();
 export const DesksLive: Layer.Layer<
   Desks,
   never,
-  | CloudflareTasks
-  | FlyTasks
+  | EngineeringTasks
   | Tasks
   | Posts
   | AI.Sessions
@@ -441,15 +442,14 @@ export const DesksLive: Layer.Layer<
 > = Layer.effect(
   Desks,
   Effect.gen(function* () {
-    const cloudflare = yield* CloudflareTasks;
-    const fly = yield* FlyTasks;
+    const engineering = yield* EngineeringTasks;
     const tasks = yield* Tasks;
     const posts = yield* Posts;
     const sessions = yield* AI.Sessions;
     const query = yield* TypeSafe.SystemOne;
     const context = yield* Effect.context<AI.Sessions>();
 
-    const views: ReadonlyArray<QueueView> = [cloudflare, fly].map((queue) => ({
+    const views: ReadonlyArray<QueueView> = [engineering].map((queue) => ({
       name: queue.name,
       slug: queue.slug,
       prose: queue.prose,
@@ -458,7 +458,7 @@ export const DesksLive: Layer.Layer<
         slug: member.slug,
       })),
     }));
-    const specs = [cloudflare, fly].map(specOf);
+    const specs = [engineering].map(specOf);
 
     const deskKey = (queue: string, member: string) =>
       lineage(AI.deskKeyOf(queue, member));

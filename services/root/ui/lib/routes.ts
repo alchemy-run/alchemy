@@ -105,13 +105,17 @@ export const showWork = (
 ): void => navigate(workPath(tab, repo, number));
 
 export interface TasksPlace {
-  /** The queue slug — undefined lands on the first registered queue. */
+  /** The queue slug — undefined lands on the one registered queue. */
   readonly queue?: string;
   /** The open task's id — undefined on the board. */
   readonly task?: string;
   /** The open desk's member slug (`/tasks/:queue/desks/:agent`). */
   readonly desk?: string;
 }
+
+/** The ONE queue — old per-cloud slugs (`cloudflare`, `fly`) in a
+ *  path fold into it, so stale links keep resolving. */
+export const TASKS_QUEUE = "engineering";
 
 /** `/tasks[/:queue[/:id]]` — the board, or one task's page. */
 export const tasksPath = (queue?: string, id?: string): string =>
@@ -128,7 +132,9 @@ export const deskPath = (queue: string, agent: string): string =>
 export const tasksFromLocation = (): TasksPlace => {
   const parts = segments();
   if (parts[0] !== "tasks" || parts[1] === undefined) return {};
-  const queue = decodeURIComponent(parts[1]);
+  // any queue slug the path names lands on the one queue — old
+  // per-cloud paths (`/tasks/cloudflare/…`) keep resolving
+  const queue = TASKS_QUEUE;
   if (parts[2] === "desks" && parts[3] !== undefined) {
     return { queue, desk: decodeURIComponent(parts[3]) };
   }
@@ -373,6 +379,23 @@ export const showOverlay = (overlay: Overlay | undefined): void => {
 /** Pre-path urls (`/?channel=…`) translate ONCE at boot — old links
  *  keep resolving; overlay params survive untouched. */
 export const normalizeLegacyLocation = (): void => {
+  // old per-queue task paths (`/tasks/cloudflare/…`) redirect to the
+  // one queue — the url itself heals, not just the parse
+  const parts = segments();
+  if (
+    parts[0] === "tasks" &&
+    parts[1] !== undefined &&
+    decodeURIComponent(parts[1]) !== TASKS_QUEUE
+  ) {
+    window.history.replaceState(
+      {},
+      "",
+      `/tasks/${TASKS_QUEUE}${parts
+        .slice(2)
+        .map((part) => `/${part}`)
+        .join("")}${window.location.search}`,
+    );
+  }
   const params = new URLSearchParams(window.location.search);
   // pre-pane params (`?agent=`, `?workspace=`) fold into the stack
   const agent = params.get("agent");
