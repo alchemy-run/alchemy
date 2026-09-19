@@ -26,6 +26,7 @@ import { FlyAuth } from "../Fly/AuthProvider.ts";
 import { DopplerAuth } from "../Doppler/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
+import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
@@ -383,6 +384,7 @@ const builtinAuth = Layer.mergeAll(
   GitHubAuth,
   DopplerAuth,
   HetznerAuth,
+  InfisicalAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,

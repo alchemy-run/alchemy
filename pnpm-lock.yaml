@@ -4953,6 +4953,9 @@ importers:
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
+      '@distilled.cloud/infisical':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/infisical
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
