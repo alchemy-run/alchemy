@@ -9,7 +9,13 @@ type _Namespace = Assert<Accepts<Cloudflare.KV.Namespace>>;
 type _Bucket = Assert<Accepts<Cloudflare.R2.Bucket>>;
 type _Job = Assert<Accepts<Cloudflare.R2.SuperSlurperJob>>;
 type _Index = Assert<Accepts<Cloudflare.Vectorize.Index>>;
-type _Model = Assert<Accepts<Cloudflare.AI.ModelResource>>;
+type _Model = Assert<Accepts<Cloudflare.AI.Model>>;
+type _SearchModel = Assert<
+  Cloudflare.AI.SearchModel extends string ? true : false
+>;
+type _SearchModelIsNotResource = Assert<
+  Accepts<Cloudflare.AI.SearchModel> extends false ? true : false
+>;
 type _Worker = Assert<Accepts<Cloudflare.Worker>>;
 
 const references = Effect.gen(function* () {
@@ -20,7 +26,7 @@ const references = Effect.gen(function* () {
     yield* Cloudflare.R2.Bucket.ref("Uploads"),
     yield* Cloudflare.R2.SuperSlurperJob.ref("Migration"),
     yield* Cloudflare.Vectorize.Index.ref("Search"),
-    yield* Cloudflare.AI.ModelResource.ref("Embeddings"),
+    yield* Cloudflare.AI.Model.ref("Embeddings"),
     yield* Cloudflare.Worker.ref("Website"),
   ];
   const Subscription = yield* Cloudflare.Queues.Subscription;

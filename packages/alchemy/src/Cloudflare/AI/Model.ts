@@ -18,8 +18,8 @@ export interface ModelAttributes {
   modelName: string;
 }
 
-export type ModelResource = Resource<
-  "Cloudflare.AI.ModelResource",
+export type Model = Resource<
+  "Cloudflare.AI.Model",
   ModelProps,
   ModelAttributes,
   never,
@@ -36,7 +36,7 @@ export type ModelResource = Resource<
  * ### Selecting a Model
  * **Example:** Observe a Workers AI model
  * ```typescript
- * const model = yield* Cloudflare.AI.ModelResource("Embeddings", {
+ * const model = yield* Cloudflare.AI.Model("Embeddings", {
  *   modelName: "@cf/baai/bge-m3",
  * });
  * ```
@@ -44,7 +44,7 @@ export type ModelResource = Resource<
  * ### Subscribing to Batch Events
  * **Example:** Model-specific Queue subscription
  * ```typescript
- * const model = yield* Cloudflare.AI.ModelResource("Embeddings", {
+ * const model = yield* Cloudflare.AI.Model("Embeddings", {
  *   modelName: "@cf/baai/bge-m3",
  * });
  * const queue = yield* Cloudflare.Queues.Queue("BatchEvents");
@@ -60,7 +60,7 @@ export type ModelResource = Resource<
  * ### Referencing a Persisted Handle
  * **Example:** Read a model handle from another stack
  * ```typescript
- * const model = yield* Cloudflare.AI.ModelResource.ref("Embeddings", {
+ * const model = yield* Cloudflare.AI.Model.ref("Embeddings", {
  *   stack: "models",
  *   stage: "production",
  * });
@@ -72,9 +72,7 @@ export type ModelResource = Resource<
  * @product Workers AI
  * @category AI
  */
-export const ModelResource = Resource<ModelResource>(
-  "Cloudflare.AI.ModelResource",
-);
+export const Model = Resource<Model>("Cloudflare.AI.Model");
 
 const observeModel = (accountId: string, modelName: string) =>
   ai
@@ -82,7 +80,7 @@ const observeModel = (accountId: string, modelName: string) =>
     .pipe(Effect.as({ accountId, modelName }));
 
 export const ModelProvider = () =>
-  Provider.succeed(ModelResource, {
+  Provider.succeed(Model, {
     stables: ["accountId", "modelName"],
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

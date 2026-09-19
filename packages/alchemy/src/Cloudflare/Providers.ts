@@ -157,7 +157,7 @@ export const providers = () =>
       Addressing.ServiceBinding,
       AI.CustomTopics,
       AI.Dataset,
-      AI.ModelResource,
+      AI.Model,
       AI.Evaluation,
       AI.Gateway,
       AI.GatewayDynamicRouting,

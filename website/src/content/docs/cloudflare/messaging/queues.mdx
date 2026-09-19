@@ -305,7 +305,7 @@ A subscription also accepts these resource values, or their yielded `.ref(...)` 
 | `Cloudflare.R2.Bucket` | `r2` | All bucket events in the account |
 | `Cloudflare.R2.SuperSlurperJob` | `superSlurper` | All migration job events in the account |
 | `Cloudflare.Vectorize.Index` | `vectorize` | All index events in the account |
-| `Cloudflare.AI.ModelResource` | `workersAi.model` | Batch events for the selected model |
+| `Cloudflare.AI.Model` | `workersAi.model` | Batch events for the selected model |
 | `Cloudflare.Worker` | `workersBuilds.worker` | Builds for the selected Worker |
 | `Cloudflare.Workflows.WorkflowResource` | `workflows.workflow` | Instances of the selected Workflow |
 
@@ -379,7 +379,7 @@ yield* Cloudflare.Queues.Subscription("MigrationEvents", {
 ### Workers AI batch events
 
 ```typescript
-const model = yield* Cloudflare.AI.ModelResource("Embeddings", {
+const model = yield* Cloudflare.AI.Model("Embeddings", {
   modelName: "@cf/baai/bge-m3",
 });
 
@@ -390,7 +390,7 @@ yield* Cloudflare.Queues.Subscription("BatchEvents", {
 });
 ```
 
-`AI.ModelResource` validates a Cloudflare-managed catalog model and persists a non-owning handle. It neither deploys nor invokes the model. `yield* Cloudflare.AI.ModelResource.ref("Embeddings")` can be used in place of `model` after deployment. Batch events require asynchronous batch inference; ordinary synchronous inference does not emit them.
+`AI.Model` validates a Cloudflare-managed catalog model and persists a non-owning handle. It neither deploys nor invokes the model. `yield* Cloudflare.AI.Model.ref("Embeddings")` can be used in place of `model` after deployment. Batch events require asynchronous batch inference; ordinary synchronous inference does not emit them.
 
 ### Workers Builds events
 
@@ -420,5 +420,5 @@ Reference:
 - [Queue API reference](/providers/cloudflare/queues/queue)
 - [Consumer API reference](/providers/cloudflare/queues/consumer)
 - [Subscription API reference](/providers/cloudflare/queues/subscription)
-- [Workers AI model handle API reference](/providers/cloudflare/ai/modelresource)
+- [Workers AI model handle API reference](/providers/cloudflare/ai/model)
 - [Super Slurper migration API reference](/providers/cloudflare/r2/superslurperjob)

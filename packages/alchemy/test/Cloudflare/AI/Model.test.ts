@@ -19,11 +19,11 @@ test.provider(
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
       const first = yield* stack.deploy(
-        Cloudflare.AI.ModelResource("Model", { modelName: "@cf/baai/bge-m3" }),
+        Cloudflare.AI.Model("Model", { modelName: "@cf/baai/bge-m3" }),
       );
       expect(first).toEqual({ accountId, modelName: "@cf/baai/bge-m3" });
       const updated = yield* stack.deploy(
-        Cloudflare.AI.ModelResource("Model", {
+        Cloudflare.AI.Model("Model", {
           modelName: "@cf/baai/bge-base-en-v1.5",
         }),
       );
@@ -45,7 +45,7 @@ test.provider(
           const identity = yield* Cloudflare.R2.Bucket("Identity", {
             name: `alchemy-model-subscription-identity-${suffix}`,
           });
-          const model = yield* Cloudflare.AI.ModelResource("Model", {
+          const model = yield* Cloudflare.AI.Model("Model", {
             modelName: identity.bucketName.pipe(
               Output.map((name) =>
                 name.endsWith("-a")
@@ -89,7 +89,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const model = Cloudflare.AI.ModelResource("Model", {
+      const model = Cloudflare.AI.Model("Model", {
         modelName: "@cf/baai/bge-m3",
       });
       yield* stack.deploy(model);
@@ -104,7 +104,7 @@ test.provider(
           const subscription = yield* Cloudflare.Queues.Subscription(
             "ModelEvents",
             {
-              source: yield* Cloudflare.AI.ModelResource.ref("Model"),
+              source: yield* Cloudflare.AI.Model.ref("Model"),
               events: ["batch.queued", "batch.succeeded", "batch.failed"],
               queueId: queue.queueId,
             },

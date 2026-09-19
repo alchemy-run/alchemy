@@ -38,7 +38,7 @@ const createSource = (kind: Kind, id = "Source") =>
           metric: "cosine",
         });
       case "model":
-        return yield* Cloudflare.AI.ModelResource(id, {
+        return yield* Cloudflare.AI.Model(id, {
           modelName: "@cf/baai/bge-m3",
         });
       case "worker":
@@ -59,7 +59,7 @@ const refSource = (kind: Kind, options?: { stack: string; stage: string }) =>
       case "vectorize":
         return yield* Cloudflare.Vectorize.Index.ref("Source", options);
       case "model":
-        return yield* Cloudflare.AI.ModelResource.ref("Source", options);
+        return yield* Cloudflare.AI.Model.ref("Source", options);
       case "worker":
         return yield* Cloudflare.Worker.ref("Source", options);
     }

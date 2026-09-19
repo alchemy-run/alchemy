@@ -17,7 +17,7 @@ import {
 } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { ModelResource } from "../AI/Model.ts";
+import type { Model } from "../AI/Model.ts";
 import type { Variant } from "../Images/Variant.ts";
 import type { Namespace } from "../KV/Namespace.ts";
 import type { Bucket } from "../R2/Bucket.ts";
@@ -175,7 +175,7 @@ export type SubscriptionResourceSource =
   | Bucket
   | SuperSlurperJob
   | Index
-  | ModelResource
+  | Model
   | Worker;
 
 /** Constructor inputs; resource sources are normalized before registration. */
@@ -246,7 +246,7 @@ const normalizeSubscriptionProps = (
       source: { type: "workersBuilds.worker", workerName: source.workerName },
     };
   }
-  if (isSourceResource(source, "Cloudflare.AI.ModelResource")) {
+  if (isSourceResource(source, "Cloudflare.AI.Model")) {
     return {
       ...props,
       sourceAccountId: source.accountId,
@@ -454,7 +454,7 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  *
  * **Example:** Workers AI batch events
  * ```typescript
- * const model = yield* Cloudflare.AI.ModelResource("Embeddings", {
+ * const model = yield* Cloudflare.AI.Model("Embeddings", {
  *   modelName: "@cf/baai/bge-m3",
  * });
  * yield* Cloudflare.Queues.Subscription("BatchEvents", {
