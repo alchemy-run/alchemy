@@ -6,6 +6,7 @@ export * from "./ClientVpnRoute.ts";
 export * from "./ClientVpnTargetNetworkAssociation.ts";
 export * from "./CreateSnapshot.ts";
 export * from "./CreateSnapshotHttp.ts";
+export * from "./DefaultSecurityGroup.ts";
 export * from "./DescribeInstance.ts";
 export * from "./DescribeInstanceHttp.ts";
 export * from "./DescribeInstanceStatus.ts";

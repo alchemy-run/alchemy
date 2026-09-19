@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -16,6 +17,14 @@ export class Journal extends Cloudflare.DurableObject<Journal>()(
         yield* state.storage.put("entries", [...entries, entry]);
       }),
       entries: () => state.storage.get<string[]>("entries"),
+      applicationFailure: (internal: boolean) =>
+        Effect.fail(
+          internal
+            ? new Error("internal error; reference = application")
+            : new TypeError(
+                'The RPC receiver does not implement the method "entries".',
+              ),
+        ),
     });
   }),
 ) {}
@@ -30,7 +39,8 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   "LifecycleWorkflow",
   Effect.gen(function* () {
     const journals = yield* Journal;
-    return Effect.fn(function* (input: { scenario: Scenario }) {
+    return Effect.fn(function* (input: { scenario: Scenario | "ready" }) {
+      if (input.scenario === "ready") return ["workflow-ready"];
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const journal = journals.getByName(event.instanceId);
       const runScope = yield* Effect.scope;
@@ -110,11 +120,26 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
         const request = yield* HttpServerRequest;
         const path = new URL(request.url, "http://localhost").pathname;
         const [, action, value] = path.split("/");
+        if (action === "probe") {
+          if (request.method === "POST") {
+            const instance = yield* workflow.create({
+              params: { scenario: "ready" },
+            });
+            return yield* HttpServerResponse.json({ id: instance.id });
+          }
+          const instance = yield* workflow.get(value);
+          return yield* HttpServerResponse.json(yield* instance.status());
+        }
         if (action === "start" && request.method === "POST") {
           const instance = yield* workflow.create({
             params: { scenario: value as Scenario },
           });
           return yield* HttpServerResponse.json({ id: instance.id });
+        }
+        if (action === "journal") {
+          return yield* HttpServerResponse.json(
+            (yield* journals.getByName(value).entries()) ?? [],
+          );
         }
         if (action === "status") {
           const instance = yield* workflow.get(value);
@@ -123,8 +148,57 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
             entries: (yield* journals.getByName(value).entries()) ?? [],
           });
         }
-        return HttpServerResponse.text("ready");
-      }),
+        if (path === "/ready" && request.method === "GET") {
+          const applicationError = new URL(
+            request.url,
+            "http://localhost",
+          ).searchParams.get("application-error");
+          const journal = journals.getByName("ready");
+          return yield* (
+            applicationError !== null
+              ? journal.applicationFailure(applicationError === "internal")
+              : journal.entries()
+          ).pipe(
+            Effect.as(HttpServerResponse.text("ready")),
+            Effect.catchCause((cause) => {
+              const error = Cause.squash(cause);
+              if (
+                error instanceof Cloudflare.RpcCallError &&
+                error.method === "entries" &&
+                error.cause instanceof Error &&
+                ((error.cause.name === "TypeError" &&
+                  error.cause.message ===
+                    'The RPC receiver does not implement the method "entries".') ||
+                  (error.cause.name === "Error" &&
+                    /^internal error; reference = [a-z0-9]+$/.test(
+                      error.cause.message,
+                    )))
+              ) {
+                return Effect.succeed(
+                  HttpServerResponse.text(
+                    "LifecycleJournal.entries not ready",
+                    {
+                      status: 503,
+                      headers: {
+                        "x-workflow-lifecycle-readiness":
+                          "journal-rpc-not-ready",
+                      },
+                    },
+                  ),
+                );
+              }
+              return Effect.failCause(cause);
+            }),
+          );
+        }
+        return HttpServerResponse.text("Not Found", { status: 404 });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.succeed(
+            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
+          ),
+        ),
+      ),
     };
   }),
 ) {}
