@@ -20,6 +20,8 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import ColdEffectWorker, {
   COLD_EFFECT_WORKFLOW_NAME,
 } from "./fixtures/workflow-async/effect-worker.ts";
@@ -1449,11 +1451,26 @@ for (const dev of [false, true]) {
             });
             return { host, workflow, consumer };
           });
-        const client = yield* HttpClient.HttpClient;
         const expectScript = (url: string, scriptName: string) =>
-          client.get(`${url}/workflow/script-name`).pipe(
-            Effect.flatMap((response) => response.text),
-            Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+          requestWorker(
+            HttpClientRequest.get(`${url}/workflow/script-name`).pipe(
+              HttpClientRequest.setHeader("cache-control", "no-cache"),
+            ),
+            { retryDelay: "3 seconds" },
+          ).pipe(
+            Effect.flatMap((response) =>
+              response.text.pipe(
+                Effect.flatMap((body) =>
+                  response.status === 200
+                    ? Effect.succeed(body)
+                    : Effect.fail(
+                        new Error(
+                          `GET ${url}/workflow/script-name: ${response.status}: ${body}`,
+                        ),
+                      ),
+                ),
+              ),
+            ),
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
               until: (name) => name === scriptName,
@@ -1462,6 +1479,7 @@ for (const dev of [false, true]) {
             Effect.tap((name) =>
               Effect.sync(() => expect(name).toBe(scriptName)),
             ),
+            Effect.timeout("45 seconds"),
           );
         const original = yield* scratch.deploy(definition("A"));
         yield* expectScript(original.consumer.url!, original.host.workerName);
