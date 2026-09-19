@@ -156,6 +156,8 @@ export const GlobalsLive = Layer.effect(
           middlewares: [
             {
               name: "plugin:entry",
+              // Restore the public URL before S3 authentication, ahead of asset routing.
+              order: worker.r2S3 ? -3 : 0,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
                 compatibilityFlags: [

@@ -5,6 +5,8 @@ import type { BindingHook } from "./PluginContext.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import type { OutputSink } from "./workerd/Workerd.ts";
 
+import type { R2S3Credentials } from "./bindings/r2-bucket/R2S3Options.shared.ts";
+
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
   readonly proxySharedSecret?: string;
@@ -70,6 +72,8 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * no-op (matching production behaviour on `workers.dev` subdomains).
    */
   readonly cache?: boolean;
+  /** Opt in to presigned HTTP access for local R2 bindings using development-only credentials. */
+  readonly r2S3?: R2S3Credentials;
   /**
    * Per-worker `request.cf` blob. Merged the way Miniflare does — used
    * verbatim unless the request carries an `MF-CF-Blob` header. Falls back
