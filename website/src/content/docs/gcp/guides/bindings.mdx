@@ -1,0 +1,146 @@
+---
+title: How bindings grant IAM
+description: What a yield* of a GCP binding actually does — the per-host service account, the role it grants, and how removing a binding revokes it.
+---
+
+On GCP, giving a container permission to call an API normally means
+three separate things: create a service account, attach it to the Cloud
+Run service, and add role bindings to the project IAM policy. Alchemy
+collapses all three into the line that gets you the callable.
+
+```typescript
+const publish = yield* GCP.PubSub.Publish(topic);
+```
+
+That expression:
+
+1. Creates (or adopts) a runtime service account for this host.
+2. Adds `roles/pubsub.editor` to it on the project.
+3. Injects whatever the call needs into the revision.
+4. Returns a typed function you call from a request handler.
+
+It is the GCP counterpart of AWS `policyStatements` on a Lambda and of
+the scoped `AccountApiToken` a Cloudflare binding mints.
+
+## The per-host service account
+
+Every effectful GCP host — `GCP.Run.Service` (and its alias
+`GCP.Function`), `GCP.Run.Job`, `GCP.Run.WorkerPool`, and
+`GCP.CloudFunctions.Function` — gets its own account, named from the
+host's logical id:
+
+```
+alch-api@my-project.iam.gserviceaccount.com
+```
+
+Accounts Alchemy mints carry the display name `alchemy-host`, which is
+how `pnpm nuke:gcp` finds them. Alchemy also grants
+`roles/iam.serviceAccountUser` to the Cloud Run and Cloud Functions
+service agents so they can `actAs` the account, and retries the deploy
+while that grant propagates.
+
+Pass your own `serviceAccount` on the host and Alchemy uses it instead.
+The difference is what happens on removal, below.
+
+## Which role a binding grants
+
+Each binding has a default role chosen from the Google service it
+belongs to:
+
+| Binding prefix | Default role |
+| --- | --- |
+| `GCP.Firestore.*` | `roles/datastore.user` |
+| `GCP.SecretManager.*` | `roles/secretmanager.secretAccessor` |
+| `GCP.PubSub.*` | `roles/pubsub.editor` |
+| `GCP.BigQuery.*` | `roles/bigquery.user` |
+| `GCP.Storage.*` | `roles/storage.objectAdmin` |
+| `GCP.Redis.*` | `roles/redis.editor` |
+| `GCP.Run.*` | `roles/run.developer` |
+| `GCP.KMS.*` | `roles/cloudkms.cryptoOperator` |
+| `GCP.Spanner.*` | `roles/spanner.databaseUser` |
+| `GCP.SQL.*` | `roles/cloudsql.client` |
+
+Anything without an entry falls back to `roles/viewer`. Individual
+bindings may override the default with a more specific role.
+
+## Adding and removing
+
+The set of bindings you yield *is* the desired IAM state. For an
+Alchemy-minted account, roles outside that set are revoked on the next
+deploy — delete a `yield*` and the permission goes away. Accounts you
+supply yourself are additive only: Alchemy grants what the bindings
+need and never removes a role it did not add, because it cannot tell
+which of the account's other roles matter.
+
+Destroying the host revokes every role Alchemy granted and deletes the
+minted account.
+
+:::note[Grants are project-scoped]
+Alchemy grants roles through `projects.setIamPolicy`, not through the
+per-resource IAM APIs (`topics.setIamPolicy`, `buckets.setIamPolicy`,
+and friends), which differ service by service. A host bound to one
+topic can therefore reach other topics in the same project. When you
+need a resource-scoped grant, set it on the resource yourself and give
+the host a narrower custom role.
+:::
+
+## Provide the implementation
+
+Yielding a binding gives you the interface. The layer that implements
+it is provided once, at the end of the host's Effect:
+
+```typescript
+export default class Api extends GCP.Function<Api>()(
+  "Api",
+  { main: import.meta.url, location: "us-central1" },
+  Effect.gen(function* () {
+    const publish = yield* GCP.PubSub.Publish(topic);
+    // ...
+  }).pipe(
+    Effect.provide([GCP.PubSub.PublishHttp]),
+  ),
+) {}
+```
+
+The convention is the binding name plus `Http`: `Publish` →
+`PublishHttp`, `GetDocument` → `GetDocumentHttp`. Forget one and the
+type error names the missing layer.
+
+## Errors are typed
+
+Bindings return the operation's real error union, so the failure modes
+are in the type rather than in a status-code comparison:
+
+```typescript
+const link = yield* getDocument({ documentPath: `links/${code}` }).pipe(
+  Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+);
+```
+
+`NotFound`, `Forbidden`, `BadRequest`, and `Conflict` are the tags you
+will handle most. Anything you do not catch stays in the channel until
+you `Effect.orDie` it.
+
+## Which host to use
+
+- **`GCP.Function`** — alias of `GCP.Run.Service`. An HTTP server with
+  a `fetch` entry. Scales to zero. Public only when you pass
+  `invokerIamDisabled: true`.
+- **`GCP.Run.Job`** — a `run` entry that executes and exits. Nothing is
+  billed between executions. Start it with a `GCP.Run.RunJob` binding
+  or Cloud Scheduler.
+- **`GCP.Run.WorkerPool`** — a long-running pool with no request path,
+  for pulling from a queue continuously.
+- **`GCP.CloudFunctions.Function`** — the zip-source gen2 API. It does
+  not take `main`; use it when you have an archive rather than a
+  bundle.
+
+The first three build a container image locally, which means Docker
+has to be running to deploy them.
+
+## Next
+
+- [Serve an API on Cloud Run](/gcp/guides/cloud-run-api) — bindings in
+  a request path.
+- [Ingest events into BigQuery](/gcp/guides/event-pipeline) — a Service
+  triggering a Job.
