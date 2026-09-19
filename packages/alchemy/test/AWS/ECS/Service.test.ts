@@ -1,7 +1,7 @@
 import * as AWS from "@/AWS";
 import { Subnet } from "@/AWS/EC2/Subnet.ts";
 import { Cluster } from "@/AWS/ECS/Cluster.ts";
-import { Service } from "@/AWS/ECS/Service.ts";
+import { Service, ServiceDidNotStabilize } from "@/AWS/ECS/Service.ts";
 import * as Provider from "@/Provider";
 import { isResourceState, State, type ResourceState } from "@/State";
 import * as Test from "@/Test/Alchemy";
@@ -11,6 +11,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
@@ -281,7 +282,7 @@ test.provider(
             const defaultVpc = yield* getDefaultVpc;
             const subnet = yield* Subnet("FailedRolloutSubnet", {
               vpcId: defaultVpc.vpcId,
-              cidrBlock: defaultVpc.subnetCidrBlock(232),
+              cidrBlock: defaultVpc.subnetCidrBlock(246),
             });
             const cluster = yield* Cluster("FailedRolloutCluster", {
               clusterName: family,
@@ -304,27 +305,7 @@ test.provider(
           }),
         );
 
-      const waitForFailedDeployment = (
-        cluster: string,
-        service: string,
-        deploymentId: string,
-      ) =>
-        ecs.describeServices({ cluster, services: [service] }).pipe(
-          Effect.repeat({
-            schedule: Schedule.max([
-              Schedule.spaced("5 seconds"),
-              Schedule.recurs(48),
-            ]),
-            until: (response) =>
-              response.services?.[0]?.deployments?.some(
-                (deployment) =>
-                  deployment.id === deploymentId &&
-                  deployment.rolloutState === "FAILED",
-              ) === true,
-          }),
-        );
-
-      // Arrange: start clean and register cleanup before creating anything.
+      // Register cleanup before creating out-of-band task definitions.
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
       yield* Effect.addFinalizer(() =>
@@ -345,41 +326,103 @@ test.provider(
       const failingTaskArn = failingTask.taskDefinition?.taskDefinitionArn!;
       const recoveryTaskArn = recoveryTask.taskDefinition?.taskDefinitionArn!;
 
-      // Establish a healthy service without starting a task yet.
       const created = yield* deployService(initialTaskArn, "initial", 0);
-
-      // Fail: roll out a task that exits immediately and wait for AWS to mark
-      // that exact deployment as FAILED.
-      const failedUpdate = yield* ecs.updateService({
+      const describeService = ecs.describeServices({
         cluster: created.clusterArn,
-        service: created.serviceName,
-        taskDefinition: failingTaskArn,
-        desiredCount: 1,
-        forceNewDeployment: true,
+        services: [created.serviceName],
       });
-      const failedDeploymentId = failedUpdate.service?.deployments?.find(
-        (deployment) => deployment.status === "PRIMARY",
-      )?.id;
-      expect(failedDeploymentId).toBeDefined();
+      const initialSnapshot = yield* describeService;
 
-      const failedSnapshot = yield* waitForFailedDeployment(
-        created.clusterArn,
-        created.serviceName,
-        failedDeploymentId!,
+      const failed = yield* deployService(failingTaskArn, "failed", 1).pipe(
+        Effect.result,
       );
-      expect(
-        failedSnapshot.services?.[0]?.deployments?.find(
-          (deployment) => deployment.id === failedDeploymentId,
-        )?.rolloutState,
-      ).toBe("FAILED");
+      expect(Result.isFailure(failed)).toBe(true);
+      if (Result.isFailure(failed)) {
+        expect(failed.failure).toBeInstanceOf(ServiceDidNotStabilize);
+        if (failed.failure instanceof ServiceDidNotStabilize) {
+          expect(failed.failure.message).toContain(
+            "reported a failed deployment",
+          );
+          expect(failed.failure.expectedTaskDefinitionArn).toBe(failingTaskArn);
+        }
+      }
+      const failedSnapshot = yield* describeService;
+      const failedDeployment = failedSnapshot.services?.[0]?.deployments?.find(
+        (deployment) => deployment.status === "PRIMARY",
+      );
+      expect(failedDeployment?.id).toBeDefined();
+      expect(failedDeployment?.taskDefinition).toBe(failingTaskArn);
+      expect(failedDeployment?.rolloutState).toBe("FAILED");
+      const failedDeploymentId = failedDeployment!.id!;
 
-      // Recover: deploy a new healthy revision through Alchemy. The stale
-      // FAILED deployment above must not be mistaken for this deployment.
-      const recovered = yield* deployService(recoveryTaskArn, "recovered", 1);
+      const [recovered, overlapping] = yield* Effect.all(
+        [
+          deployService(recoveryTaskArn, "recovered", 1),
+          describeService.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 120,
+              until: (response) => {
+                const deployments = response.services?.[0]?.deployments ?? [];
+                const primary = deployments.find((d) => d.status === "PRIMARY");
+                return (
+                  primary?.taskDefinition === recoveryTaskArn &&
+                  primary.id !== failedDeploymentId &&
+                  (primary.rolloutState === "COMPLETED" ||
+                    deployments.some(
+                      (d) =>
+                        d.id === failedDeploymentId &&
+                        d.rolloutState === "FAILED",
+                    ))
+                );
+              },
+            }),
+          ),
+        ],
+        { concurrency: 2 },
+      );
       expect(recovered.serviceArn).toBe(created.serviceArn);
       expect(recovered.taskDefinitionArn).toBe(recoveryTaskArn);
+      const overlappingDeployments =
+        overlapping.services?.[0]?.deployments ?? [];
+      expect(
+        overlappingDeployments.some(
+          (d) => d.id === failedDeploymentId && d.rolloutState === "FAILED",
+        ),
+      ).toBe(true);
+      const recoveryDeploymentId = overlappingDeployments.find(
+        (d) => d.status === "PRIMARY",
+      )?.id;
+      expect(recoveryDeploymentId).toBeDefined();
+      expect(recoveryDeploymentId).not.toBe(failedDeploymentId);
 
-      // Cleanup and prove the test cluster is gone.
+      const recoveredSnapshot = yield* describeService;
+      const recoveredService = recoveredSnapshot.services?.[0];
+      expect(recoveredService?.createdAt).toEqual(
+        initialSnapshot.services?.[0]?.createdAt,
+      );
+      expect(recoveredService?.deployments).toHaveLength(1);
+      expect(recoveredService?.deployments?.[0]?.id).toBe(recoveryDeploymentId);
+      expect(recoveredService?.deployments?.[0]?.rolloutState).toBe(
+        "COMPLETED",
+      );
+      expect(recoveredService?.runningCount).toBe(1);
+      expect(recoveredService?.pendingCount).toBe(0);
+
+      yield* deployService(recoveryTaskArn, "forced-same-revision", 1);
+      const forcedSnapshot = yield* describeService;
+      const forcedService = forcedSnapshot.services?.[0];
+      expect(forcedService?.deployments).toHaveLength(1);
+      expect(forcedService?.deployments?.[0]?.id).not.toBe(
+        recoveryDeploymentId,
+      );
+      expect(forcedService?.deployments?.[0]?.taskDefinition).toBe(
+        recoveryTaskArn,
+      );
+      expect(forcedService?.deployments?.[0]?.rolloutState).toBe("COMPLETED");
+      expect(forcedService?.runningCount).toBe(1);
+      expect(forcedService?.pendingCount).toBe(0);
+
       yield* stack.destroy();
       yield* reclaimTaskDefinitionFamily(family);
 

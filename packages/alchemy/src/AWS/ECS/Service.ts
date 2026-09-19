@@ -2572,6 +2572,7 @@ const observeServiceConvergence = (input: {
   clusterArn: string;
   serviceName: string;
   expectedTaskDefinitionArn?: string;
+  expectedDeploymentId?: string;
   mode: ServiceConvergenceMode;
 }): Effect.Effect<
   ServiceConvergenceSnapshot,
@@ -2666,6 +2667,8 @@ const observeServiceConvergence = (input: {
     const deploymentConverged =
       deployments.length === 1 &&
       primary !== undefined &&
+      (input.expectedDeploymentId === undefined ||
+        primary.id === input.expectedDeploymentId) &&
       primary.taskDefinition === input.expectedTaskDefinitionArn &&
       (deploymentController === "ECS"
         ? primary.rolloutState === "COMPLETED"
