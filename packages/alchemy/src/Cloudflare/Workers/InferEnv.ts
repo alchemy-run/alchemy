@@ -9,7 +9,7 @@ import type { Output } from "../../Output.ts";
 // @cloudflare/workers-types, referenced above) stays reachable for
 // `Rpc.DurableObjectBranded`.
 import type { Rpc as AlchemyRpc } from "../../Rpc.ts";
-import type { WorkflowLike } from "../Workflows/Workflow.ts";
+import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 // NOTE: import the service modules directly rather than `import * as Cloudflare
 // from "../index.ts"`. Importing the whole Cloudflare barrel here creates a
 // circular re-export when the barrel does `export * from "./Workers/index.ts"`
@@ -130,9 +130,13 @@ export type GetBindingType<T> =
                                                       ? WorkerVersionMetadata
                                                       : T extends WorkerLoaderResource
                                                         ? WorkerLoader
-                                                        : T extends WorkflowLike<
-                                                              infer Params
-                                                            >
+                                                        : T extends
+                                                              | WorkflowLike<
+                                                                  infer Params
+                                                                >
+                                                              | WorkflowBinding<
+                                                                  infer Params
+                                                                >
                                                           ? Workflow<Params>
                                                           : T extends DurableObjectLike
                                                             ? DurableObjectNamespace<
