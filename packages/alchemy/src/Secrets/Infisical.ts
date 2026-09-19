@@ -15,10 +15,11 @@ import {
 import { UserFacingError } from "../UserFacingError.ts";
 
 export interface InfisicalOptions {
-  /** Project slug. Either this or `projectId` is required. */
-  project?: string;
-  /** Project id, for tokens whose identity cannot resolve slugs. */
-  projectId?: string;
+  /**
+   * Project slug, or the project's UUID. Infisical only resolves slugs for
+   * machine identities, so a user token must pass the UUID.
+   */
+  project: string;
   /** Environment slug, e.g. `dev` or `prod`. */
   environment: string;
   /**
@@ -81,13 +82,11 @@ const resolveCredentials = Effect.fn("resolveInfisicalCredentials")(
 
 /** Human description of which secrets were asked for, for error messages. */
 const describeSelection = (options: InfisicalOptions) => {
-  const project =
-    options.project !== undefined
-      ? `project '${options.project}'`
-      : `project id '${options.projectId}'`;
   const folder = options.path === undefined ? "" : ` path '${options.path}'`;
-  return `${project} environment '${options.environment}'${folder}`;
+  return `project '${options.project}' environment '${options.environment}'${folder}`;
 };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const rejectedTokenMessage = (credentials: InfisicalCredentials) =>
   credentials.profileName === undefined
@@ -130,9 +129,10 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
   credentials: InfisicalCredentials,
 ) {
   const includeImports = options.includeImports ?? true;
+  const byId = UUID.test(options.project);
   const response = yield* listSecretRaw({
-    workspaceSlug: options.project,
-    workspaceId: options.projectId,
+    workspaceId: byId ? options.project : undefined,
+    workspaceSlug: byId ? undefined : options.project,
     environment: options.environment,
     secretPath: options.path,
     recursive: options.recursive,
@@ -196,13 +196,6 @@ export const Infisical = <E = never, R = never>(
       }
 
       const resolved = Effect.isEffect(options) ? yield* options : options;
-      if (resolved.project === undefined && resolved.projectId === undefined) {
-        return yield* new InfisicalSecretsError({
-          message:
-            "Secrets.Infisical needs either `project` (slug) or `projectId`.",
-        });
-      }
-
       const credentials = yield* resolveCredentials();
       const env = yield* downloadSecrets(resolved, credentials);
       return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });

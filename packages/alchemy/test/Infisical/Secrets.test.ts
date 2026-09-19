@@ -221,7 +221,10 @@ it.effect(
     withFakeInfisical(
       Config.String("INFISICAL_TEST_VALUE").pipe(
         Effect.provide(
-          Infisical({ projectId: "proj_123", environment: "prod" }),
+          Infisical({
+            project: "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+            environment: "prod",
+          }),
         ),
         Effect.map((value) => expect(value).toBe("remote")),
       ),
@@ -235,7 +238,11 @@ it.effect(
           expect(request.headers.authorization).toBe("Bearer ci-token");
           const url = new URL(request.url);
           expect(url.origin).toBe("https://infisical.example.com");
-          expect(url.searchParams.get("workspaceId")).toBe("proj_123");
+          // A UUID is sent as the project id; a slug as the project slug.
+          expect(url.searchParams.get("workspaceId")).toBe(
+            "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+          );
+          expect(url.searchParams.get("workspaceSlug")).toBeNull();
         },
       },
     ),
@@ -275,29 +282,6 @@ it.effect("directly defined secrets override imported ones", () =>
           INFISICAL_TEST_IMPORTED: "imported",
         },
       ),
-    },
-  ),
-);
-
-it.effect("requires a project slug or id before touching the network", () =>
-  withFakeInfisical(
-    Config.String("INFISICAL_TEST_VALUE").pipe(
-      Effect.provide(Infisical({ environment: "dev" })),
-      Effect.result,
-      Effect.map((result) => {
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(String(result.failure)).toContain(
-            "`project` (slug) or `projectId`",
-          );
-        }
-      }),
-    ),
-    {
-      env: { INFISICAL_TOKEN: "environment" },
-      check: () => {
-        throw new Error("Must not request secrets");
-      },
     },
   ),
 );

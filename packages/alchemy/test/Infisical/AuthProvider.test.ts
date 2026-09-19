@@ -219,7 +219,7 @@ it.effect(
         );
         expect(Result.isFailure(missing)).toBe(true);
         if (Result.isFailure(missing)) {
-          expect(missing.failure.message).toContain("Set INFISICAL_TOKEN");
+          expect(missing.failure.message).toContain("set INFISICAL_TOKEN");
         }
       }),
       HttpClient.make(() => Effect.die("No network expected")),

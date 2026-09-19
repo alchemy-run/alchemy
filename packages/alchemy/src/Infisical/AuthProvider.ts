@@ -1,6 +1,7 @@
 import {
   anonymous,
   DEFAULT_API_BASE_URL,
+  loginWithOidcAuth,
   loginWithUniversalAuth,
 } from "@distilled.cloud/infisical";
 import * as Retry from "@distilled.cloud/infisical/Retry";
@@ -23,8 +24,15 @@ import {
   type StoredValues,
 } from "../Auth/StoredAuthProvider.ts";
 import * as Interaction from "../Interaction.ts";
+import {
+  detectOidcToken,
+  INFISICAL_OIDC_AUDIENCE_ENV,
+  INFISICAL_OIDC_TOKEN_ENV,
+} from "./Oidc.ts";
 
 export const INFISICAL_TOKEN_ENV = "INFISICAL_TOKEN";
+/** The machine identity to log into with a platform OIDC token. */
+export const INFISICAL_IDENTITY_ID_ENV = "INFISICAL_IDENTITY_ID";
 /** Same name the Infisical CLI uses for self-hosted instances. */
 export const INFISICAL_API_URL_ENV = "INFISICAL_API_URL";
 
@@ -43,7 +51,7 @@ const UniversalAuthConfig = Schema.Struct({
   apiBaseUrl: Schema.optional(Schema.String),
 });
 
-/** A ready-made access token, e.g. from `infisical login --plain`. Expires. */
+/** A user token from the dashboard's "Copy Token" menu item. Valid for 10 days. */
 const AccessTokenConfig = Schema.Struct({
   method: Schema.Literal("access-token"),
   token: Schema.NonEmptyString,
@@ -74,7 +82,7 @@ const universalAuthFields: ReadonlyArray<ConfigureField> = [
     name: "clientId",
     label: "Machine identity client ID",
     description:
-      "From the machine identity's Universal Auth settings in Infisical.",
+      "From the machine identity's Universal Auth settings in Infisical. See https://infisical.com/docs/documentation/platform/identities/universal-auth",
   },
   {
     name: "clientSecret",
@@ -87,8 +95,9 @@ const universalAuthFields: ReadonlyArray<ConfigureField> = [
 const accessTokenFields: ReadonlyArray<ConfigureField> = [
   {
     name: "token",
-    label: "Infisical access token",
-    description: "A machine identity or user access token. Expires.",
+    label: "Infisical user token",
+    description:
+      'From the account menu in the Infisical dashboard ("Copy Token"). Valid for 10 days.',
     secret: true,
   },
   apiBaseUrlField,
@@ -100,6 +109,16 @@ const rejectedCredentials = (cause: unknown) =>
       "Infisical rejected the machine identity credentials. Check the client ID and secret, and that the secret has not expired or hit its use limit.",
     cause,
   });
+
+const toCredentials = (
+  response: { readonly accessToken: string | Redacted.Redacted<string> },
+  apiBaseUrl: string | undefined,
+): InfisicalResolvedCredentials => ({
+  token: Redacted.isRedacted(response.accessToken)
+    ? response.accessToken
+    : Redacted.make(response.accessToken),
+  apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
+});
 
 /**
  * Exchange a machine identity's client credentials for an access token.
@@ -121,13 +140,38 @@ export const mintAccessToken = (config: {
     Retry.none,
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
-    Effect.map((response) => ({
-      token: Redacted.isRedacted(response.accessToken)
-        ? response.accessToken
-        : Redacted.make(response.accessToken),
-      apiBaseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
-    })),
+    Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
     Effect.mapError(rejectedCredentials),
+  );
+
+/**
+ * Exchange a platform-issued OIDC token for an access token of the machine
+ * identity whose OIDC auth trusts that platform's issuer.
+ */
+export const mintAccessTokenFromOidc = (config: {
+  readonly identityId: string;
+  readonly jwt: Redacted.Redacted<string>;
+  readonly apiBaseUrl?: string;
+}): Effect.Effect<
+  InfisicalResolvedCredentials,
+  AuthError,
+  HttpClient.HttpClient
+> =>
+  loginWithOidcAuth({
+    identityId: config.identityId,
+    jwt: Redacted.value(config.jwt),
+  }).pipe(
+    Retry.none,
+    Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
+    Effect.timeout(API_TIMEOUT),
+    Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
+    Effect.mapError(
+      (cause) =>
+        new AuthError({
+          message: `Infisical rejected the OIDC login for identity '${config.identityId}'. Check that the identity's OIDC auth trusts this platform's issuer, subject, and audience.`,
+          cause,
+        }),
+    ),
   );
 
 /** Resolve the token a stored configuration grants. */
@@ -185,22 +229,58 @@ const chooseMethod = Interaction.accessors.prompt
       },
       {
         value: "access-token" as const,
-        label: "Access token",
-        description: "Paste an existing token; expires",
+        label: "User token",
+        description: "Copied from the dashboard; valid for 10 days",
       },
     ],
   })
   .pipe(mapPromptCancellation);
 
-const readEnvironment = Effect.gen(function* () {
+/**
+ * How CI authenticates, decided from the environment. Profiles do not exist
+ * in CI, and platform OIDC tokens do not exist on laptops, so the two never
+ * compete.
+ */
+type EnvironmentAuth =
+  | { readonly method: "token"; readonly token: Redacted.Redacted<string> }
+  | { readonly method: "oidc"; readonly identityId: string };
+
+const environmentAuth = Effect.gen(function* () {
   const token = yield* getEnvRedacted(INFISICAL_TOKEN_ENV);
-  if (token === undefined || Redacted.value(token).length === 0) {
+  if (token !== undefined && Redacted.value(token).length > 0) {
+    const auth: EnvironmentAuth = { method: "token", token };
+    return auth;
+  }
+  const identityId = yield* getEnv(INFISICAL_IDENTITY_ID_ENV);
+  if (identityId !== undefined && identityId.length > 0) {
+    const auth: EnvironmentAuth = { method: "oidc", identityId };
+    return auth;
+  }
+  return yield* new AuthError({
+    message: `Infisical credentials are missing. In CI set ${INFISICAL_TOKEN_ENV}, or set ${INFISICAL_IDENTITY_ID_ENV} to log in with the platform's OIDC token; locally run \`alchemy profile edit --add Infisical\`.`,
+  });
+});
+
+const readEnvironment = Effect.gen(function* () {
+  const auth = yield* environmentAuth;
+  const apiBaseUrl = yield* getEnv(INFISICAL_API_URL_ENV);
+  if (auth.method === "token") {
+    return {
+      token: auth.token,
+      apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
+    };
+  }
+  const oidc = yield* detectOidcToken;
+  if (oidc === undefined) {
     return yield* new AuthError({
-      message: `Infisical credentials are missing. Set ${INFISICAL_TOKEN_ENV} in CI, or run \`alchemy profile edit --add Infisical\` locally.`,
+      message: `${INFISICAL_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: Vercel, GitHub Actions (needs \`permissions: id-token: write\`), GitLab CI (needs \`id_tokens\`), Fly.io, and GCP; elsewhere pass the token in ${INFISICAL_OIDC_TOKEN_ENV}.`,
     });
   }
-  const apiBaseUrl = yield* getEnv(INFISICAL_API_URL_ENV);
-  return { token, apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL };
+  return yield* mintAccessTokenFromOidc({
+    identityId: auth.identityId,
+    jwt: oidc.token,
+    apiBaseUrl,
+  });
 });
 
 /**
@@ -265,7 +345,21 @@ export const InfisicalAuth = AuthProviderLayer<
       name: INFISICAL_TOKEN_ENV,
       required: true,
       secret: true,
-      description: "Machine identity access token (e.g. minted via OIDC in CI)",
+      alternatives: [INFISICAL_IDENTITY_ID_ENV],
+      description:
+        "A machine identity access token; or set INFISICAL_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, Fly.io, GCP)",
+    },
+    {
+      name: INFISICAL_OIDC_TOKEN_ENV,
+      required: false,
+      secret: true,
+      description:
+        "Explicit OIDC token for platforms that are not auto-detected",
+    },
+    {
+      name: INFISICAL_OIDC_AUDIENCE_ENV,
+      required: false,
+      description: "Audience to request in the platform's OIDC token",
     },
     {
       name: INFISICAL_API_URL_ENV,
