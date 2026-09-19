@@ -81,14 +81,19 @@ Alchemy.Secrets.Infisical(
 
 ## In CI
 
-CI never uses profiles, and there are two ways to authenticate.
+The stack does not change between your machine and CI. The
+`Secrets.Infisical({ project, environment })` line above is all it
+ever says; which credential backs it is decided by where the command
+runs. Locally that is the profile. In CI, where profiles are never
+consulted, it is the environment, and there are two ways to fill it.
 
 The simplest is a ready access token in `INFISICAL_TOKEN`, however
 you obtained it. The better one is to hold no Infisical credential in
 CI at all. Set `INFISICAL_IDENTITY_ID` to a machine identity whose
 [OIDC auth](https://infisical.com/docs/documentation/platform/identities/oidc-auth/general)
 trusts your platform, and Alchemy finds the platform's own identity
-token and exchanges it for an Infisical access token on every run:
+token and exchanges it for an Infisical access token on every run.
+Nothing else is configured on the Alchemy side:
 
 ```yaml
 jobs:
@@ -115,6 +120,10 @@ If the identity expects a specific audience, put it in
 `INFISICAL_OIDC_AUDIENCE`. A platform that is not detected can hand
 its token over in `INFISICAL_OIDC_TOKEN`.
 
+When both variables are present, `INFISICAL_TOKEN` wins and no OIDC
+exchange happens. Either one also wins over a profile on your own
+machine, so exporting `INFISICAL_IDENTITY_ID` locally is a quick way
+to try the OIDC path with a token pasted into `INFISICAL_OIDC_TOKEN`.
 `INFISICAL_API_URL` selects the EU cloud or a self-hosted instance in
 either mode. `alchemy provider check-env` lists all of these next to
 the other providers' variables.
