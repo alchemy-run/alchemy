@@ -39,8 +39,6 @@ const TOKEN_ENV = "DOPPLER_TOKEN";
 /** How long the user has to approve the browser login. */
 const LOGIN_TIMEOUT = Duration.minutes(5);
 const APPROVAL_POLL_INTERVAL = Duration.seconds(2);
-/** Enough polls at the interval above to cover the login timeout. */
-const APPROVAL_POLL_ATTEMPTS = 149;
 const API_TIMEOUT = Duration.seconds(30);
 
 /**
@@ -75,8 +73,9 @@ const awaitApproval = (authorization: {
     Retry.none,
     Effect.retry({
       while: (error) => error._tag === "Conflict",
-      times: APPROVAL_POLL_ATTEMPTS,
-      schedule: Schedule.spaced(APPROVAL_POLL_INTERVAL),
+      schedule: Schedule.spaced(APPROVAL_POLL_INTERVAL).pipe(
+        Schedule.upTo({ duration: LOGIN_TIMEOUT }),
+      ),
     }),
   );
 

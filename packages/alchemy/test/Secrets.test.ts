@@ -330,7 +330,10 @@ describe("stack secrets", () => {
       Effect.void,
     ).pipe(
       Effect.flip,
-      Effect.map((error) => expect(error).toBe("options-error")),
+      Effect.map((error) => {
+        expect(error._tag).toBe("ConfigError");
+        expect(error.message).toContain("options-error");
+      }),
       Effect.provideService(Stage, "test"),
       Effect.scoped,
     ),

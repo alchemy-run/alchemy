@@ -8,14 +8,14 @@ import * as Plan from "./Plan.ts";
 import { evalStack, type CompiledStack, type StackEffect } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 
-export const deploy = <A, E = ConfigError>({
+export const deploy = <A>({
   stack,
   stage,
   dev,
   scope,
   force,
 }: {
-  stack: StackEffect<CompiledStack<A>, E, Stage | AlchemyContext>;
+  stack: StackEffect<CompiledStack<A>, ConfigError, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */

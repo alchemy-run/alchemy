@@ -1,4 +1,4 @@
-import type { ConfigError } from "effect/Config";
+import { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -60,9 +60,9 @@ export const StackConfigOverrides = Context.Reference<StackConfigOverrides>(
  *
  * @internal
  */
-export const stackConfigLayer = <E = never>(
-  secrets?: ReadonlyArray<Layer.Layer<never, E, StackServices>>,
-): Layer.Layer<never, E | ConfigError, StackServices> =>
+export const stackConfigLayer = (
+  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>,
+): Layer.Layer<never, ConfigError, StackServices> =>
   Layer.effect(
     ConfigProvider.ConfigProvider,
     Effect.gen(function* () {
@@ -76,10 +76,24 @@ export const stackConfigLayer = <E = never>(
 
       let fromSecrets = emptyProvider;
       for (const source of sources) {
+        // A stack fails with ConfigError only; a secrets source that fails
+        // for its own reasons (auth, network) is reported as one, keeping
+        // the source's message.
         const built = yield* Layer.build(source).pipe(
           Effect.provideService(
             ConfigProvider.ConfigProvider,
             withPrecedence(fromSecrets),
+          ),
+          Effect.mapError((error) =>
+            error instanceof ConfigError
+              ? error
+              : new ConfigError(
+                  new ConfigProvider.SourceError({
+                    message:
+                      error instanceof Error ? error.message : String(error),
+                    cause: error,
+                  }),
+                ),
           ),
         );
         const provider = Context.get(built, ConfigProvider.ConfigProvider);

@@ -72,7 +72,8 @@ export interface InfisicalResolvedCredentials {
 const apiBaseUrlField: ConfigureField = {
   name: "apiBaseUrl",
   label: "Infisical API URL",
-  description: "Only for self-hosted instances.",
+  description:
+    "For the EU cloud (https://eu.infisical.com) or a self-hosted instance.",
   placeholder: DEFAULT_API_BASE_URL,
   optional: true,
 };
@@ -103,13 +104,6 @@ const accessTokenFields: ReadonlyArray<ConfigureField> = [
   apiBaseUrlField,
 ];
 
-const rejectedCredentials = (cause: unknown) =>
-  new AuthError({
-    message:
-      "Infisical rejected the machine identity credentials. Check the client ID and secret, and that the secret has not expired or hit its use limit.",
-    cause,
-  });
-
 const toCredentials = (
   response: { readonly accessToken: string | Redacted.Redacted<string> },
   apiBaseUrl: string | undefined,
@@ -128,11 +122,7 @@ export const mintAccessToken = (config: {
   readonly clientId: string;
   readonly clientSecret: string;
   readonly apiBaseUrl?: string;
-}): Effect.Effect<
-  InfisicalResolvedCredentials,
-  AuthError,
-  HttpClient.HttpClient
-> =>
+}) =>
   loginWithUniversalAuth({
     clientId: config.clientId,
     clientSecret: Redacted.make(config.clientSecret),
@@ -141,7 +131,14 @@ export const mintAccessToken = (config: {
     Effect.provide(anonymous({ apiBaseUrl: config.apiBaseUrl })),
     Effect.timeout(API_TIMEOUT),
     Effect.map((response) => toCredentials(response, config.apiBaseUrl)),
-    Effect.mapError(rejectedCredentials),
+    Effect.mapError(
+      (cause) =>
+        new AuthError({
+          message:
+            "Infisical rejected the machine identity credentials. Check the client ID and secret, and that the secret has not expired or hit its use limit.",
+          cause,
+        }),
+    ),
   );
 
 /**
@@ -152,11 +149,7 @@ export const mintAccessTokenFromOidc = (config: {
   readonly identityId: string;
   readonly jwt: Redacted.Redacted<string>;
   readonly apiBaseUrl?: string;
-}): Effect.Effect<
-  InfisicalResolvedCredentials,
-  AuthError,
-  HttpClient.HttpClient
-> =>
+}) =>
   loginWithOidcAuth({
     identityId: config.identityId,
     jwt: Redacted.value(config.jwt),
@@ -174,7 +167,11 @@ export const mintAccessTokenFromOidc = (config: {
     ),
   );
 
-/** Resolve the token a stored configuration grants. */
+/**
+ * Resolve the token a stored configuration grants. Annotated because the two
+ * branches are differently shaped Effects and a union of Effects does not
+ * flow through `flatMap`.
+ */
 const resolve = (
   config: InfisicalAuthConfig,
 ): Effect.Effect<

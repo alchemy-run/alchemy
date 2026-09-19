@@ -10,7 +10,10 @@ import { getEnv, getEnvRedacted } from "../Auth/Env.ts";
  * Platform-issued OIDC tokens, for exchanging with Infisical's OIDC machine
  * identity auth so CI never holds a long-lived Infisical credential.
  *
- * Detection order and sources mirror varlock's `oidc-tokens` utility:
+ * Detection order and sources are adapted from varlock's `oidc-tokens`
+ * utility (MIT, see THIRD_PARTY_LICENSES.md):
+ * https://github.com/dmno-dev/varlock/blob/9a7dfc2e76f0598f0c5bd56a0f084a48a2efd9e3/packages/utils/src/oidc-tokens.ts
+ *
  *
  * | Platform       | Detected by       | Token source                              |
  * | -------------- | ----------------- | ----------------------------------------- |
@@ -153,33 +156,22 @@ const attempt = <A, E, R>(probe: Effect.Effect<A | undefined, E, R>) =>
  * run in order and the first token wins; `undefined` means no supported
  * platform (or its token) was detected.
  */
-export const detectOidcToken: Effect.Effect<
-  OidcToken | undefined,
-  AuthError,
-  HttpClient.HttpClient
-> = Effect.gen(function* () {
+export const detectOidcToken = Effect.gen(function* () {
   const audience = yield* getEnv(INFISICAL_OIDC_AUDIENCE_ENV);
-  // Probe failures (HTTP or env) are swallowed by `attempt`, hence `unknown`.
-  const probes: ReadonlyArray<
-    readonly [
-      OidcPlatform,
-      Effect.Effect<
-        Redacted.Redacted<string> | undefined,
-        unknown,
-        HttpClient.HttpClient
-      >,
-    ]
-  > = [
-    ["explicit", fromExplicit],
-    ["vercel", fromVercel],
-    ["github-actions", fromGitHubActions(audience)],
-    ["gitlab", fromGitLab],
-    ["fly", fromFly(audience)],
-    ["gcp", fromGcp(audience)],
-  ];
+  const probes = [
+    ["explicit", attempt(fromExplicit)],
+    ["vercel", attempt(fromVercel)],
+    ["github-actions", attempt(fromGitHubActions(audience))],
+    ["gitlab", attempt(fromGitLab)],
+    ["fly", attempt(fromFly(audience))],
+    ["gcp", attempt(fromGcp(audience))],
+  ] as const;
   for (const [platform, probe] of probes) {
-    const token = yield* attempt(probe);
-    if (token !== undefined) return { platform, token };
+    const token = yield* probe;
+    if (token !== undefined) {
+      const found: OidcToken = { platform, token };
+      return found;
+    }
   }
   return undefined;
 });

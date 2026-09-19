@@ -61,7 +61,7 @@ export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
   readonly stackName: string;
   readonly providers: Layer.Layer<never> | undefined;
   readonly state: Layer.Layer<never> | undefined;
-  readonly secrets: Stack.StackProps<never, unknown>["secrets"];
+  readonly secrets: Stack.StackProps<never>["secrets"];
 };
 
 export interface StackModuleLoader {

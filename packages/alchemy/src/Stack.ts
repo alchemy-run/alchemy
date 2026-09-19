@@ -91,7 +91,7 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
-export interface StackProps<Req, SecretsError = never> {
+export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
   /**
@@ -99,7 +99,7 @@ export interface StackProps<Req, SecretsError = never> {
    * Process environment takes priority. Defaults to DotEnv(); use [] to disable
    * automatic dotenv loading. Options effects can read Stage.
    */
-  secrets?: ReadonlyArray<Layer.Layer<never, SecretsError, StackServices>>;
+  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
 }
 
 export const Stack: Context.ServiceClass<
@@ -118,11 +118,11 @@ export const Stack: Context.ServiceClass<
     >,
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
   <Self>(): {
-    <A, Req, SecretsError = never>(
+    <A, Req>(
       stackName: string,
-      options: StackProps<NoInfer<Req>, SecretsError>,
+      options: StackProps<NoInfer<Req>>,
       eff: Effect.Effect<A, ConfigError, Req>,
-    ): Effect.Effect<Self, ConfigError | SecretsError> & {
+    ): Effect.Effect<Self, ConfigError> & {
       new (_: never): A extends object ? A : {};
       stage: {
         [stage: string]: Effect.Effect<Self>;
@@ -132,30 +132,26 @@ export const Stack: Context.ServiceClass<
   <Self, Shape>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
-      make: <A, Req, SecretsError = never>(
-        options: StackProps<NoInfer<Req>, SecretsError>,
+      make: <A, Req>(
+        options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError | SecretsError>;
+      ) => Effect.Effect<CompiledStack<A>, ConfigError>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
     };
   };
-  <
-    A,
-    Req extends StackServices | ProviderServices = never,
-    SecretsError = never,
-  >(
+  <A, Req extends StackServices | ProviderServices = never>(
     stackName: string,
-    options: StackProps<NoInfer<Req>, SecretsError>,
+    options: StackProps<NoInfer<Req>>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError | SecretsError>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError>;
 } = Object.assign(
   taggedFunction(
     StackContext,
-    <A, Req, SecretsError = never>(
+    <A, Req>(
       stackName?: string,
-      options?: StackProps<NoInfer<Req>, SecretsError>,
+      options?: StackProps<NoInfer<Req>>,
       eff?: Effect.Effect<A, ConfigError, Req>,
     ) => {
       if (!stackName) {
@@ -169,8 +165,8 @@ export const Stack: Context.ServiceClass<
               state: options?.state,
               providers: options?.providers,
               secrets: options?.secrets,
-              make: <Req = never, SecretsError = never>(
-                options: StackProps<NoInfer<Req>, SecretsError>,
+              make: <Req = never>(
+                options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
               ) =>
                 // @ts-expect-error
@@ -231,20 +227,18 @@ export interface CompiledStack<
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
-export interface MakeStackProps<ROut = never, SecretsError = never> {
+export interface MakeStackProps<ROut = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
   /** Ordered ConfigProvider layers. Defaults to DotEnv(); [] disables dotenv. */
-  secrets?: ReadonlyArray<Layer.Layer<never, SecretsError, StackServices>>;
+  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
   /** @internal */
   stack?: StackSpec;
 }
 
 export const make =
-  <ROut = never, SecretsError = never>(
-    options: MakeStackProps<ROut, SecretsError>,
-  ) =>
+  <ROut = never>(options: MakeStackProps<ROut>) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
   ) =>
