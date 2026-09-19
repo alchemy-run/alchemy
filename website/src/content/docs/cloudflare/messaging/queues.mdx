@@ -311,6 +311,8 @@ A subscription also accepts these resource values, or their yielded `.ref(...)` 
 
 The resource's account must match the subscription's Cloudflare account. Account metadata remains in Alchemy state and is not sent as an extra Cloudflare source field. A collision with an existing subscription fails rather than changing another stack's destination Queue.
 
+Event delivery can lag subscription creation or replacement even after the destination Queue accepts messages. Deployment confirms configuration, not delivery readiness. Verify delivery before emitting events that must be observed.
+
 ### Account-wide resource events
 
 ```typescript

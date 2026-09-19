@@ -477,6 +477,10 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  * The Worker must have a Workers Builds integration to emit build events.
  * An ordinary Alchemy Worker upload is not a Workers Builds run.
  *
+ * Event delivery can lag subscription creation or replacement even after the
+ * destination Queue accepts messages. Deployment confirms configuration, not
+ * delivery readiness; verify delivery before emitting events that must be observed.
+ *
  * ### Pausing delivery
  * **Example:** Disable a subscription without deleting it
  * ```typescript

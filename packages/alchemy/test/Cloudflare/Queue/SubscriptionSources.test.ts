@@ -149,6 +149,52 @@ const triggerEvent = (kind: Kind, accountId: string, name: string) =>
     return yield* Effect.fail(new Error(`No lifecycle trigger for ${kind}`));
   });
 
+const waitForDelivery = (
+  kind: "kv" | "r2" | "vectorize",
+  accountId: string,
+  queueId: string,
+  subscriptionId: string,
+) =>
+  Effect.gen(function* () {
+    const probes: string[] = [];
+    let ready = false;
+    // Consumer readiness does not establish that the product has picked up a new subscription.
+    yield* Effect.gen(function* () {
+      probes.push(
+        yield* triggerEvent(
+          kind,
+          accountId,
+          `${kind}-${subscriptionId}-${probes.length}`,
+        ),
+      );
+      const batch = yield* queues.pullMessage({
+        accountId,
+        queueId,
+        batchSize: 100,
+        visibilityTimeoutMs: 1000,
+      });
+      ready = (batch.messages ?? []).some(
+        ({ body }) =>
+          body?.includes(`cf.${kind}.${eventType(kind)}`) &&
+          body.includes(accountId) &&
+          body.includes(subscriptionId) &&
+          probes.some((id) => body.includes(id)),
+      );
+      const acks = (batch.messages ?? []).flatMap((message) =>
+        message.leaseId ? [{ leaseId: message.leaseId }] : [],
+      );
+      if (acks.length) yield* queues.ackMessage({ accountId, queueId, acks });
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("7 seconds"),
+        times: 8,
+        until: () => ready,
+      }),
+      Effect.timeout("75 seconds"),
+    );
+    expect(ready).toBe(true);
+  });
+
 // Account-wide subscriptions are unique per product, regardless of the selected resource.
 describe.sequential("resource subscription sources", () => {
   for (const kind of [
@@ -235,6 +281,12 @@ describe.sequential("resource subscription sources", () => {
             initial.subscription.subscriptionId,
           );
           if (receivesLifecycle) {
+            yield* waitForDelivery(
+              kind,
+              accountId,
+              referenced.queue.queueId,
+              referenced.subscription.subscriptionId,
+            );
             const identity = yield* triggerEvent(
               kind,
               accountId,
