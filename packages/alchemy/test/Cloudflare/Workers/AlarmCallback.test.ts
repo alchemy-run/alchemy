@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -18,7 +19,11 @@ import type {
 } from "./fixtures/alarm-callback/object.ts";
 import Stack from "./fixtures/alarm-callback/stack.ts";
 
-const requestJson = <T>(url: string, method: "GET" | "POST") =>
+const requestJson = <T>(
+  url: string,
+  method: "GET" | "POST",
+  retryDelay: Duration.Input = "2 seconds",
+) =>
   Effect.gen(function* () {
     const client = HttpClient.mapRequest(
       yield* HttpClient.HttpClient,
@@ -58,7 +63,7 @@ const requestJson = <T>(url: string, method: "GET" | "POST") =>
     Effect.timeout("5 seconds"),
     Effect.retry({
       while: (error) => error instanceof Test.WorkerNotReady,
-      schedule: Schedule.spaced("2 seconds"),
+      schedule: Schedule.spaced(retryDelay),
       times: 8,
     }),
   );
@@ -129,8 +134,12 @@ describe.concurrent.each([
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
       yield* Effect.all([
-        json<Snapshot>(`${output.url}/readiness/snapshot`),
-        json(`${output.url}/readiness/legacy`),
+        requestJson<Snapshot>(
+          `${output.url}/readiness/snapshot`,
+          "GET",
+          "4 seconds",
+        ),
+        requestJson(`${output.url}/readiness/legacy`, "GET", "4 seconds"),
       ]).pipe(
         Effect.retry({
           while: Cause.isTimeoutError,

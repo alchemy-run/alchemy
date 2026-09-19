@@ -73,8 +73,8 @@ const getJson = <T>(
           // The opaque startup error is unexplained; only read-only readiness tolerates it.
           return response.headers["x-do-readiness-retry"] === "true";
         }),
-      schedule: Schedule.spaced("1 second"),
-      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 8,
     }),
     Effect.flatMap((res) => res.json as Effect.Effect<T>),
   );

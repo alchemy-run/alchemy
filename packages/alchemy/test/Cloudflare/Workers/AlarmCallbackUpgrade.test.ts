@@ -22,12 +22,12 @@ const requestJson = Effect.fn(
     const fresh = yield* Effect.sync(() => {
       const fresh = new URL(`${url}/${action}`);
       fresh.searchParams.set("cb", String(Date.now()));
-      return fresh.href;
+      return fresh;
     });
     const response = yield* requestWorker(
-      (action === "snapshot"
-        ? HttpClientRequest.get(fresh)
-        : HttpClientRequest.post(fresh)
+      (fresh.pathname === "/snapshot"
+        ? HttpClientRequest.get(fresh.href)
+        : HttpClientRequest.post(fresh.href)
       ).pipe(
         // A fresh connection avoids polling an edge still pinned to the old deployment.
         HttpClientRequest.setHeaders({
@@ -37,21 +37,24 @@ const requestJson = Effect.fn(
         }),
       ),
     ).pipe(Effect.timeout("15 seconds"));
-    const actualVersion = response.headers["x-alarm-worker-version"];
-    if (
-      response.status === 409 &&
-      actualVersion === (workerVersion === "v1" ? "v2" : "v1") &&
-      (yield* response.text) === "Alarm worker version mismatch"
-    ) {
-      return yield* Effect.fail(
-        new WorkerVersionPending(
-          `Waiting for Worker ${workerVersion}; got ${actualVersion}`,
-        ),
-      );
-    }
     if (response.status !== 200) {
+      const body = yield* response.text;
+      const actualVersion = response.headers["x-alarm-worker-version"];
+      if (
+        response.status === 409 &&
+        actualVersion === (workerVersion === "v1" ? "v2" : "v1") &&
+        body === "Alarm worker version mismatch"
+      ) {
+        return yield* Effect.fail(
+          new WorkerVersionPending(
+            `Waiting for Worker ${workerVersion}; got ${actualVersion}`,
+          ),
+        );
+      }
       return yield* Effect.fail(
-        new Error(`Upgrade fixture ${action}: HTTP ${response.status}`),
+        new Error(
+          `Upgrade fixture ${action}: HTTP ${response.status}\n${body}`,
+        ),
       );
     }
     const body: unknown = yield* response.json;
@@ -73,8 +76,14 @@ const request = (
     Effect.map((body) => body as Snapshot),
   );
 
-const ready = (url: string, version: Snapshot["version"]) =>
-  request(url, "snapshot", version).pipe(
+const ready = (url: string, version: Snapshot["version"], name?: string) =>
+  request(
+    url,
+    name === undefined
+      ? "snapshot"
+      : `snapshot?name=${encodeURIComponent(name)}`,
+    version,
+  ).pipe(
     Effect.flatMap((snapshot) =>
       snapshot.version === version
         ? Effect.succeed(snapshot)
@@ -152,11 +161,13 @@ for (const dev of [true, false]) {
           const initial = yield* ready(original.url!, "v1");
           expect(initial.marker).toBeNull();
           yield* request(original.url!, "seed", "v1");
+          yield* ready(original.url!, "v1", "future-version");
           const futureOriginal = yield* request(
             original.url!,
             "seed?name=future-version",
             "v1",
           );
+          yield* ready(original.url!, "v1", "atomic-migration");
           const rollbackOriginal = yield* request(
             original.url!,
             "seed?name=atomic-migration",

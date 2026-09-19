@@ -43,6 +43,42 @@ const request = Effect.fn(function* (
   return body;
 });
 
+const waitForReady = Effect.fn(function* (url: string) {
+  const ready = yield* Effect.gen(function* () {
+    const response = yield* requestWorker(HttpClientRequest.get(url), {
+      retryDelay: "3 seconds",
+    });
+    const body = yield* response.text;
+    if (
+      response.status === 503 &&
+      response.headers["x-workflow-lifecycle-readiness"] ===
+        "journal-rpc-not-ready" &&
+      body === "LifecycleJournal.entries not ready"
+    ) {
+      yield* Effect.logInfo(
+        `Workflow readiness: native journal RPC not ready at ${url}`,
+      );
+      return false;
+    }
+    if (response.status !== 200) {
+      return yield* Effect.fail(
+        new Error(`GET ${url}: ${response.status}: ${body}`),
+      );
+    }
+    if (body === "Alchemy worker is being deployed...") return false;
+    expect(body).toBe("ready");
+    return true;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (ready) => ready,
+    }),
+    Effect.timeout("45 seconds"),
+  );
+  expect(ready, "Journal entries method did not propagate").toBe(true);
+});
+
 const probeWorkflow = Effect.fn(function* (url: string) {
   const ready = yield* Effect.gen(function* () {
     const started = yield* request(`${url}/probe`, "POST");
@@ -134,14 +170,7 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      const ready = yield* request(`${output.url}/ready`).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("1 second"),
-          times: 8,
-          while: (body) => body === "Alchemy worker is being deployed...",
-        }),
-      );
-      expect(ready).toBe("ready");
+      yield* waitForReady(`${output.url}/ready`);
       yield* probeWorkflow(output.url);
       return output;
     }),
@@ -150,6 +179,27 @@ describe.concurrent.each([
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
     timeout: 30_000,
   });
+
+  for (const [kind, message] of [
+    ["missing", 'The RPC receiver does not implement the method "entries".'],
+    ["internal", "internal error; reference = application"],
+  ]) {
+    test(
+      `does not mask an application ${kind} failure as readiness`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const failure = yield* waitForReady(
+          `${url}/ready?application-error=${kind}`,
+        ).pipe(Effect.flip);
+        expect(failure.message).toContain(": 500:");
+        expect(failure.message).toContain(message);
+        expect(failure.message).not.toContain(
+          "LifecycleJournal.entries not ready",
+        );
+      }),
+      { timeout: 60_000 },
+    );
+  }
 
   for (const { scenario, entries } of cases) {
     test(
