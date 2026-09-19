@@ -302,6 +302,57 @@ Add `scriptName` to bind a workflow hosted by another Worker script
 — bindings only, so deploy the host first. The full async-handler
 example lives in the API reference.
 
+## Send lifecycle events to a Queue
+
+Pass a Workflow binding from the declared Worker's `env` directly to
+`Queues.Subscription`:
+
+```typescript
+const worker = yield* Worker;
+const queue = yield* Cloudflare.Queues.Queue("WorkflowEventsQueue");
+
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: worker.env.MY_WORKFLOW,
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+The binding's physical name is an `Output`, so the subscription waits for
+the Workflow on its first deployment and follows later renames. Only
+`{ type: "workflows.workflow", workflowName }` is persisted as the source;
+binding metadata such as `className` and `scriptName` is not stored.
+
+For an already-deployed Workflow, use its resource reference directly:
+
+```typescript
+yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+  source: yield* Cloudflare.Workflow.ref("MyWorkflow"),
+  events: ["instance.completed", "instance.errored"],
+  queueId: queue.queueId,
+});
+```
+
+`Workflow.ref` delegates to `Workflows.WorkflowResource.ref`: it reads
+persisted resource attributes, not a runtime Workflow handle. Pass the logical
+ID (including any namespace), not the env key or physical name. It defaults to
+the current stack and stage; pass `{ stack: "workflow-host", stage: "production" }`
+as the second argument to reference another deployment. Deploy the host first.
+The reference does not register a Workflow or transfer ownership, so destroying
+the subscription's stack leaves a separately managed host intact.
+
+For a Workflow referenced by physical name, the explicit descriptor is
+still supported:
+
+```typescript
+source: { type: "workflows.workflow", workflowName: "existing-ingestion" }
+```
+
+A cross-script Workflow binding can also be passed directly; the
+subscription does not take ownership of the foreign Workflow. Attach a
+[Queue consumer](/cloudflare/messaging/queues) to process the lifecycle events.
+Cloudflare permits one subscription per source per account.
+
 ## Where next
 
 The full walkthrough:
