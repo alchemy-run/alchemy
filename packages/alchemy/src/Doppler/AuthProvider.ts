@@ -6,6 +6,7 @@ import {
   revokeCliAuth,
 } from "@distilled.cloud/doppler";
 import * as Retry from "@distilled.cloud/doppler/Retry";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -36,35 +37,31 @@ const PROVIDER_NAME = "Doppler";
 const TOKEN_ENV = "DOPPLER_TOKEN";
 
 /** How long the user has to approve the browser login. */
-const LOGIN_TIMEOUT = "5 minutes";
-const APPROVAL_POLL_INTERVAL = "2 seconds";
+const LOGIN_TIMEOUT = Duration.minutes(5);
+const APPROVAL_POLL_INTERVAL = Duration.seconds(2);
 /** Enough polls at the interval above to cover the login timeout. */
 const APPROVAL_POLL_ATTEMPTS = 149;
-const API_TIMEOUT = "30 seconds";
+const API_TIMEOUT = Duration.seconds(30);
 
 /**
  * Describe this machine the way Doppler's CLI auth endpoint expects it.
  * Doppler validates these fields, so the values mirror what its own CLI sends.
  */
 const describeClient = () => ({
-  hostname: `Alchemy (${hostname()})`,
+  // Doppler cuts the token name at the first ".", so drop any domain suffix
+  // (e.g. "Yoru.local" -> "Yoru").
+  hostname: `Alchemy (${hostname().split(".")[0]})`,
   // Doppler requires vMAJOR.MINOR.PATCH; prerelease suffixes are rejected.
   version: `v${packageJson.version.split("-")[0]}`,
   os: process.platform === "win32" ? "windows" : process.platform,
-  arch: goArch(process.arch),
+  // Doppler expects Go-style architecture names.
+  arch:
+    process.arch === "x64"
+      ? "amd64"
+      : process.arch === "ia32"
+        ? "386"
+        : process.arch,
 });
-
-/** Doppler expects Go-style architecture names. */
-const goArch = (arch: NodeJS.Architecture) => {
-  switch (arch) {
-    case "x64":
-      return "amd64";
-    case "ia32":
-      return "386";
-    default:
-      return arch;
-  }
-};
 
 /**
  * Poll Doppler until the user approves the login in their browser.
@@ -162,7 +159,7 @@ const chooseMethod = Interaction.accessors.prompt
       {
         value: "login" as const,
         label: "Login",
-        description: "Authorize Alchemy in your browser",
+        description: "Login using your browser",
       },
       {
         value: "api-token" as const,

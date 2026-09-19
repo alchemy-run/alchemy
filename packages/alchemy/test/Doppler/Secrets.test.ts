@@ -4,7 +4,6 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -89,7 +88,7 @@ const withFakeDoppler = <A, E, R>(
     Effect.scoped,
   );
 it.effect(
-  "explicit token wins over env and supports stage-dependent options without mutation",
+  "supports stage-dependent options without mutating process.env",
   () => {
     const before = process.env.DOPPLER_TEST_VALUE;
     return withFakeDoppler(
@@ -101,11 +100,7 @@ it.effect(
           Effect.provide(
             Doppler(
               Effect.gen(function* () {
-                return {
-                  token: Redacted.make("explicit"),
-                  project: "app",
-                  config: yield* Stage,
-                };
+                return { project: "app", config: yield* Stage };
               }),
             ),
           ),
@@ -116,7 +111,7 @@ it.effect(
       {
         env: { DOPPLER_TOKEN: "environment" },
         check: (request) => {
-          expect(request.headers.authorization).toBe("Bearer explicit");
+          expect(request.headers.authorization).toBe("Bearer environment");
           expect(new URL(request.url).searchParams.get("config")).toBe("dev");
         },
       },
@@ -217,6 +212,34 @@ it.effect("missing CI token fails clearly without using a local profile", () =>
   ),
 );
 
+it.effect("names Doppler and the selection when the project is not found", () =>
+  withFakeDoppler(
+    Config.String("DOPPLER_TEST_VALUE").pipe(
+      Effect.provide(Doppler({ project: "dev", config: "dev" })),
+      Effect.result,
+      Effect.map((result) => {
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("DopplerSecretsError");
+          expect(String(result.failure)).toContain(
+            "Doppler could not find project 'dev' config 'dev'",
+          );
+          expect(String(result.failure)).toContain(
+            "Could not find requested project 'dev'",
+          );
+        }
+      }),
+    ),
+    {
+      token: "stored",
+      status: 404,
+      secrets: {
+        messages: ["Could not find requested project 'dev'"],
+      },
+    },
+  ),
+);
+
 it.effect("rejected stored credentials instruct refresh and never log in", () =>
   withFakeDoppler(
     Config.String("DOPPLER_TEST_VALUE").pipe(
@@ -261,7 +284,7 @@ it.effect(
 it.effect(
   "later Doppler layers win and the process environment keeps priority",
   () => {
-    let index = 0;
+    const projects: string[] = [];
     return withFakeDoppler(
       Stack(
         "doppler-layers",
@@ -269,8 +292,14 @@ it.effect(
           providers: Layer.empty,
           state: inMemoryState(),
           secrets: [
-            Doppler({ token: Redacted.make("first") }),
-            Doppler({ token: Redacted.make("second") }),
+            // A stack's ConfigProvider is built from the real process
+            // environment, so feed DOPPLER_TOKEN in through an earlier
+            // secrets layer; later layers see values from earlier ones.
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({ env: { DOPPLER_TOKEN: "layered" } }),
+            ),
+            Doppler({ project: "first", config: "dev" }),
+            Doppler({ project: "second", config: "dev" }),
           ],
         },
         Effect.all([
@@ -282,18 +311,17 @@ it.effect(
         Effect.map(({ output: [value, path] }) => {
           expect(value).toBe("second");
           expect(path).toBe(process.env.PATH!);
-          expect(index).toBe(2);
+          expect(projects).toEqual(["first", "second"]);
         }),
       ),
       {
         secrets: (request) => ({
-          DOPPLER_TEST_VALUE: request.headers.authorization!.slice(7),
+          DOPPLER_TEST_VALUE: new URL(request.url).searchParams.get("project")!,
           PATH: "remote-path",
         }),
         check: (request) => {
-          expect(request.headers.authorization).toBe(
-            `Bearer ${index++ === 0 ? "first" : "second"}`,
-          );
+          expect(request.headers.authorization).toBe("Bearer layered");
+          projects.push(new URL(request.url).searchParams.get("project")!);
         },
       },
     );

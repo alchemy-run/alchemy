@@ -3,6 +3,7 @@ import * as Retry from "@distilled.cloud/doppler/Retry";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import { AuthError, refreshHint } from "../Auth/AuthProvider.ts";
 import { SuppressMissingProviderConfig } from "../Auth/Profile.ts";
 import { resolveProviderConfig } from "../Auth/Resolve.ts";
@@ -11,14 +12,24 @@ import {
   type DopplerAuthConfig,
   type DopplerResolvedCredentials,
 } from "../Doppler/AuthProvider.ts";
+import { UserFacingError } from "../UserFacingError.ts";
 
 export interface DopplerOptions {
   /** Project slug. Required with browser login or personal tokens. */
   project?: string;
   /** Config slug, e.g. `dev` or `prd`. Required with browser login or personal tokens. */
   config?: string;
-  /** Explicit credential, used before `DOPPLER_TOKEN` and the selected profile. */
-  token?: Redacted.Redacted<string>;
+}
+
+/** Doppler could not serve the requested secrets (wrong project/config, API outage, ...). */
+export class DopplerSecretsError extends Schema.TaggedError<DopplerSecretsError>()(
+  "DopplerSecretsError",
+  {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {
+  readonly [UserFacingError] = true;
 }
 
 /** A provider that knows nothing. */
@@ -33,34 +44,64 @@ interface DopplerCredentials {
 }
 
 /**
- * Pick the token to call Doppler with: an explicit option first, otherwise
- * whatever the Doppler auth provider resolves (`DOPPLER_TOKEN`, then the
- * selected profile).
+ * Resolve the token through the Doppler auth provider: `DOPPLER_TOKEN` when
+ * present, otherwise the selected profile.
  */
-const resolveCredentials = Effect.fn("resolveDopplerCredentials")(function* (
-  options: DopplerOptions,
-) {
-  if (options.token !== undefined) {
-    const explicit: DopplerCredentials = { token: options.token };
-    return explicit;
-  }
+const resolveCredentials = Effect.fn("resolveDopplerCredentials")(function* () {
   const resolved = yield* resolveProviderConfig<
     DopplerAuthConfig,
     DopplerResolvedCredentials
   >("Doppler").pipe(Effect.provide(DopplerAuth));
   const { token } = yield* resolved.resolve;
-  const stored: DopplerCredentials = {
+  const credentials: DopplerCredentials = {
     token,
     profileName: resolved.profileName,
     method: resolved.config?.method,
   };
-  return stored;
+  return credentials;
 });
 
 const rejectedTokenMessage = (credentials: DopplerCredentials) =>
   credentials.profileName === undefined
-    ? "Doppler rejected the token. Check the explicit token or DOPPLER_TOKEN; to log in locally run `alchemy profile edit --add Doppler`."
+    ? "Doppler rejected the token. Check DOPPLER_TOKEN; to log in locally run `alchemy profile edit --add Doppler`."
     : `Doppler credentials were rejected. ${refreshHint("Doppler", credentials.profileName)}`;
+
+/** Human description of which secrets were asked for, for error messages. */
+const describeSelection = (options: DopplerOptions) => {
+  if (options.project && options.config) {
+    return `project '${options.project}' config '${options.config}'`;
+  }
+  if (options.project) {
+    return `project '${options.project}'`;
+  }
+  return "the token's own project and config";
+};
+
+/**
+ * Turn whatever the Doppler SDK failed with into an error that says
+ * "Doppler" up front, so a stack trace never has to be read to know which
+ * secrets source broke.
+ */
+const describeFailure = (
+  options: DopplerOptions,
+  credentials: DopplerCredentials,
+  error: { readonly _tag: string; readonly message: string },
+) => {
+  switch (error._tag) {
+    case "Unauthorized":
+      return new AuthError({ message: rejectedTokenMessage(credentials) });
+    case "NotFound":
+      return new DopplerSecretsError({
+        message: `Doppler could not find ${describeSelection(options)}: ${error.message}. Check Secrets.Doppler({ project, config }) and that the token has access to it.`,
+        cause: error,
+      });
+    default:
+      return new DopplerSecretsError({
+        message: `Doppler could not download secrets for ${describeSelection(options)}: ${error.message}`,
+        cause: error,
+      });
+  }
+};
 
 /** Download every secret of the selected project/config as a flat env map. */
 const downloadSecrets = Effect.fn("downloadDopplerSecrets")(function* (
@@ -75,11 +116,7 @@ const downloadSecrets = Effect.fn("downloadDopplerSecrets")(function* (
     Retry.none,
     Effect.provide(fromApiKey({ apiKey: credentials.token })),
     Effect.timeout("30 seconds"),
-    Effect.catchTag("Unauthorized", () =>
-      Effect.fail(
-        new AuthError({ message: rejectedTokenMessage(credentials) }),
-      ),
-    ),
+    Effect.mapError((error) => describeFailure(options, credentials, error)),
   );
 
   const env: Record<string, string> = {};
@@ -119,7 +156,7 @@ export const Doppler = <E = never, R = never>(
       }
 
       const resolved = Effect.isEffect(options) ? yield* options : options;
-      const credentials = yield* resolveCredentials(resolved);
+      const credentials = yield* resolveCredentials();
 
       // Browser-login tokens are personal tokens: they can see every project,
       // so Doppler needs to be told which one to read.

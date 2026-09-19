@@ -1,2 +1,6 @@
 export { DotEnv, type DotEnvOptions } from "./DotEnv.ts";
-export { Doppler, type DopplerOptions } from "./Doppler.ts";
+export {
+  Doppler,
+  DopplerSecretsError,
+  type DopplerOptions,
+} from "./Doppler.ts";
