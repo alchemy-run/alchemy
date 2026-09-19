@@ -142,6 +142,45 @@ layer(workerLayer, { excludeTestServices: true })(
     );
 
     it.effect(
+      "supports SDK-hoisted metadata and distinguishes unsatisfiable ranges",
+      () =>
+        Effect.gen(function* () {
+          const worker = yield* Worker;
+          const url = objectUrl(worker.baseUrl, "metadata.txt");
+          const upload = yield* sign(`${url}?x-amz-meta-owner=browser`, "PUT");
+          expect(
+            (yield* worker.fetch(upload.url, {
+              method: "PUT",
+              body: "metadata",
+            })).status,
+          ).toBe(200);
+          const download = yield* sign(url);
+          const response = yield* worker.fetch(download.url);
+          expect(response.headers.get("x-amz-meta-owner")).toBe("browser");
+          expect(yield* text(response)).toBe("metadata");
+          for (const range of [
+            "bytes=999-",
+            "bytes=4-2",
+            "bytes=-0",
+            "invalid",
+          ]) {
+            const denied = yield* worker.fetch(download.url, {
+              headers: { Range: range },
+            });
+            expect(denied.status).toBe(416);
+            expect(denied.headers.get("content-range")).toBe("bytes */8");
+            expect(yield* text(denied)).toContain("<Code>InvalidRange</Code>");
+          }
+          const multiple = yield* worker.fetch(download.url, {
+            headers: { Range: "bytes=0-1,4-5" },
+          });
+          expect(multiple.status).toBe(200);
+          expect(multiple.headers.get("content-range")).toBeNull();
+          expect(yield* text(multiple)).toBe("metadata");
+        }),
+    );
+
+    it.effect(
       "allows browser preflight and exposes CORS headers on authentication errors",
       () =>
         Effect.gen(function* () {

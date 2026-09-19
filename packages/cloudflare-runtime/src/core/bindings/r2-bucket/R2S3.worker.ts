@@ -1,3 +1,4 @@
+import { parseRanges } from "../../internal/shared.worker.ts";
 import { s3Error, verifyPresigned } from "./R2S3Auth.ts";
 import { R2_S3_PATH, type R2S3Credentials } from "./R2S3Options.shared.ts";
 
@@ -63,6 +64,7 @@ async function dispatch(
     [...url.searchParams.keys()].some(
       (name) =>
         !name.startsWith("X-Amz-") &&
+        !name.toLowerCase().startsWith("x-amz-meta-") &&
         ![
           "x-id",
           "response-content-type",
@@ -100,11 +102,12 @@ async function dispatch(
         "Encryption, storage classes and flexible checksums are not supported.",
       );
     }
-    const customMetadata: Record<string, string> = {};
-    for (const [name, value] of request.headers) {
-      if (name.startsWith("x-amz-meta-"))
-        customMetadata[name.slice(11)] = value;
-    }
+    // AWS SDK presigners hoist custom metadata into the signed query.
+    const customMetadata = Object.fromEntries(
+      [...request.headers, ...url.searchParams]
+        .filter(([name]) => name.toLowerCase().startsWith("x-amz-meta-"))
+        .map(([name, value]) => [name.slice(11).toLowerCase(), value]),
+    );
     const object = await bucket.put(key, request.body ?? new Uint8Array(), {
       httpMetadata: request.headers,
       customMetadata,
@@ -138,9 +141,24 @@ async function dispatch(
     if (value !== null) headers.set(name, value);
   }
   if (body) {
+    const rangeHeader = request.headers.get("Range");
+    const ranges =
+      rangeHeader === null ? undefined : parseRanges(rangeHeader, object.size);
+    // The native binding ignores invalid and multiple ranges, returning the
+    // full object. Do not mistake its full-object range metadata for a 206.
+    if (rangeHeader !== null && (ranges === undefined || ranges.length === 0)) {
+      await body.body.cancel();
+      const error = s3Error(
+        416,
+        "InvalidRange",
+        "The requested range is not satisfiable.",
+      );
+      error.headers.set("Content-Range", `bytes */${object.size}`);
+      return error;
+    }
     const range = body.range;
     if (
-      request.headers.has("Range") &&
+      ranges?.length === 1 &&
       range &&
       "offset" in range &&
       range.offset !== undefined &&
