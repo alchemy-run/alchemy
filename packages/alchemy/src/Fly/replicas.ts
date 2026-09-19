@@ -3,6 +3,7 @@ import type {
   FlyMachineMount,
   FlyMachineService,
   FlyMachineServiceCheck,
+  FlyStopConfig,
   ImageRef as FlyImageRef,
   Machine as FlyMachine,
   Volume as FlyVolume,
@@ -12,6 +13,13 @@ import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { deepEqual } from "../Diff.ts";
+import {
+  validateDeployment,
+  type DeploymentPolicy,
+  type MachineCheck,
+} from "./Deployment.ts";
+import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
   MachineGuest,
@@ -37,8 +45,6 @@ import {
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
-const CHECK_POLL = Schedule.spaced("5 seconds");
-const CHECK_WAIT = "60 seconds";
 
 export class ReplicaNotCreated extends Data.TaggedError(
   "Fly.ReplicaNotCreated",
@@ -70,6 +76,7 @@ export class ReplicaChecksNotPassing extends Data.TaggedError(
 export interface Replica {
   machineId: string;
   name: string;
+  baseName?: string;
   region: string;
   state: string;
   instanceId: string | undefined;
@@ -80,10 +87,12 @@ export interface Replica {
 }
 
 export interface ReplicaSet {
+  rolloutPending?: boolean;
   appName: string;
   machineId: string;
   machineIds: string[];
   name: string;
+  baseName?: string;
   region: string;
   state: string;
   instanceId: string | undefined;
@@ -262,9 +271,6 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.timeout("50 seconds"),
     );
 
-const configuredServiceChecks = (machine: FlyMachine) =>
-  (machine.config?.services ?? []).flatMap((service) => service.checks ?? []);
-
 const liveServiceChecks = (machine: FlyMachine) =>
   (machine.checks ?? []).filter((check) =>
     (check.name ?? "").startsWith(SERVICE_CHECK_NAME_PREFIX),
@@ -295,17 +301,23 @@ const TRANSIENT_GET_TAGS = [
 export const waitHealthy = Effect.fn(function* (
   appName: string,
   machine: FlyMachine,
+  healthTimeoutMs = 60_000,
+  config: FlyMachineConfig | undefined = machine.config,
 ) {
   const machineId = machine.id;
-  const expected = configuredServiceChecks(machine).length;
-  if (machineId === undefined || expected === 0) return machine;
+  const named = Object.keys(config?.checks ?? {});
+  const expected = (config?.services ?? []).flatMap(
+    (service) => service.checks ?? [],
+  ).length;
+  if (machineId === undefined || (expected === 0 && named.length === 0))
+    return machine;
 
   let observed = machine;
   const notPassing = () =>
     new ReplicaChecksNotPassing({
       appName,
       machineId,
-      checks: liveServiceChecks(observed).map((check) => ({
+      checks: (observed.checks ?? []).map((check) => ({
         name: check.name,
         status: check.status,
         output: check.output,
@@ -316,16 +328,23 @@ export const waitHealthy = Effect.fn(function* (
     Effect.map((current) => {
       if (current === undefined) return false;
       observed = current;
-      return allServiceChecksPassing(current, expected);
+      return (
+        allServiceChecksPassing(current, expected) &&
+        named.every((name) =>
+          (current.checks ?? []).some(
+            (check) => check.name === name && check.status === "passing",
+          ),
+        )
+      );
     }),
     Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
     Effect.repeat({
-      schedule: CHECK_POLL,
+      schedule: Schedule.spaced(healthTimeoutMs / 10),
       until: (passing) => passing,
       times: 10,
     }),
     Effect.timeoutOrElse({
-      duration: CHECK_WAIT,
+      duration: healthTimeoutMs,
       orElse: () => Effect.fail(notPassing()),
     }),
   );
@@ -356,6 +375,8 @@ export const ensureStarted = Effect.fn(function* (
   appName: string,
   machine: FlyMachine,
   skipLaunch: boolean,
+  healthTimeoutMs = 60_000,
+  expectedConfig?: FlyMachineConfig,
 ) {
   const machineId = machine.id;
   if (machineId === undefined || skipLaunch) return machine;
@@ -405,7 +426,12 @@ export const ensureStarted = Effect.fn(function* (
     }),
     Effect.timeout("50 seconds"),
   );
-  return yield* waitHealthy(appName, started);
+  return yield* waitHealthy(
+    appName,
+    started,
+    healthTimeoutMs,
+    expectedConfig ?? machine.config,
+  );
 });
 
 export const deleteMachine = Effect.fn(function* (
@@ -429,6 +455,94 @@ export const deleteMachine = Effect.fn(function* (
     );
   yield* waitDestroyed(appName, machineId);
 });
+
+const stopTimeoutMillis = (timeout: string | undefined) => {
+  if (timeout === undefined) return undefined;
+  const units: Record<string, number> = {
+    ms: 1,
+    s: 1000,
+    m: 60_000,
+    h: 3_600_000,
+  };
+  const parts = [...timeout.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)];
+  return parts.map((part) => part[0]).join("") === timeout
+    ? parts.reduce(
+        (total, part) => total + Number(part[1]) * units[part[2]!]!,
+        0,
+      )
+    : undefined;
+};
+
+export const sameStopConfig = (
+  observed: FlyStopConfig | undefined,
+  desired: FlyStopConfig | undefined,
+) =>
+  observed?.signal === desired?.signal &&
+  stopTimeoutMillis(observed?.timeout) === stopTimeoutMillis(desired?.timeout);
+
+export const retireMachine = Effect.fn(
+  function* (
+    appName: string,
+    machineId: string,
+    shutdown?: DeploymentPolicy["shutdown"],
+  ) {
+    const current = yield* getMachineById(appName, machineId);
+    if (current === undefined) return;
+    const stop =
+      shutdown ??
+      (current.config?.stop_config
+        ? {
+            signal: current.config.stop_config.signal ?? "SIGTERM",
+            timeout: current.config.stop_config.timeout ?? "30s",
+            timeoutMs:
+              stopTimeoutMillis(current.config.stop_config.timeout) ?? 300_000,
+          }
+        : undefined);
+    if (
+      stop === undefined ||
+      (current.cordoned === true &&
+        current.config?.metadata?.[alchemyMetadataKeys.phase] === "candidate")
+    )
+      return yield* deleteMachine(appName, machineId);
+    if (current.state !== "stopped" && current.state !== "created") {
+      yield* machines.cordonMachine({
+        app_name: appName,
+        machine_id: machineId,
+      });
+      if (hasPublishedService(current.config?.services))
+        yield* Effect.sleep("10 seconds");
+      yield* machines.stopMachine({
+        app_name: appName,
+        machine_id: machineId,
+        signal: stop.signal,
+        timeout: stop.timeout,
+      });
+      yield* machines
+        .waitMachine({
+          app_name: appName,
+          machine_id: machineId,
+          state: "stopped",
+          timeout: WAIT_TIMEOUT_SECONDS,
+        })
+        .pipe(
+          Retry.none,
+          Effect.retry({
+            times: 10,
+            schedule: Schedule.spaced(Math.max(500, stop.timeoutMs / 10)),
+            while: (error) =>
+              error._tag === "MachineWaitTimeout" ||
+              error._tag === "GatewayTimeout",
+          }),
+          Effect.timeout(stop.timeoutMs + 15_000),
+        );
+    }
+    yield* machines
+      .deleteMachine({ app_name: appName, machine_id: machineId, force: false })
+      .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    yield* waitDestroyed(appName, machineId);
+  },
+  Effect.catchTag("NotFound", () => Effect.void),
+);
 
 const mountedDisksOf = (
   machine: FlyMachine,
@@ -476,6 +590,7 @@ export const toReplicaSet = (
     machineId: primary?.machineId ?? "",
     machineIds: replicas.map((replica) => replica.machineId),
     name: primary?.name ?? baseName,
+    baseName,
     region: primary?.region ?? "",
     state: primary?.state ?? "",
     instanceId: primary?.instanceId,
@@ -490,6 +605,39 @@ export const toReplicaSet = (
     replicas,
   };
 };
+
+export const ownedReplicas = (
+  listed: FlyMachine[],
+  input: {
+    metadata: Record<string, string>;
+    resourceInstanceId: string;
+    fqn: string;
+    baseName?: string;
+    machineIds?: readonly string[];
+  },
+) =>
+  listed.filter((machine) => {
+    const metadata = machine.config?.metadata ?? {};
+    if (
+      !Object.entries(input.metadata).every(
+        ([key, value]) => metadata[key] === value,
+      )
+    )
+      return false;
+    if (metadata[alchemyMetadataKeys.instance] !== undefined) {
+      return (
+        metadata[alchemyMetadataKeys.instance] === input.resourceInstanceId &&
+        metadata[alchemyMetadataKeys.fqn] === input.fqn
+      );
+    }
+    return (
+      (machine.id !== undefined && input.machineIds?.includes(machine.id)) ||
+      (input.baseName !== undefined &&
+        (machine.name === input.baseName ||
+          machine.name ===
+            replicaMachineName(input.baseName, replicaIndexOf(machine), 2)))
+    );
+  });
 
 export const listReplicas = Effect.fn(function* (input: {
   appName: string;
@@ -519,9 +667,17 @@ export const listReplicaSets = Effect.fn(function* (type: FlyAlchemyType) {
           for (const machine of owned) {
             const id = alchemyIdOf(machine);
             if (id === undefined) continue;
-            const group = byId.get(id) ?? [];
+            const metadata = machine.config?.metadata;
+            const key = JSON.stringify([
+              metadata?.[alchemyMetadataKeys.stack],
+              metadata?.[alchemyMetadataKeys.stage],
+              metadata?.[alchemyMetadataKeys.fqn] ?? id,
+              metadata?.[alchemyMetadataKeys.instance],
+              metadata?.[alchemyMetadataKeys.generation],
+            ]);
+            const group = byId.get(key) ?? [];
             group.push(machine);
-            byId.set(id, group);
+            byId.set(key, group);
           }
           return [...byId.values()].map((group) => {
             const sorted = [...group].sort(
@@ -558,7 +714,11 @@ const pickVolume = (
   );
 };
 
-export const reconcileReplicas = Effect.fn(function* (input: {
+export interface ReconcileReplicasInput {
+  fqn: string;
+  resourceInstanceId: string;
+  policy: DeploymentPolicy;
+  checks?: Record<string, MachineCheck>;
   id: string;
   type: FlyAlchemyType;
   appName: string;
@@ -582,15 +742,61 @@ export const reconcileReplicas = Effect.fn(function* (input: {
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
   }) => FlyMachineConfig;
-}) {
-  const alchemy = yield* createMachineMetadata(input.id, input.type);
+}
+
+export const reconcileReplicas = Effect.fn(function* (
+  input: ReconcileReplicasInput,
+) {
+  const ownership = yield* createMachineMetadata(input.id, input.type);
+  const alchemy = {
+    ...ownership,
+    [alchemyMetadataKeys.instance]: input.resourceInstanceId,
+    [alchemyMetadataKeys.fqn]: input.fqn,
+    [alchemyMetadataKeys.baseName]: input.baseName,
+  };
+  const buildConfig: ReconcileReplicasInput["buildConfig"] = (replica) => ({
+    ...input.buildConfig(replica),
+    checks:
+      input.checks === undefined
+        ? undefined
+        : Object.fromEntries(
+            Object.entries(input.checks).map(([name, check]) => [
+              name,
+              toFlyServiceCheck(check),
+            ]),
+          ),
+    stop_config:
+      input.policy.shutdown === undefined
+        ? undefined
+        : {
+            signal: input.policy.shutdown.signal,
+            timeout: input.policy.shutdown.timeout,
+          },
+  });
+  const config = buildConfig({ index: 0, mounts: [], metadata: alchemy });
+  yield* validateDeployment(
+    input.policy,
+    config,
+    input.disks.length > 0,
+    input.skipLaunch,
+  );
+  if (input.policy.bluegreen)
+    return yield* reconcileBlueGreen(
+      { ...input, buildConfig },
+      ownership,
+      alchemy,
+    );
   const desiredNames = new Set(
     Array.from({ length: input.count }, (_, index) =>
       replicaMachineName(input.baseName, index, input.count),
     ),
   );
   const listed = yield* listMachinesByApp(input.appName);
-  const owned = listed.filter((machine) => isOwnedType(machine, input.type));
+  const owned = ownedReplicas(listed, {
+    ...input,
+    metadata: ownership,
+    machineIds: input.outputMachineIds,
+  });
   const byIndex = new Map<number, FlyMachine>();
   const preferIds = new Set(
     (input.outputMachineIds ?? []).filter((id) => id.length > 0),
@@ -603,14 +809,20 @@ export const reconcileReplicas = Effect.fn(function* (input: {
   }
   for (const machine of owned) {
     const name = machine.name;
-    if (name === undefined || !desiredNames.has(name)) continue;
+    if (
+      name === undefined ||
+      (!desiredNames.has(name) &&
+        machine.config?.metadata?.[alchemyMetadataKeys.instance] !==
+          input.resourceInstanceId)
+    )
+      continue;
     const index = replicaIndexOf(machine);
     if (!byIndex.has(index)) byIndex.set(index, machine);
   }
 
   for (const [index, machine] of byIndex) {
     if (index >= input.count && machine.id !== undefined) {
-      yield* deleteMachine(input.appName, machine.id);
+      yield* retireMachine(input.appName, machine.id, input.policy.shutdown);
       byIndex.delete(index);
     }
   }
@@ -663,7 +875,7 @@ export const reconcileReplicas = Effect.fn(function* (input: {
       usedVolumeIds.add(volumeId);
       mounts.push({ volume: volumeId, path: group.disk.path });
     }
-    const config = input.buildConfig({ index, mounts, metadata });
+    const config = buildConfig({ index, mounts, metadata });
     let current = byIndex.get(index);
     if (current === undefined) {
       const created = yield* machines
@@ -690,6 +902,10 @@ export const reconcileReplicas = Effect.fn(function* (input: {
         });
       }
     } else if (
+      !deepEqual(current.config?.checks ?? {}, config.checks ?? {}, {
+        stripNullish: true,
+      }) ||
+      !sameStopConfig(current.config?.stop_config, config.stop_config) ||
       input.configDrifted(current, {
         mounts,
         metadata,
@@ -711,9 +927,30 @@ export const reconcileReplicas = Effect.fn(function* (input: {
       input.appName,
       current,
       input.skipLaunch === true,
+      input.policy.healthTimeoutMs,
+      config,
     );
+    if (current.cordoned === true && !input.skipLaunch) {
+      yield* setRouting(input.appName, current.id!, false);
+      if (hasPublishedService(config.services))
+        yield* Effect.sleep("10 seconds");
+      current = yield* waitHealthy(
+        input.appName,
+        current,
+        input.policy.healthTimeoutMs,
+        config,
+      );
+    }
     live.push(current);
   }
+
+  const liveIds = new Set(live.map((machine) => machine.id));
+  yield* Effect.forEach(
+    owned.filter((machine) => !liveIds.has(machine.id)),
+    (machine) =>
+      retireMachine(input.appName, machine.id!, input.policy.shutdown),
+    { concurrency: 4 },
+  );
 
   for (const group of groups) {
     for (const extra of group.extras) {
@@ -750,12 +987,30 @@ export const reconcileReplicas = Effect.fn(function* (input: {
 
 export const deleteReplicaSet = Effect.fn(function* (input: {
   appName: string;
+  id: string;
+  type: FlyAlchemyType;
+  fqn: string;
+  resourceInstanceId: string;
+  shutdown?: DeploymentPolicy["shutdown"];
+  force?: boolean;
   machineIds: readonly string[];
   volumeIds: readonly string[];
 }) {
+  const owned = input.force
+    ? []
+    : ownedReplicas(yield* listMachinesByApp(input.appName), {
+        ...input,
+        metadata: yield* createMachineMetadata(input.id, input.type),
+      });
+  const ids = input.force
+    ? input.machineIds
+    : owned.flatMap((machine) => (machine.id ? [machine.id] : []));
   yield* Effect.forEach(
-    input.machineIds.filter((id) => id.length > 0),
-    (machineId) => deleteMachine(input.appName, machineId),
+    ids.filter((id) => id.length > 0),
+    (machineId) =>
+      input.force
+        ? deleteMachine(input.appName, machineId)
+        : retireMachine(input.appName, machineId, input.shutdown),
     { concurrency: 4 },
   );
   yield* Effect.forEach(
@@ -777,26 +1032,58 @@ export const volumeIdsOf = (set: {
   return [...ids];
 };
 
+export const groupGenerations = (machines: FlyMachine[]) => {
+  const groups = new Map<string | undefined, FlyMachine[]>();
+  for (const machine of machines) {
+    const generation =
+      machine.config?.metadata?.[alchemyMetadataKeys.generation];
+    const group = groups.get(generation) ?? [];
+    group.push(machine);
+    groups.set(generation, group);
+  }
+  return groups;
+};
+
 export const observeReplicaSet = Effect.fn(function* (input: {
   appName?: string;
+  fqn: string;
+  resourceInstanceId: string;
   id: string;
   type: FlyAlchemyType;
   machineIds?: readonly string[];
   baseName?: string;
 }) {
   if (input.appName === undefined) return undefined;
-  const listed = (yield* listReplicas({
-    appName: input.appName,
-    id: input.id,
-    type: input.type,
-  })).filter((machine) => {
-    if (input.baseName === undefined) return true;
-    const name = machine.name ?? "";
-    if (name === input.baseName) return true;
-    return (
-      name === replicaMachineName(input.baseName, replicaIndexOf(machine), 2)
-    );
+  const owned = ownedReplicas(yield* listMachinesByApp(input.appName), {
+    ...input,
+    metadata: yield* createMachineMetadata(input.id, input.type),
   });
+  const groups = groupGenerations(owned);
+  const committed = [...groups.entries()]
+    .filter(([generation, group]) => {
+      if (generation === undefined) return false;
+      const count = Number(
+        group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
+      );
+      return (
+        group.length === count &&
+        new Set(group.map(replicaIndexOf)).size === count &&
+        group.every(
+          (machine) =>
+            machine.config?.metadata?.[alchemyMetadataKeys.phase] ===
+              "active" && machine.cordoned === false,
+        )
+      );
+    })
+    .sort(
+      ([, a], [, b]) =>
+        Number(b[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0) -
+        Number(a[0]?.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0),
+    );
+  const listed = (committed[0]?.[1] ?? groups.get(undefined) ?? []).sort(
+    (a, b) => replicaIndexOf(a) - replicaIndexOf(b),
+  );
+  const rolloutPending = owned.some((machine) => !listed.includes(machine));
   if (listed.length > 0) {
     const volumesById = new Map<string, FlyVolume>();
     for (const machine of listed) {
@@ -808,28 +1095,24 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       }
     }
     const replicas = listed.map((machine) => toReplica(machine, volumesById));
-    return toReplicaSet(
-      replicas,
-      input.appName,
-      replicas[0]?.name ?? "",
-      listed[0]?.config?.services,
-    );
+    return {
+      ...toReplicaSet(
+        replicas,
+        input.appName,
+        listed[0]?.config?.metadata?.[alchemyMetadataKeys.baseName] ??
+          input.baseName ??
+          replicas[0]?.name ??
+          "",
+        listed[0]?.config?.services,
+      ),
+      rolloutPending,
+    };
   }
-  const ids = (input.machineIds ?? []).filter((id) => id.length > 0);
-  if (ids.length === 0) return undefined;
-  const found = yield* Effect.forEach(
-    ids,
-    (machineId) => getMachineById(input.appName!, machineId),
-    { concurrency: 4 },
-  );
-  const machines = found.filter(
-    (machine): machine is FlyMachine => machine !== undefined,
-  );
-  if (machines.length === 0) return undefined;
-  return toReplicaSet(
-    machines.map((machine) => toReplica(machine, new Map())),
-    input.appName,
-    machines[0]?.name ?? "",
-    machines[0]?.config?.services,
-  );
+  if (owned.length)
+    return {
+      ...toReplicaSet([], input.appName, input.baseName ?? ""),
+      region: owned[0]?.region ?? "",
+      rolloutPending: true,
+    };
+  return undefined;
 });

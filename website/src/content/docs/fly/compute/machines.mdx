@@ -145,12 +145,14 @@ Missing or non-passing results keep polling for up to 60 seconds. A
 failed wait stops the rollout with `Fly.ReplicaChecksNotPassing` and
 the last observed check names, statuses, and output. Later replicas
 remain unchanged; earlier updates are not automatically rolled back.
-This is an in-place rollout, not a blue/green replacement: a single
-replica can be unavailable while it updates.
+The default rolling strategy updates in place, so a single replica can be
+unavailable while it updates. Set `deploy: { strategy: "bluegreen" }` to
+[prepare checked replacement Machines before retirement](/fly/compute/deployments).
 
 `skipLaunch: true` creates or updates the config without starting
-it or waiting for checks. Delete force-destroys and waits until
-gone. `Conflict` on create/update/delete is treated as a race and
+it or waiting for checks. By default, delete force-destroys and waits until
+gone. Setting `shutdown` or enabling blue/green instead cordons, signals,
+waits for a stopped Machine, and then deletes it. `Conflict` on create/update/delete is treated as a race and
 retried. `autoDestroy: true` tears the Machine down when its main
 process exits.
 
@@ -175,6 +177,8 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 ## Where next
+
+- [Blue/green deployments](/fly/compute/deployments) — readiness, graceful shutdown, and recovery.
 
 - [Services](/fly/compute/services) — bundle an Effect program into
   a Machine.

@@ -902,6 +902,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
                 { label: "Sprites", link: "/fly/compute/sprites" },
                 { label: "Regions", link: "/fly/compute/regions" },
               ],
