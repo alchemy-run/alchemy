@@ -709,7 +709,36 @@ export interface WorkerProps<
   script?: string;
   compatibility?: {
     date?: string;
-    flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
+    /**
+     * Cloudflare runtime compatibility flags.
+     *
+     * For external Workers with `bundle: false`, an explicitly provided array
+     * is used exactly as declared, including `[]`. Omit this field to apply
+     * Alchemy's defaults.
+     *
+     * For all other Workers, supplied flags extend Alchemy's defaults:
+     * - `new_module_registry` is added unless `legacy_module_registry` is set.
+     * - `nodejs_compat` is added for dates before `2026-08-04` unless
+     *   `no_nodejs_compat` is set. External Workers also require a date on or
+     *   after `2024-09-23` for this default.
+     * - Effect Workers get `handle_cross_request_promise_resolution` for dates
+     *   before `2024-10-14`; explicitly disabling it is rejected.
+     * - Python Workers get `python_workers` instead of the JavaScript defaults.
+     *
+     * Duplicate flags are removed when defaults are applied.
+     */
+    flags?: (
+      | "nodejs_compat"
+      | "nodejs_compat_v2"
+      | "no_nodejs_compat"
+      | "nodejs_als"
+      | "new_module_registry"
+      | "legacy_module_registry"
+      | "handle_cross_request_promise_resolution"
+      | "no_handle_cross_request_promise_resolution"
+      | "python_workers"
+      | (string & {})
+    )[];
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
