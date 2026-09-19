@@ -114,6 +114,16 @@ export interface StackSecrets {
    */
   providers?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
   /**
+   * Whether the process environment sits above every provider. Set to
+   * `false` to ignore it entirely, then add `Secrets.ProcessEnv()` to
+   * `providers` where it should rank instead (auth providers read CI
+   * credentials such as `CLOUDFLARE_API_TOKEN` through the same
+   * configuration, so CI needs it somewhere). Command-line flags such as
+   * `--env-file` and `--profile` still apply on top.
+   * @default true
+   */
+  processEnv?: boolean;
+  /**
    * Validated against the assembled configuration once every provider has
    * loaded, so a missing or malformed key fails the stack before any
    * resource is touched. Typically a `Schema.Struct` keyed by variable name.

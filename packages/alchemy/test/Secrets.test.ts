@@ -539,4 +539,66 @@ describe("stack secrets", () => {
       Effect.scoped,
     ),
   );
+
+  it.effect(
+    "processEnv: false ignores the shell unless ProcessEnv() is listed",
+    () =>
+      Effect.gen(function* () {
+        const key = "ALCHEMY_DOTENV_TEST_PROCESS_OFF";
+        const previous = process.env[key];
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            process.env[key] = "shell";
+          }),
+          () =>
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env[key];
+              else process.env[key] = previous;
+            }),
+        );
+        const read = (
+          providers: NonNullable<StackSecrets["providers"]>,
+          processEnv: boolean,
+        ) =>
+          Stack(
+            "dotenv-process-off",
+            {
+              providers: Layer.empty,
+              state: inMemoryState(),
+              secrets: { providers, processEnv },
+            },
+            Effect.all({
+              value: Config.String(key),
+              other: Config.String("ALCHEMY_DOTENV_TEST_OTHER").pipe(
+                Config.option,
+              ),
+            }),
+          ).pipe(Effect.map((stack) => stack.output));
+
+        const file = Secrets.DotEnv({ path: "off.env" });
+        // Default: the shell wins over the file.
+        expect((yield* read([file], true)).value).toBe("shell");
+        // Off: the shell is invisible, so the file wins...
+        expect((yield* read([file], false)).value).toBe("file");
+        // ...and a key only the shell has is absent.
+        const shellOnly = yield* read([], false).pipe(Effect.flip);
+        expect(shellOnly._tag).toBe("ConfigError");
+        // Listing ProcessEnv() first makes the shell a fallback below the file.
+        expect((yield* read([Secrets.ProcessEnv(), file], false)).value).toBe(
+          "file",
+        );
+        expect((yield* read([file, Secrets.ProcessEnv()], false)).value).toBe(
+          "shell",
+        );
+      }).pipe(
+        Effect.provideService(Stage, "test"),
+        Effect.provide(
+          files({
+            "off.env": "ALCHEMY_DOTENV_TEST_PROCESS_OFF=file",
+          }),
+        ),
+        Effect.scoped,
+      ),
+    { exclusive: true },
+  );
 });

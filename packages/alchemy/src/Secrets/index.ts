@@ -1,4 +1,5 @@
 export { DotEnv, type DotEnvOptions } from "./DotEnv.ts";
+export { ProcessEnv } from "./ProcessEnv.ts";
 export {
   Doppler,
   DopplerSecretsError,

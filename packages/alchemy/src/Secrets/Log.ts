@@ -33,9 +33,15 @@ export const envKeys = (provider: ConfigProvider.ConfigProvider) => {
 };
 
 /** `Loaded 3 secrets from <source>: A, B, C` at debug level. */
-export const logLoadedKeys = (source: string, keys: ReadonlyArray<string>) =>
+export const logLoadedKeys = (
+  source: string,
+  keys: ReadonlyArray<string>,
+  options: { readonly names?: boolean } = {},
+) =>
   Effect.logDebug(
     keys.length === 0
       ? `Loaded no secrets from ${source}`
-      : `Loaded ${keys.length} secrets from ${source}: ${keys.join(", ")}`,
+      : options.names === false
+        ? `Loaded ${keys.length} secrets from ${source}`
+        : `Loaded ${keys.length} secrets from ${source}: ${keys.join(", ")}`,
   );
