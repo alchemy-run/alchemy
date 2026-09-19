@@ -122,10 +122,17 @@ export const channelFromLocation = (): string | undefined => {
 };
 
 /** The profile's TABS — the charter is the page; skills and tools
- *  are its two indexes; permissions is what all of it can reach. */
-export type AgentTab = "charter" | "skills" | "tools" | "permissions";
+ *  are its two indexes; permissions is what all of it can reach;
+ *  self is what the agent has learned (its digest, journal, and
+ *  generation chain). */
+export type AgentTab = "charter" | "skills" | "tools" | "permissions" | "self";
 
-const TABS: ReadonlySet<string> = new Set(["skills", "tools", "permissions"]);
+const TABS: ReadonlySet<string> = new Set([
+  "skills",
+  "tools",
+  "permissions",
+  "self",
+]);
 
 export interface AgentPlace {
   readonly name: string;

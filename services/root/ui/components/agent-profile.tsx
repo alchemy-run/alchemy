@@ -9,12 +9,14 @@
  * code — except the skill switches, the one runtime dial.
  */
 import { Avatar, KindBadge } from "@/components/avatar";
-import { MarkdownText } from "@/components/chat";
+import { MarkdownText, timeAgo } from "@/components/chat";
 import {
+  fetchAgentSelf,
   fetchOrg,
   invalidateOrg,
   setAgentSkill,
   shortKey,
+  type AgentSelfView,
   type OrgGraph,
   type OrgPermission,
   type OrgTool,
@@ -24,6 +26,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Blocks,
+  Brain,
   ChevronRight,
   Cpu,
   FileCode2,
@@ -248,7 +251,113 @@ const TABS: ReadonlyArray<{ id: AgentTab; icon: typeof ScrollText }> = [
   { id: "skills", icon: Blocks },
   { id: "tools", icon: Wrench },
   { id: "permissions", icon: KeyRound },
+  { id: "self", icon: Brain },
 ];
+
+/**
+ * The SELF tab — what the agent has learned: the digest (its self
+ * session's newest observational doc, rendered like the charter),
+ * the journal feed (the learnings its working sessions sent up), and
+ * the generation chain (one row per compaction of the self thread).
+ */
+const SelfTab = ({ name }: { name: string }) => {
+  const [view, setView] = useState<AgentSelfView | undefined>();
+  useEffect(() => {
+    let alive = true;
+    fetchAgentSelf(name)
+      .then((self) => {
+        if (alive) setView(self);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [name]);
+
+  if (view === undefined) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        loading the self…
+      </div>
+    );
+  }
+  return (
+    <article className="w-full max-w-2xl">
+      {view.digest === null ? (
+        <div className="py-6 text-sm text-muted-foreground">
+          no digest yet — the self distills one when its journal has
+          enough to reflect on
+        </div>
+      ) : (
+        <>
+          <div className="mb-3 font-mono text-[10.5px] text-muted-foreground">
+            {view.digest.tip}
+          </div>
+          <div className={PROSE}>
+            <MarkdownText text={view.digest.doc} />
+          </div>
+        </>
+      )}
+
+      <h3 className="mt-8 mb-2 text-[13px] font-semibold tracking-tight">
+        Journal
+      </h3>
+      {view.journal.length === 0 ? (
+        <div className="py-4 text-sm text-muted-foreground">
+          nothing journaled yet
+        </div>
+      ) : (
+        <ul aria-label="journal feed" className="divide-y divide-border/40">
+          {view.journal.map((entry, index) => (
+            <li key={entry.id ?? index} className="py-2.5">
+              <div className="mb-1 flex items-baseline gap-2 text-[10.5px] text-muted-foreground">
+                {entry.author !== undefined && (
+                  <span className="font-mono">{entry.author}</span>
+                )}
+                <span>{timeAgo(entry.at)}</span>
+              </div>
+              <div className="text-[13px] leading-relaxed whitespace-pre-wrap text-foreground/90">
+                {entry.text}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3 className="mt-8 mb-2 text-[13px] font-semibold tracking-tight">
+        Generations
+      </h3>
+      {view.lineage.length === 0 ? (
+        <div className="py-4 text-sm text-muted-foreground">
+          still on the birth generation
+        </div>
+      ) : (
+        <ul aria-label="generations" className="divide-y divide-border/40">
+          {view.lineage.map((generation) => (
+            <li
+              key={generation.ref}
+              className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2"
+            >
+              <span className="font-mono text-[12px] font-medium">
+                {generation.ref}
+              </span>
+              <Pill tone="muted" title="how this generation was made">
+                {generation.kind}
+              </Pill>
+              <span className="font-mono text-[10.5px] text-muted-foreground">
+                {generation.tokensBefore.toLocaleString()}→
+                {generation.tokensAfter.toLocaleString()} tokens
+              </span>
+              <span className="text-[10.5px] text-muted-foreground">
+                {timeAgo(generation.at)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+};
 
 export const AgentProfile = ({
   name,
@@ -556,6 +665,8 @@ export const AgentProfile = ({
                   <Permissions permissions={agent.permissions} />
                 </article>
               )}
+
+              {tab === "self" && <SelfTab name={agent.name} />}
             </div>
           )}
         </div>

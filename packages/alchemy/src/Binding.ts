@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { recordAcquisition } from "./CapabilityGraph.ts";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
@@ -10,7 +11,6 @@ import {
   isResource,
   type ResourceLike,
 } from "./Resource.ts";
-import { recordAcquisition } from "./CapabilityGraph.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
 import { taggedFunction } from "./Util/effect.ts";

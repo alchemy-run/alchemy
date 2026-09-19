@@ -283,6 +283,84 @@ describe("CapabilityGraph", () => {
     }),
   );
 
+  it.effect(
+    "a router re-providing a tag over a raw provider: the closure follows the VALUE to the raw Layer",
+    () =>
+      Effect.gen(function* () {
+        const graph = makeCapabilityGraph();
+        class Sandbox extends Context.Service<
+          Sandbox,
+          { readonly id: string }
+        >()("test/Sandbox") {}
+        class Repo extends Context.Service<Repo, { readonly id: string }>()(
+          "test/Repo",
+        ) {}
+        class Bash extends Context.Service<Bash, { readonly id: string }>()(
+          "test/Bash",
+        ) {}
+        // the raw machine: acquires the VM operations
+        const Raw = Layer.effect(
+          Sandbox,
+          Effect.gen(function* () {
+            yield* recordAcquisition({
+              binding: "AWS.Lambda.RunMicrovm",
+              targets: ["AWS.AI.SandboxMicrovmImage(vm)"],
+            });
+            return { id: "raw" };
+          }),
+        );
+        const RepoLive = Layer.effect(
+          Repo,
+          Effect.gen(function* () {
+            yield* recordAcquisition({
+              binding: "GitHub.GetPullRequest",
+              targets: ["GitHub.Repository(alchemy)"],
+            });
+            return { id: "repo" };
+          }),
+        );
+        // the router: the SAME tag, over the raw one and the repo
+        const Router = Layer.effect(
+          Sandbox,
+          Effect.gen(function* () {
+            const raw = yield* Sandbox;
+            yield* Repo;
+            return { id: `router(${raw.id})` };
+          }),
+        );
+        // the root shape: Layer.unwrap picking the machine at build
+        const Session = Layer.unwrap(
+          Effect.succeed(
+            Router.pipe(Layer.provide(Layer.mergeAll(Raw, RepoLive))),
+          ),
+        );
+        const BashLive = Layer.effect(
+          Bash,
+          Effect.map(Sandbox, (sandbox) => ({ id: `bash(${sandbox.id})` })),
+        ).pipe(Layer.provide(Session));
+
+        const bash = yield* observed(
+          graph,
+          Effect.flatMap(Bash, (b) => Effect.succeed(b.id)).pipe(
+            Effect.provide(BashLive),
+          ),
+        );
+        expect(bash).toBe("bash(router(raw))");
+        expect(graph.ofService("test/Bash")).toEqual([
+          {
+            binding: "AWS.Lambda.RunMicrovm",
+            targets: ["AWS.AI.SandboxMicrovmImage(vm)"],
+            via: ["test/Sandbox", "test/Sandbox"],
+          },
+          {
+            binding: "GitHub.GetPullRequest",
+            targets: ["GitHub.Repository(alchemy)"],
+            via: ["test/Sandbox", "test/Repo"],
+          },
+        ]);
+      }),
+  );
+
   it.effect("without a graph in context every recorder is a no-op", () =>
     Effect.gen(function* () {
       const result = yield* framed(

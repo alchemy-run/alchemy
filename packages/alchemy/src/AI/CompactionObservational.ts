@@ -3,8 +3,13 @@ import * as Layer from "effect/Layer";
 import type * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import type * as Prompt from "effect/unstable/ai/Prompt";
 import * as Result from "effect/Result";
-import { Compaction, renderTranscript } from "./Compaction.ts";
+import {
+  Compaction,
+  renderTranscript,
+  type CompactionPolicy,
+} from "./Compaction.ts";
 import type { CompactPlan } from "./Thread.ts";
+import { parseContextRef } from "./ThreadStorage.ts";
 
 /**
  * The OBSERVATIONAL compaction policy — two-tier memory (observation-
@@ -49,10 +54,14 @@ export interface ObservationalOptions {
   readonly observer?: LanguageModel.LanguageModel;
   /**
    * Receives the entries the observer marked as durable learnings
-   * (the `## Journal` bullets, stripped of their markers). They never
-   * appear in the log doc. Default: no-op.
+   * (the `## Journal` bullets, stripped of their markers), plus the
+   * ORIGIN session they climbed out of (parsed from the thread's
+   * tip ref). They never appear in the log doc. Default: no-op.
    */
-  readonly journal?: (entries: ReadonlyArray<string>) => Effect.Effect<void>;
+  readonly journal?: (
+    entries: ReadonlyArray<string>,
+    origin: { readonly term: string; readonly key: string },
+  ) => Effect.Effect<void>;
 }
 
 /**
@@ -64,77 +73,91 @@ export interface ObservationalOptions {
 export const observational = (
   options?: ObservationalOptions,
 ): Layer.Layer<Compaction> =>
-  Layer.succeed(
-    Compaction,
-    Compaction.of({
-      name: "observational",
-      consider: (thread, model) =>
-        Effect.gen(function* () {
-          const observer = options?.observer ?? model;
-          if (observer === undefined) return undefined;
-          const observeAt = options?.observeAt ?? 30_000;
-          const reflectAt = options?.reflectAt ?? 40_000;
-          const lineage = yield* thread.lineage;
-          const tip = lineage[0];
-          // the current log: the doc of the most recent observational
-          // generation in the chain
-          const latest = lineage.find(
-            (record) => record.kind === "observe" || record.kind === "reflect",
-          );
-          const log = latest?.doc ?? "";
-          const entries = yield* thread.entries;
-          // the head note of an observational generation IS the log —
-          // the cursor: everything after it is unobserved history
-          const hasLogHead =
-            tip !== undefined &&
-            (tip.kind === "observe" || tip.kind === "reflect");
-          const span = hasLogHead ? entries.slice(1) : entries;
+  Layer.succeed(Compaction, Compaction.of(observationalPolicy(options)));
 
-          // reflection wins: a log past its own budget is rewritten
-          // before more observations pile onto it
-          if (log.length > 0 && estimate(log) >= reflectAt) {
-            const reflected = yield* reflect(observer, log);
-            if (reflected === undefined) return undefined;
-            // only the log note is replaced — every other row of the
-            // surface survives verbatim
-            const plan: CompactPlan = {
-              observe: {
-                log: reflected,
-                keepTail: span.length,
-                kind: "reflect",
-              },
-            };
-            return plan;
-          }
+/**
+ * The observational policy as a BARE {@link CompactionPolicy} — for
+ * composers (`AI.Identity.observational`) that route per session
+ * (self vs desk) before delegating; the Layer above is this policy
+ * provided whole.
+ */
+export const observationalPolicy = (
+  options?: ObservationalOptions,
+): CompactionPolicy => ({
+  name: "observational",
+  consider: (thread, model) =>
+    Effect.gen(function* () {
+      const observer = options?.observer ?? model;
+      if (observer === undefined) return undefined;
+      const observeAt = options?.observeAt ?? 30_000;
+      const reflectAt = options?.reflectAt ?? 40_000;
+      const lineage = yield* thread.lineage;
+      const tip = lineage[0];
+      // the current log: the doc of the most recent observational
+      // generation in the chain
+      const latest = lineage.find(
+        (record) => record.kind === "observe" || record.kind === "reflect",
+      );
+      const log = latest?.doc ?? "";
+      const entries = yield* thread.entries;
+      // the head note of an observational generation IS the log —
+      // the cursor: everything after it is unobserved history
+      const hasLogHead =
+        tip !== undefined && (tip.kind === "observe" || tip.kind === "reflect");
+      const span = hasLogHead ? entries.slice(1) : entries;
 
-          if (estimateSpan(span) < observeAt) return undefined;
-          const today = yield* Effect.sync(() =>
-            new Date().toISOString().slice(0, 10),
-          );
-          // an observer failure declines the compaction — the thread
-          // keeps working and the next boundary tries again
-          const sampled = yield* Effect.result(
-            observer.generateText({
-              prompt: observerPrompt(log, renderTranscript(span), today),
-            }),
-          );
-          if (Result.isFailure(sampled)) return undefined;
-          const parsed = splitJournal(sampled.success.text);
-          if (parsed.log.length === 0) return undefined;
-          if (parsed.journal.length > 0) {
-            yield* options?.journal?.(parsed.journal) ?? Effect.void;
-          }
-          const keepTail = Math.max(
-            1,
-            Math.floor(span.length * (options?.keepTail ?? 0.2)),
-          );
-          const plan: CompactPlan = {
-            observe: { log: parsed.log, keepTail, kind: "observe" },
-          };
-          return plan;
+      // reflection wins: a log past its own budget is rewritten
+      // before more observations pile onto it
+      if (log.length > 0 && estimate(log) >= reflectAt) {
+        const reflected = yield* reflect(observer, log);
+        if (reflected === undefined) return undefined;
+        // only the log note is replaced — every other row of the
+        // surface survives verbatim
+        const plan: CompactPlan = {
+          observe: {
+            log: reflected,
+            keepTail: span.length,
+            kind: "reflect",
+          },
+        };
+        return plan;
+      }
+
+      if (estimateSpan(span) < observeAt) return undefined;
+      const today = yield* Effect.sync(() =>
+        new Date().toISOString().slice(0, 10),
+      );
+      // an observer failure declines the compaction — the thread
+      // keeps working and the next boundary tries again
+      const sampled = yield* Effect.result(
+        observer.generateText({
+          prompt: observerPrompt(log, renderTranscript(span), today),
         }),
+      );
+      if (Result.isFailure(sampled)) return undefined;
+      const parsed = splitJournal(sampled.success.text);
+      if (parsed.log.length === 0) return undefined;
+      if (parsed.journal.length > 0 && options?.journal !== undefined) {
+        // the origin the learnings climbed out of — the tip ref names
+        // the session; a hook failure is the hook's to contain
+        const origin = parseContextRef(yield* thread.tip);
+        yield* options.journal(
+          parsed.journal,
+          origin === undefined
+            ? { term: "", key: thread.key }
+            : { term: origin.term, key: origin.key },
+        );
+      }
+      const keepTail = Math.max(
+        1,
+        Math.floor(span.length * (options?.keepTail ?? 0.2)),
+      );
+      const plan: CompactPlan = {
+        observe: { log: parsed.log, keepTail, kind: "observe" },
+      };
+      return plan;
     }),
-  );
+});
 
 /** Chars/4 estimate of a string — the same heuristic as `thread.tokens`. */
 const estimate = (text: string): number => Math.ceil(text.length / 4);

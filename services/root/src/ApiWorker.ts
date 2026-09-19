@@ -32,6 +32,7 @@ import { RosterLive } from "./chat/Roster.ts";
 import { PublishTokenLive } from "./github/PublishToken.ts";
 import { SessionRepoLive } from "./github/SessionRepo.ts";
 import { HeadLive } from "./Head.ts";
+import { lineage } from "./Lineage.ts";
 import { OrgDoctrine } from "./OrgGuidance.ts";
 import { DriverCloudflare } from "./platform/DriverCloudflare.ts";
 import { SkillGateD1 } from "./platform/SkillGateD1.ts";
@@ -96,9 +97,18 @@ const Conversation = Layer.mergeAll(
   Layer.provide(CallsLive),
 );
 
+/** The IDENTITY seam, per teammate: observational compaction whose
+ *  🔴 journal learnings climb into the agent's SELF session
+ *  (`root::<name>::self` — lineage-shaped, so colleague/machine key
+ *  readers stay coherent), read back as the self digest. The observer
+ *  defaults to the session's own model (Haiku on this team). */
+const identity = (name: string) =>
+  AI.Identity.observational({ selfKey: `${lineage(name)}::self` });
+
 /** The ENGINEER — the team's worker: read + run + editor, the publish
  *  pair behind the human gate, the conversation seams. */
 const EngineerWorker = GeneralEngineer.pipe(
+  Layer.provide(identity("engineer")),
   Layer.provide([PushBranchLive, OpenPullRequestLive]),
   Layer.provide(PublishTokenLive),
   Layer.provide(Conversation),
@@ -116,6 +126,7 @@ const EngineerWorker = GeneralEngineer.pipe(
  *  (review by running; self-improvement PRs), plus the proposal tools
  *  (READY is filing the merge proposal) and workspaces of its own. */
 const ReviewerWorker = GeneralReviewer.pipe(
+  Layer.provide(identity("reviewer")),
   Layer.provide([PushBranchLive, OpenPullRequestLive]),
   Layer.provide(PublishTokenLive),
   Layer.provide(Conversation),
@@ -132,6 +143,7 @@ const ReviewerWorker = GeneralReviewer.pipe(
 /** The MANAGER — the head of the engineering team: the triage queue,
  *  the channel's threads, spawn/workspaces, proposals, conversation. */
 const ManagerWorker = ManagerLive.pipe(
+  Layer.provide(identity("manager")),
   Layer.provide(EngineerWorker),
   Layer.provide(TriageLive),
   Layer.provide(Conversation),

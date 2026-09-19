@@ -16,6 +16,7 @@ export * from "./Events.ts";
 export * from "./SessionSocket.ts";
 export * from "./Sessions.ts";
 export * from "./Fragment.ts";
+export * from "./Identity.ts";
 export * from "./Message.ts";
 export * from "./Model.ts";
 export * from "./OrgRegistry.ts";

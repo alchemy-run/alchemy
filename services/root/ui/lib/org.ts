@@ -126,6 +126,46 @@ export const findTool = (org: OrgGraph, name: string): OrgTool | undefined => {
   return undefined;
 };
 
+/** One generation of the self session's context chain — the
+ *  introspectable unit of `GET /api/org/agents/:name/self`. */
+export interface SelfGeneration {
+  readonly ref: string;
+  readonly generation: number;
+  readonly parent: string | undefined;
+  readonly author: string;
+  readonly kind: string;
+  readonly doc?: string;
+  readonly dropped: number;
+  readonly tokensBefore: number;
+  readonly tokensAfter: number;
+  readonly at: number;
+}
+
+/** One journal entry — an input of the self session. */
+export interface SelfJournalEntry {
+  readonly id?: string;
+  readonly author?: string;
+  readonly text: string;
+  readonly at: number;
+}
+
+/** The agent's SELF view — the Self tab's data. */
+export interface AgentSelfView {
+  /** The self session's newest observational doc — null until the
+   *  self has compacted at least once. */
+  readonly digest: { readonly tip: string; readonly doc: string } | null;
+  /** The journal feed, newest first. */
+  readonly journal: ReadonlyArray<SelfJournalEntry>;
+  /** The generation chain, tip first. */
+  readonly lineage: ReadonlyArray<SelfGeneration>;
+}
+
+/** The self view — fetched per visit (it grows as the agent works). */
+export const fetchAgentSelf = (name: string): Promise<AgentSelfView> =>
+  fetch(`/api/org/agents/${encodeURIComponent(name)}/self`).then(
+    (response) => response.json() as Promise<AgentSelfView>,
+  );
+
 /** Flip one agent's skill switch. */
 export const setAgentSkill = (
   agent: string,
