@@ -54,6 +54,48 @@ provider("create and delete queue with default props", (stack) =>
   }),
 );
 
+provider(
+  "fresh create resolves a queue policy that references its own ARN",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Queue("SelfPolicyQueue");
+          yield* queue.bind`Allow(${queue}, AWS.SQS.SendMessage(${queue}))`({
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Principal: { Service: "sns.amazonaws.com" },
+                Action: ["sqs:SendMessage"],
+                Resource: queue.queueArn,
+              },
+            ],
+          });
+          return queue;
+        }),
+      );
+
+      const attributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["Policy"],
+      });
+      const policy = JSON.parse(attributes.Attributes?.Policy ?? "null") as {
+        readonly Statement?: ReadonlyArray<{ readonly Resource?: string }>;
+      } | null;
+
+      expect(
+        policy?.Statement?.some(
+          (statement) => statement.Resource === queue.queueArn,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+);
+
 provider("create, update, delete standard queue", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
