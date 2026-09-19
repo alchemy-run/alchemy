@@ -48,13 +48,14 @@ const Stack = Alchemy.Stack(
     return { certificateArn, vpc, firstGroup, secondGroup, logs, stream };
   }),
 );
-const prerequisites = beforeAll(deploy(Stack));
+const prerequisites = beforeAll(deploy(Stack), { timeout: Infinity });
 afterAll(
   destroy(Stack).pipe(
     Effect.andThen(
       certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
     ),
   ),
+  { timeout: Infinity },
 );
 
 // Keep replacement generations within the account's Client VPN endpoint quota.
@@ -251,7 +252,7 @@ describe.sequential("Client VPN endpoints", () => {
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
       }),
-    { timeout: 120_000 },
+    { timeout: Infinity },
   );
 
   test.provider(
@@ -311,7 +312,7 @@ describe.sequential("Client VPN endpoints", () => {
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
       }),
-    { timeout: 120_000 },
+    { timeout: Infinity },
   );
 
   test.provider(
@@ -356,7 +357,31 @@ describe.sequential("Client VPN endpoints", () => {
           updated.endpoint.clientVpnEndpointId,
         );
       }),
-    { timeout: 120_000 },
+    { timeout: Infinity },
+  );
+
+  test.provider(
+    "fails with a typed error when the configured VPC has been deleted",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const { certificateArn } = yield* prerequisites;
+        const vpc = yield* stack.deploy(
+          Vpc("DeletedVpc", { cidrBlock: "10.175.0.0/16" }),
+        );
+        yield* stack.destroy();
+        const failure = yield* stack
+          .deploy(
+            ClientVpnEndpoint("Endpoint", {
+              ...clientVpnEndpointProps(certificateArn),
+              vpcId: vpc.vpcId,
+            }),
+          )
+          .pipe(Effect.flip);
+        expect(failure).toMatchObject({ _tag: "InvalidVpcID.NotFound" });
+        yield* stack.destroy();
+      }),
+    { timeout: Infinity },
   );
 
   test.provider(
@@ -404,6 +429,6 @@ describe.sequential("Client VPN endpoints", () => {
           changedProtocol.clientVpnEndpointId,
         );
       }),
-    { timeout: 120_000 },
+    { timeout: Infinity },
   );
 });

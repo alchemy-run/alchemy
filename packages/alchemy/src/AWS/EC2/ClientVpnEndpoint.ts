@@ -231,7 +231,6 @@ const usable = (endpoint: EC2.ClientVpnEndpoint) =>
   endpoint.Status?.Code === "available";
 const retryReady = {
   schedule: Schedule.spaced("5 seconds"),
-  times: 10,
 };
 
 const describe = (endpointId: string) =>

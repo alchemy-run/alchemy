@@ -34,13 +34,14 @@ const Stack = Alchemy.Stack(
     return { endpoint };
   }),
 );
-const prerequisites = beforeAll(deploy(Stack));
+const prerequisites = beforeAll(deploy(Stack), { timeout: Infinity });
 afterAll(
   destroy(Stack).pipe(
     Effect.andThen(
       certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
     ),
   ),
+  { timeout: Infinity },
 );
 
 test.provider(
@@ -160,7 +161,7 @@ test.provider(
         "10.172.0.0/16",
       );
     }),
-  { timeout: 120_000 },
+  { timeout: Infinity },
 );
 
 test.provider(
@@ -211,7 +212,7 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: 120_000 },
+  { timeout: Infinity },
 );
 
 test.provider(
@@ -277,5 +278,5 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: 120_000 },
+  { timeout: Infinity },
 );

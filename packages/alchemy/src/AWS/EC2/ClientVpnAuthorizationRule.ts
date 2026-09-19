@@ -161,7 +161,6 @@ const waitForRule = (
     Effect.retry({
       while: (error) => error._tag === "ClientVpnAuthorizationPending",
       schedule: Schedule.spaced("5 seconds"),
-      times: 10,
     }),
   );
 
@@ -191,7 +190,6 @@ const removeRule = Effect.fn(function* (
         Effect.retry({
           while: (error) => error._tag === "IncorrectState",
           schedule: Schedule.spaced("5 seconds"),
-          times: 8,
         }),
       );
   }
@@ -302,11 +300,8 @@ export const ClientVpnAuthorizationRuleProvider = () =>
                   () => Effect.void,
                 ),
                 Effect.retry({
-                  while: (error) =>
-                    error._tag === "InvalidClientVpnEndpointId.NotFound" ||
-                    error._tag === "IncorrectState",
+                  while: (error) => error._tag === "IncorrectState",
                   schedule: Schedule.spaced("5 seconds"),
-                  times: 8,
                 }),
               );
           }

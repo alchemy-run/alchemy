@@ -51,6 +51,8 @@ export interface ClientVpnTargetNetworkAssociation extends Resource<
  * Associates a VPC subnet with a Client VPN endpoint and waits for it to become
  * associated. AWS automatically adds the VPC's local route; do not manage that
  * automatic route with ClientVpnRoute. Security groups are endpoint-wide settings.
+ * Association and disassociation can take several minutes. The provider waits
+ * for AWS to finish, fails on association errors, and supports cancellation.
  *
  * All property changes replace the association. Replacement within the same
  * endpoint deletes first because AWS permits only one subnet per Availability
@@ -147,7 +149,6 @@ const waitForNetwork = (
     Effect.retry({
       while: (error) => error._tag === "ClientVpnAssociationPending",
       schedule: Schedule.spaced("5 seconds"),
-      times: 10,
     }),
   );
 
@@ -246,12 +247,8 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                   () => Effect.succeed(undefined),
                 ),
                 Effect.retry({
-                  while: (error) =>
-                    error._tag === "InvalidClientVpnEndpointId.NotFound" ||
-                    error._tag === "InvalidClientVpnSubnetId.NotFound" ||
-                    error._tag === "IncorrectState",
+                  while: (error) => error._tag === "IncorrectState",
                   schedule: Schedule.spaced("5 seconds"),
-                  times: 8,
                 }),
               );
             associationId = created?.AssociationId;
@@ -285,7 +282,6 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                 Effect.retry({
                   while: (error) => error._tag === "IncorrectState",
                   schedule: Schedule.spaced("5 seconds"),
-                  times: 8,
                 }),
               );
           }

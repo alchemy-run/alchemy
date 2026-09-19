@@ -55,7 +55,6 @@ export const importClientVpnCertificate = (stackName: string) =>
           Effect.retry({
             while: (error) => error._tag === "ResourceInUseException",
             schedule: Schedule.spaced("5 seconds"),
-            times: 9,
           }),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           Effect.orDie,
@@ -157,7 +156,6 @@ export const waitForClientVpn = <A, E, R>(
     Effect.retry({
       while: (error) => error instanceof ClientVpnFixtureNotReady,
       schedule: Schedule.spaced("5 seconds"),
-      times: 9,
     }),
   );
 

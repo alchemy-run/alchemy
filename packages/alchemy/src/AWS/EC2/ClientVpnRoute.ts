@@ -165,7 +165,6 @@ const waitForRoute = (props: ClientVpnRouteProps, deleted: boolean) =>
     Effect.retry({
       while: (error) => error._tag === "ClientVpnRoutePending",
       schedule: Schedule.spaced("5 seconds"),
-      times: 10,
     }),
   );
 
@@ -191,7 +190,6 @@ const removeRoute = Effect.fn(function* (props: ClientVpnRouteProps) {
         Effect.retry({
           while: (error) => error._tag === "IncorrectState",
           schedule: Schedule.spaced("5 seconds"),
-          times: 8,
         }),
       );
   }
@@ -301,13 +299,8 @@ export const ClientVpnRouteProvider = () =>
                   () => Effect.void,
                 ),
                 Effect.retry({
-                  while: (error) =>
-                    error._tag === "InvalidClientVpnEndpointId.NotFound" ||
-                    error._tag ===
-                      "InvalidClientVpnActiveAssociationNotFound" ||
-                    error._tag === "IncorrectState",
+                  while: (error) => error._tag === "IncorrectState",
                   schedule: Schedule.spaced("5 seconds"),
-                  times: 8,
                 }),
               );
           }
