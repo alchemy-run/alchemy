@@ -4,6 +4,7 @@ import { WorkflowResource } from "@/Cloudflare/Workflows/Workflow";
 import { generateWorkflowName } from "@/Cloudflare/Workflows/WorkflowName";
 import { sha256 } from "@/Util/sha256";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Exit from "effect/Exit";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
@@ -79,11 +80,44 @@ const getJson = <A>(url: string, schema: Schema.Decoder<A>) =>
     );
   });
 
-const runWorkflowToCompletion = (url: string) =>
+const runWorkflowToCompletion = (url: string, expectedWorkflowName?: string) =>
   Effect.gen(function* () {
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    const client = HttpClient.filterStatusOk(http);
+    if (expectedWorkflowName !== undefined) {
+      const identity = yield* getJson(
+        `${url}/workflow/identity`,
+        Schema.Struct({ workflowName: Schema.optional(Schema.String) }),
+      ).pipe(
+        Effect.tap((identity) =>
+          Effect.logInfo("Workflow identity readiness", {
+            expected: expectedWorkflowName,
+            observed: identity.workflowName,
+          }),
+        ),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (identity) => identity.workflowName === expectedWorkflowName,
+          times: 10,
+        }),
+        Effect.timeout("30 seconds"),
+      );
+      expect(identity.workflowName).toBe(expectedWorkflowName);
+      const rejected = yield* http.post(`${url}/workflow/start/world`, {
+        headers: {
+          "x-expected-workflow-name": `${expectedWorkflowName}-stale`,
+        },
+      });
+      yield* rejected.text;
+      expect(rejected.status).toBe(409);
+    }
     const { instanceId } = yield* client
-      .post(`${url}/workflow/start/world`)
+      .post(
+        `${url}/workflow/start/world`,
+        expectedWorkflowName === undefined
+          ? undefined
+          : { headers: { "x-expected-workflow-name": expectedWorkflowName } },
+      )
       .pipe(
         Effect.flatMap((res) => res.json),
         Effect.flatMap(
@@ -860,6 +894,7 @@ test.provider(
                 className: "MyWorkflow",
                 workflowName,
               }),
+              WORKFLOW_NAME: workflowName ?? explicit,
               EVENTS: Cloudflare.DurableObject("WorkflowEvents"),
             },
           });
@@ -932,26 +967,171 @@ test.provider(
               "props.source",
               source,
             );
-            const terminal = yield* runWorkflowToCompletion(worker.url!).pipe(
-              Effect.retry({
-                schedule: Schedule.spaced("2 seconds"),
-                times: 2,
-              }),
+            yield* Effect.logInfo("Workflow delivery phase", {
+              phase: name ?? "omitted",
+              workflow: observed,
+              subscription: liveSubscription,
+            });
+            const terminal = yield* runWorkflowToCompletion(
+              worker.url!,
+              expected,
             );
             expect(terminal.output?.workflowName).toBe(expected);
-            const events = yield* getJson(
-              `${worker.url}/events`,
-              WorkflowEvents,
-            ).pipe(
+            const terminalObservedAt = yield* Clock.currentTimeMillis;
+            yield* Effect.logInfo("Workflow terminal", {
+              ...terminal,
+              observedAt: terminalObservedAt,
+            });
+            const client = HttpClient.filterStatusOk(
+              yield* HttpClient.HttpClient,
+            );
+            const events = yield* client.get(`${worker.url}/events`).pipe(
+              Effect.flatMap((response) =>
+                Effect.gen(function* () {
+                  const body = yield* response.json.pipe(
+                    Effect.flatMap(Schema.decodeUnknownEffect(WorkflowEvents)),
+                  );
+                  yield* Effect.logInfo("Workflow event poll", {
+                    readAt: response.headers["x-events-read-at"],
+                    cache: response.headers["cf-cache-status"],
+                    age: response.headers.age,
+                    events: body,
+                  });
+                  return body;
+                }),
+              ),
+              retry,
+              // Live Queue dispatch has taken 55 seconds after Workflow completion.
               Effect.repeat({
-                schedule: Schedule.spaced("3 seconds"),
+                schedule: Schedule.spaced("5800 millis"),
                 until: (events) =>
                   events.some(
                     (event) => event.payload.instanceId === terminal.instanceId,
                   ),
                 times: 10,
               }),
+              Effect.timeoutOrElse({
+                duration: "60 seconds",
+                orElse: () => Effect.succeed([]),
+              }),
             );
+            if (
+              !events.some(
+                (event) => event.payload.instanceId === terminal.instanceId,
+              )
+            ) {
+              const diagnostics = yield* Effect.gen(function* () {
+                yield* Effect.logInfo(
+                  "Workflow event diagnostics",
+                  JSON.stringify({
+                    queue: yield* queues.getQueue({
+                      accountId,
+                      queueId: deployed.queue.queueId,
+                    }),
+                    metrics: yield* queues.getMetricsQueue({
+                      accountId,
+                      queueId: deployed.queue.queueId,
+                    }),
+                    subscription: yield* queues.getSubscription({
+                      accountId,
+                      subscriptionId: subscription.subscriptionId,
+                    }),
+                    storage: yield* getJson(
+                      `${worker.url}/events/diagnostics?instance=${terminal.instanceId}`,
+                      Schema.Unknown,
+                    ),
+                  }),
+                );
+                const probeId = `probe-${terminal.instanceId}`;
+                yield* queues.bulkPushMessages({
+                  accountId,
+                  queueId: deployed.queue.queueId,
+                  messages: [
+                    {
+                      contentType: "json",
+                      body: { type: "diagnostic.queue.probe", probeId },
+                    },
+                  ],
+                });
+                yield* Effect.logInfo("Queue probe accepted", { probeId });
+                const messages = (snapshot: unknown): unknown[] =>
+                  typeof snapshot === "object" &&
+                  snapshot !== null &&
+                  "entries" in snapshot &&
+                  Array.isArray(snapshot.entries)
+                    ? snapshot.entries.flatMap((entry: unknown) =>
+                        Array.isArray(entry) ? [entry[1]] : [],
+                      )
+                    : [];
+                const hasProbe = (snapshot: unknown) =>
+                  messages(snapshot).some(
+                    (body) =>
+                      typeof body === "object" &&
+                      body !== null &&
+                      "type" in body &&
+                      body.type === "diagnostic.queue.probe" &&
+                      "probeId" in body &&
+                      body.probeId === probeId,
+                  );
+                const hasOriginal = (snapshot: unknown) =>
+                  messages(snapshot).some(
+                    (body) =>
+                      typeof body === "object" &&
+                      body !== null &&
+                      "payload" in body &&
+                      typeof body.payload === "object" &&
+                      body.payload !== null &&
+                      "instanceId" in body.payload &&
+                      body.payload.instanceId === terminal.instanceId,
+                  );
+                const probeStorage = yield* client
+                  .get(`${worker.url}/events/diagnostics?probe=${probeId}`)
+                  .pipe(
+                    Effect.flatMap((response) => response.json),
+                    Effect.tap((snapshot) =>
+                      Effect.gen(function* () {
+                        const observedAt = yield* Clock.currentTimeMillis;
+                        yield* Effect.logInfo(
+                          "Queue delivery sample",
+                          JSON.stringify({
+                            observedAt,
+                            elapsedMs: observedAt - terminalObservedAt,
+                            originalPresent: hasOriginal(snapshot),
+                            probePresent: hasProbe(snapshot),
+                            storage: snapshot,
+                          }),
+                        );
+                      }),
+                    ),
+                    Effect.repeat({
+                      schedule: Schedule.spaced("3 seconds"),
+                      until: (snapshot) =>
+                        hasOriginal(snapshot) && hasProbe(snapshot),
+                      times: 9,
+                    }),
+                  );
+                yield* Effect.logInfo(
+                  "Queue probe delivery",
+                  JSON.stringify({
+                    probeId,
+                    observedAt: yield* Clock.currentTimeMillis,
+                    originalPresent: hasOriginal(probeStorage),
+                    probePresent: hasProbe(probeStorage),
+                    storage: probeStorage,
+                    metrics: yield* queues.getMetricsQueue({
+                      accountId,
+                      queueId: deployed.queue.queueId,
+                    }),
+                  }),
+                );
+              }).pipe(Effect.timeout("30 seconds"), Effect.exit);
+              if (Exit.isFailure(diagnostics)) {
+                yield* Effect.logWarning(
+                  "Workflow event diagnostics failed",
+                  Cause.pretty(diagnostics.cause),
+                );
+              }
+            }
             expect(events).toContainEqual(
               expect.objectContaining({
                 type: "cf.workflows.workflow.instance.completed",
