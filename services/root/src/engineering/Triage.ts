@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import { connected } from "../github/Repos.ts";
 import { inWorker } from "../platform/Database.ts";
 import { lineage } from "../Lineage.ts";
+import { TaskIntake } from "../tasks/Intake.ts";
 import { handleBurst } from "./Burst.ts";
 import type { InboundEvent } from "./Swarm.ts";
 import { swarmDeps } from "./SwarmLive.ts";
@@ -215,17 +216,42 @@ export const TriagePump = Layer.effectDiscard(
             plan.burst,
           ).pipe(inWorker);
         }
+        // singles keep the manager's message (informational) AND file
+        // a task through the intake router when one is wired — events
+        // with identity become board work; pushes stay chatter
+        const intake = yield* Effect.serviceOption(TaskIntake);
         yield* Effect.forEach(
           plan.singles,
           (single) =>
-            sessions
-              .send(
-                MANAGER_ADDRESS.term,
-                MANAGER_ADDRESS.key,
-                `[inbound${single.ref === undefined ? "" : ` ${single.ref}`}] ${single.text}`,
-                { wake: true },
-              )
-              .pipe(inWorker),
+            Effect.gen(function* () {
+              yield* sessions
+                .send(
+                  MANAGER_ADDRESS.term,
+                  MANAGER_ADDRESS.key,
+                  `[inbound${single.ref === undefined ? "" : ` ${single.ref}`}] ${single.text}`,
+                  { wake: true },
+                )
+                .pipe(inWorker);
+              if (
+                Option.isSome(intake) &&
+                single.title !== undefined &&
+                single.repo !== undefined &&
+                single.number !== undefined
+              ) {
+                yield* intake.value
+                  .file({
+                    title: single.title,
+                    body: single.text,
+                    origin: `github:${single.repo}#${single.number}`,
+                    actor: "router",
+                  })
+                  .pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.logWarning("inbound task filing failed", cause),
+                    ),
+                  );
+              }
+            }),
           { discard: true },
         );
       }).pipe(

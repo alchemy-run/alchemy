@@ -33,6 +33,7 @@ export * from "./SessionIndexMemory.ts";
 export * from "./Skill.ts";
 export * from "./SkillGate.ts";
 export * from "./Group.ts";
+export * from "./TaskQueue.ts";
 export * from "./Source.ts";
 export * from "./Thread.ts";
 export * from "./ThreadStorage.ts";

@@ -16,7 +16,7 @@ import * as Context from "effect/Context";
  * Rows de-dupe on kind + name.
  */
 export interface OrgNode {
-  readonly kind: "Agent" | "Skill" | "Group";
+  readonly kind: "Agent" | "Skill" | "Group" | "TaskQueue";
   readonly name: string;
   /** The defining file, when declared with `import.meta`. */
   readonly source?: string;

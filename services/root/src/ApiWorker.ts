@@ -45,6 +45,11 @@ import { ProposalsLive } from "./proposals/ProposalsDO.ts";
 import { RootChart } from "./Root.ts";
 import { SandboxSession } from "./sandbox/SandboxSession.ts";
 import { WorkspaceAgentLive } from "./sandbox/WorkspaceAgent.ts";
+import { CloudflareTasksLive } from "./tasks/Cloudflare.ts";
+import { DesksLive } from "./tasks/Desks.ts";
+import { FlyTasksLive } from "./tasks/Fly.ts";
+import { TaskIntakeLive } from "./tasks/Intake.ts";
+import { TasksLive } from "./tasks/TasksDO.ts";
 
 /** ONE org registry per isolate — every Agent/Skill/Group Layer that
  *  builds registers its static declaration (template + refs + pinned
@@ -197,6 +202,23 @@ const HeadWorker = Layer.suspend(() => HeadLive).pipe(
 //   Layer.provide(Cloudflare.GitHubRepositoryEventSourceLive),
 // );
 
+/** The WORK STREAMS — queues declared in code (their splices are the
+ *  desks), the per-queue board (TasksDO), the desk loop, and the one
+ *  filing door every intake takes. The queue Layers require their
+ *  member agents' implementations — the same Worker layers the
+ *  engineering group provides (memoized by reference, one build). */
+const TasksQueues = Layer.mergeAll(CloudflareTasksLive, FlyTasksLive).pipe(
+  Layer.provide(EngineerWorker),
+  Layer.provide(ReviewerWorker),
+);
+
+const TasksWorker = TaskIntakeLive.pipe(
+  Layer.provideMerge(DesksLive),
+  Layer.provideMerge(TasksQueues),
+  Layer.provideMerge(TasksLive),
+  Layer.provide(TypeSafe.SystemOneHttp),
+);
+
 /**
  * The ROUTER runs at the Worker level, where no session workspace
  * exists: `checkout` belongs to session charters alone.
@@ -240,6 +262,9 @@ const Company = Layer.mergeAll(
   TypeSafe.SystemOneHttp,
 ).pipe(
   Layer.provideMerge(TriageLive),
+  // the work streams: the board, the desk loop, and the filing door —
+  // Posts/Sessions flow in from the provisions below this link
+  Layer.provideMerge(TasksWorker),
   // the forge's issues store — the mirror the Sync routes fill and
   // the /api/v3 issues facade serves
   Layer.provideMerge(IssuesLive),
