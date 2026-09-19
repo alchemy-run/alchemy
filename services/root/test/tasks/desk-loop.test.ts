@@ -6,6 +6,7 @@
  * review cycle, its event trail, and the digest delivery dedupe.
  */
 import { RuntimeContext } from "alchemy";
+import type * as AI from "alchemy/AI";
 import type * as TypeSafe from "alchemy/TypeSafe";
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
@@ -202,9 +203,14 @@ const deskWorld = () => {
       throw new Error("unscripted question");
     })) as unknown as typeof TypeSafe.SystemOne.Service;
 
+  // the desk session's durable log, as recovery reads it — tests
+  // seed it to simulate a round that finished with no waiter alive
+  const sessionLog: Array<AI.SessionObservation> = [];
+
   const deps: DeskDeps = {
     query,
     board: () => board,
+    history: () => Effect.succeed(sessionLog.slice()),
     post: (input) =>
       Effect.sync(() => {
         const id = `w-${posts.length + 1}`;
@@ -246,6 +252,23 @@ const deskWorld = () => {
     dispatches,
     digests,
     digestSends,
+    sessionLog,
+    /** A task wedged in `working` — claimed durably, waiter dead. */
+    seedWorking: (id: string, title: string, desk: string, updated: number) => {
+      rows.set(id, {
+        id,
+        queue: QUEUE.slug,
+        title,
+        body: title,
+        state: "working",
+        tags: [],
+        desk,
+        rootPost: `p-${id}`,
+        priority: 2,
+        at: updated - 10,
+        updated,
+      });
+    },
     file: (
       id: string,
       title: string,
@@ -272,6 +295,8 @@ const deskWorld = () => {
     task: (id: string) => toTask(rows.get(id)!),
     kindsOf: (id: string) =>
       events.filter((row) => row.task === id).map((row) => row.kind),
+    recordEvent: (id: string, kind: string, actor: string, data?: string) =>
+      event(id, kind, actor, data),
   };
 };
 
@@ -368,6 +393,96 @@ describe("the desk loop", () => {
       { term: "Engineer", key: "root::tasks::engineering::engineer" },
       { term: "Reviewer", key: "root::tasks::engineering::reviewer" },
     ]);
+  });
+
+  test("a wedged working task is recovered from the session's log", async () => {
+    const world = deskWorld();
+    // claimed at t=100; the isolate died awaiting the reply — the DO
+    // session finished the round durably (reply at 200, parked at 210)
+    world.seedWorking("t-w", "wedge me", "engineer", 100);
+    const row = (partial: {
+      type: string;
+      at: number;
+      text?: string;
+    }): AI.SessionObservation =>
+      ({
+        term: "Engineer",
+        key: "root::tasks::engineering::engineer",
+        seq: world.sessionLog.length,
+        ...partial,
+      }) as AI.SessionObservation;
+    world.sessionLog.push(
+      row({ type: "input", at: 110 }),
+      row({
+        type: "assistant",
+        at: 200,
+        text: "Blocked on entitlements.\nDISPOSITION: park — no access",
+      }),
+      row({ type: "parked", at: 210 }),
+    );
+    await run(world);
+    expect(world.task("t-w").state).toBe("parked");
+    // the harvested reply landed in the task's thread
+    expect(
+      world.posts.some(
+        (post) => post.author === "engineer" && /DISPOSITION: park/.test(post.text),
+      ),
+    ).toBe(true);
+    // no new dispatch happened — recovery harvests, never re-runs
+    expect(world.dispatches.filter((d) => d.member === "engineer")).toHaveLength(0);
+  });
+
+  test("a wedged task whose round never ran is re-queued", async () => {
+    const world = deskWorld();
+    world.seedWorking("t-n", "never started", "engineer", 500);
+    // the session last parked BEFORE the claim — the ask never landed
+    world.sessionLog.push({
+      term: "Engineer",
+      key: "root::tasks::engineering::engineer",
+      seq: 0,
+      type: "parked",
+      at: 400,
+    } as AI.SessionObservation);
+    // the freed desk immediately re-claims it, so script the round
+    world.answer(
+      "engineer",
+      "done.\nDISPOSITION: complete — trivial",
+    );
+    world.answer("reviewer", "approve");
+    await run(world);
+    // re-queued, then worked to completion by the normal loop
+    expect(["ready", "review", "done"]).toContain(world.task("t-n").state);
+    expect(world.kindsOf("t-n")).toContain("routed");
+  });
+
+  test("repeated recoveries park the task as poisoned — no churn loop", async () => {
+    const world = deskWorld();
+    world.seedWorking("t-p", "poisoned", "engineer", 500);
+    // two recoveries already on the record — the third parks instead
+    world.recordEvent("t-p", "routed", "engineer", "recovered: the round ended without a reply — re-queued");
+    world.recordEvent("t-p", "routed", "engineer", "recovered: the round ended without a reply — re-queued");
+    world.sessionLog.push({
+      term: "Engineer",
+      key: "root::tasks::engineering::engineer",
+      seq: 0,
+      type: "parked",
+      at: 400,
+    } as AI.SessionObservation);
+    await run(world);
+    expect(world.task("t-p").state).toBe("parked");
+    expect(world.task("t-p").parkedReason).toContain("watchdog");
+    // and no fresh dispatch was burned on the poisoned pair
+    expect(world.dispatches.filter((d) => d.member === "engineer")).toHaveLength(0);
+  });
+
+  test("a round busy past the TTL is parked by the watchdog", async () => {
+    const world = deskWorld();
+    // claimed 31 real minutes ago; the session log shows no park —
+    // to every other check the desk just looks busy, forever
+    world.seedWorking("t-t", "hung round", "engineer", Date.now() - 31 * 60_000);
+    await run(world);
+    expect(world.task("t-t").state).toBe("parked");
+    expect(world.task("t-t").parkedReason).toContain("watchdog");
   });
 
   test("park and handoff dispositions land where they say", async () => {

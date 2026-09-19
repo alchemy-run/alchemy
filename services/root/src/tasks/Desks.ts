@@ -58,6 +58,14 @@ export const MAX_WORKING_DESKS = 4;
 /** How many claim passes one pump may make before resting. */
 const PUMP_ROUNDS = 8;
 
+/** A round older than this with no settled outcome is parked by the
+ *  watchdog — nothing is allowed to hang silently. */
+export const WORK_TTL_MS = 30 * 60_000;
+
+/** Recoveries of one task before the watchdog parks it as poisoned —
+ *  re-queuing forever is a churn loop, not resilience. */
+export const MAX_RECOVERIES = 2;
+
 export interface DeskMember {
   /** The agent's TERM (`Engineer`) — what Sessions dispatches to. */
   readonly term: string;
@@ -142,6 +150,15 @@ export interface DeskDeps {
   ) => Effect.Effect<void, never, RuntimeContext>;
   /** The desk's FULL session key (`root::tasks::<queue>::<agent>`). */
   readonly deskKey: (queue: string, member: DeskMember) => string;
+  /** The desk session's durable observation log — recovery's read. */
+  readonly history: (
+    member: DeskMember,
+    key: string,
+  ) => Effect.Effect<
+    ReadonlyArray<AI.SessionObservation>,
+    never,
+    RuntimeContext
+  >;
   readonly budget: { readonly maxWorkingDesks: number };
   /** Org-wide working-desk registry (`<queue>/<member>` entries). */
   readonly active: Set<string>;
@@ -254,6 +271,156 @@ const lastSummary = (
 
 // ── the loop ────────────────────────────────────────────────────────
 
+/** Apply a finished round's reply to the board — post it into the
+ *  task's thread, then route by disposition (worker) or verdict
+ *  (reviewer). Shared by the live path and crash recovery. */
+const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
+  deps: DeskDeps,
+  queue: QueueSpec,
+  member: DeskMember,
+  from: "ready" | "review",
+  task: TaskRow,
+  reply: string,
+) {
+  const board = deps.board(queue.slug);
+  if (task.rootPost !== undefined && reply.length > 0) {
+    const post = yield* deps.post({
+      channel: channelOf(queue),
+      replyTo: task.rootPost,
+      author: member.slug,
+      text: clip(reply),
+    });
+    yield* board.comment(task.id, member.slug, post);
+  }
+  if (from === "ready") {
+    const disposition =
+      parseDisposition(reply) ?? (yield* judgeDisposition(deps.query, reply));
+    switch (disposition.kind) {
+      case "complete":
+        yield* queue.reviewer === undefined
+          ? board.route(task.id, {
+              state: "done",
+              actor: member.slug,
+              kind: "done",
+              data: disposition.note,
+            })
+          : board.route(task.id, {
+              state: "review",
+              actor: member.slug,
+              kind: "review_requested",
+              data: disposition.note,
+            });
+        break;
+      case "park":
+        yield* board.route(task.id, {
+          state: "parked",
+          actor: member.slug,
+          data: disposition.note,
+        });
+        break;
+      case "handoff":
+        // back to the inbox — the router (or a human) re-places it
+        yield* board.route(task.id, {
+          state: "inbox",
+          actor: member.slug,
+          kind: "routed",
+          data: disposition.note,
+        });
+        break;
+    }
+  } else {
+    const verdict = yield* reviewVerdict(deps.query, reply);
+    yield* verdict === "approved"
+      ? board.route(task.id, {
+          state: "done",
+          actor: member.slug,
+          kind: "approved",
+        })
+      : board.route(task.id, {
+          state: "ready",
+          desk: queue.worker.slug,
+          actor: member.slug,
+          kind: "changes_requested",
+          data: clip(reply, 2_000),
+        });
+  }
+});
+
+/**
+ * A WORKING task whose desk fiber died with its isolate (an isolate
+ * reload, a crash) wedges the desk forever: the claim is durable and
+ * the DO session finishes its round durably, but the in-memory waiter
+ * that would have applied the disposition is gone — so the board says
+ * "busy" and every later pump walks away. Recovery is the arrival
+ * code path: read the session's durable log; a session parked AFTER
+ * the claim already ran the round, so harvest its final reply and
+ * settle it; parked BEFORE the claim means the ask never landed, so
+ * hand the task back for a fresh claim. A running session is just
+ * busy — not stuck.
+ */
+const recoverDesk = Effect.fn("root/tasks/Desks.recoverDesk")(function* (
+  deps: DeskDeps,
+  queue: QueueSpec,
+  member: DeskMember,
+  from: "ready" | "review",
+  stuck: TaskRow,
+) {
+  const board = deps.board(queue.slug);
+  const key = deps.deskKey(queue.slug, member);
+  const log = yield* deps.history(member, key);
+  const last = log[log.length - 1];
+  const now = yield* Clock.currentTimeMillis;
+  if (last === undefined || last.type !== "parked") {
+    // the session looks busy — but a round can't run forever: past
+    // the TTL the task is parked, never silently retried (a human
+    // decides; the desk session stays inspectable)
+    if (now - stuck.updated > WORK_TTL_MS) {
+      yield* board.route(stuck.id, {
+        state: "parked",
+        actor: "watchdog",
+        data: `parked by the watchdog: working for over ${Math.round(WORK_TTL_MS / 60_000)} minutes with no settled round`,
+      });
+      return true;
+    }
+    return false;
+  }
+  // a task that keeps needing recovery is a poisoned pair (task ×
+  // desk) — re-queuing it again is a churn loop that burns the
+  // dispatch budget; park it with the evidence instead
+  const recoveries = (yield* board.events(stuck.id)).filter(
+    (event) => event.data !== undefined && event.data.startsWith("recovered:"),
+  ).length;
+  const requeue = (why: string) =>
+    recoveries >= MAX_RECOVERIES
+      ? board.route(stuck.id, {
+          state: "parked",
+          actor: "watchdog",
+          data: `parked by the watchdog: ${recoveries} recoveries without a settled round (${why})`,
+        })
+      : board.route(stuck.id, {
+          state: from,
+          actor: member.slug,
+          kind: "routed",
+          data: why,
+        });
+  if (last.at < stuck.updated) {
+    // the fiber died between claim and dispatch — nothing ever ran
+    yield* requeue("recovered: the desk never received this — re-queued");
+    return true;
+  }
+  const reply = [...log]
+    .reverse()
+    .find((row) => row.type === "assistant" && row.at >= stuck.updated);
+  const text = reply?.type === "assistant" ? reply.text.trim() : "";
+  if (text.length === 0) {
+    // the round died without a reply — re-queue rather than judge air
+    yield* requeue("recovered: the round ended without a reply — re-queued");
+    return true;
+  }
+  yield* settleRound(deps, queue, member, from, stuck, text);
+  return true;
+});
+
 /** One desk's pass: claim, dispatch, disposition. Answers whether it
  *  progressed (a claim happened) — the pump re-passes on progress. */
 const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
@@ -273,7 +440,9 @@ const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
     return false;
   }
   const desk = yield* board.deskState(member.slug);
-  if (desk.working !== undefined) return false;
+  if (desk.working !== undefined) {
+    return yield* recoverDesk(deps, queue, member, from, desk.working);
+  }
   const candidates = yield* board.list(from);
   if (candidates.length === 0) return false;
   // the scheduler advises on `ready`; reviews are worked in arrival
@@ -320,67 +489,7 @@ const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
         ? workAsk(queue, task)
         : reviewAsk(queue, task, lastSummary(yield* board.events(task.id)));
     const reply = yield* deps.dispatch(member, { key, ask });
-    if (task.rootPost !== undefined && reply.length > 0) {
-      const post = yield* deps.post({
-        channel: channelOf(queue),
-        replyTo: task.rootPost,
-        author: member.slug,
-        text: clip(reply),
-      });
-      yield* board.comment(task.id, member.slug, post);
-    }
-    if (from === "ready") {
-      const disposition =
-        parseDisposition(reply) ?? (yield* judgeDisposition(deps.query, reply));
-      switch (disposition.kind) {
-        case "complete":
-          yield* queue.reviewer === undefined
-            ? board.route(task.id, {
-                state: "done",
-                actor: member.slug,
-                kind: "done",
-                data: disposition.note,
-              })
-            : board.route(task.id, {
-                state: "review",
-                actor: member.slug,
-                kind: "review_requested",
-                data: disposition.note,
-              });
-          break;
-        case "park":
-          yield* board.route(task.id, {
-            state: "parked",
-            actor: member.slug,
-            data: disposition.note,
-          });
-          break;
-        case "handoff":
-          // back to the inbox — the router (or a human) re-places it
-          yield* board.route(task.id, {
-            state: "inbox",
-            actor: member.slug,
-            kind: "routed",
-            data: disposition.note,
-          });
-          break;
-      }
-    } else {
-      const verdict = yield* reviewVerdict(deps.query, reply);
-      yield* verdict === "approved"
-        ? board.route(task.id, {
-            state: "done",
-            actor: member.slug,
-            kind: "approved",
-          })
-        : board.route(task.id, {
-            state: "ready",
-            desk: queue.worker.slug,
-            actor: member.slug,
-            kind: "changes_requested",
-            data: clip(reply, 2_000),
-          });
-    }
+    yield* settleRound(deps, queue, member, from, task, reply);
     return true;
   }).pipe(Effect.ensuring(Effect.sync(() => deps.active.delete(deskId))));
 });
@@ -508,6 +617,7 @@ export const DesksLive: Layer.Layer<
           ),
         ),
       deskKey: (queue, member) => deskKey(queue, member.slug),
+      history: (member, key) => sessions.history(member.term, key),
       budget: { maxWorkingDesks: MAX_WORKING_DESKS },
       active,
     };

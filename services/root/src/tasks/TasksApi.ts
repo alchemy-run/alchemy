@@ -93,6 +93,18 @@ export const TasksApi = Effect.gen(function* () {
     return yield* HttpServerResponse.json({ queues: views });
   });
 
+  /** Board READS also pump, debounced per queue — this is what heals
+   *  a desk wedged by an isolate reload (recoverDesk in Desks.ts):
+   *  nothing mutates after a reload, but someone always looks. */
+  const lastPump = new Map<string, number>();
+  const pumpOnRead = (queue: string) =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      if (now - (lastPump.get(queue) ?? 0) < 10_000) return;
+      lastPump.set(queue, now);
+      yield* exec.waitUntil(desks.pump(queue));
+    });
+
   const board = Effect.gen(function* () {
     const queue = yield* knownQueue;
     if (queue === undefined) {
@@ -101,6 +113,7 @@ export const TasksApi = Effect.gen(function* () {
         { status: 404 },
       );
     }
+    yield* pumpOnRead(queue.slug);
     const rows = yield* tasks.list(queue.slug);
     const byState = Object.fromEntries(
       TASK_STATES.map((state) => [
