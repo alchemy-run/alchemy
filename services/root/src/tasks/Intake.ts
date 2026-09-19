@@ -1,3 +1,4 @@
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as TypeSafe from "alchemy/TypeSafe";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -14,7 +15,8 @@ import { mintTaskId, Tasks, type TaskRow } from "./TasksDO.ts";
  * Triage's singles, an agent's explicit filing): route the task to a
  * queue (Router.ts — the rubrics are the queues' own missions),
  * create its conversation thread (a root post in the `tasks:<queue>`
- * channel), insert the board row, and pump the queue's desks.
+ * channel), insert the board row, and pump the queue's desks in the
+ * background (`ctx.waitUntil`) — filing never waits on a desk round.
  *
  * An unsure route files to the FIRST registered queue's INBOX — the
  * human routes it from the board; a confident route (or an explicit
@@ -43,7 +45,7 @@ export class TaskIntake extends Context.Service<
 export const TaskIntakeLive: Layer.Layer<
   TaskIntake,
   never,
-  Tasks | Desks | Posts | TypeSafe.SystemOne
+  Tasks | Desks | Posts | TypeSafe.SystemOne | Cloudflare.WorkerExecutionContext
 > = Layer.effect(
   TaskIntake,
   Effect.gen(function* () {
@@ -51,6 +53,7 @@ export const TaskIntakeLive: Layer.Layer<
     const desks = yield* Desks;
     const posts = yield* Posts;
     const query = yield* TypeSafe.SystemOne;
+    const exec = yield* Cloudflare.WorkerExecutionContext;
 
     const clip = (value: string, at: number) =>
       value.length > at ? `${value.slice(0, at)}…` : value;
@@ -103,7 +106,10 @@ export const TaskIntakeLive: Layer.Layer<
               ? {}
               : { priority: input.priority }),
           });
-          yield* desks.pump(target);
+          // pump AFTER the response (TasksApi's re-arm pattern): a
+          // desk round can run minutes — filing returns immediately
+          // and the pump rides `ctx.waitUntil`
+          yield* exec.waitUntil(desks.pump(target)).pipe(inWorker);
           return task;
         }),
     });

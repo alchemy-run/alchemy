@@ -12,6 +12,10 @@
  * - the `Recall` tool pages the raw messages a generation shadowed.
  */
 import * as AI from "@/AI/index.ts";
+import {
+  applyCompactionPlan,
+  elideOrphanToolResults,
+} from "@/AI/DriverCore.ts";
 import { DriverLocal } from "@/AI/DriverLocal.ts";
 import { ThreadStorage } from "@/AI/ThreadStorage.ts";
 import { ThreadStorageMemory } from "@/AI/ThreadStorageMemory.ts";
@@ -303,5 +307,138 @@ ${AI.Recall} to page history that compaction shadowed.`;
         ),
       ),
     );
+  });
+});
+
+const assistantCall = (id: string) =>
+  ({
+    role: "assistant",
+    content: [
+      { type: "tool-call", id, name: "search", params: { query: "q" } },
+    ],
+  }) as const;
+
+const toolResult = (id: string) =>
+  ({
+    role: "tool",
+    content: [
+      {
+        type: "tool-result",
+        id,
+        name: "search",
+        isFailure: false,
+        result: "hits",
+      },
+    ],
+  }) as const;
+
+/** Every tool-result must follow its call and every call must be
+ *  answered — the shape every provider requires of a surface. */
+const expectPairBalanced = (
+  rows: ReadonlyArray<{
+    readonly role: string;
+    readonly content: string | ReadonlyArray<unknown>;
+  }>,
+) => {
+  const calls = new Set<string>();
+  const answered = new Set<string>();
+  for (const row of rows) {
+    if (typeof row.content === "string") continue;
+    for (const part of row.content as ReadonlyArray<{
+      readonly type: string;
+      readonly id?: string;
+    }>) {
+      if (part.type === "tool-call") calls.add(part.id!);
+      if (part.type === "tool-result") {
+        expect(calls.has(part.id!)).toBe(true);
+        answered.add(part.id!);
+      }
+    }
+  }
+  for (const id of calls) expect(answered.has(id)).toBe(true);
+};
+
+describe("pair-balanced compaction", () => {
+  it.effect("an observe tail landing mid-pair walks back onto the call", () =>
+    Effect.gen(function* () {
+      const storage = yield* ThreadStorage;
+      const handle = yield* storage.open("Researcher", "pair-observe");
+      yield* handle.appendMessages([
+        user("first question"),
+        assistantCall("call-1"),
+        toolResult("call-1"),
+        user("second question"),
+        user("third question"),
+      ]);
+      // keepTail 3 would start the tail ON the tool row — its call
+      // shadowed, the provider would reject; the balanced start
+      // walks back onto the assistant turn that issued the call
+      yield* applyCompactionPlan(handle, {
+        observe: { log: "- 🔴 the log", keepTail: 3, kind: "observe" },
+      });
+      const live = yield* handle.messages;
+      expect(JSON.stringify(live[0])).toContain("Observation log");
+      expect(live[1]!.role).toBe("assistant");
+      expectPairBalanced(live);
+      // the pair rode the tail whole; older rows are shadowed
+      expect(JSON.stringify(live)).toContain("call-1");
+      expect(JSON.stringify(live)).not.toContain("first question");
+    }).pipe(Effect.scoped, Effect.provide(ThreadStorageMemory)),
+  );
+
+  it.effect("a drop that splits a pair widens to the whole pair", () =>
+    Effect.gen(function* () {
+      const storage = yield* ThreadStorage;
+
+      // dropping only the CALL drops its result too
+      const first = yield* storage.open("Researcher", "pair-drop-call");
+      yield* first.appendMessages([
+        user("old question"),
+        assistantCall("call-2"),
+        toolResult("call-2"),
+        user("recent question"),
+      ]);
+      yield* applyCompactionPlan(first, {
+        drop: (_entry, index) => index === 1,
+      });
+      const afterCallDrop = yield* first.messages;
+      expectPairBalanced(afterCallDrop);
+      expect(JSON.stringify(afterCallDrop)).not.toContain("call-2");
+      expect(JSON.stringify(afterCallDrop)).toContain("recent question");
+
+      // dropping only the RESULT drops its call too
+      const second = yield* storage.open("Researcher", "pair-drop-result");
+      yield* second.appendMessages([
+        user("old question"),
+        assistantCall("call-3"),
+        toolResult("call-3"),
+        user("recent question"),
+      ]);
+      yield* applyCompactionPlan(second, {
+        drop: (_entry, index) => index === 2,
+      });
+      const afterResultDrop = yield* second.messages;
+      expectPairBalanced(afterResultDrop);
+      expect(JSON.stringify(afterResultDrop)).not.toContain("call-3");
+      expect(JSON.stringify(afterResultDrop)).toContain("recent question");
+    }).pipe(Effect.scoped, Effect.provide(ThreadStorageMemory)),
+  );
+
+  it("the wire guard elides orphans a pre-fix compaction persisted", () => {
+    // a surface a pre-pair-balancing engine wrote: the log note is
+    // followed by a tool result whose call was shadowed
+    const rows = [
+      user("Observation log …"),
+      toolResult("call-orphan"),
+      assistantCall("call-4"),
+      toolResult("call-4"),
+      user("keep going"),
+    ];
+    const elided = elideOrphanToolResults(rows);
+    expectPairBalanced(elided);
+    expect(JSON.stringify(elided)).not.toContain("call-orphan");
+    expect(JSON.stringify(elided)).toContain("call-4");
+    // a balanced surface passes through untouched (same reference)
+    expect(elideOrphanToolResults(elided)).toBe(elided);
   });
 });

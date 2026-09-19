@@ -869,6 +869,68 @@ export interface SessionOps {
 const estimateTokens = (rows: ReadonlyArray<Prompt.MessageEncoded>): number =>
   Math.ceil(JSON.stringify(rows).length / 4);
 
+/** True when the encoded row is an assistant turn that issued tool
+ *  calls — the head of a call/result pair. */
+const issuesToolCalls = (row: Prompt.MessageEncoded): boolean =>
+  row.role === "assistant" &&
+  typeof row.content !== "string" &&
+  row.content.some((part) => part.type === "tool-call");
+
+/**
+ * The pair-balanced start for a verbatim tail proposed to begin at
+ * `start`: a surface may never OPEN on `tool` rows whose calls were
+ * shadowed — every provider rejects a tool_result whose tool_use is
+ * missing — so the start walks BACK over leading tool rows onto the
+ * assistant turn that issued their calls. The other orphan (a call
+ * stranded without its results) cannot happen in a suffix: results
+ * always land after their call, so a call inside the tail keeps its
+ * results inside it too.
+ */
+export const pairBalancedTailStart = (
+  rows: ReadonlyArray<Prompt.MessageEncoded>,
+  start: number,
+): number => {
+  let index = Math.max(0, Math.min(start, rows.length));
+  while (index > 0 && index < rows.length && rows[index]!.role === "tool") {
+    index--;
+  }
+  return index;
+};
+
+/**
+ * The wire-side pair guard: drop tool-result parts whose issuing call
+ * is not present earlier in the surface. A surface compacted by a
+ * pre-pair-balancing engine may still open on orphaned results — the
+ * provider rejects the whole request (`unexpected tool_use_id`) — so
+ * the orphans are elided from the PROMPT only, never from storage;
+ * the next compaction re-heads the surface for good.
+ */
+export const elideOrphanToolResults = (
+  rows: ReadonlyArray<Prompt.MessageEncoded>,
+): ReadonlyArray<Prompt.MessageEncoded> => {
+  const calls = new Set<string>();
+  let changed = false;
+  const out: Array<Prompt.MessageEncoded> = [];
+  for (const row of rows) {
+    if (row.role === "assistant" && typeof row.content !== "string") {
+      for (const part of row.content) {
+        if (part.type === "tool-call") calls.add(part.id);
+      }
+    } else if (row.role === "tool" && typeof row.content !== "string") {
+      const content = row.content.filter(
+        (part) => part.type !== "tool-result" || calls.has(part.id),
+      );
+      if (content.length !== row.content.length) {
+        changed = true;
+        if (content.length > 0) out.push({ ...row, content });
+        continue;
+      }
+    }
+    out.push(row);
+  }
+  return changed ? out : rows;
+};
+
 /**
  * Apply one requested compaction to a session's thread — shared by
  * every host because it operates purely on the {@link ThreadHandle}.
@@ -906,9 +968,15 @@ export const applyCompactionPlan = Effect.fn(function* (
   if ("observe" in plan) {
     // observational advance: the log note heads the new surface, the
     // freshest rows ride verbatim behind it — everything older is
-    // shadowed under the closed generation
+    // shadowed under the closed generation. The tail start is PAIR-
+    // BALANCED: it may not split an assistant tool call from its
+    // results.
     const tail =
-      plan.observe.keepTail > 0 ? rows.slice(-plan.observe.keepTail) : [];
+      plan.observe.keepTail > 0
+        ? rows.slice(
+            pairBalancedTailStart(rows, rows.length - plan.observe.keepTail),
+          )
+        : [];
     const surface = [
       noteMessage(
         `Observation log — the distilled memory of this thread's earlier work (raw messages are archived):\n${plan.observe.log}`,
@@ -926,10 +994,25 @@ export const applyCompactionPlan = Effect.fn(function* (
     });
   }
   const decoded = Prompt.make([...rows]).content;
+  const drops = decoded.map((message, index) => plan.drop(message, index));
+  // pair closure: an assistant turn that issued calls and the tool
+  // rows answering it live or die TOGETHER — a surface may neither
+  // keep a result whose call was dropped nor a call whose results
+  // were (providers reject both). Dropping widens: the predicate
+  // marked part of the pair as archivable, so the whole pair goes.
+  for (let index = 0; index < rows.length; index++) {
+    if (!issuesToolCalls(rows[index]!)) continue;
+    let end = index + 1;
+    while (end < rows.length && rows[end]!.role === "tool") end++;
+    if (drops.slice(index, end).some(Boolean)) {
+      for (let pair = index; pair < end; pair++) drops[pair] = true;
+    }
+    index = end - 1;
+  }
   const kept: Array<Prompt.MessageEncoded> = [];
   let dropped = 0;
-  for (let index = 0; index < decoded.length; index++) {
-    if (plan.drop(decoded[index]!, index)) {
+  for (let index = 0; index < rows.length; index++) {
+    if (drops[index]) {
       dropped++;
     } else {
       kept.push(rows[index]!);
@@ -1722,7 +1805,9 @@ export const sampleTick = Effect.fn(function* (options: {
         ),
       );
   const startedAt = yield* Effect.sync(() => Date.now());
-  const thread = Prompt.make([...(yield* handle.messages)]);
+  const thread = Prompt.make([
+    ...elideOrphanToolResults(yield* handle.messages),
+  ]);
   // the model the stance was PROVIDED (its fragment recorded the
   // LanguageModel in scope), else the driver's Layer — and the
   // sampling runs under the session frame, so a hand-written routing
