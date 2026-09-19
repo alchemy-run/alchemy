@@ -137,7 +137,10 @@ export const sessionAuthor = (id: string): Author => {
   const colon = id.indexOf(":");
   const term = colon === -1 ? id : id.slice(0, colon);
   const key = colon === -1 ? "" : id.slice(colon + 1);
-  const identity = key.split("::").filter(Boolean)[1];
+  const segments = key.split("::").filter(Boolean);
+  // a DESK session (`root::tasks::<queue>::<member>`) speaks as its
+  // member — `tasks` is the namespace, never an identity
+  const identity = segments[1] === "tasks" ? segments[3] : segments[1];
   if (term === "Head") return { name: "head", kind: "agent" };
   if (identity !== undefined) {
     return { name: identity, kind: "agent" };

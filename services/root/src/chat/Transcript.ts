@@ -30,7 +30,7 @@ const readIds = (request: HttpServerRequest) =>
 
 /**
  * A session's transcript: the UIMessage projection, the redact-delete,
- * and the raw observation log.
+ * the raw observation log, and the generation branch.
  */
 export const Transcript = Effect.gen(function* () {
   const sessions = yield* AI.Sessions;
@@ -86,6 +86,53 @@ export const Transcript = Effect.gen(function* () {
     }),
   );
 
+  /**
+   * BRANCH a new session from any generation of an existing one
+   * (`{ ref, key }` → `Sessions.branch`, the desk view's "branch @N").
+   * The typed refusals map to statuses: a driver placement that
+   * cannot branch (the Cloudflare DO driver) answers 501, an occupied
+   * target 409, a bad ref 400.
+   */
+  const sessionBranch = HttpRouter.add(
+    "POST",
+    "/api/sessions/branch",
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      const body = (yield* request.json.pipe(
+        Effect.catch(() => Effect.succeed({})),
+      )) as { ref?: string; key?: string };
+      if (
+        typeof body.ref !== "string" ||
+        body.ref.length === 0 ||
+        typeof body.key !== "string" ||
+        body.key.length === 0
+      ) {
+        return yield* HttpServerResponse.json(
+          { error: "ref and key required" },
+          { status: 400 },
+        );
+      }
+      return yield* sessions.branch(body.ref, { key: body.key }).pipe(
+        Effect.flatMap((branched) =>
+          HttpServerResponse.json(branched, { status: 201 }),
+        ),
+        Effect.catchTag("AI.BranchError", (error) =>
+          HttpServerResponse.json(
+            { error: error.message, reason: error.reason },
+            {
+              status:
+                error.reason === "unsupported"
+                  ? 501
+                  : error.reason === "occupied"
+                    ? 409
+                    : 400,
+            },
+          ),
+        ),
+      );
+    }),
+  );
+
   const sessionLog = HttpRouter.add(
     "GET",
     "/api/chats/:id/log",
@@ -108,5 +155,10 @@ export const Transcript = Effect.gen(function* () {
     }),
   );
 
-  return Layer.mergeAll(sessionMessages, sessionMessagesDelete, sessionLog);
+  return Layer.mergeAll(
+    sessionMessages,
+    sessionMessagesDelete,
+    sessionBranch,
+    sessionLog,
+  );
 });

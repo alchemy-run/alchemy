@@ -1,15 +1,17 @@
 /**
- * The APP's TOP TABS — Chat | Code | Issues | Pulls.
+ * The APP's TOP TABS — Chat | Code | Issues | Pulls | Tasks.
  *
- * The thesis, as chrome: the org is one thing seen four ways — the
+ * The thesis, as chrome: the org is one thing seen five ways — the
  * conversation (Chat), the repositories it works on (Code), the work
- * it tracks (Issues), and the changes it proposes (Pulls). Chat
- * keeps its place across hops (rememberChatPath).
+ * it tracks (Issues), the changes it proposes (Pulls), and the work
+ * streams its desks pump through (Tasks). Chat keeps its place
+ * across hops (rememberChatPath).
  */
 import {
   rememberChatPath,
   showChat,
   showCode,
+  showTasks,
   showWork,
   type AppTab,
 } from "@/lib/routes";
@@ -19,6 +21,7 @@ import {
   FolderGit2,
   GitPullRequest,
   MessageCircle,
+  SquareKanban,
 } from "lucide-react";
 
 /** The Alchemy brand mark — the Sri-Yantra water triangle in a ring
@@ -54,6 +57,7 @@ const TABS: ReadonlyArray<{
   { id: "code", label: "Code", icon: FolderGit2 },
   { id: "issues", label: "Issues", icon: CircleDot },
   { id: "pulls", label: "Pulls", icon: GitPullRequest },
+  { id: "tasks", label: "Tasks", icon: SquareKanban },
 ];
 
 export const AppTabs = ({ tab }: { tab: AppTab }) => {
@@ -62,6 +66,7 @@ export const AppTabs = ({ tab }: { tab: AppTab }) => {
     if (tab === "chat") rememberChatPath();
     if (target === "chat") showChat();
     else if (target === "code") showCode();
+    else if (target === "tasks") showTasks();
     else showWork(target);
   };
   return (

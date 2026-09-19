@@ -172,7 +172,7 @@ export const TasksApi = Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const body = (yield* request.json.pipe(
       Effect.catch(() => Effect.succeed({})),
-    )) as { state?: string; desk?: string };
+    )) as { state?: string; desk?: string; data?: string };
     if (typeof body.state !== "string" || !isTaskState(body.state)) {
       return yield* HttpServerResponse.json(
         { error: "state required" },
@@ -182,6 +182,10 @@ export const TasksApi = Effect.gen(function* () {
     const task = yield* tasks.route(queue.slug, id, {
       state: body.state,
       ...(typeof body.desk === "string" ? { desk: body.desk } : {}),
+      // the note the hop rides — a park's reason, a reroute's why
+      ...(typeof body.data === "string" && body.data.length > 0
+        ? { data: body.data }
+        : {}),
       actor: HUMAN,
     });
     if (task === undefined) {

@@ -10,6 +10,7 @@
  */
 import { Avatar, KindBadge } from "@/components/avatar";
 import { MarkdownText, timeAgo } from "@/components/chat";
+import { GenerationRail } from "@/components/generation-rail";
 import {
   fetchAgentSelf,
   fetchOrg,
@@ -262,6 +263,8 @@ const TABS: ReadonlyArray<{ id: AgentTab; icon: typeof ScrollText }> = [
  */
 const SelfTab = ({ name }: { name: string }) => {
   const [view, setView] = useState<AgentSelfView | undefined>();
+  /** The rail's open generation — its doc shows under the chain. */
+  const [generation, setGeneration] = useState<string | undefined>();
   useEffect(() => {
     let alive = true;
     fetchAgentSelf(name)
@@ -332,28 +335,37 @@ const SelfTab = ({ name }: { name: string }) => {
           still on the birth generation
         </div>
       ) : (
-        <ul aria-label="generations" className="divide-y divide-border/40">
-          {view.lineage.map((generation) => (
-            <li
-              key={generation.ref}
-              className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-2"
-            >
-              <span className="font-mono text-[12px] font-medium">
-                {generation.ref}
-              </span>
-              <Pill tone="muted" title="how this generation was made">
-                {generation.kind}
-              </Pill>
-              <span className="font-mono text-[10.5px] text-muted-foreground">
-                {generation.tokensBefore.toLocaleString()}→
-                {generation.tokensAfter.toLocaleString()} tokens
-              </span>
-              <span className="text-[10.5px] text-muted-foreground">
-                {timeAgo(generation.at)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <GenerationRail
+            generations={view.lineage}
+            selected={generation}
+            onSelect={(ref) =>
+              setGeneration((current) => (current === ref ? undefined : ref))
+            }
+          />
+          {(() => {
+            const open = view.lineage.find(
+              (candidate) => candidate.ref === generation,
+            );
+            if (open === undefined) return null;
+            return (
+              <div className="mt-3 rounded-md border border-border/60 px-3.5 py-3">
+                <div className="mb-2 font-mono text-[10.5px] text-muted-foreground">
+                  {open.ref} · {open.dropped} shadowed
+                </div>
+                {open.doc === undefined || open.doc.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    this generation carries no doc — a bare {open.kind}
+                  </div>
+                ) : (
+                  <div className={PROSE}>
+                    <MarkdownText text={open.doc} />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </>
       )}
     </article>
   );

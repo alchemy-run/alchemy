@@ -32,14 +32,17 @@ const navigate = (url: string): void => {
 const segments = (): ReadonlyArray<string> =>
   window.location.pathname.split("/").filter(Boolean);
 
-/* ── the app's TOP TABS: Chat | Code | Issues | Pulls ─────────────── */
+/* ── the app's TOP TABS: Chat | Code | Issues | Pulls | Tasks ─────── */
 
-export type AppTab = "chat" | "code" | "issues" | "pulls";
+export type AppTab = "chat" | "code" | "issues" | "pulls" | "tasks";
 
 /** Which top tab the path lives under — every chat-era path is Chat. */
 export const tabFromLocation = (): AppTab => {
   const head = segments()[0];
-  return head === "code" || head === "issues" || head === "pulls"
+  return head === "code" ||
+    head === "issues" ||
+    head === "pulls" ||
+    head === "tasks"
     ? head
     : "chat";
 };
@@ -100,6 +103,46 @@ export const showWork = (
   repo?: string,
   number?: number,
 ): void => navigate(workPath(tab, repo, number));
+
+export interface TasksPlace {
+  /** The queue slug — undefined lands on the first registered queue. */
+  readonly queue?: string;
+  /** The open task's id — undefined on the board. */
+  readonly task?: string;
+  /** The open desk's member slug (`/tasks/:queue/desks/:agent`). */
+  readonly desk?: string;
+}
+
+/** `/tasks[/:queue[/:id]]` — the board, or one task's page. */
+export const tasksPath = (queue?: string, id?: string): string =>
+  queue === undefined
+    ? "/tasks"
+    : `/tasks/${encodeURIComponent(queue)}${
+        id === undefined ? "" : `/${encodeURIComponent(id)}`
+      }`;
+
+/** `/tasks/:queue/desks/:agent` — one desk's standing session. */
+export const deskPath = (queue: string, agent: string): string =>
+  `/tasks/${encodeURIComponent(queue)}/desks/${encodeURIComponent(agent)}`;
+
+export const tasksFromLocation = (): TasksPlace => {
+  const parts = segments();
+  if (parts[0] !== "tasks" || parts[1] === undefined) return {};
+  const queue = decodeURIComponent(parts[1]);
+  if (parts[2] === "desks" && parts[3] !== undefined) {
+    return { queue, desk: decodeURIComponent(parts[3]) };
+  }
+  return {
+    queue,
+    ...(parts[2] === undefined ? {} : { task: decodeURIComponent(parts[2]) }),
+  };
+};
+
+export const showTasks = (queue?: string, id?: string): void =>
+  navigate(tasksPath(queue, id));
+
+export const showDesk = (queue: string, agent: string): void =>
+  navigate(deskPath(queue, agent));
 
 /** Chat remembers its place across tab hops (module state is enough —
  *  a reload lands on the tab the URL names). */

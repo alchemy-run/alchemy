@@ -19,6 +19,9 @@ import { AppTabs } from "@/components/app-tabs";
 import { ChannelFeed, ThreadView } from "@/components/channel-feed";
 import { CodeBrowser } from "@/components/code-browser";
 import { WorkPage } from "@/components/issues";
+import { TaskBoard } from "@/components/task-board";
+import { TaskPage } from "@/components/task-page";
+import { DeskView } from "@/components/desk-view";
 import { PaneContext } from "@/components/pane-context";
 import { CallThread } from "@/components/call";
 import { MembersPanel } from "@/components/members";
@@ -39,6 +42,7 @@ import {
   showOverlay,
   codeFromLocation,
   tabFromLocation,
+  tasksFromLocation,
   threadFromLocation,
   workFromLocation,
   type AgentPlace,
@@ -46,6 +50,7 @@ import {
   type CodePlace,
   type Overlay,
   type Pane,
+  type TasksPlace,
   type WorkPlace,
 } from "@/lib/routes";
 import { useTheme } from "@/lib/theme";
@@ -276,6 +281,9 @@ export const App = () => {
   const [workPlace, setWorkPlace] = useState<WorkPlace>(() =>
     workFromLocation(),
   );
+  const [tasksPlace, setTasksPlace] = useState<TasksPlace>(() =>
+    tasksFromLocation(),
+  );
   const [overlay, setOverlay] = useState<Overlay | undefined>(() =>
     overlayFromLocation(),
   );
@@ -348,6 +356,7 @@ export const App = () => {
       setTab(tabFromLocation());
       setCodePlace(codeFromLocation());
       setWorkPlace(workFromLocation());
+      setTasksPlace(tasksFromLocation());
       setOverlay(overlayFromLocation());
       setPanes(panesFromLocation());
       setAgent(agentFromLocation());
@@ -538,6 +547,59 @@ export const App = () => {
         <WorkPage kind="issues" place={workPlace} />
       ) : tab === "pulls" ? (
         <WorkPage kind="pulls" place={workPlace} />
+      ) : tab === "tasks" ? (
+        <div className="relative flex min-h-0 flex-1">
+          {tasksPlace.queue !== undefined && tasksPlace.desk !== undefined ? (
+            <DeskView queue={tasksPlace.queue} agent={tasksPlace.desk} />
+          ) : tasksPlace.queue !== undefined &&
+            tasksPlace.task !== undefined ? (
+            <TaskPage queue={tasksPlace.queue} id={tasksPlace.task} />
+          ) : (
+            <TaskBoard queue={tasksPlace.queue} />
+          )}
+          {/* the PANE STACK, tasks-flavored: "Worked for" chips, origin
+            `post:` chips, and branch buttons split sessions and threads
+            open here — same tokens (`?panes=`), simpler chrome (equal
+            splits, no drag) */}
+          {panes.length > 0 && (
+            <aside
+              aria-label="panes"
+              className="flex min-h-0 min-w-0 flex-1 flex-row overflow-x-auto border-l border-border max-md:absolute max-md:inset-0 max-md:z-40"
+              style={{ flexGrow: 1, flexBasis: 0 }}
+            >
+              {panes.map((pane) => (
+                <div
+                  key={
+                    pane.kind === "agent"
+                      ? `a:${pane.id}`
+                      : pane.kind === "workspace"
+                        ? `w:${pane.name}`
+                        : `p:${pane.channel}:${pane.id}`
+                  }
+                  className="flex min-h-0 min-w-[20rem] flex-1 flex-col border-l border-border first:border-l-0"
+                >
+                  <PaneContext.Provider value={pane}>
+                    {pane.kind === "agent" ? (
+                      <AgentColumn id={pane.id} />
+                    ) : pane.kind === "workspace" ? (
+                      <WorkspaceColumn name={pane.name} />
+                    ) : (
+                      <ThreadView
+                        channel={pane.channel}
+                        chat={
+                          channels.find((entry) => entry.name === pane.channel)
+                            ?.chat ?? ""
+                        }
+                        id={pane.id}
+                        onClose={() => closePane(pane)}
+                      />
+                    )}
+                  </PaneContext.Provider>
+                </div>
+              ))}
+            </aside>
+          )}
+        </div>
       ) : (
         <div className="relative flex min-h-0 flex-1">
           {/* the rail: one channel per group — the org chart, as rooms */}
