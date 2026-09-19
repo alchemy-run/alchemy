@@ -42,7 +42,19 @@ pkg publish --dir .pkg --registry https://pkg.alchemy.run
 
 A group is `NAME=GLOB` or `NAME[Collapsed]=GLOB`. Globs support `*` as a whole path segment and `{a,b}` alternatives, so `./submodules/distilled/packages/{core,aws}` lists exactly those two. Repeat `--group` with the same name to add more directories to one group. `Collapsed` renders that group inside a closed `<details>` block in the install comment, for long lists of secondary packages.
 
-For each non-private package under a group's glob, `pack`:
+On pull requests, `pack` compares the PR base SHA with HEAD and selects changed packages, their transitive dependents, and all dependencies required by that set. Dependency edges use all four dependency sections between packages matched by `--group`; include all candidate workspace packages in those groups. Adding an unchanged dependency does not pull in its unrelated dependents. A changed submodule pointer selects all configured packages inside it.
+
+Pushes and local runs pack everything by default. Use `--since <ref>` to select changes explicitly, or `--all` to force every package. Repository-specific labels belong in the workflow: this repository maps `force-ci` to `--all`. Root package manifests, lockfiles, workspace configuration, TypeScript configuration, `turbo.json`, and the package-preview workflows invalidate everything. Add shared build inputs with repeatable `--rebuild-all-path 'scripts/**'` (exact paths and directory prefixes ending in `/**` are supported).
+
+```sh
+pkg pack --group 'Distilled=./packages/*' --since origin/main
+```
+
+Git comparisons require the base commit locally (`actions/checkout` with `fetch-depth: 0`); unavailable refs fail rather than silently publish an incomplete set. The comparison includes added and deleted paths, including both sides of moves. Only committed changes are considered.
+
+`pack` writes an empty manifest when nothing is affected, clearing previous output, and exposes `package-count` alongside `artifact-name` in GitHub step outputs. Skip artifact upload and publication when `package-count` is `0`; `publish` also treats an empty manifest as a no-op.
+
+For each selected non-private package, `pack`:
 
 - packs in dependency order and rewrites every dependency on another packed package to that package's immutable tarball URL, `https://<registry>/<name>/-/<sha256>.tgz`, so a tarball's bytes depend only on its source and its dependencies' bytes and identical builds deduplicate across commits, pull requests, and repositories;
 - repacks with fixed timestamps and no ownership so identical inputs hash identically, letting the registry skip uploads it already has;
