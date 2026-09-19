@@ -16,6 +16,7 @@ import {
   assertClientVpnRouteDeleted,
   clientVpnAvailabilityZones,
   clientVpnEndpointProps,
+  clientVpnTestTimeout,
   clientVpnNetwork,
   importClientVpnCertificate,
   readClientVpnRoutes,
@@ -59,14 +60,16 @@ describe("Client VPN routes", () => {
       return { ...network, endpoint, firstAssociation, secondAssociation };
     }),
   );
-  const prerequisites = beforeAll(deploy(Stack), { timeout: Infinity });
+  const prerequisites = beforeAll(deploy(Stack), {
+    timeout: clientVpnTestTimeout,
+  });
   afterAll(
     destroy(Stack).pipe(
       Effect.andThen(
         certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
       ),
     ),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 
   test.provider(
@@ -258,6 +261,6 @@ describe("Client VPN routes", () => {
           }),
         );
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 });

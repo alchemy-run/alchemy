@@ -11,6 +11,7 @@ import {
   assertClientVpnAuthorizationDeleted,
   assertClientVpnCertificateDeleted,
   clientVpnEndpointProps,
+  clientVpnTestTimeout,
   importClientVpnCertificate,
   readClientVpnAuthorizationRules,
   waitForClientVpn,
@@ -34,14 +35,16 @@ const Stack = Alchemy.Stack(
     return { endpoint };
   }),
 );
-const prerequisites = beforeAll(deploy(Stack), { timeout: Infinity });
+const prerequisites = beforeAll(deploy(Stack), {
+  timeout: clientVpnTestTimeout,
+});
 afterAll(
   destroy(Stack).pipe(
     Effect.andThen(
       certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
     ),
   ),
-  { timeout: Infinity },
+  { timeout: clientVpnTestTimeout },
 );
 
 test.provider(
@@ -161,7 +164,7 @@ test.provider(
         "10.172.0.0/16",
       );
     }),
-  { timeout: Infinity },
+  { timeout: clientVpnTestTimeout },
 );
 
 test.provider(
@@ -212,7 +215,7 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: Infinity },
+  { timeout: clientVpnTestTimeout },
 );
 
 test.provider(
@@ -278,5 +281,5 @@ test.provider(
         targetNetworkCidr,
       );
     }),
-  { timeout: Infinity },
+  { timeout: clientVpnTestTimeout },
 );

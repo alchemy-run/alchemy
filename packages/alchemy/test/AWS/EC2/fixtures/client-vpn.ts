@@ -17,6 +17,15 @@ import {
   CLIENT_VPN_PRIVATE_KEY_PEM,
 } from "./client-vpn-certificate.ts";
 
+// A lifecycle test performs several create, replacement, and delete operations.
+export const clientVpnTestTimeout =
+  Number(process.env.AWS_CLIENT_VPN_TEST_TIMEOUT_MINUTES ?? 60) * 60_000;
+if (!Number.isFinite(clientVpnTestTimeout) || clientVpnTestTimeout <= 0) {
+  throw new RangeError(
+    "AWS_CLIENT_VPN_TEST_TIMEOUT_MINUTES must be positive and finite",
+  );
+}
+
 class ClientVpnFixtureNotReady extends Data.TaggedError(
   "ClientVpnFixtureNotReady",
 )<{ readonly resource: string }> {}
@@ -54,7 +63,9 @@ export const importClientVpnCertificate = (stackName: string) =>
         acm.deleteCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.retry({
             while: (error) => error._tag === "ResourceInUseException",
-            schedule: Schedule.spaced("5 seconds"),
+            schedule: Schedule.spaced("5 seconds").pipe(
+              Schedule.upTo({ duration: clientVpnTestTimeout }),
+            ),
           }),
           Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           Effect.orDie,
@@ -155,7 +166,9 @@ export const waitForClientVpn = <A, E, R>(
     ),
     Effect.retry({
       while: (error) => error instanceof ClientVpnFixtureNotReady,
-      schedule: Schedule.spaced("5 seconds"),
+      schedule: Schedule.spaced("5 seconds").pipe(
+        Schedule.upTo({ duration: clientVpnTestTimeout }),
+      ),
     }),
   );
 

@@ -1,7 +1,6 @@
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -17,6 +16,7 @@ import {
 } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+import { retryClientVpn } from "./ClientVpnWait.ts";
 
 export type ClientVpnEndpointId = `cvpn-endpoint-${string}`;
 
@@ -168,6 +168,9 @@ export interface ClientVpnEndpoint extends Resource<
  * changes replace the endpoint. Other settings update in place; omitted optional
  * settings restore the documented defaults rather than leaving drift unmanaged.
  *
+ * Readiness waits default to 30 minutes. Set `AWS_CLIENT_VPN_TIMEOUT` to a
+ * positive finite duration, such as `45 minutes`, to override this deadline.
+ *
  * ### Creating an Endpoint
  * **Example:** Mutual TLS with split tunneling
  * ```typescript
@@ -229,9 +232,6 @@ const gone = (endpoint: EC2.ClientVpnEndpoint) =>
 const usable = (endpoint: EC2.ClientVpnEndpoint) =>
   endpoint.Status?.Code === "pending-associate" ||
   endpoint.Status?.Code === "available";
-const retryReady = {
-  schedule: Schedule.spaced("5 seconds"),
-};
 
 const describe = (endpointId: string) =>
   EC2.describeClientVpnEndpoints({ ClientVpnEndpointIds: [endpointId] }).pipe(
@@ -524,10 +524,11 @@ export const ClientVpnEndpointProvider = () =>
                     )
                   : Effect.void,
               ),
-              Effect.retry({
-                ...retryReady,
-                while: (error) => error._tag === "ClientVpnEndpointNotReady",
-              }),
+              (effect) =>
+                retryClientVpn(
+                  effect,
+                  (error) => error._tag === "ClientVpnEndpointNotReady",
+                ),
             );
             endpoint = undefined;
           }
@@ -562,10 +563,11 @@ export const ClientVpnEndpointProvider = () =>
                       }),
                     ),
               ),
-              Effect.retry({
-                ...retryReady,
-                while: (error) => error._tag === "ClientVpnEndpointNotReady",
-              }),
+              (effect) =>
+                retryClientVpn(
+                  effect,
+                  (error) => error._tag === "ClientVpnEndpointNotReady",
+                ),
             );
           }
           const endpointId = endpoint.ClientVpnEndpointId!;
@@ -615,10 +617,11 @@ export const ClientVpnEndpointProvider = () =>
                       }),
                     );
               }),
-              Effect.retry({
-                ...retryReady,
-                while: (error) => error._tag === "ClientVpnEndpointNotReady",
-              }),
+              (effect) =>
+                retryClientVpn(
+                  effect,
+                  (error) => error._tag === "ClientVpnEndpointNotReady",
+                ),
             );
           }
           const { removed, upsert } = diffTags(
@@ -669,10 +672,11 @@ export const ClientVpnEndpointProvider = () =>
                   )
                 : Effect.void,
             ),
-            Effect.retry({
-              ...retryReady,
-              while: (error) => error._tag === "ClientVpnEndpointNotReady",
-            }),
+            (effect) =>
+              retryClientVpn(
+                effect,
+                (error) => error._tag === "ClientVpnEndpointNotReady",
+              ),
           );
         }),
       };

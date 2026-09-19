@@ -1,7 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -9,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { canonicalCidr } from "../../Utils/ip-address.ts";
 import type { Providers } from "../Providers.ts";
 import type { ClientVpnEndpointId } from "./ClientVpnEndpoint.ts";
+import { retryClientVpn } from "./ClientVpnWait.ts";
 import type { SubnetId } from "./Subnet.ts";
 
 /** Immutable settings for a manually added VPC-based Client VPN route. */
@@ -65,6 +65,9 @@ export interface ClientVpnRoute extends Resource<
  * declared endpoint/destination/subnet identity, including an existing manual
  * route discovered without cached state. Routes have no independent ownership
  * markers.
+ *
+ * Readiness waits default to 30 minutes. Set `AWS_CLIENT_VPN_TIMEOUT` to a
+ * positive finite duration, such as `45 minutes`, to override this deadline.
  *
  * ### Routing Client Traffic
  * **Example:** Route internet traffic through an associated subnet
@@ -161,11 +164,8 @@ const waitForRoute = (props: ClientVpnRouteProps, deleted: boolean) =>
     return yield* new ClientVpnRoutePending({
       message: `Client VPN route ${props.destinationCidrBlock} is ${route?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "deletion" : "active"}`,
     });
-  }).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "ClientVpnRoutePending",
-      schedule: Schedule.spaced("5 seconds"),
-    }),
+  }).pipe((effect) =>
+    retryClientVpn(effect, (error) => error._tag === "ClientVpnRoutePending"),
   );
 
 const removeRoute = Effect.fn(function* (props: ClientVpnRouteProps) {
@@ -187,10 +187,8 @@ const removeRoute = Effect.fn(function* (props: ClientVpnRouteProps) {
           ],
           () => Effect.void,
         ),
-        Effect.retry({
-          while: (error) => error._tag === "IncorrectState",
-          schedule: Schedule.spaced("5 seconds"),
-        }),
+        (effect) =>
+          retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
       );
   }
   yield* waitForRoute(props, true);
@@ -298,10 +296,11 @@ export const ClientVpnRouteProvider = () =>
                   "InvalidClientVpnDuplicateRoute",
                   () => Effect.void,
                 ),
-                Effect.retry({
-                  while: (error) => error._tag === "IncorrectState",
-                  schedule: Schedule.spaced("5 seconds"),
-                }),
+                (effect) =>
+                  retryClientVpn(
+                    effect,
+                    (error) => error._tag === "IncorrectState",
+                  ),
               );
           }
           const active = yield* waitForRoute(news, false);

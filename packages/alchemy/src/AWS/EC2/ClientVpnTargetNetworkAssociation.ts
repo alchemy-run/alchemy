@@ -1,13 +1,13 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import type { ClientVpnEndpointId } from "./ClientVpnEndpoint.ts";
+import { retryClientVpn } from "./ClientVpnWait.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
@@ -59,6 +59,9 @@ export interface ClientVpnTargetNetworkAssociation extends Resource<
  * Zone. Removing the last association disconnects clients. This resource manages
  * the declared endpoint/subnet pair, including an existing association discovered
  * without cached state. Associations have no independent ownership markers.
+ *
+ * Readiness waits default to 30 minutes. Set `AWS_CLIENT_VPN_TIMEOUT` to a
+ * positive finite duration, such as `45 minutes`, to override this deadline.
  *
  * ### Associating a Target Network
  * **Example:** Associate a subnet and order an internet route after it
@@ -145,11 +148,11 @@ const waitForNetwork = (
     return yield* new ClientVpnAssociationPending({
       message: `Client VPN association ${associationId ?? props.subnetId} is ${network?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "disassociation" : "associated"}`,
     });
-  }).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "ClientVpnAssociationPending",
-      schedule: Schedule.spaced("5 seconds"),
-    }),
+  }).pipe((effect) =>
+    retryClientVpn(
+      effect,
+      (error) => error._tag === "ClientVpnAssociationPending",
+    ),
   );
 
 /** Live AWS provider for ClientVpnTargetNetworkAssociation. */
@@ -246,10 +249,11 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                   ],
                   () => Effect.succeed(undefined),
                 ),
-                Effect.retry({
-                  while: (error) => error._tag === "IncorrectState",
-                  schedule: Schedule.spaced("5 seconds"),
-                }),
+                (effect) =>
+                  retryClientVpn(
+                    effect,
+                    (error) => error._tag === "IncorrectState",
+                  ),
               );
             associationId = created?.AssociationId;
           }
@@ -279,10 +283,11 @@ export const ClientVpnTargetNetworkAssociationProvider = () =>
                   ],
                   () => Effect.void,
                 ),
-                Effect.retry({
-                  while: (error) => error._tag === "IncorrectState",
-                  schedule: Schedule.spaced("5 seconds"),
-                }),
+                (effect) =>
+                  retryClientVpn(
+                    effect,
+                    (error) => error._tag === "IncorrectState",
+                  ),
               );
           }
           yield* waitForNetwork(output, output.associationId, true);

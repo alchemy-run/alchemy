@@ -1,7 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -9,6 +8,7 @@ import { Resource } from "../../Resource.ts";
 import { canonicalCidr } from "../../Utils/ip-address.ts";
 import type { Providers } from "../Providers.ts";
 import type { ClientVpnEndpointId } from "./ClientVpnEndpoint.ts";
+import { retryClientVpn } from "./ClientVpnWait.ts";
 
 /** Immutable settings for a Client VPN ingress authorization rule. */
 export interface ClientVpnAuthorizationRuleProps {
@@ -65,6 +65,9 @@ export interface ClientVpnAuthorizationRule extends Resource<
  * declared endpoint/CIDR/group identity, including an existing rule discovered
  * without cached state. Rules have no independent ownership markers. Revoking an
  * all-groups rule leaves group-specific rules untouched.
+ *
+ * Readiness waits default to 30 minutes. Set `AWS_CLIENT_VPN_TIMEOUT` to a
+ * positive finite duration, such as `45 minutes`, to override this deadline.
  *
  * ### Authorizing All Clients
  * **Example:** Permit authenticated clients to reach the VPC
@@ -157,11 +160,11 @@ const waitForRule = (
     return yield* new ClientVpnAuthorizationPending({
       message: `Client VPN authorization for ${props.targetNetworkCidr} is ${rule?.Status?.Code ?? "not visible"}; waiting for ${deleted ? "revocation" : "active"}`,
     });
-  }).pipe(
-    Effect.retry({
-      while: (error) => error._tag === "ClientVpnAuthorizationPending",
-      schedule: Schedule.spaced("5 seconds"),
-    }),
+  }).pipe((effect) =>
+    retryClientVpn(
+      effect,
+      (error) => error._tag === "ClientVpnAuthorizationPending",
+    ),
   );
 
 const removeRule = Effect.fn(function* (
@@ -187,10 +190,8 @@ const removeRule = Effect.fn(function* (
           ],
           () => Effect.void,
         ),
-        Effect.retry({
-          while: (error) => error._tag === "IncorrectState",
-          schedule: Schedule.spaced("5 seconds"),
-        }),
+        (effect) =>
+          retryClientVpn(effect, (error) => error._tag === "IncorrectState"),
       );
   }
   yield* waitForRule(props, true);
@@ -299,10 +300,11 @@ export const ClientVpnAuthorizationRuleProvider = () =>
                   "InvalidClientVpnDuplicateAuthorizationRule",
                   () => Effect.void,
                 ),
-                Effect.retry({
-                  while: (error) => error._tag === "IncorrectState",
-                  schedule: Schedule.spaced("5 seconds"),
-                }),
+                (effect) =>
+                  retryClientVpn(
+                    effect,
+                    (error) => error._tag === "IncorrectState",
+                  ),
               );
           }
           const active = yield* waitForRule(news, false);

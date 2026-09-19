@@ -15,6 +15,7 @@ import {
   assertClientVpnCertificateDeleted,
   assertClientVpnEndpointDeleted,
   clientVpnEndpointProps,
+  clientVpnTestTimeout,
   expectClientVpnOwnershipTags,
   importClientVpnCertificate,
   readClientVpnEndpoint,
@@ -48,14 +49,16 @@ const Stack = Alchemy.Stack(
     return { certificateArn, vpc, firstGroup, secondGroup, logs, stream };
   }),
 );
-const prerequisites = beforeAll(deploy(Stack), { timeout: Infinity });
+const prerequisites = beforeAll(deploy(Stack), {
+  timeout: clientVpnTestTimeout,
+});
 afterAll(
   destroy(Stack).pipe(
     Effect.andThen(
       certificate.pipe(Effect.flatMap(assertClientVpnCertificateDeleted)),
     ),
   ),
-  { timeout: Infinity },
+  { timeout: clientVpnTestTimeout },
 );
 
 // Keep replacement generations within the account's Client VPN endpoint quota.
@@ -252,7 +255,7 @@ describe.sequential("Client VPN endpoints", () => {
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 
   test.provider(
@@ -312,7 +315,7 @@ describe.sequential("Client VPN endpoints", () => {
         yield* stack.destroy();
         yield* assertClientVpnEndpointDeleted(created.clientVpnEndpointId);
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 
   test.provider(
@@ -357,7 +360,7 @@ describe.sequential("Client VPN endpoints", () => {
           updated.endpoint.clientVpnEndpointId,
         );
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 
   test.provider(
@@ -381,7 +384,7 @@ describe.sequential("Client VPN endpoints", () => {
         expect(failure).toMatchObject({ _tag: "InvalidVpcID.NotFound" });
         yield* stack.destroy();
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 
   test.provider(
@@ -429,6 +432,6 @@ describe.sequential("Client VPN endpoints", () => {
           changedProtocol.clientVpnEndpointId,
         );
       }),
-    { timeout: Infinity },
+    { timeout: clientVpnTestTimeout },
   );
 });
