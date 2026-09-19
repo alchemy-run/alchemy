@@ -38,17 +38,6 @@ export const dotAlchemyDirectory = Effect.serviceOption(AlchemyContext).pipe(
   ),
 );
 
-/** Whether a file belongs to the configured runtime storage tree. */
-export const withinDotAlchemy = (directory: string, file: string) => {
-  const relative = path.relative(path.resolve(directory), path.resolve(file));
-  return (
-    relative === "" ||
-    (!path.isAbsolute(relative) &&
-      relative !== ".." &&
-      !relative.startsWith("../"))
-  );
-};
-
 export const AlchemyContextLive = Layer.effect(
   AlchemyContext,
   Effect.gen(function* () {

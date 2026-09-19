@@ -1,12 +1,11 @@
+import { watchBundleDirectory } from "@/Cloudflare/Workers/Sources/shared";
+import * as Stream from "effect/Stream";
+import { isPathWithin } from "@/Util/isPathWithin";
 import { hashDirectory } from "@/Command/Memo";
 import nextjsSource from "@alchemy.run/frontend-frameworks/nextjs/source";
 import { readPythonWorkerBundle } from "@/Cloudflare/Workers/Sources/Python";
 import { sha256 } from "@/Util/sha256";
-import {
-  AlchemyContext,
-  dotAlchemyDirectory,
-  withinDotAlchemy,
-} from "@/AlchemyContext";
+import { AlchemyContext, dotAlchemyDirectory } from "@/AlchemyContext";
 import { createTempBundleDir, getStableContextDir } from "@/Bundle/TempRoot";
 import { WorkerBundle } from "@/Cloudflare/Workers/Sources/Rolldown";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
@@ -23,6 +22,43 @@ import * as Path from "effect/Path";
 import { gunzipSync } from "node:zlib";
 
 layer(PlatformServices)("runtime directory", (it) => {
+  it.effect(
+    "compares paths against the supplied base without using the process cwd",
+    () =>
+      Effect.sync(() => {
+        expect(
+          isPathWithin(
+            ".alchemy",
+            "/workspace/app/.alchemy/bundles/worker.js",
+            "/workspace/app",
+          ),
+        ).toBe(true);
+        expect(
+          isPathWithin(
+            ".alchemy",
+            "/workspace/app/.alchemy/bundles/worker.js",
+            "/workspace/other",
+          ),
+        ).toBe(false);
+        expect(isPathWithin(".alchemy", ".alchemy", "/workspace/app")).toBe(
+          true,
+        );
+        expect(
+          isPathWithin(
+            ".alchemy",
+            ".alchemy-backup/worker.js",
+            "/workspace/app",
+          ),
+        ).toBe(false);
+        expect(
+          isPathWithin(".alchemy", ".alchemy/../source.js", "/workspace/app"),
+        ).toBe(false);
+        expect(
+          isPathWithin("/runtime", "/runtime/worker.js", "/workspace/app"),
+        ).toBe(true);
+      }),
+  );
+
   it.effect("preserves the relative fallback and configured roots", () =>
     Effect.gen(function* () {
       expect(yield* dotAlchemyDirectory).toBe(".alchemy");
@@ -36,10 +72,60 @@ layer(PlatformServices)("runtime directory", (it) => {
         ),
       ).toBe("node_modules/.cache/runtime");
       expect(
-        withinDotAlchemy("/tmp/runtime", "/tmp/runtime-sibling/file"),
+        isPathWithin(
+          "/tmp/runtime",
+          "/tmp/runtime-sibling/file",
+          process.cwd(),
+        ),
       ).toBe(false);
-      expect(withinDotAlchemy("/tmp/runtime", "/tmp/runtime/file")).toBe(true);
+      expect(
+        isPathWithin("/tmp/runtime", "/tmp/runtime/file", process.cwd()),
+      ).toBe(true);
     }),
+  );
+
+  it.effect(
+    "ignores runtime watch events using the caller base rather than the watched directory",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped();
+        const runtime = path.join(root, "runtime");
+        const main = path.join(root, "worker.py");
+        yield* fs.writeFileString(main, "class Default: pass");
+        for (const [eventPath, expected] of [
+          ["runtime/state.json", ["Success"]],
+          ["worker.py", ["Success", "Start", "Success"]],
+        ] as const) {
+          const events = yield* watchBundleDirectory({
+            main,
+            read: Effect.succeed({
+              files: [
+                {
+                  path: "worker.py",
+                  content: "class Default: pass",
+                  hash: "test",
+                },
+              ],
+              hash: "test",
+            }),
+          }).pipe(
+            Stream.runCollect,
+            Effect.provideService(FileSystem.FileSystem, {
+              ...fs,
+              watch: () =>
+                Stream.make({ _tag: "Update" as const, path: eventPath }),
+            }),
+            Effect.provideService(AlchemyContext, {
+              dotAlchemy: path.relative(process.cwd(), runtime),
+              dev: false,
+              adopt: false,
+            }),
+          );
+          expect(events.map((event) => event._tag)).toEqual(expected);
+        }
+      }),
   );
 
   it.effect(
@@ -150,7 +236,7 @@ layer(PlatformServices)("runtime directory", (it) => {
               "image",
             ),
           ).toBe(path.join(relative, "tmp/test-dev-image"));
-          expect(withinDotAlchemy(runtime, temporary)).toBe(true);
+          expect(isPathWithin(runtime, temporary, process.cwd())).toBe(true);
           expect(yield* fs.exists(temporary)).toBe(true);
         }).pipe(
           Effect.provideService(Stack, {
@@ -244,7 +330,7 @@ layer(PlatformServices)("runtime directory", (it) => {
           );
         }).pipe(
           Effect.provideService(AlchemyContext, {
-            dotAlchemy: runtime,
+            dotAlchemy: path.relative(process.cwd(), runtime),
             dev: false,
             adopt: false,
           }),

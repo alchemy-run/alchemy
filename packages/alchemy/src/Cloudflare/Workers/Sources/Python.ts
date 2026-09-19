@@ -1,7 +1,5 @@
-import {
-  dotAlchemyDirectory,
-  withinDotAlchemy,
-} from "../../../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
+import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
@@ -181,9 +179,10 @@ const resolvePythonModulesDir = Effect.fn(function* (
     `${pythonVersion}\0${target.index}\0${pyprojectContent}`,
   );
 
+  const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
   // uv runs from the Worker root, so its arguments need absolute staging paths.
-  const staging = path.resolve(dotAlchemy, "python", options.id);
+  const staging = path.resolve(runtimeBase, dotAlchemy, "python", options.id);
   const vendorDir = path.join(staging, "python_modules");
   const tokenFile = path.join(staging, ".synced");
 
@@ -321,6 +320,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
   const fs = yield* FileSystem.FileSystem;
   const main = yield* resolveMainPath(options.main);
   const root = path.dirname(main);
+  const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
   const entryName = path.basename(main);
 
@@ -346,14 +346,14 @@ export const readPythonWorkerBundle = Effect.fn(function* (
       "**/.venv*/**",
       "**/node_modules/**",
       "**/.alchemy/**",
-      `${convertPathToPattern(path.resolve(dotAlchemy))}/**`,
+      `${convertPathToPattern(path.resolve(runtimeBase, dotAlchemy))}/**`,
     ],
   }).pipe(
     Effect.map((names) =>
       names.filter(
         (name) =>
           name !== entryName &&
-          !withinDotAlchemy(dotAlchemy, path.join(root, name)),
+          !isPathWithin(dotAlchemy, path.join(root, name), runtimeBase),
       ),
     ),
     Effect.flatMap(

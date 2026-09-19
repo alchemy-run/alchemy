@@ -1,8 +1,6 @@
 import * as Effect from "effect/Effect";
-import {
-  dotAlchemyDirectory,
-  withinDotAlchemy,
-} from "../../../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
+import { isPathWithin } from "../../../Util/isPathWithin.ts";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
@@ -114,6 +112,7 @@ export const watchBundleDirectory = <R>(options: {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const main = yield* resolveMainPath(options.main);
+      const runtimeBase = process.cwd();
       const dotAlchemy = yield* dotAlchemyDirectory;
       const root = path.dirname(main);
       const read = options.read.pipe(
@@ -128,8 +127,12 @@ export const watchBundleDirectory = <R>(options: {
       const rebuilds = fs.watch(root).pipe(
         Stream.filter(
           (event) =>
-            withinDotAlchemy(dotAlchemy, root) ||
-            !withinDotAlchemy(dotAlchemy, path.resolve(root, event.path)),
+            isPathWithin(dotAlchemy, root, runtimeBase) ||
+            !isPathWithin(
+              dotAlchemy,
+              path.resolve(root, event.path),
+              runtimeBase,
+            ),
         ),
         options.ignore
           ? Stream.filter((event) => !options.ignore!(event.path))

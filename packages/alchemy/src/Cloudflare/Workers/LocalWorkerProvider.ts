@@ -22,7 +22,8 @@ import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory, withinDotAlchemy } from "../../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -139,6 +140,7 @@ export const LocalWorkerProvider = () =>
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
+      const runtimeBase = process.cwd();
       const dotAlchemy = yield* dotAlchemyDirectory;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
@@ -699,8 +701,8 @@ export const LocalWorkerProvider = () =>
           for (const namespace of worker.durableObjectNamespaces) {
             const image = namespace.container;
             if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(image.context ?? ".");
-            if (withinDotAlchemy(dotAlchemy, context)) continue;
+            const context = path.resolve(runtimeBase, image.context ?? ".");
+            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
             watched.set(context, {
               dockerfile:
                 image.dockerfile !== undefined

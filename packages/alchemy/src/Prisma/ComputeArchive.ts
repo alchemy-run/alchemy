@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory, withinDotAlchemy } from "../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
+import { isPathWithin } from "../Util/isPathWithin.ts";
 import {
   inspectArtifactFile,
   inspectVerifiedFile,
@@ -157,15 +158,18 @@ const createComputeArchiveFile = Effect.fn(function* (
   } = options;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const root = path.resolve(directory);
+  const runtimeBase = process.cwd();
+  const root = path.resolve(runtimeBase, directory);
   const realRoot = yield* fs.realPath(root);
   const dotAlchemy = yield* dotAlchemyDirectory;
-  const runtimeRelative = path.relative(root, dotAlchemy).replaceAll("\\", "/");
+  const runtimeRelative = path
+    .relative(root, path.resolve(runtimeBase, dotAlchemy))
+    .replaceAll("\\", "/");
   const normalizedEntrypoint = yield* normalizeEntrypoint(entrypoint);
   const validated = yield* Effect.try({
     try: () => ({
       ignore: [
-        ...(withinDotAlchemy(root, dotAlchemy)
+        ...(isPathWithin(root, dotAlchemy, runtimeBase)
           ? [
               // Keep runtime state out of the archive. Escape regex characters
               // in the literal directory name (e.g. "cache[private]"); the

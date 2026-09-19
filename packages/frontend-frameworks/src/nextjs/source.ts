@@ -312,6 +312,10 @@ const listProjectFiles = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const runtimeDirectory =
+    dotAlchemy === undefined
+      ? undefined
+      : path.resolve(process.cwd(), dotAlchemy);
   const out: Array<string> = [];
   const walk = (relative: string): Effect.Effect<void, PlatformError, never> =>
     Effect.gen(function* () {
@@ -319,9 +323,9 @@ const listProjectFiles = Effect.fn(function* (
       const entries = yield* fs.readDirectory(absolute);
       for (const entry of entries) {
         const rel = relative === "" ? entry : `${relative}/${entry}`;
-        if (dotAlchemy !== undefined) {
+        if (runtimeDirectory !== undefined) {
           const runtimeRelative = path.relative(
-            dotAlchemy,
+            runtimeDirectory,
             path.join(root, rel),
           );
           if (

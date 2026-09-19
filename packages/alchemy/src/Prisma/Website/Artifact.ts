@@ -2,7 +2,8 @@ import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core"
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory, withinDotAlchemy } from "../../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import type { PlatformError } from "effect/PlatformError";
 import { createRequire } from "node:module";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -84,6 +85,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(initialCwd, props.root));
+  const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
   const dist = yield* fs.realPath(path.resolve(initialCwd, props.distDir));
   const entry =
@@ -125,7 +127,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     const relative = path.relative(root, source).replaceAll("\\", "/");
     if (
       excluded(relative) ||
-      withinDotAlchemy(dotAlchemy, source) ||
+      isPathWithin(dotAlchemy, source, runtimeBase) ||
       (runtimePackage && /(?:\.map|\.d\.ts)$/.test(source)) ||
       (props.layout === "next" && nextExcluded(relative))
     )
@@ -216,7 +218,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
       const source = path.resolve(path.dirname(manifest), file);
       if (
         excluded(path.relative(root, source)) ||
-        withinDotAlchemy(dotAlchemy, source)
+        isPathWithin(dotAlchemy, source, runtimeBase)
       )
         return yield* fail(
           `A Next.js runtime dependency is a sensitive file: ${source}`,
@@ -261,7 +263,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   for (const file of files) {
     if (
       excluded(path.relative(root, file)) ||
-      withinDotAlchemy(dotAlchemy, file)
+      isPathWithin(dotAlchemy, file, runtimeBase)
     )
       return yield* fail(
         `A website runtime dependency is a sensitive file: ${file}`,

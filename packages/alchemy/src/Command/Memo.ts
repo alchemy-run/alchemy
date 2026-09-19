@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { dotAlchemyDirectory, withinDotAlchemy } from "../AlchemyContext.ts";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
+import { isPathWithin } from "../Util/isPathWithin.ts";
 import type { PlatformError } from "effect/PlatformError";
 import { convertPathToPattern, glob } from "tinyglobby";
 import { gitignoreRulesToGlobs } from "../Util/gitignore-rules-to-globs.ts";
@@ -63,6 +64,7 @@ interface ResolvedMemoOptions {
 const Memo = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const runtimeBase = process.cwd();
   const dotAlchemy = yield* dotAlchemyDirectory;
 
   const findUp = Effect.fn(function* (
@@ -133,7 +135,7 @@ const Memo = Effect.gen(function* () {
     options: ResolvedMemoOptions,
   ): Effect.fn.Return<string[], PlatformError> {
     // Explicitly hashing a generated artifact still hashes its contents.
-    const excludeRuntime = !withinDotAlchemy(dotAlchemy, options.cwd);
+    const excludeRuntime = !isPathWithin(dotAlchemy, options.cwd, runtimeBase);
     const [files, lockfile] = yield* Effect.all(
       [
         Effect.promise(() =>
@@ -142,7 +144,9 @@ const Memo = Effect.gen(function* () {
             ignore: [
               ...options.exclude,
               ...(excludeRuntime
-                ? [`${convertPathToPattern(path.resolve(dotAlchemy))}/**`]
+                ? [
+                    `${convertPathToPattern(path.resolve(runtimeBase, dotAlchemy))}/**`,
+                  ]
                 : []),
             ],
             onlyFiles: true,
@@ -176,7 +180,11 @@ const Memo = Effect.gen(function* () {
       .filter(
         (file) =>
           !excludeRuntime ||
-          !withinDotAlchemy(dotAlchemy, path.resolve(options.cwd, file)),
+          !isPathWithin(
+            dotAlchemy,
+            path.resolve(options.cwd, file),
+            runtimeBase,
+          ),
       )
       .map((file) =>
         path.isAbsolute(file) ? path.relative(options.cwd, file) : file,
