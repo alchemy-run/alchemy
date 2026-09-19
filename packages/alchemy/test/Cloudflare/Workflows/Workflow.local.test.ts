@@ -47,7 +47,7 @@ interface WorkflowStatus {
     workflowName: string;
     instanceId: string;
   };
-  error?: { message?: string } | null;
+  error?: { name?: string; message?: string } | null;
   rollback?: {
     outcome: "complete" | "failed";
     error: { message?: string } | null;
@@ -130,6 +130,39 @@ const runInstance = (url: string, path: string, live = false) =>
       times: 2,
     }),
   );
+
+const probeWorkflow = Effect.fn(function* (url: string) {
+  const ready = yield* Effect.gen(function* () {
+    const id = yield* startInstance(url, "/workflow/probe");
+    const status = yield* waitForTerminal(url, id);
+    yield* Effect.logInfo(
+      `Workflow readiness probe ${id}: ${JSON.stringify(status)}`,
+    );
+    if (
+      status.status === "errored" &&
+      (status.error?.message === "Worker not found." ||
+        (status.error?.name === "TypeError" &&
+          (status.error.message ===
+            'The RPC receiver does not implement the method "run".' ||
+            status.error.message ===
+              "The entrypoint name LocalTestWorkflow was not found in this worker. Ensure the worker exports an entrypoint with that name.")))
+    )
+      return false;
+    expect(status).toMatchObject({
+      status: "complete",
+      output: { ready: true },
+    });
+    return true;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (ready) => ready,
+    }),
+    Effect.timeout("45 seconds"),
+  );
+  expect(ready, "Workflow entrypoint did not propagate").toBe(true);
+});
 
 const assertRollback = (url: string, live = false) =>
   Effect.gen(function* () {
@@ -536,6 +569,7 @@ test.provider(
       expect(live.id).toBe(row!.attr!.workflowId);
 
       const url = deployed.worker.url!;
+      yield* probeWorkflow(url);
       const { status } = yield* runInstance(url, "/workflow/start/world", true);
       expect(status).toMatchObject({ status: "complete" });
       expect(status.error).toBeFalsy();

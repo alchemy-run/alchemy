@@ -79,7 +79,10 @@ const waitForReady = Effect.fn(function* (url: string) {
   expect(ready, "Journal entries method did not propagate").toBe(true);
 });
 
-const probeWorkflow = Effect.fn(function* (url: string) {
+const probeWorkflow = Effect.fn(function* (
+  url: string,
+  className = "LifecycleWorkflow",
+) {
   const ready = yield* Effect.gen(function* () {
     const started = yield* request(`${url}/probe`, "POST");
     const { id } = yield* Effect.try(
@@ -104,7 +107,7 @@ const probeWorkflow = Effect.fn(function* (url: string) {
       status.status === "errored" &&
       status.error?.name === "TypeError" &&
       status.error.message ===
-        "The entrypoint name LifecycleWorkflow was not found in this worker. Ensure the worker exports an entrypoint with that name."
+        `The entrypoint name ${className} was not found in this worker. Ensure the worker exports an entrypoint with that name.`
     ) {
       return false;
     }
@@ -125,6 +128,21 @@ const probeWorkflow = Effect.fn(function* (url: string) {
 });
 
 const cases: Array<{ scenario: Scenario; entries: string[] }> = [
+  ...(
+    [
+      "unsupported-function",
+      "unsupported-symbol",
+      "unsupported-cycle",
+      "unsupported-size",
+      "unsupported-array",
+      "unsupported-accessor",
+      "unsupported-tag-accessor",
+      "unsupported-alias",
+    ] as const
+  ).map((scenario) => ({
+    scenario,
+    entries: ["open:1:captured:true", "close:1"],
+  })),
   {
     scenario: "success",
     entries: ["open:1:captured:true", "close:1", "after-task"],
@@ -140,9 +158,66 @@ const cases: Array<{ scenario: Scenario; entries: string[] }> = [
     ],
   },
   {
+    scenario: "exhaustion",
+    entries: [
+      "open:1:captured:true",
+      "close:1",
+      "open:2:captured:true",
+      "close:2",
+      "caught:application:2:true",
+      "after-task",
+    ],
+  },
+  {
+    scenario: "uncaught",
+    entries: [
+      "open:1:captured:true",
+      "close:1",
+      "open:2:captured:true",
+      "close:2",
+    ],
+  },
+  {
+    scenario: "die",
+    entries: ["open:1:captured:true", "close:1"],
+  },
+  {
+    scenario: "orDie",
+    entries: ["open:1:captured:true", "close:1"],
+  },
+  {
     scenario: "interrupt",
     entries: ["open:1:captured:true", "close:1", "joined", "after-task"],
   },
+  {
+    scenario: "interrupt-retry",
+    entries: ["open:1:captured:true", "close:1", "joined", "after-task"],
+  },
+  {
+    scenario: "rollback-retry",
+    entries: [
+      "open:1:captured:true",
+      "close:1",
+      "after-task",
+      "rollback-open:captured:true:1",
+      "rollback-body:1",
+      "rollback-close:1",
+      "rollback-open:captured:true:2",
+      "rollback-body:2",
+      "rollback-close:2",
+    ],
+  },
+  ...(["rollback-die", "rollback-orDie"] as const).map((scenario) => ({
+    scenario,
+    entries: [
+      "open:1:captured:true",
+      "close:1",
+      "after-task",
+      "rollback-open:captured:true:1",
+      "rollback-body:1",
+      "rollback-close:1",
+    ],
+  })),
   {
     scenario: "rollback",
     entries: [
@@ -201,6 +276,93 @@ describe.concurrent.each([
     );
   }
 
+  for (const scenario of [
+    "replay",
+    "replay-inherited",
+    "replay-terminal-die",
+    "replay-terminal-orDie",
+  ] as const) {
+    test(
+      `preserves ${scenario} error semantics after checkpoint replay`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const terminal = scenario.startsWith("replay-terminal");
+        const caught = terminal ? "caught:terminal" : "caught:application:2";
+        const { id } = yield* request(
+          `${url}/start/${scenario}?stage=${encodeURIComponent(stage)}`,
+          "POST",
+        ).pipe(
+          Effect.flatMap((body) =>
+            Effect.try(() => JSON.parse(body) as { id: string }),
+          ),
+        );
+        const recovered = yield* request(`${url}/journal/${id}`).pipe(
+          Effect.flatMap((body) =>
+            Effect.try(() => JSON.parse(body) as string[]),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+            until: (entries) => entries.includes("checkpoint"),
+          }),
+        );
+        if (!recovered.includes(`${caught}:true`)) {
+          yield* Effect.logInfo(
+            "Workflow replay recovery status",
+            yield* request(`${url}/status/${id}`),
+          );
+        }
+        expect(recovered).toContain(`${caught}:true`);
+        yield* request(`${url}/restart/${id}`, "POST");
+        const journal = yield* request(`${url}/journal/${id}`).pipe(
+          Effect.flatMap((body) =>
+            Effect.try(() => JSON.parse(body) as string[]),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+            until: (entries) => entries.includes("after-task"),
+          }),
+        );
+        yield* Effect.logInfo(
+          `Replay journal ${id}: ${JSON.stringify(journal)}`,
+        );
+        // Native terminal failures may rerun on an explicit checkpoint restart.
+        const reranTerminal =
+          terminal && journal.includes("open:3:captured:true");
+        expect(journal).toContain(`${caught}:${reranTerminal}`);
+        const replayed = yield* request(`${url}/status/${id}`).pipe(
+          Effect.flatMap((body) =>
+            Effect.try(() => JSON.parse(body) as Status),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+            until: (status) =>
+              status.status === "complete" || status.status === "errored",
+          }),
+        );
+        expect(replayed, JSON.stringify(replayed)).toMatchObject({
+          status: "complete",
+          entries: [
+            "run",
+            "open:1:captured:true",
+            "close:1",
+            "open:2:captured:true",
+            "close:2",
+            `${caught}:true`,
+            "checkpoint",
+            "run",
+            ...(reranTerminal ? ["open:3:captured:true", "close:3"] : []),
+            `${caught}:${reranTerminal}`,
+            "after-task",
+          ],
+        });
+      }),
+      { timeout: 60_000 },
+    );
+  }
+
   for (const { scenario, entries } of cases) {
     test(
       `closes and owns ${scenario} attempt resources`,
@@ -210,7 +372,7 @@ describe.concurrent.each([
         const { id } = yield* Effect.try(
           () => JSON.parse(started) as { id: string },
         );
-        if (scenario === "rollback") {
+        if (scenario.startsWith("rollback")) {
           // Native status() can reject during compensation; observe cleanup first.
           const journal = yield* request(`${url}/journal/${id}`).pipe(
             Effect.flatMap((body) =>
@@ -219,7 +381,7 @@ describe.concurrent.each([
             Effect.repeat({
               schedule: Schedule.spaced("2 seconds"),
               times: 10,
-              until: (entries) => entries.includes("rollback-close"),
+              until: (actual) => actual.includes(entries[entries.length - 1]),
             }),
           );
           expect(journal).toEqual(entries);
@@ -235,17 +397,47 @@ describe.concurrent.each([
               status.status === "complete" || status.status === "errored",
           }),
         );
+        const failed =
+          scenario.startsWith("rollback") ||
+          scenario.startsWith("unsupported") ||
+          ["uncaught", "die", "orDie"].includes(scenario);
         expect(status, JSON.stringify(status)).toMatchObject({
-          status: scenario === "rollback" ? "errored" : "complete",
+          status: failed ? "errored" : "complete",
           entries,
         });
-        if (scenario === "rollback") {
+        if (scenario.startsWith("rollback")) {
           if (!dev) {
-            expect(status.rollback).toMatchObject({ outcome: "complete" });
+            expect(status.rollback).toMatchObject({
+              outcome:
+                scenario === "rollback-die" || scenario === "rollback-orDie"
+                  ? "failed"
+                  : "complete",
+            });
           }
           expect(status.error).toMatchObject({
             message: "trigger compensation",
           });
+        } else if (scenario.startsWith("unsupported")) {
+          expect(status.error?.message).toContain(
+            "Workflow application failure is not serializable",
+          );
+          if (scenario === "unsupported-array")
+            expect(status.error?.message).toContain(
+              "sparse arrays or custom array properties",
+            );
+          if (
+            scenario === "unsupported-accessor" ||
+            scenario === "unsupported-tag-accessor"
+          ) {
+            expect(status.error?.message).toContain("accessor error data");
+            expect(status.error?.message).not.toContain("getter was invoked");
+          }
+          if (scenario === "unsupported-alias")
+            expect(status.error?.message).toContain(
+              "shared references in error data",
+            );
+        } else if (failed) {
+          expect(status.error?.message).toContain("application failure");
         } else {
           expect(status.output).toEqual(entries);
         }
