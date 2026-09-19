@@ -674,6 +674,9 @@ export default { async fetch() { return new Response("v4"); } };
           }),
         );
 
+        const originalNamespaceId = v1.b.durableObjectNamespaces.Counter;
+        expect(originalNamespaceId).toBeDefined();
+
         // Write data while worker-b hosts the namespace.
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
         const written = yield* fetchJsonReady<{ value: number }>(
@@ -704,6 +707,8 @@ export default { async fetch() { return new Response("v4"); } };
         });
 
         const v2 = yield* scratch.deploy(moved);
+        expect(v2.a.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
+        expect(v2.b.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
 
         // The namespace moved to worker-a with its data intact...
         const viaA = yield* fetchJsonReady<{ value: number }>(
@@ -1214,6 +1219,7 @@ export default { async fetch() { return new Response("${version}"); } };
               schedule: Schedule.spaced("2 seconds"),
               until: (namespaces) =>
                 namespaces.length === 19 &&
+                new Set(namespaces.map((ns) => ns.id)).size === 19 &&
                 namespaces.every(
                   (ns) =>
                     ns.class !== undefined &&

@@ -2149,42 +2149,120 @@ export const LiveWorkerProvider = () =>
         logicalId: string;
         className: string;
         sources: readonly string[];
-        observedNamespaces: readonly { script: string; class: string }[];
+        observedNamespaces: readonly {
+          id?: string | null;
+          script: string;
+          class: string;
+        }[];
       }) {
         if (params.sources.length === 0) {
           return undefined;
         }
-        const candidates = Array.from(
-          new Set(
-            params.observedNamespaces.flatMap((ns) =>
-              ns.class === params.className &&
-              ns.script !== params.selfScriptName
-                ? [ns.script]
-                : [],
-            ),
+        const observedScripts = yield* workers.listScripts
+          .items({ accountId: params.accountId })
+          .pipe(Stream.runCollect);
+        const logicalSources = new Set(
+          observedScripts.flatMap((script) =>
+            script.id != null &&
+            params.sources.some((source) =>
+              hasAlchemyWorkerTags(source, script.tags ?? []),
+            )
+              ? [script.id]
+              : [],
           ),
         );
+        // Direct names remain candidates even when both listings omit the script.
+        const candidates = new Set([
+          ...params.sources,
+          ...logicalSources,
+          ...params.observedNamespaces.flatMap((ns) =>
+            ns.class === params.className ? [ns.script] : [],
+          ),
+        ]);
         const matched: string[] = [];
         for (const script of candidates) {
-          if (params.sources.includes(script)) {
-            matched.push(script);
-            continue;
-          }
+          if (script === params.selfScriptName) continue;
+          // A same-class namespace alone does not identify a declared source.
+          const knownSource =
+            logicalSources.has(script) ||
+            (params.sources.includes(script) &&
+              (observedScripts.some((observed) => observed.id === script) ||
+                params.observedNamespaces.some((ns) => ns.script === script)));
           const settings = yield* getScriptSettings(
             params.accountId,
             script,
             undefined,
           ).pipe(
-            Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("WorkerHasNoVersions", () =>
-              Effect.succeed(undefined),
+            Effect.catchTag("WorkerNotFound", (error) =>
+              knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+            ),
+            Effect.catchTag("WorkerHasNoVersions", (error) =>
+              knownSource || params.sources.includes(script)
+                ? Effect.fail(error)
+                : Effect.succeed(undefined),
             ),
           );
-          const tags = new Set(settings?.tags ?? []);
           if (
-            tags.has(`alchemy:stack:${stack.name}`) &&
-            tags.has(`alchemy:stage:${stack.stage}`) &&
-            params.sources.some((source) => tags.has(`alchemy:id:${source}`))
+            settings === undefined ||
+            (!params.sources.includes(script) &&
+              !logicalSources.has(script) &&
+              !params.sources.some((source) =>
+                hasAlchemyWorkerTags(source, settings.tags ?? []),
+              ))
+          ) {
+            continue;
+          }
+          const localBinding = settings.bindings?.find(
+            (binding) =>
+              binding.type === "durable_object_namespace" &&
+              binding.className === params.className &&
+              (binding.scriptName == null || binding.scriptName === script),
+          );
+          const namespaceId =
+            localBinding?.type === "durable_object_namespace"
+              ? (localBinding.namespaceId ?? undefined)
+              : undefined;
+          const findNamespace = (
+            namespaces: typeof params.observedNamespaces,
+          ) =>
+            namespaces.find((ns) =>
+              namespaceId === undefined
+                ? ns.script === script && ns.class === params.className
+                : ns.id === namespaceId,
+            );
+          let namespace = findNamespace(params.observedNamespaces);
+          if (
+            namespace === undefined &&
+            (localBinding !== undefined ||
+              Object.values(
+                getDurableObjectTagMap(settings.tags ?? []),
+              ).includes(params.className))
+          ) {
+            // A known source namespace must be located, not replaced with a fresh one.
+            namespace = yield* listDurableObjectNamespaces(
+              params.accountId,
+            ).pipe(
+              Effect.flatMap((namespaces) => {
+                const namespace = findNamespace(namespaces);
+                return namespace
+                  ? Effect.succeed(namespace)
+                  : Effect.fail(
+                      new MissingDurableObjects({
+                        scriptName: script,
+                        expected: [params.className],
+                      }),
+                    );
+              }),
+              Effect.retry({
+                while: (error) => error._tag === "MissingDurableObjects",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 5,
+              }),
+            );
+          }
+          if (
+            namespace?.script === script &&
+            namespace.class === params.className
           ) {
             matched.push(script);
           }
