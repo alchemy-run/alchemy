@@ -133,10 +133,61 @@ authors no messages of its own.
 
 ## Compaction
 
-Long threads are managed, not feared: `thread.compact` requests
-either a filtered **drop** (replaced by an archived-messages marker)
-or a **reset** to a summary — applied at the next sampling boundary,
-never mid-assembly, always visible in the transcript. Policy is
-yours (a token threshold in the turn, a model-triggered `handoff`
-tool whose self-authored summary becomes the new thread); the kernel
-owns only the mechanism.
+Long threads are managed, not feared: `thread.compact` requests a
+filtered **drop** (replaced by an archived-messages marker), a
+**reset** to a summary, or an **observe** (an observation log heading
+the thread, the freshest rows kept verbatim) — applied at the next
+sampling boundary, never mid-assembly, always visible in the
+transcript. Retained tails are pair-balanced: a compaction never
+separates an assistant tool call from its results.
+
+### The generations ledger
+
+Compaction never destroys. Each applied plan **closes a generation
+and opens the next** — a git-shaped chain of immutable records, each
+addressed by a `ContextRef` (`"<term>/<key>@<n>"`):
+
+```typescript
+const thread = yield* AI.Thread;
+yield* thread.tip       // ContextRef — the current generation
+yield* thread.lineage   // GenerationRecords, tip first
+```
+
+A `GenerationRecord` carries its `kind` (`drop | reset | observe |
+reflect | branch`), its `author` (the policy's name, or `"charter"`),
+the distilled `doc` it opens with, and token counts before/after. The
+rows a generation shadowed stay addressable (`messagesAt`, the
+`AI.Recall` tool) — the surface the model sees is just the tip.
+
+### Policies are Layers
+
+Beyond explicit `thread.compact` calls, the kernel consults the
+ambient `AI.Compaction` policy at every sampling boundary — judgment
+in userland, mechanism in the kernel. Attach one where behavior
+belongs, on the charter's Layer:
+
+```typescript
+export const EngineerLive = Engineer.make`
+  ...charter prose...
+`.pipe(Layer.provide(AI.Compaction.reset({ at: 120_000 })));
+```
+
+Shipped policies: `AI.Compaction.none` (explicit requests only),
+`AI.Compaction.reset` (model-authored handoff summary at a token
+threshold), and `AI.Compaction.observational` (the two-tier
+observer/reflector memory — see [Memory &
+identity](/agents/concepts/memory)).
+
+### Branching
+
+Every `ContextRef` is the tip of its own prefix, so branching is just
+starting a session at a ref:
+
+```typescript
+const lineage = yield* thread.lineage;
+yield* sessions.branch(lineage[2]!.ref, { key: "engineer@alt" });
+```
+
+The branch's birth generation points at the ref as parent; the source
+session is untouched — two chains sharing history below the branch
+point, exactly like git refs sharing commits.

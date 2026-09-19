@@ -426,6 +426,14 @@ export default defineConfig({
                 { label: "Skills", link: "/agents/concepts/skills" },
                 { label: "Delegation", link: "/agents/concepts/delegation" },
                 { label: "Runs & threads", link: "/agents/concepts/runs" },
+                {
+                  label: "Memory & identity",
+                  link: "/agents/concepts/memory",
+                },
+                {
+                  label: "Task queues",
+                  link: "/agents/concepts/task-queues",
+                },
                 { label: "Workspaces", link: "/agents/concepts/workspaces" },
                 { label: "The kernel", link: "/agents/concepts/kernel" },
                 {

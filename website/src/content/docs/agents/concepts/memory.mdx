@@ -1,0 +1,105 @@
+---
+title: Memory & identity
+description: The observational compaction policy, the self-thread, journaling up, and the digest flowing down — how an agent learns across sessions.
+---
+
+A long-lived thread that works many adjacent problems gets *better* —
+compaction distills the codebase's patterns into dense context. The
+memory seam turns that accident into architecture: a two-tier
+**observational policy** at each session, and a **self-thread** per
+identity that learnings climb into and flow back out of.
+
+## The observational policy
+
+`AI.Compaction.observational` is a two-tier memory. A cheap
+**observer** watches the thread and distills unobserved history into
+a dated, priority-tagged observation log (🔴 critical · 🟡 useful ·
+🟢 minor · ✅ done) that heads each new
+[generation](/agents/concepts/runs#the-generations-ledger); when the
+log itself grows past its budget, a **reflector** rewrites the whole
+log more densely.
+
+```typescript
+export const EngineerLive = Engineer.make`
+  ...charter prose...
+`.pipe(
+  Layer.provide(AI.Compaction.observational({
+    observeAt: 30_000,   // unobserved tokens before the observer runs
+    reflectAt: 40_000,   // log tokens before the reflector rewrites it
+    observer: Haiku,     // the cheap watcher; the agent's model works
+  })),
+);
+```
+
+Every advance is a ledgered generation (`kind: "observe" |
+"reflect"`), so nothing is destroyed: the raw rows a log shadows stay
+addressable, and the `AI.Recall` tool lets the model page them back
+by ref when it needs the original detail.
+
+## The self-thread
+
+An identity is not a new runtime concept — it is an ordinary durable
+session of the same term under a reserved key (the **inner dialog**),
+declared by one Layer that carries both the identity service and the
+compaction policy:
+
+```typescript
+export const EngineerLive = Engineer.make`
+  ...charter prose...
+`.pipe(
+  Layer.provide(AI.Identity.observational({
+    selfKey: "root::engineer::self",
+  })),
+);
+```
+
+What makes it *self* is its diet: its inputs are journals from the
+identity's other sessions, and its compaction is reflection-heavy —
+the doc of its newest observational generation **is** the self
+digest: "who I am, what I've learned, the patterns of this codebase."
+
+## Journaling up
+
+Learnings climb; task state stays put. Two paths in, both landing as
+waking inputs on the self session:
+
+**Automatic** — when the observer runs in any session of the term, it
+separates durable learnings (a `## Journal` section: codebase
+patterns, gotchas, conventions — things true beyond this task) from
+task state. Journal lines are forwarded to the self session and kept
+*out* of the desk's log.
+
+**Explicit** — a `Journal` tool any charter can splice:
+
+```typescript
+const journal = yield* AI.Tool("journal")`
+  Record ${learning} to your durable self — something true beyond
+  this task: a pattern, a failure mode, a convention.`(
+  Effect.fn(function* (p) {
+    yield* AI.Identity.journal(p.learning);
+    return "journaled";
+  }),
+);
+```
+
+`journal` resolves the calling session from the ambient `AI.Thread`;
+a call from the self session itself is a no-op — self never journals
+to self.
+
+## The digest flows down
+
+The self digest is delivered to working sessions as a quiet message
+(`[self <tipRef>]` + the doc), never injected into the stance — the
+static prompt stays byte-identical, so provider caches live. Delivery
+dedupes by tip: a digest is re-sent only after the self session
+reflects again.
+
+```typescript
+// a host's admission hook (the desk loop calls this before each claim)
+yield* AI.Identity.deliverDigest("Engineer", deskKey);
+```
+
+So an Engineer working one stream benefits from what another stream
+taught it — two workstreams, one self. Watch it happen on the agent
+profile's **Self** tab: the digest document, the journal feed, and
+the self-thread's own generation rail.

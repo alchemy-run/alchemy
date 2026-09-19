@@ -1,0 +1,95 @@
+---
+title: Task queues
+description: Work streams declared in code — desks, TypeSafe traffic, and the disposition contract that ends every round.
+---
+
+A **task queue** is a work stream declared in code: the standing lane
+tasks flow through, staffed by **desks** — one single-threaded
+session per (queue × agent) that works the stream's tasks serially,
+forever, accumulating and compacting the stream's context.
+
+## Declaring a queue
+
+Same contract/implementation split as `AI.Group`: the class is the
+identity, the `make` template is the mission, and its splices *are*
+the member agents:
+
+```typescript
+export class CloudflareTasks extends AI.TaskQueue<CloudflareTasks>(import.meta)(
+  "Cloudflare",
+) {}
+
+export const CloudflareTasksLive = CloudflareTasks.make`
+  Cloudflare work: provider bugs, distilled patches, live-test
+  failures, new resources. ${Engineer} implements — one task at a
+  time, in a workspace per task. ${Reviewer} gates every review.
+  Park anything blocked on entitlements with a reason.`;
+```
+
+Position is the convention: the **first** member is the queue's
+worker desk (claims ready tasks), the **second**, when declared, is
+its review gate. Building the Layer registers the queue in the
+ambient `OrgRegistry` — rosters, the org graph, and the UI see queues
+the same derived way they see groups.
+
+## Desks
+
+A desk is a standing session addressed by a derived key:
+
+```typescript
+queue.deskKey(Engineer)   // "tasks::cloudflare::engineer"
+```
+
+One desk works one task at a time, serially, forever — its context
+accumulates and [compacts](/agents/concepts/runs#compaction), and
+with the [identity seam](/agents/concepts/memory) attached, what one
+stream teaches the agent flows to every other desk it holds. Context
+is why desks exist: the Cloudflare desk *becomes* the Cloudflare
+expert.
+
+## Traffic is TypeSafe, work is the model
+
+The model does the *work*; System One does the *traffic*. Every hop
+between states is a small TypeSafe question over structured state,
+never a vibe:
+
+- **Intake** — which queue owns this task? A `Choice` whose rubric is
+  derived from the queues' own mission prose. An unsure route lands
+  in the inbox for a human; a confident one files ready.
+- **Scheduling** — an idle desk asks what to pick up next: a `Choice`
+  over the ready cards that sees the desk's recent focus and prefers
+  adjacent tasks — **context affinity beats FIFO**.
+- **Review** — the reviewer desk's reply is judged by one `Noul`:
+  approved (done) or changes requested (back to ready, affinity
+  intact).
+
+## The disposition contract
+
+A desk round ends in code, not vibes. The dispatch tells the desk to
+end its reply with exactly one fenced line, and the host parses it:
+
+```
+DISPOSITION: complete — <one-line summary of the result>
+DISPOSITION: park — <what blocks it>
+DISPOSITION: handoff — <who should own it and why>
+```
+
+- `complete` → the task moves to review (or straight to done in a
+  gate-less queue), the summary riding the timeline event.
+- `park` → the task parks with its reason — entitlements, upstream
+  dependencies, missing access.
+- `handoff` → back to the inbox for re-routing.
+
+A reply that forgets its line is judged by one small `Choice`; unsure
+falls to `complete` — the review gate catches what code cannot.
+
+## The board
+
+Runtime state hangs off the code construct, never the other way
+around: the queue class is identity + teaching + desk derivation;
+task rows, states (`inbox → ready → working → review → done`, with
+`parked` and `dropped`), and the event timeline are the host's
+business. Each task's conversation is an ordinary post thread —
+timeline comments, workspace pills, and "Worked for Xm" session
+chips come free from the chat machinery, and the desk view renders
+the session's generation rail beside its live transcript.
