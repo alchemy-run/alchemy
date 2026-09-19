@@ -3,45 +3,87 @@ import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import type {
   MigrationProbe,
   Snapshot,
 } from "./fixtures/alarm-upgrade/types.ts";
 import AlarmUpgradeWorker from "./fixtures/alarm-upgrade/v2.ts";
 
-const requestJson = Effect.fn(function* (url: string, action = "snapshot") {
-  // A fresh connection avoids polling an edge still pinned to the old deployment.
-  const client = HttpClient.mapRequest(
-    yield* HttpClient.HttpClient,
-    HttpClientRequest.setHeaders({
-      connection: "close",
-      "cache-control": "no-cache",
-    }),
+class WorkerVersionPending extends Error {}
+
+const requestJson = Effect.fn(
+  function* (
+    url: string,
+    action = "snapshot",
+    workerVersion: Snapshot["version"] = "v2",
+  ) {
+    const fresh = yield* Effect.sync(() => {
+      const fresh = new URL(`${url}/${action}`);
+      fresh.searchParams.set("cb", String(Date.now()));
+      return fresh;
+    });
+    const response = yield* requestWorker(
+      (fresh.pathname === "/snapshot"
+        ? HttpClientRequest.get(fresh.href)
+        : HttpClientRequest.post(fresh.href)
+      ).pipe(
+        // A fresh connection avoids polling an edge still pinned to the old deployment.
+        HttpClientRequest.setHeaders({
+          connection: "close",
+          "cache-control": "no-cache",
+          "x-alarm-worker-version": workerVersion,
+        }),
+      ),
+    ).pipe(Effect.timeout("15 seconds"));
+    if (response.status !== 200) {
+      const body = yield* response.text;
+      const actualVersion = response.headers["x-alarm-worker-version"];
+      if (
+        response.status === 409 &&
+        actualVersion === (workerVersion === "v1" ? "v2" : "v1") &&
+        body === "Alarm worker version mismatch"
+      ) {
+        return yield* Effect.fail(
+          new WorkerVersionPending(
+            `Waiting for Worker ${workerVersion}; got ${actualVersion}`,
+          ),
+        );
+      }
+      return yield* Effect.fail(
+        new Error(
+          `Upgrade fixture ${action}: HTTP ${response.status}\n${body}`,
+        ),
+      );
+    }
+    const body: unknown = yield* response.json;
+    return body;
+  },
+  Effect.retry({
+    while: (error) => error instanceof WorkerVersionPending,
+    schedule: Schedule.spaced("1 second"),
+    times: 10,
+  }),
+);
+
+const request = (
+  url: string,
+  action = "snapshot",
+  workerVersion: Snapshot["version"] = "v2",
+) =>
+  requestJson(url, action, workerVersion).pipe(
+    Effect.map((body) => body as Snapshot),
   );
-  const fresh = yield* Effect.sync(() => {
-    const fresh = new URL(`${url}/${action}`);
-    fresh.searchParams.set("cb", String(Date.now()));
-    return fresh.href;
-  });
-  const response = yield* (
-    action === "snapshot" ? client.get(fresh) : client.post(fresh)
-  ).pipe(Effect.timeout("5 seconds"));
-  if (response.status !== 200) {
-    return yield* Effect.fail(
-      new Error(`Upgrade fixture ${action}: HTTP ${response.status}`),
-    );
-  }
-  const body: unknown = yield* response.json;
-  return body;
-});
 
-const request = (url: string, action = "snapshot") =>
-  requestJson(url, action).pipe(Effect.map((body) => body as Snapshot));
-
-const ready = (url: string, version: Snapshot["version"]) =>
-  request(url).pipe(
+const ready = (url: string, version: Snapshot["version"], name?: string) =>
+  request(
+    url,
+    name === undefined
+      ? "snapshot"
+      : `snapshot?name=${encodeURIComponent(name)}`,
+    version,
+  ).pipe(
     Effect.flatMap((snapshot) =>
       snapshot.version === version
         ? Effect.succeed(snapshot)
@@ -52,8 +94,12 @@ const ready = (url: string, version: Snapshot["version"]) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
   );
 
-const delivered = (url: string, until: (snapshot: Snapshot) => boolean) =>
-  request(url).pipe(
+const delivered = (
+  url: string,
+  until: (snapshot: Snapshot) => boolean,
+  workerVersion: Snapshot["version"] = "v2",
+) =>
+  request(url, "snapshot", workerVersion).pipe(
     Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 10, until }),
     Effect.tap((snapshot) =>
       Effect.sync(() => expect(until(snapshot)).toBe(true)),
@@ -83,16 +129,28 @@ for (const dev of [true, false]) {
               new URL("./fixtures/alarm-upgrade/v1.ts", import.meta.url)
                 .pathname,
           );
-          const original = yield* stack.deploy(
+          const originalDeployment = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Worker("AlarmUpgradeWorker", {
+              const host = yield* Cloudflare.Worker("AlarmUpgradeWorker", {
                 main,
                 env: {
                   UpgradeObject: Cloudflare.DurableObject("UpgradeObject"),
                 },
               });
+              const reader = dev
+                ? undefined
+                : yield* Cloudflare.Worker("AlarmUpgradeV1Reader", {
+                    main,
+                    env: {
+                      UpgradeObject: Cloudflare.DurableObject("UpgradeObject", {
+                        scriptName: host.workerName,
+                      }),
+                    },
+                  });
+              return { host, reader };
             }),
           );
+          const original = originalDeployment.host;
           expect(original.url).toBeDefined();
           expect(original.durableObjectNamespaces.UpgradeObject).toBeDefined();
           if (dev) {
@@ -102,14 +160,18 @@ for (const dev of [true, false]) {
           }
           const initial = yield* ready(original.url!, "v1");
           expect(initial.marker).toBeNull();
-          yield* request(original.url!, "seed");
+          yield* request(original.url!, "seed", "v1");
+          yield* ready(original.url!, "v1", "future-version");
           const futureOriginal = yield* request(
             original.url!,
             "seed?name=future-version",
+            "v1",
           );
+          yield* ready(original.url!, "v1", "atomic-migration");
           const rollbackOriginal = yield* request(
             original.url!,
             "seed?name=atomic-migration",
+            "v1",
           );
           for (const seeded of [futureOriginal, rollbackOriginal]) {
             expect(seeded.tables).toEqual(["alchemy_scheduled_events"]);
@@ -124,6 +186,7 @@ for (const dev of [true, false]) {
               snapshot.legacyRows.length === 3 &&
               snapshot.alarm ===
                 Math.min(...snapshot.legacyRows.map((row) => row.run_at)),
+            "v1",
           );
           expect(before.version).toBe("v1");
           expect(before.marker).toBe("written-by-v1");
@@ -154,11 +217,23 @@ for (const dev of [true, false]) {
           ]);
 
           // This is an update of the existing resource, not a fresh namespace or a schema-only fixture.
-          const upgraded = yield* stack.deploy(
+          const upgradedDeployment = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* AlarmUpgradeWorker;
+              const host = yield* AlarmUpgradeWorker;
+              const reader = dev
+                ? undefined
+                : yield* Cloudflare.Worker("AlarmUpgradeV1Reader", {
+                    main,
+                    env: {
+                      UpgradeObject: Cloudflare.DurableObject("UpgradeObject", {
+                        scriptName: host.workerName,
+                      }),
+                    },
+                  });
+              return { host, reader };
             }),
           );
+          const upgraded = upgradedDeployment.host;
           expect(upgraded.workerName).toBe(original.workerName);
           expect(upgraded.workerId).toBe(original.workerId);
           expect(upgraded.durableObjectNamespaces.UpgradeObject).toBe(
@@ -179,6 +254,26 @@ for (const dev of [true, false]) {
           expect(after.schemaVersion).toBe(1);
           expect(after.schemaRows).toEqual([{ id: 1, version: 1 }]);
           expect(after.callbacks).toEqual([]);
+          if (upgradedDeployment.reader) {
+            // Local restarts are atomic; live edges can still run V1 against the V2 object.
+            const viaV1 = yield* request(
+              upgradedDeployment.reader.url!,
+              "snapshot",
+              "v1",
+            );
+            expect(viaV1).toEqual(after);
+            const rejected = yield* requestWorker(
+              HttpClientRequest.post(
+                `${upgradedDeployment.reader.url!}/callback-first`,
+              ).pipe(
+                HttpClientRequest.setHeader("x-alarm-worker-version", "v2"),
+              ),
+            );
+            expect(rejected.status).toBe(409);
+            expect(rejected.headers["x-alarm-worker-version"]).toBe("v1");
+            expect(yield* rejected.text).toBe("Alarm worker version mismatch");
+            expect(yield* request(upgraded.url!)).toEqual(after);
+          }
 
           const callbackFirst = yield* request(upgraded.url!, "callback-first");
           expect(callbackFirst.callbacks).toHaveLength(1);

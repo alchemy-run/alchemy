@@ -4,7 +4,8 @@ import * as Test from "@/Test/Alchemy.ts";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import LifecycleWorker, {
   type Scenario,
 } from "./fixtures/workflow-lifecycle/worker.ts";
@@ -21,7 +22,7 @@ const Stack = Alchemy.Stack(
 interface Status {
   status: string;
   output?: string[];
-  error?: unknown;
+  error?: { name?: string; message?: string } | null;
   rollback?: { outcome: string } | null;
   entries: string[];
 }
@@ -30,8 +31,9 @@ const request = Effect.fn(function* (
   url: string,
   method: "GET" | "POST" = "GET",
 ) {
-  const client = yield* HttpClient.HttpClient;
-  const response = yield* method === "GET" ? client.get(url) : client.post(url);
+  const response = yield* requestWorker(
+    method === "GET" ? HttpClientRequest.get(url) : HttpClientRequest.post(url),
+  );
   const body = yield* response.text;
   if (response.status !== 200) {
     return yield* Effect.fail(
@@ -39,6 +41,87 @@ const request = Effect.fn(function* (
     );
   }
   return body;
+});
+
+const waitForReady = Effect.fn(function* (url: string) {
+  const ready = yield* Effect.gen(function* () {
+    const response = yield* requestWorker(HttpClientRequest.get(url), {
+      retryDelay: "3 seconds",
+    });
+    const body = yield* response.text;
+    if (
+      response.status === 503 &&
+      response.headers["x-workflow-lifecycle-readiness"] ===
+        "journal-rpc-not-ready" &&
+      body === "LifecycleJournal.entries not ready"
+    ) {
+      yield* Effect.logInfo(
+        `Workflow readiness: native journal RPC not ready at ${url}`,
+      );
+      return false;
+    }
+    if (response.status !== 200) {
+      return yield* Effect.fail(
+        new Error(`GET ${url}: ${response.status}: ${body}`),
+      );
+    }
+    if (body === "Alchemy worker is being deployed...") return false;
+    expect(body).toBe("ready");
+    return true;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (ready) => ready,
+    }),
+    Effect.timeout("45 seconds"),
+  );
+  expect(ready, "Journal entries method did not propagate").toBe(true);
+});
+
+const probeWorkflow = Effect.fn(function* (url: string) {
+  const ready = yield* Effect.gen(function* () {
+    const started = yield* request(`${url}/probe`, "POST");
+    const { id } = yield* Effect.try(
+      () => JSON.parse(started) as { id: string },
+    );
+    const status = yield* request(`${url}/probe/${id}`).pipe(
+      Effect.flatMap((body) =>
+        Effect.try(() => JSON.parse(body) as Omit<Status, "entries">),
+      ),
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        times: 10,
+        until: (status) =>
+          status.status === "complete" || status.status === "errored",
+      }),
+    );
+    yield* Effect.logInfo(
+      `Workflow readiness probe ${id}: ${JSON.stringify(status)}`,
+    );
+    // Only a probe may be recreated when Workflow execution still sees the stub.
+    if (
+      status.status === "errored" &&
+      status.error?.name === "TypeError" &&
+      status.error.message ===
+        "The entrypoint name LifecycleWorkflow was not found in this worker. Ensure the worker exports an entrypoint with that name."
+    ) {
+      return false;
+    }
+    expect(status, JSON.stringify(status)).toMatchObject({
+      status: "complete",
+      output: ["workflow-ready"],
+    });
+    return true;
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+      until: (ready) => ready,
+    }),
+    Effect.timeout("45 seconds"),
+  );
+  expect(ready, "Workflow entrypoint did not propagate").toBe(true);
 });
 
 const cases: Array<{ scenario: Scenario; entries: string[] }> = [
@@ -87,9 +170,8 @@ describe.concurrent.each([
     Effect.gen(function* () {
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
-      yield* request(`${output.url}/ready`).pipe(
-        Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-      );
+      yield* waitForReady(`${output.url}/ready`);
+      yield* probeWorkflow(output.url);
       return output;
     }),
     { timeout: 120_000 },
@@ -97,6 +179,27 @@ describe.concurrent.each([
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
     timeout: 30_000,
   });
+
+  for (const [kind, message] of [
+    ["missing", 'The RPC receiver does not implement the method "entries".'],
+    ["internal", "internal error; reference = application"],
+  ]) {
+    test(
+      `does not mask an application ${kind} failure as readiness`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const failure = yield* waitForReady(
+          `${url}/ready?application-error=${kind}`,
+        ).pipe(Effect.flip);
+        expect(failure.message).toContain(": 500:");
+        expect(failure.message).toContain(message);
+        expect(failure.message).not.toContain(
+          "LifecycleJournal.entries not ready",
+        );
+      }),
+      { timeout: 60_000 },
+    );
+  }
 
   for (const { scenario, entries } of cases) {
     test(
@@ -107,6 +210,20 @@ describe.concurrent.each([
         const { id } = yield* Effect.try(
           () => JSON.parse(started) as { id: string },
         );
+        if (scenario === "rollback") {
+          // Native status() can reject during compensation; observe cleanup first.
+          const journal = yield* request(`${url}/journal/${id}`).pipe(
+            Effect.flatMap((body) =>
+              Effect.try(() => JSON.parse(body) as string[]),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+              until: (entries) => entries.includes("rollback-close"),
+            }),
+          );
+          expect(journal).toEqual(entries);
+        }
         const status = yield* request(`${url}/status/${id}`).pipe(
           Effect.flatMap((body) =>
             Effect.try(() => JSON.parse(body) as Status),
@@ -115,17 +232,23 @@ describe.concurrent.each([
             schedule: Schedule.spaced("2 seconds"),
             times: 10,
             until: (status) =>
-              (status.status === "complete" || status.status === "errored") &&
-              (scenario !== "rollback" ||
-                (status.entries.includes("rollback-body") &&
-                  status.entries.includes("rollback-close"))),
+              status.status === "complete" || status.status === "errored",
           }),
         );
         expect(status, JSON.stringify(status)).toMatchObject({
           status: scenario === "rollback" ? "errored" : "complete",
           entries,
         });
-        if (scenario !== "rollback") expect(status.output).toEqual(entries);
+        if (scenario === "rollback") {
+          if (!dev) {
+            expect(status.rollback).toMatchObject({ outcome: "complete" });
+          }
+          expect(status.error).toMatchObject({
+            message: "trigger compensation",
+          });
+        } else {
+          expect(status.output).toEqual(entries);
+        }
       }),
       { timeout: 60_000 },
     );

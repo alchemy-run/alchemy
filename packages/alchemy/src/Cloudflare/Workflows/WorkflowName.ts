@@ -4,6 +4,21 @@ import * as Output from "../../Output.ts";
 import { sha256 } from "../../Util/sha256.ts";
 
 /**
+ * Lift a script-name input (a literal, an Output, or a Config/Effect-valued
+ * name) into an Output so it can feed plan-time derivations.
+ *
+ * @internal
+ */
+export const asScriptNameOutput = (
+  scriptName: Input<string>,
+): Output.Output<string> =>
+  Output.asOutput(
+    (Effect.isEffect(scriptName)
+      ? scriptName.pipe(Effect.orDie)
+      : scriptName) as string | Output.Output<string> | Effect.Effect<string>,
+  );
+
+/**
  * Derive an account-global Workflow name from a resolved host Worker name and
  * exported class.
  *
@@ -33,18 +48,9 @@ export const generateWorkflowName = Effect.fn(function* (
 export const makeWorkflowName = (
   scriptName: Input<string>,
   className: string,
-): Output.Output<string> => {
-  const resolvedScriptName = Effect.isEffect(scriptName)
-    ? scriptName.pipe(Effect.orDie)
-    : scriptName;
-  return Output.asOutput(
-    resolvedScriptName as
-      | string
-      | Output.Output<string>
-      | Effect.Effect<string>,
-  ).pipe(
+): Output.Output<string> =>
+  asScriptNameOutput(scriptName).pipe(
     Output.mapEffect((scriptName) =>
       generateWorkflowName(scriptName, className),
     ),
   );
-};

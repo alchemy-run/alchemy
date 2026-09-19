@@ -9,6 +9,7 @@ import { OwnedBySomeoneElse, Unowned } from "../../AdoptPolicy.ts";
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import type * as Output from "../../Output.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -380,6 +381,34 @@ export interface WorkflowLike<Params = unknown> {
 }
 
 /**
+ * A Workflow bound on an external/async Worker's `env`, exposed on
+ * `worker.env.<name>` at declaration time, not on persisted Worker references
+ * or Effect-native Workers. Carries the binding's identity as `Output`s
+ * of the current deploy pass, so a sibling resource in the same stack — a
+ * Queue subscription to the Workflow's lifecycle events, for instance — can
+ * consume the Workflow's physical name on its very first deployment without
+ * reading persisted state or re-deriving the name.
+ *
+ * For a locally-hosted Workflow, `workflowName` and `scriptName` resolve from
+ * the {@link WorkflowResource} the binding registers, so a consumer deploys
+ * after `putWorkflow` has run. A cross-script reference (`scriptName` set)
+ * registers no resource; both outputs derive from the declared host script.
+ */
+export interface WorkflowBinding<Params = unknown> {
+  kind: TypeId;
+  /** Logical name of the Workflow, as passed to `Workflow(name, …)`. */
+  name: string;
+  /** Name of the exported `WorkflowEntrypoint` class. */
+  className: string;
+  /** Account-global physical Workflow name, resolved in the current deploy. */
+  workflowName: Output.Output<string>;
+  /** Script name of the Worker hosting the Workflow class. */
+  scriptName: Output.Output<string>;
+  /** @internal phantom */
+  Params?: Params;
+}
+
+/**
  * Type guard for the reference (async) form of a Workflow.
  */
 export const isWorkflowLike = (value: unknown): value is WorkflowLike =>
@@ -496,6 +525,8 @@ export interface WorkflowClass extends Effect.Effect<
   never,
   WorkflowHandle
 > {
+  /** Reference a deployed Workflow by logical ID, optionally in another stack or stage. */
+  ref: typeof WorkflowResource.ref;
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
@@ -839,6 +870,51 @@ export class WorkflowScope extends Context.Service<
  * };
  * ```
  *
+ * ### Consuming the Workflow's Physical Name
+ * An external/async Worker declaration exposes each Workflow binding on `worker.env` with
+ * the Workflow's account-global `workflowName` as an `Output` of the
+ * current deploy. Pass the binding directly as a Queue subscription's
+ * `source`; it deploys after the Workflow is registered, including on the
+ * first deployment. Explicit source descriptors remain supported for
+ * Workflows referenced by physical name.
+ *
+ * **Example:** Subscribing a Queue to the Workflow's events
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     FILE_URL_INGESTION: Cloudflare.Workflow("FileUrlIngestion", {
+ *       className: "FileUrlIngestionWorkflow",
+ *     }),
+ *   },
+ * });
+ *
+ * yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: worker.env.FILE_URL_INGESTION,
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * ### Referencing a Deployed Workflow
+ * `Workflow.ref` reads the same persisted resource as `WorkflowResource.ref`.
+ * Use its logical ID (including any namespace), not its physical name or
+ * Worker env key. Omitting `stack` and `stage` uses the current stack/stage.
+ * Deploy the host first; a reference does not register or own the Workflow
+ * and returns resource attributes, not a runtime `WorkflowHandle`.
+ *
+ * **Example:** Subscribe to a Workflow in another stack
+ * ```typescript
+ * yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: yield* Cloudflare.Workflow.ref("Ingestion", {
+ *     stack: "workflow-host",
+ *     stage: "production",
+ *   }),
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
  * ### Cross-Script Binding in an Async Worker
  * Async Workers can also bind to a Workflow hosted by another Worker
  * script. The host Worker declares and exports the `WorkflowEntrypoint`
@@ -1045,6 +1121,8 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
     }),
   );
 }) as any);
+
+Workflow.ref = (id, options) => WorkflowResource.ref(id, options);
 
 // ---------------------------------------------------------------------------
 // WorkflowResource -- manages the Cloudflare Workflows API lifecycle
