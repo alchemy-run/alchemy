@@ -887,7 +887,7 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         prepareReset: Effect.fn(function* (value: string) {
           yield* onArchive.schedule("reset", {
-            after: "4 seconds",
+            after: "5 minutes",
             payload: { value },
           });
           return yield* snapshot();
@@ -897,10 +897,24 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             return yield* Effect.die("optional callback not registered");
           }
           yield* onOptional.schedule("optional", {
-            after: "4 seconds",
+            after: "5 minutes",
             payload: { value: "retained" },
           });
           yield* storage.put("optionalEnabled", false);
+          return yield* snapshot();
+        }),
+        releasePending: Effect.fn(function* () {
+          // Preserve persisted jobs until reconstruction, then advance only their due times.
+          const at = yield* Effect.sync(() => Date.now() + 1_000);
+          yield* storage.transaction(
+            Effect.gen(function* () {
+              yield* storage.sql.exec(
+                "UPDATE alchemy_alarm_callbacks SET run_at = ?",
+                at,
+              );
+              yield* storage.setAlarm(at);
+            }),
+          );
           return yield* snapshot();
         }),
         enableOptional: Effect.fn(function* () {
