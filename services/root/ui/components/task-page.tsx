@@ -470,10 +470,20 @@ export const TaskPage = ({ queue, id }: { queue: string; id: string }) => {
             )}
             {task.state === "working" && (
               <EventRow icon={Loader2} when={task.updated}>
-                <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={desk === undefined}
+                  onClick={() =>
+                    desk !== undefined &&
+                    openPane({ kind: "agent", id: deskSessionId(desk) })
+                  }
+                  title="watch the desk session working this task"
+                  className="group/working flex cursor-pointer items-center gap-1.5 disabled:cursor-default"
+                >
                   {b(task.desk ?? "the desk")} is working
                   <Loader2 className="size-3 animate-spin text-primary/70" />
-                </span>
+                  <ChevronRight className="size-3 shrink-0 opacity-0 transition-opacity group-hover/working:opacity-100" />
+                </button>
               </EventRow>
             )}
 
