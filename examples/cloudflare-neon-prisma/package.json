@@ -10,6 +10,8 @@
   },
   "type": "module",
   "scripts": {
+    "generate": "alchemy prisma generate",
+    "generate:watch": "alchemy prisma generate --watch",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
     "destroy": "alchemy destroy",

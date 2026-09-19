@@ -33,18 +33,26 @@ export type {
 export * from "./Errors.ts";
 export type { EffectCollection, EffectOrm, WhereFilter } from "./OrmClient.ts";
 
-/** A native TypeScript Prisma contract. */
+/** A Prisma Postgres contract, authored directly or described by emitted types. */
 export type AnyPostgresContract = Contract<SqlStorage>;
 
 /** A plan produced by the `sql` builder lane (`db.sql...build()`) or `raw`. */
 export type Plan<Row> = SqlQueryPlan<Row> | SqlExecutionPlan<Row>;
 
-export interface PostgresConfig<
-  C extends AnyPostgresContract,
-> extends PostgresOptionsBase {
-  /** The TypeScript contract returned by Prisma's `defineContract`. */
-  readonly contract: C;
-}
+export type PostgresConfig<C extends AnyPostgresContract> =
+  PostgresOptionsBase &
+    (
+      | {
+          /** The TypeScript contract returned by Prisma's `defineContract`. */
+          readonly contract: C;
+          readonly contractJson?: never;
+        }
+      | {
+          /** Canonical JSON paired with Prisma's emitted Contract declaration. */
+          readonly contractJson: unknown;
+          readonly contract?: never;
+        }
+    );
 
 /**
  * The transaction scope handed to {@link PostgresDatabase.transaction}'s
@@ -133,7 +141,7 @@ export interface PostgresDatabase<
  * Model types infer directly from the native TypeScript contract, together
  * with the connection source's error and requirement channels. No generated
  * application imports are required. For Prisma rc.11, author contracts with
- * `defineContract` from `alchemy/Prisma/ORM/ContractBuilder` to retain metadata
+ * `defineContract` from `alchemy/Prisma/ORM` to retain metadata
  * lost by the upstream declarations. It uses Prisma's native runtime builders.
  *
  *
@@ -165,6 +173,19 @@ export interface PostgresDatabase<
  *   );
  * });
  * ```
+ *
+ * ### PSL Contracts
+ * **Example:** Use a generated contract-bound factory
+ * ```typescript
+ * import { makeDatabase } from "./prisma/generated/client.ts";
+ * const db = yield* makeDatabase(connection.connectionString);
+ * const users = yield* db.orm.public.User.select("id", "email").all();
+ * ```
+ *
+ * Run `alchemy prisma generate` with `withEffect` registered in the ORM
+ * configuration. The factory delegates to this runtime with Prisma's emitted
+ * `Contract` type and `contractJson`; query behavior and cleanup are identical.
+ * Generated `schemas.ts` can be imported independently of this client.
  *
  * ### Prepared Queries
  * **Example:** Reuse a query with typed parameters
@@ -207,7 +228,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
   config: PostgresConfig<C>,
 ): Effect.Effect<PostgresDatabase<C, E, R>> =>
   Effect.gen(function* () {
-    const { contract, ...options } = config;
+    const { contract, contractJson, ...options } = config;
     const [{ default: postgres }, { default: postgresStatic }, { orm }] =
       yield* Effect.promise(() =>
         Promise.all([
@@ -220,7 +241,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
     // Pure static context: the typed sql/raw builders and the codec
     // machinery, with no driver and no connection behind them.
     const statics = postgresStatic<C>({
-      contractJson: contract,
+      contractJson: contract ?? contractJson,
       ...(options.extensions === undefined
         ? {}
         : { extensions: options.extensions }),
@@ -229,11 +250,10 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
     const client = yield* makeExecutionMemo(
       Effect.gen(function* () {
         const url = Redacted.value(yield* connectionString);
-        const instance = postgres({
-          contract,
-          url,
-          ...options,
-        });
+        const instance =
+          contract === undefined
+            ? postgres<C>({ contractJson, url, ...options })
+            : postgres({ contract, url, ...options });
         yield* Effect.addFinalizer(() =>
           Effect.tryPromise(() => instance.close()).pipe(Effect.ignore),
         );

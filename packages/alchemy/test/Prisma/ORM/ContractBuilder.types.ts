@@ -4,7 +4,7 @@ import {
   field,
   member,
   model,
-} from "@/Prisma/ORM/ContractBuilder.ts";
+} from "@/Prisma/ORM/index.ts";
 import type { PostgresDatabase } from "@/Prisma/ORM/Postgres.ts";
 import type { ExtractTypeMapsFromContract } from "@prisma/orm-postgres/family-contract/types";
 import type { PostgresAggregateTypes } from "@/Prisma/ORM/PostgresAggregateTypes.ts";

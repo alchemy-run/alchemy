@@ -1,4 +1,4 @@
-import { defineContract } from "@/Prisma/ORM/ContractBuilder.ts";
+import { defineContract } from "@/Prisma/ORM/index.ts";
 
 export const contract = defineContract(
   { extensions: {}, foreignKeyDefaults: { constraint: true, index: true } },

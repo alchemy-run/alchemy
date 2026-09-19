@@ -10,12 +10,81 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { contract } from "./fixtures/client/contract.ts";
+import { makeDatabase } from "./fixtures/psl/generated/client.ts";
+import { schemas } from "./fixtures/psl/generated/schemas.ts";
+import * as Schema from "effect/Schema";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Prisma.providers(), Neon.providers()),
 });
 
 const HOOK_TIMEOUT = 120_000;
+
+test.provider(
+  "PSL-generated client: CRUD, relations, schemas, and rollback",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const path = yield* Path.Path;
+      const config = yield* path.fromFileUrl(
+        new URL("./fixtures/psl/prisma.config.ts", import.meta.url),
+      );
+      const { branch } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const contract = yield* Prisma.Contract("psl-contract", { config });
+          const project = yield* Neon.Project("PrismaPslProject");
+          const branch = yield* Neon.Branch("PrismaPslBranch", { project });
+          yield* Prisma.Migrate("psl-migrate", {
+            contract,
+            url: branch.connectionUri,
+          });
+          return { branch };
+        }),
+      );
+      const db = yield* makeDatabase(
+        Effect.succeed(Redacted.make(branch.connectionUri)),
+      );
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const user = yield* db.orm.public.User.create({
+            email: "psl@example.com",
+            name: null,
+          });
+          const validated = yield* Schema.decodeUnknownEffect(
+            schemas.public.User,
+          )(user);
+          expect(validated.id).toBe(user.id);
+          yield* db.orm.public.Post.create({
+            title: "PSL post",
+            authorId: user.id,
+          });
+          const loaded = yield* db.orm.public.User.where({ id: user.id })
+            .include("posts")
+            .first();
+          expect(loaded?.posts.map((post) => post.title)).toEqual(["PSL post"]);
+          const rollback = yield* db
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                yield* tx.orm.public.User.where({ id: user.id }).update({
+                  name: "rolled back",
+                });
+                return yield* tx.rollback();
+              }),
+            )
+            .pipe(Effect.result);
+          expect(Result.isFailure(rollback)).toBe(true);
+          expect(
+            (yield* db.orm.public.User.where({ id: user.id }).first())?.name,
+          ).toBeNull();
+          yield* db.orm.public.Post.where({ authorId: user.id }).delete();
+          yield* db.orm.public.User.where({ id: user.id }).delete();
+          expect(yield* db.orm.public.User.all()).toEqual([]);
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  { timeout: HOOK_TIMEOUT },
+);
 
 const fixtureConfig = Effect.gen(function* () {
   const path = yield* Path.Path;

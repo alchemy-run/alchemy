@@ -1,5 +1,5 @@
 import "./validation.ts";
-import { defineContract } from "alchemy/Prisma/ORM/ContractBuilder";
+import { defineContract } from "alchemy/Prisma/ORM";
 
 export const contract = defineContract(
   { extensions: {} },

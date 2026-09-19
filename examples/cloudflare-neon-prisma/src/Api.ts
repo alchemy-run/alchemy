@@ -1,10 +1,14 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { makeSchemas } from "alchemy/Prisma/ORM/Schema";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Hyperdrive } from "./Db.ts";
 import { contract } from "./prisma/contract.ts";
+
+const schemas = makeSchemas(contract);
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -33,10 +37,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
             return yield* HttpServerResponse.json({ user });
           }
           case "POST": {
-            const user = yield* db.orm.public.User.create({
+            const values = yield* Effect.sync(() => ({
               name: crypto.randomUUID(),
               email: crypto.randomUUID(),
-            });
+            }));
+            const row = yield* db.orm.public.User.create(values);
+            const user = yield* Schema.decodeUnknownEffect(schemas.public.User)(
+              row,
+            );
             return yield* HttpServerResponse.json({ user });
           }
           case "DELETE": {
@@ -52,19 +60,12 @@ export default class Api extends Cloudflare.Worker<Api>()(
           }
         }
       }).pipe(
-        Effect.catch((cause: any) => {
-          const peel = (e: any): any => (e?.cause ? peel(e.cause) : e);
-          const root = peel(cause);
-          return HttpServerResponse.json(
-            {
-              ok: false,
-              error: String(cause),
-              rootError: root?.message ?? String(root),
-              rootCode: root?.code,
-            },
+        Effect.catch((cause) =>
+          HttpServerResponse.json(
+            { ok: false, error: cause._tag },
             { status: 500 },
-          );
-        }),
+          ),
+        ),
       ),
     };
   }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),

@@ -281,6 +281,12 @@
       "worker": "./src/Prisma/index.ts",
       "import": "./lib/Prisma/index.js"
     },
+    "./Prisma/ORM": {
+      "types": "./lib/Prisma/ORM/index.d.ts",
+      "bun": "./src/Prisma/ORM/index.ts",
+      "worker": "./src/Prisma/ORM/index.ts",
+      "import": "./lib/Prisma/ORM/index.js"
+    },
     "./Prisma/ComputeApp": null,
     "./Prisma/ComputeService": null,
     "./Prisma/ComputeVersion": null,

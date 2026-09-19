@@ -1,4 +1,4 @@
-import { defineContract, model } from "@/Prisma/ORM/ContractBuilder.ts";
+import { defineContract, model } from "@/Prisma/ORM/index.ts";
 import {
   defineContract as nativeDefineContract,
   model as nativeModel,
