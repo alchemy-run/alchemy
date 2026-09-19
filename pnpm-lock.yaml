@@ -905,6 +905,9 @@ importers:
 
   examples/aws-website-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -1429,6 +1432,9 @@ importers:
 
   examples/cloudflare-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -1460,6 +1466,9 @@ importers:
 
   examples/cloudflare-foldkit-ssr:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -1953,6 +1962,9 @@ importers:
 
   examples/cloudflare-website-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -2556,6 +2568,9 @@ importers:
 
   examples/fly-website-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -3092,6 +3107,9 @@ importers:
 
   examples/hetzner-website-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -4400,6 +4418,9 @@ importers:
 
   examples/railway-website-foldkit:
     dependencies:
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       effect:
         specifier: 4.0.0-rc.115
         version: 4.0.0-rc.115
@@ -5044,6 +5065,9 @@ importers:
       '@effect/language-service':
         specifier: 'catalog:'
         version: 0.87.2
+      '@effect/platform-browser':
+        specifier: 4.0.0-rc.115
+        version: 4.0.0-rc.115(effect@4.0.0-rc.115)
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)

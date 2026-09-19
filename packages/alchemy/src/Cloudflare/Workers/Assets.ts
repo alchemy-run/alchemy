@@ -103,6 +103,12 @@ export interface AssetReadResult {
 export interface AssetsProps extends AssetsConfig {
   directory: string;
   /**
+   * Files to leave out of the upload, as patterns in the `.assetsignore`
+   * syntax relative to {@link directory}. Merged with the directory's own
+   * `.assetsignore`, and never sent to Cloudflare.
+   */
+  ignore?: ReadonlyArray<string>;
+  /**
    * The path this site is served from, when it is not the origin root —
    * e.g. `"/docs"` for a Worker on the route `example.com/docs*`. Matches
    * Vite's `base`, and `Website.Vite` fills it in from the resolved Vite
@@ -297,6 +303,7 @@ export const mergeAssetsConfigFiles = (
 export const readAssets = Effect.fn(function* ({
   directory,
   base,
+  ignore: ignorePatterns,
   ...config
 }: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
@@ -324,6 +331,7 @@ export const readAssets = Effect.fn(function* ({
       ?.split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith("#")) ?? []),
+    ...(ignorePatterns ?? []),
   ]);
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;

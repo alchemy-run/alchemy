@@ -84,6 +84,19 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
             if (!hasConfigureServerHook(plugin)) {
               return vite.createRunnableDevEnvironment(name, config);
             }
+            // With no Worker entry at all — no `main`, and nothing the app's
+            // config names for the entry environment — workerd serves assets
+            // alone and evaluates nothing, so there is no runtime for these
+            // environments to run modules in. Taking them over anyway would
+            // only strip the app's own server-side dev tooling of the runnable
+            // environment it expects (a framework's `vite dev` rendering, say).
+            if (
+              options.main === undefined &&
+              optionsApi !== undefined &&
+              Object.keys(optionsApi.input()).length === 0
+            ) {
+              return vite.createRunnableDevEnvironment(name, config);
+            }
             return new DistilledDevEnvironment(name, config);
           },
         },
