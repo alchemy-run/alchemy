@@ -1,5 +1,4 @@
 import type { ConfigError } from "effect/Config";
-import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type { Crypto } from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -29,7 +28,7 @@ import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import { StackContext } from "./StackContext.ts";
 import type { State } from "./State/State.ts";
-import { loadConfigProvider } from "./Util/ConfigProvider.ts";
+import { stackConfigLayer } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
@@ -92,9 +91,15 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
-export interface StackProps<Req> {
+export interface StackProps<Req, SecretsError = never> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /**
+   * ConfigProvider layers applied in order; later sources override earlier ones.
+   * Process environment takes priority. Defaults to DotEnv(); use [] to disable
+   * automatic dotenv loading. Options effects can read Stage.
+   */
+  secrets?: ReadonlyArray<Layer.Layer<never, SecretsError, StackServices>>;
 }
 
 export const Stack: Context.ServiceClass<
@@ -113,11 +118,11 @@ export const Stack: Context.ServiceClass<
     >,
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
   <Self>(): {
-    <A, Req>(
+    <A, Req, SecretsError = never>(
       stackName: string,
-      options: StackProps<NoInfer<Req>>,
+      options: StackProps<NoInfer<Req>, SecretsError>,
       eff: Effect.Effect<A, ConfigError, Req>,
-    ): Effect.Effect<Self, ConfigError> & {
+    ): Effect.Effect<Self, ConfigError | SecretsError> & {
       new (_: never): A extends object ? A : {};
       stage: {
         [stage: string]: Effect.Effect<Self>;
@@ -127,26 +132,30 @@ export const Stack: Context.ServiceClass<
   <Self, Shape>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
-      make: <A, Req>(
-        options: StackProps<NoInfer<Req>>,
+      make: <A, Req, SecretsError = never>(
+        options: StackProps<NoInfer<Req>, SecretsError>,
         effect: Effect.Effect<A, ConfigError, Req>,
-      ) => Effect.Effect<CompiledStack<A>, ConfigError>;
+      ) => Effect.Effect<CompiledStack<A>, ConfigError | SecretsError>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
     };
   };
-  <A, Req extends StackServices | ProviderServices = never>(
+  <
+    A,
+    Req extends StackServices | ProviderServices = never,
+    SecretsError = never,
+  >(
     stackName: string,
-    options: StackProps<NoInfer<Req>>,
+    options: StackProps<NoInfer<Req>, SecretsError>,
     eff: Effect.Effect<A, ConfigError, Req>,
-  ): Effect.Effect<CompiledStack<A>, ConfigError>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError | SecretsError>;
 } = Object.assign(
   taggedFunction(
     StackContext,
-    <A, Req>(
+    <A, Req, SecretsError = never>(
       stackName?: string,
-      options?: StackProps<NoInfer<Req>>,
+      options?: StackProps<NoInfer<Req>, SecretsError>,
       eff?: Effect.Effect<A, ConfigError, Req>,
     ) => {
       if (!stackName) {
@@ -159,8 +168,9 @@ export const Stack: Context.ServiceClass<
               stage: createStageProxy(stackName),
               state: options?.state,
               providers: options?.providers,
-              make: <Req = never>(
-                options: StackProps<NoInfer<Req>>,
+              secrets: options?.secrets,
+              make: <Req = never, SecretsError = never>(
+                options: StackProps<NoInfer<Req>, SecretsError>,
                 eff: Effect.Effect<A, ConfigError, Req>,
               ) =>
                 // @ts-expect-error
@@ -180,6 +190,7 @@ export const Stack: Context.ServiceClass<
             stage: createStageProxy(stackName),
             state: options?.state,
             providers: options?.providers,
+            secrets: options?.secrets,
           }),
       );
     },
@@ -220,16 +231,20 @@ export interface CompiledStack<
 
 export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 
-export interface MakeStackProps<ROut = never> {
+export interface MakeStackProps<ROut = never, SecretsError = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** Ordered ConfigProvider layers. Defaults to DotEnv(); [] disables dotenv. */
+  secrets?: ReadonlyArray<Layer.Layer<never, SecretsError, StackServices>>;
   /** @internal */
   stack?: StackSpec;
 }
 
 export const make =
-  <ROut = never>(options: MakeStackProps<ROut>) =>
+  <ROut = never, SecretsError = never>(
+    options: MakeStackProps<ROut, SecretsError>,
+  ) =>
   <A, Err = never, Req extends ROut | StackServices = never>(
     effect: Effect.Effect<A, Err, Req>,
   ) =>
@@ -262,6 +277,7 @@ export const make =
         }
         return options.providers.pipe(
           Layer.provideMerge(options.state),
+          Layer.provideMerge(stackConfigLayer(options.secrets)),
           Layer.provideMerge(
             Layer.effect(
               Stack,
@@ -348,15 +364,9 @@ export const evalStack = <A, B, StackErr, Err, Req>(
 ) => {
   const body = Effect.gen(function* () {
     const stack = yield* effect;
-    const configProvider = yield* loadConfigProvider(Option.none());
-
     return yield* fn(stack).pipe(
       provideFreshArtifactStore,
-      Effect.provide(
-        Layer.succeedContext(stack.services).pipe(
-          Layer.provideMerge(Layer.succeed(ConfigProvider, configProvider)),
-        ),
-      ),
+      Effect.provide(Layer.succeedContext(stack.services)),
     );
   }).pipe(
     Effect.provide(

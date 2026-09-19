@@ -42,6 +42,7 @@
     "./*": "./src/*.ts",
     "./AI": "./src/AI/index.ts",
     "./Auth": "./src/Auth/index.ts",
+    "./Secrets": "./src/Secrets/index.ts",
     "./Alchemist": "./src/Alchemist/index.ts",
     "./AWS": "./src/AWS/index.ts",
     "./AWS/*": "./src/AWS/*/index.ts",

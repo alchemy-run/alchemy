@@ -1,4 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as Config from "effect/Config";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { fileURLToPath } from "node:url";
@@ -6,11 +9,14 @@ import path from "pathe";
 import { describe, expect, test } from "alchemy-test";
 import {
   collectAuthProviders,
+  buildStackProviders,
   DEFAULT_ENTRYPOINT,
   importStack,
   open,
   routeCacheLayer,
+  StackModuleLoader,
 } from "@/Alchemist/Session.ts";
+import { Secrets, Stack, Stage, inMemoryState } from "@/index.ts";
 import * as CliKit from "@/Cli/CliKit/index.ts";
 import { evalStack } from "../../src/Stack";
 import * as TestCore from "../../src/Test/Core";
@@ -36,6 +42,80 @@ const runFixture = (path: string) =>
   );
 
 describe("importStack", () => {
+  test("loads stack secrets for sessions and provider-only builds with CLI overrides", () =>
+    TestCore.run(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const envFile = path.join(dir, "cli.env");
+        yield* fs.writeFileString(envFile, "ALCHEMY_DOTENV_SESSION_VALUE=cli");
+        for (const stage of ["prod", "placeholder"]) {
+          yield* fs.writeFileString(
+            path.join(dir, `${stage}.env`),
+            `ALCHEMY_DOTENV_SESSION_VALUE=file\nALCHEMY_DOTENV_SESSION_STAGE=${stage}\nALCHEMY_PROFILE=file-profile`,
+          );
+        }
+        const observations: string[][] = [];
+        const stack = Stack(
+          "session-secrets",
+          {
+            state: inMemoryState(),
+            providers: Layer.effectDiscard(
+              Effect.gen(function* () {
+                observations.push([
+                  yield* Config.String("ALCHEMY_DOTENV_SESSION_VALUE"),
+                  yield* Config.String("ALCHEMY_DOTENV_SESSION_STAGE"),
+                  yield* Config.String("ALCHEMY_PROFILE"),
+                ]);
+              }).pipe(Effect.orDie),
+            ),
+            secrets: [
+              Secrets.DotEnv(
+                Effect.gen(function* () {
+                  const stage = yield* Stage;
+                  return { path: path.join(dir, `${stage}.env`) };
+                }),
+              ),
+            ],
+          },
+          Config.String("ALCHEMY_DOTENV_SESSION_STAGE"),
+        );
+        yield* Effect.gen(function* () {
+          const session = yield* open({
+            entrypoint: fixtureAbsolutePath,
+            stage: "prod",
+            envFile,
+            profile: "cli-profile",
+          });
+          expect(session.stack.output).toBe("prod");
+          expect(
+            yield* Config.String("ALCHEMY_DOTENV_SESSION_VALUE").pipe(
+              Effect.provide(session.context),
+            ),
+          ).toBe("cli");
+          const providers = yield* buildStackProviders({
+            main: fixtureAbsolutePath,
+            envFile: Option.some(envFile),
+            profile: "cli-profile",
+          });
+          expect(
+            yield* Config.String("ALCHEMY_DOTENV_SESSION_STAGE").pipe(
+              Effect.provide(providers.context),
+            ),
+          ).toBe("placeholder");
+          expect(observations).toEqual([
+            ["cli", "prod", "cli-profile"],
+            ["cli", "placeholder", "cli-profile"],
+          ]);
+        }).pipe(
+          Effect.provideService(StackModuleLoader, {
+            import: async () => ({ default: stack }),
+          }),
+        );
+      }),
+      { providers: TestLayers() },
+    ));
+
   test("loads stack entrypoint via relative path", () =>
     expect(runFixture(fixtureRelativePath)).resolves.toBe(
       "import-stack-fixture",

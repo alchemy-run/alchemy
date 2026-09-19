@@ -8,13 +8,13 @@ import type { CompiledStack, StackEffect } from "./Stack.ts";
 import { evalStack } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
 
-export const destroy = ({
+export const destroy = <E = ConfigError>({
   stack,
   stage,
   dev,
   scope,
 }: {
-  stack: StackEffect<CompiledStack, ConfigError, Stage | AlchemyContext>;
+  stack: StackEffect<CompiledStack, E, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `destroy`. */
