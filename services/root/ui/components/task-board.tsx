@@ -22,6 +22,7 @@ import {
   KNOWN_TAGS,
   parseOrigin,
   routeTask,
+  tagColor,
   TRANSITIONS,
   type QueueSummary,
   type TaskRow,
@@ -137,9 +138,14 @@ export const OriginChip = ({ origin }: { origin: string }) => {
 };
 
 /** A task's small AREA tag chip — the board card's and the task
- *  page's shared token. */
+ *  page's shared token, each tag in its own hue (lib/tasks.ts). */
 export const TagChip = ({ tag }: { tag: string }) => (
-  <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] text-primary/90">
+  <span
+    className={cn(
+      "shrink-0 rounded-full px-1.5 py-px font-mono text-[10px]",
+      tagColor(tag),
+    )}
+  >
     {tag}
   </span>
 );
@@ -392,9 +398,10 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
               }
               className={cn(
                 "cursor-pointer rounded-md px-2 py-0.5 font-mono text-xs",
+                tagColor(candidate),
                 candidate === tag
-                  ? "bg-accent font-semibold"
-                  : "text-muted-foreground hover:bg-accent/60",
+                  ? "font-semibold ring-1 ring-current"
+                  : "opacity-70 hover:opacity-100",
               )}
             >
               {candidate}

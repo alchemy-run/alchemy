@@ -181,12 +181,21 @@ const TaskEvent = ({ event }: { event: TaskEventRow }) => {
       const data = dataOf(event);
       const tags =
         typeof data === "object" && Array.isArray(data.tags)
-          ? data.tags.map(String).join(", ")
-          : "";
+          ? data.tags.map(String)
+          : [];
       return (
         <EventRow icon={Tag} when={event.at}>
           {b(event.actor)} retagged this
-          {tags.length > 0 && <> — {tags}</>}
+          {tags.length > 0 && (
+            <>
+              {" — "}
+              <span className="inline-flex flex-wrap items-center gap-1 align-middle">
+                {tags.map((candidate) => (
+                  <TagChip key={candidate} tag={candidate} />
+                ))}
+              </span>
+            </>
+          )}
         </EventRow>
       );
     }

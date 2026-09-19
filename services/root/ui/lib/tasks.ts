@@ -45,6 +45,24 @@ export const KNOWN_TAGS: ReadonlyArray<string> = [
   "org",
 ];
 
+/** Each tag's chip classes — the issue StateBadge pattern (tinted bg
+ *  + tinted text, a darker text step in light mode), one distinct hue
+ *  per tag. NEVER moss/primary — that green is the agents' color —
+ *  and never honey/amber, which melts into the tan accent. */
+const TAG_COLORS: Record<string, string> = {
+  cloudflare: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
+  fly: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  aws: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+  distilled: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400",
+  forge: "bg-rose-500/15 text-rose-700 dark:text-rose-400",
+  org: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
+};
+
+/** A tag's chip classes — unknown (data-seen) tags fall back to the
+ *  neutral chip. */
+export const tagColor = (tag: string): string =>
+  TAG_COLORS[tag] ?? "bg-muted text-muted-foreground";
+
 export interface TaskRow {
   readonly id: string;
   readonly queue: string;
