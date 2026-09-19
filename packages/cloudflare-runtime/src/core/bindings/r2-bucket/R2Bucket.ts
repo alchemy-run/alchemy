@@ -13,7 +13,7 @@ import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
-import type { BindingHook } from "../../PluginContext.ts";
+import { PluginContext, type BindingHook } from "../../PluginContext.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -84,14 +84,15 @@ export const R2BucketLive = Layer.effect(
     });
 
     return R2Bucket.of(
-      Effect.sync(() => {
-        let used = false;
+      Effect.gen(function* () {
+        const { worker } = yield* PluginContext;
+        const buckets = new Set<string>();
 
         return {
           api: {
             register: (props) =>
               Effect.sync(() => {
-                used = true;
+                buckets.add(props.bucketName);
                 return {
                   name: SERVICE_R2,
                   props: { json: JSON.stringify(props) },
@@ -99,7 +100,19 @@ export const R2BucketLive = Layer.effect(
               }),
           },
           defer: Effect.gen(function* () {
-            if (!used) return {};
+            if (buckets.size === 0) return {};
+            if (
+              worker.r2S3 &&
+              (!worker.r2S3.accessKeyId ||
+                worker.r2S3.accessKeyId.includes("/") ||
+                !worker.r2S3.secretAccessKey)
+            ) {
+              return yield* new ConfigError({
+                subtag: "R2S3",
+                message:
+                  "Local R2 S3 credentials must be nonempty, and the access key must not contain a slash.",
+              });
+            }
             const storageService = yield* makeStorageService;
             const r2Service: WorkerdConfig.Service = {
               name: SERVICE_R2,
@@ -140,7 +153,43 @@ export const R2BucketLive = Layer.effect(
                 ],
               },
             };
-            return { services: [storageService, r2Service] };
+            const entries = [...buckets].map(
+              (bucketName, index) => [bucketName, `BUCKET_${index}`] as const,
+            );
+            const middlewares: Plugin.Middleware[] = [];
+            if (worker.r2S3) {
+              middlewares.push({
+                name: "r2:s3",
+                // Run after the entry middleware restores the trusted public URL.
+                order: -2,
+                upstreamBindingName: "UPSTREAM",
+                worker: {
+                  compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
+                  modules: formatInternalWorkerModules(
+                    yield* Effect.promise(() =>
+                      loadInternalWorker(
+                        "#cloudflare-runtime-core-worker/bindings/r2-bucket/R2S3.worker",
+                      ),
+                    ),
+                  ),
+                  bindings: [
+                    { name: "CREDENTIALS", json: JSON.stringify(worker.r2S3) },
+                    {
+                      name: "BUCKETS",
+                      json: JSON.stringify(Object.fromEntries(entries)),
+                    },
+                    ...entries.map(([bucketName, name]) => ({
+                      name,
+                      r2Bucket: {
+                        name: SERVICE_R2,
+                        props: { json: JSON.stringify({ bucketName }) },
+                      },
+                    })),
+                  ],
+                },
+              });
+            }
+            return { services: [storageService, r2Service], middlewares };
           }),
         };
       }),

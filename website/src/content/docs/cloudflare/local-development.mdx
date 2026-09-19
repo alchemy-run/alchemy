@@ -57,6 +57,83 @@ set breakpoints, and profile.
 A local resource's id is `dev:`-prefixed, which doubles as proof
 that no cloud call ran.
 
+## Presigned R2 uploads and downloads
+
+Enable the S3 endpoint on the Worker that binds your local bucket:
+
+```typescript
+const bucket = yield* Cloudflare.R2.Bucket("Uploads");
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/worker.ts",
+  env: { BUCKET: bucket },
+  dev: {
+    r2S3: {
+      accessKeyId: "local-access-key",
+      secretAccessKey: "local-secret-key",
+    },
+  },
+});
+```
+
+The endpoint is opt-in and uses development-only credentials. Every local R2
+bucket bound to this Worker is reachable with that pair; remote buckets are
+excluded. Uploads and Worker bindings use the same local bucket storage.
+`dev.r2S3` has no effect on deployed Workers or `r2.dev` public domains.
+
+Use the running Worker's URL and the bucket's resolved `bucketName` stack output
+when configuring your backend signer. Local bucket names start with `dev:`;
+do not substitute the resource's logical name or its binding name.
+
+```typescript
+import { localS3Endpoint } from "alchemy/Cloudflare/R2";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const s3 = new S3Client({
+  endpoint: localS3Endpoint(workerUrl), // http://localhost:<port>/cdn-cgi/local/r2/s3/
+  region: "auto",
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId: "local-access-key",
+    secretAccessKey: "local-secret-key",
+  },
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
+});
+const uploadUrl = await getSignedUrl(
+  s3,
+  new PutObjectCommand({ Bucket: bucketName, Key: "photos/example.jpg" }),
+  { expiresIn: 300 },
+);
+const downloadUrl = await getSignedUrl(
+  s3,
+  new GetObjectCommand({ Bucket: bucketName, Key: "photos/example.jpg" }),
+  { expiresIn: 300 },
+);
+```
+
+Return the signed URLs to your browser; keep the signing credentials in your
+backend. Browser requests need no additional authorization headers:
+
+```typescript
+await fetch(uploadUrl, { method: "PUT", body: file });
+const downloaded = await fetch(downloadUrl).then((response) => response.blob());
+```
+
+Local preflights allow `PUT`, `GET`, and `HEAD` from any origin and expose response
+headers, including `ETag`. This permissive development CORS policy is independent
+of the deployed bucket's CORS rules. URLs expire after their signed lifetime
+(1–604800 seconds); changing the method, path, signed headers, or query invalidates
+the signature.
+
+This endpoint supports presigned single-object `PUT`, `GET`, and `HEAD`, with
+HTTP/custom metadata. It is not a full S3 emulator: header authentication,
+listing, deletion, multipart uploads, session tokens, encryption, storage
+classes, and checksum validation are unsupported. Use native bindings for
+other bucket operations. Avoid optional SDK checksums as configured above.
+The endpoint runs for the lifetime of the local Worker and follows its public
+dev URL, including through the Vite integration.
+
 ## Websites run their own dev servers
 
 Every `Cloudflare.Website.*` resource — Vite, Next.js, Astro,

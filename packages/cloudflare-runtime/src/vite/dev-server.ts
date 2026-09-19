@@ -255,6 +255,7 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
     // message, with `send()` never settling.
     queueConsumers: options.worker?.queueConsumers,
     crons: options.worker?.crons,
+    r2S3: options.worker?.r2S3,
     assets: options.worker?.assets,
     unsafe: {
       moduleFallback,

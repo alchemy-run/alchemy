@@ -880,6 +880,7 @@ export const LocalWorkerProvider = () =>
                       // Cache API opt-out (`dev: { cache: false }`) — matches
                       // production workers.dev, where the Cache API is a no-op.
                       cache: worker.dev.cache,
+                      r2S3: worker.dev.r2S3,
                       // Per-worker request.cf override (`dev: { cf: {...} }`).
                       cf: worker.dev.cf,
                       modules: yield* toRuntimeModules(bundle),
@@ -1290,6 +1291,7 @@ export const LocalWorkerProvider = () =>
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
                         devAccess: worker.dev.access,
+                        r2S3: worker.dev.r2S3,
                         durableObjectNamespaces: worker.durableObjectNamespaces,
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
