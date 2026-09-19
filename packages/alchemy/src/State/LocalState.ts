@@ -7,6 +7,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { existsSync } from "node:fs";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
+import { initialCwd } from "../Util/Node.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
@@ -34,7 +35,8 @@ export const makeLocalState = () =>
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dotAlchemy = yield* dotAlchemyDirectory;
-    const stateDir = path.join(dotAlchemy, "state");
+    // Keep the store anchored across deploy/destroy even if another task changes cwd.
+    const stateDir = path.resolve(initialCwd, dotAlchemy, "state");
 
     const fail = (err: PlatformError) =>
       Effect.fail(

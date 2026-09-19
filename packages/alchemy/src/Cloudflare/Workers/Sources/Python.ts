@@ -182,7 +182,8 @@ const resolvePythonModulesDir = Effect.fn(function* (
   );
 
   const dotAlchemy = yield* dotAlchemyDirectory;
-  const staging = path.join(dotAlchemy, "python", options.id);
+  // uv runs from the Worker root, so its arguments need absolute staging paths.
+  const staging = path.resolve(dotAlchemy, "python", options.id);
   const vendorDir = path.join(staging, "python_modules");
   const tokenFile = path.join(staging, ".synced");
 
@@ -345,7 +346,7 @@ export const readPythonWorkerBundle = Effect.fn(function* (
       "**/.venv*/**",
       "**/node_modules/**",
       "**/.alchemy/**",
-      `${convertPathToPattern(dotAlchemy)}/**`,
+      `${convertPathToPattern(path.resolve(dotAlchemy))}/**`,
     ],
   }).pipe(
     Effect.map((names) =>

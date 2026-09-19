@@ -142,7 +142,7 @@ const Memo = Effect.gen(function* () {
             ignore: [
               ...options.exclude,
               ...(excludeRuntime
-                ? [`${convertPathToPattern(dotAlchemy)}/**`]
+                ? [`${convertPathToPattern(path.resolve(dotAlchemy))}/**`]
                 : []),
             ],
             onlyFiles: true,

@@ -15,7 +15,6 @@ import { Stage } from "@/Stage";
 import { localState } from "@/State/LocalState";
 import { State } from "@/State/State";
 import { copyTree, hashExtraFiles } from "@/Util/extraFiles";
-import { initialCwd } from "@/Util/Node";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -24,30 +23,23 @@ import * as Path from "effect/Path";
 import { gunzipSync } from "node:zlib";
 
 layer(PlatformServices)("runtime directory", (it) => {
-  it.effect(
-    "resolves the default and relative configured roots consistently",
-    () =>
-      Effect.gen(function* () {
-        const path = yield* Path.Path;
-        expect(yield* dotAlchemyDirectory).toBe(
-          path.join(initialCwd, ".alchemy"),
-        );
-        expect(
-          yield* dotAlchemyDirectory.pipe(
-            Effect.provideService(AlchemyContext, {
-              dotAlchemy: "node_modules/.cache/runtime",
-              dev: false,
-              adopt: false,
-            }),
-          ),
-        ).toBe(path.join(initialCwd, "node_modules/.cache/runtime"));
-        expect(
-          withinDotAlchemy("/tmp/runtime", "/tmp/runtime-sibling/file"),
-        ).toBe(false);
-        expect(withinDotAlchemy("/tmp/runtime", "/tmp/runtime/file")).toBe(
-          true,
-        );
-      }),
+  it.effect("preserves the relative fallback and configured roots", () =>
+    Effect.gen(function* () {
+      expect(yield* dotAlchemyDirectory).toBe(".alchemy");
+      expect(
+        yield* dotAlchemyDirectory.pipe(
+          Effect.provideService(AlchemyContext, {
+            dotAlchemy: "node_modules/.cache/runtime",
+            dev: false,
+            adopt: false,
+          }),
+        ),
+      ).toBe("node_modules/.cache/runtime");
+      expect(
+        withinDotAlchemy("/tmp/runtime", "/tmp/runtime-sibling/file"),
+      ).toBe(false);
+      expect(withinDotAlchemy("/tmp/runtime", "/tmp/runtime/file")).toBe(true);
+    }),
   );
 
   it.effect(
@@ -91,6 +83,46 @@ layer(PlatformServices)("runtime directory", (it) => {
   );
 
   it.effect(
+    "keeps standalone and configured relative Worker output paths relative to the bundle cwd",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped();
+        const main = path.join(root, "worker.mjs");
+        yield* fs.writeFileString(path.join(root, "package.json"), "{}");
+        yield* fs.writeFileString(
+          main,
+          'export default { fetch: () => new Response("ok") };',
+        );
+        for (const configured of [undefined, "custom/runtime"]) {
+          const bundler = yield* configured === undefined
+            ? WorkerBundle
+            : WorkerBundle.pipe(
+                Effect.provideService(AlchemyContext, {
+                  dotAlchemy: configured,
+                  dev: false,
+                  adopt: false,
+                }),
+              );
+          yield* bundler.build({
+            id: "relative",
+            main,
+            compatibility: { date: "2026-03-17", flags: [] },
+            entry: { kind: "external" },
+            stack: { name: "test", stage: "test" },
+            extraOptions: undefined,
+          });
+          expect(
+            (yield* fs.readDirectory(
+              path.join(root, configured ?? ".alchemy", "bundles/relative"),
+            )).length,
+          ).toBeGreaterThan(0);
+        }
+      }),
+  );
+
+  it.effect(
     "keeps temporary and stable container contexts under the full configured path",
     () =>
       Effect.gen(function* () {
@@ -110,6 +142,14 @@ layer(PlatformServices)("runtime directory", (it) => {
             "image",
           );
           expect(stable).toBe(path.join(runtime, "tmp/test-dev-image"));
+          const relative = path.relative(process.cwd(), runtime);
+          expect(
+            yield* getStableContextDir(
+              path.join(root, "entry.ts"),
+              relative,
+              "image",
+            ),
+          ).toBe(path.join(relative, "tmp/test-dev-image"));
           expect(withinDotAlchemy(runtime, temporary)).toBe(true);
           expect(yield* fs.exists(temporary)).toBe(true);
         }).pipe(

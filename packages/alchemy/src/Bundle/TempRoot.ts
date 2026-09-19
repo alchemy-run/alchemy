@@ -3,7 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { initialCwd } from "../Util/Node.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 
@@ -44,7 +43,7 @@ export const createTempBundleDir = (
     const path = yield* Path.Path;
     const stack = yield* Stack;
     const stage = yield* Stage;
-    const tempRoot = path.resolve(initialCwd, dotAlchemy, "tmp");
+    const tempRoot = path.join(dotAlchemy, "tmp");
     yield* fs.makeDirectory(tempRoot, { recursive: true });
 
     const nonce = crypto.randomUUID().slice(0, 8);
@@ -70,7 +69,7 @@ export const getStableContextDir = (
     const path = yield* Path.Path;
     const stack = yield* Stack;
     const stage = yield* Stage;
-    const tempRoot = path.resolve(initialCwd, dotAlchemy, "tmp");
+    const tempRoot = path.join(dotAlchemy, "tmp");
     const bundleId = `${stack.name}-${stage}-${id}`;
     const tempDir = path.join(tempRoot, bundleId);
 

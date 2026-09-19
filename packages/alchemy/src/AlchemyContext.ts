@@ -4,7 +4,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import path from "pathe";
-import { initialCwd } from "./Util/Node.ts";
 
 export class AlchemyContext extends EffectContext.Service<
   AlchemyContext,
@@ -32,19 +31,16 @@ export class AlchemyContext extends EffectContext.Service<
   }
 >()("alchemy/Context") {}
 
-/** Resolve runtime storage from the supplied context or the process's initial directory. */
+/** Use the configured runtime directory, with a relative fallback for standalone callers. */
 export const dotAlchemyDirectory = Effect.serviceOption(AlchemyContext).pipe(
   Effect.map((context) =>
-    path.resolve(
-      initialCwd,
-      Option.isSome(context) ? context.value.dotAlchemy : ".alchemy",
-    ),
+    Option.isSome(context) ? context.value.dotAlchemy : ".alchemy",
   ),
 );
 
 /** Whether a file belongs to the configured runtime storage tree. */
 export const withinDotAlchemy = (directory: string, file: string) => {
-  const relative = path.relative(directory, path.resolve(initialCwd, file));
+  const relative = path.relative(path.resolve(directory), path.resolve(file));
   return (
     relative === "" ||
     (!path.isAbsolute(relative) &&
@@ -57,7 +53,7 @@ export const AlchemyContextLive = Layer.effect(
   AlchemyContext,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const dir = yield* dotAlchemyDirectory;
+    const dir = path.resolve(yield* dotAlchemyDirectory);
     yield* fs.makeDirectory(dir, { recursive: true });
     return {
       dotAlchemy: dir,
