@@ -34,6 +34,17 @@ export interface MigrationRecord {
  */
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
+  /** PostgreSQL targets without SERIAL can use UUID bookkeeping IDs. */
+  readonly migrationTableId?: "uuid";
+  /** False when DDL cannot commit atomically with history conversion. */
+  readonly transactionalDdl?: boolean;
+  /** Reject edits to migrations already recorded in the database. */
+  readonly verifyMigrationHashes?: boolean;
+  /** Override atomic batches for targets requiring durable statement progress. */
+  readonly applyMigration?: (
+    record: MigrationRecord,
+    bookkeeping: string,
+  ) => Effect.Effect<void, MigrationError>;
   /**
    * Run a single query and return its rows as objects. `params` bind as
    * `?`/`$n` placeholders; adapters without native parameter support inline

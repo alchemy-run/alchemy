@@ -25,7 +25,11 @@ export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
  * format Alchemy ever writes. Migrating from drizzle/prisma/wrangler
  * bookkeeping is a one-way conversion performed once (see `Convert.ts`).
  */
-const createTableSql = (table: string, dialect: MigrationDialect): string => {
+const createTableSql = (
+  table: string,
+  dialect: MigrationDialect,
+  id?: "uuid",
+): string => {
   const quoted = quoteIdentifier(table, dialect);
   switch (dialect) {
     case "sqlite":
@@ -38,7 +42,7 @@ const createTableSql = (table: string, dialect: MigrationDialect): string => {
 );`;
     case "postgres":
       return `CREATE TABLE IF NOT EXISTS ${quoted} (
-  id SERIAL PRIMARY KEY,
+  id ${id === "uuid" ? "uuid DEFAULT gen_random_uuid()" : "SERIAL"} PRIMARY KEY,
   hash text NOT NULL,
   created_at bigint,
   name text,
@@ -92,6 +96,11 @@ const rebuildInPlace = (options: {
 }) =>
   Effect.gen(function* () {
     const { executor, table, records, nameExpr } = options;
+    if (executor.transactionalDdl === false) {
+      return yield* new MigrationError({
+        message: `Cannot automatically rebuild migration history in "${table}" on a target without transactional DDL. Convert the history explicitly before deploying.`,
+      });
+    }
     const dialect = executor.dialect;
     const quoted = quoteIdentifier(table, dialect);
     const rows = yield* executor.query(
@@ -116,7 +125,7 @@ const rebuildInPlace = (options: {
     const temp = `${table}_alchemy_upgrade`;
     yield* executor.batch([
       `DROP TABLE IF EXISTS ${quoteIdentifier(temp, dialect)};`,
-      createTableSql(temp, dialect).replace(
+      createTableSql(temp, dialect, executor.migrationTableId).replace(
         "CREATE TABLE IF NOT EXISTS",
         "CREATE TABLE",
       ),
@@ -143,8 +152,13 @@ const ensureTable = (options: {
         const converted = history
           ? yield* matchForeignRows({ history, records })
           : [];
+        if (converted.length > 0 && executor.transactionalDdl === false) {
+          return yield* new MigrationError({
+            message: `Cannot automatically copy foreign migration history into "${table}" without transactional DDL. Convert the history explicitly before deploying.`,
+          });
+        }
         yield* executor.batch([
-          createTableSql(table, executor.dialect),
+          createTableSql(table, executor.dialect, executor.migrationTableId),
           ...converted.map((row) =>
             convertedRowInsertSql(table, executor.dialect, row),
           ),
@@ -214,7 +228,8 @@ const appliedNames = (executor: SqlExecutor, table: string) =>
  * Apply pending migrations with Alchemy's bookkeeping. Idempotent: each
  * migration's statements and its bookkeeping INSERT go through
  * `executor.batch` as one unit (a transaction on pg/mysql, one batched
- * query on D1, which has no transactions over HTTP).
+ * query on D1, which has no transactions over HTTP). Nontransactional DDL
+ * targets can supply `applyMigration` to checkpoint individual statements.
  *
  * Applied-detection is name-keyed with layout aliasing: pre-registry
  * Alchemy recorded drizzle-layout migrations under `<dir>/migration.sql`
@@ -230,6 +245,38 @@ export const applyAlchemyFormat = (options: {
     if (records.length === 0) return;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedNames(executor, table);
+    if (executor.verifyMigrationHashes) {
+      const rows = yield* executor.query(
+        `SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`,
+      );
+      // Check the entire history before executing any pending migration.
+      const normalize = (name: string) => name.replace(/\/migration\.sql$/, "");
+      for (const row of rows) {
+        if (
+          row.name == null ||
+          !records.some(
+            (record) => normalize(record.name) === normalize(String(row.name)),
+          )
+        ) {
+          return yield* new MigrationError({
+            message: `Applied migration ${row.name ?? "(unnamed)"} is missing from the directory. Restore the original migration files before deploying.`,
+          });
+        }
+      }
+      for (const record of records) {
+        const row = rows.find(
+          (row) =>
+            row.name === record.name ||
+            row.name === `${record.name}/migration.sql` ||
+            row.name === record.name.replace(/\/migration\.sql$/, ""),
+        );
+        if (row && row.hash !== record.hash) {
+          return yield* new MigrationError({
+            message: `Migration ${record.name} has changed since it was applied. Expected SHA256: ${row.hash}; actual SHA256: ${record.hash}. Create a new migration instead.`,
+          });
+        }
+      }
+    }
     for (const record of records) {
       if (
         applied.has(record.name) ||
@@ -238,9 +285,9 @@ export const applyAlchemyFormat = (options: {
       ) {
         continue;
       }
-      yield* executor.batch([
-        ...record.statements,
-        insertSql(table, executor.dialect, record),
-      ]);
+      const bookkeeping = insertSql(table, executor.dialect, record);
+      yield* executor.applyMigration
+        ? executor.applyMigration(record, bookkeeping)
+        : executor.batch([...record.statements, bookkeeping]);
     }
   });

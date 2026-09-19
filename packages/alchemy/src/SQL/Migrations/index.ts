@@ -31,6 +31,7 @@ export {
   migrationsAttrs,
   migrationsInputOf,
   runMigrations,
+  readMigrationRecords,
   normalizeMigrationsInput,
   resolveMigrations,
   stampedOf,
