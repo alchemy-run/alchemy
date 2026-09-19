@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import packageJson from "../../package.json" with { type: "json" };
 import {
+  authOidc,
   authorizeCliAuth,
   generateCliAuth,
   revokeCliAuth,
@@ -16,7 +17,11 @@ import {
   AuthProviderLayer,
   type ConfigureField,
 } from "../Auth/AuthProvider.ts";
-import { getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
+import { getEnv, getEnvRedacted, mapPromptCancellation } from "../Auth/Env.ts";
+import {
+  detectOidcToken,
+  SUPPORTED_OIDC_PLATFORMS,
+} from "../Auth/OidcToken.ts";
 import {
   storedValueText,
   validateFieldValues,
@@ -34,7 +39,13 @@ export interface DopplerResolvedCredentials {
 }
 
 const PROVIDER_NAME = "Doppler";
-const TOKEN_ENV = "DOPPLER_TOKEN";
+export const DOPPLER_TOKEN_ENV = "DOPPLER_TOKEN";
+/** A service account identity to log into with a platform OIDC token. */
+export const DOPPLER_IDENTITY_ID_ENV = "DOPPLER_IDENTITY_ID";
+/** Explicit OIDC token for platforms that are not auto-detected. */
+export const DOPPLER_OIDC_TOKEN_ENV = "DOPPLER_OIDC_TOKEN";
+/** Optional audience to request in the platform's OIDC token. */
+export const DOPPLER_OIDC_AUDIENCE_ENV = "DOPPLER_OIDC_AUDIENCE";
 
 /** How long the user has to approve the browser login. */
 const LOGIN_TIMEOUT = Duration.minutes(5);
@@ -189,14 +200,60 @@ const revokeLoginToken = (config: DopplerAuthConfig) =>
       )
     : Effect.void;
 
+/**
+ * Exchange a platform-issued OIDC token for a short-lived Doppler token via
+ * the service account identity that trusts that platform's issuer.
+ * Identities are a Team/Enterprise plan feature.
+ */
+export const mintTokenFromOidc = (config: {
+  readonly identityId: string;
+  readonly jwt: Redacted.Redacted<string>;
+}) =>
+  authOidc({
+    identity: config.identityId,
+    token: Redacted.value(config.jwt),
+  }).pipe(
+    Retry.none,
+    Effect.timeout(API_TIMEOUT),
+    Effect.map((response): DopplerResolvedCredentials => ({
+      token: Redacted.isRedacted(response.token)
+        ? response.token
+        : Redacted.make(response.token),
+    })),
+    Effect.mapError(
+      (cause) =>
+        new AuthError({
+          message: `Doppler rejected the OIDC login for identity '${config.identityId}'. Check that the service account identity trusts this platform's issuer, subject, and audience, and that the workplace plan includes identities.`,
+          cause,
+        }),
+    ),
+  );
+
+/**
+ * How CI authenticates, decided from the environment: a ready token, or a
+ * service account identity to log into with the platform's OIDC token.
+ */
 const readEnvironment = Effect.gen(function* () {
-  const token = yield* getEnvRedacted(TOKEN_ENV);
-  if (token === undefined || Redacted.value(token).length === 0) {
+  const token = yield* getEnvRedacted(DOPPLER_TOKEN_ENV);
+  if (token !== undefined && Redacted.value(token).length > 0) {
+    return { token };
+  }
+  const identityId = yield* getEnv(DOPPLER_IDENTITY_ID_ENV);
+  if (identityId === undefined || identityId.length === 0) {
     return yield* new AuthError({
-      message: `Doppler credentials are missing. Set ${TOKEN_ENV} in CI, or run \`alchemy profile edit --add Doppler\` locally and choose Login.`,
+      message: `Doppler credentials are missing. In CI set ${DOPPLER_TOKEN_ENV}, or set ${DOPPLER_IDENTITY_ID_ENV} to log in with the platform's OIDC token; locally run \`alchemy profile edit --add Doppler\` and choose Login.`,
     });
   }
-  return { token };
+  const oidc = yield* detectOidcToken({
+    token: DOPPLER_OIDC_TOKEN_ENV,
+    audience: DOPPLER_OIDC_AUDIENCE_ENV,
+  });
+  if (oidc === undefined) {
+    return yield* new AuthError({
+      message: `${DOPPLER_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: ${SUPPORTED_OIDC_PLATFORMS}; elsewhere pass the token in ${DOPPLER_OIDC_TOKEN_ENV}.`,
+    });
+  }
+  return yield* mintTokenFromOidc({ identityId, jwt: oidc.token });
 });
 
 /** Doppler profile authentication: explicit browser Login or a stored API token. */
@@ -229,10 +286,24 @@ export const DopplerAuth = AuthProviderLayer<
   readEnvironment,
   environment: [
     {
-      name: TOKEN_ENV,
+      name: DOPPLER_TOKEN_ENV,
       required: true,
       secret: true,
-      description: "Doppler service token or personal token",
+      alternatives: [DOPPLER_IDENTITY_ID_ENV],
+      description:
+        "A service token or personal token; or set DOPPLER_IDENTITY_ID instead to log in with the platform's OIDC token (Vercel, GitHub Actions, GitLab CI, Fly.io, GCP)",
+    },
+    {
+      name: DOPPLER_OIDC_TOKEN_ENV,
+      required: false,
+      secret: true,
+      description:
+        "Explicit OIDC token for platforms that are not auto-detected",
+    },
+    {
+      name: DOPPLER_OIDC_AUDIENCE_ENV,
+      required: false,
+      description: "Audience to request in the platform's OIDC token",
     },
   ],
 });

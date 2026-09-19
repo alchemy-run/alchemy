@@ -6,13 +6,13 @@ import { envKeys, logLoadedKeys } from "./Log.ts";
  * The process environment as an explicit secrets provider.
  *
  * By default the environment already outranks every provider, so this is
- * only needed together with `processEnv: false`, to put the environment at
+ * only needed together with `automaticallyLoadProcessEnv: false`, to put the environment at
  * a priority of your choosing, typically first so it is a fallback rather
  * than an override:
  *
  * ```ts
  * secrets: {
- *   processEnv: false,
+ *   automaticallyLoadProcessEnv: false,
  *   providers: [Secrets.ProcessEnv(), Secrets.Doppler({ project: "app", config: "prd" })],
  * }
  * ```

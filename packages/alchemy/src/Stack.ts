@@ -122,7 +122,7 @@ export interface StackSecrets {
    * `--env-file` and `--profile` still apply on top.
    * @default true
    */
-  processEnv?: boolean;
+  automaticallyLoadProcessEnv?: boolean;
   /**
    * Validated against the assembled configuration once every provider has
    * loaded, so a missing or malformed key fails the stack before any

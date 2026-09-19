@@ -3,12 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { AuthError } from "../Auth/AuthProvider.ts";
-import { getEnv, getEnvRedacted } from "../Auth/Env.ts";
+import { getEnv, getEnvRedacted } from "./Env.ts";
 
 /**
- * Platform-issued OIDC tokens, for exchanging with Infisical's OIDC machine
- * identity auth so CI never holds a long-lived Infisical credential.
+ * Platform-issued OIDC tokens, for exchanging with a secrets manager's OIDC
+ * identity auth (Doppler service account identities, Infisical machine
+ * identities) so CI never holds a long-lived credential.
  *
  * Detection order and sources are adapted from varlock's `oidc-tokens`
  * utility (MIT, see THIRD_PARTY_LICENSES.md):
@@ -17,7 +17,7 @@ import { getEnv, getEnvRedacted } from "../Auth/Env.ts";
  *
  * | Platform       | Detected by       | Token source                              |
  * | -------------- | ----------------- | ----------------------------------------- |
- * | explicit       | `INFISICAL_OIDC_TOKEN` | the variable itself                  |
+ * | explicit       | the caller's env  | the variable itself                       |
  * | Vercel         | `VERCEL`          | `VERCEL_OIDC_TOKEN`                       |
  * | GitHub Actions | `GITHUB_ACTIONS`  | `ACTIONS_ID_TOKEN_REQUEST_URL` + token    |
  * | GitLab CI      | `GITLAB_CI`       | `CI_JOB_JWT_V2` or `SIGSTORE_ID_TOKEN`    |
@@ -37,10 +37,17 @@ export interface OidcToken {
   readonly token: Redacted.Redacted<string>;
 }
 
-/** Explicit override for platforms that are not auto-detected. */
-export const INFISICAL_OIDC_TOKEN_ENV = "INFISICAL_OIDC_TOKEN";
-/** Optional `aud` claim to request where the platform supports it. */
-export const INFISICAL_OIDC_AUDIENCE_ENV = "INFISICAL_OIDC_AUDIENCE";
+/** Which env vars a provider reserves for its explicit token and audience. */
+export interface OidcTokenEnv {
+  /** Explicit override for platforms that are not auto-detected. */
+  readonly token: string;
+  /** Optional `aud` claim to request where the platform supports it. */
+  readonly audience: string;
+}
+
+/** The platforms {@link detectOidcToken} knows, for error messages. */
+export const SUPPORTED_OIDC_PLATFORMS =
+  "Vercel, GitHub Actions (needs `permissions: id-token: write`), GitLab CI (needs `id_tokens`), Fly.io, and GCP";
 
 /** Metadata and internal endpoints answer fast or not at all. */
 const PROBE_TIMEOUT = Duration.seconds(5);
@@ -57,8 +64,6 @@ const tokenFromEnv = (name: string) =>
         : undefined,
     ),
   );
-
-const fromExplicit = tokenFromEnv(INFISICAL_OIDC_TOKEN_ENV);
 
 const fromVercel = Effect.gen(function* () {
   if (!present(yield* getEnv("VERCEL"))) return undefined;
@@ -156,22 +161,23 @@ const attempt = <A, E, R>(probe: Effect.Effect<A | undefined, E, R>) =>
  * run in order and the first token wins; `undefined` means no supported
  * platform (or its token) was detected.
  */
-export const detectOidcToken = Effect.gen(function* () {
-  const audience = yield* getEnv(INFISICAL_OIDC_AUDIENCE_ENV);
-  const probes = [
-    ["explicit", attempt(fromExplicit)],
-    ["vercel", attempt(fromVercel)],
-    ["github-actions", attempt(fromGitHubActions(audience))],
-    ["gitlab", attempt(fromGitLab)],
-    ["fly", attempt(fromFly(audience))],
-    ["gcp", attempt(fromGcp(audience))],
-  ] as const;
-  for (const [platform, probe] of probes) {
-    const token = yield* probe;
-    if (token !== undefined) {
-      const found: OidcToken = { platform, token };
-      return found;
+export const detectOidcToken = (env: OidcTokenEnv) =>
+  Effect.gen(function* () {
+    const audience = yield* getEnv(env.audience);
+    const probes = [
+      ["explicit", attempt(tokenFromEnv(env.token))],
+      ["vercel", attempt(fromVercel)],
+      ["github-actions", attempt(fromGitHubActions(audience))],
+      ["gitlab", attempt(fromGitLab)],
+      ["fly", attempt(fromFly(audience))],
+      ["gcp", attempt(fromGcp(audience))],
+    ] as const;
+    for (const [platform, probe] of probes) {
+      const token = yield* probe;
+      if (token !== undefined) {
+        const found: OidcToken = { platform, token };
+        return found;
+      }
     }
-  }
-  return undefined;
-});
+    return undefined;
+  });

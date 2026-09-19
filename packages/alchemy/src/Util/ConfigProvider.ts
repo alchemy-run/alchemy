@@ -74,7 +74,7 @@ export const stackConfigLayer = (
 
       const withPrecedence = (fromSecrets: ConfigProvider.ConfigProvider) =>
         overrides.apply(
-          secrets?.processEnv === false
+          secrets?.automaticallyLoadProcessEnv === false
             ? fromSecrets
             : ConfigProvider.orElse(processEnvironment(), fromSecrets),
         );

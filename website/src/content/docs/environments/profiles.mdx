@@ -180,7 +180,7 @@ directly from environment variables and nothing is read from or written to
 | Fly | `FLY_API_TOKEN` | `FLY_API_HOSTNAME` overrides the Machines API root |
 | Hetzner | `HCLOUD_TOKEN` | `HCLOUD_ENDPOINT` overrides the API base URL |
 | Railway | `RAILWAY_API_TOKEN` (account or workspace token) | `RAILWAY_API_URL` overrides the GraphQL host |
-| Doppler | `DOPPLER_TOKEN` (service token) | None — see [Doppler](/environments/doppler) |
+| Doppler | `DOPPLER_TOKEN`, or `DOPPLER_IDENTITY_ID` to log in with the platform's OIDC token | `DOPPLER_OIDC_TOKEN`, `DOPPLER_OIDC_AUDIENCE` — see [Doppler](/environments/doppler) |
 | Infisical | `INFISICAL_TOKEN`, or `INFISICAL_IDENTITY_ID` to log in with the platform's OIDC token | `INFISICAL_OIDC_TOKEN`, `INFISICAL_OIDC_AUDIENCE`, `INFISICAL_API_URL` — see [Infisical](/environments/infisical) |
 
 These variables are a CI credential source, not a profile authentication

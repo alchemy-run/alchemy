@@ -71,8 +71,14 @@ token belongs to.
 
 ## In CI
 
-CI never uses profiles. Set `DOPPLER_TOKEN` to a service token and
-nothing else changes:
+The stack does not change between your machine and CI. The
+`Secrets.Doppler({ project, config })` line above is all it ever
+says; which credential backs it is decided by where the command runs.
+Locally that is the profile. In CI, where profiles are never
+consulted, it is the environment, and there are two ways to fill it.
+
+The simplest is a [service token](https://docs.doppler.com/docs/service-tokens)
+in `DOPPLER_TOKEN`:
 
 ```yaml
 - run: bun alchemy deploy --stage prod --yes
@@ -80,10 +86,41 @@ nothing else changes:
     DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 ```
 
-`DOPPLER_TOKEN` also wins on your own machine when it is set, in the
-shell or in `.env`, so a teammate without a browser login can still
-deploy with a token they were handed. `alchemy provider check-env`
-lists it alongside the other providers' variables.
+The better one, on Doppler's Team and Enterprise plans, is to hold no
+Doppler credential in CI at all. Create a service account with a
+[service account identity](https://docs.doppler.com/docs/service-account-identities)
+that trusts your platform's OIDC issuer, and set `DOPPLER_IDENTITY_ID`
+to it. Alchemy finds the platform's own identity token and exchanges
+it for a short-lived Doppler token on every run. Nothing else is
+configured on the Alchemy side:
+
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write   # lets the job request an OIDC token
+      contents: read
+    steps:
+      - run: bun alchemy deploy --stage prod --yes
+        env:
+          DOPPLER_IDENTITY_ID: ${{ vars.DOPPLER_IDENTITY_ID }}
+```
+
+Detection covers Vercel, GitHub Actions, GitLab CI, Fly.io, and
+Google Cloud. On GitHub the job needs `id-token: write`, as above; on
+GitLab the job needs an
+[`id_tokens`](https://docs.gitlab.com/ee/ci/secrets/id_token_authentication.html)
+block; Vercel, Fly, and Cloud Run need nothing extra. On the Doppler
+side, bind the identity's subject claim to your repository so no
+other workflow can use it. If the identity expects a specific
+audience, put it in `DOPPLER_OIDC_AUDIENCE`. A platform that is not
+detected can hand its token over in `DOPPLER_OIDC_TOKEN`.
+
+When both variables are present, `DOPPLER_TOKEN` wins and no OIDC
+exchange happens. Either one also wins over a profile on your own
+machine, so a teammate without a browser login can still deploy with
+a token they were handed. `alchemy provider check-env` lists all of
+these alongside the other providers' variables.
 
 ## When something goes wrong
 

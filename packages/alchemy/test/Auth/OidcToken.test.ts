@@ -2,19 +2,11 @@ import { expect, it } from "alchemy-test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider.ts";
-import {
-  InfisicalAuth,
-  type InfisicalAuthConfig,
-  type InfisicalResolvedCredentials,
-} from "@/Infisical/AuthProvider.ts";
-import { detectOidcToken } from "@/Infisical/Oidc.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import { detectOidcToken } from "@/Auth/OidcToken.ts";
 
 /** Decode the JSON body encoded onto an outgoing request. */
 const readJsonBody = (request: HttpClientRequest.HttpClientRequest) =>
@@ -49,7 +41,10 @@ const detect = (
   env: Record<string, string>,
   handler: Handler = () => Effect.die("No network expected"),
 ) =>
-  detectOidcToken.pipe(
+  detectOidcToken({
+    token: "TEST_OIDC_TOKEN",
+    audience: "TEST_OIDC_AUDIENCE",
+  }).pipe(
     Effect.provideService(
       ConfigProvider.ConfigProvider,
       ConfigProvider.fromEnv({ env }),
@@ -61,9 +56,9 @@ it.effect("returns nothing on a plain laptop", () =>
   detect({}).pipe(Effect.map((found) => expect(found).toBeUndefined())),
 );
 
-it.effect("an explicit INFISICAL_OIDC_TOKEN wins over every platform", () =>
+it.effect("an explicit token variable wins over every platform", () =>
   detect({
-    INFISICAL_OIDC_TOKEN: "explicit-jwt",
+    TEST_OIDC_TOKEN: "explicit-jwt",
     VERCEL: "1",
     VERCEL_OIDC_TOKEN: "vercel-jwt",
   }).pipe(
@@ -90,7 +85,7 @@ it.effect("GitHub Actions requests the token with the audience", () =>
       ACTIONS_ID_TOKEN_REQUEST_URL:
         "https://pipelines.actions.githubusercontent.com/token?scope=x",
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token",
-      INFISICAL_OIDC_AUDIENCE: "infisical",
+      TEST_OIDC_AUDIENCE: "infisical",
     },
     (request) =>
       Effect.sync(() => {
@@ -139,7 +134,7 @@ it.effect(
 
 it.effect("Fly mints the token from the internal API", () =>
   detect(
-    { FLY_APP_NAME: "my-app", INFISICAL_OIDC_AUDIENCE: "infisical" },
+    { FLY_APP_NAME: "my-app", TEST_OIDC_AUDIENCE: "infisical" },
     (request) =>
       Effect.gen(function* () {
         expect(request.method).toBe("POST");
@@ -181,111 +176,4 @@ it.effect("a failing probe is treated as not detected, not as an error", () =>
   detect({ FLY_APP_NAME: "my-app" }, () =>
     Effect.fail(new Error("connection refused")),
   ).pipe(Effect.map((found) => expect(found).toBeUndefined())),
-);
-
-const auth = getAuthProvider<InfisicalAuthConfig, InfisicalResolvedCredentials>(
-  "Infisical",
-);
-
-/** The provider's environment path against a fake platform and fake Infisical. */
-const readEnvironmentWith = (env: Record<string, string>, handler: Handler) =>
-  Effect.gen(function* () {
-    const provider = yield* auth;
-    return yield* provider.readEnvironment!;
-  }).pipe(
-    Effect.provide(InfisicalAuth),
-    Effect.provideService(AuthProviders, {}),
-    Effect.provideService(
-      ConfigProvider.ConfigProvider,
-      ConfigProvider.fromEnv({ env }),
-    ),
-    Effect.provideService(HttpClient.HttpClient, fakeClient(handler)),
-    Effect.provide(NodeServices.layer),
-  );
-
-it.effect(
-  "INFISICAL_IDENTITY_ID exchanges the platform token for an access token",
-  () =>
-    readEnvironmentWith(
-      {
-        INFISICAL_IDENTITY_ID: "identity-1",
-        INFISICAL_API_URL: "https://infisical.example.com",
-        VERCEL: "1",
-        VERCEL_OIDC_TOKEN: "vercel-jwt",
-      },
-      (request) =>
-        Effect.gen(function* () {
-          const url = new URL(request.url);
-          expect(url.origin).toBe("https://infisical.example.com");
-          expect(url.pathname).toBe("/api/v1/auth/oidc-auth/login");
-          expect(request.headers.authorization).toBeUndefined();
-          expect(yield* readJsonBody(request)).toEqual({
-            identityId: "identity-1",
-            jwt: "vercel-jwt",
-          });
-          return Response.json({
-            accessToken: "oidc-access-token",
-            expiresIn: 3600,
-            accessTokenMaxTTL: 86400,
-            tokenType: "Bearer",
-          });
-        }),
-    ).pipe(
-      Effect.map((credentials) => {
-        expect(Redacted.value(credentials.token)).toBe("oidc-access-token");
-        expect(credentials.apiBaseUrl).toBe("https://infisical.example.com");
-      }),
-    ),
-);
-
-it.effect("INFISICAL_TOKEN takes precedence over OIDC", () =>
-  readEnvironmentWith(
-    {
-      INFISICAL_TOKEN: "static",
-      INFISICAL_IDENTITY_ID: "identity-1",
-      VERCEL: "1",
-      VERCEL_OIDC_TOKEN: "vercel-jwt",
-    },
-    () => Effect.die("No network expected"),
-  ).pipe(
-    Effect.map((credentials) =>
-      expect(Redacted.value(credentials.token)).toBe("static"),
-    ),
-  ),
-);
-
-it.effect(
-  "an identity id with no platform token explains what is supported",
-  () =>
-    readEnvironmentWith({ INFISICAL_IDENTITY_ID: "identity-1" }, () =>
-      Effect.die("No network expected"),
-    ).pipe(
-      Effect.result,
-      Effect.map((result) => {
-        expect(Result.isFailure(result)).toBe(true);
-        if (Result.isFailure(result)) {
-          expect(result.failure.message).toContain(
-            "no platform OIDC token was found",
-          );
-          expect(result.failure.message).toContain("INFISICAL_OIDC_TOKEN");
-        }
-      }),
-    ),
-);
-
-it.effect("a rejected OIDC login names the identity", () =>
-  readEnvironmentWith(
-    { INFISICAL_IDENTITY_ID: "identity-1", INFISICAL_OIDC_TOKEN: "jwt" },
-    () => Effect.succeed(Response.json({ message: "nope" }, { status: 401 })),
-  ).pipe(
-    Effect.result,
-    Effect.map((result) => {
-      expect(Result.isFailure(result)).toBe(true);
-      if (Result.isFailure(result)) {
-        expect(result.failure.message).toContain(
-          "OIDC login for identity 'identity-1'",
-        );
-      }
-    }),
-  ),
 );

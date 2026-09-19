@@ -541,7 +541,7 @@ describe("stack secrets", () => {
   );
 
   it.effect(
-    "processEnv: false ignores the shell unless ProcessEnv() is listed",
+    "automaticallyLoadProcessEnv: false ignores the shell unless ProcessEnv() is listed",
     () =>
       Effect.gen(function* () {
         const key = "ALCHEMY_DOTENV_TEST_PROCESS_OFF";
@@ -558,14 +558,14 @@ describe("stack secrets", () => {
         );
         const read = (
           providers: NonNullable<StackSecrets["providers"]>,
-          processEnv: boolean,
+          automaticallyLoadProcessEnv: boolean,
         ) =>
           Stack(
             "dotenv-process-off",
             {
               providers: Layer.empty,
               state: inMemoryState(),
-              secrets: { providers, processEnv },
+              secrets: { providers, automaticallyLoadProcessEnv },
             },
             Effect.all({
               value: Config.String(key),

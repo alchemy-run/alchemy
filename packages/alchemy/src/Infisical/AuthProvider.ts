@@ -26,15 +26,18 @@ import {
 import * as Interaction from "../Interaction.ts";
 import {
   detectOidcToken,
-  INFISICAL_OIDC_AUDIENCE_ENV,
-  INFISICAL_OIDC_TOKEN_ENV,
-} from "./Oidc.ts";
+  SUPPORTED_OIDC_PLATFORMS,
+} from "../Auth/OidcToken.ts";
 
 export const INFISICAL_TOKEN_ENV = "INFISICAL_TOKEN";
 /** The machine identity to log into with a platform OIDC token. */
 export const INFISICAL_IDENTITY_ID_ENV = "INFISICAL_IDENTITY_ID";
 /** Same name the Infisical CLI uses for self-hosted instances. */
 export const INFISICAL_API_URL_ENV = "INFISICAL_API_URL";
+/** Explicit OIDC token for platforms that are not auto-detected. */
+export const INFISICAL_OIDC_TOKEN_ENV = "INFISICAL_OIDC_TOKEN";
+/** Optional audience to request in the platform's OIDC token. */
+export const INFISICAL_OIDC_AUDIENCE_ENV = "INFISICAL_OIDC_AUDIENCE";
 
 const PROVIDER_NAME = "Infisical";
 const API_TIMEOUT = Duration.seconds(30);
@@ -267,10 +270,13 @@ const readEnvironment = Effect.gen(function* () {
       apiBaseUrl: apiBaseUrl ?? DEFAULT_API_BASE_URL,
     };
   }
-  const oidc = yield* detectOidcToken;
+  const oidc = yield* detectOidcToken({
+    token: INFISICAL_OIDC_TOKEN_ENV,
+    audience: INFISICAL_OIDC_AUDIENCE_ENV,
+  });
   if (oidc === undefined) {
     return yield* new AuthError({
-      message: `${INFISICAL_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: Vercel, GitHub Actions (needs \`permissions: id-token: write\`), GitLab CI (needs \`id_tokens\`), Fly.io, and GCP; elsewhere pass the token in ${INFISICAL_OIDC_TOKEN_ENV}.`,
+      message: `${INFISICAL_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: ${SUPPORTED_OIDC_PLATFORMS}; elsewhere pass the token in ${INFISICAL_OIDC_TOKEN_ENV}.`,
     });
   }
   return yield* mintAccessTokenFromOidc({

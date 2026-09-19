@@ -203,7 +203,7 @@ it.effect("missing CI token fails clearly without using a local profile", () =>
       Effect.map((result) => {
         expect(Result.isFailure(result)).toBe(true);
         if (Result.isFailure(result))
-          expect(String(result.failure)).toContain("Set DOPPLER_TOKEN");
+          expect(String(result.failure)).toContain("set DOPPLER_TOKEN");
       }),
     ),
     {

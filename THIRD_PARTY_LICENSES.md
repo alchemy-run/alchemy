@@ -52,7 +52,7 @@ section above.
 
 ## varlock
 
-The OIDC platform token detection in `packages/alchemy/src/Infisical/Oidc.ts`
+The OIDC platform token detection in `packages/alchemy/src/Auth/OidcToken.ts`
 is adapted from varlock's `packages/utils/src/oidc-tokens.ts`
 (https://github.com/dmno-dev/varlock/blob/9a7dfc2e76f0598f0c5bd56a0f084a48a2efd9e3/packages/utils/src/oidc-tokens.ts).
 
