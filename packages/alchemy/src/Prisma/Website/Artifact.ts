@@ -2,6 +2,7 @@ import { makeNodeServeEntrySource } from "@alchemy.run/frontend-frameworks/core"
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { dotAlchemyDirectory, withinDotAlchemy } from "../../AlchemyContext.ts";
 import type { PlatformError } from "effect/PlatformError";
 import { createRequire } from "node:module";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -83,6 +84,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(initialCwd, props.root));
+  const dotAlchemy = yield* dotAlchemyDirectory;
   const dist = yield* fs.realPath(path.resolve(initialCwd, props.distDir));
   const entry =
     props.serverEntry === undefined
@@ -123,6 +125,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     const relative = path.relative(root, source).replaceAll("\\", "/");
     if (
       excluded(relative) ||
+      withinDotAlchemy(dotAlchemy, source) ||
       (runtimePackage && /(?:\.map|\.d\.ts)$/.test(source)) ||
       (props.layout === "next" && nextExcluded(relative))
     )
@@ -211,7 +214,10 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     }
     for (const file of parsed.files) {
       const source = path.resolve(path.dirname(manifest), file);
-      if (excluded(path.relative(root, source)))
+      if (
+        excluded(path.relative(root, source)) ||
+        withinDotAlchemy(dotAlchemy, source)
+      )
         return yield* fail(
           `A Next.js runtime dependency is a sensitive file: ${source}`,
         );
@@ -253,7 +259,10 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const links = new Map<string, string>();
   const selected = new Set<string>();
   for (const file of files) {
-    if (excluded(path.relative(root, file)))
+    if (
+      excluded(path.relative(root, file)) ||
+      withinDotAlchemy(dotAlchemy, file)
+    )
       return yield* fail(
         `A website runtime dependency is a sensitive file: ${file}`,
       );
@@ -380,18 +389,14 @@ export const WebsiteArtifactProvider = () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+      const dotAlchemy = yield* dotAlchemyDirectory;
       return {
         list: () => Effect.succeed([]),
         // Traced dependencies can change independently of the framework's hash.
         diff: () => Effect.succeed({ action: "update" as const }),
         reconcile: Effect.fn(function* ({ id, news }) {
           const name = yield* createPhysicalName({ id, maxLength: 80 });
-          const directory = path.join(
-            initialCwd,
-            ".alchemy",
-            "prisma-websites",
-            name,
-          );
+          const directory = path.join(dotAlchemy, "prisma-websites", name);
           return yield* Effect.scoped(
             Effect.gen(function* () {
               const staged = yield* stageWebsiteArtifact(news);
