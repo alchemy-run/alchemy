@@ -97,6 +97,79 @@ Fly's proxy terminates TLS on 443 once the certificate is
 `"custom"` uploads a PEM (`fullchain` + `privateKey`). Hostname is
 the identity. Changing `app`, `hostname`, or `kind` replaces.
 
+## Issue a certificate independently
+
+Use `alchemy/ACME` when you want to choose the certificate authority or
+issue a wildcard with DNS-01. The account and certificate are independent
+of Fly; this example uploads the result to a Fly App.
+
+```typescript
+import * as ACME from "alchemy/ACME";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Fly from "alchemy/Fly";
+import * as Layer from "effect/Layer";
+
+const providers = Layer.mergeAll(
+  ACME.providers(),
+  Cloudflare.providers(),
+  Fly.providers(),
+);
+```
+
+Use `providers` in the Stack configuration. Inside the Stack's Effect,
+resolve your existing Cloudflare `Zone` and Fly `Site`, then issue and upload:
+
+```typescript
+const zone = yield* Zone;
+const site = yield* Site;
+const account = yield* ACME.Account("LetsEncrypt", {
+  ca: ACME.LetsEncrypt,
+  contact: ["mailto:ops@example.com"],
+  termsOfServiceAgreed: true,
+});
+const certificate = yield* ACME.Certificate("Wildcard", {
+  account,
+  identifiers: ["*.example.com"],
+  solver: Cloudflare.DNS.AcmeSolver(zone),
+});
+yield* Fly.Certificate("WildcardUpload", {
+  app: site,
+  hostname: "*.example.com",
+  kind: "custom",
+  fullchain: certificate.chain,
+  privateKey: certificate.privateKey,
+});
+```
+
+The DNS solver publishes and removes the challenge TXT records. Cloudflare's
+solver waits 60 seconds before validation so cached challenge values can expire.
+Start with `ACME.LetsEncryptStaging` while developing; its certificates are not
+trusted by browsers.
+
+Renewal is evaluated when you deploy, with a default threshold of 30 days before
+expiry. Schedule deployments if you need automatic renewal. Account and
+certificate private keys are persisted in stack state as redacted values;
+protect the state backend as secret material. Redaction alone is not encryption.
+
+## Manage certificates at runtime
+
+A Service can bind `Fly.WriteCertificates(Site)` to request, upload, inspect,
+check, and remove certificates without redeploying. Provide
+`Fly.WriteCertificatesHttp` on the Service Effect. For runtime issuance,
+`ACME.IssueCertificate` and `ACME.IssueCertificateHttp` bind an existing account;
+pass a runtime DNS solver to each issuance call.
+
+Runtime operations do not become stack resources. Your application owns renewal
+scheduling, revocation, and removal of certificates it creates this way. Verify
+that the chosen certificate authority is reachable from your runtime.
+
+Follow [Runtime issuance](/acme/runtime) for an authenticated Worker example,
+[Using certificates](/acme/using-certificates) for Fly uploads, and
+[Renewal & revocation](/acme/renewal) for scheduling and deletion policies.
+The [`IssueCertificate`](/providers/acme/issuecertificate) and
+[`WriteCertificates`](/providers/fly/writecertificates) references document the
+binding methods.
+
 ## Where next
 
 The [tutorial](/fly/tutorial/part-2) allocates `shared_v4` so

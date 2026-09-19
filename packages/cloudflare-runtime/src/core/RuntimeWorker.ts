@@ -114,13 +114,7 @@ export type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 export type Module =
   | {
       name: string;
-      type:
-        | "ESModule"
-        | "CommonJsModule"
-        | "Text"
-        | "Json"
-        | "PythonModule"
-        | "PythonRequirement";
+      type: "ESModule" | "CommonJsModule" | "Text" | "Json" | "PythonModule";
       content: string;
     }
   | {

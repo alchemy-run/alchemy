@@ -1714,6 +1714,65 @@ describe("prior crash in 'updating' state", () => {
   });
 });
 
+describe("pending replacement deletion plans", () => {
+  for (const status of ["replacing", "replaced"] as const) {
+    test(
+      `preserves the complete ${status} chain and all generation dependencies`,
+      Effect.gen(function* () {
+        const oldest: ResourceState = {
+          status: "created",
+          fqn: "R",
+          logicalId: "R",
+          namespace: undefined,
+          instanceId: "oldest",
+          resourceType: "Test.ModalResource",
+          providerVersion: 0,
+          props: { value: "one" },
+          attr: { value: "one", runtime: "live" },
+          providerMode: "live",
+          downstream: ["OldDependent"],
+          bindings: [],
+        };
+        const middle: ResourceState = {
+          ...oldest,
+          status: "replacing",
+          instanceId: "middle",
+          props: { value: "two" },
+          attr: undefined,
+          providerMode: "local",
+          downstream: ["MiddleDependent"],
+          deleteFirst: false,
+          old: oldest,
+        };
+        const pending: ResourceState = {
+          ...oldest,
+          status,
+          instanceId: "newest",
+          props: { value: "three" },
+          attr: { value: "three", runtime: "live" },
+          downstream: ["NewDependent"],
+          deleteFirst: false,
+          old: middle,
+        };
+        yield* seed({ R: pending });
+        const plan = yield* makePlan(Effect.void);
+        expect(plan.deletions.R?.action).toBe("delete");
+        expect(plan.deletions.R?.mode).toBe("live");
+        expect(plan.deletions.R?.state).toEqual(pending);
+        expect(plan.deletions.R?.downstream).toEqual([
+          "NewDependent",
+          "MiddleDependent",
+          "OldDependent",
+        ]);
+        const state = yield* yield* State;
+        expect(
+          yield* state.get({ stack: TEST_STACK, stage: TEST_STAGE, fqn: "R" }),
+        ).toEqual(pending);
+      }),
+    );
+  }
+});
+
 describe("prior crash in 'replacing' state", () => {
   const priorStates = ["created", "creating", "updated", "updating"] as const;
 

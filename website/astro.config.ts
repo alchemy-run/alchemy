@@ -38,6 +38,7 @@ function providersSidebarEntry() {
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "ACME", link: "/acme" },
     ],
   };
 }
@@ -1071,6 +1072,17 @@ export default defineConfig({
             { label: "Overview", link: "/prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "prisma/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
@@ -1080,10 +1092,28 @@ export default defineConfig({
               ],
             },
             {
-              label: "Compute",
+              label: "Frontend",
               items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
+                { label: "Overview", link: "/prisma/frontend/websites" },
+                { label: "Astro", link: "/prisma/frontend/astro" },
+                { label: "Foldkit", link: "/prisma/frontend/foldkit" },
+                { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "Nuxt", link: "/prisma/frontend/nuxt" },
+                { label: "Octane", link: "/prisma/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/prisma/frontend/react-router",
+                },
+                { label: "SolidStart", link: "/prisma/frontend/solidstart" },
+                { label: "Static sites", link: "/prisma/frontend/static-site" },
+                { label: "SvelteKit", link: "/prisma/frontend/sveltekit" },
+                {
+                  label: "TanStack Start",
+                  link: "/prisma/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/prisma/frontend/vite" },
+                { label: "Vocs", link: "/prisma/frontend/vocs" },
+                { label: "Waku", link: "/prisma/frontend/waku" },
               ],
             },
             {
@@ -1294,6 +1324,23 @@ export default defineConfig({
             },
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
+          ],
+        },
+        {
+          label: "ACME",
+          items: [
+            { label: "Overview", link: "/acme" },
+            { label: "Getting started", link: "/acme/getting-started" },
+            {
+              label: "Certificate authorities",
+              link: "/acme/certificate-authorities",
+            },
+            { label: "DNS validation", link: "/acme/dns-validation" },
+            { label: "Renewal & revocation", link: "/acme/renewal" },
+            { label: "Runtime issuance", link: "/acme/runtime" },
+            { label: "Using certificates", link: "/acme/using-certificates" },
+            { label: "Troubleshooting", link: "/acme/troubleshooting" },
+            providerResourcesEntry("ACME"),
           ],
         },
         providersSidebarEntry(),

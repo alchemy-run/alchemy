@@ -2,10 +2,10 @@
 
 Preview packages for pull requests. A Cloudflare Worker registry that verifies every publication against the GitHub Actions run that produced it, plus the `pkg` CLI that packs workspace packages and publishes them from CI.
 
-Install URLs look like `https://pkg.alchemy.run/<name>/<tag>`, where `<tag>` is a commit SHA, a short SHA, `branch:<name>`, or `pr:<number>`:
+Install URLs look like `https://pkg.alchemy.run/<name>/<tag>`, where `<tag>` is a commit SHA, a short SHA, `branch:<name>`, `pr:<number>`, or `pr:<number>:<short-sha>` for PR revisions:
 
 ```sh
-pnpm install https://pkg.alchemy.run/alchemy/pr:1516
+pnpm install https://pkg.alchemy.run/alchemy/pr:1516:163c051
 pnpm install https://pkg.alchemy.run/alchemy/branch:main
 pnpm install https://pkg.alchemy.run/alchemy/163c051
 ```
@@ -18,7 +18,7 @@ Every publication is a GitHub Actions **run**. The registry never trusts what a 
 2. `pkg pack` prints the artifact name, `pkg-manifest-<sha256 of the manifest>`, as the `artifact-name` step output for the upload. Only the job's runtime token can add artifacts to the run, and the runner exposes that token to actions alone, which is why the upload is its own step. The artifact is GitHub's record that this run vouched for exactly these package hashes.
 3. Requests name the run they come from (repository, run id, attempt) and nothing else. The registry fetches the run through the App, requires it to be in progress, lists its artifacts, and refuses any manifest whose hash is not vouched for. Someone naming another run can only ever get that run's own manifest accepted, which changes nothing.
 4. One idempotent publish either answers with the tarballs it lacks, which the CLI uploads before publishing again, or points the tags, posts a "Preview packages" check run on the commit, and for pull requests updates the sticky comment. The manifest's `head` has to be the run's head commit, so a `pull_request` job must check out `github.event.pull_request.head.sha` rather than the merge commit.
-5. A run from a fork gets only the `pr:<number>` tag. Commit and branch tags are shared by every publisher, and a fork can run any commit, including one the repository already published, so it may not write them.
+5. Install commands for all pull requests use the `pr:<number>:<short-sha>` tag, using the first seven characters of the run's head commit. New commits get distinct URLs; rerunning the same commit can update its tag. Fork runs get only this tag. Commit and branch tags are shared by every publisher, and a fork can run any commit, including one the repository already published, so it may not write them.
 
 ## The `pkg` CLI
 
@@ -108,7 +108,7 @@ The contract lives in `@alchemy.run/pkg/Protocol` as an Effect `HttpApi`. The Wo
 
 ## Policy
 
-`repos` lists the repositories allowed to publish. A publication may contain any package; every package gets the commit, short commit, `branch:<name>`, and `pr:<number>` tags of the run that produced it, and nothing in the manifest can name a different commit. A package built from a submodule is therefore tagged with the publishing repository's commit; dependency links between tarballs use content URLs and do not involve commits at all.
+`repos` lists the repositories allowed to publish. A publication may contain any package; same-repository runs get commit, short commit, `branch:<name>`, `pr:<number>`, and `pr:<number>:<short-sha>` tags as applicable, while fork runs get only `pr:<number>:<short-sha>`. Nothing in the manifest can name a different commit. A package built from a submodule is therefore tagged with the publishing repository's commit; dependency links between tarballs use content URLs and do not involve commits at all.
 
 ## Cleanup
 
