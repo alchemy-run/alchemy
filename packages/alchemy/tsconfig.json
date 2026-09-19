@@ -32,6 +32,7 @@
     ]
   },
   "references": [
+    { "path": "../../submodules/distilled/packages/doppler/tsconfig.json" },
     {
       "path": "../floci/tsconfig.json"
     },
