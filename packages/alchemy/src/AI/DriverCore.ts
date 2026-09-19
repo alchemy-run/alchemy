@@ -2896,7 +2896,10 @@ export const makeSessionEngine = (
     // the spawn call DRIVES the worker — its rounds run inside this
     // handler, and the waiter resolves at the worker's quiescence
     yield* burst(worker.key);
-    return yield* Deferred.await(waiter);
+    const report = yield* Deferred.await(waiter);
+    // the worker's session key rides the result so a projection can
+    // OPEN the subagent's transcript (a UI pane) — plain reports wrap
+    return typeof report === "string" ? { report, agent: worker.key } : report;
   });
 
   /**

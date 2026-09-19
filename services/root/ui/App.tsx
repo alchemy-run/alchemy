@@ -36,6 +36,7 @@ import {
   normalizeLegacyLocation,
   OVERLAY_EVENT,
   closePane,
+  openPane,
   overlayFromLocation,
   panesFromLocation,
   showChannel,
@@ -69,11 +70,16 @@ import {
 import {
   useRef,
   Fragment,
+  useContext,
   useEffect,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import {
+  OpenAgentContext,
+  type SpawnTarget,
+} from "@/components/tool-card";
 
 interface Channel {
   readonly name: string;
@@ -142,6 +148,22 @@ const AgentColumn = ({ id }: { id: string }) => {
   // WHO is working here — the header names the agent, not the
   // session's internal id
   const author = sessionAuthor(id);
+  // subagents open RIGHT-ADJACENT panes, never inline — the same
+  // reference chain a message link follows. A bare worker key (the
+  // intrinsic spawn's `spawn-…`) lives under this column's own term.
+  const pane = useContext(PaneContext);
+  const term = id.includes(":") ? id.slice(0, id.indexOf(":")) : undefined;
+  const openSubagent = (target: SpawnTarget) => {
+    if (target.key === undefined) return;
+    const child =
+      target.key.includes(":") || term === undefined
+        ? target.key
+        : `${term}:${target.key}`;
+    openPane(
+      { kind: "agent", id: child },
+      pane === undefined ? {} : { after: pane },
+    );
+  };
   return (
     <section
       aria-label="agent session"
@@ -168,15 +190,17 @@ const AgentColumn = ({ id }: { id: string }) => {
           <X className="size-3.5" />
         </button>
       </header>
-      <ChatView
-        id={id}
-        active={false}
-        readOnly
-        flat
-        {...(invocation !== undefined && invocation.startsWith("p-")
-          ? { hideInput: invocation }
-          : {})}
-      />
+      <OpenAgentContext.Provider value={openSubagent}>
+        <ChatView
+          id={id}
+          active={false}
+          readOnly
+          flat
+          {...(invocation !== undefined && invocation.startsWith("p-")
+            ? { hideInput: invocation }
+            : {})}
+        />
+      </OpenAgentContext.Provider>
     </section>
   );
 };

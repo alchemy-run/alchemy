@@ -930,7 +930,9 @@ const THREAD: {
           {running && settled === undefined && (
             <span className="animate-pulse text-[11px] text-moss">working</span>
           )}
-          {!intrinsic && (
+          {/* intrinsic workers carry their session key on the result,
+              so a settled subagent opens as a pane like any agent */}
+          {(!intrinsic || agentKey !== undefined) && (
             <OpenAgentButton target={{ key: agentKey, brief: input.brief }} />
           )}
         </span>
