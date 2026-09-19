@@ -203,7 +203,7 @@ export interface DefaultSecurityGroup extends Resource<
  *   egress: [],
  * });
  * yield* AWS.EC2.SecurityGroupRule("HttpsEgress", {
- *   groupId: group.groupId,
+ *   group: group,
  *   type: "egress",
  *   ipProtocol: "tcp",
  *   fromPort: 443,
@@ -212,9 +212,11 @@ export interface DefaultSecurityGroup extends Resource<
  * });
  * ```
  *
- * Pass the manager's `groupId` output to order rule creation and updates.
- * The manager finishes its update before dependent rules execute, while its
- * stable group ID remains available for replacement planning.
+ * Pass the whole manager as `group` so rule creation and updates wait for its
+ * inline reconciliation. Only `group.groupId` is consumed by the rule provider;
+ * unrelated manager attributes do not trigger rule updates. The stable ID is
+ * still available for replacement planning. The ID-only `groupId` form cannot
+ * enforce this ordering when the manager updates without changing its ID.
  * Standalone ingress composes the same way. Omitting `egress` instead would
  * retain the default allow-all rule alongside this standalone rule. A current
  * declaration and its persisted physical ID establish ownership, not cloud
@@ -456,7 +458,6 @@ export const DefaultSecurityGroupProvider = () =>
       });
 
       return {
-        reconcileBeforeDependents: true,
         stables: ["groupId", "groupArn", "groupName", "ownerId"],
 
         read: Effect.fn(function* ({ olds, output }) {

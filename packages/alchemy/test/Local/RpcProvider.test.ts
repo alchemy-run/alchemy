@@ -2,13 +2,8 @@ import { AlchemyContext } from "@/AlchemyContext.ts";
 import * as Artifacts from "@/Artifacts.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import * as RpcProvider from "@/Local/RpcProvider.ts";
-import { RpcProviderProxy } from "@/Local/RpcProviderProxy.ts";
-import {
-  unwrapRpcHandlers,
-  wrapRpcHandlers,
-} from "@/Local/RpcSerialization.ts";
 import type { ProviderService } from "@/Provider.ts";
-import { Resource, type ResourceLike } from "@/Resource.ts";
+import { Resource } from "@/Resource.ts";
 import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { describe, expect, it } from "alchemy-test";
@@ -41,49 +36,6 @@ const defaultStack: StackShape = {
 };
 
 describe("Local.RpcProvider.effect", () => {
-  it.effect("preserves opt-in ordering metadata in process", () =>
-    useProvider((provider) =>
-      Effect.sync(() => {
-        expect(provider.reconcileBeforeDependents).toBe(true);
-        expect(typeof provider.list).toBe("function");
-      }),
-    ).pipe(Effect.asVoid),
-  );
-
-  for (const flag of [true, false, undefined]) {
-    it.effect(
-      `preserves ordering metadata through the RPC proxy: ${flag}`,
-      () =>
-        Effect.gen(function* () {
-          const remote: ProviderService<TestResource> = {
-            ...(flag === undefined ? {} : { reconcileBeforeDependents: flag }),
-            list: () => Effect.succeed([]),
-            reconcile: () => Effect.succeed({ ok: true, artifact: "remote" }),
-            delete: () => Effect.void,
-          };
-          const [, result] = yield* useProvider((provider) =>
-            Effect.gen(function* () {
-              expect(provider.reconcileBeforeDependents).toBe(flag);
-              return yield* provider.list();
-            }),
-          ).pipe(
-            Effect.provideService(RpcProviderProxy, {
-              get: <R extends ResourceLike>(url: string, type: R["Type"]) => {
-                expect(url).toBe("ignored://entry");
-                expect(type).toBe(TestResource.Type);
-                return Effect.succeed(
-                  unwrapRpcHandlers(
-                    wrapRpcHandlers(remote),
-                  ) as ProviderService<R>,
-                );
-              },
-            }),
-          );
-          expect(result).toEqual([]);
-        }),
-    );
-  }
-
   it.effect(
     "provides default Stack, Stage, and InstanceId to lifecycle effects",
     () =>
@@ -240,7 +192,6 @@ const TestResourceProvider = (capture: Capture) =>
     TestResource,
     "ignored://entry",
     Effect.succeed({
-      reconcileBeforeDependents: true,
       diff: Effect.fn(function* () {
         capture.artifact = yield* artifact;
       }),

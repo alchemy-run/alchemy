@@ -275,12 +275,6 @@ export type Plan<Output = any> = {
    */
   cycleMembers: ReadonlySet<string>;
   /**
-   * Execution-only waits for opted-in upstream reconciliations. Derived from
-   * declared references, independently of stable-value materialization.
-   * Omitted when no ordering is needed; never persisted in resource state.
-   */
-  reconcileDependencies?: Record<string, string[]>;
-  /**
    * The run-level default {@link ProviderMode} this plan was built with
    * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
    * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
@@ -1821,45 +1815,6 @@ export const make = <A>(
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
 
-    const reconcileDependencies: Record<string, string[]> = {};
-    const orderedUpstreams = Object.entries(resourceGraph).filter(
-      ([, node]) =>
-        node.provider.reconcileBeforeDependents && node.action !== "noop",
-    );
-    if (orderedUpstreams.length > 0) {
-      const downstream: Record<string, string[]> = {};
-      for (const [consumer, upstreams] of Object.entries(
-        allUpstreamDependencies,
-      )) {
-        for (const upstream of upstreams) {
-          (downstream[upstream] ??= []).push(consumer);
-        }
-      }
-      const reachable = (root: string, edges: Record<string, string[]>) => {
-        const visited = new Set<string>();
-        const pending = [root];
-        while (pending.length > 0) {
-          const fqn = pending.pop()!;
-          if (visited.has(fqn)) continue;
-          visited.add(fqn);
-          pending.push(...(edges[fqn] ?? []));
-        }
-        return visited;
-      };
-      for (const [upstream] of orderedUpstreams) {
-        const ancestors = reachable(upstream, allUpstreamDependencies);
-        for (const consumer of reachable(upstream, downstream)) {
-          // A terminal wait within an SCC (including self-bindings) deadlocks.
-          if (ancestors.has(consumer)) continue;
-          const node = resourceGraph[consumer] ?? actionGraph[consumer];
-          if (node.action === "noop") continue;
-          // Traverse noops too: their materialized outputs can hide this edge
-          // from a transitive consumer that still has work to execute.
-          (reconcileDependencies[consumer] ??= []).push(upstream);
-        }
-      }
-    }
-
     // SCC membership of the combined upstream graph. Apply uses it to
     // decide whether an update node must publish its prior attr early to
     // break a cycle, or can simply wait for upstreams like a DAG node
@@ -2148,9 +2103,6 @@ export const make = <A>(
       actionDeletions,
       output: stack.output,
       cycleMembers,
-      ...(Object.keys(reconcileDependencies).length > 0
-        ? { reconcileDependencies }
-        : {}),
       defaultMode: runDefaultMode,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(

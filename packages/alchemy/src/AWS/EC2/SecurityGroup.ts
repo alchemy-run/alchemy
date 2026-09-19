@@ -339,8 +339,10 @@ export interface SecurityGroup extends Resource<
  *
  * ### Composing Standalone Rules
  * Standalone rules must be declared in the same stack and stage as this group.
- * Pass the group's `groupId` output to order creation and updates. Ownership is
- * verified against each current declaration's persisted physical rule ID.
+ * Pass the whole resource as `group` to order creation and updates after inline
+ * reconciliation. The ID-only `groupId` form remains supported, but a stable ID
+ * alone does not order concurrent inline updates. Ownership is verified against
+ * each current declaration's persisted physical rule ID.
  * Removing a declaration ends that ownership; tags alone do not protect rules.
  * Cross-stack or cross-stage rule ownership is unsupported: this group removes
  * rules declared elsewhere when reconciling its authoritative configuration.
@@ -350,7 +352,7 @@ export interface SecurityGroup extends Resource<
  * **Example:** Add a standalone rule in the group's stack
  * ```typescript
  * yield* AWS.EC2.SecurityGroupRule("HttpsIngress", {
- *   groupId: sg.groupId,
+ *   group: sg,
  *   type: "ingress",
  *   ipProtocol: "tcp",
  *   fromPort: 443,

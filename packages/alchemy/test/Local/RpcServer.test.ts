@@ -87,19 +87,16 @@ describe.concurrent("Local.RpcServer", () => {
             const stub = (newWebSocketRpcSession as any)(
               url,
             ) as RpcStub<RpcProxyApi>;
-            const provider = yield* Effect.promise(() =>
-              stub.getProvider(
+            const result = yield* Effect.promise(async () => {
+              const provider = await stub.getProvider(
                 "Test.Echo",
                 new URL("./fixtures/rpc-server-entry.ts", import.meta.url).href,
-              ),
-            );
-            expect(provider.reconcileBeforeDependents).toBe(true);
-            const handlers = unwrapRpcHandlers(provider as any) as {
-              reconcileBeforeDependents?: boolean;
-              echo: (msg: string) => Effect.Effect<string>;
-            };
-            expect(handlers.reconcileBeforeDependents).toBe(true);
-            const result = yield* handlers.echo("hello");
+              );
+              const handlers = unwrapRpcHandlers(provider as any) as {
+                echo: (msg: string) => Effect.Effect<string>;
+              };
+              return await Effect.runPromise(handlers.echo("hello"));
+            });
             expect(result).toBe("echo:hello");
 
             // Closing the parent ws should cause the child to exit promptly.

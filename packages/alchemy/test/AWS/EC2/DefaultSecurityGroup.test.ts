@@ -14,6 +14,7 @@ import type {
   VpcId,
 } from "@/AWS/EC2";
 import * as Drift from "@/Drift";
+import * as Output from "@/Output";
 import { isActionState, State } from "@/State/State";
 import * as Core from "@/Test/Core";
 import * as EC2 from "@distilled.cloud/aws/ec2";
@@ -1254,7 +1255,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
             });
             const ingress = standalone
               ? yield* SecurityGroupRule("CompositionIngress", {
-                  groupId: group.groupId,
+                  group: group,
                   type: "ingress",
                   ipProtocol: "tcp",
                   fromPort: replace ? 5433 : 5432,
@@ -1265,7 +1266,7 @@ for (const mode of ["omitted", "empty", "inline"] as const) {
               : undefined;
             const egress = standalone
               ? yield* SecurityGroupRule("CompositionEgress", {
-                  groupId: group.groupId,
+                  group: group,
                   type: "egress",
                   ipProtocol: "udp",
                   fromPort: replace ? 123 : 53,
@@ -1552,7 +1553,7 @@ test.provider(
             },
           );
           const direction = yield* SecurityGroupRule("DirectionReplacement", {
-            groupId: group.groupId,
+            group: group,
             type: desired.direction,
             ipProtocol: "tcp",
             fromPort: desired.directionPort,
@@ -1560,7 +1561,7 @@ test.provider(
             cidrIpv4: desired.directionCidr,
           });
           const identity = yield* SecurityGroupRule("IdentityReplacement", {
-            groupId: group.groupId,
+            group: group,
             type: "egress",
             ipProtocol: desired.protocol,
             fromPort: desired.identityPort,
@@ -1571,7 +1572,7 @@ test.provider(
             phase === 0
               ? undefined
               : yield* SecurityGroupRule("AddedDuringReplacement", {
-                  groupId: group.groupId,
+                  group: group,
                   type: "ingress",
                   ipProtocol: "udp",
                   fromPort: 1234,
@@ -1758,7 +1759,7 @@ test.provider(
             egress: [],
           });
           yield* SecurityGroupRule("TargetIngress", {
-            groupId: group.groupId,
+            group: group,
             type: "ingress",
             ipProtocol: "tcp",
             fromPort: 443,
@@ -1766,7 +1767,7 @@ test.provider(
             cidrIpv4: "10.58.0.0/16",
           });
           yield* SecurityGroupRule("TargetEgress", {
-            groupId: group.groupId,
+            group: group,
             type: "egress",
             ipProtocol: "udp",
             fromPort: 53,
@@ -1920,6 +1921,342 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+for (const kind of ["default", "custom"] as const) {
+  test.provider(
+    `normalizes standalone input forms and ignores unrelated ${kind} group attributes`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (
+          form:
+            | "id"
+            | "resource"
+            | "attributes"
+            | "flatMap-id"
+            | "flatMap-resource"
+            | "both"
+            | "neither",
+          description = "Standalone",
+          inlineDescription = "Inline",
+          move = false,
+        ) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("InputFormsVpc", {
+              cidrBlock: "10.60.0.0/16",
+            });
+            const props = {
+              vpcId: vpc.vpcId,
+              ingress: [
+                {
+                  ipProtocol: "tcp",
+                  fromPort: 443,
+                  toPort: 443,
+                  cidrIpv4: "10.60.0.0/16",
+                  description: inlineDescription,
+                },
+              ],
+              egress: [],
+            };
+            const group =
+              kind === "default"
+                ? yield* DefaultSecurityGroup("InputFormsGroup", props)
+                : yield* SecurityGroup("InputFormsGroup", props);
+            const peer = yield* SecurityGroup("InputFormsPeer", {
+              vpcId: vpc.vpcId,
+              ingress: [],
+              egress: [],
+            });
+            const targetGroup = move ? peer : group;
+            const target =
+              form === "id"
+                ? { groupId: targetGroup.groupId }
+                : form === "resource"
+                  ? { group: targetGroup }
+                  : form === "attributes"
+                    ? { group: { groupId: targetGroup.groupId } }
+                    : form === "flatMap-id"
+                      ? {
+                          groupId: vpc.vpcId.pipe(
+                            Output.flatMap(() => targetGroup.groupId),
+                          ),
+                        }
+                      : form === "flatMap-resource"
+                        ? {
+                            group: vpc.vpcId.pipe(
+                              Output.flatMap(() => Output.of(targetGroup)),
+                            ),
+                          }
+                        : form === "both"
+                          ? { group: targetGroup, groupId: targetGroup.groupId }
+                          : {};
+            const rule = yield* SecurityGroupRule("InputFormsRule", {
+              ...target,
+              type: "egress",
+              ipProtocol: "tcp",
+              fromPort: 5432,
+              toPort: 5432,
+              cidrIpv4: "10.60.0.0/16",
+              description,
+              tags: { purpose: description },
+            });
+            return { vpc, group, peer, rule };
+          });
+        const created = yield* stack.deploy(program("id"));
+        const groupId = created.group.groupId;
+        const ruleId = created.rule.securityGroupRuleId;
+        const initial = yield* readRules(groupId);
+        for (const form of [
+          "flatMap-id",
+          "id",
+          "flatMap-resource",
+          "resource",
+          "attributes",
+          "id",
+        ] as const) {
+          const observer = yield* observeRuleRequests;
+          yield* Effect.gen(function* () {
+            const plan = yield* stack.plan(program(form));
+            expect(plan.resources.InputFormsGroup?.action).toBe("noop");
+            expect(plan.resources.InputFormsRule?.action).toBe("noop");
+            const deployed = yield* stack.deploy(program(form));
+            expect(deployed.rule.securityGroupRuleId).toBe(ruleId);
+            expect(deployed.rule.groupId).toBe(groupId);
+          }).pipe(
+            Effect.provideService(HttpClient.HttpClient, observer.client),
+          );
+          expect(observer.requests.length).toBeGreaterThan(0);
+          expect(observer.requests.filter((request) => request.write)).toEqual(
+            [],
+          );
+          const rules = yield* readRules(groupId);
+          expect(rules).toEqual(expect.arrayContaining(initial));
+          expect(rules).toHaveLength(2);
+          expect(
+            rules.find((rule) => rule.SecurityGroupRuleId === ruleId),
+          ).toMatchObject({
+            GroupId: groupId,
+            SecurityGroupRuleId: ruleId,
+            IsEgress: true,
+            FromPort: 5432,
+            ToPort: 5432,
+          });
+        }
+        for (const form of ["both", "neither"] as const) {
+          const observer = yield* observeRuleRequests;
+          const error = yield* stack
+            .plan(program(form))
+            .pipe(
+              Effect.provideService(HttpClient.HttpClient, observer.client),
+              Effect.flip,
+            );
+          expect(error).toMatchObject({
+            _tag: "InvalidSecurityGroupRuleGroup",
+            message: "Specify exactly one of group or groupId.",
+          });
+          expect(observer.requests.filter((request) => request.write)).toEqual(
+            [],
+          );
+        }
+        expect(
+          (yield* stack.plan(program("resource", "Updated"))).resources
+            .InputFormsRule?.action,
+        ).toBe("update");
+        const updated = yield* stack.deploy(program("resource", "Updated"));
+        expect(updated.rule.securityGroupRuleId).toBe(ruleId);
+        const observed = (yield* readRules(groupId)).find(
+          (rule) => rule.SecurityGroupRuleId === ruleId,
+        )!;
+        expect(observed.Description).toBe("Updated");
+        expect(observed.Tags).toEqual(
+          expect.arrayContaining([{ Key: "purpose", Value: "Updated" }]),
+        );
+        const observer = yield* observeRuleRequests;
+        yield* Effect.gen(function* () {
+          const plan = yield* stack.plan(
+            program("resource", "Updated", "Changed inline"),
+          );
+          expect(plan.resources.InputFormsGroup?.action).toBe("update");
+          expect(plan.resources.InputFormsRule?.action).toBe("noop");
+          const deployed = yield* stack.deploy(
+            program("resource", "Updated", "Changed inline"),
+          );
+          expect(deployed.rule.securityGroupRuleId).toBe(ruleId);
+        }).pipe(Effect.provideService(HttpClient.HttpClient, observer.client));
+        const writes = observer.requests.filter((request) => request.write);
+        expect(writes.length).toBeGreaterThan(0);
+        expect(
+          writes.every(
+            (request) => request.action === "ModifySecurityGroupRules",
+          ),
+        ).toBe(true);
+        expect(writes.flatMap((request) => request.ruleIds)).not.toContain(
+          ruleId,
+        );
+        expect(
+          (yield* readRules(groupId)).find(
+            (rule) => rule.SecurityGroupRuleId === ruleId,
+          ),
+        ).toEqual(observed);
+        for (const form of ["resource", "id"] as const) {
+          const noop = yield* observeRuleRequests;
+          yield* Effect.gen(function* () {
+            expect(
+              (yield* stack.plan(program(form, "Updated", "Changed inline")))
+                .resources.InputFormsRule?.action,
+            ).toBe("noop");
+            yield* stack.deploy(program(form, "Updated", "Changed inline"));
+          }).pipe(Effect.provideService(HttpClient.HttpClient, noop.client));
+          expect(noop.requests.length).toBeGreaterThan(0);
+          expect(noop.requests.filter((request) => request.write)).toEqual([]);
+        }
+        // A current declaration targeting another group no longer delegates its old ID.
+        for (const form of ["flatMap-id", "flatMap-resource"] as const) {
+          const movePlan = yield* stack.plan(
+            program(form, "Updated", "Changed inline", true),
+          );
+          expect(movePlan.resources.InputFormsGroup?.action).toBe("update");
+          expect(movePlan.resources.InputFormsRule?.action).toBe("replace");
+        }
+        const moving = program(
+          kind === "default" ? "resource" : "id",
+          "Updated",
+          "Changed inline",
+          true,
+        );
+        const movePlan = yield* stack.plan(moving);
+        expect(movePlan.resources.InputFormsGroup?.action).toBe("update");
+        expect(movePlan.resources.InputFormsRule?.action).toBe("replace");
+        const moved = yield* stack.deploy(moving);
+        expect(moved.rule.groupId).toBe(moved.peer.groupId);
+        expect(moved.rule.securityGroupRuleId).not.toBe(ruleId);
+        const remaining = yield* readRules(groupId);
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0]?.FromPort).toBe(443);
+        expect(remaining[0]?.Description).toBe("Changed inline");
+        const peerRules = yield* readRules(moved.peer.groupId);
+        expect(peerRules).toHaveLength(1);
+        expect(peerRules[0]).toMatchObject({
+          SecurityGroupRuleId: moved.rule.securityGroupRuleId,
+          IsEgress: true,
+          FromPort: 5432,
+          ToPort: 5432,
+        });
+        yield* stack.destroy();
+        yield* assertVpcGone(created.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+}
+
+for (const scenario of [
+  "new destination VPC",
+  "upstream VPC replacement",
+] as const) {
+  test.provider(
+    `replaces whole-group standalone rules during ${scenario}`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (move: boolean) =>
+          Effect.gen(function* () {
+            const original = yield* Vpc("RuleIdentityVpc", {
+              cidrBlock:
+                move && scenario === "upstream VPC replacement"
+                  ? "10.62.0.0/16"
+                  : "10.61.0.0/16",
+            });
+            const destination =
+              move && scenario === "new destination VPC"
+                ? yield* Vpc("RuleDestinationVpc", {
+                    cidrBlock: "10.62.0.0/16",
+                  })
+                : original;
+            const group = yield* DefaultSecurityGroup("RuleIdentityGroup", {
+              vpcId: destination.vpcId,
+              ingress: [],
+              egress: [],
+            });
+            const ingress = yield* SecurityGroupRule("MovingIngress", {
+              group,
+              type: "ingress",
+              ipProtocol: "tcp",
+              fromPort: 443,
+              toPort: 443,
+              cidrIpv4: "10.61.0.0/16",
+            });
+            const egress = yield* SecurityGroupRule("MovingEgress", {
+              group,
+              type: "egress",
+              ipProtocol: "udp",
+              fromPort: 53,
+              toPort: 53,
+              cidrIpv4: "10.61.0.0/16",
+            });
+            return { original, destination, group, ingress, egress };
+          });
+        const created = yield* stack.deploy(program(false));
+        const plan = yield* stack.plan(program(true));
+        for (const fqn of [
+          "RuleIdentityGroup",
+          "MovingIngress",
+          "MovingEgress",
+        ]) {
+          expect(plan.resources[fqn]?.action).toBe("replace");
+        }
+        const moved = yield* stack.deploy(program(true));
+        expect(moved.group.groupId).not.toBe(created.group.groupId);
+        expect(moved.ingress.securityGroupRuleId).not.toBe(
+          created.ingress.securityGroupRuleId,
+        );
+        expect(moved.egress.securityGroupRuleId).not.toBe(
+          created.egress.securityGroupRuleId,
+        );
+        expect(moved.ingress.groupId).toBe(moved.group.groupId);
+        expect(moved.egress.groupId).toBe(moved.group.groupId);
+        yield* expectRules(
+          moved.group.groupId,
+          [
+            {
+              SecurityGroupRuleId: moved.ingress.securityGroupRuleId,
+              IsEgress: false,
+              IpProtocol: "tcp",
+              FromPort: 443,
+              ToPort: 443,
+              CidrIpv4: "10.61.0.0/16",
+            },
+          ],
+          [
+            {
+              SecurityGroupRuleId: moved.egress.securityGroupRuleId,
+              IsEgress: true,
+              IpProtocol: "udp",
+              FromPort: 53,
+              ToPort: 53,
+              CidrIpv4: "10.61.0.0/16",
+            },
+          ],
+        );
+        if (scenario === "new destination VPC") {
+          yield* expectRules(created.group.groupId, [], []);
+        } else {
+          yield* assertVpcGone(created.original.vpcId);
+        }
+        const noop = yield* stack.plan(program(true));
+        for (const fqn of [
+          "RuleIdentityGroup",
+          "MovingIngress",
+          "MovingEgress",
+        ]) {
+          expect(noop.resources[fqn]?.action).toBe("noop");
+        }
+        yield* stack.destroy();
+        yield* assertVpcGone(created.original.vpcId);
+        yield* assertVpcGone(moved.destination.vpcId);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+}
 
 const observeRuleRequests = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;

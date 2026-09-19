@@ -15,14 +15,12 @@ import { launch } from "../../../src/Local/RpcServer.ts";
 export class TestEcho extends Context.Service<
   TestEcho,
   {
-    reconcileBeforeDependents: boolean;
     echo: (msg: string) => Effect.Effect<string>;
     boom: () => Effect.Effect<never, { _tag: "Boom"; msg: string }>;
   }
 >()("Test.Echo") {}
 
 const TestEchoLive = Layer.succeed(TestEcho, {
-  reconcileBeforeDependents: true,
   echo: (msg) => Effect.succeed(`echo:${msg}`),
   boom: () => Effect.fail({ _tag: "Boom" as const, msg: "kaboom" }),
 });
