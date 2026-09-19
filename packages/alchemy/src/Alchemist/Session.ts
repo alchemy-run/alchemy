@@ -23,8 +23,10 @@ import { AwsAuth } from "../AWS/AuthProvider.ts";
 import { AxiomAuth } from "../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../Cloudflare/Auth/AuthProvider.ts";
 import { FlyAuth } from "../Fly/AuthProvider.ts";
+import { DopplerAuth } from "../Doppler/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
+import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
@@ -33,7 +35,11 @@ import { StripeAuth } from "../Stripe/AuthProvider.ts";
 import * as Stack from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { Progress } from "./Progress.ts";
-import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import {
+  loadConfigProvider,
+  stackConfigLayer,
+  StackConfigOverrides,
+} from "../Util/ConfigProvider.ts";
 import { fileLogger } from "../Util/FileLogger.ts";
 
 import {
@@ -55,6 +61,7 @@ export type StackModule = ReturnType<ReturnType<typeof Stack.make>> & {
   readonly stackName: string;
   readonly providers: Layer.Layer<never> | undefined;
   readonly state: Layer.Layer<never> | undefined;
+  readonly secrets: Stack.StackProps<never>["secrets"];
 };
 
 export interface StackModuleLoader {
@@ -130,13 +137,25 @@ interface SessionServicesOptions {
 const sessionServices = Effect.fn("sessionServices")(function* (
   options: SessionServicesOptions,
 ) {
-  return Layer.mergeAll(
-    ConfigProvider.layer(
+  const commandConfig = yield* loadConfigProvider(options.envFile);
+  const envFile = Option.getOrUndefined(options.envFile);
+
+  // `--env-file` and `--profile` were given on the command line, so they must
+  // keep winning over whatever a stack's `secrets` layers load.
+  const overrides: StackConfigOverrides = {
+    envFile,
+    apply: (stackConfig) =>
       withProfileOverride(
-        yield* loadConfigProvider(options.envFile),
+        envFile === undefined
+          ? stackConfig
+          : ConfigProvider.orElse(commandConfig, stackConfig),
         options.profile,
       ),
-    ),
+  };
+
+  return Layer.mergeAll(
+    Layer.succeed(StackConfigOverrides, overrides),
+    ConfigProvider.layer(withProfileOverride(commandConfig, options.profile)),
     options.logger ??
       Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
     options.extra ?? Layer.empty,
@@ -350,6 +369,7 @@ export const buildStackProviders = Effect.fn("buildStackProviders")(function* (
   const context = yield* Layer.build(
     (stackEffect.providers ?? Layer.empty).pipe(
       Layer.provideMerge(stackEffect.state ?? Layer.empty),
+      Layer.provideMerge(stackConfigLayer(stackEffect.secrets)),
       Layer.provideMerge(Layer.mergeAll(valueServices, shared)),
     ),
   );
@@ -362,7 +382,9 @@ const builtinAuth = Layer.mergeAll(
   CloudflareAuth,
   FlyAuth,
   GitHubAuth,
+  DopplerAuth,
   HetznerAuth,
+  InfisicalAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,
@@ -418,8 +440,7 @@ const collectAuthProvidersUncached = Effect.fn("collectAuthProvidersUncached")(
     }
     if (!missingDefault) {
       yield* buildStackProviders({ ...options, registry: authProviders }).pipe(
-        Effect.timeout(Duration.seconds(15)),
-        Effect.catchTag("TimeoutError", () => Effect.void),
+        Effect.timeoutOption(Duration.seconds(15)),
         Effect.catchCause((cause) => {
           const suppressed = cause.reasons.some((reason) => {
             const error = Cause.isFailReason(reason)

@@ -1,5 +1,4 @@
 import type { ConfigError } from "effect/Config";
-import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type { Crypto } from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -28,8 +27,9 @@ import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import { StackContext } from "./StackContext.ts";
+import type * as Schema from "effect/Schema";
 import type { State } from "./State/State.ts";
-import { loadConfigProvider } from "./Util/ConfigProvider.ts";
+import { stackConfigLayer } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
@@ -92,9 +92,50 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
+/**
+ * Where a stack's configuration comes from and what it must contain.
+ *
+ * ```ts
+ * secrets: {
+ *   providers: [Secrets.DotEnv(), Secrets.Doppler({ project: "app", config: "dev" })],
+ *   schema: Schema.Struct({ DATABASE_URL: Schema.String, API_KEY: Schema.Redacted }),
+ * }
+ * ```
+ */
+export interface StackSecrets {
+  /**
+   * ConfigProvider layers applied in order; later providers override earlier
+   * ones and the process environment overrides them all. Each provider is
+   * built with the configuration assembled so far, so an options effect can
+   * read the `Stage` or values from an earlier provider.
+   *
+   * Defaults to `[Secrets.DotEnv()]`; use `[]` to disable automatic dotenv
+   * loading.
+   */
+  providers?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
+  /**
+   * Whether the process environment sits above every provider. Set to
+   * `false` to ignore it entirely, then add `Secrets.ProcessEnv()` to
+   * `providers` where it should rank instead (auth providers read CI
+   * credentials such as `CLOUDFLARE_API_TOKEN` through the same
+   * configuration, so CI needs it somewhere). Command-line flags such as
+   * `--env-file` and `--profile` still apply on top.
+   * @default true
+   */
+  automaticallyLoadProcessEnv?: boolean;
+  /**
+   * Validated against the assembled configuration once every provider has
+   * loaded, so a missing or malformed key fails the stack before any
+   * resource is touched. Typically a `Schema.Struct` keyed by variable name.
+   */
+  schema?: Schema.ConstraintCodec<unknown, unknown>;
+}
+
 export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** See {@link StackSecrets}. Defaults to loading `.env`. */
+  secrets?: StackSecrets;
 }
 
 export const Stack: Context.ServiceClass<
@@ -159,6 +200,7 @@ export const Stack: Context.ServiceClass<
               stage: createStageProxy(stackName),
               state: options?.state,
               providers: options?.providers,
+              secrets: options?.secrets,
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
@@ -180,6 +222,7 @@ export const Stack: Context.ServiceClass<
             stage: createStageProxy(stackName),
             state: options?.state,
             providers: options?.providers,
+            secrets: options?.secrets,
           }),
       );
     },
@@ -224,6 +267,8 @@ export interface MakeStackProps<ROut = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /** See {@link StackSecrets}. Defaults to loading `.env`. */
+  secrets?: StackSecrets;
   /** @internal */
   stack?: StackSpec;
 }
@@ -262,6 +307,7 @@ export const make =
         }
         return options.providers.pipe(
           Layer.provideMerge(options.state),
+          Layer.provideMerge(stackConfigLayer(options.secrets)),
           Layer.provideMerge(
             Layer.effect(
               Stack,
@@ -348,15 +394,9 @@ export const evalStack = <A, B, StackErr, Err, Req>(
 ) => {
   const body = Effect.gen(function* () {
     const stack = yield* effect;
-    const configProvider = yield* loadConfigProvider(Option.none());
-
     return yield* fn(stack).pipe(
       provideFreshArtifactStore,
-      Effect.provide(
-        Layer.succeedContext(stack.services).pipe(
-          Layer.provideMerge(Layer.succeed(ConfigProvider, configProvider)),
-        ),
-      ),
+      Effect.provide(Layer.succeedContext(stack.services)),
     );
   }).pipe(
     Effect.provide(
