@@ -291,16 +291,18 @@ it.effect(
         {
           providers: Layer.empty,
           state: inMemoryState(),
-          secrets: [
-            // A stack's ConfigProvider is built from the real process
-            // environment, so feed DOPPLER_TOKEN in through an earlier
-            // secrets layer; later layers see values from earlier ones.
-            ConfigProvider.layer(
-              ConfigProvider.fromEnv({ env: { DOPPLER_TOKEN: "layered" } }),
-            ),
-            Doppler({ project: "first", config: "dev" }),
-            Doppler({ project: "second", config: "dev" }),
-          ],
+          secrets: {
+            providers: [
+              // A stack's ConfigProvider is built from the real process
+              // environment, so feed DOPPLER_TOKEN in through an earlier
+              // secrets layer; later layers see values from earlier ones.
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { DOPPLER_TOKEN: "layered" } }),
+              ),
+              Doppler({ project: "first", config: "dev" }),
+              Doppler({ project: "second", config: "dev" }),
+            ],
+          },
         },
         Effect.all([
           Config.String("DOPPLER_TEST_VALUE"),

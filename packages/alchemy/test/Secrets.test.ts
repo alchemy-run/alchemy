@@ -9,7 +9,10 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Logger from "effect/Logger";
 import * as PlatformError from "effect/PlatformError";
+import { MinimumLogLevel } from "effect/References";
+import * as Schema from "effect/Schema";
 
 const files = (contents: Record<string, string>) =>
   FileSystem.layerNoop({
@@ -77,7 +80,9 @@ describe("stack secrets", () => {
         {
           providers: Layer.empty,
           state: inMemoryState(),
-          secrets: [source],
+          secrets: {
+            providers: [source],
+          },
         },
         Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
       );
@@ -119,7 +124,9 @@ describe("stack secrets", () => {
             {
               providers: Layer.empty,
               state: inMemoryState(),
-              secrets: [source],
+              secrets: {
+                providers: [source],
+              },
             },
             Effect.all({
               value: Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
@@ -153,7 +160,9 @@ describe("stack secrets", () => {
       {
         providers: Layer.empty,
         state: inMemoryState(),
-        secrets: [Secrets.DotEnv({ path: ["base.env", "missing.env"] })],
+        secrets: {
+          providers: [Secrets.DotEnv({ path: ["base.env", "missing.env"] })],
+        },
       },
       Effect.void,
     ).pipe(
@@ -167,7 +176,7 @@ describe("stack secrets", () => {
 
   it.effect("explicit arrays exclude automatic and ambient dotenv values", () =>
     Effect.gen(function* () {
-      for (const secrets of [
+      for (const providers of [
         [],
         [Secrets.DotEnv({ path: [] })],
         [Secrets.DotEnv({ path: "explicit.env" })],
@@ -177,7 +186,7 @@ describe("stack secrets", () => {
           {
             providers: Layer.empty,
             state: inMemoryState(),
-            secrets,
+            secrets: { providers },
           },
           Config.String("ALCHEMY_DOTENV_TEST_DEFAULT").pipe(Config.option),
         );
@@ -210,18 +219,20 @@ describe("stack secrets", () => {
         {
           providers: Layer.empty,
           state: inMemoryState(),
-          secrets: [
-            Secrets.DotEnv({ path: "base.env" }),
-            Secrets.DotEnv(
-              Effect.gen(function* () {
-                const stage = yield* Stage;
-                const directory = yield* Config.String(
-                  "ALCHEMY_DOTENV_TEST_DIR",
-                );
-                return { path: `${directory}/${stage}.env` };
-              }),
-            ),
-          ],
+          secrets: {
+            providers: [
+              Secrets.DotEnv({ path: "base.env" }),
+              Secrets.DotEnv(
+                Effect.gen(function* () {
+                  const stage = yield* Stage;
+                  const directory = yield* Config.String(
+                    "ALCHEMY_DOTENV_TEST_DIR",
+                  );
+                  return { path: `${directory}/${stage}.env` };
+                }),
+              ),
+            ],
+          },
         },
         Effect.all({
           value: Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
@@ -275,7 +286,9 @@ describe("stack secrets", () => {
                   Effect.orDie,
                 ),
               ),
-              secrets: [Secrets.DotEnv({ path: "services.env" })],
+              secrets: {
+                providers: [Secrets.DotEnv({ path: "services.env" })],
+              },
             },
             Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
           ).pipe(
@@ -304,7 +317,9 @@ describe("stack secrets", () => {
       {
         providers: Layer.empty,
         state: inMemoryState(),
-        secrets: [Secrets.DotEnv({ path: "missing.env" })],
+        secrets: {
+          providers: [Secrets.DotEnv({ path: "missing.env" })],
+        },
       },
       Effect.void,
     ).pipe(
@@ -325,7 +340,9 @@ describe("stack secrets", () => {
       {
         providers: Layer.empty,
         state: inMemoryState(),
-        secrets: [Secrets.DotEnv(Effect.fail("options-error" as const))],
+        secrets: {
+          providers: [Secrets.DotEnv(Effect.fail("options-error" as const))],
+        },
       },
       Effect.void,
     ).pipe(
@@ -345,23 +362,25 @@ describe("stack secrets", () => {
       {
         providers: Layer.empty,
         state: inMemoryState(),
-        secrets: [
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: {
-                ALCHEMY_DOTENV_TEST_VALUE: "first",
-                ALCHEMY_DOTENV_TEST_FALLBACK: "fallback",
-              },
-            }),
-          ),
-          ConfigProvider.layer(
-            ConfigProvider.fromEnv({
-              env: {
-                ALCHEMY_DOTENV_TEST_VALUE: "last",
-              },
-            }),
-          ),
-        ],
+        secrets: {
+          providers: [
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  ALCHEMY_DOTENV_TEST_VALUE: "first",
+                  ALCHEMY_DOTENV_TEST_FALLBACK: "fallback",
+                },
+              }),
+            ),
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  ALCHEMY_DOTENV_TEST_VALUE: "last",
+                },
+              }),
+            ),
+          ],
+        },
       },
       Effect.all([
         Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
@@ -397,15 +416,17 @@ describe("stack secrets", () => {
             {
               providers: Layer.empty,
               state: inMemoryState(),
-              secrets: [
-                Secrets.DotEnv({ path: "process.env" }),
-                Secrets.DotEnv(
-                  Effect.gen(function* () {
-                    expect(yield* Config.String(key)).toBe(value);
-                    return { path: "process.env" };
-                  }),
-                ),
-              ],
+              secrets: {
+                providers: [
+                  Secrets.DotEnv({ path: "process.env" }),
+                  Secrets.DotEnv(
+                    Effect.gen(function* () {
+                      expect(yield* Config.String(key)).toBe(value);
+                      return { path: "process.env" };
+                    }),
+                  ),
+                ],
+              },
             },
             Config.String(key),
           );
@@ -428,5 +449,88 @@ describe("stack secrets", () => {
         Effect.scoped,
       ),
     { exclusive: true },
+  );
+
+  it.effect("validates the assembled config against the secrets schema", () =>
+    Effect.gen(function* () {
+      const schema = Schema.Struct({
+        ALCHEMY_DOTENV_TEST_VALUE: Schema.String,
+        ALCHEMY_DOTENV_TEST_PORT: Schema.Int,
+      });
+      const stack = (providers: ReadonlyArray<Layer.Layer<never, unknown>>) =>
+        Stack(
+          "dotenv-schema",
+          {
+            providers: Layer.empty,
+            state: inMemoryState(),
+            secrets: { providers, schema },
+          },
+          Config.String("ALCHEMY_DOTENV_TEST_VALUE"),
+        );
+
+      const complete = yield* stack([Secrets.DotEnv({ path: "complete.env" })]);
+      expect(complete.output).toBe("ok");
+
+      const incomplete = yield* stack([
+        Secrets.DotEnv({ path: "incomplete.env" }),
+      ]).pipe(Effect.flip);
+      expect(incomplete._tag).toBe("ConfigError");
+      expect(incomplete.message).toContain("ALCHEMY_DOTENV_TEST_PORT");
+    }).pipe(
+      Effect.provideService(Stage, "test"),
+      Effect.provide(
+        files({
+          "complete.env":
+            "ALCHEMY_DOTENV_TEST_VALUE=ok\nALCHEMY_DOTENV_TEST_PORT=8080",
+          "incomplete.env": "ALCHEMY_DOTENV_TEST_VALUE=ok",
+        }),
+      ),
+      Effect.scoped,
+    ),
+  );
+
+  it.effect("logs which keys each provider loaded at debug level", () =>
+    Effect.gen(function* () {
+      const messages: string[] = [];
+      const capture = Logger.make(({ message }) => {
+        messages.push(String(message));
+      });
+      yield* Stack(
+        "dotenv-logging",
+        {
+          providers: Layer.empty,
+          state: inMemoryState(),
+          secrets: {
+            providers: [
+              Secrets.DotEnv({ path: "base.env" }),
+              Secrets.DotEnv({ path: ["prod.env", "empty.env"] }),
+            ],
+            schema: Schema.Struct({ ALCHEMY_DOTENV_TEST_VALUE: Schema.String }),
+          },
+        },
+        Effect.void,
+      ).pipe(
+        Effect.provide(Logger.layer([capture])),
+        Effect.provideService(MinimumLogLevel, "Debug"),
+      );
+      expect(messages).toEqual([
+        "Loaded 2 secrets from dotenv (base.env): ALCHEMY_DOTENV_TEST_FALLBACK, ALCHEMY_DOTENV_TEST_VALUE",
+        "Loaded 1 secrets from dotenv (prod.env, empty.env): ALCHEMY_DOTENV_TEST_VALUE",
+        "Stack secrets satisfy the declared schema",
+      ]);
+      // Keys only, never values.
+      expect(messages.join("\n")).not.toContain("hunter2");
+    }).pipe(
+      Effect.provideService(Stage, "test"),
+      Effect.provide(
+        files({
+          "base.env":
+            "ALCHEMY_DOTENV_TEST_VALUE=hunter2\nALCHEMY_DOTENV_TEST_FALLBACK=base",
+          "prod.env": "ALCHEMY_DOTENV_TEST_VALUE=hunter2",
+          "empty.env": "",
+        }),
+      ),
+      Effect.scoped,
+    ),
   );
 });

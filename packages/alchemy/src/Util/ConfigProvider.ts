@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -6,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { DotEnv } from "../Secrets/DotEnv.ts";
-import type { StackServices } from "../Stack.ts";
+import type { StackSecrets, StackServices } from "../Stack.ts";
 
 /**
  * The real process environment. Empty strings are kept as explicit values.
@@ -47,27 +48,29 @@ export const StackConfigOverrides = Context.Reference<StackConfigOverrides>(
 );
 
 /**
- * Build the ConfigProvider a stack runs under from its ordered `secrets`
- * layers.
+ * Build the ConfigProvider a stack runs under from its `secrets` providers,
+ * then check the result against the stack's secrets schema.
  *
  * Precedence, highest first: CLI overrides, the process environment, the last
- * secrets layer, ..., the first secrets layer.
+ * provider, ..., the first provider.
  *
- * Each layer is built with the provider assembled so far, so an options
- * effect can read the `Stage` or values loaded by an earlier layer. When the
- * stack declares no `secrets`, a single `DotEnv()` reading `.env` (or the
- * `--env-file`) is used.
+ * Each provider is built with the configuration assembled so far, so an
+ * options effect can read the `Stage` or values loaded by an earlier one.
+ * When the stack declares no providers, a single `DotEnv()` reading `.env`
+ * (or the `--env-file`) is used.
  *
  * @internal
  */
 export const stackConfigLayer = (
-  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>,
+  secrets?: StackSecrets,
 ): Layer.Layer<never, ConfigError, StackServices> =>
   Layer.effect(
     ConfigProvider.ConfigProvider,
     Effect.gen(function* () {
       const overrides = yield* StackConfigOverrides;
-      const sources = secrets ?? [DotEnv({ path: overrides.envFile })];
+      const sources = secrets?.providers ?? [
+        DotEnv({ path: overrides.envFile }),
+      ];
 
       const withPrecedence = (fromSecrets: ConfigProvider.ConfigProvider) =>
         overrides.apply(
@@ -99,7 +102,13 @@ export const stackConfigLayer = (
         const provider = Context.get(built, ConfigProvider.ConfigProvider);
         fromSecrets = ConfigProvider.orElse(provider, fromSecrets);
       }
-      return withPrecedence(fromSecrets);
+
+      const assembled = withPrecedence(fromSecrets);
+      if (secrets?.schema !== undefined) {
+        yield* Config.schema(secrets.schema).parse(assembled);
+        yield* Effect.logDebug("Stack secrets satisfy the declared schema");
+      }
+      return assembled;
     }),
   );
 

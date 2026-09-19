@@ -13,6 +13,7 @@ import {
   type DopplerResolvedCredentials,
 } from "../Doppler/AuthProvider.ts";
 import { UserFacingError } from "../UserFacingError.ts";
+import { logLoadedKeys } from "./Log.ts";
 
 export interface DopplerOptions {
   /** Project slug. Required with browser login or personal tokens. */
@@ -169,6 +170,10 @@ export const Doppler = <E = never, R = never>(
       }
 
       const env = yield* downloadSecrets(resolved, credentials);
+      yield* logLoadedKeys(
+        `Doppler (${describeSelection(resolved)})`,
+        Object.keys(env).sort(),
+      );
       return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
     }),
     { asPrimary: true },

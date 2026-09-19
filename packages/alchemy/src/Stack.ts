@@ -27,6 +27,7 @@ import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import { StackContext } from "./StackContext.ts";
+import type * as Schema from "effect/Schema";
 import type { State } from "./State/State.ts";
 import { stackConfigLayer } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -91,15 +92,40 @@ export type Stack = Context.ServiceClass.Shape<
   Omit<StackSpec, "output">
 >;
 
+/**
+ * Where a stack's configuration comes from and what it must contain.
+ *
+ * ```ts
+ * secrets: {
+ *   providers: [Secrets.DotEnv(), Secrets.Doppler({ project: "app", config: "dev" })],
+ *   schema: Schema.Struct({ DATABASE_URL: Schema.String, API_KEY: Schema.Redacted }),
+ * }
+ * ```
+ */
+export interface StackSecrets {
+  /**
+   * ConfigProvider layers applied in order; later providers override earlier
+   * ones and the process environment overrides them all. Each provider is
+   * built with the configuration assembled so far, so an options effect can
+   * read the `Stage` or values from an earlier provider.
+   *
+   * Defaults to `[Secrets.DotEnv()]`; use `[]` to disable automatic dotenv
+   * loading.
+   */
+  providers?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
+  /**
+   * Validated against the assembled configuration once every provider has
+   * loaded, so a missing or malformed key fails the stack before any
+   * resource is touched. Typically a `Schema.Struct` keyed by variable name.
+   */
+  schema?: Schema.ConstraintCodec<unknown, unknown>;
+}
+
 export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
-  /**
-   * ConfigProvider layers applied in order; later sources override earlier ones.
-   * Process environment takes priority. Defaults to DotEnv(); use [] to disable
-   * automatic dotenv loading. Options effects can read Stage.
-   */
-  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
+  /** See {@link StackSecrets}. Defaults to loading `.env`. */
+  secrets?: StackSecrets;
 }
 
 export const Stack: Context.ServiceClass<
@@ -231,8 +257,8 @@ export interface MakeStackProps<ROut = never> {
   name: string;
   providers: Layer.Layer<ROut, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
-  /** Ordered ConfigProvider layers. Defaults to DotEnv(); [] disables dotenv. */
-  secrets?: ReadonlyArray<Layer.Layer<never, unknown, StackServices>>;
+  /** See {@link StackSecrets}. Defaults to loading `.env`. */
+  secrets?: StackSecrets;
   /** @internal */
   stack?: StackSpec;
 }

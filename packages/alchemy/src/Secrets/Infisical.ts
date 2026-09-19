@@ -13,6 +13,7 @@ import {
   type InfisicalResolvedCredentials,
 } from "../Infisical/AuthProvider.ts";
 import { UserFacingError } from "../UserFacingError.ts";
+import { logLoadedKeys } from "./Log.ts";
 
 export interface InfisicalOptions {
   /**
@@ -198,6 +199,10 @@ export const Infisical = <E = never, R = never>(
       const resolved = Effect.isEffect(options) ? yield* options : options;
       const credentials = yield* resolveCredentials();
       const env = yield* downloadSecrets(resolved, credentials);
+      yield* logLoadedKeys(
+        `Infisical (${describeSelection(resolved)})`,
+        Object.keys(env).sort(),
+      );
       return ConfigProvider.fromEnv({ env, preserveEmptyStrings: true });
     }),
     { asPrimary: true },

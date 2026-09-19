@@ -368,16 +368,18 @@ it.effect(
         {
           providers: Layer.empty,
           state: inMemoryState(),
-          secrets: [
-            // A stack's ConfigProvider is built from the real process
-            // environment, so feed INFISICAL_TOKEN in through an earlier
-            // secrets layer; later layers see values from earlier ones.
-            ConfigProvider.layer(
-              ConfigProvider.fromEnv({ env: { INFISICAL_TOKEN: "layered" } }),
-            ),
-            Infisical({ project: "app", environment: "first" }),
-            Infisical({ project: "app", environment: "second" }),
-          ],
+          secrets: {
+            providers: [
+              // A stack's ConfigProvider is built from the real process
+              // environment, so feed INFISICAL_TOKEN in through an earlier
+              // secrets layer; later layers see values from earlier ones.
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { INFISICAL_TOKEN: "layered" } }),
+              ),
+              Infisical({ project: "app", environment: "first" }),
+              Infisical({ project: "app", environment: "second" }),
+            ],
+          },
         },
         Effect.all([
           Config.String("INFISICAL_TEST_VALUE"),

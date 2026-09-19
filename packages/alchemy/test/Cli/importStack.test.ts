@@ -69,14 +69,16 @@ describe("importStack", () => {
                 ]);
               }).pipe(Effect.orDie),
             ),
-            secrets: [
-              Secrets.DotEnv(
-                Effect.gen(function* () {
-                  const stage = yield* Stage;
-                  return { path: path.join(dir, `${stage}.env`) };
-                }),
-              ),
-            ],
+            secrets: {
+              providers: [
+                Secrets.DotEnv(
+                  Effect.gen(function* () {
+                    const stage = yield* Stage;
+                    return { path: path.join(dir, `${stage}.env`) };
+                  }),
+                ),
+              ],
+            },
           },
           Config.String("ALCHEMY_DOTENV_SESSION_STAGE"),
         );

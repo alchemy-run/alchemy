@@ -2,6 +2,7 @@ import { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
+import { envKeys, logLoadedKeys } from "./Log.ts";
 
 export interface DotEnvOptions {
   /**
@@ -89,14 +90,19 @@ export const DotEnv = <E = never, R = never>(
 
       // Later files win, so each file is placed *in front of* everything
       // loaded before it.
+      const paths = filesToLoad(resolved);
       let loaded = emptyProvider;
-      for (const path of filesToLoad(resolved)) {
+      for (const path of paths) {
         const file = yield* readDotEnvFile(path, {
           explicit,
           expandVariables: resolved.expandVariables,
         });
         loaded = ConfigProvider.orElse(file, loaded);
       }
+      yield* logLoadedKeys(
+        `dotenv (${paths.join(", ") || "no files"})`,
+        yield* envKeys(loaded),
+      );
       return loaded;
     }),
     { asPrimary: true },
