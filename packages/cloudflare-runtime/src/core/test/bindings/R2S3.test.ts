@@ -171,6 +171,14 @@ layer(workerLayer, { excludeTestServices: true })(
             expect(denied.headers.get("content-range")).toBe("bytes */8");
             expect(yield* text(denied)).toContain("<Code>InvalidRange</Code>");
           }
+          for (const range of ["bytes=-8", "bytes=-999"]) {
+            const suffix = yield* worker.fetch(download.url, {
+              headers: { Range: range },
+            });
+            expect(suffix.status).toBe(206);
+            expect(suffix.headers.get("content-range")).toBe("bytes 0-7/8");
+            expect(yield* text(suffix)).toBe("metadata");
+          }
           const multiple = yield* worker.fetch(download.url, {
             headers: { Range: "bytes=0-1,4-5" },
           });

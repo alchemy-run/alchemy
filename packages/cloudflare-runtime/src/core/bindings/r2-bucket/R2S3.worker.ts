@@ -142,11 +142,25 @@ async function dispatch(
   }
   if (body) {
     const rangeHeader = request.headers.get("Range");
-    const ranges =
-      rangeHeader === null ? undefined : parseRanges(rangeHeader, object.size);
+    const singleRange = rangeHeader !== null && !rangeHeader.includes(",");
+    const ranges = singleRange
+      ? parseRanges(rangeHeader, object.size)
+      : undefined;
+    // The shared parser represents a suffix covering the whole object as [].
+    const suffix = singleRange
+      ? /^ *bytes *= *- *(\d+) *$/i.exec(rangeHeader)
+      : null;
+    const fullSuffix =
+      suffix !== null &&
+      Number(suffix[1]) > 0 &&
+      object.size > 0 &&
+      Number(suffix[1]) >= object.size;
     // The native binding ignores invalid and multiple ranges, returning the
     // full object. Do not mistake its full-object range metadata for a 206.
-    if (rangeHeader !== null && (ranges === undefined || ranges.length === 0)) {
+    if (
+      singleRange &&
+      (ranges === undefined || (ranges.length === 0 && !fullSuffix))
+    ) {
       await body.body.cancel();
       const error = s3Error(
         416,
@@ -158,7 +172,7 @@ async function dispatch(
     }
     const range = body.range;
     if (
-      ranges?.length === 1 &&
+      (ranges?.length === 1 || fullSuffix) &&
       range &&
       "offset" in range &&
       range.offset !== undefined &&
