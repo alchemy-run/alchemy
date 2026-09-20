@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Cream parchment / deep walnut — matches --alc-bg in tokens.css.
+         The inline script below rewrites `content` once the stored mode is
+         known; src/themeMode.ts keeps it in sync afterwards. -->
+    <meta name="theme-color" content="#f5efe3" />
+    <title>alchemy dashboard</title>
+    <script>
+      // Pre-paint theme init — mirrors website ThemeProvider.astro.
+      // localStorage["alchemy-dashboard-theme"] ∈ light|dark|auto (default
+      // auto → prefers-color-scheme). Sets data-theme on <html> before the
+      // first paint so there is never a flash of the wrong theme.
+      (() => {
+        let mode = null;
+        try {
+          mode = localStorage.getItem("alchemy-dashboard-theme");
+        } catch {}
+        const dark =
+          mode === "dark" ||
+          (mode !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", dark ? "#14110d" : "#f5efe3");
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

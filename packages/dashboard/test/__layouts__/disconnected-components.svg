@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1216 536" font-family="monospace" font-size="13">
+  <!-- disconnected-components: 1168x488 aspect=2.39 -->
+  <rect width="100%" height="100%" fill="#f4efe4"/>
+  <line x1="254" y1="84" x2="374" y2="84" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="268" x2="374" y2="268" stroke="#8a7a5c" stroke-width="1.5"/>
+  <line x1="254" y1="452" x2="374" y2="452" stroke="#8a7a5c" stroke-width="1.5"/>
+  <rect x="24" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="52" fill="#3f3828">A1</text>
+  <rect x="374" y="24" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="52" fill="#3f3828">A2</text>
+  <rect x="24" y="208" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="236" fill="#3f3828">B1</text>
+  <rect x="374" y="208" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="236" fill="#3f3828">B2</text>
+  <rect x="24" y="392" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="38" y="420" fill="#3f3828">C1</text>
+  <rect x="374" y="392" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="388" y="420" fill="#3f3828">C2</text>
+  <rect x="668" y="392" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="682" y="420" fill="#3f3828">Lone1</text>
+  <rect x="962" y="392" width="230" height="120" rx="10" fill="#fdfaf1" stroke="#b19d76"/>
+  <text x="976" y="420" fill="#3f3828">Lone2</text>
+</svg>
