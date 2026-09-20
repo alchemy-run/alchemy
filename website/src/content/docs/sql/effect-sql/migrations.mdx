@@ -185,39 +185,40 @@ const migrations = yield* Cloudflare.SqlMigrations({
 
 ### Per-instance application
 
-- The shared Alchemy engine checks `__alchemy_migrations` when an
-  instance activates and applies only its pending files.
-- Each file's SQL and history entry run together in a native
-  synchronous SQLite transaction. A failure rolls back that file and
-  prevents activation. Earlier successful files remain committed;
-  pending files are retried on the next activation.
-- A deploy does **not** enumerate or migrate every object. An idle
-  instance applies pending files when it next activates with the new
-  Worker code. Plan compatible schema changes around that boundary.
-- Loading does not generate SQL. Any drizzle-kit generation must
-  finish before construction/planning reads the directory; commit
-  the output so other checkouts and CI see the same history.
+Each object applies pending files when it activates, not during deployment of
+the whole namespace. Each file's SQL and history row commit together:
+
+```text
+0001_create_users → commit SQL + history
+0002_add_email    → failure rolls back this file and prevents activation
+next activation  → skip 0001, retry 0002
+```
 
 ### Adopting Drizzle history
 
-The shared engine adopts matching **modern** Drizzle history into
-`__alchemy_migrations`, without rerunning already-applied SQL. The
-old `__drizzle_migrations` table remains frozen: adoption is one-way,
-so stop running Drizzle's migrator afterward. Keep all historical
-files; unmatched history raises `MigrationHistoryConflictError`.
+```text
+__drizzle_migrations → copy matching history → __alchemy_migrations
+                      missing match → MigrationHistoryConflictError
+```
 
-The legacy `meta/_journal.json` directory layout is rejected with
-`DrizzleV0LayoutError`. Run `pnpm exec drizzle-kit up`, review and
-commit the upgraded output, then retry.
+Adoption is one-way: keep the historical SQL files and use only Alchemy's
+migrator afterward; the old table stays frozen. Changing `migrationsTable`
+on a `migrations.js` bundle does not convert its history.
 
-If you already pass a `migrations.js` object to
-`Drizzle.DurableObject`, it remains compatible but still uses
-Drizzle's migrator. Setting that object's `migrationsTable` to
-`"__alchemy_migrations"` is **not** history conversion. Switch to
-`Cloudflare.SqlMigrations` to use the shared engine; see
-[Drizzle Durable Object migrations](/sql/drizzle/migrations#durable-object-migrations)
-and the
-[runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql).
+### Upgrade legacy Drizzle files
+
+For the legacy `meta/_journal.json` layout:
+
+```sh
+pnpm exec drizzle-kit up
+git diff -- drizzle
+git add drizzle
+git commit -m "Upgrade Drizzle migration layout"
+```
+
+See the [Drizzle guide](/sql/drizzle/migrations#durable-object-migrations)
+or [runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql)
+for the full setup.
 
 ## Where next
 
