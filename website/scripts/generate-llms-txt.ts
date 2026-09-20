@@ -476,6 +476,15 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "sql/index",
+        "sql/databases",
+        "sql/providers/aws",
+        "sql/providers/cloudflare",
+        "sql/providers/fly",
+        "sql/providers/hetzner",
+        "sql/providers/neon",
+        "sql/providers/planetscale",
+        "sql/providers/prisma",
+        "sql/providers/railway",
         "sql/effect-sql/postgres",
         "sql/effect-sql/d1",
         "sql/effect-sql/migrations",

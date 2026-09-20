@@ -1,0 +1,54 @@
+---
+title: SQL on Railway
+description: Connect Railway Services to private Postgres or MySQL databases, find the Drizzle example, and choose the right endpoint for queries and migrations.
+---
+
+Railway hosts both application Services and database Services in a project.
+Application connections normally use the private network. Public connection
+endpoints serve a different purpose, such as local development or a migration
+runner outside Railway.
+
+## Choose the database
+
+| Database | Integration |
+| --- | --- |
+| Postgres | [Railway Postgres](/railway/data/postgres), `Railway.ConnectPostgres`, [Drizzle Postgres](/sql/drizzle/postgres), [Effect SQL Postgres](/sql/effect-sql/postgres) |
+| MySQL | [Railway MySQL](/railway/data/mysql), matching [Drizzle](/sql/drizzle/mysql) or [Effect SQL](/sql/effect-sql/mysql) client |
+
+The Postgres guide contains the complete Service binding shape. Supply
+`Railway.ConnectPostgresHttp` and pass `conn.connectionString` to the
+client. The [railway-service example](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service)
+is a runnable multi-service application using Drizzle and Postgres, alongside
+other Railway capabilities.
+
+## Application runtime
+
+Use a [Service](/railway/compute/services) for the database-backed API.
+Follow the Service's packaging configuration for the `pg` driver; the Postgres
+guide calls out `build.install: ["pg"]`. A different Railway execution product
+may have different package or size constraints—do not assume a Service example
+can be copied unchanged into every runtime.
+
+Railway variables can contain either resolved values or resource reference
+templates. See [Variables](/railway/data/variables) for secret/configuration
+binding and `Railway.ref`.
+
+## Before deploying
+
+Private hostnames are not automatically reachable from your laptop or CI.
+Choose the migration execution location and endpoint explicitly. Disabling
+the database's public TCP proxy changes which external tools can reach it;
+it does not prevent same-project private connections.
+
+The documented default Postgres image is **version 16**. Prisma ORM v8 requires
+**PostgreSQL 17+**; select and verify a compatible engine before considering
+that integration. The existing Drizzle example is not proof of Prisma support.
+
+Database replacement can delete the old volume. Review project changes,
+backups, and cleanup behavior before deploying to persistent data.
+
+## Next steps
+
+- [Railway setup](/railway/setup), [Services](/railway/compute/services), and [Networking](/railway/networking).
+- [Connection lifecycle](/sql/effect-sql/lifecycle) and [migration choices](/sql#manage-schema-changes).
+- [Choose a database](/sql/databases) for external alternatives.

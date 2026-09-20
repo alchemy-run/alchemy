@@ -1,0 +1,56 @@
+---
+title: Choose a database
+description: Find Aurora PostgreSQL, Aurora DSQL, D1, Neon, PlanetScale, Prisma Postgres, Fly Postgres, Railway, or an existing database and the corresponding SQL integration.
+---
+
+Choose the database separately from the runtime that executes your queries.
+A Worker can use Neon, a Lambda can use Aurora, and a container service can
+connect to an existing Postgres database. Network reachability and the driver
+matter as much as the database's SQL dialect.
+
+## Find your database
+
+| Database | Connection and integration guides |
+| --- | --- |
+| Aurora PostgreSQL / RDS Postgres | [SQL on AWS](/sql/providers/aws#aurora-postgresql-and-drizzle), [RDS & Aurora](/aws/data/rds) |
+| Aurora MySQL / RDS MySQL | [RDS & Aurora](/aws/data/rds), [Effect SQL MySQL](/sql/effect-sql/mysql), [Drizzle MySQL](/sql/drizzle/mysql) — verify the selected driver/auth path; the Aurora example uses Postgres |
+| Aurora DSQL | [SQL on AWS](/sql/providers/aws#aurora-dsql), [Drizzle full-stack integration](/aws/frontend/full-stack-tanstack-rpc-drizzle) |
+| Cloudflare D1 | [D1](/cloudflare/data/d1), [Drizzle + D1](/cloudflare/data/d1-drizzle) |
+| Fly Managed Postgres | [Fly Postgres](/fly/data/postgres), [SQL on Fly.io](/sql/providers/fly) |
+| Neon Postgres | [Connections](/neon/data/connections), [SQL with Neon](/sql/providers/neon) |
+| PlanetScale Postgres | [Postgres](/planetscale/data/postgres), [SQL with PlanetScale](/sql/providers/planetscale) |
+| PlanetScale MySQL/Vitess | [MySQL](/planetscale/data/mysql), [SQL with PlanetScale](/sql/providers/planetscale) |
+| Prisma Postgres | [Database resources](/prisma/data/postgres), [Connections](/prisma/data/connections) |
+| Railway Postgres / MySQL | [Postgres](/railway/data/postgres), [MySQL](/railway/data/mysql), [SQL on Railway](/sql/providers/railway) |
+| Existing or self-managed Postgres/MySQL | [Bring your own connection](/sql#already-have-a-database), then choose your runtime's networking and secret configuration |
+
+## Match the client to the database
+
+[Effect SQL](/sql/effect-sql/postgres) and [Drizzle](/sql/drizzle/postgres)
+have Postgres and MySQL clients, plus separate D1 integrations.
+[Prisma ORM v8](/sql/prisma/contracts) currently targets PostgreSQL 17+.
+Check the deployed engine version rather than assuming a provider's default
+satisfies that requirement.
+
+Aurora DSQL speaks the Postgres wire protocol but has different SQL and DDL
+constraints. Its Drizzle integration is not evidence of Prisma ORM support.
+The **RDS Data API** executes statements over HTTPS and is a different runtime
+interface from a Postgres/MySQL connection string.
+
+Hyperdrive is a connection pool/proxy, not a database. Use it from Cloudflare
+Workers when the selected integration calls for it; Lambda and container
+integrations do not require it.
+
+## Decide where migrations run
+
+A provider may expose a deploy-time `migrations` property, a separate migration
+resource, or require a runner with access to the database's private network.
+Read the database guide before choosing an apply strategy. Generate schemas
+with [Drizzle](/sql/drizzle/migrations) or
+[Prisma](/sql/prisma/migrations), or use
+[hand-written SQL files](/sql/effect-sql/migrations).
+
+## Find your runtime
+
+[Browse SQL by provider](/sql#find-your-provider) for application wiring,
+connection lifetime, packaging, authentication, and runnable examples.

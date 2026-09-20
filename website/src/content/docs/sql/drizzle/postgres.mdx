@@ -200,6 +200,16 @@ const user = yield* db.query.Users.findFirst({
 });
 ```
 
+## Deploy this client
+
+Choose your application runtime and database independently. The provider pages
+route to connection setup and runnable projects:
+
+- [AWS](/sql/providers/aws#aurora-postgresql-and-drizzle) — Aurora PostgreSQL and the separate Aurora DSQL integration.
+- [Cloudflare](/sql/providers/cloudflare) — Workers and Hyperdrive.
+- [Fly.io](/sql/providers/fly), [Hetzner](/sql/providers/hetzner), and [Railway](/sql/providers/railway) — Service integrations.
+- [Neon](/sql/providers/neon), [PlanetScale](/sql/providers/planetscale), and [Prisma Postgres](/sql/providers/prisma) — database-side configuration.
+
 ## Where next
 
 - [Migrations](/sql/drizzle/migrations) — what deploy-time schema

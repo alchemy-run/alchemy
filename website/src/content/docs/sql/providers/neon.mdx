@@ -1,0 +1,51 @@
+---
+title: SQL with Neon
+description: Provision Neon Postgres, choose direct or pooled connections, and find Drizzle and Prisma ORM integrations for Cloudflare Workers and Hetzner Services.
+---
+
+Neon supplies the Postgres database. Choose the application runtime separately:
+the examples below run on Cloudflare and Hetzner. Neon's project, branch,
+connection, and migration documentation is shared across those integrations.
+
+## Configure the database
+
+Start with [Neon setup](/neon/setup), then choose a project and branch.
+[Connection URLs](/neon/data/connections) distinguish direct and pooled
+connections, while [branching](/neon/data/branching) covers preview databases.
+The database URL belongs in your backend, not your browser application.
+
+| Database task | Guide |
+| --- | --- |
+| Get a direct or pooled connection | [Connections](/neon/data/connections) |
+| Apply SQL migrations | [Neon migrations](/neon/data/migrations) |
+| Generate migrations with Drizzle | [Drizzle with Neon](/neon/guides/drizzle) |
+| Create a branch per preview | [Preview branches](/neon/guides/preview-branches) |
+
+## Choose an application integration
+
+| Runtime and client | Guide or runnable example |
+| --- | --- |
+| Workers + Hyperdrive + Drizzle | [Cloudflare integration](/cloudflare/data/drizzle), [cloudflare-neon-drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) |
+| Workers + Hyperdrive + Prisma ORM | [Prisma runtime walkthrough](/sql/prisma/postgres), [TypeScript-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma), [PSL-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl) |
+| Hetzner Service + Drizzle | [SQL on Hetzner](/sql/providers/hetzner), [hetzner-website-vite](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) |
+| Your existing backend | [Effect SQL Postgres](/sql/effect-sql/postgres) or [Drizzle Postgres](/sql/drizzle/postgres) with an accessible connection URL |
+
+The backend row describes a connection option, not a tested example for every
+runtime. Follow your host's packaging, secrets, and network requirements.
+
+## Before deploying
+
+Choose the connection endpoint for its purpose. Hyperdrive already supplies
+pooling; the Cloudflare guide uses Neon's direct origin. Migration tools may
+need a direct connection even when application queries use a pooled endpoint.
+Keep schema generation separate from provider-specific migration application.
+
+For [Prisma ORM v8](/sql/prisma/contracts), verify PostgreSQL 17+ and use
+[Prisma migration packages](/sql/prisma/migrations). A Drizzle migration
+resource is not a substitute for that contract-based workflow.
+
+## Next steps
+
+- [Neon overview](/neon) — database resources and configuration.
+- [SQL provider index](/sql#find-your-provider) — choose a different runtime.
+- [Connection lifecycle](/sql/effect-sql/lifecycle) — scoped query clients.

@@ -1,0 +1,58 @@
+---
+title: SQL with Prisma Postgres and Compute
+description: Distinguish Prisma's managed Postgres and Compute platform from Prisma ORM, and find database, connection, hosting, and Worker integration guides.
+---
+
+**Prisma Postgres** is a hosted database. **Prisma Compute** hosts applications.
+**Prisma ORM** is a query/model tool. You can use the hosted database with
+another SQL client, or use Prisma ORM with a different Postgres provider.
+
+## Configure Prisma Postgres
+
+The [Postgres resource guide](/prisma/data/postgres) covers projects,
+databases, branch attachment, and local development. The
+[connection guide](/prisma/data/connections) explains credentials, URLs, and
+origins for external runtimes.
+
+| Task | Guide |
+| --- | --- |
+| Provision the database | [Prisma Postgres](/prisma/data/postgres) |
+| Configure database access | [Connections](/prisma/data/connections) |
+| Organize preview databases | [Branches](/prisma/data/branches) |
+| Run an app beside the database | [Prisma Compute](/prisma/compute/apps) |
+| Connect a Cloudflare Worker | [Worker integration](/prisma/guides/cloudflare-workers) |
+
+Prisma projects can supply database environment variables to their Compute
+applications. Follow the Compute guide for that runtime rather than copying
+Cloudflare-specific binding code.
+
+## Choose a client
+
+For ordinary Postgres connections, start with [Effect SQL](/sql/effect-sql/postgres)
+or [Drizzle](/sql/drizzle/postgres). The client's setup is separate from
+provisioning a `Prisma.Postgres` resource.
+
+For **Prisma ORM v8**, start with [Contracts](/sql/prisma/contracts) and the
+[Postgres runtime guide](/sql/prisma/postgres). Verify PostgreSQL 17+ and the
+selected connection/migration path. The current
+[TypeScript-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
+and [PSL-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl)
+ORM examples use **Neon**, not Prisma-hosted Postgres; their names describe
+the ORM integration.
+
+## Before deploying
+
+Keep project-management credentials separate from database credentials. Choose
+the direct or pooled endpoint appropriate to the query/migration tool, and
+confirm that the application and migration runner can both reach it.
+Destroying a project or database can remove data; the database guide documents
+ownership and lifecycle behavior.
+
+A platform resource, a query client, and a runnable integration example prove
+different things. This page links those pieces without claiming every ORM,
+hosting mode, and connection option has a dedicated validated example.
+
+## Next steps
+
+- [Prisma platform setup](/prisma/setup) and [overview](/prisma).
+- [SQL client choices](/sql#choose-a-client) and [other database providers](/sql/databases).
