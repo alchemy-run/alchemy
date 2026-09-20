@@ -233,7 +233,7 @@ overrides:
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.2
-  zod: 4.4.3
+  zod: 4.5.4
   rolldown: 1.2.5
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
