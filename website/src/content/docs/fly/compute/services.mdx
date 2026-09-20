@@ -238,7 +238,7 @@ replacement Machines, not a snapshot of the App vault. Standalone secrets,
 other Services, and runtime writers are not serialized by Machine leases.
 An out-of-band secret update alone does not guarantee a new rollout; use
 an explicit desired-input change when rotation requires replacement.
-See [secret version limits](/fly/compute/deployments#treat-secret-versions-as-a-floor).
+See [rotating secrets with your application](/fly/compute/deployments#rotate-secrets-with-your-application).
 
 ## Background services
 
@@ -273,7 +273,7 @@ cleanup on SIGTERM/SIGINT while HTTP requests and shared dependencies remain
 alive. The application owns its stop-acquisition barrier and bounded job drain.
 Use ordinary finalizers and a separately owned work scope for jobs that must
 survive worker-loop interruption; no new public shutdown hook is required.
-See the [worker resource-lifetime pattern](/fly/compute/deployments#own-the-job-drain-with-ordinary-scopes).
+See the [queue worker cleanup example](/fly/compute/deployments#close-your-queue-worker-on-shutdown).
 
 Fly's restart policy controls what happens when the process exits. Suspension
 is not ordinary process shutdown, so it is not a promise that finalizers run.
