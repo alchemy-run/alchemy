@@ -7,7 +7,7 @@ import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
-import { Stack } from "./Stack.ts";
+import { StackContext as Stack } from "./StackContext.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
 import { isPlainData, isPrimitive, type Primitive } from "./Util/data.ts";
