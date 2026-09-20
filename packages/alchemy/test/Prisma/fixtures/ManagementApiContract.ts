@@ -87,19 +87,11 @@ export const managementApiContract = {
     "POST /v1/source-repositories",
   ],
   /**
-   * Prisma Object Storage is a new product surface and is intentionally
-   * deferred from this provider revision. Keep these routes visible in the
-   * pinned contract so this omission cannot be mistaken for API coverage.
+   * Routes that are intentionally not mapped by this provider revision.
+   * Keep any entries visible in the pinned contract so an omission cannot
+   * be mistaken for API coverage. Currently every pinned route is mapped.
    */
-  deferredRoutes: [
-    "DELETE /v1/buckets/{bucketId}",
-    "DELETE /v1/buckets/{bucketId}/keys/{keyId}",
-    "GET /v1/buckets",
-    "GET /v1/buckets/{bucketId}",
-    "GET /v1/buckets/{bucketId}/keys",
-    "POST /v1/buckets",
-    "POST /v1/buckets/{bucketId}/keys",
-  ],
+  deferredRoutes: [],
 } as const;
 
 const deferredRouteSet = new Set<string>(managementApiContract.deferredRoutes);

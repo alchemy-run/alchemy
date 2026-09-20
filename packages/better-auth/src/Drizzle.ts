@@ -34,13 +34,9 @@ export interface DrizzleLayerConfig {
  * support (`npx @better-auth/cli generate` + your drizzle-kit flow own the
  * tables).
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer drizzle-orm
- * @product Drizzle
  *
- * @section Bringing your own Drizzle db
- * @example Postgres drizzle instance with a generated auth schema
+ * ### Bringing your own Drizzle db
+ * **Example:** Postgres drizzle instance with a generated auth schema
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
@@ -54,6 +50,11 @@ export interface DrizzleLayerConfig {
  *   // ...
  * }).pipe(Effect.provide(Drizzle(db, { provider: "pg", schema })))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer drizzle-orm
+ * @product Drizzle
  */
 export const Drizzle = (
   db:

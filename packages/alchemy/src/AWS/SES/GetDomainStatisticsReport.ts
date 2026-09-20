@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * Requires the deliverability dashboard subscription; an unknown domain
  * surfaces the typed `NotFoundException`. Account-level operation. Provide the
  * implementation with `Effect.provide(AWS.SES.GetDomainStatisticsReportHttp)`.
- * @binding
- * @section Deliverability Insights
- * @example Read a Domain's Deliverability Report
+ * ### Deliverability Insights
+ * **Example:** Read a Domain's Deliverability Report
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getReport = yield* SES.GetDomainStatisticsReport();
@@ -24,6 +23,8 @@ import * as Binding from "../../Binding.ts";
  *   EndDate: new Date(),
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetDomainStatisticsReport extends Binding.Service<
   GetDomainStatisticsReport,

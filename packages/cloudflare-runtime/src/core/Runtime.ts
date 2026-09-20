@@ -9,6 +9,7 @@ import {
   defaultDurableObjectUniqueKey,
   SERVICE_USER_WORKER,
   SOCKET_USER_ENTRY,
+  withDefaultFlags,
 } from "./internal/constants.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
 import type { BindingHook } from "./PluginContext.ts";
@@ -195,6 +196,12 @@ export const RuntimeLive = Layer.effect(
 
     return Runtime.of({
       start: Effect.fn(function* (worker) {
+        worker = {
+          ...worker,
+          compatibilityFlags: withDefaultFlags(worker.compatibilityFlags, {
+            date: worker.compatibilityDate,
+          }),
+        };
         const [
           { config, context, bindings, tails, streamingTails },
           { containerEngine, imageNames },

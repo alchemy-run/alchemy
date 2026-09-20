@@ -19,9 +19,8 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
  * use.
  *
- * @binding
- * @section Decrypting Data
- * @example Decrypt a Ciphertext
+ * ### Decrypting Data
+ * **Example:** Decrypt a Ciphertext
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
@@ -33,7 +32,7 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  *   : response.Plaintext; // Uint8Array
  * ```
  *
- * @example Decrypt with an Encryption Context
+ * **Example:** Decrypt with an Encryption Context
  * ```typescript
  * // Must match the context used at encryption time exactly, otherwise the
  * // call fails with a typed InvalidCiphertextException.
@@ -43,14 +42,14 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  * });
  * ```
  *
- * @section Pre-Existing Keys
- * @example Bind by Alias Name
+ * ### Pre-Existing Keys
+ * **Example:** Bind by Alias Name
  * ```typescript
  * const decrypt = yield* AWS.KMS.Decrypt("alias/app-key");
  * ```
  *
- * @section Wiring
- * @example Provide the Implementation on a Lambda Function
+ * ### Wiring
+ * **Example:** Provide the Implementation on a Lambda Function
  * ```typescript
  * // Provide the DecryptHttp layer on the Function's init Effect,
  * // merged with the other KMS layers the function binds.
@@ -67,6 +66,8 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  *   ),
  * );
  * ```
+ *
+ * @binding
  */
 export interface Decrypt extends Binding.Service<
   Decrypt,

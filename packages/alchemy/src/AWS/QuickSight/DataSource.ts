@@ -102,8 +102,8 @@ export interface DataSource extends Resource<
  * one, create operations fail with the typed `QuickSightSubscriptionRequired`
  * error.
  *
- * @section Creating a Data Source
- * @example Athena Data Source
+ * ### Creating a Data Source
+ * **Example:** Athena Data Source
  * ```typescript
  * const source = yield* DataSource("analytics", {
  *   name: "Athena Analytics",
@@ -112,7 +112,7 @@ export interface DataSource extends Resource<
  * });
  * ```
  *
- * @example S3 Manifest Data Source
+ * **Example:** S3 Manifest Data Source
  * ```typescript
  * const source = yield* DataSource("s3-source", {
  *   name: "S3 Sales Data",

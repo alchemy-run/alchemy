@@ -15,15 +15,16 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@distilled.cloud/aws": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
-    "@sveltejs/kit": "catalog:frameworks",
-    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
     "@tailwindcss/vite": "catalog:",
-    "@types/node": "^24.12.0",
-    "svelte": "catalog:frameworks",
+    "@types/node": "catalog:node24",
+    "alchemy-test": "workspace:*",
+    "svelte": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:typescript-classic",
     "vite": "catalog:"
   },
   "repository": {

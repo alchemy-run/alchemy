@@ -158,16 +158,15 @@ export type Branch = Resource<
  *
  * Branches are first-class, copy-on-write copies of a parent branch — they
  * share storage with the parent until the new branch starts diverging.
- * @resource
- * @section Branching from a project's default branch
- * @example Basic branch
+ * ### Branching from a project's default branch
+ * **Example:** Basic branch
  * ```typescript
  * const project = yield* Neon.Project("my-project");
  * const dev = yield* Neon.Branch("dev-branch", { project });
  * ```
  *
- * @section Branching from another branch
- * @example Branch off another branch
+ * ### Branching from another branch
+ * **Example:** Branch off another branch
  * ```typescript
  * const dev = yield* Neon.Branch("dev", { project });
  * const featureBranch = yield* Neon.Branch("feature", {
@@ -176,8 +175,8 @@ export type Branch = Resource<
  * });
  * ```
  *
- * @section Point-in-time branches
- * @example Branch from a parent at a specific LSN
+ * ### Point-in-time branches
+ * **Example:** Branch from a parent at a specific LSN
  * ```typescript
  * const branch = yield* Neon.Branch("at-lsn", {
  *   project,
@@ -185,8 +184,8 @@ export type Branch = Resource<
  * });
  * ```
  *
- * @section Migrations on a branch
- * @example Apply migrations on the branch only
+ * ### Migrations on a branch
+ * **Example:** Apply migrations on the branch only
  * ```typescript
  * const featureBranch = yield* Neon.Branch("feature", {
  *   project,
@@ -195,6 +194,8 @@ export type Branch = Resource<
  * ```
  *
  * @see https://neon.tech/docs/manage/branches/
+ *
+ * @resource
  */
 export const Branch = Resource<Branch>("Neon.Branch");
 

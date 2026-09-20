@@ -1,5 +1,6 @@
 export * from "../Access.ts";
 export * from "./Application.ts";
+export * from "./Context.ts";
 export * from "./Bookmark.ts";
 export * from "./Certificate.ts";
 export * from "./CustomPage.ts";
@@ -14,3 +15,4 @@ export * from "./Organization.ts";
 export * from "./Policy.ts";
 export * from "./ServiceToken.ts";
 export * from "./Tag.ts";
+export * from "./WorkerDestination.ts";

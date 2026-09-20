@@ -76,12 +76,13 @@ export interface Cluster extends Resource<
 
 /**
  * An Amazon ECS cluster for running tasks and services.
- * @resource
- * @section Creating Clusters
- * @example Default Cluster
+ * ### Creating Clusters
+ * **Example:** Default Cluster
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {});
  * ```
+ *
+ * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.ECS.Cluster");
 

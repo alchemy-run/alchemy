@@ -158,9 +158,8 @@ export interface Cluster extends Resource<
 
 /**
  * An Amazon EKS cluster with support for EKS Auto Mode settings.
- * @resource
- * @section Creating Clusters
- * @example Auto Mode Cluster (managed roles)
+ * ### Creating Clusters
+ * **Example:** Auto Mode Cluster (managed roles)
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {
  *   compute: "auto",
@@ -170,7 +169,7 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
- * @example Auto Mode Cluster from Existing Roles and Subnets
+ * **Example:** Auto Mode Cluster from Existing Roles and Subnets
  * ```typescript
  * const cluster = yield* Cluster("AppCluster", {
  *   roleArn: clusterRole.roleArn,
@@ -196,8 +195,8 @@ export interface Cluster extends Resource<
  * });
  * ```
  *
- * @section Running Workloads
- * @example Cluster with a Managed Node Group and an Add-on
+ * ### Running Workloads
+ * **Example:** Cluster with a Managed Node Group and an Add-on
  * ```typescript
  * const cluster = yield* AWS.EKS.Cluster("AppCluster", {
  *   roleArn: clusterRole.roleArn,
@@ -218,6 +217,8 @@ export interface Cluster extends Resource<
  *   addonName: "metrics-server",
  * });
  * ```
+ *
+ * @resource
  */
 export const Cluster = Resource<Cluster>("AWS.EKS.Cluster");
 

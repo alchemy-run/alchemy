@@ -11,12 +11,12 @@
   },
   "dependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@octanejs/adapter-cloudflare": "catalog:frameworks",
-    "@octanejs/vite-plugin": "catalog:frameworks",
+    "@octanejs/adapter-cloudflare": "catalog:",
+    "@octanejs/vite-plugin": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "octane": "catalog:frameworks",
-    "vite": "^8.0.0"
+    "octane": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"

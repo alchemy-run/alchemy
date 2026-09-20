@@ -7,7 +7,7 @@ The resource builds the app through the project's own `@nuxt/kit` with nitro's `
 ```ts
 const site = yield* Cloudflare.Website.Nuxt("NuxtSite", {
   env: {
-    GREETING: "Hello from alchemy",
+    GREETING: "Hello from Nuxt on Cloudflare!",
   },
 });
 ```

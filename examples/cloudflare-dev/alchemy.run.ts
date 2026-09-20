@@ -48,7 +48,9 @@ const AsyncWorker = (deps: {
 }) =>
   Effect.gen(function* () {
     const queue = yield* Cloudflare.Queues.Queue("AsyncWorkerQueue");
-    const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket");
+    const bucket = yield* Cloudflare.R2.Bucket("AsyncWorkerBucket", {
+      forceDestroy: true,
+    });
     const db = yield* Cloudflare.D1.Database("AsyncWorkerDB", {
       // Applied on deploy — including local dev, where they run against the
       // local D1 simulator through an ephemeral workerd gateway.
@@ -74,7 +76,7 @@ const AsyncWorker = (deps: {
           className: "QueueMessages",
         }),
         MY_VARIABLE: "my-variable-abc123",
-        MY_SECRET: Config.redacted("MY_SECRET").pipe(
+        MY_SECRET: Config.Redacted("MY_SECRET").pipe(
           Config.withDefault(Redacted.make("my-secret-abc123")),
         ),
         // The worker's own URL, injected as a plain-text binding (`self_url`).
@@ -120,7 +122,6 @@ const MediaWorker = Effect.gen(function* () {
   });
   const worker = yield* Cloudflare.Worker("MediaWorker", {
     main: "./src/MediaWorker.ts",
-    compatibility: { flags: ["nodejs_compat"] },
     env: {
       BROWSER: Cloudflare.Browser("BROWSER"),
       IMAGES: Cloudflare.Images.Images("IMAGES"),

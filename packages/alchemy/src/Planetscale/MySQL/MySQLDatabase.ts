@@ -124,15 +124,15 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * A MySQL PlanetScale database (powered by Vitess). For PostgreSQL use
  * {@link PostgresDatabase} instead.
  *
- * @section Creating a MySQL Database
- * @example Basic MySQL database
+ * ### Creating a MySQL Database
+ * **Example:** Basic MySQL database
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
  * });
  * ```
  *
- * @example MySQL with Vitess migration tooling
+ * **Example:** MySQL with Vitess migration tooling
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -143,8 +143,8 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Migrations and seed data
- * @example Apply migrations and seed files
+ * ### Migrations and seed data
+ * **Example:** Apply migrations and seed files
  * ```typescript
  * const db = yield* Planetscale.MySQLDatabase("MyDb", {
  *   clusterSize: "PS_10",
@@ -153,8 +153,8 @@ export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
  * });
  * ```
  *
- * @section Adoption
- * @example Adopting an existing database
+ * ### Adoption
+ * **Example:** Adopting an existing database
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
  *

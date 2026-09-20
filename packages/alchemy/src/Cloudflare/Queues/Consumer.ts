@@ -15,7 +15,7 @@ import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localRuntimeServices,
 } from "../LocalRuntime.ts";
@@ -105,11 +105,8 @@ export type Consumer = Resource<
  * script, the deploy fails with a clear error rather than silently
  * adopting it. A stranded consumer from a prior generation of the *same*
  * Worker (identified by the scripts' ownership tags) is rebuilt in place.
- * @resource
- * @product Queues
- * @category Storage & Databases
- * @section Registering a Consumer
- * @example Basic consumer
+ * ### Registering a Consumer
+ * **Example:** Basic consumer
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("MyQueue");
  * const worker = yield* Cloudflare.Worker("Worker", { ... });
@@ -120,7 +117,7 @@ export type Consumer = Resource<
  * });
  * ```
  *
- * @example Consumer with settings
+ * **Example:** Consumer with settings
  * ```typescript
  * yield* Cloudflare.Queues.Consumer("MyConsumer", {
  *   queueId: queue.queueId,
@@ -132,6 +129,10 @@ export type Consumer = Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  */
 export const Consumer = Resource<Consumer>("Cloudflare.Queues.Consumer", {
   aliases: ["Cloudflare.QueueConsumer"],
@@ -688,7 +689,7 @@ const queueHandlerReadinessSchedule = Schedule.max([
 export const ConsumerProviderLocal = () =>
   RpcProvider.effect(
     Consumer,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const localRuntimeState = yield* LocalRuntimeState;
 

@@ -12,6 +12,7 @@ import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { toSeconds, toWireDays } from "../../Util/Duration.ts";
+import type { DistributiveOmit } from "../../Util/types.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import type { DurableExecutionContext, DurableStep } from "./Durable.ts";
 import {
@@ -77,10 +78,8 @@ export type DurableFunctionInitServices =
  * durable-execution envelope — there is no HTTP surface), plus the
  * `DurableConfig` tuning knobs below.
  */
-export interface DurableFunctionProps extends Omit<
-  FunctionProps,
-  "functionUrl" | "durableConfig"
-> {
+/** The DurableConfig tuning knobs a DurableFunction adds to Function props. */
+export interface DurableFunctionTuning {
   /**
    * Maximum total duration of a durable execution, from start to terminal
    * state (minimum 60 seconds, maximum 1 year). Rounded up to whole seconds.
@@ -94,6 +93,28 @@ export interface DurableFunctionProps extends Omit<
    */
   retentionPeriod?: Duration.Input;
 }
+
+/**
+ * Props of a {@link DurableFunction}: any Function props that carry a
+ * `main` — the orchestrator body is an Effect that has to be bundled into
+ * an entrypoint — minus `functionUrl` (every invocation arrives as the
+ * durable envelope, so there is no HTTP surface), plus the DurableConfig
+ * knobs.
+ *
+ * Selected by SHAPE (`Extract<…, { main: string }>`), not by packaging, so
+ * any future main-bearing variant is durable-capable automatically; a
+ * prebuilt `image` function is excluded because it has no `main` for the
+ * `impl` Effect to live in.
+ *
+ * The Omit DISTRIBUTES over the union: a bare `Omit` computes the COMMON
+ * keys and merges the members, which would make `main` optional and let
+ * `image` through alongside it.
+ */
+export type DurableFunctionProps = DistributiveOmit<
+  Extract<FunctionProps, { main: string }>,
+  "functionUrl" | "durableConfig"
+> &
+  DurableFunctionTuning;
 
 /**
  * Options for starting a durable execution.
@@ -550,9 +571,8 @@ const composeDurableImpl = (
  * between a plain `Function` and a `DurableFunction` replaces the physical
  * function (DurableConfig cannot be flipped in place).
  *
- * @resource
- * @section Defining a Durable Function
- * @example Class form with steps and a durable sleep
+ * ### Defining a Durable Function
+ * **Example:** Class form with steps and a durable sleep
  * ```typescript
  * export class OrderFlow extends AWS.Lambda.DurableFunction<OrderFlow>()(
  *   "OrderFlow",
@@ -578,7 +598,7 @@ const composeDurableImpl = (
  * ) {}
  * ```
  *
- * @example Tag + default export (entrypoint form)
+ * **Example:** Tag + default export (entrypoint form)
  * ```typescript
  * // order-flow.ts — `main` points at this module
  * export class OrderFlow extends AWS.Lambda.DurableFunction<OrderFlow>()(
@@ -595,7 +615,7 @@ const composeDurableImpl = (
  * );
  * ```
  *
- * @example Inline effect form
+ * **Example:** Inline effect form
  * ```typescript
  * const flow = yield* AWS.Lambda.DurableFunction(
  *   "OrderFlow",
@@ -608,8 +628,8 @@ const composeDurableImpl = (
  * );
  * ```
  *
- * @section Starting and Monitoring Executions
- * @example Starting an execution
+ * ### Starting and Monitoring Executions
+ * **Example:** Starting an execution
  * ```typescript
  * const orders = yield* OrderFlow;
  * const ref = yield* orders.start({
@@ -619,7 +639,7 @@ const composeDurableImpl = (
  * });
  * ```
  *
- * @example Publish and promote for production
+ * **Example:** Publish and promote for production
  * ```typescript
  * const orders = yield* OrderFlow;
  * const version = yield* AWS.Lambda.Version("OrderFlowVersion", {
@@ -637,14 +657,14 @@ const composeDurableImpl = (
  * });
  * ```
  *
- * @example Checking status
+ * **Example:** Checking status
  * ```typescript
  * const execution = yield* orders.get(ref.executionArn!);
  * // execution.Status: "RUNNING" | "SUCCEEDED" | "FAILED" | ...
  * ```
  *
- * @section External Callbacks
- * @example Waiting for an approval
+ * ### External Callbacks
+ * **Example:** Waiting for an approval
  * ```typescript
  * const approval = yield* AWS.Lambda.Durable.waitForCallback<{ ok: boolean }>(
  *   "approve",
@@ -652,6 +672,8 @@ const composeDurableImpl = (
  *   { timeout: "1 day" },
  * );
  * ```
+ *
+ * @resource
  */
 export const DurableFunction: DurableFunctionClass = taggedFunction(
   DurableFunctionScope,

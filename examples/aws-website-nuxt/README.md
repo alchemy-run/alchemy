@@ -2,14 +2,12 @@
 
 Deploys a Nuxt app to AWS with `AWS.Website.Nuxt` — no `nitro.preset` edits, no CDK.
 
-The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `server.environment` are exposed to server routes and SSR through `process.env`.
+The resource builds the app through the project's own `@nuxt/kit` with nitro's `aws-lambda` preset (your `nuxt.config.ts` loads natively), deploys the nitro server bundle on a streaming Lambda Function URL, and serves client assets + prerendered pages from S3 behind CloudFront. Values passed via `env` are exposed to server routes and SSR through `process.env`.
 
 ```ts
 const site = yield* AWS.Website.Nuxt("NuxtSite", {
-  server: {
-    environment: {
-      GREETING: "Hello from alchemy",
-    },
+  env: {
+    GREETING: "Hello from Nuxt on AWS!",
   },
 });
 ```

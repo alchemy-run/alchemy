@@ -62,18 +62,15 @@ export type View = Resource<
  * Requires the Enterprise Internal DNS entitlement on the account
  * (creation fails with `InternalDnsNotAvailable` otherwise). Both
  * `name` and `zones` are mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a View
- * @example View over internal zones
+ * ### Creating a View
+ * **Example:** View over internal zones
  * ```typescript
  * const view = yield* Cloudflare.DNS.View("Internal", {
  *   zones: [internalZone.zoneId],
  * });
  * ```
  *
- * @example View with an explicit name
+ * **Example:** View with an explicit name
  * ```typescript
  * const view = yield* Cloudflare.DNS.View("Internal", {
  *   name: "datacenter-east",
@@ -82,6 +79,10 @@ export type View = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/internal-dns/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const View = Resource<View>(DnsViewTypeId, {
   aliases: ["Cloudflare.Dns.View"],

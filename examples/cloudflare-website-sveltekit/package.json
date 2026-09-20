@@ -15,13 +15,13 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
-    "@sveltejs/kit": "catalog:frameworks",
-    "@sveltejs/vite-plugin-svelte": "catalog:frameworks",
+    "@sveltejs/kit": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
     "@tailwindcss/vite": "catalog:",
-    "@types/node": "^24.12.0",
-    "svelte": "catalog:frameworks",
+    "@types/node": "catalog:node24",
+    "svelte": "catalog:",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:",
+    "typescript": "catalog:typescript-classic",
     "vite": "catalog:"
   },
   "repository": {
