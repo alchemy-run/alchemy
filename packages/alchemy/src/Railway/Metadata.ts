@@ -11,6 +11,22 @@ import { createPhysicalName } from "../PhysicalName.ts";
 export const RAILWAY_NAME_MAX_LENGTH = 32;
 
 /**
+ * Railway generates `{serviceName}-{environmentName}.up.railway.app` on
+ * `serviceDomainCreate`. That first DNS label must be ≤ 63 characters
+ * (`32 + 1 + 32 = 65` fails with "please try again"). Extra environments
+ * stay shorter so a 32-char service name still fits.
+ */
+export const RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH = 24;
+
+const clipName = (raw: string, maxLength: number) => {
+  const clipped = raw.length > maxLength ? raw.slice(0, maxLength) : raw;
+  const forced = /^[a-z]/.test(clipped)
+    ? clipped
+    : `r${clipped}`.slice(0, maxLength);
+  return forced.replace(/-+$/g, "") || "r";
+};
+
+/**
  * Railway Project / Service / Volume / Variable physical names:
  * `createPhysicalName({ lowercase: true, maxLength: 32 })`, then force a
  * leading letter (`r` prefix if needed). Unique per workspace.
@@ -21,26 +37,37 @@ export const createRailwayName = Effect.fn(function* (id: string) {
     lowercase: true,
     maxLength: RAILWAY_NAME_MAX_LENGTH,
   });
-  return /^[a-z]/.test(raw) ? raw : `r${raw}`.slice(0, RAILWAY_NAME_MAX_LENGTH);
+  return clipName(raw, RAILWAY_NAME_MAX_LENGTH);
+});
+
+/** Extra-environment names. See {@link RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH}. */
+export const createRailwayEnvironmentName = Effect.fn(function* (id: string) {
+  const raw = yield* createPhysicalName({
+    id,
+    lowercase: true,
+    maxLength: RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH,
+  });
+  return clipName(raw, RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH);
 });
 
 /**
  * Sanitize a user-supplied Railway name: lowercase, DNS-compatible
  * (`[a-z0-9-]`), force a leading letter, max 32 chars.
  */
-export const sanitizeRailwayName = (name: string): string => {
+const sanitizeTo = (name: string, maxLength: number): string => {
   const lowered = name
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const clipped =
-    lowered.length > RAILWAY_NAME_MAX_LENGTH
-      ? lowered.slice(0, RAILWAY_NAME_MAX_LENGTH).replace(/-+$/g, "")
-      : lowered;
-  const raw = clipped.length === 0 ? "r" : clipped;
-  return /^[a-z]/.test(raw) ? raw : `r${raw}`.slice(0, RAILWAY_NAME_MAX_LENGTH);
+  return clipName(lowered.length === 0 ? "r" : lowered, maxLength);
 };
+
+export const sanitizeRailwayName = (name: string): string =>
+  sanitizeTo(name, RAILWAY_NAME_MAX_LENGTH);
+
+export const sanitizeRailwayEnvironmentName = (name: string): string =>
+  sanitizeTo(name, RAILWAY_ENVIRONMENT_NAME_MAX_LENGTH);
 
 export const sanitize = sanitizeRailwayName;
 
@@ -74,7 +101,5 @@ export const matchesAlchemyPhysicalName = (
     return true;
   }
   const compact = name.replaceAll("-", "");
-  return (
-    name.length === RAILWAY_NAME_MAX_LENGTH && /[a-z2-7]{16}$/.test(compact)
-  );
+  return /[a-z2-7]{16}$/.test(compact);
 };

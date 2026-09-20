@@ -1,18 +1,18 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "include": ["alchemy.run.ts", "src/**/*.ts", "vite.config.ts"],
   "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun", "vite/client"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
     "noEmit": true,
-    // TODO(sam): remove this once we have a proper implementation
-    "noCheck": true,
-    "rootDir": ".",
-    "module": "Preserve",
-    "moduleResolution": "Bundler",
-    "target": "ESNext"
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true
   },
-  "references": [
-    {
-      "path": "../../packages/alchemy/tsconfig.json"
-    }
-  ]
+  "include": ["alchemy.run.ts", "vite.config.ts", "src", "test"],
+  "references": [{ "path": "../../packages/alchemy" }]
 }

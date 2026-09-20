@@ -39,7 +39,7 @@ this file with Rolldown, builds a Docker image (default
 
 ## Serve HTTP with `fetch`
 
-Return `fetch` from the init Effect to boot an HTTP server.
+Return `fetch` from the constructor Effect to boot an HTTP server.
 
 ```diff lang="typescript"
 import * as Fly from "alchemy/Fly";
@@ -165,7 +165,9 @@ Alchemy bundles `main` with Rolldown. If the hash matches the last
 deploy, it skips build and push. Otherwise it builds `linux/amd64`
 from `image` (default `oven/bun:1`) and pushes to
 `registry.fly.io/{app}:{id}-{hash}`. Then it creates or updates
-`count` Machines and waits until they are `started`.
+`count` Machines one at a time. After each Machine is `started`,
+if it has service checks, reconcile waits until those checks are
+passing before updating the next replica.
 
 Changed code is a new image and an in-place Machine update.
 Unchanged code is a no-op.
@@ -173,14 +175,24 @@ Unchanged code is a no-op.
 Override the base image with `image` (must still run bun). Pass
 `services: []` for a process that should not be published.
 
-:::note[Deploy waits for `started`, not `/health`]
-Alchemy waits until the Machine is `started`. It does not poll
-`/health`. Omitting that route does not fail the deploy.
+:::note[Deploy waits for Fly service checks]
+If a Machine has service checks (the default TCP check, or your HTTP
+checks), reconcile waits until Fly reports them `passing` before it
+moves on to the next replica. `started` only means the VM booted.
+Missing or non-passing results keep polling for up to 60 seconds.
+If checks do not pass, deployment fails with
+`Fly.ReplicaChecksNotPassing`, including the last observed check
+results, and later replicas remain unchanged. Earlier updates are
+not automatically rolled back.
+
+Omitting `/health` does not fail the deploy unless you configured an
+HTTP check on that path. A single replica still updates in place and
+can be unavailable during deployment; this is not blue/green deployment.
 :::
 
 ## Config
 
-Yield `Config` in init. Alchemy reads the value from the env of
+Yield `Config` in the constructor. Alchemy reads the value from the env of
 whoever deploys and writes it onto the Machine. Do not pass
 `env: { ... }` on a Service.
 
@@ -192,7 +204,7 @@ export default class Api extends Fly.Service<Api>()(
   "Api",
   { app: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("API_KEY");
+    const apiKey = yield* Config.Redacted("API_KEY");
 
     return {
       fetch: Effect.gen(function* () {
@@ -204,7 +216,7 @@ export default class Api extends Fly.Service<Api>()(
 ) {}
 ```
 
-`Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+`Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
 `Redacted.value` only where you need the raw string.
 
 Alchemy also injects `PORT` (when `port` is set) and stack metadata.
@@ -265,7 +277,7 @@ creates three disks.
 ## Logs
 
 Machine logs live in the Fly dashboard and `fly logs`. `alchemy
-logs` / `alchemy tail` don't support Fly Services yet.
+logs` (including `--tail`) doesn't support Fly Services yet.
 
 ## Where next
 
@@ -277,5 +289,5 @@ hibernate — no parent App, no Docker image.
 [Postgres](/fly/data/postgres) binds with `ConnectPostgres`.
 [Redis](/fly/data/redis) binds with `ReadWriteRedis`.
 [Tigris](/fly/data/tigris) binds with `PutObject` / `GetObject`.
-[Secrets](/fly/data/secrets) covers `Config.redacted` and `Fly.Secret`.
+[Secrets](/fly/data/secrets) covers `Config.Redacted` and `Fly.Secret`.
 The [`Service` reference](/providers/fly/service) lists every prop.

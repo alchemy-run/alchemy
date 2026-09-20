@@ -53,7 +53,7 @@ export interface ServiceBinding {
  *
  * `yield* Hetzner.MountVolume(volume, { path: "/data" })` inside a
  * Service impl registers `{ env, volumes: [{ volumeId, path }] }` on the
- * host. Service reconcile attaches the Volume (automount ok) and SSHs
+ * host. Service reconcile attaches the Volume (no automount) and SSHs
  * `mkdir` + `mount` + fstab at `path`. The same `(volume, server, path)`
  * from two Services is one attach and one mount.
  *

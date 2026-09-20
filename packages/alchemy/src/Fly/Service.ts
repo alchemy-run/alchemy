@@ -3,6 +3,7 @@ import type {
   FlyMachineGuest,
   FlyMachineMount,
   FlyMachineService,
+  FlyStatic,
   Machine as FlyMachine,
 } from "@distilled.cloud/fly-io/machines";
 import * as Data from "effect/Data";
@@ -50,6 +51,7 @@ import {
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
+  toFlyService,
   volumeIdsOf,
   type Replica,
   type ReplicaSet,
@@ -124,9 +126,10 @@ export interface ServiceProps extends PlatformProps {
   build?: FlyBuildOptions;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must
-   * be able to run the bun runtime.
+   * be able to run Node (websites and Effect-native Services use Node
+   * in production).
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim"
    */
   image?: string;
   /**
@@ -138,6 +141,32 @@ export interface ServiceProps extends PlatformProps {
    * from the stack, stage and logical ID. Changing it replaces the Service.
    */
   name?: string;
+  /**
+   * Extra host directories copied into the Machine image next to the
+   * bundled entry (e.g. a website `clientDirectory` at `/app/dist`).
+   * Hashed into `code.hash` so asset changes update the image.
+   * Destination is relative to `/app`.
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    dest: string;
+  }>;
+  /**
+   * Fly proxy static-file maps. Matching GET paths skip the process and
+   * are served from the image (`guestPath`) or a Tigris bucket
+   * (`tigrisBucket`). Website composites publish hashed client assets
+   * this way.
+   */
+  statics?: ReadonlyArray<{
+    /** Path inside the image, or key prefix in {@link tigrisBucket}. */
+    guestPath: string;
+    /** URL prefix, e.g. `"/"`. */
+    urlPrefix: string;
+    /** Tigris bucket name. When set, files come from the bucket. */
+    tigrisBucket?: string;
+    /** Directory index file (`index.html`) for Tigris statics. */
+    indexDocument?: string;
+  }>;
 }
 
 export type Service = Resource<
@@ -202,7 +231,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * `app` is the parent {@link App}. Pass the declaration directly,
  * yielded or module-scope. `main: import.meta.url` is the bundle
  * entrypoint. Alchemy bundles this file with Rolldown, builds a
- * Docker image (default `oven/bun:1`), and pushes it to
+ * Docker image (default `node:26-slim`), and pushes it to
  * `registry.fly.io/{app}:{id}-{hash}`.
  *
  * **Example:** Class + App + main
@@ -331,6 +360,55 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * TLS on 443, picks one started Machine that published this service,
  * and forwards to `port` where `fetch` runs.
  *
+ * ### Configure routing health checks
+ * The generated service includes a TCP check on `port`. To customize
+ * it, provide `services` and configure each service's `checks` property.
+ * After each replica is `started`, reconcile waits until those checks
+ * are passing before updating the next replica. Missing or non-passing
+ * results are polled for up to 60 seconds, then fail deployment with
+ * `Fly.ReplicaChecksNotPassing` and the last observed check results.
+ * Later replicas remain unchanged; earlier updates are not rolled back.
+ * A single replica still updates in place and can be unavailable.
+ *
+ * **Example:** HTTP readiness check
+ * ```typescript
+ * export default class Api extends Fly.Service<Api>()(
+ *   "Api",
+ *   {
+ *     app: Site,
+ *     main: import.meta.url,
+ *     port: 3000,
+ *     services: [
+ *       {
+ *         protocol: "tcp",
+ *         internalPort: 3000,
+ *         ports: [
+ *           { port: 80, handlers: ["http"], forceHttps: true },
+ *           { port: 443, handlers: ["tls", "http"] },
+ *         ],
+ *         checks: [
+ *           {
+ *             type: "http",
+ *             port: 3000,
+ *             method: "GET",
+ *             path: "/health",
+ *             protocol: "http",
+ *             interval: "15s",
+ *             timeout: "2s",
+ *             gracePeriod: "30s",
+ *           },
+ *         ],
+ *       },
+ *     ],
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
  * ### An address so it answers
  * `{app}.fly.dev` does not answer over IPv4 until the App has an
  * {@link IpAssignment}. Allocate a shared Anycast IPv4 on the same
@@ -376,14 +454,14 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * whoever deploys and writes it onto the Machine. Do not pass
  * `env: { ... }` on a Service.
  *
- * `Config.redacted("API_KEY")` is `Redacted<string>`. Unwrap with
+ * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
  *
  * Alchemy also injects `PORT` (when `port` is set) and stack metadata.
  * For a secret Fly should own and inject into every Machine on the
  * App, use {@link Secret}.
  *
- * **Example:** Config.redacted
+ * **Example:** Config.Redacted
  * ```typescript
  * import * as Config from "effect/Config";
  * import * as Redacted from "effect/Redacted";
@@ -392,7 +470,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   "Api",
  *   { app: Site, main: import.meta.url, port: 3000 },
  *   Effect.gen(function* () {
- *     const apiKey = yield* Config.redacted("API_KEY");
+ *     const apiKey = yield* Config.Redacted("API_KEY");
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -492,8 +570,8 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *
  * ### Base image
  * `image` is the generated Dockerfile's `FROM`. Default is
- * `oven/bun:1`. It must still run bun. A content-hash change of
- * `main` updates the Machine in place.
+ * `node:26-slim`. A content-hash change of `main` updates the
+ * Machine in place.
  *
  * **Example:** Override FROM
  * ```typescript
@@ -502,7 +580,7 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  *   {
  *     app: Site,
  *     main: import.meta.url,
- *     image: "oven/bun:1.2",
+ *     image: "node:26",
  *     port: 3000,
  *   },
  *   Effect.gen(function* () {
@@ -700,26 +778,6 @@ const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
   return fly;
 };
 
-const toFlyService = (service: MachineService): FlyMachineService => ({
-  protocol: service.protocol,
-  internal_port: service.internalPort,
-  autostart: service.autostart,
-  autostop:
-    typeof service.autostop === "boolean"
-      ? service.autostop
-        ? "stop"
-        : "off"
-      : service.autostop,
-  min_machines_running: service.minMachinesRunning,
-  ports: service.ports?.map((port) => ({
-    port: port.port,
-    handlers: port.handlers,
-    force_https: port.forceHttps,
-    start_port: port.startPort,
-    end_port: port.endPort,
-  })),
-});
-
 const desiredEnv = (
   props: ServiceProps,
   bindingEnv: Record<string, any>,
@@ -732,6 +790,29 @@ const desiredEnv = (
   ...toEnv(props.env),
 });
 
+const toFlyStatics = (
+  statics:
+    | ReadonlyArray<{
+        guestPath: string;
+        urlPrefix: string;
+        tigrisBucket?: string;
+        indexDocument?: string;
+      }>
+    | undefined,
+): FlyStatic[] | undefined => {
+  if (statics === undefined || statics.length === 0) return undefined;
+  return statics.map((entry) => ({
+    guest_path: entry.guestPath,
+    url_prefix: entry.urlPrefix,
+    ...(entry.tigrisBucket !== undefined
+      ? { tigris_bucket: entry.tigrisBucket }
+      : {}),
+    ...(entry.indexDocument !== undefined
+      ? { index_document: entry.indexDocument }
+      : {}),
+  }));
+};
+
 const buildConfig = (input: {
   image: string;
   guest: FlyMachineGuest;
@@ -739,6 +820,7 @@ const buildConfig = (input: {
   services: FlyMachineService[];
   mounts: FlyMachineMount[];
   metadata: Record<string, string>;
+  statics?: FlyStatic[];
 }): FlyMachineConfig => ({
   image: input.image,
   guest: input.guest,
@@ -746,6 +828,10 @@ const buildConfig = (input: {
   services: input.services.length > 0 ? input.services : undefined,
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
+  statics:
+    input.statics !== undefined && input.statics.length > 0
+      ? input.statics
+      : undefined,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -808,6 +894,11 @@ const metadataChanged = (
   );
 };
 
+const sameStatics = (
+  observed: FlyStatic[] | undefined,
+  desired: FlyStatic[] | undefined,
+) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+
 const configDrifted = (
   machine: FlyMachine,
   desired: {
@@ -817,6 +908,7 @@ const configDrifted = (
     services: FlyMachineService[];
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
+    statics?: FlyStatic[];
   },
 ) => {
   const config = machine.config;
@@ -826,7 +918,8 @@ const configDrifted = (
     !sameEnv(config?.env, desired.env) ||
     !sameServices(config?.services, desired.services) ||
     !sameMounts(config?.mounts, desired.mounts) ||
-    metadataChanged(config?.metadata, desired.metadata)
+    metadataChanged(config?.metadata, desired.metadata) ||
+    !sameStatics(config?.statics, desired.statics)
   );
 };
 
@@ -892,14 +985,17 @@ export const ServiceProvider = () =>
             }
           }
           // The code hash depends only on statically-known props (`main`,
-          // `build`, `image`, `port`). Never gate it on the WHOLE props
-          // being resolved: `app` is a resource reference that stays
-          // unresolved at diff time, so a whole-props guard makes
-          // code-only changes silently noop. By diff time the
+          // `build`, `image`, `port`, `extraFiles`, `isExternal`). Never
+          // gate it on the WHOLE props being resolved: `app` is a resource
+          // reference that stays unresolved at diff time, so a whole-props
+          // guard makes code-only changes silently noop. By diff time the
           // effect-config form has been evaluated, so the object view is
           // safe to read.
           const statics = news as Partial<
-            Pick<ServiceProps, "main" | "build" | "image" | "port">
+            Pick<
+              ServiceProps,
+              "main" | "build" | "image" | "port" | "extraFiles" | "isExternal"
+            >
           >;
           if (
             isResolved({
@@ -907,6 +1003,8 @@ export const ServiceProvider = () =>
               build: statics.build,
               image: statics.image,
               port: statics.port,
+              extraFiles: statics.extraFiles,
+              isExternal: statics.isExternal,
             }) &&
             statics.main !== undefined
           ) {
@@ -978,6 +1076,7 @@ export const ServiceProvider = () =>
             props.services !== undefined
               ? props.services.map(toFlyService)
               : defaultHttpServices(port, count);
+          const statics = toFlyStatics(props.statics);
 
           const { imageRef, codeHash } = yield* hosted.resolveImage({
             id,
@@ -1008,6 +1107,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts: desired.mounts,
                 metadata: desired.metadata,
+                statics,
               }),
             buildConfig: ({ mounts, metadata }) =>
               buildConfig({
@@ -1017,6 +1117,7 @@ export const ServiceProvider = () =>
                 services,
                 mounts,
                 metadata,
+                statics,
               }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
@@ -1031,11 +1132,27 @@ export const ServiceProvider = () =>
           return toAttrs(set, codeHash);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ id, olds, output }) {
+          const appName = output.appName ?? appNameOf(olds.app);
+          if (appName === undefined) return;
+          const current =
+            machineIdsOf(output).length > 0
+              ? output
+              : yield* observeReplicaSet({
+                  appName,
+                  id,
+                  type: "Fly.Service",
+                  baseName: yield* resolveMachineName(
+                    id,
+                    olds.name,
+                    output.name,
+                  ),
+                });
+          if (current === undefined) return;
           yield* deleteReplicaSet({
-            appName: output.appName,
-            machineIds: machineIdsOf(output),
-            volumeIds: volumeIdsOf(output),
+            appName,
+            machineIds: current.machineIds,
+            volumeIds: volumeIdsOf(current),
           });
         }),
       });

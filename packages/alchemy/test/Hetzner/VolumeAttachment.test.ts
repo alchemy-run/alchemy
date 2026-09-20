@@ -47,7 +47,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const server = yield* Hetzner.Server("Web", {
-            serverType: "cx23",
+            serverType: "cpx12",
             image: "ubuntu-24.04",
             location: "nbg1",
           });
@@ -96,5 +96,5 @@ test.provider.skipIf(!hasHetznerCreds)(
       const serverGone = yield* waitUntilServerGone(created.server.id);
       expect(serverGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );

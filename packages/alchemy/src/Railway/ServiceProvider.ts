@@ -1,38 +1,23 @@
-import { Retry as RailwayRetry } from "@distilled.cloud/railway";
-import type {
-  Builder,
-  DeploymentTriggersResponseEdgesItemNode,
-  ProjectResponseServicesEdgesItemNode,
-  RestartPolicyType,
-  ServiceCreateResponse,
-  ServiceInstanceResponse,
-  ServiceInstanceUpdateInput,
-  ServiceResponse,
-  ServiceUpdateResponse,
-} from "@distilled.cloud/railway";
+import { waitUntilDeleted, projectServices } from "./GraphQL.ts";
 import * as railway from "@distilled.cloud/railway";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { Unowned } from "../AdoptPolicy.ts";
 import * as Bundle from "../Bundle/Bundle.ts";
-import { deepEqual, isResolved } from "../Diff.ts";
-import { DockerLive, Docker } from "../Docker/Docker.ts";
+import { deepEqual, isResolved, stripEffects } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Stack } from "../Stack.ts";
 import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
+import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
+import { ownedProjects } from "./Project.ts";
+import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 import {
-  assertHostDisk,
-  type MountSpec,
-  type ServiceBinding,
-} from "./MountVolume.ts";
-import { listOwnedProjects, type Project } from "./Project.ts";
-import { listServiceVolumes } from "./Volume.ts";
-import {
+  deleteOwnedServiceDomain,
   ensureServiceDomain,
+  findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
 import {
@@ -43,11 +28,81 @@ import {
   toEnvRecord,
 } from "./hosted.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
+import { tarGzipDirectory } from "../Util/tarGzip.ts";
 import {
-  Service,
-  type ServiceEnvironment,
-  type ServiceProps,
-} from "./Service.ts";
+  hashRailwayLocalContext,
+  prepareRailwayLocalContext,
+  resolveRailwayServiceSource,
+  ServiceSourceInvalid,
+  type RailwayLocalContextSource,
+} from "./local-context.ts";
+import { uploadDeployTarball } from "./Up.ts";
+import { Service } from "./Service.ts";
+
+type Builder = railway.Scalars["Builder"];
+type RestartPolicyType = railway.Scalars["RestartPolicyType"];
+type ServiceInstanceUpdateInput = railway.Inputs["ServiceInstanceUpdateInput"];
+
+const serviceSelection = {
+  id: true,
+  name: true,
+  deletedAt: true,
+} as const satisfies railway.Selection<"Service">;
+const instanceSelection = {
+  deletedAt: true,
+  source: { image: true, repo: true },
+  region: true,
+  sleepApplication: true,
+  latestDeployment: { id: true, status: true },
+  activeDeployments: { id: true, status: true },
+  buildCommand: true,
+  builder: true,
+  cronSchedule: true,
+  dockerfilePath: true,
+  drainingSeconds: true,
+  healthcheckPath: true,
+  healthcheckTimeout: true,
+  numReplicas: true,
+  overlapSeconds: true,
+  preDeployCommand: true,
+  restartPolicyMaxRetries: true,
+  restartPolicyType: true,
+  rootDirectory: true,
+  startCommand: true,
+  watchPatterns: true,
+} as const satisfies railway.Selection<"ServiceInstance">;
+type ServiceResponse = railway.Result<"Service!", typeof serviceSelection>;
+type CreateServiceResponse = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type UpdateServiceResponse = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type ProjectResponseServicesEdgesItemNode = railway.Result<
+  "Service!",
+  typeof serviceSelection
+>;
+type ServiceInstanceResponse = railway.Result<
+  "ServiceInstance!",
+  typeof instanceSelection
+>;
+type DeploymentTriggersResponseEdgesItemNode = railway.Result<
+  "DeploymentTrigger!",
+  { id: true; branch: true; repository: true; provider: true }
+>;
+
+export {
+  ServiceContextPathInvalid,
+  ServiceContextPathUnsupported,
+  ServiceContextSymlinkUnsupported,
+  ServiceContextTooLarge,
+  ServiceDockerfileOutsideContext,
+  ServiceDockerfilePathInvalid,
+  ServiceImageOrMainRequired,
+  ServiceSourceInvalid,
+} from "./local-context.ts";
 
 export class ServiceNotCreated extends Data.TaggedError(
   "Railway.ServiceNotCreated",
@@ -62,19 +117,20 @@ export class ServiceProjectRequired extends Data.TaggedError(
   message: string;
 }> {}
 
-export class ServiceImageOrMainRequired extends Data.TaggedError(
-  "Railway.ServiceImageOrMainRequired",
-)<{
-  message: string;
-}> {}
-
 export class ServiceDeployFailed extends Data.TaggedError(
   "Railway.ServiceDeployFailed",
 )<{
   serviceId: string;
   status: string;
   deploymentId: string | undefined;
-}> {}
+  logs: string;
+}> {
+  override get message() {
+    return this.logs.length > 0
+      ? `Service deploy ${this.status}: ${this.logs}`
+      : `Service deploy ${this.status}`;
+  }
+}
 
 class ServicePending extends Data.TaggedError("Railway.ServicePending")<{
   serviceId: string;
@@ -86,12 +142,16 @@ class ServiceDeployPending extends Data.TaggedError(
 )<{
   serviceId: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `deployment still ${this.status}`;
+  }
+}
 
 type CloudService =
   | ServiceResponse
-  | ServiceCreateResponse
-  | ServiceUpdateResponse
+  | CreateServiceResponse
+  | UpdateServiceResponse
   | ProjectResponseServicesEdgesItemNode;
 
 const projectIdOf = (value: unknown): string | undefined => {
@@ -124,29 +184,21 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
   });
 
 const getById = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
+  railway.service({ id: serviceId }, serviceSelection).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
-  railway.serviceInstance({ environmentId, serviceId }).pipe(
+  railway.serviceInstance({ environmentId, serviceId }, instanceSelection).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
   );
 
 const listProjectServices = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.services.edges
-        .map((edge) => edge.node)
-        .filter((node) => !isGoneService(node)),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+  projectServices(projectId, serviceSelection).pipe(
+    Effect.map((services) => services.filter((node) => !isGoneService(node))),
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed([] as ProjectResponseServicesEdgesItemNode[]),
     ),
   );
@@ -155,9 +207,6 @@ const findByName = (projectId: string, name: string) =>
   listProjectServices(projectId).pipe(
     Effect.map((services) => services.find((service) => service.name === name)),
   );
-
-const alreadyExists = (message: string) =>
-  /already exists|already in use|duplicate/i.test(message);
 
 const sameImage = (observed: string | null | undefined, desired: string) => {
   if (observed == null || observed.length === 0) return false;
@@ -176,12 +225,6 @@ const deployReady = (status: string | undefined) =>
 const deployFailed = (status: string | undefined) =>
   status === "FAILED" || status === "CRASHED" || status === "REMOVED";
 
-const rateLimited = {
-  while: (e: { _tag: string }) => e._tag === "RailwayRateLimited",
-  schedule: Schedule.spaced("2 seconds"),
-  times: 3 as const,
-};
-
 const undef = <T>(value: T | null | undefined): T | undefined =>
   value == null ? undefined : value;
 
@@ -190,6 +233,18 @@ const sameWatchPatterns = (
   desired: readonly string[] | undefined,
 ) => desired === undefined || deepEqual([...(observed ?? [])], [...desired]);
 
+const samePreDeployCommand = (
+  observed: unknown,
+  desired: string | null | undefined,
+) =>
+  desired === undefined ||
+  (desired === null
+    ? observed == null || (Array.isArray(observed) && observed.length === 0)
+    : observed === desired ||
+      (Array.isArray(observed) &&
+        observed.length === 1 &&
+        observed[0] === desired));
+
 const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   input: ServiceInstanceUpdateInput,
   key: K,
@@ -197,7 +252,13 @@ const assignIfChanged = <K extends keyof ServiceInstanceUpdateInput>(
   observed: unknown,
 ): boolean => {
   if (desired === undefined) return false;
-  if (deepEqual(undef(observed as never), desired)) return false;
+  if (
+    desired === null
+      ? observed == null
+      : deepEqual(undef(observed as never), desired)
+  ) {
+    return false;
+  }
   input[key] = desired;
   return true;
 };
@@ -211,6 +272,7 @@ const instanceSettingsDelta = (input: {
     region?: string;
     rootDirectory?: string;
     buildCommand?: string;
+    preDeploy?: { command: string | null };
     startCommand?: string;
     healthcheckPath?: string;
     healthcheck?: string;
@@ -221,7 +283,7 @@ const instanceSettingsDelta = (input: {
     drainingSeconds?: number;
     overlapSeconds?: number;
     sleepApplication?: boolean;
-    dockerfilePath?: string;
+    dockerfilePath?: string | null;
     builder?: Builder;
     watchPatterns?: string[];
   };
@@ -265,6 +327,19 @@ const instanceSettingsDelta = (input: {
       input.props.buildCommand,
       instance?.buildCommand,
     ) || changed;
+  const preDeployCommand =
+    input.props.preDeploy === undefined
+      ? undefined
+      : input.props.preDeploy.command;
+  if (
+    preDeployCommand !== undefined &&
+    !samePreDeployCommand(instance?.preDeployCommand, preDeployCommand)
+  ) {
+    // Railway's GraphQL field is `[String]`. `null` is a no-op; `[]` clears.
+    delta.preDeployCommand =
+      preDeployCommand === null ? [] : [preDeployCommand];
+    changed = true;
+  }
   changed =
     assignIfChanged(
       delta,
@@ -364,16 +439,19 @@ const listDeploymentTriggers = (
   serviceId: string,
 ) =>
   railway.deploymentTriggers
-    .items({
-      projectId,
-      environmentId,
-      serviceId,
-      first: 50,
-    })
+    .items(
+      {
+        projectId,
+        environmentId,
+        serviceId,
+        first: 50,
+      },
+      { id: true, branch: true, repository: true, provider: true },
+    )
     .pipe(
       Stream.runCollect,
       Effect.map((triggers) => Array.from(triggers)),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      railway.catchTags(["RailwayNotFound"], () =>
         Effect.succeed([] as DeploymentTriggersResponseEdgesItemNode[]),
       ),
     );
@@ -393,8 +471,8 @@ const syncBranch = Effect.fn(function* (input: {
   );
   const current = triggers[0];
   if (current === undefined) {
-    yield* railway
-      .deploymentTriggerCreate({
+    yield* railway.deploymentTriggerCreate(
+      {
         input: {
           branch: input.branch,
           environmentId: input.environmentId,
@@ -403,23 +481,42 @@ const syncBranch = Effect.fn(function* (input: {
           repository: input.repo,
           serviceId: input.serviceId,
         },
-      })
-      .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+      },
+      { id: true },
+    );
     return true;
   }
   const branchChanged = current.branch !== input.branch;
   const repoChanged = current.repository !== input.repo;
   if (!branchChanged && !repoChanged) return false;
-  yield* railway
-    .deploymentTriggerUpdate({
+  yield* railway.deploymentTriggerUpdate(
+    {
       id: current.id,
       input: {
         ...(branchChanged ? { branch: input.branch } : {}),
         ...(repoChanged ? { repository: input.repo } : {}),
       },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+    },
+    { id: true },
+  );
   return true;
+});
+
+const clearDeploymentTriggers = Effect.fn(function* (input: {
+  projectId: string;
+  environmentId: string;
+  serviceId: string;
+}) {
+  const triggers = yield* listDeploymentTriggers(
+    input.projectId,
+    input.environmentId,
+    input.serviceId,
+  );
+  const github = triggers.filter((trigger) => trigger.provider === "github");
+  yield* Effect.forEach(github, (trigger) =>
+    railway.deploymentTriggerDelete({ id: trigger.id }),
+  );
+  return github.length > 0;
 });
 
 const syncAutoUpdates = Effect.fn(function* (input: {
@@ -430,27 +527,29 @@ const syncAutoUpdates = Effect.fn(function* (input: {
 }) {
   if (input.enabled === undefined) return;
   const status = yield* railway
-    .serviceInstanceAutoDeployStatus({
-      environmentId: input.environmentId,
-      projectId: input.projectId,
-      serviceId: input.serviceId,
-    })
+    .serviceInstanceAutoDeployStatus(
+      {
+        environmentId: input.environmentId,
+        projectId: input.projectId,
+        serviceId: input.serviceId,
+      },
+      { enabled: true },
+    )
     .pipe(
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      railway.catchTags(["RailwayNotFound"], () => Effect.succeed(undefined)),
     );
   if (status?.enabled === input.enabled) return;
-  yield* railway
-    .serviceInstanceAutoDeployUpdate({
+  yield* railway.serviceInstanceAutoDeployUpdate(
+    {
       input: {
         enabled: input.enabled,
         environmentId: input.environmentId,
         projectId: input.projectId,
         serviceId: input.serviceId,
       },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+    },
+    { enabled: true },
+  );
 });
 
 const waitForInstance = (environmentId: string, serviceId: string) =>
@@ -465,13 +564,36 @@ const waitForInstance = (environmentId: string, serviceId: string) =>
     }),
     Effect.retry({
       while: (e) => e._tag === "Railway.ServicePending",
-      times: 8,
-      schedule: Schedule.spaced("1 second"),
+      // serviceCreate fans the instance out to each environment
+      // asynchronously; wait a bounded interval for it to appear.
+      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.catchTag("Railway.ServicePending", () =>
       getInstance(environmentId, serviceId),
     ),
   );
+
+const fetchDeployLogs = (deploymentId: string | undefined) =>
+  deploymentId === undefined || deploymentId.length === 0
+    ? Effect.succeed("")
+    : railway
+        .deploymentLogs(
+          { deploymentId, limit: 80 },
+          { message: true, severity: true },
+        )
+        .pipe(
+          Effect.map((rows) =>
+            rows
+              .map((row) =>
+                row.severity != null
+                  ? `[${row.severity}] ${row.message}`
+                  : row.message,
+              )
+              .join("\n"),
+          ),
+          Effect.orElseSucceed(() => ""),
+        );
 
 const waitForDeployment = (environmentId: string, serviceId: string) =>
   Effect.gen(function* () {
@@ -479,10 +601,12 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     const latest = instance?.latestDeployment;
     const status = latest?.status;
     if (status !== undefined && deployFailed(status)) {
+      const logs = yield* fetchDeployLogs(latest?.id);
       return yield* new ServiceDeployFailed({
         serviceId,
         status,
         deploymentId: latest?.id,
+        logs,
       });
     }
     if (instance !== undefined && deployReady(status)) {
@@ -498,8 +622,131 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
-    Effect.catchTag("Railway.ServiceDeployPending", () =>
-      getInstance(environmentId, serviceId),
+  );
+
+type DeployRef = {
+  id: string;
+  status: string | undefined;
+};
+
+const asDeployRef = (
+  row: { id: string; status?: string | null } | undefined,
+): DeployRef | undefined =>
+  row === undefined
+    ? undefined
+    : { id: row.id, status: row.status ?? undefined };
+
+const matchUploadedDeployment = (
+  instance: ServiceInstanceResponse | undefined,
+  deploymentId: string,
+): DeployRef | undefined => {
+  const latest = instance?.latestDeployment;
+  if (latest?.id === deploymentId) return asDeployRef(latest);
+  return asDeployRef(
+    (instance?.activeDeployments ?? []).find(
+      (deployment) => deployment.id === deploymentId,
+    ),
+  );
+};
+
+const listUploadedDeployment = (input: {
+  deploymentId: string;
+  serviceId: string;
+  environmentId: string;
+}) =>
+  railway.deployments
+    .items(
+      {
+        first: 10,
+        input: {
+          serviceId: input.serviceId,
+          environmentId: input.environmentId,
+        },
+      },
+      { id: true, status: true },
+    )
+    .pipe(
+      Stream.filter((row) => row.id === input.deploymentId),
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)[0]),
+      Effect.timeoutOrElse({
+        duration: "8 seconds",
+        orElse: () => Effect.succeed(undefined),
+      }),
+      railway.catchTags("RailwayNotFound", () => Effect.succeed(undefined)),
+    );
+
+const waitForDeploymentById = (input: {
+  deploymentId: string;
+  serviceId: string;
+  environmentId: string;
+}) =>
+  Effect.gen(function* () {
+    // Poll the instance, not `deployment(id)`. Distilled's deployment
+    // query is a huge nested selection that 404s/times out for /up ids;
+    // `serviceInstance.latestDeployment` is the same record the rest of
+    // reconcile already uses. The placeholder `hashicorp/http-echo`
+    // deploy often FAILED (wrong port / no `/health`) before `railway up`
+    // replaces it — do not inherit that FAILED onto this wait.
+    const instance = yield* getInstance(input.environmentId, input.serviceId);
+    const match =
+      matchUploadedDeployment(instance, input.deploymentId) ??
+      asDeployRef(yield* listUploadedDeployment(input));
+    if (match === undefined) {
+      return yield* new ServiceDeployPending({
+        serviceId: input.serviceId,
+        status: "pending",
+      });
+    }
+    const status = match.status;
+    if (status !== undefined && deployFailed(status)) {
+      const logs = yield* fetchDeployLogs(match.id);
+      return yield* new ServiceDeployFailed({
+        serviceId: input.serviceId,
+        status,
+        deploymentId: match.id,
+        logs,
+      });
+    }
+    if (instance !== undefined && deployReady(status)) {
+      return instance;
+    }
+    return yield* new ServiceDeployPending({
+      serviceId: input.serviceId,
+      status: status ?? "pending",
+    });
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Railway.ServiceDeployPending",
+      times: 10,
+      schedule: Schedule.spaced("5 seconds"),
+    }),
+    Effect.catchTag("Railway.ServiceDeployPending", (pending) =>
+      Effect.gen(function* () {
+        const instance = yield* getInstance(
+          input.environmentId,
+          input.serviceId,
+        );
+        const match =
+          matchUploadedDeployment(instance, input.deploymentId) ??
+          asDeployRef(yield* listUploadedDeployment(input));
+        const status = match?.status;
+        if (
+          match !== undefined &&
+          status !== undefined &&
+          deployFailed(status)
+        ) {
+          const logs = yield* fetchDeployLogs(match.id);
+          return yield* new ServiceDeployFailed({
+            serviceId: input.serviceId,
+            status,
+            deploymentId: match.id,
+            logs,
+          });
+        }
+        return yield* pending;
+      }),
     ),
   );
 
@@ -510,18 +757,16 @@ const upsertVariable = (input: {
   name: string;
   value: string;
 }) =>
-  railway
-    .variableUpsert({
-      input: {
-        projectId: input.projectId,
-        environmentId: input.environmentId,
-        serviceId: input.serviceId,
-        name: input.name,
-        value: input.value,
-        skipDeploys: true,
-      },
-    })
-    .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+  railway.upsertVariable({
+    input: {
+      projectId: input.projectId,
+      environmentId: input.environmentId,
+      serviceId: input.serviceId,
+      name: input.name,
+      value: input.value,
+      skipDeploys: true,
+    },
+  });
 
 const asVariableMap = (value: unknown): Record<string, string> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -550,7 +795,7 @@ const listVariableMap = (
     })
     .pipe(
       Effect.map(asVariableMap),
-      Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+      railway.catchTags(["RailwayNotFound"], () =>
         Effect.succeed({} as Record<string, string>),
       ),
     );
@@ -585,25 +830,18 @@ const syncEnv = Effect.fn(function* (input: {
 
 const syncMounts = Effect.fn(function* (input: {
   environmentId: string;
+  projectId: string;
   serviceId: string;
   mounts: MountSpec[];
 }) {
   for (const mount of input.mounts) {
-    if (mount.volumeId.length === 0) continue;
-    yield* railway
-      .volumeInstanceUpdate({
-        volumeId: mount.volumeId,
-        environmentId: input.environmentId,
-        input: {
-          serviceId: input.serviceId,
-          mountPath: mount.path,
-        },
-      })
-      .pipe(
-        RailwayRetry.none,
-        Effect.retry(rateLimited),
-        Effect.catchTag(["RailwayNotFound", "NotFound"], () => Effect.void),
-      );
+    yield* attachVolumeToService({
+      environmentId: input.environmentId,
+      projectId: input.projectId,
+      serviceId: input.serviceId,
+      volumeId: mount.volumeId,
+      mountPath: mount.path,
+    });
   }
 });
 
@@ -647,14 +885,12 @@ export const ServiceProvider = () =>
     Service,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const docker = yield* Docker;
       const { dotAlchemy } = yield* AlchemyContext;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const hosted = createRailwayHostedSupport({
         stackName: stack.name,
         stage: stack.stage,
         virtualEntryPlugin,
-        docker,
         dotAlchemy,
       });
 
@@ -662,7 +898,11 @@ export const ServiceProvider = () =>
         stables: ["serviceId", "projectId", "environmentId"],
         nuke: { dependsOn: ["Railway.Project"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news: desired, output }) {
+          // Runtime exports contain Effects that remain unevaluated during
+          // planning. The bundle hash covers their code; they must not prevent
+          // code-only changes from reaching the hash comparison below.
+          const news = stripEffects(desired);
           if (news === undefined || !isResolved(news)) return undefined;
           if (output === undefined) return undefined;
           const nextProject = projectIdOf(news.project);
@@ -674,17 +914,23 @@ export const ServiceProvider = () =>
           if (projectChanged || environmentChanged) {
             return { action: "replace" as const };
           }
-          if (news.main !== undefined && news.main.length > 0) {
+          const source = yield* resolveRailwayServiceSource(news);
+          if (source.mode === "main") {
             const hash = yield* hosted.hash({
-              main: news.main,
+              main: source.main,
               handler: news.handler,
               port: news.port,
               image: news.image,
               env: news.env,
               isExternal: news.isExternal,
               build: news.build,
-              registry: news.registry,
+              extraFiles: news.extraFiles,
             });
+            if (hash !== output.code.hash) {
+              return { action: "update" as const };
+            }
+          } else if (source.mode === "context") {
+            const hash = yield* hashRailwayLocalContext(source);
             if (hash !== output.code.hash) {
               return { action: "update" as const };
             }
@@ -723,55 +969,112 @@ export const ServiceProvider = () =>
             resolvedEnvId.length > 0
               ? yield* getInstance(resolvedEnvId, found.id)
               : undefined;
+          // A recorded domain id is the ownership boundary. Refresh an owned
+          // domain, but do not claim a generated domain found during adoption.
+          const domain =
+            output?.domainId !== undefined &&
+            resolvedProjectId.length > 0 &&
+            resolvedEnvId.length > 0
+              ? yield* findServiceDomainById({
+                  projectId: resolvedProjectId,
+                  environmentId: resolvedEnvId,
+                  serviceId: found.id,
+                  domainId: output.domainId,
+                })
+              : undefined;
           const attrs = toAttrs({
             service: found,
             instance,
-            domain: undefined,
+            domain,
             projectId: resolvedProjectId,
             environmentId: resolvedEnvId,
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
           });
-          if (output !== undefined) return attrs;
+          if (output !== undefined) {
+            // Keep the recorded ownership id even if the live list lags.
+            // Wiping it makes `publicDomain: false` a no-op.
+            if (domain === undefined && output.domainId !== undefined) {
+              return {
+                ...attrs,
+                domainId: output.domainId,
+                domain: output.domain,
+                url: output.url,
+              };
+            }
+            return attrs;
+          }
           return matchesAlchemyPhysicalName(found.name)
             ? attrs
             : Unowned(attrs);
         }),
 
         list: Effect.fn(function* () {
-          const projects = yield* listOwnedProjects();
-          const rows = yield* Effect.forEach(
-            projects,
-            (project) =>
-              listProjectServices(project.projectId).pipe(
-                Effect.map((services) =>
-                  services
-                    .filter((service) =>
-                      matchesAlchemyPhysicalName(service.name),
-                    )
-                    .map((service) =>
-                      toAttrs({
-                        service,
-                        instance: undefined,
-                        domain: undefined,
-                        projectId: project.projectId,
-                        environmentId: project.environmentId,
-                        port: undefined,
-                        codeHash: "",
-                        rpcToken: "",
-                      }),
-                    ),
-                ),
+          const projects = yield* ownedProjects();
+          const rows = yield* Effect.forEach(projects, (project) =>
+            listProjectServices(project.projectId).pipe(
+              Effect.map((services) =>
+                services
+                  .filter((service) => matchesAlchemyPhysicalName(service.name))
+                  .map((service) =>
+                    toAttrs({
+                      service,
+                      instance: undefined,
+                      domain: undefined,
+                      projectId: project.projectId,
+                      environmentId: project.environmentId,
+                      port: undefined,
+                      codeHash: "",
+                      rpcToken: "",
+                    }),
+                  ),
               ),
-            { concurrency: 8 },
+            ),
           );
           return rows.flat();
+        }),
+
+        // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
+        // Those are knowable from the physical name and props; the cloud
+        // service is created in reconcile (and re-synced in converge).
+        precreate: Effect.fn(function* ({ id, news }) {
+          const name = yield* resolveName(
+            id,
+            typeof news.name === "string" ? news.name : undefined,
+          );
+          const port = typeof news.port === "number" ? news.port : DEFAULT_PORT;
+          return {
+            serviceId: "",
+            name,
+            projectId: "",
+            environmentId: "",
+            image: undefined,
+            repo: undefined,
+            healthcheckPath: undefined,
+            healthcheckTimeout: undefined,
+            replicas: undefined,
+            buildCommand: undefined,
+            startCommand: undefined,
+            cronSchedule: undefined,
+            rootDirectory: undefined,
+            region: undefined,
+            port,
+            url: undefined,
+            domain: undefined,
+            dnsName: `${name}.railway.internal`,
+            rpcToken: plainEnvValue(news.rpcToken) ?? "",
+            domainId: undefined,
+            deploymentId: undefined,
+            deploymentStatus: undefined,
+            code: { hash: "" },
+          } satisfies Service["Attributes"];
         }),
 
         reconcile: Effect.fn(function* ({
           id,
           news,
+          olds,
           output,
           bindings,
           session,
@@ -794,10 +1097,10 @@ export const ServiceProvider = () =>
             });
           }
           const name = yield* resolveName(id, props.name, output?.name);
-          const hostedMain =
-            props.main !== undefined && props.main.length > 0
-              ? props.main
-              : undefined;
+          const source = yield* resolveRailwayServiceSource(props);
+          const hostedMain = source.mode === "main" ? source.main : undefined;
+          const localContext: RailwayLocalContextSource | undefined =
+            source.mode === "context" ? source : undefined;
           const bound = collectBindingState(bindings ?? []);
           yield* assertHostDisk({
             name,
@@ -819,38 +1122,49 @@ export const ServiceProvider = () =>
 
           let sourceImage: string | undefined;
           let sourceRepo: string | undefined;
-          let codeHash = output?.code.hash ?? "";
-          let registryCredentials:
-            | { username: string; password: string }
+          let localPrepared:
+            | {
+                codeHash: string;
+                dockerfilePath: string;
+                tarball: Uint8Array;
+              }
             | undefined;
-          if (hostedMain !== undefined) {
-            const resolved = yield* hosted.resolveImage({
-              id,
-              props: {
-                main: hostedMain,
-                handler: props.handler,
-                port,
-                image: props.image,
-                env: props.env,
-                isExternal: props.isExternal,
-                build: props.build,
-                registry: props.registry,
-              },
-              previousHash: output?.code.hash,
-              session,
+          let codeHash = output?.code.hash ?? "";
+          let hashed:
+            | {
+                bundled: {
+                  files: ReadonlyArray<{
+                    path: string;
+                    content: string | Uint8Array;
+                  }>;
+                };
+                dockerfile: string;
+                codeHash: string;
+                packageJson: string | undefined;
+              }
+            | undefined;
+          if (source.mode === "main") {
+            yield* (session?.note ?? ((_message: string) => Effect.void))(
+              `Bundling ${id} program...`,
+            );
+            hashed = yield* hosted.computeCodeHash({
+              main: source.main,
+              handler: props.handler,
+              port,
+              image: props.image,
+              env: props.env,
+              isExternal: props.isExternal,
+              build: props.build,
+              extraFiles: props.extraFiles,
             });
-            sourceImage = resolved.imageRef;
-            codeHash = resolved.codeHash;
-            registryCredentials = resolved.registryCredentials;
-          } else if (props.image !== undefined && props.image.length > 0) {
-            sourceImage = props.image;
-          } else if (props.repo !== undefined && props.repo.length > 0) {
-            sourceRepo = props.repo;
+            codeHash = hashed.codeHash;
+          } else if (source.mode === "context") {
+            localPrepared = yield* prepareRailwayLocalContext(source);
+            codeHash = localPrepared.codeHash;
+          } else if (source.mode === "image") {
+            sourceImage = source.image;
           } else {
-            return yield* new ServiceImageOrMainRequired({
-              message:
-                "Railway.Service requires `image` (public image), `main` + `registry` (Effect-native), or `repo` (GitHub).",
-            });
+            sourceRepo = source.repo;
           }
 
           let current: CloudService | undefined =
@@ -863,33 +1177,30 @@ export const ServiceProvider = () =>
 
           if (current === undefined) {
             const created = yield* railway
-              .serviceCreate({
-                input: {
-                  projectId,
-                  environmentId,
-                  name,
-                  source:
-                    sourceRepo !== undefined
-                      ? { repo: sourceRepo }
-                      : { image: sourceImage },
-                  ...(sourceRepo !== undefined && props.branch !== undefined
-                    ? { branch: props.branch }
-                    : {}),
-                  ...(registryCredentials !== undefined
-                    ? { registryCredentials }
-                    : {}),
-                  ...(Object.keys(env).length > 0 ? { variables: env } : {}),
+              .createService(
+                {
+                  input: {
+                    projectId,
+                    environmentId,
+                    name,
+                    ...(sourceRepo !== undefined
+                      ? { source: { repo: sourceRepo } }
+                      : {
+                          source: {
+                            image: sourceImage ?? "hashicorp/http-echo",
+                          },
+                        }),
+                    ...(sourceRepo !== undefined && props.branch !== undefined
+                      ? { branch: props.branch }
+                      : {}),
+                  },
                 },
-              })
+                serviceSelection,
+              )
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
-                Effect.catchTag("RailwayValidationError", (e) =>
-                  alreadyExists(e.message)
-                    ? Effect.succeed(undefined)
-                    : Effect.fail(e),
+                railway.catchTags("RailwayValidationError", () =>
+                  Effect.succeed(undefined),
                 ),
-                Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
               );
             current = created ?? (yield* findByName(projectId, name));
           }
@@ -899,13 +1210,51 @@ export const ServiceProvider = () =>
           }
 
           if (current.name !== name) {
-            current = yield* railway.serviceUpdate({
-              id: current.id,
-              input: { name },
+            current = yield* railway.updateService(
+              {
+                id: current.id,
+                input: { name },
+              },
+              serviceSelection,
+            );
+          }
+
+          // The service instance must exist in this environment before a
+          // domain can be generated (`railway domain` / Terraform both
+          // operate on a live service instance). Extra non-fork
+          // environments lag — `serviceCreate` fans out to every
+          // non-fork env and `serviceInstance` 404s until it lands.
+          let instance = yield* waitForInstance(environmentId, current.id);
+
+          const publicDomain = props.publicDomain !== false;
+          let domain: ServiceDomainRecord | undefined;
+          if (publicDomain) {
+            // Railway's generated-domain API refuses a service that already
+            // has PORT (or other env) set — it returns "please try again"
+            // forever. Create the hostname on a bare service, then sync env.
+            yield* (session?.note ?? ((_message: string) => Effect.void))(
+              `Creating service domain for ${id}...`,
+            );
+            domain = yield* ensureServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              domainId: output?.domainId ?? null,
+            });
+          } else {
+            // Only the recorded generated domain belongs to this resource.
+            // Adoption does not populate domainId/domain, so a foreign
+            // domain stays. Null the environment-config key — GraphQL
+            // delete alone is not enough; Railway recreates from config.
+            yield* deleteOwnedServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              domainId: output?.domainId,
+              domain: output?.domain,
             });
           }
 
-          let instance = yield* waitForInstance(environmentId, current.id);
           const attached = yield* listServiceVolumes(
             environmentId,
             projectId,
@@ -922,22 +1271,54 @@ export const ServiceProvider = () =>
             ],
           });
           let needsDeploy = false;
+          let localSourceChanged =
+            localContext !== undefined &&
+            (instance?.source?.repo != null || instance?.source?.image != null);
 
+          if (localSourceChanged) {
+            yield* railway.disconnectService({ id: current.id }, { id: true });
+            needsDeploy = true;
+            instance =
+              (yield* getInstance(environmentId, current.id)) ?? instance;
+          }
+
+          const leavingContext =
+            olds?.context !== undefined && olds.context.length > 0;
+          const clearsDockerfilePath =
+            leavingContext &&
+            (source.mode === "image" ||
+              (source.mode === "repo" && props.dockerfilePath === undefined));
+          const dockerfilePath =
+            localPrepared?.dockerfilePath ??
+            (clearsDockerfilePath ? null : props.dockerfilePath);
           const instanceDelta = instanceSettingsDelta({
             instance,
             sourceImage,
             sourceRepo,
-            registryCredentials,
-            props,
+            registryCredentials: undefined,
+            props: {
+              ...props,
+              dockerfilePath,
+              // Effect-native images must answer HTTP before Railway
+              // stamps SUCCESS — otherwise waitForDeploymentById returns
+              // while `/up` is still building and public GET hangs.
+              // Default `/health`, not `/`: user fetch handlers often 404
+              // `/` (BucketApi) and Railway treats that as FAILED.
+              healthcheckPath:
+                props.healthcheckPath ??
+                props.healthcheck ??
+                (hostedMain !== undefined ? "/health" : undefined),
+              healthcheckTimeout:
+                props.healthcheckTimeout ??
+                (hostedMain !== undefined ? 300 : undefined),
+            },
           });
           if (instanceDelta !== undefined) {
-            yield* railway
-              .serviceInstanceUpdate({
-                environmentId,
-                serviceId: current.id,
-                input: instanceDelta,
-              })
-              .pipe(RailwayRetry.none, Effect.retry(rateLimited));
+            yield* railway.updateServiceInstance({
+              environmentId,
+              serviceId: current.id,
+              input: instanceDelta,
+            });
             needsDeploy = true;
             instance =
               (yield* getInstance(environmentId, current.id)) ?? instance;
@@ -952,6 +1333,18 @@ export const ServiceProvider = () =>
               branch: props.branch,
             });
             if (branchChanged) needsDeploy = true;
+          }
+
+          if (localContext !== undefined) {
+            const triggersChanged = yield* clearDeploymentTriggers({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+            });
+            if (triggersChanged) {
+              needsDeploy = true;
+              localSourceChanged = true;
+            }
           }
 
           yield* syncAutoUpdates({
@@ -969,37 +1362,100 @@ export const ServiceProvider = () =>
           });
           if (envChanged) needsDeploy = true;
 
+          if (publicDomain && port !== undefined) {
+            domain = yield* ensureServiceDomain({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              domainId: domain?.id,
+              targetPort: port,
+            });
+          }
+
           yield* syncMounts({
             environmentId,
+            projectId,
             serviceId: current.id,
             mounts: bound.mounts,
           });
 
-          const domain = yield* ensureServiceDomain({
-            projectId,
-            environmentId,
-            serviceId: current.id,
-            targetPort: port,
-          });
+          const uploadSource =
+            hostedMain !== undefined || localContext !== undefined;
+          const latestOk = deployReady(instance?.latestDeployment?.status);
+          const shouldUpload =
+            uploadSource &&
+            (codeHash !== output?.code.hash || !latestOk || localSourceChanged);
 
-          if (needsDeploy || instance?.latestDeployment == null) {
+          if (shouldUpload) {
+            const note = session?.note ?? ((_message: string) => Effect.void);
+            yield* note(`Preparing ${id} build context...`);
+            const tarball =
+              localPrepared !== undefined
+                ? localPrepared.tarball
+                : hostedMain !== undefined && hashed !== undefined
+                  ? yield* hosted
+                      .writeContext({
+                        id,
+                        props: {
+                          main: hostedMain,
+                          handler: props.handler,
+                          port,
+                          image: props.image,
+                          env: props.env,
+                          isExternal: props.isExternal,
+                          build: props.build,
+                          extraFiles: props.extraFiles,
+                        },
+                        hashed,
+                      })
+                      .pipe(Effect.flatMap(tarGzipDirectory))
+                  : yield* new ServiceSourceInvalid({
+                      message: "Railway.Service upload source was not prepared",
+                    });
+            yield* note(`Uploading ${id} build context to Railway...`);
+            const uploaded = yield* uploadDeployTarball({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              tarball,
+              message: `alchemy ${id} ${codeHash}`,
+            });
+            yield* note(`Queued Railway build ${uploaded.deploymentId}`);
+            instance =
+              (yield* waitForDeploymentById({
+                deploymentId: uploaded.deploymentId,
+                serviceId: current.id,
+                environmentId,
+              })) ?? instance;
+          } else if (
+            !uploadSource &&
+            (needsDeploy || instance?.latestDeployment == null)
+          ) {
             yield* railway
               .serviceInstanceDeployV2({
                 environmentId,
                 serviceId: current.id,
               })
               .pipe(
-                RailwayRetry.none,
-                Effect.retry(rateLimited),
-                Effect.catchTag("RailwayValidationError", () => Effect.void),
+                railway.catchTags("RailwayValidationError", () => Effect.void),
               );
+            instance =
+              sourceRepo !== undefined
+                ? ((yield* getInstance(environmentId, current.id)) ?? instance)
+                : ((yield* waitForDeployment(environmentId, current.id)) ??
+                  instance);
+          } else if (uploadSource && needsDeploy) {
+            yield* railway
+              .serviceInstanceDeployV2({
+                environmentId,
+                serviceId: current.id,
+              })
+              .pipe(
+                railway.catchTags("RailwayValidationError", () => Effect.void),
+              );
+            instance =
+              (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
-
-          instance =
-            sourceRepo !== undefined
-              ? ((yield* getInstance(environmentId, current.id)) ?? instance)
-              : ((yield* waitForDeployment(environmentId, current.id)) ??
-                instance);
 
           return toAttrs({
             service: current,
@@ -1017,27 +1473,16 @@ export const ServiceProvider = () =>
           const serviceId = output.serviceId;
           if (serviceId.length === 0) return;
           yield* railway
-            .serviceDelete({
-              id: serviceId,
-              ...(output.environmentId.length > 0
-                ? { environmentId: output.environmentId }
-                : {}),
-            })
-            .pipe(
-              Effect.catchTag(
-                ["RailwayNotFound", "NotFound"],
-                () => Effect.void,
-              ),
-            );
-          yield* getById(serviceId).pipe(
-            Effect.map((service) => service === undefined),
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              until: (gone) => gone,
-              times: 8,
-            }),
+            .deleteService({ id: serviceId })
+            .pipe(railway.catchTags(["RailwayNotFound"], () => Effect.void));
+          yield* waitUntilDeleted(
+            "Service",
+            serviceId,
+            getById(serviceId).pipe(
+              Effect.map((service) => service === undefined),
+            ),
           );
         }),
       });
     }),
-  ).pipe(Layer.provide(DockerLive));
+  );

@@ -21,6 +21,11 @@
         "**/.cache/**/*.tsbuildinfo"
       ]
     },
+    "@alchemy.run/frontend-frameworks#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!fixtures/**"],
+      "outputs": ["dist/**", ".cache/**/*.tsbuildinfo"]
+    },
     "dev": {
       "persistent": true,
       "cache": false
@@ -50,11 +55,13 @@
     "test": {
       "dependsOn": ["^build"],
       "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
+      "cache": false,
       "outputs": []
     },
     "@alchemy.run/cloudflare-runtime#test": {
       "dependsOn": ["build", "^build"],
       "env": ["TEST_MYSQL_URL", "TEST_POSTGRES_URL"],
+      "cache": false,
       "outputs": []
     }
   }

@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "./Http.ts";
+import type { CallbackFactory } from "./Callback.ts";
 import type { Output } from "./Output.ts";
 
 export interface BaseRuntimeContext {
@@ -21,6 +22,8 @@ export interface BaseRuntimeContext {
    */
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
+  /** Register a durable callback in the current host instance, when supported. */
+  makeCallback?: CallbackFactory;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
@@ -136,7 +139,7 @@ export const packEnvValueKeepRedacted = (
  *
  * Runtime `get` accessors MUST feed this from the raw environment
  * (`process.env[key]` / the platform env object) — never through
- * `Config.string`: the ambient runtime `ConfigProvider` reifies bound
+ * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
  * values (unwrapping the marker before it could be detected here), and
  * during init the ambient provider is the interceptor installed in
  * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` —

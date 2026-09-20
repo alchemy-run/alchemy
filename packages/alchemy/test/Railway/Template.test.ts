@@ -1,10 +1,13 @@
 import * as railway from "@distilled.cloud/railway";
 import * as Provider from "@/Provider";
 import * as Railway from "@/Railway";
+import { projectServices } from "@/Railway/GraphQL.ts";
+import { suitePartition } from "./suiteProject.ts";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Railway.providers() });
@@ -17,26 +20,11 @@ const logLevel = Effect.provideService(
 const PUBLIC_TEMPLATE_CODE = "postgres";
 
 const waitUntilServiceGone = (serviceId: string) =>
-  railway.service({ id: serviceId }).pipe(
+  railway.service({ id: serviceId }, { deletedAt: true }).pipe(
     Effect.map((service) =>
       service.deletedAt != null ? ("gone" as const) : ("found" as const),
     ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
-      Effect.succeed("gone" as const),
-    ),
-    Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
-      until: (status) => status === "gone",
-      times: 10,
-    }),
-  );
-
-const waitUntilProjectGone = (projectId: string) =>
-  railway.project({ id: projectId }).pipe(
-    Effect.map((project) =>
-      project.deletedAt != null ? ("gone" as const) : ("found" as const),
-    ),
-    Effect.catchTag(["RailwayNotFound", "NotFound"], () =>
+    railway.catchTags(["RailwayNotFound"], () =>
       Effect.succeed("gone" as const),
     ),
     Effect.repeat({
@@ -52,7 +40,10 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const fetched = yield* railway.template({ code: PUBLIC_TEMPLATE_CODE });
+      const fetched = yield* railway.template(
+        { code: PUBLIC_TEMPLATE_CODE },
+        { id: true, code: true, name: true, serializedConfig: true },
+      );
       expect(fetched.id).toEqual(expect.any(String));
       expect(fetched.id.length).toBeGreaterThan(0);
       expect(fetched.code).toEqual(PUBLIC_TEMPLATE_CODE);
@@ -61,7 +52,7 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 120_000 },
 );
 
 test.provider(
@@ -72,12 +63,13 @@ test.provider(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const project = yield* Railway.Project("Site");
+          const { project, environment } = yield* suitePartition;
           const deployed = yield* Railway.Template("Postgres", {
             templateId: PUBLIC_TEMPLATE_CODE,
             project,
+            environment,
           });
-          return { project, deployed };
+          return { project, environment, deployed };
         }),
       );
 
@@ -87,7 +79,7 @@ test.provider(
       expect(created.deployed.name).toEqual(expect.any(String));
       expect(created.deployed.projectId).toEqual(created.project.projectId);
       expect(created.deployed.environmentId).toEqual(
-        created.project.environmentId,
+        created.environment.environmentId,
       );
       expect(created.deployed.workspaceId).toEqual(created.project.workspaceId);
       expect(created.deployed.ownsProject).toEqual(false);
@@ -96,9 +88,11 @@ test.provider(
         `https://railway.com/project/${created.project.projectId}`,
       );
 
-      const live = yield* railway.project({ id: created.project.projectId });
-      const liveIds = live.services.edges
-        .map((edge) => edge.node)
+      const live = yield* projectServices(created.project.projectId, {
+        id: true,
+        deletedAt: true,
+      });
+      const liveIds = live
         .filter((node) => node.deletedAt == null)
         .map((node) => node.id);
       for (const serviceId of created.deployed.serviceIds) {
@@ -106,22 +100,27 @@ test.provider(
       }
 
       const source = yield* railway
-        .templateSourceForProject({
-          projectId: created.project.projectId,
-        })
+        .templateSourceForProject(
+          {
+            projectId: created.project.projectId,
+          },
+          { id: true },
+        )
         .pipe(
-          Effect.catchTag(
-            ["RailwayNotFound", "NotFound", "RailwayForbidden"],
-            () => Effect.succeed(undefined),
+          railway.catchTags(["RailwayNotFound", "RailwayForbidden"], () =>
+            Effect.succeed(undefined),
           ),
         );
-      if (source !== undefined) {
+      if (source != null) {
         expect(source.id).toEqual(created.deployed.templateId);
       }
 
-      const stamped = yield* railway.service({
-        id: created.deployed.serviceIds[0]!,
-      });
+      const stamped = yield* railway.service(
+        {
+          id: created.deployed.serviceIds[0]!,
+        },
+        { templateId: true },
+      );
       if (stamped.templateId != null) {
         expect(stamped.templateId).toEqual(created.deployed.templateId);
       }
@@ -134,8 +133,31 @@ test.provider(
           row.templateId === created.deployed.templateId,
       );
       expect(found).toBeDefined();
-      expect(found?.code).toEqual(PUBLIC_TEMPLATE_CODE);
-      expect(found?.serviceIds.length).toBeGreaterThan(0);
+      if (found === undefined) {
+        return yield* Effect.fail(
+          new Error("Deployed marketplace template was not listed"),
+        );
+      }
+      expect(found.templateId).toEqual(created.deployed.templateId);
+      expect(found.serviceIds.length).toBeGreaterThan(0);
+      if (found.code !== undefined) {
+        expect(found.code).toEqual(PUBLIC_TEMPLATE_CODE);
+      } else {
+        // Listing preserves service ownership even when Railway refuses
+        // marketplace metadata by ID. Confirm that omission against the API.
+        const metadata = yield* Effect.result(
+          railway.template({ id: found.templateId }, { id: true, code: true }),
+        );
+        expect(Result.isFailure(metadata)).toBe(true);
+        if (Result.isFailure(metadata)) {
+          expect(
+            railway.isErrorTag(metadata.failure, [
+              "RailwayForbidden",
+              "RailwayNotFound",
+            ]),
+          ).toBe(true);
+        }
+      }
 
       yield* stack.destroy();
 
@@ -143,10 +165,6 @@ test.provider(
         const gone = yield* waitUntilServiceGone(serviceId);
         expect(gone).toEqual("gone");
       }
-      const projectGone = yield* waitUntilProjectGone(
-        created.project.projectId,
-      );
-      expect(projectGone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 480_000 },
+  { timeout: 120_000 },
 );

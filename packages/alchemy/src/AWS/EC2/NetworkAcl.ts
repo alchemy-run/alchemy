@@ -229,20 +229,25 @@ export const NetworkAclProvider = () =>
 
         list: () =>
           Effect.gen(function* () {
-            const acls = yield* ec2.describeNetworkAcls.pages({}).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.NetworkAcls ?? []).filter(
-                    (acl): acl is ec2.NetworkAcl & { NetworkAclId: string } =>
-                      acl.NetworkAclId != null &&
-                      // Each VPC's default NACL is AWS-managed and cannot be
-                      // deleted (InvalidParameterValue) — don't enumerate it.
-                      acl.IsDefault !== true,
+            // Filter default NACLs at the API: every VPC has one, they
+            // cannot be deleted, and paging through them under a concurrent
+            // suite stalls the list test past the per-test timeout — which
+            // then skips destroy and leaks the custom ACL + VPC.
+            const acls = yield* ec2.describeNetworkAcls
+              .pages({
+                Filters: [{ Name: "default", Values: ["false"] }],
+              })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.NetworkAcls ?? []).filter(
+                      (acl): acl is ec2.NetworkAcl & { NetworkAclId: string } =>
+                        acl.NetworkAclId != null && acl.IsDefault !== true,
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
             return yield* Effect.forEach(acls, (acl) => toAttrs(acl));
           }),
 

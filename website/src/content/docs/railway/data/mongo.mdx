@@ -31,7 +31,7 @@ service and volume are deleted. Data is not copied.
 
 ## Connect from a Service
 
-Yield `ConnectMongo` in Service init. Provide `ConnectMongoHttp`.
+Yield `ConnectMongo` in the Service's constructor. Provide `ConnectMongoHttp`.
 Pass `conn.connectionString` to the MongoDB driver (or
 `Railway.pingMongo`).
 
@@ -44,7 +44,6 @@ export default class Api extends Railway.Service<Api>()(
   {
     project: Site,
     main: import.meta.url,
-    registry: "ghcr.io/acme",
     build: { install: ["mongodb"] },
   },
   Effect.gen(function* () {

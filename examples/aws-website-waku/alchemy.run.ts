@@ -10,11 +10,14 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const site = yield* AWS.Website.Waku("WakuSite", {
+      // Only hash the files that affect the build, so unchanged sources
+      // skip the Waku build (and the deploy) entirely.
+      memo: {
+        include: ["src/**", "public/**", "package.json", "waku.config.ts"],
+      },
       forceDestroy: true,
-      server: {
-        environment: {
-          GREETING: "Hello from alchemy",
-        },
+      env: {
+        GREETING: "Hello from Waku on AWS!",
       },
     });
 

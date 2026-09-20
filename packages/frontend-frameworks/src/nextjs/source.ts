@@ -98,6 +98,7 @@ export interface SourceBuildOutput {
 
 /** The subset of alchemy's `SourceContext` this provider consumes. */
 export interface SourceContext {
+  readonly dotAlchemy?: string;
   readonly id: string;
   readonly workerName: string;
   readonly compatibility: {
@@ -307,9 +308,14 @@ const ALWAYS_IGNORED_FILES = new Set([".DS_Store"]);
 const listProjectFiles = Effect.fn(function* (
   root: string,
   prune: ReadonlySet<string>,
+  dotAlchemy?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const runtimeDirectory =
+    dotAlchemy === undefined
+      ? undefined
+      : path.resolve(process.cwd(), dotAlchemy);
   const out: Array<string> = [];
   const walk = (relative: string): Effect.Effect<void, PlatformError, never> =>
     Effect.gen(function* () {
@@ -317,6 +323,19 @@ const listProjectFiles = Effect.fn(function* (
       const entries = yield* fs.readDirectory(absolute);
       for (const entry of entries) {
         const rel = relative === "" ? entry : `${relative}/${entry}`;
+        if (runtimeDirectory !== undefined) {
+          const runtimeRelative = path.relative(
+            runtimeDirectory,
+            path.join(root, rel),
+          );
+          if (
+            runtimeRelative === "" ||
+            (!path.isAbsolute(runtimeRelative) &&
+              runtimeRelative !== ".." &&
+              !runtimeRelative.startsWith(`..${path.sep}`))
+          )
+            continue;
+        }
         const info = yield* fs.stat(path.join(root, rel));
         if (info.type === "Directory") {
           if (!prune.has(entry)) {
@@ -358,12 +377,17 @@ const findUp = Effect.fn(function* (start: string, filenames: Array<string>) {
 const hashInputTree = Effect.fn(function* (
   root: string,
   options: NextjsSourceOptions,
+  dotAlchemy?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const memo = options.memo ?? {};
   const include = (memo.include ?? ["**/*"]).map(globToRegExp);
   const exclude = (memo.exclude ?? []).map(globToRegExp);
-  const files = (yield* listProjectFiles(root, ALWAYS_PRUNED)).filter(
+  const files = (yield* listProjectFiles(
+    root,
+    ALWAYS_PRUNED,
+    dotAlchemy,
+  )).filter(
     (file) =>
       include.some((re) => re.test(file)) &&
       !exclude.some((re) => re.test(file)),
@@ -644,7 +668,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
         output.clientDirectory !== undefined
           ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx))
           : Effect.succeed(undefined),
-        hashInputTree(root, options),
+        hashInputTree(root, options, ctx.dotAlchemy),
       ]);
       return {
         bundle: { files, hash: bundleHash },
@@ -660,9 +684,9 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
 
     // Rebuild-free: the input-tree hash is the change signal (like the vite
     // source). `previous` is never consulted — state can be stale/foreign.
-    hash: Effect.fn(function* (_ctx, _previous) {
+    hash: Effect.fn(function* (ctx, _previous) {
       const root = yield* resolveRoot();
-      return { input: yield* hashInputTree(root, options) };
+      return { input: yield* hashInputTree(root, options, ctx.dotAlchemy) };
     }),
 
     // Default ("preview"): always build on dev start (OpenNext memoizes

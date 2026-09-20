@@ -6,9 +6,12 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Result from "effect/Result";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Api from "./fixtures/api.ts";
-import { MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
+import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
+import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
@@ -117,6 +120,12 @@ test.provider(
       expect(fetched.config?.metadata?.["alchemy.replica"]).toEqual("0");
       expect(fetched.config?.guest?.cpus).toEqual(1);
       expect(fetched.config?.guest?.memory_mb).toEqual(256);
+      const defaultCheck = fetched.config?.services?.[0]?.checks?.[0];
+      expect(defaultCheck?.type).toEqual("tcp");
+      expect(defaultCheck?.port).toEqual(API_PORT);
+      expect(defaultCheck?.interval).toEqual("10s");
+      expect(defaultCheck?.timeout).toEqual("2s");
+      expect(defaultCheck?.grace_period).toEqual("30s");
 
       const liveVolume = yield* machines.getVolumeById({
         app_name: deployed.api.appName,
@@ -157,5 +166,101 @@ test.provider(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "destroy recovers a service and its volumes after initial checks fail",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = yield* stack.deploy(UnhealthySite);
+      const result = yield* stack.deploy(UnhealthyApi).pipe(Effect.result);
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(result.failure).toMatchObject({
+          _tag: "Fly.ReplicaChecksNotPassing",
+        });
+      }
+      const live = yield* machines.listMachines({ app_name: app.appName });
+      expect(
+        live.filter((machine) => machine.state !== "destroyed"),
+      ).toHaveLength(1);
+      const volumes = yield* machines.listVolumes({ app_name: app.appName });
+      expect(volumes).toHaveLength(2);
+      const attached = volumes.find(
+        (volume) => volume.attached_machine_id === live[0]?.id,
+      );
+      expect(attached).toBeDefined();
+      const blocked = yield* machines
+        .deleteVolume({
+          app_name: app.appName,
+          volume_id: attached!.id!,
+        })
+        .pipe(Effect.flip);
+      expect(blocked._tag).toBe("VolumeAttached");
+      yield* stack.destroy();
+      for (const machine of live) {
+        expect(yield* waitUntilGone(app.appName, machine.id!)).toBe("gone");
+      }
+      for (const volume of volumes) {
+        const missing = yield* machines
+          .getVolumeById({
+            app_name: app.appName,
+            volume_id: volume.id!,
+          })
+          .pipe(Effect.flip);
+        expect(missing._tag).toBe("NotFound");
+      }
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "creates a custom service check and reports it passing",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* ChecksSite;
+          const service = yield* ChecksApi;
+          return { app, service };
+        }),
+      );
+
+      const live = yield* machines.getMachine({
+        app_name: deployed.app.appName,
+        machine_id: deployed.service.machineId,
+      });
+      const check = live.config?.services?.[0]?.checks?.[0];
+      expect(check?.type).toEqual("http");
+      expect(check?.port).toEqual(API_PORT);
+      expect(check?.method).toEqual("GET");
+      expect(check?.path).toEqual("/health");
+      expect(check?.protocol).toEqual("http");
+      expect(check?.interval).toEqual("15s");
+      expect(check?.timeout).toEqual("3s");
+      expect(check?.grace_period).toEqual("20s");
+
+      const serviceChecks =
+        live.checks?.filter((check) =>
+          check.name?.startsWith("servicecheck-"),
+        ) ?? [];
+      expect(serviceChecks).toHaveLength(1);
+      expect(serviceChecks[0]?.name).toEqual(
+        `servicecheck-00-http-${API_PORT}`,
+      );
+      expect(serviceChecks[0]?.status).toEqual("passing");
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(
+        deployed.service.appName,
+        deployed.service.machineId,
+      );
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
