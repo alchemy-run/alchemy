@@ -43,6 +43,8 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
     const ctx = yield* Worker;
     const createWebhook = yield* Webhook;
     const lock = yield* Semaphore.make(1);
+    const repositoryPaths = new Map<string, string>();
+    const secretPaths = new Map<string, string>();
     const receivers = new Map<
       string,
       {
@@ -57,6 +59,23 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
       process: (event: WebhookEvent) => Effect.Effect<void>,
     ) {
       const path = webhookPath(props);
+      const repositoryKey = JSON.stringify([props.owner, props.repository]);
+      const secretKey = webhookSecretEnvName(props);
+      if (
+        (repositoryPaths.has(repositoryKey) &&
+          repositoryPaths.get(repositoryKey) !== path) ||
+        (props.secret &&
+          secretPaths.has(secretKey) &&
+          secretPaths.get(secretKey) !== path)
+      ) {
+        return yield* Effect.die(
+          new ConflictingWebhookEndpoint({
+            path,
+            message:
+              "This GitHub repository or signing-secret binding is already assigned to another webhook path.",
+          }),
+        );
+      }
       let receiver = receivers.get(path);
       if (
         receiver &&
@@ -84,8 +103,10 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
                 owner: props.owner,
                 repository: props.repository,
                 url: Output.interpolate`${ctx.url}${path}`,
-                events: Effect.sync(() =>
-                  events.has("*") ? ["*"] : [...events].sort(),
+                events: Output.fromEffect(
+                  Effect.sync(() =>
+                    events.has("*") ? ["*"] : [...events].sort(),
+                  ),
                 ),
                 secret: props.secret,
                 contentType: "json",
@@ -107,6 +128,8 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
         });
         receiver = { props, events, dispatcher };
         receivers.set(path, receiver);
+        repositoryPaths.set(repositoryKey, path);
+        if (props.secret) secretPaths.set(secretKey, path);
       }
       const selection = props.events ?? ["push"];
       for (const event of selection) receiver.events.add(event);

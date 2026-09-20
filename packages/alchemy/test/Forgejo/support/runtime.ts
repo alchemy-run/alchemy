@@ -547,8 +547,8 @@ export const verifyRuntime = <A, E, R, Retained>(
             ),
         }),
       );
-    const delivered = rotatedComments.some((comment) =>
-      comment.body?.startsWith("received issues "),
+    const delivered = ["received issues ", "audited issues "].every((prefix) =>
+      rotatedComments.some((comment) => comment.body?.startsWith(prefix)),
     );
     if (!delivered) yield* logDeliveryStatus;
     expect(delivered).toBe(true);

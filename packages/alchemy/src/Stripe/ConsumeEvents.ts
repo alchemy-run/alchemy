@@ -182,6 +182,8 @@ export const ConsumeEventsLive = Layer.effect(
   Effect.gen(function* () {
     const host = yield* Worker;
     const lock = yield* Semaphore.make(1);
+    const endpointPaths = new Map<string, string>();
+    const secretPaths = new Map<string, string>();
     const receivers = new Map<
       string,
       {
@@ -196,6 +198,19 @@ export const ConsumeEventsLive = Layer.effect(
       process: (event: StripeEventInstance) => Effect.Effect<void>,
     ) {
       const path = webhookPath(props.path);
+      const secretKey = webhookSecretEnvName(path);
+      if (
+        (endpointPaths.has(id) && endpointPaths.get(id) !== path) ||
+        (secretPaths.has(secretKey) && secretPaths.get(secretKey) !== path)
+      ) {
+        return yield* Effect.die(
+          new ConflictingWebhookEndpoint({
+            path,
+            message:
+              "This Stripe endpoint ID or signing-secret binding is already assigned to another webhook path.",
+          }),
+        );
+      }
       let receiver = receivers.get(path);
       if (receiver && receiver.id !== id) {
         return yield* Effect.die(
@@ -218,13 +233,14 @@ export const ConsumeEventsLive = Layer.effect(
             Effect.gen(function* () {
               const endpoint = yield* WebhookEndpoint(id, {
                 url: Output.interpolate`${host.url}${path}`,
-                enabledEvents: Effect.sync(() => [...byType.values()]),
+                enabledEvents: Output.fromEffect(
+                  Effect.sync(() => [...byType.values()]),
+                ),
               });
               yield* bindWebhookSecret(host, endpoint.secret, props.path);
             }),
           );
         }
-        const secretKey = webhookSecretEnvName(path);
         yield* host.listen((event) => {
           if (!isWorkerEvent(event) || event.type !== "fetch") return;
           const request = event.input as cf.Request;
@@ -239,6 +255,8 @@ export const ConsumeEventsLive = Layer.effect(
         });
         receiver = { id, byType, dispatcher };
         receivers.set(path, receiver);
+        endpointPaths.set(id, path);
+        secretPaths.set(secretKey, path);
       }
       for (const event of props.events) receiver.byType.set(event.type, event);
       yield* receiver.dispatcher.subscribe((event) =>

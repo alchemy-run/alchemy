@@ -1,4 +1,7 @@
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
+import { GitHubRepositoryEventSourceLive } from "@/Cloudflare/Workers/GitHubRepositoryEventSource.ts";
+import { consumeRepositoryEvents } from "@/GitHub/RepositoryEventSource.ts";
+import * as Layer from "effect/Layer";
 import { makeWorkerRuntimeContext } from "@/Cloudflare/Workers/WorkerRuntimeContext.ts";
 import { RuntimeContext } from "@/RuntimeContext.ts";
 import { ConflictingWebhookEndpoint } from "@/Serverless/Webhook.ts";
@@ -127,6 +130,78 @@ it.effect(
         expect((yield* send("customer.deleted")).status).toBe(200);
         expect(customerCalls).toBe(2);
         expect(applicationCalls).toBe(0);
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.effect(
+  "independent GitHub and Stripe receivers cannot claim the same path",
+  () =>
+    runtimeOnly(
+      Effect.gen(function* () {
+        const ctx = makeWorkerRuntimeContext("cross-provider-conflict");
+        const exit = yield* Effect.gen(function* () {
+          yield* consumeRepositoryEvents(
+            { owner: "acme", repository: "api", path: "/webhooks/stripe" },
+            () => Effect.void,
+          );
+          yield* consumeEvents(
+            "Events",
+            { events: [CustomerCreated] },
+            () => Effect.void,
+          );
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(GitHubRepositoryEventSourceLive, ConsumeEventsLive),
+          ),
+          Effect.provideService(WorkerHost, ctx as unknown as Worker),
+          Effect.provideService(RuntimeContext, ctx),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.squash(exit.cause)).toBeInstanceOf(
+            ConflictingWebhookEndpoint,
+          );
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.effect(
+  "Stripe rejects endpoint ID and secret-key aliases across different paths",
+  () =>
+    runtimeOnly(
+      Effect.gen(function* () {
+        for (const [firstId, firstPath, secondId, secondPath] of [
+          ["Same", "/first", "Same", "/second"],
+          ["First", "/a-b", "Second", "/a_b"],
+        ] as const) {
+          const ctx = makeWorkerRuntimeContext("stripe-alias-conflict");
+          const exit = yield* Effect.gen(function* () {
+            yield* consumeEvents(
+              firstId,
+              { events: [CustomerCreated], path: firstPath },
+              () => Effect.void,
+            );
+            yield* consumeEvents(
+              secondId,
+              { events: [InvoicePaid], path: secondPath },
+              () => Effect.void,
+            );
+          }).pipe(
+            Effect.provide(ConsumeEventsLive),
+            Effect.provideService(WorkerHost, ctx as unknown as Worker),
+            Effect.provideService(RuntimeContext, ctx),
+            Effect.exit,
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit))
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(
+              ConflictingWebhookEndpoint,
+            );
+        }
       }),
     ),
   { exclusive: true },

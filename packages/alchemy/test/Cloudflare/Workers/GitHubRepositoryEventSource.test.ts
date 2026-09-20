@@ -145,6 +145,49 @@ it.effect(
 );
 
 it.effect(
+  "GitHub rejects repository and secret-binding identities reused across paths",
+  () =>
+    runtimeOnly(
+      Effect.gen(function* () {
+        const secret = Redacted.make("shared-secret");
+        for (const [first, second] of [
+          [
+            { repository: "api", path: "/first" },
+            { repository: "api", path: "/second" },
+          ],
+          [
+            { repository: "a-b", path: "/first" },
+            { repository: "a_b", path: "/second" },
+          ],
+        ]) {
+          const ctx = makeWorkerRuntimeContext("github-identity-conflict");
+          const exit = yield* Effect.gen(function* () {
+            yield* consumeRepositoryEvents(
+              { owner: "acme", secret, ...first! },
+              () => Effect.void,
+            );
+            yield* consumeRepositoryEvents(
+              { owner: "acme", secret, ...second! },
+              () => Effect.void,
+            );
+          }).pipe(
+            Effect.provide(GitHubRepositoryEventSourceLive),
+            Effect.provideService(WorkerHost, ctx as unknown as Worker),
+            Effect.provideService(RuntimeContext, ctx),
+            Effect.exit,
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit))
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(
+              ConflictingWebhookEndpoint,
+            );
+        }
+      }),
+    ),
+  { exclusive: true },
+);
+
+it.effect(
   "GitHub rejects conflicting signing secrets on a shared endpoint",
   () =>
     runtimeOnly(
