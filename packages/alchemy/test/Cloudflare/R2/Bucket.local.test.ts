@@ -4,12 +4,14 @@ import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Alchemy";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "alchemy-test";
+import { S3Client } from "bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as pathe from "pathe";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment.ts";
 
@@ -79,6 +81,12 @@ test.provider(
               "fixtures/r2-local-worker.ts",
             ),
             env: { BUCKET: bucket },
+            dev: {
+              r2S3: {
+                accessKeyId: "local-key",
+                secretAccessKey: "local-secret",
+              },
+            },
           });
           return { bucket, worker };
         }),
@@ -103,6 +111,40 @@ test.provider(
       expect(body.size).toBe("hello r2".length);
       expect(body.keys).toEqual(["greeting.txt"]);
       expect(body.afterDelete).toBe(true);
+
+      // Sign through a second independent client and use the public proxy URL.
+      const signed = yield* Effect.sync(() => {
+        const client = new S3Client({
+          endpoint: Cloudflare.R2.localS3Endpoint(deployed.worker.url!),
+          bucket: deployed.bucket.bucketName,
+          region: "auto",
+          accessKeyId: "local-key",
+          secretAccessKey: "local-secret",
+        });
+        return {
+          upload: client.presign("browser.txt", {
+            method: "PUT",
+            expiresIn: 60,
+          }),
+          download: client.presign("browser.txt", {
+            method: "GET",
+            expiresIn: 60,
+          }),
+        };
+      });
+      const client = yield* HttpClient.HttpClient;
+      const upload = yield* client.execute(
+        HttpClientRequest.put(signed.upload).pipe(
+          HttpClientRequest.bodyText("from browser"),
+        ),
+      );
+      expect(upload.status).toBe(200);
+      expect(
+        yield* getJsonReady(`${deployed.worker.url}/get?key=browser.txt`),
+      ).toEqual({ text: "from browser" });
+      const download = yield* client.get(signed.download);
+      expect(download.status).toBe(200);
+      expect(yield* download.text).toBe("from browser");
 
       yield* stack.destroy();
     }).pipe(logLevel),

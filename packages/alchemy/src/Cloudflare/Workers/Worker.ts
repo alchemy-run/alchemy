@@ -939,6 +939,18 @@ export interface WorkerProps<
          */
         cache?: boolean;
         /**
+         * Enable the local R2 S3 endpoint for this Worker's local bucket bindings.
+         * Use development-only credentials to sign PUT/GET/HEAD URLs. The S3
+         * client endpoint is `R2.localS3Endpoint(workerUrl)` with region `auto`
+         * and path-style addressing. Disabled by default; ignored on deploy.
+         */
+        r2S3?: {
+          /** Development access key id (nonempty, without slashes). */
+          accessKeyId: string;
+          /** Development secret used to sign requests. Never use a production key. */
+          secretAccessKey: string;
+        };
+        /**
          * Override the `request.cf` blob served to this Worker locally.
          * Defaults to a static placeholder (Miniflare's Austin/DFW blob);
          * pass e.g. `{ colo: "LHR", country: "GB" }` to simulate a

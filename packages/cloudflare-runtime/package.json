@@ -63,6 +63,7 @@
     "@types/http-cache-semantics": "catalog:",
     "@types/node": "catalog:",
     "@types/ws": "catalog:",
+    "aws4fetch": "1.0.20",
     "capnweb": "catalog:",
     "heap-js": "catalog:",
     "http-cache-semantics": "catalog:",

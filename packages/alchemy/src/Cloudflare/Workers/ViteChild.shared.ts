@@ -48,6 +48,7 @@ export interface ViteChildConfig {
     hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     queueConsumers: QueueConsumer[];
     crons: RuntimeWorker["crons"];
+    r2S3?: RuntimeWorker["r2S3"];
     assets: RuntimeWorker["assets"];
   };
 }

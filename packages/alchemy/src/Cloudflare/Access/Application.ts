@@ -136,7 +136,14 @@ export interface InlineApplicationPolicy {
   purposeJustificationPrompt?: string;
 }
 
+export type ApplicationCorsHeaders =
+  zeroTrust.AccessApplicationsCreateRequestCorsHeaders;
+
 export interface ApplicationProps {
+  /** Access-managed CORS preflight responses. */
+  corsHeaders?: ApplicationCorsHeaders;
+  /** Set Access cookies on every concrete hostname during login. */
+  eagerRedirectCookieSetting?: boolean;
   /**
    * The Access application type.
    *
@@ -270,6 +277,8 @@ export interface ApplicationProps {
  * Output attributes persisted between reconciles.
  */
 export interface ApplicationAttributes {
+  corsHeaders: ApplicationCorsHeaders | undefined;
+  eagerRedirectCookieSetting: boolean | undefined;
   /** Cloudflare-assigned application UUID. */
   applicationId: string;
   /** Audience tag used to verify JWTs issued for this application. */
@@ -536,6 +545,8 @@ export const ApplicationProvider = () =>
         destinations: observed.destinations ?? output?.destinations,
         // Live cloud state is authoritative. In particular, do not resurrect
         // a persisted configuration when Cloudflare explicitly returns null.
+        corsHeaders: observed.corsHeaders,
+        eagerRedirectCookieSetting: observed.eagerRedirectCookieSetting,
         oauthConfiguration: observed.oauthConfiguration,
         type: observed.type,
         name,
@@ -615,6 +626,8 @@ export const ApplicationProvider = () =>
               body.allowedIdps === undefined
                 ? undefined
                 : Array.from(body.allowedIdps),
+            corsHeaders: body.corsHeaders,
+            eagerRedirectCookieSetting: body.eagerRedirectCookieSetting,
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
@@ -668,6 +681,13 @@ export const ApplicationProvider = () =>
               body.allowedIdps === undefined
                 ? undefined
                 : Array.from(body.allowedIdps),
+            corsHeaders: mergeCorsHeaders(
+              observed.corsHeaders,
+              body.corsHeaders,
+            ),
+            eagerRedirectCookieSetting:
+              body.eagerRedirectCookieSetting ??
+              observed.eagerRedirectCookieSetting,
             autoRedirectToIdentity: body.autoRedirectToIdentity,
             appLauncherVisible: body.appLauncherVisible,
             tags: body.tags === undefined ? undefined : Array.from(body.tags),
@@ -710,6 +730,8 @@ export const ApplicationProvider = () =>
         // Keep the provider output cloud-authoritative. If Cloudflare rejects
         // or clears the desired configuration, do not mask that drift with
         // the request body.
+        corsHeaders: observed.corsHeaders,
+        eagerRedirectCookieSetting: observed.eagerRedirectCookieSetting,
         oauthConfiguration: observed.oauthConfiguration,
         type: observed.type,
         name: observed.name ?? resolvedName,
@@ -746,6 +768,8 @@ export const ApplicationProvider = () =>
                     aud: app.aud,
                     domain: app.domain ?? "",
                     destinations: app.destinations,
+                    corsHeaders: app.corsHeaders,
+                    eagerRedirectCookieSetting: app.eagerRedirectCookieSetting,
                     oauthConfiguration: app.oauthConfiguration,
                     type: app.type,
                     name: app.name ?? "",
@@ -874,6 +898,8 @@ interface ObservedPolicy {
 }
 
 interface ObservedApp {
+  readonly corsHeaders?: ApplicationCorsHeaders;
+  readonly eagerRedirectCookieSetting?: boolean;
   readonly id?: string;
   readonly aud?: string;
   readonly name?: string;
@@ -944,7 +970,54 @@ const narrowOAuthConfiguration = (
               },
       };
 
+const narrowCorsHeaders = (
+  raw:
+    | zeroTrust.AccessApplicationsCreateResultSelfHostedApplicationCorsHeaders
+    | null
+    | undefined,
+): ApplicationCorsHeaders | undefined =>
+  raw == null
+    ? undefined
+    : {
+        allowAllHeaders: undef(raw.allowAllHeaders),
+        allowAllMethods: undef(raw.allowAllMethods),
+        allowAllOrigins: undef(raw.allowAllOrigins),
+        allowCredentials: undef(raw.allowCredentials),
+        allowedHeaders: raw.allowedHeaders?.filter(
+          (value) => typeof value === "string",
+        ),
+        allowedMethods: raw.allowedMethods?.filter(
+          (value) => typeof value === "string",
+        ),
+        allowedOrigins: raw.allowedOrigins?.filter(
+          (value) => typeof value === "string",
+        ),
+        maxAge: undef(raw.maxAge),
+      };
+
+const mergeCorsHeaders = (
+  observed: ApplicationCorsHeaders | undefined,
+  desired: ApplicationCorsHeaders | undefined,
+) => (desired === undefined ? observed : { ...observed, ...desired });
+
+const corsHeadersEqual = (
+  desired: ApplicationCorsHeaders | undefined,
+  observed: ApplicationCorsHeaders | undefined,
+) =>
+  desired === undefined ||
+  Object.entries(desired).every(([key, value]) => {
+    if (value === undefined) return true;
+    const actual = observed?.[key as keyof ApplicationCorsHeaders];
+    return Array.isArray(value)
+      ? Array.isArray(actual) &&
+          JSON.stringify([...value].sort()) ===
+            JSON.stringify([...actual].sort())
+      : value === actual;
+  });
+
 const narrowApp = (raw: {
+  corsHeaders?: zeroTrust.AccessApplicationsCreateResultSelfHostedApplicationCorsHeaders | null;
+  eagerRedirectCookieSetting?: boolean | null;
   id?: string | null;
   aud?: string | null;
   name?: string | null;
@@ -970,6 +1043,8 @@ const narrowApp = (raw: {
     raw.destinations == null
       ? undefined
       : (raw.destinations as ReadonlyArray<ApplicationDestination>),
+  corsHeaders: narrowCorsHeaders(raw.corsHeaders),
+  eagerRedirectCookieSetting: undef(raw.eagerRedirectCookieSetting),
   oauthConfiguration: narrowOAuthConfiguration(raw.oauthConfiguration),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
@@ -1033,6 +1108,8 @@ type RequestPolicy =
   zeroTrust.AccessApplicationsCreateForAccountRequestPoliciesSelfHostedApplicationItem;
 
 interface AppMutableBody {
+  corsHeaders?: ApplicationCorsHeaders;
+  eagerRedirectCookieSetting?: boolean;
   domain?: string;
   destinations?: ReadonlyArray<ApplicationDestination>;
   oauthConfiguration?: OAuthConfiguration;
@@ -1212,6 +1289,12 @@ const buildMutableBody = (
   // Warp apps cannot accept a user-supplied domain — Cloudflare derives it.
   if (news.type !== "warp" && news.domain !== undefined) {
     body.domain = news.domain;
+  }
+  if (news.corsHeaders !== undefined) {
+    body.corsHeaders = news.corsHeaders;
+  }
+  if (news.eagerRedirectCookieSetting !== undefined) {
+    body.eagerRedirectCookieSetting = news.eagerRedirectCookieSetting;
   }
   if (news.destinations !== undefined) {
     body.destinations = news.destinations;
@@ -1431,6 +1514,13 @@ const bodyEqualsObserved = (
   desired: AppMutableBody,
   observed: ObservedApp,
 ): boolean => {
+  if (!corsHeadersEqual(desired.corsHeaders, observed.corsHeaders))
+    return false;
+  if (
+    desired.eagerRedirectCookieSetting !== undefined &&
+    desired.eagerRedirectCookieSetting !== observed.eagerRedirectCookieSetting
+  )
+    return false;
   if (desired.name !== undefined && desired.name !== observed.name) {
     return false;
   }

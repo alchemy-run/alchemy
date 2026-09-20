@@ -195,17 +195,19 @@ const encodeNodeValue = (value: unknown): EncodedValue | undefined => {
 };
 
 const encodeArg = (binding: string, value: unknown): EncodedValue => {
-  const ref = getChainRef(value);
-  if (ref !== undefined) {
-    if (ref.binding !== binding) {
-      throw new Error(
-        `platform-proxy: cannot pass a stub of binding "${ref.binding}" to a call on binding "${binding}". ` +
-          "Cross-binding stub arguments are not supported.",
-      );
+  return encodeValue(value, (nested) => {
+    const ref = getChainRef(nested);
+    if (ref !== undefined) {
+      if (ref.binding !== binding) {
+        throw new Error(
+          `platform-proxy: cannot pass a stub of binding "${ref.binding}" to a call on binding "${binding}". ` +
+            "Cross-binding stub arguments are not supported.",
+        );
+      }
+      return { $: "chain", chain: encodeChain(binding, ref.chain) };
     }
-    return { $: "chain", chain: encodeChain(binding, ref.chain) };
-  }
-  return encodeValue(value, encodeNodeValue);
+    return encodeNodeValue(nested);
+  });
 };
 
 const encodeChain = (

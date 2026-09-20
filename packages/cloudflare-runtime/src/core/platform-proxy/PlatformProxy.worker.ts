@@ -228,6 +228,21 @@ const decodeArg = async (
     }
     return namespace.idFromString(arg.id);
   }
+  if (arg.$ === "array") {
+    return Promise.all(
+      arg.value.map((value) => decodeArg(env, binding, value)),
+    );
+  }
+  if (arg.$ === "object") {
+    return Object.fromEntries(
+      await Promise.all(
+        Object.entries(arg.value).map(async ([key, value]) => [
+          key,
+          await decodeArg(env, binding, value),
+        ]),
+      ),
+    );
+  }
   return decodeValue(arg);
 };
 
