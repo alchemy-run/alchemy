@@ -234,7 +234,7 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
-      await builder.buildApp();
+      await builder.build();
     });
     return yield* outputPlugin.output;
   });
