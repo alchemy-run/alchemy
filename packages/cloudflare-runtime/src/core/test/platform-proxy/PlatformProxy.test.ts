@@ -1,5 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as D1 from "../../bindings/d1/index.ts";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import * as Json from "../../bindings/Json.ts";
 import * as KvNamespace from "../../bindings/kv-namespace/index.ts";
@@ -81,6 +82,94 @@ layer(localRuntimeLayer, { excludeTestServices: true })(
             await kv.delete("key");
             expect(await kv.get("key")).toBeNull();
           });
+        }),
+      { timeout: 30_000 },
+    );
+
+    it.effect(
+      "proxies nested D1 prepared statements in a batch",
+      () =>
+        Effect.gen(function* () {
+          const proxy = yield* open({
+            name: "platform-proxy-d1-batch",
+            bindings: [
+              D1.local({ binding: "DB", id: "platform-proxy-d1-batch" }),
+            ],
+          });
+          const db = (proxy.env as { DB: D1Database }).DB;
+          yield* Effect.promise(() =>
+            db.exec(
+              "CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT, note TEXT)",
+            ),
+          );
+          const results = yield* Effect.promise(() =>
+            db.batch([
+              db
+                .prepare("INSERT INTO items (id, label, note) VALUES (?, ?, ?)")
+                .bind(1, "first", null),
+              db
+                .prepare("INSERT INTO items (id, label, note) VALUES (?, ?, ?)")
+                .bind(2, "second", "bound value"),
+              db.prepare("SELECT id, label, note FROM items ORDER BY id"),
+            ]),
+          );
+          expect(results.map((result) => result.success)).toEqual([
+            true,
+            true,
+            true,
+          ]);
+          expect(results[2].results).toEqual([
+            { id: 1, label: "first", note: null },
+            { id: 2, label: "second", note: "bound value" },
+          ]);
+          expect(
+            yield* Effect.promise(() =>
+              db
+                .prepare("SELECT label FROM items WHERE id = ?")
+                .bind(2)
+                .first("label"),
+            ),
+          ).toBe("second");
+        }),
+      { timeout: 30_000 },
+    );
+
+    it.effect(
+      "rolls back a proxied D1 batch when a later statement fails",
+      () =>
+        Effect.gen(function* () {
+          const proxy = yield* open({
+            name: "platform-proxy-d1-rollback",
+            bindings: [
+              D1.local({ binding: "DB", id: "platform-proxy-d1-rollback" }),
+            ],
+          });
+          const db = (proxy.env as { DB: D1Database }).DB;
+          yield* Effect.promise(() =>
+            db.exec("CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT)"),
+          );
+          yield* Effect.promise(() =>
+            db
+              .prepare("INSERT INTO items (id, label) VALUES (?, ?)")
+              .bind(1, "existing")
+              .run(),
+          );
+          yield* Effect.promise(() =>
+            expect(
+              db.batch([
+                db
+                  .prepare("INSERT INTO items (id, label) VALUES (?, ?)")
+                  .bind(2, "rolled back"),
+                db
+                  .prepare("INSERT INTO items (id, label) VALUES (?, ?)")
+                  .bind(1, "duplicate"),
+              ]),
+            ).rejects.toThrow(/UNIQUE constraint failed/),
+          );
+          const remaining = yield* Effect.promise(() =>
+            db.prepare("SELECT id, label FROM items ORDER BY id").all(),
+          );
+          expect(remaining.results).toEqual([{ id: 1, label: "existing" }]);
         }),
       { timeout: 30_000 },
     );
