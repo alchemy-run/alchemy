@@ -300,34 +300,8 @@ export const stageWebsiteArtifact = Effect.fn(function* (
   const directory = yield* fs.makeTempDirectoryScoped({
     prefix: "alchemy-prisma-website-",
   });
-  // pnpm's peer-qualified store names exceed ustar's 100-byte link field.
-  // Shorten only store-directory names; package scopes and links stay intact.
-  const stores = new Map(
-    [
-      ...new Set(
-        [...selected, ...links.keys(), ...links.values()].flatMap((file) => {
-          const parts = file.split(path.sep);
-          return parts.flatMap((part, index) =>
-            part === ".pnpm" && parts[index + 1] !== undefined
-              ? [parts[index + 1]!]
-              : [],
-          );
-        }),
-      ),
-    ]
-      .sort()
-      .map((name, index) => [name, `p${index.toString(36)}`]),
-  );
-  const staged = (file: string) => {
-    const parts = path.relative(base, file).split(path.sep);
-    return path.join(
-      directory,
-      "files",
-      ...parts.map((part, index) =>
-        parts[index - 1] === ".pnpm" ? (stores.get(part) ?? part) : part,
-      ),
-    );
-  };
+  const staged = (file: string) =>
+    path.join(directory, "files", path.relative(base, file));
   let bytes = 0;
   for (const file of [...selected].sort()) {
     const stat = yield* fs.stat(file);

@@ -128,6 +128,9 @@
       "path": "./examples/cloudflare-agent/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
@@ -164,6 +167,9 @@
       "path": "./examples/cloudflare-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-website-nuxt/tsconfig.json"
     },
     {
@@ -189,6 +195,12 @@
     },
     {
       "path": "./examples/prisma-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/prisma-website-vinext/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-website-vinext/tsconfig.json"
     },
     {
       "path": "./examples/prisma-website-nuxt/tsconfig.json"
@@ -269,6 +281,9 @@
       "path": "./examples/fly-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/fly-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/fly-website-nuxt/tsconfig.json"
     },
     {
@@ -299,6 +314,9 @@
       "path": "./examples/hetzner-website-nextjs/tsconfig.json"
     },
     {
+      "path": "./examples/hetzner-website-vinext/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-website-nuxt/tsconfig.json"
     },
     {
@@ -327,6 +345,9 @@
     },
     {
       "path": "./examples/railway-website-nextjs/tsconfig.json"
+    },
+    {
+      "path": "./examples/railway-website-vinext/tsconfig.json"
     },
     {
       "path": "./examples/railway-website-nuxt/tsconfig.json"
