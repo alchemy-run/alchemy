@@ -6,6 +6,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Fiber from "effect/Fiber";
+import * as Schedule from "effect/Schedule";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
@@ -370,7 +371,7 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
             Effect.succeed("saved"),
           );
           yield* journal.record("checkpoint");
-          yield* Cloudflare.Workflows.sleep("park-after-recovery", "1 hour");
+          return yield* journal.entries();
         }
       } else {
         yield* task;
@@ -384,12 +385,52 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   }),
 ) {}
 
+class WorkflowControlUnavailable extends Data.TaggedError(
+  "WorkflowControlUnavailable",
+)<{
+  operation: string;
+  cause: Error;
+}> {}
+
+const retryWorkflowControl = <A, R>(
+  operation: string,
+  effect: Effect.Effect<A, never, R>,
+) =>
+  effect.pipe(
+    Effect.catchDefect((defect) =>
+      Cause.isUnknownError(defect) &&
+      defect.cause instanceof Error &&
+      defect.cause.message === "internal error"
+        ? Effect.fail(
+            new WorkflowControlUnavailable({ operation, cause: defect.cause }),
+          )
+        : Effect.die(defect),
+    ),
+    Effect.tapError(() =>
+      Effect.logWarning(`Native Workflow ${operation} unavailable; retrying`),
+    ),
+    Effect.retry({ schedule: Schedule.exponential("250 millis"), times: 4 }),
+    Effect.orDie,
+  );
+
 export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>()(
   "LifecycleWorker",
   { main: import.meta.url },
   Effect.gen(function* () {
     const workflow = yield* LifecycleWorkflow;
     const journals = yield* Journal;
+    const start = Effect.fn(function* (
+      id: string,
+      scenario: Scenario | "ready",
+      stage?: string,
+    ) {
+      // Retrying anonymous create() could duplicate an accepted start; createBatch is idempotent by ID.
+      yield* retryWorkflowControl(
+        "createBatch",
+        workflow.createBatch([{ id, params: { scenario, stage } }]),
+      );
+      return yield* retryWorkflowControl("get", workflow.get(id));
+    });
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -397,26 +438,32 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
         const [, action, value] = path.split("/");
         if (action === "probe") {
           if (request.method === "POST") {
-            const instance = yield* workflow.create({
-              params: { scenario: "ready" },
-            });
+            const id = yield* Effect.sync(() => crypto.randomUUID());
+            const instance = yield* start(id, "ready");
             return yield* HttpServerResponse.json({ id: instance.id });
           }
-          const instance = yield* workflow.get(value);
-          return yield* HttpServerResponse.json(yield* instance.status());
+          const instance = yield* retryWorkflowControl(
+            "get",
+            workflow.get(value),
+          );
+          return yield* HttpServerResponse.json(
+            yield* retryWorkflowControl("status", instance.status()),
+          );
         }
         if (action === "start" && request.method === "POST") {
-          const stage = new URL(
-            request.url,
-            "http://localhost",
-          ).searchParams.get("stage");
-          const instance = yield* workflow.create({
-            params: { scenario: value as Scenario, stage: stage ?? undefined },
-          });
+          const params = new URL(request.url, "http://localhost").searchParams;
+          const instance = yield* start(
+            params.get("id") ?? value,
+            value as Scenario,
+            params.get("stage") ?? undefined,
+          );
           return yield* HttpServerResponse.json({ id: instance.id });
         }
         if (action === "restart") {
-          const instance = yield* workflow.get(value);
+          const instance = yield* retryWorkflowControl(
+            "get",
+            workflow.get(value),
+          );
           yield* instance.restart({
             from: { name: "replay-checkpoint", type: "do" },
           });
@@ -428,9 +475,12 @@ export default class LifecycleWorker extends Cloudflare.Worker<LifecycleWorker>(
           );
         }
         if (action === "status") {
-          const instance = yield* workflow.get(value);
+          const instance = yield* retryWorkflowControl(
+            "get",
+            workflow.get(value),
+          );
           return yield* HttpServerResponse.json({
-            ...(yield* instance.status()),
+            ...(yield* retryWorkflowControl("status", instance.status())),
             entries: (yield* journals.getByName(value).entries()) ?? [],
           });
         }
