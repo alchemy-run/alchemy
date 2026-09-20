@@ -13,7 +13,7 @@ class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
     const migrations = yield* Cloudflare.SqlMigrations(dir);
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-      yield* Cloudflare.applySqlMigrations(migrations).pipe(Effect.orDie);
+      yield* migrations.apply().pipe(Effect.orDie);
       return {
         inspect: () =>
           Effect.gen(function* () {

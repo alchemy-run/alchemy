@@ -27,6 +27,11 @@ await Effect.runPromise(
           runtime: process.release.name,
           object: SqlMigrationsUnitObject.name,
           snapshot,
+          capturedHasApply: typeof snapshot.apply === "function",
+          exportedHasApply: Object.values(exports).some(
+            (exported) =>
+              exported.kind === "sqlMigrations" && "apply" in exported.snapshot,
+          ),
           exports: Object.keys(exports).length,
           env: worker.env,
         }),

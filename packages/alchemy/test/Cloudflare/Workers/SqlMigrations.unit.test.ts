@@ -1,7 +1,13 @@
+import { purePlugin } from "@/Bundle/PurePlugin.ts";
+import type { DurableObjectState } from "@/Cloudflare/Workers/DurableObjectState.ts";
 import {
   SqlMigrations,
   type SqlMigrationsInput,
 } from "@/Cloudflare/Workers/SqlMigrations.ts";
+import {
+  SqlMigrationsRuntime,
+  type SqlMigrationSnapshot,
+} from "@/Cloudflare/Workers/SqlMigrationsRuntime.ts";
 import { makeEffectVirtualEntry } from "@/Cloudflare/Workers/Sources/Rolldown.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import {
@@ -9,9 +15,11 @@ import {
   type WorkerExport,
   type WorkerRuntimeContext,
 } from "@/Cloudflare/Workers/WorkerRuntimeContext.ts";
+import type { RuntimeContext } from "@/RuntimeContext.ts";
 import {
   DrizzleV0LayoutError,
   MigrationError,
+  type MigrationHistoryConflictError,
 } from "@/SQL/Migrations/Format.ts";
 import { readMigrationRecords } from "@/SQL/Migrations/Records.ts";
 import { sha256 } from "@/Util/sha256.ts";
@@ -27,6 +35,38 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { nodePath, nodeSupportsDevMode } from "../../nodeProbe.ts";
+
+type Assert<T extends true> = T;
+type Application = ReturnType<
+  Effect.Success<ReturnType<typeof SqlMigrations>>["apply"]
+>;
+type _RequiresRuntimeContext = Assert<
+  RuntimeContext extends Effect.Services<Application> ? true : false
+>;
+type _RequiresDurableObjectState = Assert<
+  DurableObjectState extends Effect.Services<Application> ? true : false
+>;
+type _NotConstructionOnly = Assert<
+  Application extends Effect.Effect<
+    void,
+    MigrationError | MigrationHistoryConflictError,
+    Effect.Services<ReturnType<typeof SqlMigrations>>
+  >
+    ? false
+    : true
+>;
+type _RuntimeRequiredEvenWithState = Assert<
+  Application extends Effect.Effect<
+    void,
+    MigrationError | MigrationHistoryConflictError,
+    DurableObjectState
+  >
+    ? false
+    : true
+>;
+type _SnapshotHasNoMethod = Assert<
+  "apply" extends keyof SqlMigrationSnapshot ? false : true
+>;
 
 // Worker resolves its host through the resource's Self key.
 const WorkerHost = Context.Service<Worker, WorkerRuntimeContext>(
@@ -94,9 +134,24 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         undefined,
         undefined,
       ]);
+      expect(typeof snapshot.apply).toBe("function");
+      expect(Effect.isEffect(snapshot.apply())).toBe(true);
       expect(Object.values(exports)).toEqual([
-        { kind: "sqlMigrations", snapshot },
+        {
+          kind: "sqlMigrations",
+          snapshot: {
+            _tag: snapshot._tag,
+            table: snapshot.table,
+            records: snapshot.records,
+          },
+        },
       ]);
+      for (const exported of Object.values(exports)) {
+        if (exported.kind === "sqlMigrations") {
+          expect(exported.snapshot).not.toHaveProperty("apply");
+          expect(exported.snapshot).not.toBe(snapshot);
+        }
+      }
       expect(worker.env).toEqual({});
     }).pipe(Effect.scoped),
   );
@@ -136,10 +191,70 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
           "INSERT INTO users VALUES (1);",
         ]);
         expect(Object.values(exports)).toEqual([
-          { kind: "sqlMigrations", snapshot },
+          {
+            kind: "sqlMigrations",
+            snapshot: {
+              _tag: snapshot._tag,
+              table: snapshot.table,
+              records: snapshot.records,
+            },
+          },
         ]);
         expect(worker.env).toEqual({});
       }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "reconstructs apply from the plain runtime snapshot without reading the directory",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* writeMigrations({
+          "migrations/0001_users.sql":
+            "CREATE TABLE users (id INTEGER PRIMARY KEY);",
+        });
+        const dir = path.join(root, "migrations");
+        const input = { dir, table: "runtime_history" };
+        const captured = yield* capture(input);
+        const bundles: Record<string, SqlMigrationSnapshot> = {};
+        for (const [key, exported] of Object.entries(captured.exports)) {
+          if (exported.kind === "sqlMigrations") {
+            expect(exported.snapshot).not.toHaveProperty("apply");
+            bundles[key] = exported.snapshot;
+          }
+        }
+        expect(Object.keys(bundles)).toHaveLength(1);
+        yield* fs.remove(dir, { recursive: true });
+
+        const reconstructed = yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const previous = globalThis.__ALCHEMY_RUNTIME__;
+            globalThis.__ALCHEMY_RUNTIME__ = true;
+            return previous;
+          }),
+          () =>
+            SqlMigrations(input).pipe(
+              Effect.provideService(SqlMigrationsRuntime, bundles),
+              Effect.provideService(WorkerHost, captured.worker),
+            ),
+          (previous) =>
+            Effect.sync(() => {
+              globalThis.__ALCHEMY_RUNTIME__ = previous;
+            }),
+        );
+
+        expect(reconstructed._tag).toBe(captured.snapshot._tag);
+        expect(reconstructed.table).toBe(captured.snapshot.table);
+        expect(reconstructed.records).toEqual(captured.snapshot.records);
+        expect(typeof reconstructed.apply).toBe("function");
+        expect(Effect.isEffect(reconstructed.apply())).toBe(true);
+        expect(reconstructed.apply).not.toBe(captured.snapshot.apply);
+        for (const snapshot of Object.values(bundles)) {
+          expect(snapshot).not.toHaveProperty("apply");
+        }
+      }).pipe(Effect.scoped),
+    { exclusive: true },
   );
 
   it.effect(
@@ -332,6 +447,67 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
       }),
   );
 
+  it.effect(
+    "emits the SqlMigrations factory and apply method without filesystem imports",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const input = yield* path.fromFileUrl(
+          new URL(
+            "../../../src/Cloudflare/Workers/SqlMigrations.ts",
+            import.meta.url,
+          ),
+        );
+        const { rolldown } = yield* Effect.promise(() => import("rolldown"));
+        const output = yield* Effect.acquireUseRelease(
+          Effect.promise(() =>
+            rolldown({
+              input,
+              platform: "neutral",
+              external: (id) => !id.startsWith(".") && !path.isAbsolute(id),
+              transform: {
+                define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
+              },
+              plugins: [purePlugin()],
+            }),
+          ),
+          (bundle) =>
+            Effect.promise(() =>
+              bundle.generate({ format: "esm", minify: "dce-only" }),
+            ),
+          (bundle) => Effect.promise(() => bundle.close()),
+        );
+        const chunks = output.output.filter((item) => item.type === "chunk");
+        const modules = chunks.flatMap((chunk) =>
+          Object.entries(chunk.modules)
+            .filter(([, module]) => module.renderedLength > 0)
+            .map(([id]) => id),
+        );
+        const imports = chunks.flatMap((chunk) => [
+          ...chunk.imports,
+          ...chunk.dynamicImports,
+        ]);
+        const code = chunks.map((chunk) => chunk.code).join("\n");
+
+        expect(chunks.flatMap((chunk) => chunk.exports)).toContain(
+          "SqlMigrations",
+        );
+        expect(
+          modules.some((id) => id.endsWith("/Workers/SqlMigrations.ts")),
+        ).toBe(true);
+        expect(
+          modules.some((id) => id.endsWith("/Workers/SqlMigrationsApply.ts")),
+        ).toBe(true);
+        const forbidden =
+          /(?:SQL\/Migrations\/(?:Records|Registry|Detect)\.ts|SQL\/SqlFile\.ts|node:(?:crypto|fs)|effect\/(?:FileSystem|Path)|@effect\/platform-(?:node|bun))/;
+        expect(modules.filter((id) => forbidden.test(id))).toEqual([]);
+        expect(imports.filter((id) => forbidden.test(id))).toEqual([]);
+        expect(code).not.toContain("readMigrationRecords");
+        expect(code).not.toContain("node:fs");
+        expect(code).not.toContain("node:crypto");
+      }),
+  );
+
   it.effect.skipIf(!nodeSupportsDevMode)(
     "imports a SqlMigrations Durable Object through Node's Oxc loader and captures SQL",
     () =>
@@ -387,6 +563,8 @@ layer(NodeServices.layer)("Cloudflare.SqlMigrations construction", (it) => {
         expect(stdout).toContain('"table":"node_loader_history"');
         expect(stdout).toContain(JSON.stringify(sql));
         expect(stdout).toContain(yield* sha256(sql));
+        expect(stdout).toContain('"capturedHasApply":true');
+        expect(stdout).toContain('"exportedHasApply":false');
         expect(stdout).toContain('"exports":1');
         expect(stdout).toContain('"env":{}');
       }).pipe(Effect.scoped),

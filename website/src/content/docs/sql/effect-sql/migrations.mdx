@@ -154,7 +154,7 @@ export class Users extends Cloudflare.DurableObject<Users>()(
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      yield* Cloudflare.applySqlMigrations(migrations).pipe(Effect.orDie);
+      yield* migrations.apply().pipe(Effect.orDie);
 
       return {
         listUsers: () =>
@@ -167,8 +167,9 @@ export class Users extends Cloudflare.DurableObject<Users>()(
 ) {}
 ```
 
-`Cloudflare.applySqlMigrations` uses the current Durable Object state;
-call it in the **inner** Effect before returning the instance's API.
+`migrations.apply()` requires `RuntimeContext` and the current Durable Object
+state. Call it in the **inner** Effect before returning the instance's API;
+it cannot run in the outer construction Effect.
 Its error channel includes `MigrationError` and
 `MigrationHistoryConflictError`. Using `.pipe(Effect.orDie)` here
 prevents activation if the schema cannot be initialized.

@@ -34,7 +34,6 @@ export * from "./SecretKey.ts";
 export * from "./SecretKeyBinding.ts";
 export * from "./Source.ts";
 export * from "./SqlMigrations.ts";
-export * from "./SqlMigrationsApply.ts";
 export * from "./Subdomain.ts";
 export * from "./Telemetry.ts";
 export * from "./VersionMetadata.ts";

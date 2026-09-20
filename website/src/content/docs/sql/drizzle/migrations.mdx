@@ -170,7 +170,7 @@ Keep applied files unchanged. Migration failures are initialization defects; the
 Without Drizzle, use the same engine in the inner Effect:
 
 ```typescript
-yield* Cloudflare.applySqlMigrations(migrations).pipe(Effect.orDie);
+yield* migrations.apply().pipe(Effect.orDie);
 ```
 
 See the [raw SQL example](/sql/effect-sql/migrations#durable-object-migrations) for the complete object.

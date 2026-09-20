@@ -1,7 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ALCHEMY_DEFAULT_TABLE } from "../../SQL/Migrations/AlchemyFormat.ts";
-import { MigrationError } from "../../SQL/Migrations/Format.ts";
+import {
+  MigrationError,
+  type MigrationHistoryConflictError,
+} from "../../SQL/Migrations/Format.ts";
+import type { DurableObjectState } from "./DurableObjectState.ts";
+import { applySqlMigrations } from "./SqlMigrationsApply.ts";
 import {
   SqlMigrationsRuntime,
   type SqlMigrationSnapshot,
@@ -10,6 +16,21 @@ import {
 import { Worker } from "./Worker.ts";
 
 export type { SqlMigrationSnapshot } from "./SqlMigrationsRuntime.ts";
+
+/** Captured SQL migrations with a runtime-only application method. */
+export interface SqlMigrations extends SqlMigrationSnapshot {
+  /**
+   * Apply pending files to the current Durable Object's SQLite database.
+   * Call in the inner instance Effect before returning public methods.
+   * Each file and its history row commit atomically; applied files are skipped.
+   * Requires runtime context, which is also available in request handlers.
+   */
+  readonly apply: () => Effect.Effect<
+    void,
+    MigrationError | MigrationHistoryConflictError,
+    DurableObjectState | RuntimeContext
+  >;
+}
 
 /** A migrations directory, optionally with a custom bookkeeping table. */
 export type SqlMigrationsInput =
@@ -52,6 +73,23 @@ export type SqlMigrationsInput =
  * ) {}
  * ```
  *
+ * ### Apply Migrations Without Drizzle
+ * **Example:** Migrate before exposing the object's methods
+ * ```typescript
+ * Effect.gen(function* () {
+ *   const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
+ *   return Effect.gen(function* () {
+ *     yield* migrations.apply().pipe(Effect.orDie);
+ *     return {};
+ *   });
+ * });
+ * ```
+ *
+ * `apply()` requires `RuntimeContext` and the current Durable Object state.
+ * Each pending file and its `__alchemy_migrations` row commit atomically.
+ * A failed file rolls back; successfully applied earlier files stay committed.
+ * Existing modern Drizzle history is adopted without replaying applied SQL.
+ *
  * ### Custom Bookkeeping Table
  * **Example:** Use the same table on every activation
  * ```typescript
@@ -84,7 +122,7 @@ export const SqlMigrations = Effect.fn("Cloudflare.SqlMigrations")(function* (
       kind: "sqlMigrations",
       snapshot,
     } satisfies SqlMigrationsExport);
-    return snapshot;
+    return makeSqlMigrations(snapshot);
   }
   const bundles = yield* Effect.serviceOption(SqlMigrationsRuntime);
   const snapshot = Option.isSome(bundles) ? bundles.value[key] : undefined;
@@ -95,5 +133,10 @@ export const SqlMigrations = Effect.fn("Cloudflare.SqlMigrations")(function* (
       }),
     );
   }
-  return snapshot;
+  return makeSqlMigrations(snapshot);
+});
+
+const makeSqlMigrations = (snapshot: SqlMigrationSnapshot): SqlMigrations => ({
+  ...snapshot,
+  apply: () => applySqlMigrations(snapshot),
 });

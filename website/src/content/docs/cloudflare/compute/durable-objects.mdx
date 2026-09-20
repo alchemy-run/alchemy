@@ -93,7 +93,7 @@ Effect.gen(function* () {
   const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
 
   return Effect.gen(function* () {
-    yield* Cloudflare.applySqlMigrations(migrations).pipe(Effect.orDie);
+    yield* migrations.apply().pipe(Effect.orDie);
     return {};
   });
 });

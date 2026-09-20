@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import { applySqlMigrations } from "@/Cloudflare/Workers/SqlMigrationsApply.ts";
 import * as Drizzle from "@/Drizzle/Cloudflare.ts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -81,7 +82,7 @@ export class MigratedObject extends Cloudflare.DurableObject<MigratedObject>()(
         repeat: () =>
           Effect.gen(function* () {
             yield* Drizzle.DurableObject({ migrations: snapshot, relations });
-            yield* Cloudflare.applySqlMigrations(snapshot);
+            yield* snapshot.apply();
             return yield* inspect();
           }).pipe(Effect.provideService(Cloudflare.DurableObjectState, state)),
         reset: () =>
@@ -100,7 +101,7 @@ export class CustomMigratedObject extends Cloudflare.DurableObject<CustomMigrate
     });
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-      yield* Cloudflare.applySqlMigrations(snapshot).pipe(Effect.orDie);
+      yield* snapshot.apply().pipe(Effect.orDie);
       const inspect = () =>
         Effect.gen(function* () {
           const rows = yield* state.storage.sql
@@ -120,10 +121,12 @@ export class CustomMigratedObject extends Cloudflare.DurableObject<CustomMigrate
       return {
         inspect,
         repeat: () =>
-          Cloudflare.applySqlMigrations(snapshot).pipe(
-            Effect.andThen(inspect),
-            Effect.provideService(Cloudflare.DurableObjectState, state),
-          ),
+          snapshot
+            .apply()
+            .pipe(
+              Effect.andThen(inspect),
+              Effect.provideService(Cloudflare.DurableObjectState, state),
+            ),
       };
     });
   }),
@@ -143,9 +146,7 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
       return {
         rollback: () =>
           Effect.gen(function* () {
-            const result = yield* Cloudflare.applySqlMigrations(broken).pipe(
-              Effect.result,
-            );
+            const result = yield* broken.apply().pipe(Effect.result);
             const rows = yield* state.storage.sql
               .exec<{ value: string }>(
                 "SELECT value FROM stable_values ORDER BY id",
@@ -167,9 +168,9 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
               relations,
             });
             const before = yield* history(state, "__drizzle_migrations");
-            yield* Cloudflare.applySqlMigrations(snapshot);
+            yield* snapshot.apply();
             const adopted = yield* history(state, snapshot.table);
-            yield* Cloudflare.applySqlMigrations(snapshot);
+            yield* snapshot.apply();
             const db = yield* Drizzle.DurableObject({
               migrations: snapshot,
               relations,
@@ -196,8 +197,9 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
               relations,
             });
             const before = yield* history(state, "__drizzle_migrations");
-            const result = yield* Cloudflare.applySqlMigrations({
-              ...snapshot,
+            const result = yield* applySqlMigrations({
+              _tag: snapshot._tag,
+              table: snapshot.table,
               records: empty ? [] : snapshot.records.slice(1),
             }).pipe(Effect.result);
             return {

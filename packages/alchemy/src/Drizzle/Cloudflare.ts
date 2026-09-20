@@ -7,8 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
-import { applySqlMigrations } from "../Cloudflare/Workers/SqlMigrationsApply.ts";
-import type { SqlMigrationSnapshot } from "../Cloudflare/Workers/SqlMigrationsRuntime.ts";
+import type { SqlMigrations } from "../Cloudflare/Workers/SqlMigrations.ts";
 
 /**
  * Migrations for {@link DurableObject} — the shape of the `migrations.js`
@@ -33,10 +32,7 @@ export interface DurableObjectConfig<
    * The generated Drizzle `migrations.js` input remains supported and uses
    * Drizzle's own migrator; its SQL imports still require loader support.
    */
-  readonly migrations?:
-    | SqlMigrationSnapshot
-    | DurableObjectMigrations
-    | undefined;
+  readonly migrations?: SqlMigrations | DurableObjectMigrations | undefined;
 }
 
 /**
@@ -139,7 +135,7 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
     storage,
   }).pipe(Effect.provideContext(services));
   if (migrations !== undefined && "_tag" in migrations) {
-    yield* applySqlMigrations(migrations).pipe(Effect.orDie);
+    yield* migrations.apply().pipe(Effect.orDie);
   } else if (migrations !== undefined) {
     // A migration that cannot apply leaves the instance unusable — there
     // is no meaningful recovery at init, so it dies rather than forcing

@@ -92,7 +92,7 @@ the SQL directory is not watched as part of the JavaScript import graph.
 - SQL must exist before construction/planning, including in CI.
   `SqlMigrations` does not generate migrations.
 - An ORM is optional. In an object's inner Effect,
-  `yield* Cloudflare.applySqlMigrations(migrations).pipe(Effect.orDie)`
+  `yield* migrations.apply().pipe(Effect.orDie)`
   applies the same records using the current Durable Object state.
 
 The shared engine can adopt matching modern Drizzle history. This is
