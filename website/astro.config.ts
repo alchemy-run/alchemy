@@ -566,6 +566,7 @@ export default defineConfig({
                 { label: "R2", link: "/cloudflare/data/r2" },
                 { label: "Hyperdrive", link: "/cloudflare/data/hyperdrive" },
                 { label: "Drizzle ORM", link: "/cloudflare/data/drizzle" },
+                { label: "Prisma ORM", link: "/cloudflare/data/prisma" },
                 { label: "Drizzle on D1", link: "/cloudflare/data/d1-drizzle" },
                 {
                   label: "Shared database",

@@ -3,19 +3,16 @@ title: Connection lifecycle
 description: SQL clients build lazily on first query, memoize per execution, and tear down when the event settles — why, and what that means on workerd and Lambda.
 ---
 
-Every alchemy SQL client — `SQL.Postgres`, `SQL.MySQL`, `SQL.D1`,
-`Drizzle.Postgres`, `Drizzle.MySQL`, `Drizzle.D1` — follows one
-lifecycle contract.
-This page is the canonical statement of that contract; the runtime
-pages link here.
+Alchemy's Effect SQL, Drizzle, and Prisma Postgres adapters resolve clients
+lazily and memoize them per execution scope. Connection setup is separate from
+runtime initialization, whether the application runs in Lambda, a container,
+or a Worker.
 
 ## Construction runs once, events run many times
 
-A Worker's constructor runs once per isolate, then serves many
-events. A Lambda instance initializes once, then handles many
-invocations. Resolving a client in the constructor is therefore an
-isolate-lifetime decision — and disposable resources must not live
-that long, because the instance scope may never close:
+A Lambda instance, container server, or Worker initializes once and handles
+many requests. Construct the adapter during initialization; acquire its
+connections only inside the execution that uses them:
 
 ```typescript
 Effect.gen(function* () {
@@ -44,9 +41,9 @@ Every later query in the same execution reuses it. When the event
 settles, the scope closes and the client's finalizer runs: the pool
 ends, the statement cache drops.
 
-Deploy and plan evaluate the same constructor code, and because nothing
-connects until a query runs inside an event, they never open a
-connection.
+Constructing a runtime adapter during plan or deploy does not open a
+connection. Migration resources are separate: they connect from the deployment
+runner or a controlled migration task when applying schema changes.
 
 ## Why not a global pool
 
@@ -85,9 +82,10 @@ they cannot disagree.
 
 ## Lambda and servers
 
-The contract is identical off Cloudflare: each Lambda invocation and
-each server request gets a fresh execution scope, clients build on
-first query and release on settle.
+Alchemy gives each Lambda invocation and server request a fresh execution
+scope. Clients build on first query and release when it settles. A standalone
+Effect program supplies its own scope with `Effect.scoped`; these adapters do
+not create a process-wide pool automatically.
 [Runtime](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
 covers the instance-scope rules — what the constructor may do, when instance
 finalizers run, and the Lambda SIGTERM window.

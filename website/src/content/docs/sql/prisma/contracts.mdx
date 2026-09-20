@@ -15,7 +15,8 @@ Choose one authoritative source: **Prisma Schema Language (PSL)** or
 This guide targets Prisma ORM v8 release candidates and PostgreSQL 17+.
 The contract toolchain is different from earlier Prisma versions; expect
 breaking changes between release candidates. See [Postgres](/sql/prisma/postgres)
-for dependencies and a complete deployment example.
+for dependencies and the client API, or the [Cloudflare integration](/cloudflare/data/prisma)
+for a complete deployment example.
 :::
 
 ## Choose an authoring form
@@ -103,7 +104,7 @@ const users = yield* db.orm.public.User.select("id", "email").all();
 
 These calls run inside an Effect. `connectionString` is an Effect producing a
 redacted connection string, as returned by Alchemy's database connection bindings.
-The [Postgres guide](/sql/prisma/postgres) shows Cloudflare Hyperdrive.
+The [Cloudflare integration](/cloudflare/data/prisma) shows Hyperdrive wiring.
 The generated factory binds your contract to the
 shared Effect runtime, rather than generating another ORM implementation.
 
@@ -152,7 +153,7 @@ gaps are tracked in [Prisma #30341](https://github.com/prisma/orm/issues/30341).
 :::note[Cloudflare Workers]
 Before importing the native contract builder, configure Arktype with
 `jitless: true` in a separate, first-imported module and preserve that module
-from tree-shaking. Follow [Configure validation for Workers](/sql/prisma/postgres#configure-validation-for-workers).
+from tree-shaking. Follow [Configure validation for Workers](/cloudflare/data/prisma#configure-validation-for-workers).
 Ordinary Node and Bun applications do not need this setup. PSL-first Workers
 use the emitted contract and do not import the authoring builder.
 :::
@@ -331,7 +332,8 @@ schema changes, including changes that need an explicit data backfill.
 
 ## Where next
 
-- [Postgres](/sql/prisma/postgres) — provision a database and query it from a Worker.
+- [Postgres](/sql/prisma/postgres) — queries, prepared statements, and transactions.
+- [Cloudflare integration](/cloudflare/data/prisma) — provision a database and query it from a Worker.
 - [Migrations](/sql/prisma/migrations) — plan and apply contract changes on deployment.
 - [TypeScript-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma) — authored contract with optional standalone schema generation.
 - [PSL-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl) — PSL source with generated client and schemas.

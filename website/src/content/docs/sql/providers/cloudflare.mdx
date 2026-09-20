@@ -16,7 +16,7 @@ origin can supply it.
 | D1: Cloudflare-hosted SQLite | [D1](/cloudflare/data/d1), [Drizzle + D1](/cloudflare/data/d1-drizzle), [Effect SQL D1](/sql/effect-sql/d1) |
 | Postgres through Hyperdrive | [Hyperdrive](/cloudflare/data/hyperdrive), [Drizzle integration](/cloudflare/data/drizzle) |
 | MySQL through Hyperdrive | [Hyperdrive](/cloudflare/data/hyperdrive), [Effect SQL MySQL](/sql/effect-sql/mysql), [Drizzle MySQL](/sql/drizzle/mysql) |
-| Prisma ORM v8 + Postgres | [Prisma runtime walkthrough](/sql/prisma/postgres), [Contracts](/sql/prisma/contracts) |
+| Prisma ORM v8 + Postgres | [Prisma runtime walkthrough](/cloudflare/data/prisma), [Contracts](/sql/prisma/contracts) |
 
 Prisma ORM v8 does not support D1 or MySQL. D1 support in another client does
 not imply support in Prisma.
@@ -40,7 +40,7 @@ how Alchemy's clients handle this separation.
 Hyperdrive pools connections across requests. Query caching is a separate
 choice: disable it when immediate reads must reflect writes. Native Prisma
 contract authoring also needs the Worker-specific Arktype configuration in
-the [Prisma walkthrough](/sql/prisma/postgres#configure-validation-for-workers).
+the [Prisma walkthrough](/cloudflare/data/prisma#configure-validation-for-workers).
 
 Apply migrations using the database's migration path, not by treating a
 Hyperdrive binding as a schema-management resource. For D1, follow the native

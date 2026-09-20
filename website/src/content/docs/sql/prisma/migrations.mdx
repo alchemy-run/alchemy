@@ -102,7 +102,7 @@ Prisma records the applied contract hash in the database itself
 marker against the contract's hash, so databases changed out-of-band —
 a marker reset, a branch recreated from another parent — are detected
 and re-converged on the next deploy. The runtime client also verifies
-the marker on first use by default, so a Worker deployed against a
+the marker on first use by default, so an application deployed against a
 stale database surfaces the drift instead of returning wrong answers.
 
 ## Destroy never unwinds the database
@@ -126,8 +126,8 @@ until 8.0.0 final.
 
 ## Where next
 
-- [Postgres](/sql/prisma/postgres) — the full contract → database →
-  Worker flow.
+- [Postgres](/sql/prisma/postgres) — the runtime query API.
+- [Cloudflare integration](/cloudflare/data/prisma) — the full contract, database, and Worker setup.
 - [Effect SQL: Migrations](/sql/effect-sql/migrations) — the plain
   `.sql` migration contract used by Drizzle and the raw clients.
 - [Prisma Postgres](/prisma) — provision the database with the Prisma

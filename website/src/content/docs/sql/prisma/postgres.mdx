@@ -1,17 +1,16 @@
 ---
 title: Postgres
-description: Connect Prisma ORM v8 to Postgres, deploy migrations, and run Effect-native queries, streams, and transactions from a Worker over Hyperdrive.
+description: Connect Prisma ORM v8 to Postgres and run Effect-native queries, streams, prepared statements, and transactions independently of your cloud provider.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-export const deps = `@prisma/orm-postgres arktype`;
+export const deps = `@prisma/orm-postgres`;
 export const devDeps = `prisma`;
 
-Prisma ORM v8 (the `8.0.0-rc` line) on Postgres, end to end: a
-contract, a `Prisma.Contract` resource that emits it and plans
-migrations on deploy, a `Prisma.Migrate` resource that applies them,
-and a Worker that queries through the Prisma client over Hyperdrive.
+Prisma ORM v8 (the `8.0.0-rc` line) provides contract-based queries,
+streams, and transactions as Effects. Choose the runtime and database
+separately; this page covers the client API.
 
 :::caution
 Prisma v8 is a release candidate. It is a ground-up rewrite of Prisma
@@ -20,8 +19,7 @@ this Alchemy integration targets **PostgreSQL 17+ only** — no MySQL, no D1.
 Alchemy pins the exact RC version; expect breaking changes between release candidates.
 :::
 
-Prisma ORM and its CLI are optional Alchemy peers. This Worker example also
-installs Arktype to configure Prisma's internal validator for workerd:
+Prisma ORM and its CLI are optional Alchemy peers:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -42,128 +40,61 @@ installs Arktype to configure Prisma's internal validator for workerd:
 
 Follow [Contracts](/sql/prisma/contracts) to define the `User` and `Post` models
 in PSL or TypeScript and configure `prisma.config.ts`. For PSL-first projects,
-generate the client before compiling or bundling the Worker. Both authoring
+generate the client before compiling or bundling the application. Both authoring
 forms use the same deployment resources and query APIs shown below.
 
 This walkthrough uses the TypeScript contract directly and shows the
 PSL-first connection alternative. Contract definitions, generated outputs,
 watch mode, and row schemas are covered in the Contracts guide.
 
-## Configure validation for Workers
-
-Cloudflare Workers prohibit runtime JavaScript compilation during requests.
-Configure Prisma's Arktype dependency before importing the native contract builder:
+## Connect
 
 ```typescript
-// src/prisma/validation.ts
-import { configure } from "arktype/config";
-
-configure({ jitless: true });
-```
-
-Import this module first in `src/prisma/contract.ts`, before `defineContract`.
-If your application declares `"sideEffects": false` in `package.json`, preserve this
-bootstrap with `"sideEffects": ["./src/prisma/validation.ts"]` instead. Otherwise
-a bundler can remove the configuration call. Ordinary Node and Bun applications
-do not need this Worker-specific setup.
-
-## Declare the contract resource and database
-
-`Prisma.Contract` runs `prisma contract emit` on every deploy
-and — when the contract drifted from the migration graph — plans a new
-migration package. `Prisma.Migrate` applies pending packages to a
-database. Passing the contract's output creates the dependency edge:
-emit and plan first, apply second, in one `alchemy deploy`. On Neon:
-
-```typescript
-// src/db.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
-import * as Prisma from "alchemy/Prisma";
-import * as Effect from "effect/Effect";
-
-export const Db = Effect.gen(function* () {
-  const contract = yield* Prisma.Contract("contract");
-
-  const project = yield* Neon.Project("app-db");
-  const branch = yield* Neon.Branch("app-branch", { project });
-
-  yield* Prisma.Migrate("migrate", {
-    url: branch.connectionUri,
-    contract,
-  });
-
-  return branch;
-});
-
-export const Hyperdrive = Effect.gen(function* () {
-  const branch = yield* Db;
-  return yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
-    origin: branch.origin,
-    caching: { disabled: true },
-  });
-});
-```
-
-Query caching is disabled here so a list immediately reflects creates and deletes.
-Hyperdrive still pools connections; caching query results is a separate setting.
-
-Any Postgres 17+ works the same way — a [Prisma Postgres](/prisma)
-database's `directConnectionString`, an RDS instance, or a
-self-hosted URL. Register `Prisma.providers()` alongside your cloud
-providers in the Stack. [Migrations](/sql/prisma/migrations) covers
-what the deploy does — and what it refuses to decide for you.
-
-## Connect in a Worker
-
-Hyperdrive pools connections at the edge. Pass its connection string and the
-native TypeScript contract to the runtime factory; application code imports
-neither generated JSON nor generated declarations:
-
-```typescript
-// src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { contract } from "./prisma/contract.ts";
-import { Hyperdrive } from "./db.ts";
 
-export default class Api extends Cloudflare.Worker<Api>()(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
-    const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-    const db = yield* PrismaPostgres.Postgres(conn.connectionString, { contract });
+const database = PrismaPostgres.Postgres(Config.Redacted("DATABASE_URL"), {
+  contract,
+});
 
-    return {
-      fetch: Effect.gen(function* () {
-        const users = yield* db.orm.public.User.all();
-        return yield* HttpServerResponse.json({ users });
-      }),
-    };
-  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
-) {}
+const listUsers = Effect.gen(function* () {
+  const db = yield* database;
+  return yield* db.orm.public.User.all();
+});
 ```
 
-For a PSL-first contract, import the [generated factory](/sql/prisma/contracts#query-a-psl-contract)
-instead of the authored contract and replace the database construction:
+Pass an Effect that resolves a redacted connection URL, including a runtime binding.
+The native TypeScript contract preserves inferred query types without generated JSON.
+
+For a PSL-first contract, use the [generated factory](/sql/prisma/contracts#query-a-psl-contract):
 
 ```typescript
 import { makeDatabase } from "./prisma/generated/client.ts";
 
-const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-const db = yield* makeDatabase(conn.connectionString);
+const database = makeDatabase(Config.Redacted("DATABASE_URL"));
 ```
 
-The handler and binding layer stay the same. PSL-first Workers do not need
-the native-authoring Arktype bootstrap.
+Both factories connect lazily and memoize a client per execution scope. Alchemy
+runtimes supply that scope; a standalone program must provide it with
+`Effect.scoped`. See [Connection lifecycle](/sql/effect-sql/lifecycle).
 
-Neither factory connects at init — the client is built per event, its pool
-opens on the first query, and `close()` runs when the event settles
-(see [Connection lifecycle](/sql/effect-sql/lifecycle)). Constructing the
-runtime client during plan or deploy does not open a connection; the separate
-migration resource connects when it applies migrations.
+## Declare the contract resource and database
+
+Keep deployment resources separate from runtime queries.
+[Prisma migrations](/sql/prisma/migrations) covers `Prisma.Contract`,
+`Prisma.Migrate`, and the deployment runner's direct database connection.
+
+## Configure validation for Workers
+
+The [Worker validation setup](/cloudflare/data/prisma#configure-validation-for-workers)
+configures Arktype for workerd. Ordinary Node and Bun applications do not need it.
+
+## Connect in a Worker
+
+Follow [Prisma ORM with Postgres on Cloudflare](/cloudflare/data/prisma) for the
+complete Neon, Hyperdrive, migration, and Worker setup.
 
 ## Queries are Effects
 
@@ -278,6 +209,16 @@ yield* db.transaction((tx) =>
 Native extensions or query surfaces outside the Effect facade remain available
 through `db.use((client) => ...)`. Prefer the Effect-native methods when available
 so failures and execution remain in the Effect runtime.
+
+## Deploy this client
+
+The [Cloudflare integration](/cloudflare/data/prisma) includes verified Worker
+examples with Neon. [Prisma Postgres and Compute](/sql/providers/prisma) covers
+the separate database and compute provider; [Choose a database](/sql/databases)
+compares other destinations without implying Prisma compatibility for each one.
+
+PostgreSQL 17+ is a requirement, not a guarantee that every PostgreSQL-compatible
+service supports this release candidate's contracts and migration features.
 
 ## Where next
 

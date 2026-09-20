@@ -530,7 +530,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 On Workers the client defaults to the text protocol (Hyperdrive's
 MySQL proxy has no `COM_STMT_PREPARE`) and eval-free row parsing
 (the isolate forbids `new Function(...)`) — see
-[Workers defaults](/sql/effect-sql/mysql#workers-defaults). One
+[Workers defaults](/cloudflare/data/hyperdrive#workers-defaults). One
 query-surface difference from Postgres: MySQL has no `RETURNING`
 clause, so inserts report generated ids via `$returningId()` and
 upserts use `onDuplicateKeyUpdate` — see
