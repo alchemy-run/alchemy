@@ -5,6 +5,7 @@
 
     "src/**/*.ts",
     "test/**/*.ts",
+    "eval/**/*.ts",
     "e2e/**/*.ts",
     "ui/**/*.ts",
     "ui/**/*.tsx",

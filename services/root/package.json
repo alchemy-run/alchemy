@@ -14,6 +14,7 @@
     "deploy": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy deploy",
     "destroy": "ALCHEMY_PROFILE=testing doppler run -p alchemy-v2 -c dev -- bun alchemy destroy",
     "test": "bun test",
+    "eval": "bun eval/run.ts",
     "test:tools": "bun test test/tools",
     "test:e2e": "playwright test -c e2e/playwright.config.ts",
     "test:e2e:update": "playwright test -c e2e/playwright.config.ts --update-snapshots",
