@@ -19,5 +19,6 @@
     "octane.config.ts",
     "vite.config.ts",
     "alchemy.run.ts"
-  ]
+  ],
+  "references": [{ "path": "../../packages/alchemy" }]
 }

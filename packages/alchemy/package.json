@@ -428,6 +428,7 @@
     "@vitejs/plugin-rsc": "catalog:",
     "alchemy-test": "workspace:*",
     "astro": "catalog:",
+    "aws4fetch": "catalog:",
     "effect": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
