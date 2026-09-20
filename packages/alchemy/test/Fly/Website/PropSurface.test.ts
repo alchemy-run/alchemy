@@ -19,6 +19,10 @@ describe("Fly.Website prop surfaces", () => {
       }),
     () =>
       Fly.Website.Vite("V", {
+        deploy: { strategy: "bluegreen", healthTimeout: "90 seconds" },
+        shutdown: { timeout: "30 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/health" } },
+        services: [],
         assets: { notFoundHandling: "single-page-application" },
         vite: { outDir: "build", base: "/docs/" },
       }),
@@ -58,6 +62,17 @@ describe("Fly.Website prop surfaces", () => {
     () =>
       Fly.Website.SvelteKit("S", {
         kit: { paths: { base: "/docs" } },
+        deploy: { strategy: "bluegreen", healthTimeout: "90 seconds" },
+        shutdown: { signal: "SIGINT", timeout: "60 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/ready" } },
+        services: [],
+      }),
+    () =>
+      Fly.Website.Nextjs("N", {
+        deploy: { strategy: "rolling" },
+        shutdown: { signal: "SIGTERM", timeout: "10 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/ready" } },
+        services: [],
       }),
     () =>
       Fly.Website.SolidStart("So", {
@@ -72,6 +87,10 @@ describe("Fly.Website prop surfaces", () => {
     () =>
       Fly.Website.StaticSite("St", {
         build: { command: "hugo --minify", output: "public" },
+        deploy: { strategy: "bluegreen" },
+        shutdown: { signal: "SIGTERM" },
+        checks: { ready: { type: "tcp", port: 3000 } },
+        services: [],
         assets: { notFoundHandling: "single-page-application" },
       }),
     () =>
