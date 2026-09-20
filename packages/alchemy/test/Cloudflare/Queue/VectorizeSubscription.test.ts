@@ -12,12 +12,16 @@ import { SubscriptionEvent } from "./SubscriptionEvent.ts";
 import { makeSubscriptionCleanup } from "./SubscriptionCleanup.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
-// Cloudflare can route fresh events to the previous Queue after either change.
-for (const change of ["replacement", "update"] as const) {
+// Native routing experiments are opt-in; control-plane reads are not delivery barriers.
+for (const change of ["replacement", "update", "paused-update"] as const) {
   const enabled =
-    change === "replacement"
-      ? process.env.CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_REPLACEMENT === "1"
-      : process.env.CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_UPDATE === "1";
+    process.env[
+      {
+        replacement: "CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_REPLACEMENT",
+        update: "CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_UPDATE",
+        "paused-update": "CLOUDFLARE_TEST_VECTORIZE_PAUSED_UPDATE",
+      }[change]
+    ] === "1";
   test.provider.skipIf(!enabled)(
     `Vectorize immediately routes post-${change} events to the current subscription`,
     (stack) =>
@@ -116,6 +120,10 @@ for (const change of ["replacement", "update"] as const) {
                 yield* Effect.logInfo(`Native ${change} receipt`, {
                   elapsedMs: (yield* Clock.currentTimeMillis) - start,
                   queueId,
+                  messageId: message.id,
+                  timestampMs: message.timestampMs,
+                  attempts: message.attempts,
+                  rawBody: message.body,
                   event,
                 });
               }
@@ -154,7 +162,53 @@ for (const change of ["replacement", "update"] as const) {
           }),
         );
         expect(initiallyReady()).toBe(true);
+        const observe = Effect.fn(function* (
+          subscriptionId: string,
+          phase: string,
+        ) {
+          const observed = yield* queues.getSubscription({
+            accountId,
+            subscriptionId,
+          });
+          yield* Effect.logInfo(`Native ${change} configuration`, {
+            phase,
+            elapsedMs: (yield* Clock.currentTimeMillis) - start,
+            subscription: observed,
+          });
+          return observed;
+        });
         const current = yield* Effect.gen(function* () {
+          if (change === "paused-update") {
+            yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              enabled: false,
+            });
+            const paused = yield* observe(old.id, "disabled");
+            expect(paused.enabled).toBe(false);
+            expect(paused.destination.queueId).toBe(a);
+            yield* create(`vec-${a}-disabled`);
+            yield* pull(a);
+            yield* pull(b);
+            yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              destination: { type: "queues.queue", queueId: b },
+            });
+            const moved = yield* observe(
+              old.id,
+              "destination-updated-while-disabled",
+            );
+            expect(moved.enabled).toBe(false);
+            expect(moved.destination.queueId).toBe(b);
+            const resumed = yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              enabled: true,
+            });
+            expect(resumed.id).toBe(old.id);
+            return resumed;
+          }
           if (change === "update") {
             const updated = yield* queues.patchSubscription({
               accountId,
@@ -178,11 +232,12 @@ for (const change of ["replacement", "update"] as const) {
             );
           return yield* makeSubscription(b);
         });
-        const observed = yield* queues.getSubscription({
-          accountId,
-          subscriptionId: current.id,
-        });
+        const observed = yield* observe(
+          current.id,
+          "active-at-new-destination",
+        );
         expect(observed.destination.queueId).toBe(b);
+        expect(observed.enabled).toBe(true);
         yield* Effect.logInfo(`Native ${change} identities`, {
           oldSubscription: old.id,
           oldQueue: a,
@@ -199,11 +254,7 @@ for (const change of ["replacement", "update"] as const) {
         }).pipe(
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
-            times: 4,
-            until: () =>
-              identities.every((identity) =>
-                received.some(({ event }) => event.payload.name === identity),
-              ),
+            times: 5,
           }),
         );
         const deliveries = received.filter(({ event }) =>
@@ -213,6 +264,7 @@ for (const change of ["replacement", "update"] as const) {
           identities,
           deliveries,
         });
+        expect(deliveries.filter(({ queueId }) => queueId === a)).toEqual([]);
         for (const identity of identities) {
           expect(
             deliveries.some(
@@ -223,7 +275,6 @@ for (const change of ["replacement", "update"] as const) {
             ),
           ).toBe(true);
         }
-        expect(deliveries.some(({ queueId }) => queueId === a)).toBe(false);
         yield* stack.destroy();
       }).pipe(
         Effect.timeout("90 seconds"),
