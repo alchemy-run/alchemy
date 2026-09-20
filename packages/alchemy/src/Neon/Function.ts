@@ -95,6 +95,15 @@ export interface Function extends Resource<
  * keys omitted from `env` and bindings are removed. Values are write-only, so
  * cached digests cannot detect out-of-band value drift.
  *
+ * ### Streaming disconnects <!-- api-prose -->
+ *
+ * Neon’s production host currently does not reliably propagate client disconnects
+ * to uncompressed response streams. An abandoned stream can retain its producer
+ * and request-scoped resources until it finishes. Prefer finite responses and
+ * application-bounded streams; do not rely on disconnect cleanup for long-lived
+ * streaming workloads until [the upstream issue](https://github.com/neondatabase/neon-pkgs/issues/636)
+ * is resolved. Alchemy propagates abort and body-cancel signals when the host supplies them.
+ *
  * ### Native Fetch
  * **Example:** Bundle a native object, bare handler, or Hono application
  * ```typescript
@@ -115,15 +124,6 @@ export interface Function extends Resource<
  * ```typescript
  * const site = yield* Neon.Function("Site", { branch, artifact: { directory: "./dist" } });
  * ```
- *
- * ### Streaming disconnects <!-- api-prose -->
- *
- * Neon’s production host currently does not reliably propagate client disconnects
- * to uncompressed response streams. An abandoned stream can retain its producer
- * and request-scoped resources until it finishes. Prefer finite responses and
- * application-bounded streams; do not rely on disconnect cleanup for long-lived
- * streaming workloads until [the upstream issue](https://github.com/neondatabase/neon-pkgs/issues/636)
- * is resolved. Alchemy propagates abort and body-cancel signals when the host supplies them.
  *
  * @resource
  */
