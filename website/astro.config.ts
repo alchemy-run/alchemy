@@ -720,6 +720,8 @@ export default defineConfig({
                 { label: "DynamoDB", link: "/aws/data/dynamodb" },
                 { label: "S3", link: "/aws/data/s3" },
                 { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
               ],
             },
             {
@@ -838,7 +840,13 @@ export default defineConfig({
             },
             {
               label: "Data",
-              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+              items: [
+                { label: "Volumes", link: "/hetzner/data/volumes" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/hetzner/data/drizzle-postgres",
+                },
+              ],
             },
             {
               label: "Networking",
@@ -911,6 +919,10 @@ export default defineConfig({
               items: [
                 { label: "Volumes", link: "/fly/data/volumes" },
                 { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
                 { label: "Redis", link: "/fly/data/redis" },
                 { label: "Tigris", link: "/fly/data/tigris" },
                 { label: "Secrets", link: "/fly/data/secrets" },
@@ -991,6 +1003,14 @@ export default defineConfig({
                 { label: "Volumes", link: "/railway/data/volumes" },
                 { label: "Postgres", link: "/railway/data/postgres" },
                 { label: "MySQL", link: "/railway/data/mysql" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/railway/data/drizzle-postgres",
+                },
+                {
+                  label: "Drizzle + MySQL",
+                  link: "/railway/data/drizzle-mysql",
+                },
                 { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
                 { label: "Variables", link: "/railway/data/variables" },
@@ -1086,6 +1106,10 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/prisma/data/drizzle-postgres",
+                },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
                 { label: "Buckets", link: "/prisma/data/buckets" },
@@ -1289,6 +1313,20 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "Databases", link: "/sql/databases" },
+            {
+              label: "Providers",
+              items: [
+                { label: "AWS", link: "/sql/providers/aws" },
+                { label: "Cloudflare", link: "/sql/providers/cloudflare" },
+                { label: "Fly", link: "/sql/providers/fly" },
+                { label: "Hetzner", link: "/sql/providers/hetzner" },
+                { label: "Neon", link: "/sql/providers/neon" },
+                { label: "PlanetScale", link: "/sql/providers/planetscale" },
+                { label: "Prisma", link: "/sql/providers/prisma" },
+                { label: "Railway", link: "/sql/providers/railway" },
+              ],
+            },
             {
               label: "Effect SQL",
               items: [

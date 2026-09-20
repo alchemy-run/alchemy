@@ -1,0 +1,33 @@
+---
+title: PlanetScale
+description: Choose PlanetScale Postgres or MySQL/Vitess and connect it to your application runtime.
+---
+
+PlanetScale provides Postgres and MySQL/Vitess databases, with separate resources for each engine.
+
+## Postgres
+
+```typescript
+import * as Planetscale from "alchemy/Planetscale";
+
+const database = yield* Planetscale.PostgresDatabase("Database", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+
+const branch = yield* Planetscale.PostgresBranch("App", {
+  database,
+});
+```
+
+See [Postgres](/planetscale/data/postgres) for roles and connection origins, or [MySQL](/planetscale/data/mysql) for the Vitess resource family.
+
+## Connect an application
+
+[PlanetScale with Drizzle](/planetscale/guides/drizzle) covers database configuration. [Worker + Drizzle](/cloudflare/data/drizzle) owns the Cloudflare deployment walkthrough.
+
+Use the portable [Postgres](/sql/drizzle/postgres) or [MySQL](/sql/drizzle/mysql) client guide for other runtimes.
+
+## Setup and migrations
+
+[Configure PlanetScale credentials](/planetscale/setup), then [generate and commit migration files](/sql/drizzle/migrations). [PlanetScale migrations](/planetscale/data/migrations) documents application for each engine.

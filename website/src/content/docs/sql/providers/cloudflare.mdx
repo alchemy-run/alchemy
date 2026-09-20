@@ -1,0 +1,47 @@
+---
+title: Cloudflare
+description: Choose D1, per-object SQLite, or external Postgres/MySQL through Hyperdrive for a Worker.
+---
+
+A Worker can bind D1, use each Durable Object's SQLite database, or connect to Postgres/MySQL through Hyperdrive.
+
+## D1
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+
+const database = yield* Cloudflare.D1.Database("Database", {
+  migrations: "./drizzle",
+});
+```
+
+Use [Drizzle on D1](/cloudflare/data/d1-drizzle) for the complete Worker, or [Effect SQL on D1](/sql/effect-sql/d1) for raw queries.
+
+## Durable Objects
+
+```typescript
+import * as Effect from "effect/Effect";
+
+Effect.gen(function* () {
+  const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
+  return Effect.gen(function* () {
+    yield* migrations.apply().pipe(Effect.orDie);
+    return {};
+  });
+});
+```
+
+See [Durable Objects](/cloudflare/compute/durable-objects#sql-migrations) and [Drizzle migrations](/sql/drizzle/migrations#durable-object-migrations) for per-instance activation.
+
+## Postgres and MySQL
+
+```typescript
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("Database", {
+  origin: branch.origin,
+  dev: branch.pooledOrigin,
+});
+```
+
+Here `branch` is a [Neon branch](/neon/data/branching); [PlanetScale roles](/planetscale/data/postgres#origin-vs-pooledorigin) also expose connection origins. Follow [Hyperdrive](/cloudflare/data/hyperdrive) and [Worker + Drizzle](/cloudflare/data/drizzle) for the full setup.
+
+Start with [Cloudflare setup](/cloudflare/setup), then [generate and commit migrations](/sql/drizzle/migrations).

@@ -1,0 +1,27 @@
+---
+title: Hetzner
+description: Query Postgres from a Hetzner-hosted application with Drizzle or Effect SQL.
+---
+
+Host the application on Hetzner and connect it to a reachable Postgres database, such as Neon. This guide does not provision a managed Hetzner database.
+
+## Query from a handler
+
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import { users } from "./schema.ts";
+
+const url = yield* Config.Redacted("DATABASE_URL");
+const db = yield* Drizzle.Postgres(Effect.succeed(url));
+const rows = yield* db.select().from(users);
+```
+
+Follow [Hetzner + Postgres + Drizzle](/hetzner/data/drizzle-postgres) for application deployment and connection configuration.
+
+## Database and client setup
+
+[Neon](/sql/providers/neon) and [PlanetScale](/sql/providers/planetscale) cover managed database options. The [Postgres client guide](/sql/drizzle/postgres) works with either provider.
+
+See [Hetzner setup](/hetzner/setup) and [generate and commit migrations](/sql/drizzle/migrations).

@@ -1,0 +1,26 @@
+---
+title: AWS
+description: SQL on AWS with RDS, Aurora PostgreSQL, or Aurora DSQL, connected from Lambda.
+---
+
+Use RDS/Aurora for managed Postgres or MySQL, or Aurora DSQL for distributed SQL. Aurora PostgreSQL and Aurora DSQL have separate connection and schema-management workflows.
+
+## Aurora DSQL
+
+```typescript
+import * as AWS from "alchemy/AWS";
+
+const database = yield* AWS.DSQL.Cluster("Database", {});
+```
+
+Follow [Lambda + Aurora DSQL + Drizzle](/aws/data/drizzle-dsql) for IAM authentication and queries.
+
+## Aurora PostgreSQL
+
+Follow [Lambda + Aurora PostgreSQL + Drizzle](/aws/data/drizzle-aurora) for the VPC, database, and Lambda connection. [RDS & Aurora](/aws/data/rds) covers provisioning and the Data API.
+
+## Clients and migrations
+
+[Postgres with Drizzle](/sql/drizzle/postgres) and [Effect SQL](/sql/effect-sql/postgres) cover shared client usage. Generate and commit migration files before deployment; use the AWS guide for the target database's application step.
+
+See [AWS setup](/aws/setup) and the [full-stack DSQL example](/aws/frontend/full-stack-tanstack-rpc-drizzle).

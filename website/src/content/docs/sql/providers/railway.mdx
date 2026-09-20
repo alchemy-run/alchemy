@@ -1,0 +1,31 @@
+---
+title: Railway
+description: Run Postgres or MySQL alongside a Railway Service and query it with Drizzle or Effect SQL.
+---
+
+Railway databases run as services with persistent volumes inside your project.
+
+## Postgres
+
+```typescript
+import * as Railway from "alchemy/Railway";
+
+const project = yield* Railway.Project("App");
+const database = yield* Railway.Postgres("Database", { project });
+```
+
+Follow [Railway + Postgres + Drizzle](/railway/data/drizzle-postgres) for the application and connection binding.
+
+## MySQL
+
+```typescript
+const database = yield* Railway.MySQL("Database", { project });
+```
+
+Follow [Railway + MySQL + Drizzle](/railway/data/drizzle-mysql) for the MySQL driver and binding.
+
+## Connections and migrations
+
+The [Postgres](/railway/data/postgres) and [MySQL](/railway/data/mysql) guides distinguish private service URLs from public access. Generate and commit migration files with schema changes, then apply them using the workflow in the matching deployment guide.
+
+See [Railway setup](/railway/setup), [Effect SQL on Postgres](/sql/effect-sql/postgres), and [Effect SQL on MySQL](/sql/effect-sql/mysql).

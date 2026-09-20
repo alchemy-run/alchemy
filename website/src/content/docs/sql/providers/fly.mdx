@@ -1,0 +1,29 @@
+---
+title: Fly
+description: Connect a Fly Service to Managed Postgres with Drizzle or Effect SQL.
+---
+
+Run a Fly Service alongside a Fly Managed Postgres cluster.
+
+```typescript
+import * as Fly from "alchemy/Fly";
+
+const database = yield* Fly.Postgres("Database", {
+  region: "iad",
+});
+```
+
+The cluster is billed; deployment-time migrations require access to Fly's private network.
+
+## Connect from a Service
+
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+
+const connection = yield* Fly.ConnectPostgres(database);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
+
+The [Fly + Drizzle guide](/fly/data/drizzle-postgres) includes the Service and binding layer. [Managed Postgres](/fly/data/postgres) covers cluster settings and connection URLs.
+
+See [Fly setup](/fly/setup), [Effect SQL on Postgres](/sql/effect-sql/postgres), and [committed migrations](/sql/drizzle/migrations).

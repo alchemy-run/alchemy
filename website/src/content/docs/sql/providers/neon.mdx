@@ -1,0 +1,28 @@
+---
+title: Neon
+description: Provision Postgres projects and branches, then connect them to your application runtime.
+---
+
+Neon provides managed Postgres; your application runs on a separate provider.
+
+## Create a database branch
+
+```typescript
+import * as Neon from "alchemy/Neon";
+
+const project = yield* Neon.Project("Database", {
+  region: "aws-us-east-1",
+});
+
+const branch = yield* Neon.Branch("App", {
+  project,
+});
+```
+
+Commit the migration directory before deployment. See [branching](/neon/data/branching) and [migrations](/neon/data/migrations) for database-specific behavior.
+
+## Connect an application
+
+[Neon connections](/neon/data/connections) documents direct and pooled URLs. Use [Worker + Drizzle](/cloudflare/data/drizzle) for Cloudflare or [Hetzner + Drizzle](/hetzner/data/drizzle-postgres) for a hosted server.
+
+See [Neon setup](/neon/setup), [Neon with Drizzle](/neon/guides/drizzle), and the portable [Postgres client](/sql/drizzle/postgres).
