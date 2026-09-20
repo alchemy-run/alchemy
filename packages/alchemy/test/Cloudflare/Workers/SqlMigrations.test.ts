@@ -269,27 +269,34 @@ for (const dev of [true, false]) {
       { timeout: 90_000 },
     );
 
-    test(
-      "unmatched Drizzle history rejects adoption without changing schema or history",
-      Effect.gen(function* () {
-        const state = yield* json<{
-          error: string | null;
-          before: HistoryRow[];
-          after: HistoryRow[];
-          tables: { name: string }[];
-          users: string[];
-        }>("POST", "/conflict?name=conflict");
-        expect(state.error).toBe("MigrationHistoryConflictError");
-        expect(state.before).toHaveLength(1);
-        expect(state.before[0]!.name).toBe(migrationNames[0]);
-        expect(state.after).toEqual(state.before);
-        expect(state.users).toEqual(["seed"]);
-        expect(state.tables.map((table) => table.name)).not.toContain(
-          "__alchemy_migrations",
-        );
-        expect(state.tables.map((table) => table.name)).not.toContain("posts");
-      }),
-      { timeout: 90_000 },
-    );
+    for (const empty of [false, true]) {
+      test(
+        `${empty ? "empty migration directory" : "unmatched Drizzle history"} rejects adoption without changing schema or history`,
+        Effect.gen(function* () {
+          const state = yield* json<{
+            error: string | null;
+            before: HistoryRow[];
+            after: HistoryRow[];
+            tables: { name: string }[];
+            users: string[];
+          }>(
+            "POST",
+            `/conflict?name=conflict-${empty}${empty ? "&empty" : ""}`,
+          );
+          expect(state.error).toBe("MigrationHistoryConflictError");
+          expect(state.before).toHaveLength(1);
+          expect(state.before[0]!.name).toBe(migrationNames[0]);
+          expect(state.after).toEqual(state.before);
+          expect(state.users).toEqual(["seed"]);
+          expect(state.tables.map((table) => table.name)).not.toContain(
+            "__alchemy_migrations",
+          );
+          expect(state.tables.map((table) => table.name)).not.toContain(
+            "posts",
+          );
+        }),
+        { timeout: 90_000 },
+      );
+    }
   });
 }

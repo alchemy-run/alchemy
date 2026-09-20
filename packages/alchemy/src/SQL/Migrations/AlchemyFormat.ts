@@ -227,7 +227,6 @@ export const applyAlchemyFormat = (options: {
 }): Effect.Effect<void, MigrationError | MigrationHistoryConflictError> =>
   Effect.gen(function* () {
     const { executor, table, records } = options;
-    if (records.length === 0) return;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedNames(executor, table);
     for (const record of records) {

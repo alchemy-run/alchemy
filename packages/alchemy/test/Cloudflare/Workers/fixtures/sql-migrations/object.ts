@@ -188,7 +188,7 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
               })),
             };
           }).pipe(Effect.provideService(Cloudflare.DurableObjectState, state)),
-        conflict: () =>
+        conflict: (empty: boolean = false) =>
           Effect.gen(function* () {
             const first = snapshot.records[0]!;
             const db = yield* Drizzle.DurableObject({
@@ -198,7 +198,7 @@ export class MigrationScenarios extends Cloudflare.DurableObject<MigrationScenar
             const before = yield* history(state, "__drizzle_migrations");
             const result = yield* Cloudflare.applySqlMigrations({
               ...snapshot,
-              records: snapshot.records.slice(1),
+              records: empty ? [] : snapshot.records.slice(1),
             }).pipe(Effect.result);
             return {
               error: Result.isFailure(result) ? result.failure._tag : null,

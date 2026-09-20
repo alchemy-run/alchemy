@@ -78,6 +78,20 @@ for (const dev of [true, false]) {
               .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
             yield* fs.writeFileString(
               path.join(dir, "0002_append.sql"),
+              "INSERT INTO items VALUES ('must-rollback'); INSERT INTO missing_table VALUES (1);",
+            );
+            const broken = yield* deploy;
+            const failed = yield* client.get(broken.url).pipe(
+              Effect.map((response) => response.status),
+              Effect.repeat({
+                until: (status) => status === 500,
+                schedule: Schedule.spaced("1 second"),
+                times: 10,
+              }),
+            );
+            expect(failed).toBe(500);
+            yield* fs.writeFileString(
+              path.join(dir, "0002_append.sql"),
               "INSERT INTO items VALUES ('migration-two');",
             );
             const second = yield* deploy;

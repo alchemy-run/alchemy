@@ -34,6 +34,9 @@ import type { SqlMigrationSnapshot } from "./SqlMigrationsRuntime.ts";
  *       return {
  *         count: () => state.storage.sql.exec<{ count: number }>(
  *           "SELECT count(*) AS count FROM users",
+ *         ).pipe(
+ *           Effect.flatMap((cursor) => cursor.one()),
+ *           Effect.map((row) => row.count),
  *         ),
  *       };
  *     });

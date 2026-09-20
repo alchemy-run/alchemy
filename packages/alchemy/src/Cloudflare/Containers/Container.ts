@@ -328,6 +328,62 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
+ * Builds are cached by default at
+ * `registry.cloudflare.com/<account-id>/<application-physical-name>`.
+ * The generated physical name includes the stage and resource instance, so
+ * subsequent updates in that stage can reuse matching images. Replacement or
+ * destroy/recreate can change the name and start a new cache. This does not
+ * automatically share one repository across every container in the stage.
+ * The same defaults apply to inline Dockerfiles and Effect-native `main` builds.
+ *
+ * **Example:** Reuse builds across stages
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ *   publish: { repository: "web" },
+ * }) {}
+ * ```
+ *
+ * `repository: "web"` names the destination repository, not a source image or
+ * the container application. With the default registry host, Alchemy lowercases
+ * the name and expands it to `registry.cloudflare.com/<account-id>/web`.
+ * Supply only the repository name, without a registry host, account ID, tag,
+ * or digest. A build produces these references:
+ *
+ * ```text
+ * Published build:  registry.cloudflare.com/<account-id>/web:<build-hash>
+ * Build cache:      registry.cloudflare.com/<account-id>/web:buildcache
+ * Deployed image:   registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+ * ```
+ *
+ * The build hash identifies the inputs; the manifest digest identifies the
+ * published artifact. Applications and stages in the same account can use
+ * `publish: { repository: "web" }` to reuse matching published builds. Changed
+ * inputs produce another hash tag in the same repository. Builds targeting
+ * that repository import reusable layers from its shared `:buildcache` tag,
+ * including when full input hashes differ. This mutable tag points to the
+ * latest exported inline cache, not a combined cache of every historical
+ * image. Reusing a finished image does not move the layer-cache tag.
+ *
+ * Pin base images and downloaded dependencies: changes outside the build
+ * context cannot invalidate the input hash. Each stage still has its own
+ * Container application, runtime settings, and instances; only images and
+ * build layers are shared.
+ *
+ * **Example:** Publish an existing image into a named repository
+ * ```typescript
+ * export class Proxy extends Cloudflare.Container<Proxy>()("Proxy", {
+ *   image: "nginx:alpine",
+ *   publish: { repository: "web-proxy" },
+ * }) {}
+ * // Re-publishes nginx into registry.cloudflare.com/<account-id>/web-proxy
+ * // and deploys registry.cloudflare.com/<account-id>/web-proxy@sha256:<manifest-digest>.
+ * ```
+ *
+ * Remote images are re-published without building them. An image already in
+ * the target registry keeps its existing repository; `publish.repository`
+ * does not copy it into another one.
+ *
  * **Example:** Remote image (`image`)
  * ```typescript
  * // Alchemy pulls the public image and re-pushes it to Cloudflare's

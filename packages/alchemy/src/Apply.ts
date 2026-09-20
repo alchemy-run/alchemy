@@ -61,6 +61,7 @@ import {
   type RanActionState,
   type ReplacedResourceState,
   type ReplacementOldResourceState,
+  type ReplacementResourceState,
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
@@ -1956,22 +1957,32 @@ const collectGarbage = Effect.fn(function* (
   const blockedDeletes: BlockedDelete[] = [];
   const unresolved = new Set<string>();
 
-  type DeleteOutcome = "deleted" | "failed" | "blocked";
+  const pendingDeletes = { ...plan.deletions };
+  // Pending means this generation drained; deferred means it is still live.
+  type DeleteOutcome =
+    | "deleted"
+    | "pending"
+    | "deferred"
+    | "failed"
+    | "blocked";
 
   const deleteGraph = Effect.fn(function* (
-    deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,
+    deletionGraph: Record<
+      string,
+      Delete | ReplacementResourceState | undefined
+    >,
   ) {
     const deletions: {
-      [fqn in string]: Effect.Effect<DeleteOutcome, never, ArtifactStore>;
+      [fqn: string]: Effect.Effect<DeleteOutcome, never, ArtifactStore>;
     } = {};
 
     const deleteResource = (
-      node: Delete | ReplacedResourceState,
+      node: Delete | ReplacementResourceState,
       ancestors: ReadonlySet<string> = new Set(),
     ): Effect.Effect<DeleteOutcome, never, ArtifactStore> =>
       Effect.gen(function* () {
         const isDeleteNode = (
-          node: Delete | ReplacedResourceState,
+          node: Delete | ReplacementResourceState,
         ): node is Delete => "action" in node;
 
         const {
@@ -2095,7 +2106,7 @@ const collectGarbage = Effect.fn(function* (
                 dep !== fqn && !ancestors.has(dep)
                   ? dep in deletionGraph
                     ? deleteResource(
-                        deletionGraph[dep] as Delete | ReplacedResourceState,
+                        deletionGraph[dep] as Delete | ReplacementResourceState,
                         nextAncestors,
                       ).pipe(Effect.map((outcome) => ({ dep, outcome })))
                     : // Not in this pass's graph — but it may have failed in
@@ -2112,7 +2123,9 @@ const collectGarbage = Effect.fn(function* (
             );
 
             const blockedBy = dependents
-              .filter(({ outcome }) => outcome !== "deleted")
+              .filter(
+                ({ outcome }) => outcome === "failed" || outcome === "blocked",
+              )
               .map(({ dep }) => dep);
 
             if (blockedBy.length > 0) {
@@ -2128,6 +2141,17 @@ const collectGarbage = Effect.fn(function* (
               );
               yield* report("skipped");
               return "blocked" as const;
+            }
+
+            if (
+              dependents.some(
+                ({ outcome }) =>
+                  outcome === "deferred" ||
+                  (isDeleteNode(node) && outcome === "pending"),
+              )
+            ) {
+              // Even GC must wait when the dependent's physical delete has not run.
+              return "deferred" as const;
             }
 
             return yield* deleteResourceBody().pipe(
@@ -2156,6 +2180,7 @@ const collectGarbage = Effect.fn(function* (
                   fqn,
                 });
                 yield* report("orphaned");
+                delete pendingDeletes[fqn];
                 // Retention is intentional — it never blocks dependencies.
                 return "deleted" as const;
               }
@@ -2301,36 +2326,23 @@ const collectGarbage = Effect.fn(function* (
                 node.old.status === "replacing" ||
                 node.old.status === "replaced"
               ) {
-                // We only deleted the outermost old generation. A nested replacement
-                // chain still exists, so stay in `replaced` and pop the chain forward
-                // one level. The outer loop will pick this resource up again.
-                yield* commit<ReplacedResourceState>({
-                  status: "replaced",
-                  fqn,
-                  logicalId: node.logicalId,
-                  instanceId: node.instanceId,
-                  resourceType: node.resourceType,
-                  props: node.props,
-                  attr: node.attr,
-                  providerVersion: node.providerVersion,
-                  downstream: node.downstream,
+                const remaining: ReplacementResourceState = {
+                  ...node,
                   bindings: excludeDeletedBindings(node.bindings),
                   old: node.old.old,
-                  deleteFirst: node.deleteFirst,
-                  removalPolicy: node.removalPolicy,
-                  providerMode: node.providerMode,
-                });
+                };
+                yield* commit(remaining);
               } else {
-                // The old chain is fully drained, so the current replacement is now
-                // the stable resource and we can collapse back to a terminal state.
-                yield* commit<CreatedResourceState>({
-                  status: "created",
+                // Precreate attributes do not mean the replacement reconcile completed.
+                yield* commit<CreatedResourceState | CreatingResourceState>({
+                  ...(node.status === "replacing"
+                    ? { status: "creating" as const, attr: node.attr }
+                    : { status: "created" as const, attr: node.attr }),
                   fqn,
                   logicalId: node.logicalId,
                   instanceId: node.instanceId,
                   resourceType: node.resourceType,
                   props: node.props,
-                  attr: node.attr,
                   providerVersion: node.providerVersion,
                   downstream: node.downstream,
                   bindings: excludeDeletedBindings(node.bindings),
@@ -2344,7 +2356,15 @@ const collectGarbage = Effect.fn(function* (
                   : "Replaced resource cleanup complete.",
               );
             }
-            return "deleted" as const;
+            if (isDeleteNode(node)) {
+              delete pendingDeletes[fqn];
+              return "deleted" as const;
+            }
+            return node.old.status === "replacing" ||
+              node.old.status === "replaced" ||
+              pendingDeletes[fqn] !== undefined
+              ? ("pending" as const)
+              : ("deleted" as const);
           });
         }
       });
@@ -2361,36 +2381,34 @@ const collectGarbage = Effect.fn(function* (
     );
   });
 
-  // The first pass handles both planned deletions and any top-level replaced
-  // resources already present in state. Later passes only drain replacement
-  // chains that were re-committed as `replaced` while deleting older generations.
-  let first = true;
+  // Drain one old generation per FQN per pass, preserving that generation's
+  // dependency edges. Planned deletions remain queued until their chains drain.
   while (true) {
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    }))
-      // A row whose drain already failed (or was blocked) this run stays
-      // `replaced` in state — retrying it in a later pass would loop forever.
-      // It stays behind for the next destroy; the aggregate error below
-      // reports it.
-      .filter((replaced) => !unresolved.has(replaced.fqn));
-    if (!first && remainingReplacedResources.length === 0) {
-      break;
+    })).filter((replaced) => !unresolved.has(replaced.fqn));
+    const deletionGraph: Record<
+      string,
+      Delete | ReplacementResourceState | undefined
+    > = Object.fromEntries(
+      remainingReplacedResources.map((replaced) => [replaced.fqn, replaced]),
+    );
+    for (const [fqn, node] of Object.entries(pendingDeletes)) {
+      if (node === undefined || unresolved.has(fqn)) continue;
+      const current = yield* state.get({ stack: stackName, stage, fqn });
+      if (current === undefined) {
+        delete pendingDeletes[fqn];
+      } else if (current.kind !== "action") {
+        deletionGraph[fqn] =
+          node.action !== "orphaned" &&
+          (current.status === "replacing" || current.status === "replaced")
+            ? current
+            : { ...node, state: current, downstream: current.downstream };
+      }
     }
-    yield* deleteGraph({
-      // Orphan/resource deletions from the current plan should only run once.
-      ...(first ? plan.deletions : {}),
-      ...Object.fromEntries(
-        remainingReplacedResources.map((replaced) => [
-          // Key by the persisted FQN (not a recomputed one) so logical IDs
-          // containing the FQN separator round-trip correctly.
-          replaced.fqn,
-          replaced,
-        ]),
-      ),
-    });
-    first = false;
+    if (Object.keys(deletionGraph).length === 0) break;
+    yield* deleteGraph(deletionGraph);
   }
 
   if (failures.length > 0) {

@@ -2,8 +2,10 @@ import * as SqliteDoClient from "@effect/sql-sqlite-do/SqliteClient";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
 import * as SQLiteDoDrizzle from "drizzle-orm/effect-sqlite-do";
 import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scheduler from "effect/Scheduler";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
 import { applySqlMigrations } from "../Cloudflare/Workers/SqlMigrationsApply.ts";
 import type { SqlMigrationSnapshot } from "../Cloudflare/Workers/SqlMigrationsRuntime.ts";
@@ -121,6 +123,14 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   // Built on the ambient (instance) Scope — the client wraps the DO's
   // local SQLite storage, so there is no disposable resource behind it.
   const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
+  const client = Context.get(services, SqliteDoClient.SqliteClient);
+  const original = client.withTransaction;
+  const scheduler = new Scheduler.MixedScheduler("sync");
+  const withTransaction: typeof client.withTransaction = (body) =>
+    original(body).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+  // A parent input-gate timer can block later transaction timers. Yield through
+  // microtasks while retaining the adapter's client, SQL permit, and context.
+  yield* Effect.sync(() => Object.assign(client, { withTransaction }));
   const db = yield* SQLiteDoDrizzle.makeWithDefaults({
     ...(drizzleConfig as Omit<
       SQLiteDoDrizzle.EffectDrizzleSQLiteDoConfig<TRelations>,

@@ -76,6 +76,8 @@ export interface SourceBuildOutput {
  * once per stack.
  */
 export interface SourceContext {
+  /** Resolved runtime storage directory, excluded from source inputs. */
+  readonly dotAlchemy?: string;
   /** Logical id of the Worker resource. */
   readonly id: string;
   /** Namespace-qualified id (`ns/Worker`) — the display prefix for log lines. */
@@ -386,6 +388,7 @@ export const resolveSource = (
  * persisted output state rather than the name generator).
  */
 export const makeSourceContext = (params: {
+  dotAlchemy?: string;
   id: string;
   fqn: string;
   workerName: string;
@@ -393,6 +396,7 @@ export const makeSourceContext = (params: {
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
 }): SourceContext => ({
+  dotAlchemy: params.dotAlchemy,
   id: params.id,
   fqn: params.fqn,
   workerName: params.workerName,

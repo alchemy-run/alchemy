@@ -77,7 +77,10 @@ export default class SqlMigrationsWorker extends Cloudflare.Worker<SqlMigrations
         }
         if (route === "POST /conflict") {
           return yield* HttpServerResponse.json(
-            yield* scenarios.getByName(name).conflict().pipe(Effect.orDie),
+            yield* scenarios
+              .getByName(name)
+              .conflict(url.searchParams.has("empty"))
+              .pipe(Effect.orDie),
           );
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
