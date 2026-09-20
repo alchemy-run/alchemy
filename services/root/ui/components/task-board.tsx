@@ -1,11 +1,12 @@
 /**
- * The BOARD (`/tasks/:queue`) — the ONE work stream, six columns
- * (inbox | ready | working | review | parked | done), TAG filter
- * pills (All + every known/seen area tag), and the DESK STRIP: each
- * desk's agent with the task it is working (live elapsed) or "idle".
- * Cards wear small tag chips and click into the task page; the ⋯
+ * The BOARD (`/tasks/:queue`) — a SIDEBAR that teaches the mental
+ * model (one work stream › its agents' DESKS › TAGS as mere labels)
+ * beside six columns (inbox | ready | working | review | parked |
+ * done). Desks are one-per-agent standing threads; tags are area
+ * labels the router assigns — filters and scheduling affinity, never
+ * desks. Cards wear tag chips and click into the task page; the ⋯
  * menu is the human override (a `routed` event with actor `sam`);
- * desk entries click into the desk view.
+ * desk rows click into the desk view.
  */
 import { Avatar } from "@/components/avatar";
 import { PostRef } from "@/components/post-thread";
@@ -264,8 +265,8 @@ const TaskCard = ({
   </div>
 );
 
-/** One desk of the strip — the agent, and what it is working. */
-const DeskChip = ({
+/** One desk of the sidebar — the agent, and what it is working. */
+const DeskRow = ({
   queue,
   desk,
   now,
@@ -280,23 +281,40 @@ const DeskChip = ({
   <button
     type="button"
     onClick={() => showDesk(queue, desk.slug)}
-    title={`open the ${desk.slug} desk`}
-    className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-2 py-1 text-[11px] hover:bg-accent"
+    title={`open the ${desk.slug} desk — its one long-lived working thread`}
+    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-accent/60"
   >
-    <Avatar name={desk.slug} kind="agent" size={16} />
-    <span className="font-mono font-semibold">{desk.slug}</span>
-    {desk.working !== undefined ? (
-      <span className="flex items-center gap-1 text-primary/80">
-        <Loader2 className="size-3 shrink-0 animate-spin" />
-        {desk.working}
-        {workingSince !== undefined && (
-          <> · {elapsedOf(now - workingSince)}</>
-        )}
+    <Avatar name={desk.slug} kind="agent" size={18} />
+    <span className="min-w-0 flex-1">
+      <span className="block truncate font-mono font-semibold">
+        {desk.slug}
       </span>
-    ) : (
-      <span className="text-muted-foreground">idle</span>
-    )}
+      {desk.working !== undefined ? (
+        <span className="flex items-center gap-1 text-[10.5px] text-primary/80">
+          <Loader2 className="size-3 shrink-0 animate-spin" />
+          <span className="truncate">
+            {desk.working}
+            {workingSince !== undefined && <> · {elapsedOf(now - workingSince)}</>}
+          </span>
+        </span>
+      ) : (
+        <span className="block text-[10.5px] text-muted-foreground">idle</span>
+      )}
+    </span>
   </button>
+);
+
+/** A sidebar section's tiny caption — the mental model, in place. */
+const SideNote = ({ children }: { children: string }) => (
+  <p className="px-2 pb-1.5 text-[10.5px] leading-snug text-muted-foreground/80">
+    {children}
+  </p>
+);
+
+const SideHeading = ({ children }: { children: string }) => (
+  <div className="px-2 pt-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+    {children}
+  </div>
 );
 
 export const TaskBoard = ({ queue }: { queue?: string }) => {
@@ -368,67 +386,96 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
         ).filter((candidate) => !KNOWN_TAGS.includes(candidate))),
   ].filter((candidate, index, all) => all.indexOf(candidate) === index);
 
+  // tasks per tag, board-wide — the sidebar's filter counts
+  const countOf = (candidate: string) =>
+    board === undefined
+      ? 0
+      : BOARD_STATES.flatMap((state) => board[state] ?? []).filter((task) =>
+          task.tags.includes(candidate),
+        ).length;
+
   return (
     <section
       aria-label={`task board ${selected.slug}`}
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      className="flex min-h-0 min-w-0 flex-1"
     >
-      {/* the tag filter pills + the desk strip */}
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-        <div className="flex flex-wrap items-center gap-1">
+      {/* the sidebar — the mental model made visible:
+          one QUEUE › its agents' DESKS › TAGS as mere labels */}
+      <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-muted/20 px-2 pb-3">
+        <SideHeading>work stream</SideHeading>
+        <SideNote>a queue of tasks, staffed by the desks below</SideNote>
+        <div
+          className="rounded-md bg-accent px-2 py-1.5 text-[12px] font-semibold"
+          title={selected.prose}
+        >
+          {selected.name}
+        </div>
+
+        <SideHeading>desks</SideHeading>
+        <SideNote>
+          one per agent — every task this stream assigns an agent runs
+          through its single long-lived thread
+        </SideNote>
+        {selected.desks.map((desk) => (
+          <DeskRow
+            key={desk.slug}
+            queue={selected.slug}
+            desk={desk}
+            now={now}
+            workingSince={
+              working.find((task) => task.id === desk.working)?.updated
+            }
+          />
+        ))}
+
+        <SideHeading>tags</SideHeading>
+        <SideNote>
+          area labels the router assigns — they filter and steer
+          scheduling; tags do not have desks
+        </SideNote>
+        <button
+          type="button"
+          onClick={() => setTag(undefined)}
+          className={cn(
+            "flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1 text-left text-xs",
+            tag === undefined
+              ? "bg-accent font-semibold"
+              : "text-muted-foreground hover:bg-accent/60",
+          )}
+        >
+          All
+        </button>
+        {tags.map((candidate) => (
           <button
+            key={candidate}
             type="button"
-            onClick={() => setTag(undefined)}
+            title={`show only ${candidate} tasks`}
+            onClick={() => setTag(candidate === tag ? undefined : candidate)}
             className={cn(
-              "cursor-pointer rounded-md px-2 py-0.5 text-xs",
-              tag === undefined
-                ? "bg-accent font-semibold"
-                : "text-muted-foreground hover:bg-accent/60",
+              "flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1 text-left",
+              candidate === tag ? "bg-accent" : "hover:bg-accent/60",
             )}
           >
-            All
-          </button>
-          {tags.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              title={`show only ${candidate} tasks`}
-              onClick={() =>
-                setTag(candidate === tag ? undefined : candidate)
-              }
+            <span
               className={cn(
-                "cursor-pointer rounded-md px-2 py-0.5 font-mono text-xs",
+                "rounded-full px-1.5 py-px font-mono text-[11px]",
                 tagColor(candidate),
-                candidate === tag
-                  ? "font-semibold ring-1 ring-current"
-                  : "opacity-70 hover:opacity-100",
+                candidate === tag ? "font-semibold" : "opacity-80",
               )}
             >
               {candidate}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex min-w-0 items-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            desks
-          </span>
-          {selected.desks.map((desk) => (
-            <DeskChip
-              key={desk.slug}
-              queue={selected.slug}
-              desk={desk}
-              now={now}
-              workingSince={
-                working.find((task) => task.id === desk.working)?.updated
-              }
-            />
-          ))}
-        </div>
-      </header>
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {countOf(candidate) || ""}
+            </span>
+          </button>
+        ))}
+      </aside>
 
       {/* the six columns */}
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 py-3">
-        {board === undefined ? (
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 py-3">
+          {board === undefined ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
             loading the board…
           </div>
@@ -467,13 +514,14 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
             );
           })
         )}
-      </div>
-      {empty && (
-        <div className="shrink-0 px-4 pb-4 text-center text-[12px] text-muted-foreground">
-          nothing in the {selected.name} stream yet — file a task and the
-          router places it
         </div>
-      )}
+        {empty && (
+          <div className="shrink-0 px-4 pb-4 text-center text-[12px] text-muted-foreground">
+            nothing in the {selected.name} stream yet — file a task and the
+            router places it
+          </div>
+        )}
+      </div>
     </section>
   );
 };
