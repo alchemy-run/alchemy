@@ -1,5 +1,10 @@
 import * as Layer from "effect/Layer";
 import * as UIProvider from "../../UI/UIProvider.ts";
+import type { ClientVpnAuthorizationRule } from "./ClientVpnAuthorizationRule.ts";
+import type { ClientVpnEndpoint } from "./ClientVpnEndpoint.ts";
+import type { ClientVpnRoute } from "./ClientVpnRoute.ts";
+import type { ClientVpnTargetNetworkAssociation } from "./ClientVpnTargetNetworkAssociation.ts";
+import type { DefaultSecurityGroup } from "./DefaultSecurityGroup.ts";
 import type { DhcpOptions } from "./DhcpOptions.ts";
 import type { EIP } from "./EIP.ts";
 import type { EgressOnlyInternetGateway } from "./EgressOnlyInternetGateway.ts";
@@ -804,6 +809,156 @@ export const VpcPeeringConnectionUI = UIProvider.succeed<VpcPeeringConnection>(
   },
 );
 
+export const ClientVpnEndpointUI = UIProvider.succeed<ClientVpnEndpoint>(
+  "AWS.EC2.ClientVpnEndpoint",
+  {
+    displayName: "Client VPN Endpoint",
+    icon: "lock",
+    color: NETWORK_PURPLE,
+    category: "network",
+    summary: (ctx) => ctx.attrs?.dnsName ?? ctx.attrs?.clientVpnEndpointId,
+    link: (ctx) => ctx.attrs?.selfServicePortalUrl,
+    consoleUrl: (ctx) =>
+      ctx.attrs?.clientVpnEndpointId === undefined
+        ? undefined
+        : vpcConsole(
+            regionOfArn(ctx.attrs?.clientVpnEndpointArn),
+            `ClientVPNEndpointDetails:clientVpnEndpointId=${ctx.attrs.clientVpnEndpointId}`,
+          ),
+    facts: (ctx) => [
+      {
+        label: "endpoint id",
+        value: ctx.attrs?.clientVpnEndpointId,
+        mono: true,
+        copy: true,
+      },
+      {
+        label: "arn",
+        value: ctx.attrs?.clientVpnEndpointArn,
+        mono: true,
+        copy: true,
+      },
+      { label: "dns name", value: ctx.attrs?.dnsName, mono: true, copy: true },
+      { label: "status", value: ctx.attrs?.status },
+      { label: "client cidr", value: ctx.attrs?.clientCidrBlock, mono: true },
+      { label: "vpc", value: ctx.attrs?.vpcId, mono: true },
+      { label: "split tunnel", value: ctx.attrs?.splitTunnel },
+    ],
+  },
+);
+
+export const ClientVpnAuthorizationRuleUI =
+  UIProvider.succeed<ClientVpnAuthorizationRule>(
+    "AWS.EC2.ClientVpnAuthorizationRule",
+    {
+      displayName: "Client VPN Authorization Rule",
+      icon: "shield-check",
+      color: NETWORK_PURPLE,
+      category: "network",
+      summary: (ctx) => ctx.attrs?.targetNetworkCidr,
+      facts: (ctx) => [
+        {
+          label: "target cidr",
+          value: ctx.attrs?.targetNetworkCidr,
+          mono: true,
+          copy: true,
+        },
+        {
+          label: "endpoint",
+          value: ctx.attrs?.clientVpnEndpointId,
+          mono: true,
+        },
+        { label: "access group", value: ctx.attrs?.accessGroupId, mono: true },
+        { label: "all groups", value: ctx.attrs?.authorizeAllGroups },
+        { label: "status", value: ctx.attrs?.status },
+        { label: "description", value: ctx.attrs?.description },
+      ],
+    },
+  );
+
+export const ClientVpnRouteUI = UIProvider.succeed<ClientVpnRoute>(
+  "AWS.EC2.ClientVpnRoute",
+  {
+    displayName: "Client VPN Route",
+    icon: "route",
+    color: NETWORK_PURPLE,
+    category: "network",
+    summary: (ctx) => ctx.attrs?.destinationCidrBlock,
+    facts: (ctx) => [
+      {
+        label: "destination",
+        value: ctx.attrs?.destinationCidrBlock,
+        mono: true,
+        copy: true,
+      },
+      {
+        label: "target subnet",
+        value: ctx.attrs?.targetVpcSubnetId,
+        mono: true,
+      },
+      { label: "endpoint", value: ctx.attrs?.clientVpnEndpointId, mono: true },
+      { label: "status", value: ctx.attrs?.status },
+      { label: "origin", value: ctx.attrs?.origin },
+      { label: "type", value: ctx.attrs?.type },
+    ],
+  },
+);
+
+export const ClientVpnTargetNetworkAssociationUI =
+  UIProvider.succeed<ClientVpnTargetNetworkAssociation>(
+    "AWS.EC2.ClientVpnTargetNetworkAssociation",
+    {
+      displayName: "Client VPN Target Network Association",
+      icon: "link",
+      color: NETWORK_PURPLE,
+      category: "network",
+      summary: (ctx) => ctx.attrs?.associationId,
+      facts: (ctx) => [
+        {
+          label: "association id",
+          value: ctx.attrs?.associationId,
+          mono: true,
+          copy: true,
+        },
+        {
+          label: "endpoint",
+          value: ctx.attrs?.clientVpnEndpointId,
+          mono: true,
+        },
+        { label: "subnet", value: ctx.attrs?.subnetId, mono: true },
+        { label: "vpc", value: ctx.attrs?.vpcId, mono: true },
+        { label: "status", value: ctx.attrs?.status },
+      ],
+    },
+  );
+
+export const DefaultSecurityGroupUI = UIProvider.succeed<DefaultSecurityGroup>(
+  "AWS.EC2.DefaultSecurityGroup",
+  {
+    displayName: "Default Security Group",
+    icon: "shield",
+    color: COMPUTE_ORANGE,
+    category: "security",
+    summary: (ctx) => ctx.attrs?.groupId,
+    consoleUrl: (ctx) =>
+      ctx.attrs?.groupId === undefined
+        ? undefined
+        : ec2Console(
+            regionOfArn(ctx.attrs?.groupArn),
+            `SecurityGroup:groupId=${ctx.attrs.groupId}`,
+          ),
+    facts: (ctx) => [
+      { label: "group id", value: ctx.attrs?.groupId, mono: true, copy: true },
+      { label: "arn", value: ctx.attrs?.groupArn, mono: true, copy: true },
+      { label: "vpc", value: ctx.attrs?.vpcId, mono: true },
+      { label: "owner", value: ctx.attrs?.ownerId, mono: true },
+      { label: "description", value: ctx.attrs?.description },
+      { label: "ingress rules", value: ctx.attrs?.ingressRules?.length },
+      { label: "egress rules", value: ctx.attrs?.egressRules?.length },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     VpcUI,
@@ -832,4 +987,9 @@ export const ui = () =>
     VolumeUI,
     VolumeAttachmentUI,
     VpcPeeringConnectionUI,
+    ClientVpnEndpointUI,
+    ClientVpnAuthorizationRuleUI,
+    ClientVpnRouteUI,
+    ClientVpnTargetNetworkAssociationUI,
+    DefaultSecurityGroupUI,
   );
