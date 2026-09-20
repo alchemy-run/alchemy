@@ -159,6 +159,67 @@ test.provider(
 );
 
 test.provider(
+  "allocate a Flycast private_v6 next to a public v6",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const app = yield* Fly.App("IpFlycastApp");
+        const flycast = yield* Fly.IpAssignment("Flycast", {
+          app,
+          type: "private_v6",
+        });
+        const publicIp = yield* Fly.IpAssignment("Public", {
+          app,
+          type: "v6",
+        });
+        return { app, flycast, publicIp };
+      });
+
+      const created = yield* stack.deploy(program);
+
+      expect(created.flycast.type).toEqual("private_v6");
+      expect(created.flycast.ip.toLowerCase().startsWith("fdaa:")).toEqual(
+        true,
+      );
+      expect(created.flycast.shared).toEqual(false);
+      expect(created.publicIp.type).toEqual("v6");
+      expect(created.publicIp.ip).not.toEqual(created.flycast.ip);
+      expect(created.publicIp.ip.toLowerCase().startsWith("fdaa:")).toEqual(
+        false,
+      );
+
+      const fetched = yield* listedHas(created.app.appName, created.flycast.ip);
+      expect(fetched?.ip).toEqual(created.flycast.ip);
+
+      // Both families are IPv6: a redeploy must keep each address.
+      const updated = yield* stack.deploy(program);
+      expect(updated.flycast.ip).toEqual(created.flycast.ip);
+      expect(updated.flycast.type).toEqual("private_v6");
+      expect(updated.publicIp.ip).toEqual(created.publicIp.ip);
+      expect(updated.publicIp.type).toEqual("v6");
+
+      const provider = yield* Provider.findProvider(Fly.IpAssignment);
+      const all = yield* provider.list();
+      expect(all.find((row) => row.ip === created.flycast.ip)?.type).toEqual(
+        "private_v6",
+      );
+
+      yield* stack.destroy();
+
+      const ipGone = yield* waitUntilIpGone(
+        created.app.appName,
+        created.flycast.ip,
+      );
+      expect(ipGone).toEqual("gone");
+      const appGone = yield* waitUntilAppGone(created.app.appName);
+      expect(appGone).toEqual("gone");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
   "list enumerates the deployed assignment",
   (stack) =>
     Effect.gen(function* () {

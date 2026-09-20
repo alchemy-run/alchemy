@@ -19,9 +19,10 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 /**
  * Fly IP family allocated onto an App. Dedicated `v4` is billed and may
  * be rejected when the org has no IPv4 quota. Prefer `v6` (free) or
- * `shared_v4` (free) in tests.
+ * `shared_v4` (free) in tests. `private_v6` is a Flycast address: it is
+ * reachable only from the organization's private network.
  */
-export type IpAssignmentType = "v4" | "v6" | "shared_v4";
+export type IpAssignmentType = "v4" | "v6" | "shared_v4" | "private_v6";
 
 export interface IpAssignmentProps {
   /**
@@ -32,8 +33,9 @@ export interface IpAssignmentProps {
   /**
    * Address family to allocate. `v6` is a dedicated IPv6 (free).
    * `shared_v4` is a shared Anycast IPv4 (free). `v4` is a dedicated
-   * IPv4 (billed; may 400 when the org is over quota). Changing type
-   * replaces the assignment.
+   * IPv4 (billed; may 400 when the org is over quota). `private_v6` is
+   * a Flycast IPv6 (free) that Fly's proxy serves only inside the
+   * private network. Changing type replaces the assignment.
    */
   type: IpAssignmentType;
   /**
@@ -41,7 +43,8 @@ export interface IpAssignmentProps {
    */
   region?: string;
   /**
-   * Isolated network name. Create-only; changing it replaces.
+   * Private network a `private_v6` address is reachable from. Defaults
+   * to the organization's network. Create-only; changing it replaces.
    */
   network?: string;
   /**
@@ -141,6 +144,22 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * });
  * ```
  *
+ * ### Flycast (private IPv6)
+ * `private_v6` is a Flycast address. Fly's proxy serves it only inside
+ * the organization's private network, at `{app}.flycast`. It is free.
+ * Use it for a backend that another App calls and the internet must
+ * not reach. Requests still go through the proxy, so blue/green
+ * cordoning, `autostart`, and `autostop` keep working. Allocate no
+ * public address on the same App.
+ *
+ * **Example:** Allocate private_v6
+ * ```typescript
+ * export const Private = Fly.IpAssignment("Private", {
+ *   app: Backend,
+ *   type: "private_v6",
+ * });
+ * ```
+ *
  * ### Region
  * `region` pins a dedicated address. Shared Anycast ignores it. See
  * [Regions](/fly/compute/regions) for the list of codes.
@@ -176,14 +195,15 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  * :::
  *
  * ### Isolated network
- * `network` is an optional 6PN name. Create-only.
+ * `network` names the private network a `private_v6` address is
+ * reachable from. Create-only.
  *
  * **Example:** Custom network
  * ```typescript
  * export const Private = Fly.IpAssignment("Private", {
- *   app: Site,
- *   type: "v6",
- *   network: "private",
+ *   app: Backend,
+ *   type: "private_v6",
+ *   network: "tenant-a",
  * });
  * ```
  *
@@ -259,7 +279,15 @@ const appNameOf = (value: unknown): string | undefined => {
 };
 
 const asType = (value: string | undefined): IpAssignmentType | undefined =>
-  value === "v4" || value === "v6" || value === "shared_v4" ? value : undefined;
+  value === "v4" ||
+  value === "v6" ||
+  value === "shared_v4" ||
+  value === "private_v6"
+    ? value
+    : undefined;
+
+/** Flycast addresses are allocated from Fly's private `fdaa::/16` range. */
+const isPrivateIp = (ip: string) => ip.toLowerCase().startsWith("fdaa:");
 
 const inferType = (
   assignment: FlyIPAssignment,
@@ -269,6 +297,7 @@ const inferType = (
   if (wire !== undefined) return wire;
   if (assignment.shared === true) return "shared_v4";
   const ip = assignment.ip ?? "";
+  if (isPrivateIp(ip)) return "private_v6";
   if (ip.includes(":")) return "v6";
   if (fallback !== undefined) return fallback;
   return ip.length > 0 ? "v4" : (fallback ?? "v4");
