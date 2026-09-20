@@ -11,6 +11,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { contract } from "./fixtures/client/contract.ts";
 import { makeDatabase } from "./fixtures/psl/generated/client.ts";
+import { makeDatabase as makeVariantDatabase } from "./fixtures/variants/generated/client.ts";
 import { schemas } from "./fixtures/psl/generated/schemas.ts";
 import * as Schema from "effect/Schema";
 
@@ -79,6 +80,99 @@ test.provider(
           yield* db.orm.public.Post.where({ authorId: user.id }).delete();
           yield* db.orm.public.User.where({ id: user.id }).delete();
           expect(yield* db.orm.public.User.all()).toEqual([]);
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  { timeout: HOOK_TIMEOUT },
+);
+
+test.provider(
+  "polymorphic collections: single-table and multi-table variants",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const path = yield* Path.Path;
+      const config = yield* path.fromFileUrl(
+        new URL("./fixtures/variants/prisma.config.ts", import.meta.url),
+      );
+      const { branch } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const contract = yield* Prisma.Contract("variant-contract", {
+            config,
+          });
+          const project = yield* Neon.Project("PrismaVariantProject");
+          const branch = yield* Neon.Branch("PrismaVariantBranch", { project });
+          yield* Prisma.Migrate("variant-migrate", {
+            contract,
+            url: branch.connectionUri,
+          });
+          return { branch };
+        }),
+      );
+      const db = yield* makeVariantDatabase(
+        Effect.succeed(Redacted.make(branch.connectionUri)),
+      );
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const assignee = yield* db.orm.public.Assignee.create({
+            name: "Sam",
+          });
+          const bug = yield* db.orm.public.Task.variant("Bug").create({
+            title: "Crash",
+            severity: "critical",
+            assigneeId: assignee.id,
+          });
+          const feature = yield* db.orm.public.Task.variant("Feature").create({
+            title: "Search",
+            priority: 3,
+          });
+          expect(bug).toMatchObject({ type: "bug", severity: "critical" });
+          expect(feature).toMatchObject({ type: "feature", priority: 3 });
+          const all = yield* db.orm.public.Task.orderBy((task) =>
+            task.id.asc(),
+          ).all();
+          expect(all.map((task) => task.type)).toEqual(["bug", "feature"]);
+          const narrowed = yield* db.orm.public.Task.variant("Feature")
+            .where((task) => task.priority.gte(3))
+            .orderBy((task) => task.priority.desc())
+            .first();
+          expect(narrowed).toMatchObject({ id: feature.id, priority: 3 });
+          const included = yield* db.orm.public.Task.variant("Bug")
+            .include("assignee")
+            .first();
+          expect(included?.assignee).toEqual(assignee);
+          const selected = yield* db.orm.public.Task.variant("Bug")
+            .include("assignee", (person) => person.select("name"))
+            .select("id", "title")
+            .first();
+          expect(selected).toEqual({
+            id: bug.id,
+            title: "Crash",
+            assignee: { name: "Sam" },
+          });
+          const rolledBack = yield* db
+            .transaction((tx) =>
+              Effect.gen(function* () {
+                yield* tx.orm.public.Task.variant("Feature").create({
+                  title: "Undo",
+                  priority: 5,
+                });
+                return yield* tx.rollback();
+              }),
+            )
+            .pipe(Effect.result);
+          expect(Result.isFailure(rolledBack)).toBe(true);
+          expect(
+            yield* db.orm.public.Task.variant("Feature").all(),
+          ).toHaveLength(1);
+          expect(
+            yield* db.orm.public.Task.variant("Feature").deleteAndCount(),
+          ).toBe(1);
+          expect(
+            yield* db.orm.public.Task.variant("Bug").deleteAndCount(),
+          ).toBe(1);
+          expect(yield* db.orm.public.Task.all()).toEqual([]);
         }),
       );
       yield* stack.destroy();
@@ -278,6 +372,60 @@ test.provider(
             .select("title")
             .all();
           expect(distinct).toHaveLength(5);
+          const distinctOn = yield* db.orm.public.Post.orderBy([
+            (post) => post.title.asc(),
+            (post) => post.id.asc(),
+          ])
+            .distinctOn("title")
+            .all();
+          expect(distinctOn).toHaveLength(5);
+          expect(distinctOn.find((post) => post.title === "repeat")?.id).toBe(
+            repeats[0]!.id,
+          );
+          expect(
+            yield* db.orm.public.Post.aggregate((aggregate) => ({
+              total: aggregate.count(),
+              highestId: aggregate.max("id"),
+            })),
+          ).toEqual({ total: 6, highestId: repeats[1]!.id });
+          expect(
+            yield* db.orm.public.Post.groupBy("authorId")
+              .having((aggregate) => aggregate.count().gt(6))
+              .aggregate((aggregate) => ({ total: aggregate.count() })),
+          ).toEqual([]);
+          expect(
+            yield* db.orm.public.Post.groupBy("authorId")
+              .orderBy((post) => post.authorId.asc())
+              .offset(1)
+              .aggregate((aggregate) => ({ total: aggregate.count() })),
+          ).toEqual([]);
+          const changed = yield* db.orm.public.Post.where({
+            title: "repeat",
+          }).updateAll({ title: "updated" });
+          expect(changed.map((post) => post.title)).toEqual([
+            "updated",
+            "updated",
+          ]);
+          expect(
+            yield* db.orm.public.Post.where({
+              title: "updated",
+            }).updateAndCount({ title: "counted" }),
+          ).toBe(2);
+          const removed = yield* db.orm.public.Post.where({ title: "counted" })
+            .deleteAll()
+            .stream.pipe(Stream.runCollect);
+          expect(removed).toHaveLength(2);
+          expect(
+            yield* db.orm.public.Post.where({
+              title: "bulk-count",
+            }).deleteAndCount(),
+          ).toBe(1);
+          expect(
+            yield* db.orm.public.Post.orderBy((post) => post.id.asc())
+              .offset(1)
+              .limit(1)
+              .first(),
+          ).toMatchObject({ title: "bulk-one" });
 
           // granular constraint tags: unique violation is its own error
           const dup = yield* db.orm.public.User.create({

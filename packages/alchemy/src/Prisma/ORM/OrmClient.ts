@@ -101,6 +101,14 @@ type RelatedRow<
   TargetNamespace<C, Relation<C, Ns, M, Rel>, Ns>,
   RelatedModelName<C, M, Rel, Ns> & string
 >;
+type IncludeOwner<
+  C extends AnyContract,
+  Ns extends string,
+  M extends string,
+  Rel extends string,
+  S extends CollectionTypeState,
+> = Rel extends RelationNames<C, M, Ns> ? M : S["variantName"] & string;
+type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 type Cardinality<Rel> = Rel extends { readonly cardinality: infer Card }
   ? Card
   : "1:N";
@@ -139,7 +147,14 @@ type Refinement<
     RelatedRow<C, Ns, M, Rel>,
     InitialState<TargetNamespace<C, Relation<C, Ns, M, Rel>, Ns>>
   >,
-  Terminal
+  | Terminal
+  | (Cardinality<Relation<C, Ns, M, Rel>> extends "1:1" | "N:1"
+      ?
+          | "combine"
+          | (string extends keyof AggregateBuilder<C, M, Ns>
+              ? never
+              : keyof AggregateBuilder<C, M, Ns>)
+      : never)
 >;
 type RefinedValue<Rel, T> = T extends {
   readonly kind: "includeScalar" | "includeCombine";
@@ -210,7 +225,7 @@ export interface EffectCollection<
     E,
     R
   >;
-  include<Rel extends RelationNames<C, M, Ns>>(
+  include<Rel extends Parameters<Native<C, M, Row, S>["include"]>[0]>(
     relation: Rel,
   ): EffectCollection<
     C,
@@ -219,8 +234,8 @@ export interface EffectCollection<
     Simplify<
       Row & {
         [K in Rel]: RelationValue<
-          Relation<C, Ns, M, K>,
-          RelatedRow<C, Ns, M, K>
+          Relation<C, Ns, IncludeOwner<C, Ns, M, K, S>, K>,
+          RelatedRow<C, Ns, IncludeOwner<C, Ns, M, K, S>, K>
         >;
       }
     >,
@@ -229,17 +244,28 @@ export interface EffectCollection<
     R
   >;
   include<
-    Rel extends RelationNames<C, M, Ns>,
-    Refined extends RefinementResult,
+    Rel extends Parameters<Native<C, M, Row, S>["include"]>[0],
+    Refined extends (Cardinality<
+      Relation<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>
+    > extends "1:1" | "N:1"
+      ? { readonly _row?: unknown }
+      : RefinementResult),
   >(
     relation: Rel,
-    refine: (collection: Refinement<C, Ns, M, Rel>) => Refined,
+    refine: (
+      collection: Refinement<C, Ns, IncludeOwner<C, Ns, M, Rel, S>, Rel>,
+    ) => Refined,
   ): EffectCollection<
     C,
     Ns,
     M,
     Simplify<
-      Row & { [K in Rel]: RefinedValue<Relation<C, Ns, M, K>, Refined> }
+      Row & {
+        [K in Rel]: RefinedValue<
+          Relation<C, Ns, IncludeOwner<C, Ns, M, K, S>, K>,
+          Refined
+        >;
+      }
     >,
     S,
     E,
@@ -258,7 +284,7 @@ export interface EffectCollection<
     M,
     Simplify<
       Pick<DefaultModelRow<C, M, Ns>, Fields[number]> &
-        Omit<Row, keyof DefaultModelRow<C, M, Ns>>
+        Omit<Row, KeysOfUnion<RootRow<C, Ns, M>>>
     >,
     S,
     E,

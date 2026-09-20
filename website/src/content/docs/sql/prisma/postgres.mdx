@@ -422,6 +422,29 @@ const outcome = yield* db.orm.public.User.create({ email, name }).pipe(
 );
 ```
 
+## Query polymorphic models
+
+For PSL contracts declaring `@@discriminator` and `@@base`, narrow the base
+collection with `variant()`. Both single-table and multi-table variants use
+the same Effect terminals:
+
+```typescript
+const bugs = yield* db.orm.public.Task.variant("Bug")
+  .where((bug) => bug.severity.eq("critical"))
+  .include("assignee")
+  .all();
+```
+
+The narrowed row keeps its literal discriminator and variant fields. `include`
+can load relations declared by that variant. `select` removes unselected scalar
+fields while preserving included relations. Scalar reducers such as `count`
+and `combine` are only available when refining a to-many relation.
+
+Use client-only generation (`{ client: true, schemas: false }`) for these
+contracts: automatic row-schema generation intentionally rejects inherited and
+variant models. Define an application Effect Schema when you need to validate
+a polymorphic response.
+
 ## The sql lane and raw SQL
 
 `db.sql` is Prisma's pure query builder — plans are data, no

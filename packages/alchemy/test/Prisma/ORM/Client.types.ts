@@ -83,6 +83,12 @@ export function clientTypes(db: PostgresDatabase<Contract>) {
     .all();
   // @ts-expect-error refinement callbacks construct queries rather than executing them
   db.orm.public.User.include("posts", (posts) => posts.all());
+  // @ts-expect-error scalar reducers only apply to to-many relations
+  db.orm.public.Post.include("author", (author) => author.count());
+  db.orm.public.Post.include("author", (author) => {
+    // @ts-expect-error combine only applies to to-many relations
+    return author.combine({ row: author });
+  });
 
   const grouped: Effect.Effect<
     Array<{ authorId: number; total: number }>,

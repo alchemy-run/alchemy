@@ -487,8 +487,12 @@
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@prisma/orm-postgres": { "optional": true },
-    "prisma": { "optional": true },
+    "@prisma/orm-postgres": {
+      "optional": true
+    },
+    "prisma": {
+      "optional": true
+    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },
