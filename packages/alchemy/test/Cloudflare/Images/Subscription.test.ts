@@ -7,11 +7,11 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { makeSubscriptionCleanup } from "../Queue/SubscriptionCleanup.ts";
 import {
+  makeSubscriptionCleanup,
   matchesSubscriptionEvent,
   SubscriptionEvent,
-} from "../Queue/SubscriptionEvent.ts";
+} from "../Queue/SubscriptionSources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 const canUpload = process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD === "1";

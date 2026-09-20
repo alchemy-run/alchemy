@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import type { SubscriptionResourceSource } from "@/Cloudflare/Queues/Subscription";
 import * as TestCore from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
 import * as ai from "@distilled.cloud/cloudflare/ai";
@@ -9,9 +10,11 @@ import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
+import { describe, expect, test as unitTest } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import * as Layer from "effect/Layer";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -19,12 +22,61 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import {
   hasReadySubscriptionEvent,
+  makeSubscriptionCleanup,
   matchesSubscriptionEvent,
   SubscriptionEvent,
   type SubscriptionProbe,
-} from "./SubscriptionEvent.ts";
+} from "./SubscriptionSources.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+type Assert<T extends true> = T;
+type Accepts<T> = T extends SubscriptionResourceSource ? true : false;
+type _Variant = Assert<Accepts<Cloudflare.Images.Variant>>;
+type _Namespace = Assert<Accepts<Cloudflare.KV.Namespace>>;
+type _Bucket = Assert<Accepts<Cloudflare.R2.Bucket>>;
+type _Job = Assert<Accepts<Cloudflare.R2.SuperSlurperJob>>;
+type _Index = Assert<Accepts<Cloudflare.Vectorize.Index>>;
+type _Model = Assert<Accepts<Cloudflare.AI.Model>>;
+type _SearchModel = Assert<
+  Cloudflare.AI.SearchModel extends string ? true : false
+>;
+type _SearchModelIsNotResource = Assert<
+  Accepts<Cloudflare.AI.SearchModel> extends false ? true : false
+>;
+type _Worker = Assert<Accepts<Cloudflare.Worker>>;
+
+const references = Effect.gen(function* () {
+  const queue = yield* Cloudflare.Queues.Queue("EventsQueue");
+  const sources = [
+    yield* Cloudflare.Images.Variant.ref("Image"),
+    yield* Cloudflare.KV.Namespace.ref("Cache"),
+    yield* Cloudflare.R2.Bucket.ref("Uploads"),
+    yield* Cloudflare.R2.SuperSlurperJob.ref("Migration"),
+    yield* Cloudflare.Vectorize.Index.ref("Search"),
+    yield* Cloudflare.AI.Model.ref("Embeddings"),
+    yield* Cloudflare.Worker.ref("Website"),
+  ];
+  const Subscription = yield* Cloudflare.Queues.Subscription;
+  for (const [index, source] of sources.entries()) {
+    yield* Subscription(
+      `Events${index}`,
+      Effect.succeed({
+        source,
+        events: ["product.event"],
+        queueId: queue.queueId,
+      }),
+    );
+  }
+  yield* Subscription("Invalid", {
+    // @ts-expect-error arbitrary account-bearing objects are not resource sources
+    source: { accountId: "account", modelName: "model" },
+    events: ["batch.queued"],
+    queueId: queue.queueId,
+  });
+});
+void references;
+
 type Kind = "images" | "kv" | "r2" | "vectorize" | "model" | "worker";
 const createSource = (kind: Kind, id = "Source") =>
   Effect.gen(function* () {
@@ -613,3 +665,571 @@ describe.sequential("resource subscription sources", () => {
     { timeout: 120_000, exclusive: true },
   );
 });
+
+describe("subscription cleanup", () => {
+  unitTest.effect("returns successful cleanup results", () =>
+    Effect.gen(function* () {
+      const cleanup = makeSubscriptionCleanup();
+      expect(yield* cleanup(Effect.succeed(42))).toBe(42);
+    }),
+  );
+
+  unitTest.effect("preserves cleanup failures", () =>
+    Effect.gen(function* () {
+      const cleanup = makeSubscriptionCleanup();
+      const result = yield* cleanup(
+        Effect.fail(new Error("delete failed")),
+      ).pipe(Effect.exit);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result))
+        expect(Cause.pretty(result.cause)).toContain("delete failed");
+    }),
+  );
+
+  unitTest.effect("bounds a stalled release inside scope finalization", () =>
+    Effect.gen(function* () {
+      const cleanup = makeSubscriptionCleanup();
+      const fiber = yield* Effect.acquireRelease(Effect.void, () =>
+        cleanup(Effect.never),
+      ).pipe(
+        Effect.scoped,
+        Effect.exit,
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* TestClock.adjust("5 seconds");
+      const result = yield* Fiber.join(fiber);
+      expect(Exit.isFailure(result)).toBe(true);
+      if (Exit.isFailure(result))
+        expect(Cause.pretty(result.cause)).toContain("TimeoutError");
+    }),
+  );
+
+  unitTest.effect(
+    "shares one deadline across releases and stops starting work when exhausted",
+    () =>
+      Effect.gen(function* () {
+        const cleanup = makeSubscriptionCleanup();
+        yield* cleanup(Effect.void);
+        yield* TestClock.adjust("19 seconds");
+        const fiber = yield* cleanup(Effect.never).pipe(
+          Effect.exit,
+          Effect.forkChild({ startImmediately: true }),
+        );
+        yield* TestClock.adjust("1 second");
+        expect(Exit.isFailure(yield* Fiber.join(fiber))).toBe(true);
+        let started = false;
+        const result = yield* cleanup(
+          Effect.sync(() => {
+            started = true;
+          }),
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(result)).toBe(true);
+        expect(started).toBe(false);
+        if (Exit.isFailure(result))
+          expect(Cause.pretty(result.cause)).toContain(
+            "Subscription cleanup deadline exceeded",
+          );
+      }),
+  );
+});
+
+const expected = {
+  source: "vectorize" as const,
+  type: "index.created",
+  accountId: "account",
+  subscriptionId: "subscription",
+  identity: "vectorize-subscription-0-event",
+};
+const event: SubscriptionEvent = {
+  type: "cf.vectorize.index.created",
+  source: { type: "vectorize" },
+  metadata: {
+    accountId: "account",
+    eventSubscriptionId: "subscription",
+    eventTimestamp: "2026-09-20T00:00:00Z",
+  },
+  payload: { name: expected.identity },
+};
+
+describe("subscription event identity", () => {
+  unitTest(
+    "an early event from the current subscription does not establish settled routing",
+    () => {
+      expect(
+        hasReadySubscriptionEvent(
+          [event],
+          [{ identity: expected.identity, createdAt: 49_000 }],
+          {
+            ...expected,
+            readyAfter: 60_000,
+          },
+        ),
+      ).toBe(false);
+    },
+  );
+
+  unitTest(
+    "an early probe delivered later cannot substitute for a fresh probe",
+    () => {
+      expect(
+        hasReadySubscriptionEvent(
+          [event],
+          [
+            { identity: expected.identity, createdAt: 49_000 },
+            { identity: "fresh-probe", createdAt: 61_000 },
+          ],
+          { ...expected, readyAfter: 60_000 },
+        ),
+      ).toBe(false);
+    },
+  );
+
+  unitTest(
+    "a fresh matching probe establishes readiness after the propagation interval",
+    () => {
+      expect(
+        hasReadySubscriptionEvent(
+          [event],
+          [{ identity: expected.identity, createdAt: 61_000 }],
+          {
+            ...expected,
+            readyAfter: 60_000,
+          },
+        ),
+      ).toBe(true);
+    },
+  );
+
+  unitTest("matches the exact Vectorize event envelope", () => {
+    const decoded = Schema.decodeUnknownSync(SubscriptionEvent)(
+      JSON.stringify(event),
+    );
+    expect(matchesSubscriptionEvent(decoded, expected)).toBe(true);
+  });
+
+  unitTest(
+    "an index name containing the subscription id does not prove subscription identity",
+    () => {
+      expect(
+        matchesSubscriptionEvent(
+          {
+            ...event,
+            metadata: { ...event.metadata, eventSubscriptionId: "other" },
+          },
+          expected,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  unitTest("a readiness probe cannot satisfy a distinct final index", () => {
+    expect(
+      matchesSubscriptionEvent(event, {
+        ...expected,
+        identity: "final-index",
+      }),
+    ).toBe(false);
+  });
+
+  unitTest("matches the whole resource name, not a substring", () => {
+    expect(
+      matchesSubscriptionEvent(
+        {
+          ...event,
+          payload: { name: `${expected.identity}-other` },
+        },
+        expected,
+      ),
+    ).toBe(false);
+  });
+
+  unitTest(
+    "rejects another account even when its name contains the expected account",
+    () => {
+      expect(
+        matchesSubscriptionEvent(
+          {
+            ...event,
+            metadata: { ...event.metadata, accountId: "other" },
+            payload: { name: expected.identity, id: expected.accountId },
+          },
+          expected,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  unitTest("requires the exact event type and product source", () => {
+    expect(
+      matchesSubscriptionEvent(
+        { ...event, type: `${event.type}.other` },
+        expected,
+      ),
+    ).toBe(false);
+    expect(
+      matchesSubscriptionEvent({ ...event, source: { type: "r2" } }, expected),
+    ).toBe(false);
+  });
+
+  unitTest(
+    "matches an Images upload by exact payload id and subscription",
+    () => {
+      const image = {
+        ...event,
+        type: "cf.images.image.uploaded",
+        source: { type: "images" },
+        payload: { id: "subscription-final" },
+      };
+      const target = {
+        ...expected,
+        source: "images" as const,
+        type: "image.uploaded",
+        identity: "subscription-final",
+      };
+      expect(matchesSubscriptionEvent(image, target)).toBe(true);
+      expect(
+        matchesSubscriptionEvent(
+          { ...image, payload: { id: "subscription-probe-0" } },
+          target,
+        ),
+      ).toBe(false);
+      expect(
+        matchesSubscriptionEvent(
+          {
+            ...image,
+            metadata: {
+              ...image.metadata,
+              eventSubscriptionId: "old-subscription",
+            },
+          },
+          target,
+        ),
+      ).toBe(false);
+      expect(
+        matchesSubscriptionEvent(
+          { ...image, payload: { name: target.identity } },
+          target,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  unitTest(
+    "matches KV ids and R2 names in their documented payload fields",
+    () => {
+      expect(
+        matchesSubscriptionEvent(
+          {
+            ...event,
+            type: "cf.kv.namespace.created",
+            source: { type: "kv" },
+            payload: { id: "namespace-id", name: "namespace-name" },
+          },
+          {
+            ...expected,
+            source: "kv",
+            type: "namespace.created",
+            identity: "namespace-id",
+          },
+        ),
+      ).toBe(true);
+      expect(
+        matchesSubscriptionEvent(
+          {
+            ...event,
+            type: "cf.r2.bucket.created",
+            source: { type: "r2" },
+            payload: { name: "bucket-name" },
+          },
+          {
+            ...expected,
+            source: "r2",
+            type: "bucket.created",
+            identity: "bucket-name",
+          },
+        ),
+      ).toBe(true);
+    },
+  );
+});
+
+// Native routing experiments are opt-in; control-plane reads are not delivery barriers.
+for (const change of ["replacement", "update", "paused-update"] as const) {
+  const enabled =
+    process.env[
+      {
+        replacement: "CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_REPLACEMENT",
+        update: "CLOUDFLARE_TEST_VECTORIZE_IMMEDIATE_UPDATE",
+        "paused-update": "CLOUDFLARE_TEST_VECTORIZE_PAUSED_UPDATE",
+      }[change]
+    ] === "1";
+  test.provider.skipIf(!enabled)(
+    `Vectorize immediately routes post-${change} events to the current subscription`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const start = yield* Clock.currentTimeMillis;
+        const cleanup = makeSubscriptionCleanup();
+        const makeQueue = (suffix: string) =>
+          Effect.gen(function* () {
+            const queue = yield* Effect.acquireRelease(
+              queues.createQueue({
+                accountId,
+                queueName: `alchemy-vectorize-replacement-${suffix}`,
+              }),
+              (queue) =>
+                queues
+                  .deleteQueue({ accountId, queueId: queue.queueId! })
+                  .pipe(cleanup),
+            );
+            yield* queues.createConsumer({
+              accountId,
+              queueId: queue.queueId!,
+              type: "http_pull",
+            });
+            return queue.queueId!;
+          });
+        const a = yield* makeQueue("a");
+        const b = yield* makeQueue("b");
+        const makeSubscription = (queueId: string) =>
+          Effect.acquireRelease(
+            queues.createSubscription({
+              accountId,
+              name: `native-${queueId}`,
+              source: { type: "vectorize" },
+              events: ["index.created"],
+              enabled: true,
+              destination: { type: "queues.queue", queueId },
+            }),
+            (subscription) =>
+              queues
+                .deleteSubscription({
+                  accountId,
+                  subscriptionId: subscription.id,
+                })
+                .pipe(
+                  Effect.catchTag("SubscriptionNotFound", () => Effect.void),
+                  cleanup,
+                ),
+          );
+        const create = (name: string) =>
+          Effect.gen(function* () {
+            const index = yield* Effect.acquireRelease(
+              vectorize.createIndex({
+                accountId,
+                name,
+                config: { dimensions: 32, metric: "cosine" },
+              }),
+              () =>
+                vectorize
+                  .deleteIndex({ accountId, indexName: name })
+                  .pipe(cleanup),
+            );
+            yield* Effect.logInfo(`Native ${change} create`, {
+              elapsedMs: (yield* Clock.currentTimeMillis) - start,
+              index,
+            });
+            return name;
+          });
+        const received: { queueId: string; event: SubscriptionEvent }[] = [];
+        const pull = (queueId: string) =>
+          Effect.gen(function* () {
+            const batch = yield* queues
+              .pullMessage({
+                accountId,
+                queueId,
+                batchSize: 100,
+                visibilityTimeoutMs: 30_000,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "QueueHttpPullNotEnabled",
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 8,
+                }),
+              );
+            for (const message of batch.messages ?? []) {
+              if (message.body) {
+                const event = yield* Schema.decodeUnknownEffect(
+                  SubscriptionEvent,
+                )(message.body);
+                expect(event.type).toBe("cf.vectorize.index.created");
+                expect(event.source.type).toBe("vectorize");
+                expect(event.metadata.accountId).toBe(accountId);
+                received.push({ queueId, event });
+                yield* Effect.logInfo(`Native ${change} receipt`, {
+                  elapsedMs: (yield* Clock.currentTimeMillis) - start,
+                  queueId,
+                  messageId: message.id,
+                  timestampMs: message.timestampMs,
+                  attempts: message.attempts,
+                  rawBody: message.body,
+                  event,
+                });
+              }
+            }
+            const acks = (batch.messages ?? []).flatMap(({ leaseId }) =>
+              leaseId ? [{ leaseId }] : [],
+            );
+            if (acks.length) {
+              const ack = yield* queues.ackMessage({
+                accountId,
+                queueId,
+                acks,
+              });
+              expect(ack.ackCount).toBe(acks.length);
+              expect(Object.keys(ack.warnings ?? {})).toHaveLength(0);
+            }
+          });
+        const old = yield* makeSubscription(a);
+        yield* pull(b);
+        const initialProbes: string[] = [];
+        const initiallyReady = () =>
+          received.some(
+            ({ queueId, event }) =>
+              queueId === a &&
+              event.metadata.eventSubscriptionId === old.id &&
+              initialProbes.includes(event.payload.name!),
+          );
+        yield* Effect.gen(function* () {
+          initialProbes.push(yield* create(`vec-${a}-${initialProbes.length}`));
+          yield* pull(a);
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("7 seconds"),
+            times: 8,
+            until: initiallyReady,
+          }),
+        );
+        expect(initiallyReady()).toBe(true);
+        const observe = Effect.fn(function* (
+          subscriptionId: string,
+          phase: string,
+        ) {
+          const observed = yield* queues.getSubscription({
+            accountId,
+            subscriptionId,
+          });
+          yield* Effect.logInfo(`Native ${change} configuration`, {
+            phase,
+            elapsedMs: (yield* Clock.currentTimeMillis) - start,
+            subscription: observed,
+          });
+          return observed;
+        });
+        const current = yield* Effect.gen(function* () {
+          if (change === "paused-update") {
+            yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              enabled: false,
+            });
+            const paused = yield* observe(old.id, "disabled");
+            expect(paused.enabled).toBe(false);
+            expect(paused.destination.queueId).toBe(a);
+            yield* create(`vec-${a}-disabled`);
+            yield* pull(a);
+            yield* pull(b);
+            yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              destination: { type: "queues.queue", queueId: b },
+            });
+            const moved = yield* observe(
+              old.id,
+              "destination-updated-while-disabled",
+            );
+            expect(moved.enabled).toBe(false);
+            expect(moved.destination.queueId).toBe(b);
+            const resumed = yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              enabled: true,
+            });
+            expect(resumed.id).toBe(old.id);
+            return resumed;
+          }
+          if (change === "update") {
+            const updated = yield* queues.patchSubscription({
+              accountId,
+              subscriptionId: old.id,
+              destination: { type: "queues.queue", queueId: b },
+            });
+            expect(updated.id).toBe(old.id);
+            return updated;
+          }
+          yield* queues.deleteSubscription({
+            accountId,
+            subscriptionId: old.id,
+          });
+          yield* queues
+            .getSubscription({ accountId, subscriptionId: old.id })
+            .pipe(
+              Effect.flatMap(() =>
+                Effect.fail(new Error("Deleted subscription still exists")),
+              ),
+              Effect.catchTag("SubscriptionNotFound", () => Effect.void),
+            );
+          return yield* makeSubscription(b);
+        });
+        const observed = yield* observe(
+          current.id,
+          "active-at-new-destination",
+        );
+        expect(observed.destination.queueId).toBe(b);
+        expect(observed.enabled).toBe(true);
+        yield* Effect.logInfo(`Native ${change} identities`, {
+          oldSubscription: old.id,
+          oldQueue: a,
+          newSubscription: current.id,
+          newQueue: b,
+          elapsedMs: (yield* Clock.currentTimeMillis) - start,
+        });
+        const identities = yield* Effect.forEach([0, 1, 2], (i) =>
+          create(`vec-${b}-after-${change}-${i}`),
+        );
+        yield* Effect.gen(function* () {
+          yield* pull(a);
+          yield* pull(b);
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            times: 5,
+          }),
+        );
+        const deliveries = received.filter(({ event }) =>
+          identities.includes(event.payload.name!),
+        );
+        yield* Effect.logInfo(`Native ${change} result`, {
+          identities,
+          deliveries,
+        });
+        expect(deliveries.filter(({ queueId }) => queueId === a)).toEqual([]);
+        for (const identity of identities) {
+          expect(
+            deliveries.some(
+              ({ queueId, event }) =>
+                queueId === b &&
+                event.metadata.eventSubscriptionId === current.id &&
+                event.payload.name === identity,
+            ),
+          ).toBe(true);
+        }
+        yield* stack.destroy();
+      }).pipe(
+        Effect.timeout("90 seconds"),
+        Effect.scoped,
+        Effect.ensuring(
+          stack
+            .destroy()
+            .pipe(
+              Effect.timeout("5 seconds"),
+              Effect.orDie,
+              Effect.interruptible,
+            ),
+        ),
+      ),
+    { timeout: 120_000, exclusive: true },
+  );
+}
