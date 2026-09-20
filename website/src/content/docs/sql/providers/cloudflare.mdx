@@ -6,40 +6,82 @@ description: D1 and Hyperdrive-backed Postgres or MySQL for Workers.
 ## D1
 
 ```typescript
-const database = yield* Cloudflare.D1.Database("Database", {
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/D1";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const Database = Cloudflare.D1.Database("Database", {
   migrations: "./migrations",
 });
-```
 
-In a Worker:
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const connection = yield* Cloudflare.D1.QueryDatabase(Database);
+    const db = yield* Drizzle.D1(connection);
 
-```typescript
-const connection = yield* Cloudflare.D1.QueryDatabase(database);
-const db = yield* Drizzle.D1(connection);
+    return {
+      fetch: Effect.gen(function* () {
+        const rows = yield* db.all(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(rows);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
+) {}
 ```
 
 [Drizzle + D1](/cloudflare/data/d1-drizzle) · [Effect SQL](/sql/effect-sql/d1) · [Migrations](/cloudflare/data/d1)
 
 ## Postgres and MySQL
 
+A Worker with Neon Postgres through Hyperdrive:
+
 ```typescript
-const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("Database", {
-  origin: branch.origin,
-  caching: { disabled: true },
+// src/PostgresApi.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Neon from "alchemy/Neon";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const Hyperdrive = Effect.gen(function* () {
+  const project = yield* Neon.Project("Database");
+  const branch = yield* Neon.Branch("App", {
+    project,
+    migrations: "./migrations",
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
+    origin: branch.origin,
+    caching: { disabled: true },
+  });
 });
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.Postgres(connection.connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
 ```
 
-```typescript
-const connection = yield* Cloudflare.Hyperdrive.Connect(hyperdrive);
-const db = yield* Drizzle.Postgres(connection.connectionString);
-```
-
-Use `Drizzle.MySQL` for a MySQL origin. Apply migrations through the database provider, not Hyperdrive.
-
-[Hyperdrive](/cloudflare/data/hyperdrive) · [Drizzle](/cloudflare/data/drizzle) · [Prisma ORM](/cloudflare/data/prisma) · [Connection lifecycle](/sql/effect-sql/lifecycle)
+[MySQL Worker example](/sql/providers/planetscale#mysql) · [Hyperdrive](/cloudflare/data/hyperdrive) · [Drizzle](/cloudflare/data/drizzle) · [Prisma ORM](/cloudflare/data/prisma) · [Connection lifecycle](/sql/effect-sql/lifecycle)
 
 ## Examples
 
 [Neon + Drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) · [PlanetScale + Drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) · [Prisma TypeScript](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma) · [Prisma PSL](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl)
 
-[Cloudflare setup](/cloudflare/setup) · [Choose a database](/sql/databases)
+[Cloudflare setup](/cloudflare/setup) · [Stack and deployment](/cloudflare/compute/workers) · [Choose a database](/sql/databases)

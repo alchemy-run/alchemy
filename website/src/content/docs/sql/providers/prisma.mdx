@@ -6,13 +6,20 @@ description: Prisma-hosted Postgres and Compute, separate from the Prisma ORM cl
 ## Prisma Postgres
 
 ```typescript
+// src/database.ts
 import * as Prisma from "alchemy/Prisma";
+import * as Effect from "effect/Effect";
 
-const project = yield* Prisma.Project("App", {
+export const Project = Prisma.Project("App", {
   createDatabase: false,
   region: "us-east-1",
 });
-const database = yield* Prisma.Postgres("Database", { project });
+
+export const Connection = Effect.gen(function* () {
+  const project = yield* Project;
+  const database = yield* Prisma.Postgres("Database", { project });
+  return yield* Prisma.Connection("Connection", { database });
+});
 ```
 
 [Database guide](/prisma/data/postgres) · [Connections](/prisma/data/connections) · [Branches](/prisma/data/branches) · [Worker integration](/prisma/guides/cloudflare-workers)
@@ -20,23 +27,53 @@ const database = yield* Prisma.Postgres("Database", { project });
 ## Prisma Compute
 
 ```typescript
-const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
+// src/Api.ts
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Prisma from "alchemy/Prisma";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Connection, Project } from "./database.ts";
+
+export default class Api extends Prisma.Compute<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const project = yield* Project;
+    return { project, main: import.meta.filename };
+  }),
+  Effect.gen(function* () {
+    const connection = yield* Prisma.Connect(Connection);
+    const db = yield* Drizzle.Postgres(connection.databaseUrl);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Prisma.ConnectBinding)),
+) {}
 ```
 
-Compute applications receive database variables from their project.
-
-[Compute guide](/prisma/compute/apps) · [Setup](/prisma/setup)
+[Compute guide](/prisma/compute/apps) · [Setup and deployment](/prisma/setup)
 
 ## Prisma ORM
 
 ```typescript
-const contract = yield* Prisma.Contract("Contract");
-yield* Prisma.Migrate("Migrate", {
-  url: yield* Config.Redacted("DATABASE_URL"),
-  contract,
+// src/migrations.ts
+import * as Prisma from "alchemy/Prisma";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export const Migrations = Effect.gen(function* () {
+  const contract = yield* Prisma.Contract("Contract");
+  return yield* Prisma.Migrate("Migrate", {
+    url: yield* Config.Redacted("DATABASE_URL"),
+    contract,
+  });
 });
 ```
 
-Prisma ORM is separate from Prisma hosting. ORM v8 requires PostgreSQL 17+; its current Worker examples use Neon.
+Yield `Migrations` from the Stack. Prisma ORM is separate from Prisma hosting; ORM v8 requires PostgreSQL 17+.
 
-[Contracts](/sql/prisma/contracts) · [Migrations](/sql/prisma/migrations) · [Query API](/sql/prisma/postgres) · [Worker example](/cloudflare/data/prisma)
+[Contracts](/sql/prisma/contracts) · [Migration workflow](/sql/prisma/migrations) · [Query API](/sql/prisma/postgres) · [Worker example](/cloudflare/data/prisma)

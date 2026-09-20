@@ -6,26 +6,55 @@ description: Connect a Hetzner Service to an external Postgres database.
 ## Service + Neon + Drizzle
 
 ```typescript
-const project = yield* Neon.Project("Database");
-const branch = yield* Neon.Branch("App", {
-  project,
-  migrations: "./migrations",
+// src/Api.ts
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Hetzner from "alchemy/Hetzner";
+import * as Neon from "alchemy/Neon";
+import { sql } from "drizzle-orm";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const Server = Hetzner.Server("Server", {
+  serverType: "cpx12",
+  image: "ubuntu-24.04",
+  location: "fsn1",
 });
-```
+const Database = Effect.gen(function* () {
+  const project = yield* Neon.Project("Database");
+  return yield* Neon.Branch("App", {
+    project,
+    migrations: "./migrations",
+  });
+});
 
-Pass the connection URL to the backend Service:
+export default class Api extends Hetzner.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const database = yield* Database;
+    return {
+      server: Server,
+      main: import.meta.url,
+      build: { install: ["pg"] },
+      env: { DATABASE_URL: database.connectionUri },
+    };
+  }),
+  Effect.gen(function* () {
+    const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
 
-```typescript
-env: { DATABASE_URL: branch.connectionUri }
-```
-
-```typescript
-const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
 ```
 
 This uses external Neon Postgres, not a Hetzner-managed database resource.
 
-[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) · [Services](/hetzner/compute/services) · [Neon migrations](/neon/data/migrations)
+[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) · [Stack and deployment](/hetzner/compute/services) · [Neon migrations](/neon/data/migrations)
 
 ## Other database choices
 

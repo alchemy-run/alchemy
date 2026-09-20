@@ -6,32 +6,47 @@ description: Fly Managed Postgres with SQL migrations and a Service connection b
 ## Fly Managed Postgres
 
 ```typescript
+// src/Api.ts
+import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Fly from "alchemy/Fly";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-const database = yield* Fly.Postgres("Database", {
+const App = Fly.App("App");
+const Database = Fly.Postgres("Database", {
   region: "iad",
   migrations: "./migrations",
 });
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    app: App,
+    main: import.meta.url,
+    build: { install: ["pg"] },
+  },
+  Effect.gen(function* () {
+    const connection = yield* Fly.ConnectPostgres(Database);
+    const db = yield* Drizzle.Postgres(connection.connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
+) {}
 ```
 
-In a Service:
+Deployment-time migrations need access to Fly's private network.
 
-```typescript
-const connection = yield* Fly.ConnectPostgres(database);
-const db = yield* Drizzle.Postgres(connection.connectionString);
-```
-
-Provide `Fly.ConnectPostgresHttp` on the Service. Deployment-time migrations need access to Fly's private network.
-
-[Postgres guide](/fly/data/postgres) · [Migrations](/fly/data/postgres#migrations) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-postgres)
+[Postgres guide](/fly/data/postgres) · [Migrations](/fly/data/postgres#migrations) · [Stack and deployment](/fly/compute/services) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-postgres)
 
 ## External databases
 
-```typescript
-const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
-```
-
-[Service configuration](/fly/compute/services) · [Secrets](/fly/data/secrets) · [Choose a database](/sql/databases)
+[Service environment variables](/fly/compute/services) · [Secrets](/fly/data/secrets) · [Choose a database](/sql/databases)
 
 ## Next steps
 

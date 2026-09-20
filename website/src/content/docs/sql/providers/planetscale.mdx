@@ -6,16 +6,49 @@ description: PlanetScale Postgres and MySQL databases, branches, and migrations.
 ## Postgres
 
 ```typescript
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Planetscale from "alchemy/Planetscale";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-const database = yield* Planetscale.PostgresDatabase("Database", {
-  region: { slug: "us-east" },
-  clusterSize: "PS_10",
+const Hyperdrive = Effect.gen(function* () {
+  const database = yield* Planetscale.PostgresDatabase("Database", {
+    region: { slug: "us-east" },
+    clusterSize: "PS_10",
+  });
+  const branch = yield* Planetscale.PostgresBranch("App", {
+    database,
+    migrations: "./migrations",
+  });
+  const role = yield* Planetscale.PostgresRole("Reader", {
+    database,
+    branch,
+    inheritedRoles: ["pg_read_all_data"],
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
+    origin: role.origin,
+    caching: { disabled: true },
+  });
 });
-const branch = yield* Planetscale.PostgresBranch("App", {
-  database,
-  migrations: "./migrations",
-});
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.Postgres(connection.connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`);
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
 ```
 
 [Postgres](/planetscale/data/postgres) · [Credentials](/planetscale/data/credentials) · [Migrations](/planetscale/data/migrations)
@@ -23,26 +56,54 @@ const branch = yield* Planetscale.PostgresBranch("App", {
 ## MySQL
 
 ```typescript
-const database = yield* Planetscale.MySQLDatabase("Database", {
-  region: { slug: "us-east" },
-  clusterSize: "PS_10",
+// src/MySqlApi.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/MySQL";
+import * as Planetscale from "alchemy/Planetscale";
+import { sql } from "drizzle-orm";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+const Hyperdrive = Effect.gen(function* () {
+  const database = yield* Planetscale.MySQLDatabase("Database", {
+    region: { slug: "us-east" },
+    clusterSize: "PS_10",
+  });
+  const branch = yield* Planetscale.MySQLBranch("App", {
+    database,
+    isProduction: false,
+    migrations: "./migrations",
+  });
+  const password = yield* Planetscale.MySQLPassword("Reader", {
+    database,
+    branch,
+    role: "reader",
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
+    origin: password.origin,
+    caching: { disabled: true },
+  });
 });
-const branch = yield* Planetscale.MySQLBranch("App", {
-  database,
-  isProduction: false,
-  migrations: "./migrations",
-});
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+    const db = yield* Drizzle.MySQL(connection.connectionString);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* db.execute(sql`SELECT 1 AS ok`, "objects");
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding)),
+) {}
 ```
 
 [MySQL](/planetscale/data/mysql) · [Safe migrations](/planetscale/data/migrations) · [Preview branches](/planetscale/guides/preview-branches)
 
 ## Workers with Hyperdrive
 
-```typescript
-const connection = yield* Cloudflare.Hyperdrive.Connect(hyperdrive);
-const db = yield* Drizzle.Postgres(connection.connectionString);
-```
-
-Use `Drizzle.MySQL` for MySQL. The integration guide includes branch credentials and Hyperdrive setup.
-
-[Worker integration](/cloudflare/data/drizzle) · [Postgres example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) · [PlanetScale setup](/planetscale/setup)
+[Stack and deployment](/cloudflare/data/drizzle) · [Postgres example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) · [MySQL example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-mysql-drizzle) · [PlanetScale setup](/planetscale/setup)
