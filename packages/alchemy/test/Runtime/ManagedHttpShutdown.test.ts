@@ -84,6 +84,16 @@ const waitForOutput = (fixture: { output: () => string }, text: string) =>
     Effect.tap((output) => Effect.sync(() => expect(output).toContain(text))),
   );
 
+// Measure the child's shutdown budget separately from signal delivery and reaping.
+const shutdownElapsed = (fixture: { output: () => string }) =>
+  waitForOutput(fixture, "shutdown elapsed ms:").pipe(
+    Effect.map((output) => {
+      const match = /shutdown elapsed ms: ([\d.]+)/.exec(output);
+      expect(match).not.toBeNull();
+      return Number(match![1]);
+    }),
+  );
+
 const refusesNewRequests = (
   fixture: Effect.Success<ReturnType<typeof spawnFixture>>,
 ) =>
@@ -188,6 +198,7 @@ describe.sequential("managed Fly HTTP shutdown", () => {
       Effect.gen(function* () {
         const fixture = yield* spawnFixture({
           ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: "2000",
+          RECORD_SHUTDOWN_TIMING: "1",
         });
         const first = yield* Deferred.make<void>();
         const response = yield* fixture.get("/stream-hang").pipe(
@@ -200,11 +211,12 @@ describe.sequential("managed Fly HTTP shutdown", () => {
           Effect.forkChild,
         );
         yield* Deferred.await(first);
-        const started = yield* Effect.sync(() => performance.now());
         yield* fixture.signal("SIGTERM");
+        expect(
+          yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds")),
+        ).toBe(1);
         expect(Result.isFailure(yield* Fiber.join(response))).toBe(true);
-        expect(yield* fixture.handle.exitCode).toBe(1);
-        const elapsed = yield* Effect.sync(() => performance.now() - started);
+        const elapsed = yield* shutdownElapsed(fixture);
         expect(elapsed).toBeGreaterThanOrEqual(1500);
         expect(elapsed).toBeLessThan(2000);
         yield* waitForOutput(fixture, "instance finalized");
@@ -222,16 +234,18 @@ describe.sequential("managed Fly HTTP shutdown", () => {
         const fixture = yield* spawnFixture({
           ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS: "2000",
           HANG_FINALIZER: "1",
+          RECORD_SHUTDOWN_TIMING: "1",
         });
         const response = yield* fixture
           .get("/hang")
           .pipe(Effect.result, Effect.forkChild);
         yield* waitForOutput(fixture, "request started");
-        const started = yield* Effect.sync(() => performance.now());
         yield* fixture.signal("SIGTERM");
         yield* refusesNewRequests(fixture);
-        expect(yield* fixture.handle.exitCode).toBe(1);
-        const elapsed = yield* Effect.sync(() => performance.now() - started);
+        expect(
+          yield* fixture.handle.exitCode.pipe(Effect.timeout("5 seconds")),
+        ).toBe(1);
+        const elapsed = yield* shutdownElapsed(fixture);
         expect(elapsed).toBeGreaterThanOrEqual(1500);
         expect(elapsed).toBeLessThan(2000);
         expect(Result.isFailure(yield* Fiber.join(response))).toBe(true);

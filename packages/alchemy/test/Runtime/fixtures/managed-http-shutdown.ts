@@ -11,6 +11,23 @@ import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
+Effect.runSync(
+  Effect.sync(() => {
+    if (process.env.RECORD_SHUTDOWN_TIMING !== "1") return;
+    let started: number | undefined;
+    const onSignal = () => {
+      started ??= performance.now();
+    };
+    process.prependOnceListener("SIGTERM", onSignal);
+    process.prependOnceListener("SIGINT", onSignal);
+    process.once("exit", () => {
+      if (started !== undefined) {
+        console.error(`shutdown elapsed ms: ${performance.now() - started}`);
+      }
+    });
+  }),
+);
+
 const event = (message: string) => Effect.sync(() => console.log(message));
 let dependencyOpen = true;
 const useDependency = Effect.sync(() => {
