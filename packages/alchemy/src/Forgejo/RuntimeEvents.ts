@@ -1,4 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Semaphore from "effect/Semaphore";
+import {
+  ConflictingWebhookEndpoint,
+  makeWebhookDispatcher,
+  reserveWebhookPath,
+  type WebhookDispatcher,
+} from "../Serverless/Webhook.ts";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Namespace from "../Namespace.ts";
@@ -15,12 +23,86 @@ import {
 import { forgejoBindingId, forgejoSecretOutput } from "./RuntimeHttp.ts";
 import { Webhook } from "./Webhook.ts";
 
-export const makeForgejoSubscription = (
+export interface ForgejoWebhookReceiver {
+  readonly path: string;
+  readonly handle: (request: Request) => Effect.Effect<Response>;
+}
+
+export const makeForgejoEventSource = (options: {
+  host: string;
+  url: Output.Output<string | undefined>;
+  runtime: BaseRuntimeContext;
+  listen: (receiver: ForgejoWebhookReceiver) => Effect.Effect<void>;
+}) =>
+  Effect.gen(function* () {
+    const lock = yield* Semaphore.make(1);
+    const receivers = new Map<
+      string,
+      {
+        secret: RepositoryEventSourceProps["secret"];
+        dispatcher: WebhookDispatcher<RepositoryEvent>;
+      }
+    >();
+    return (
+      repository: Repository,
+      props: RepositoryEventSourceProps,
+      handler: (
+        event: RepositoryEvent,
+      ) => Effect.Effect<void, never, RuntimeContext>,
+    ) =>
+      lock.withPermit(
+        Effect.gen(function* () {
+          if (props.events.length === 0)
+            return yield* Effect.die(
+              "Forgejo.RepositoryEventSource requires at least one event.",
+            );
+          const selection = [...new Set(props.events)].sort().join(",");
+          const id = yield* forgejoBindingId(
+            options.host,
+            repository,
+            `events:${selection}`,
+          );
+          let receiver = receivers.get(id);
+          if (receiver && !Equal.equals(receiver.secret, props.secret)) {
+            return yield* Effect.die(
+              new ConflictingWebhookEndpoint({
+                path: `/__alchemy/forgejo/${id}`,
+                message:
+                  "Subscriptions to the same Forgejo webhook must use the same signing secret source.",
+              }),
+            );
+          }
+          if (!receiver) {
+            const dispatcher = yield* makeWebhookDispatcher<RepositoryEvent>();
+            const subscription = yield* makeForgejoSubscription(
+              options.host,
+              options.url,
+              repository,
+              props,
+            );
+            yield* reserveWebhookPath(options.runtime, subscription.path);
+            yield* options.listen({
+              path: subscription.path,
+              handle: (request) =>
+                subscription.handle(request, dispatcher.dispatch),
+            });
+            receiver = { secret: props.secret, dispatcher };
+            receivers.set(id, receiver);
+          }
+          yield* receiver.dispatcher.subscribe((event) =>
+            handler(event).pipe(
+              Effect.provideService(RuntimeContext, options.runtime),
+            ),
+          );
+        }),
+      );
+  });
+
+const makeForgejoSubscription = (
   host: string,
   url: Output.Output<string | undefined>,
   repository: Repository,
   props: RepositoryEventSourceProps,
-  runtime: BaseRuntimeContext,
 ) =>
   Effect.gen(function* () {
     if (props.events.length === 0)
@@ -69,13 +151,9 @@ export const makeForgejoSubscription = (
       path,
       handle: (
         request: Request,
-        handler: (
-          event: RepositoryEvent,
-        ) => Effect.Effect<void, never, RuntimeContext>,
+        handler: (event: RepositoryEvent) => Effect.Effect<Response>,
       ) =>
-        handleForgejoDelivery(request, secret, repoId, props.events, (event) =>
-          handler(event).pipe(Effect.provideService(RuntimeContext, runtime)),
-        ),
+        handleForgejoDelivery(request, secret, repoId, props.events, handler),
     };
   });
 
@@ -115,7 +193,7 @@ export const handleForgejoDelivery = (
   secret: Effect.Effect<Redacted.Redacted<string>>,
   repoId: Effect.Effect<number>,
   events: readonly string[],
-  handler: (event: RepositoryEvent) => Effect.Effect<void>,
+  handler: (event: RepositoryEvent) => Effect.Effect<Response>,
 ): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST")
@@ -154,6 +232,5 @@ export const handleForgejoDelivery = (
       return new Response("invalid event payload", { status: 400 });
     if (event.value.payload.repository.id !== (yield* repoId))
       return new Response("wrong repository", { status: 403 });
-    yield* handler(event.value);
-    return new Response(null, { status: 202 });
+    return yield* handler(event.value);
   });

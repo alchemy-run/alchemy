@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Input } from "../Input.ts";
-import { liftRedacted } from "../Util/redacted.ts";
+import { liftRedacted } from "./Redacted.ts";
 import { Secret } from "./Secret.ts";
 
 /** Properties for creating multiple Forgejo Actions secrets. */

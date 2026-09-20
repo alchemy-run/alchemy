@@ -35,13 +35,49 @@ export const program = Effect.gen(function* () {
             title: `received push ${event.id}`,
             body: event.payload.ref,
           })
-        : event.payload.action === "opened"
+        : event.payload.action === "fanout-retry"
           ? writeIssues.createComment({
               index: event.payload.issue.number,
-              body: `received issues ${event.id}`,
+              body: `attempted delivery ${event.id}`,
             })
-          : Effect.void
+          : event.payload.action === "opened"
+            ? writeIssues.createComment({
+                index: event.payload.issue.number,
+                body: `received issues ${event.id}`,
+              })
+            : Effect.void
       ).pipe(Effect.asVoid, Effect.orDie),
+  );
+  yield* Forgejo.RepositoryEventSource(
+    repo,
+    {
+      events: ["issues", "push"],
+      secret: Option.getOrUndefined(signingSecret),
+    },
+    (event) =>
+      Effect.gen(function* () {
+        if (event.name !== "issues") return;
+        if (event.payload.action === "opened") {
+          yield* writeIssues
+            .createComment({
+              index: event.payload.issue.number,
+              body: `audited issues ${event.id}`,
+            })
+            .pipe(Effect.orDie);
+        }
+        if (event.payload.action === "fanout-retry") {
+          const comments = yield* issues
+            .listComments({ index: event.payload.issue.number })
+            .pipe(Effect.orDie);
+          if (
+            !comments.some(
+              (comment) => comment.body === `retry approved ${event.id}`,
+            )
+          ) {
+            return yield* Effect.die("subscriber awaiting retry approval");
+          }
+        }
+      }),
   );
   return {
     fetch: Effect.gen(function* () {

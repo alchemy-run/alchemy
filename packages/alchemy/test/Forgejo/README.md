@@ -56,7 +56,8 @@ the same real Forgejo server on loopback, avoiding local DNS propagation delays.
 Deployed hosts use the public URL. Requests are not mocked. Tests verify
 restricted-token permissions, deduplication, rotation, external-credential
 ownership, generated signing secrets, actual push/issue deliveries, invalid
-signatures, host replacement, and resource cleanup.
+signatures, shared-receiver subscriber fan-out, failure acknowledgements, identical
+redelivery after partial success, host replacement, and resource cleanup.
 
 ## Cleanup
 

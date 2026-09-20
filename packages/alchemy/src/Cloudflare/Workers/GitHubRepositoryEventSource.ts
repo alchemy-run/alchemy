@@ -1,7 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Semaphore from "effect/Semaphore";
 import {
   RepositoryEventSource,
   webhookPath,
@@ -9,24 +11,27 @@ import {
   type RepositoryEventSourceProps,
   type RepositoryEventSourceService,
   type WebhookEvent,
+  type WebhookEventName,
 } from "../../GitHub/RepositoryEventSource.ts";
 import { Webhook } from "../../GitHub/Webhook.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
+import {
+  ConflictingWebhookEndpoint,
+  makeWebhookDispatcher,
+  reserveWebhookPath,
+  type WebhookDispatcher,
+} from "../../Serverless/Webhook.ts";
 import { isWorkerEvent, Worker } from "./Worker.ts";
 
 /**
  * GitHub event source for Cloudflare Workers.
  *
- * Deploy-time: provisions a {@link Webhook} on the repository whose delivery
- * URL points at this Worker (at a deterministic per-repo path). The webhook
- * secret is bound onto the Worker via an `Output` accessor so the runtime can
- * verify delivery signatures.
- *
- * Runtime: registers a `fetch` listener that claims requests on the
- * repository's delivery path, verifies the `HMAC-SHA256` signature against the
- * bound secret, and forwards each delivery to the subscriber. Requests on any
- * other path fall through to the Worker's own `fetch` handler.
+ * Subscriptions to one repository endpoint share its webhook, signing secret,
+ * and request decoder. All matching subscribers must succeed within 30 seconds
+ * before the delivery is acknowledged. Failures return 503; retried deliveries
+ * may repeat successful subscribers, so handlers must be idempotent.
+ * Requests on other paths fall through to the Worker's application handler.
  *
  * @binding
  * @product Workers
@@ -36,161 +41,149 @@ export const GitHubRepositoryEventSourceLive = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
     const ctx = yield* Worker;
-    // Loosely-typed constructor — yielding the resource class erases its
-    // `GitHub.Providers` requirement. The requirement is satisfied by the
-    // stack at plan time.
     const createWebhook = yield* Webhook;
+    const lock = yield* Semaphore.make(1);
+    const receivers = new Map<
+      string,
+      {
+        props: RepositoryEventSourceProps;
+        events: Set<WebhookEventName>;
+        dispatcher: WebhookDispatcher<WebhookEvent>;
+      }
+    >();
 
-    return Effect.fn(function* (
+    const subscribe = Effect.fn(function* (
       props: RepositoryEventSourceProps,
-      process: (event: WebhookEvent) => Effect.Effect<void, never, never>,
+      process: (event: WebhookEvent) => Effect.Effect<void>,
     ) {
       const path = webhookPath(props);
-
-      // Deploy-time: provision the repository webhook pointing at this Worker.
-      // Skipped once running inside the deployed Worker (the global guard).
-      // Namespaced under the host so the webhook's logical identity matches the
-      // previous Binding.Policy.
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          ctx.LogicalId,
-          Effect.gen(function* () {
-            yield* createWebhook(`${props.owner}/${props.repository}`, {
-              owner: props.owner,
-              repository: props.repository,
-              url: Output.interpolate`${ctx.url}${path}`,
-              events: [...(props.events ?? ["push"])],
-              secret: props.secret,
-              contentType: "json",
-            });
+      let receiver = receivers.get(path);
+      if (
+        receiver &&
+        (receiver.props.owner !== props.owner ||
+          receiver.props.repository !== props.repository ||
+          !Equal.equals(receiver.props.secret, props.secret))
+      ) {
+        return yield* Effect.die(
+          new ConflictingWebhookEndpoint({
+            path,
+            message:
+              "Subscriptions to one GitHub endpoint must use the same repository and signing secret.",
           }),
         );
       }
-
-      // Bind the webhook secret as a Worker env accessor under a
-      // deterministic key. This single `yield*` does both halves: at plan
-      // time it registers a `secret_text` binding (the engine deploys
-      // `Redacted` values as Cloudflare secrets), and it returns an Effect
-      // that reads the value back from `WorkerEnvironment` at runtime —
-      // reconstructing the `Redacted` wrapper. No direct `event.env` access.
-      const secret = props.secret
-        ? yield* Output.named(
-            Output.asOutput(props.secret),
-            webhookSecretEnvName(props),
-          )
-        : undefined;
-
-      yield* ctx.listen((event) => {
-        if (!isWorkerEvent(event) || event.type !== "fetch") return;
-        const request = event.input as cf.Request;
-
-        let pathname: string;
-        try {
-          pathname = new URL(request.url).pathname;
-        } catch {
-          return;
+      if (!receiver) {
+        yield* reserveWebhookPath(ctx, path);
+        const events = new Set<WebhookEventName>();
+        const dispatcher = yield* makeWebhookDispatcher<WebhookEvent>();
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* Namespace.push(
+            ctx.LogicalId,
+            Effect.gen(function* () {
+              yield* createWebhook(`${props.owner}/${props.repository}`, {
+                owner: props.owner,
+                repository: props.repository,
+                url: Output.interpolate`${ctx.url}${path}`,
+                events: Effect.sync(() =>
+                  events.has("*") ? ["*"] : [...events].sort(),
+                ),
+                secret: props.secret,
+                contentType: "json",
+              });
+            }),
+          );
         }
-        // Not our delivery path — let the Worker's own handler take it.
-        if (pathname !== path) return;
-
-        return handleDelivery(request, secret, process);
-      });
-    }) as RepositoryEventSourceService;
+        const secret = props.secret
+          ? yield* Output.named(
+              Output.asOutput(props.secret),
+              webhookSecretEnvName(props),
+            )
+          : undefined;
+        yield* ctx.listen((event) => {
+          if (!isWorkerEvent(event) || event.type !== "fetch") return;
+          const request = event.input as cf.Request;
+          if (new URL(request.url).pathname !== path) return;
+          return handleGitHubDelivery(request, secret, dispatcher.dispatch);
+        });
+        receiver = { props, events, dispatcher };
+        receivers.set(path, receiver);
+      }
+      const selection = props.events ?? ["push"];
+      for (const event of selection) receiver.events.add(event);
+      yield* receiver.dispatcher.subscribe((event) =>
+        selection.includes("*") || selection.some((name) => name === event.name)
+          ? process(event)
+          : Effect.void,
+      );
+    });
+    return ((
+      props: RepositoryEventSourceProps,
+      process: (event: WebhookEvent) => Effect.Effect<void>,
+    ) =>
+      lock.withPermit(
+        subscribe(props, process),
+      )) as RepositoryEventSourceService;
   }),
 );
 
-const handleDelivery = <Req>(
+const handleGitHubDelivery = (
   request: cf.Request,
-  // The bound secret accessor (see `Output.named` above). `undefined` when
-  // no secret was configured, in which case deliveries are accepted
-  // unverified.
   secret: Effect.Effect<Redacted.Redacted<string> | undefined> | undefined,
-  process: (event: WebhookEvent<any>) => Effect.Effect<void, never, Req>,
-): Effect.Effect<Response, never, Req> =>
+  process: (event: WebhookEvent) => Effect.Effect<Response>,
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
-    if (request.method !== "POST") {
+    if (request.method !== "POST")
       return new Response("method not allowed", { status: 405 });
-    }
-
     const body = yield* Effect.promise(() =>
       (request as unknown as Request).text(),
     );
-
     if (secret !== undefined) {
       const resolved = yield* secret;
-      const signature = request.headers.get("x-hub-signature-256") ?? undefined;
-      const valid = yield* verifySignature(
-        resolved ? Redacted.value(resolved) : undefined,
-        body,
-        signature,
-      );
-      if (!valid) {
+      if (
+        !resolved ||
+        !(yield* verifySignature(
+          Redacted.value(resolved),
+          body,
+          request.headers.get("x-hub-signature-256"),
+        ))
+      ) {
         return new Response("invalid signature", { status: 401 });
       }
     }
-
     const name = request.headers.get("x-github-event") ?? "unknown";
     const id = request.headers.get("x-github-delivery") ?? "";
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      payload = body;
-    }
-
-    // The wire shape matches `EmitterWebhookEvent`, but the runtime can't
-    // statically prove `name`/`payload` line up with a specific member of
-    // the discriminated union — GitHub's headers are the source of truth, so
-    // cast across the boundary.
+    const payload = yield* Effect.try(() => JSON.parse(body) as unknown).pipe(
+      Effect.catch(() => Effect.succeed(body)),
+    );
     const delivery = { id, name, payload } as unknown as WebhookEvent;
-
-    yield* process(delivery).pipe(Effect.orDie);
-
-    return new Response(null, { status: 202 });
+    return yield* process(delivery);
   });
 
 const verifySignature = (
-  secret: string | undefined,
+  secret: string,
   body: string,
-  signature: string | undefined,
-): Effect.Effect<boolean> =>
+  signature: string | null,
+) =>
   Effect.gen(function* () {
-    if (!secret || !signature || !signature.startsWith("sha256=")) {
+    if (!secret || !signature || !/^sha256=[a-fA-F0-9]{64}$/.test(signature))
       return false;
-    }
-    const expected = yield* Effect.promise(async () => {
-      const encoder = new TextEncoder();
-      const key = await crypto.subtle.importKey(
+    const keyBytes = yield* Effect.sync(() => new TextEncoder().encode(secret));
+    const bodyBytes = yield* Effect.sync(() => new TextEncoder().encode(body));
+    const key = yield* Effect.promise(() =>
+      crypto.subtle.importKey(
         "raw",
-        encoder.encode(secret),
+        keyBytes,
         { name: "HMAC", hash: "SHA-256" },
         false,
-        ["sign"],
-      );
-      const digest = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        encoder.encode(body),
-      );
-      const hex = Array.from(new Uint8Array(digest))
-        .map((byte) => byte.toString(16).padStart(2, "0"))
-        .join("");
-      return `sha256=${hex}`;
-    });
-    return timingSafeEqual(expected, signature);
+        ["verify"],
+      ),
+    );
+    const digest = yield* Effect.sync(() =>
+      Uint8Array.from(signature.slice(7).match(/../g)!, (byte) =>
+        Number.parseInt(byte, 16),
+      ),
+    );
+    return yield* Effect.promise(() =>
+      crypto.subtle.verify("HMAC", key, digest, bodyBytes),
+    );
   });
-
-/**
- * Constant-time string comparison. Avoids leaking signature bytes through
- * early-exit timing differences. `crypto.subtle.timingSafeEqual` isn't
- * available on Workers without `nodejs_compat`, so we roll a small one.
- */
-const timingSafeEqual = (a: string, b: string): boolean => {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-};

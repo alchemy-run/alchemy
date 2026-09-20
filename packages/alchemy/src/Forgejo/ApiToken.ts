@@ -7,7 +7,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import { Credentials } from "./Credentials.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { toRedacted } from "../Util/redacted.ts";
+import { toRedacted } from "./Redacted.ts";
 import { paginate } from "./Pagination.ts";
 import type * as Forgejo from "./Providers.ts";
 import { sameSet } from "./Settings.ts";

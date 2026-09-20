@@ -4,6 +4,13 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Semaphore from "effect/Semaphore";
+import {
+  ConflictingWebhookEndpoint,
+  makeWebhookDispatcher,
+  reserveWebhookPath,
+  type WebhookDispatcher,
+} from "../Serverless/Webhook.ts";
 import { Worker, isWorkerEvent } from "../Cloudflare/Workers/Worker.ts";
 import * as Namespace from "../Namespace.ts";
 import * as Output from "../Output.ts";
@@ -73,6 +80,12 @@ export const bindWebhookSecret = (
  * the delivery URL from the Worker's `url`, enables the selected event
  * types, and binds the endpoint's minted signing secret onto the Worker so
  * deliveries are verified. No separate endpoint declaration is needed.
+ *
+ * Subscriptions sharing a path must use the same endpoint ID. Their event
+ * selections are combined into one endpoint, which verifies and decodes each
+ * request once. Every matching subscriber must succeed within 30 seconds before
+ * acknowledgement; failures return 503. Redeliveries may repeat successful
+ * subscribers, so side effects must be idempotent.
  *
  * Provide {@link ConsumeEventsLive} on the Worker Effect.
  *
@@ -168,47 +181,77 @@ export const ConsumeEventsLive = Layer.effect(
   EventSource,
   Effect.gen(function* () {
     const host = yield* Worker;
-
-    return Effect.fn(function* (
+    const lock = yield* Semaphore.make(1);
+    const receivers = new Map<
+      string,
+      {
+        id: string;
+        byType: Map<string, StripeEventClass>;
+        dispatcher: WebhookDispatcher<StripeEventInstance>;
+      }
+    >();
+    const subscribe = Effect.fn(function* (
       id: string,
       props: ConsumeEventsProps,
-      process: (
-        event: StripeEventInstance,
-      ) => Effect.Effect<void, never, never>,
+      process: (event: StripeEventInstance) => Effect.Effect<void>,
     ) {
       const path = webhookPath(props.path);
-      const secretKey = webhookSecretEnvName(path);
-      const byType = new Map(
-        props.events.map((event) => [event.type, event] as const),
-      );
-
-      if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const endpoint = yield* WebhookEndpoint(id, {
-              url: Output.interpolate`${host.url}${path}`,
-              enabledEvents: [...props.events],
-            });
-            yield* bindWebhookSecret(host, endpoint.secret, props.path);
+      let receiver = receivers.get(path);
+      if (receiver && receiver.id !== id) {
+        return yield* Effect.die(
+          new ConflictingWebhookEndpoint({
+            path,
+            message:
+              "Subscriptions to one Stripe webhook path must use the same endpoint ID.",
           }),
         );
       }
-
-      yield* host.listen((event) => {
-        if (!isWorkerEvent(event) || event.type !== "fetch") return;
-        const request = event.input as cf.Request;
-        let pathname: string;
-        try {
-          pathname = new URL(request.url).pathname;
-        } catch {
-          return;
+      if (!receiver) {
+        yield* reserveWebhookPath(host, path);
+        const byType = new Map<string, StripeEventClass>();
+        const dispatcher = yield* makeWebhookDispatcher<StripeEventInstance>({
+          successStatus: 200,
+        });
+        if (!globalThis.__ALCHEMY_RUNTIME__) {
+          yield* Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const endpoint = yield* WebhookEndpoint(id, {
+                url: Output.interpolate`${host.url}${path}`,
+                enabledEvents: Effect.sync(() => [...byType.values()]),
+              });
+              yield* bindWebhookSecret(host, endpoint.secret, props.path);
+            }),
+          );
         }
-        if (pathname !== path) return;
-        const env = (event.env ?? {}) as Record<string, unknown>;
-        return handleDelivery(request, env, secretKey, byType, process);
-      });
-    }) as EventSourceService;
+        const secretKey = webhookSecretEnvName(path);
+        yield* host.listen((event) => {
+          if (!isWorkerEvent(event) || event.type !== "fetch") return;
+          const request = event.input as cf.Request;
+          if (new URL(request.url).pathname !== path) return;
+          return handleStripeDelivery(
+            request,
+            (event.env ?? {}) as Record<string, unknown>,
+            secretKey,
+            byType,
+            dispatcher.dispatch,
+          );
+        });
+        receiver = { id, byType, dispatcher };
+        receivers.set(path, receiver);
+      }
+      for (const event of props.events) receiver.byType.set(event.type, event);
+      yield* receiver.dispatcher.subscribe((event) =>
+        props.events.some((selected) => selected.type === event.type)
+          ? process(event)
+          : Effect.void,
+      );
+    });
+    return ((
+      id: string,
+      props: ConsumeEventsProps,
+      process: (event: StripeEventInstance) => Effect.Effect<void>,
+    ) => lock.withPermit(subscribe(id, props, process))) as EventSourceService;
   }),
 );
 
@@ -229,13 +272,13 @@ const asWebhookSecret = (
   return undefined;
 };
 
-const handleDelivery = <Req>(
+const handleStripeDelivery = (
   request: cf.Request,
   env: Record<string, any>,
   secretKey: string,
   byType: Map<string, StripeEventClass>,
-  process: (event: StripeEventInstance) => Effect.Effect<void, never, Req>,
-): Effect.Effect<Response, never, Req> =>
+  process: (event: StripeEventInstance) => Effect.Effect<Response>,
+): Effect.Effect<Response> =>
   Effect.gen(function* () {
     if (request.method !== "POST") {
       return new Response("method not allowed", { status: 405 });
@@ -273,6 +316,5 @@ const handleDelivery = <Req>(
       "object" in parsed.data
         ? (parsed.data as { object: unknown }).object
         : parsed.data;
-    yield* process(new Ctor(data as never)).pipe(Effect.orDie);
-    return new Response(null, { status: 200 });
+    return yield* process(new Ctor(data as never));
   });

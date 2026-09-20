@@ -200,8 +200,8 @@ export const verifyRuntime = <A, E, R, Retained>(
           schedule: Schedule.spaced("2 seconds"),
           times: 8,
           until: (comments) =>
-            comments.some((comment) =>
-              comment.body?.startsWith("received issues "),
+            ["received issues ", "audited issues "].every((prefix) =>
+              comments.some((comment) => comment.body?.startsWith(prefix)),
             ),
         }),
       );
@@ -212,6 +212,9 @@ export const verifyRuntime = <A, E, R, Retained>(
     }
     expect(
       comments.some((comment) => comment.body?.startsWith("received issues ")),
+    ).toBe(true);
+    expect(
+      comments.some((comment) => comment.body?.startsWith("audited issues ")),
     ).toBe(true);
     const pushed = yield* Services.issue.listIssues(target).pipe(
       Effect.repeat({
@@ -385,6 +388,39 @@ export const verifyRuntime = <A, E, R, Retained>(
       }),
     );
     expect(yield* signAndSend(validBody, secret)).toBe(202);
+    const retryBody = yield* Effect.sync(() =>
+      JSON.stringify({
+        action: "fanout-retry",
+        issue: { ...issue, body: "fanout" },
+        repository: observedRepo,
+        sender: observedRepo.owner,
+      }),
+    );
+    expect(yield* signAndSend(retryBody, secret)).toBe(503);
+    expect(
+      (yield* Services.issue.issueGetComments({
+        ...target,
+        index: issue.number!,
+      })).filter(
+        (comment) =>
+          comment.body === "attempted delivery runtime-negative-controls",
+      ),
+    ).toHaveLength(1);
+    yield* Services.issue.issueCreateComment({
+      ...target,
+      index: issue.number!,
+      body: "retry approved runtime-negative-controls",
+    });
+    expect(yield* signAndSend(retryBody, secret)).toBe(202);
+    expect(
+      (yield* Services.issue.issueGetComments({
+        ...target,
+        index: issue.number!,
+      })).filter(
+        (comment) =>
+          comment.body === "attempted delivery runtime-negative-controls",
+      ),
+    ).toHaveLength(2);
     expect(yield* signAndSend(validBody, Redacted.make("wrong-secret"))).toBe(
       401,
     );
@@ -506,8 +542,8 @@ export const verifyRuntime = <A, E, R, Retained>(
           schedule: Schedule.spaced("5 seconds"),
           times: 8,
           until: (comments) =>
-            comments.some((comment) =>
-              comment.body?.startsWith("received issues "),
+            ["received issues ", "audited issues "].every((prefix) =>
+              comments.some((comment) => comment.body?.startsWith(prefix)),
             ),
         }),
       );

@@ -7,14 +7,8 @@ import {
   isFunctionURLEvent,
   makeFunctionHttpHandler,
 } from "../AWS/Lambda/HttpServer.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Repository } from "./Repository.ts";
-import {
-  RepositoryEventSource,
-  type RepositoryEventSourceProps,
-  type RepositoryEvent,
-} from "./RepositoryEventSource.ts";
-import { makeForgejoSubscription } from "./RuntimeEvents.ts";
+import { RepositoryEventSource } from "./RepositoryEventSource.ts";
+import { makeForgejoEventSource } from "./RuntimeEvents.ts";
 
 /**
  * Receives signed Forgejo webhooks through a Lambda Function URL or API Gateway v2.
@@ -26,35 +20,29 @@ export const RepositoryEventSourceLambda = Layer.effect(
   RepositoryEventSource,
   Effect.gen(function* () {
     const host = yield* Function;
-    return Effect.fn(function* (
-      repo: Repository,
-      props: RepositoryEventSourceProps,
-      handler: (
-        event: RepositoryEvent,
-      ) => Effect.Effect<void, never, RuntimeContext>,
-    ) {
-      const subscription = yield* makeForgejoSubscription(
-        `${host.Type}:${host.FQN}`,
-        host.functionUrl,
-        repo,
-        props,
-        host,
-      );
-      const receive = makeFunctionHttpHandler(
+    return yield* makeForgejoEventSource({
+      host: `${host.Type}:${host.FQN}`,
+      url: host.functionUrl,
+      runtime: host,
+      listen: (receiver) =>
         Effect.gen(function* () {
-          const incoming = yield* HttpServerRequest.HttpServerRequest;
-          const request = yield* HttpServerRequest.toWeb(incoming).pipe(
-            Effect.orDie,
+          const receive = makeFunctionHttpHandler(
+            Effect.gen(function* () {
+              const incoming = yield* HttpServerRequest.HttpServerRequest;
+              const request = yield* HttpServerRequest.toWeb(incoming).pipe(
+                Effect.orDie,
+              );
+              return HttpServerResponse.fromWeb(
+                yield* receiver.handle(request),
+              );
+            }),
           );
-          const response = yield* subscription.handle(request, handler);
-          return HttpServerResponse.fromWeb(response);
+          yield* host.listen((event) => {
+            if (!isFunctionURLEvent(event) || event.rawPath !== receiver.path)
+              return;
+            return receive(event);
+          });
         }),
-      );
-      yield* host.listen((event) => {
-        if (!isFunctionURLEvent(event) || event.rawPath !== subscription.path)
-          return;
-        return receive(event);
-      });
     });
   }),
 );

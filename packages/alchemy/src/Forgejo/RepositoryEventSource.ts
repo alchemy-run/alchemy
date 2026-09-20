@@ -109,6 +109,12 @@ export interface RepositoryEventSource extends Binding.Service<
  * delete-first: deliveries can be interrupted until both hook and receiver
  * converge. This is not an atomic rotation.
  *
+ * Subscriptions with the same repository and event selection share one receiver
+ * and must reuse the same signing secret source. The receiver authenticates and
+ * decodes once, then runs every subscriber. It acknowledges only after all
+ * subscribers succeed; failures or a 30-second processing timeout return 503.
+ * Redelivery can repeat successful subscribers, so side effects must be idempotent.
+ *
  * ### Receiving Repository Events
  * **Example:** Subscribe inside a Worker or Lambda initialization effect
  * ```typescript

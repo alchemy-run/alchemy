@@ -274,6 +274,23 @@ verification. Forgejo 16.0.3 cannot edit a hook's signing secret, so a
 secret change replaces the hook and can interrupt delivery during
 replacement. A failed replacement can extend that gap until recovery.
 
+### Multiple subscribers and acknowledgement
+
+Subscriptions on the same host with the same repository and event selection
+share one webhook receiver. Event order does not matter. Reuse the same signing
+secret source when providing an external secret; conflicting secrets are rejected.
+
+The receiver verifies the signature and decodes the request once, then runs every
+subscriber concurrently. It returns `202` only after all subscribers succeed.
+A subscriber failure or a 30-second processing timeout returns `503` instead;
+invalid signatures invoke no subscribers.
+
+A retried or manually redelivered event runs all subscribers again, including
+those that previously succeeded. Make side effects idempotent, using the event's
+`id` where appropriate. Partial failure does not roll back completed side effects.
+The sender's delivery policy determines whether and when it retries a failed
+request. Alchemy does not persist a delivery queue or promise exactly-once processing.
+
 ## Bootstrap permissions and cleanup
 
 Automatic token creation uses Forgejo's administrator token API. The
