@@ -1,10 +1,11 @@
 /**
  * SOFT HUMAN RANKING, SCRIPTED — the deterministic edges of the
- * staged scheduler (Scheduler.ts) over the desk world: the drag's
+ * walk scheduler (Scheduler.ts) over the desk world: the drag's
  * one-row hint math, the hint-then-FIFO fallback (unreachable or
  * unsure judge), the judge's recorded deviation from the human's
- * dragged order, and the worked-by memory that feeds a desk's
- * `recent` even after review re-desks its completed tasks.
+ * dragged order (through the focused two-option gate), and the
+ * worked-by memory that feeds a desk's `recent` even after review
+ * re-desks its completed tasks.
  */
 import { RuntimeContext } from "alchemy";
 import type * as TypeSafe from "alchemy/TypeSafe";
@@ -30,38 +31,53 @@ const runRerank = (world: ReturnType<typeof deskWorld>) =>
   );
 
 /**
- * A scripted judge for the RANK questions: map Scores answer fixed
- * urgency/fit, the pairwise Choice picks by `pick` over the human
- * signal's two ids at the given confidence. Review/disposition
- * questions answer like the world's own scripted query.
+ * A scripted judge for the WALK questions: the pick fan-out
+ * (`next`+`probe`) chooses by `pick` over the human signal's two ids
+ * at the given confidence (probe answers `enough` — no drilling),
+ * and the focused two-option gate (`pair`) answers the same way with
+ * the confidence as the winner's probability mass. Review and
+ * disposition questions answer like the world's own scripted query.
  */
 const rankJudge = (options: {
   readonly pick: "above" | "below";
   readonly confidence: number;
-  readonly urgency?: number;
-  readonly fit?: number;
 }) =>
   ((questions: Record<string, unknown>, opts: {
     state: Record<string, unknown>;
   }) =>
     Effect.sync(() => {
-      if ("urgency" in questions) {
-        const urgency = options.urgency ?? 0.2;
-        const fit = options.fit ?? 0.4;
-        return {
-          value: { urgency, fit },
-          answers: { urgency: { score: urgency }, fit: { score: fit } },
-        };
-      }
-      if ("pair" in questions) {
+      const chooseHuman = () => {
         const match = /sam ordered (\S+) above (\S+)/.exec(
           String(opts.state.human ?? ""),
         );
         if (match === null) throw new Error("no human signal to pick from");
-        const value = options.pick === "above" ? match[1]! : match[2]!;
+        return options.pick === "above" ? match[1]! : match[2]!;
+      };
+      if ("next" in questions) {
+        const value = chooseHuman();
+        return {
+          value: { next: value, probe: "enough" },
+          answers: {
+            next: {
+              choice: value,
+              confidence: options.confidence,
+              probabilities: { [value]: options.confidence },
+            },
+            probe: { choice: "enough", confidence: 0.9 },
+          },
+        };
+      }
+      if ("pair" in questions) {
+        const value = chooseHuman();
         return {
           value: { pair: value },
-          answers: { pair: { choice: value, confidence: options.confidence } },
+          answers: {
+            pair: {
+              choice: value,
+              confidence: options.confidence,
+              probabilities: { [value]: options.confidence },
+            },
+          },
         };
       }
       if ("changes" in questions) {
@@ -101,6 +117,9 @@ describe("soft human ranking", () => {
     expect(world.task("t-3").rank).toBe(1);
     expect(world.task("t-3").rankWhy).toBe("sam's order");
     expect(world.task("t-1").rankWhy).toBe("fifo — oldest ready");
+    // the top pick wears the NEXT stamp for the desk (width 1)
+    expect(world.task("t-3").nextFor).toBe("engineer");
+    expect(world.task("t-1").nextFor).toBeUndefined();
 
     // and the desk loop claims in exactly that order — zero judging
     // on the claim path
@@ -135,6 +154,17 @@ describe("soft human ranking", () => {
     expect(world.task("t-a").rank).toBe(1);
     expect(world.task("t-a").rankWhy).toBe("judge: before t-b");
     expect(world.task("t-b").rankWhy).toBe("follows t-a (same forge)");
+    expect(world.task("t-a").nextFor).toBe("engineer");
+
+    // the pick's WALK TRACE landed with the rank — the pick step and
+    // the two-option override gate, in order
+    const write = world.rankWrites.at(-1)!;
+    const trace = write.entries.find((entry) => entry.id === "t-a")?.trace;
+    expect(trace).toBeDefined();
+    expect(trace!.length).toBe(2);
+    expect(trace![0]!.answer).toBe("t-a");
+    expect(trace![1]!.question).toContain("override sam's order?");
+    expect(trace![1]!.conviction).toBeCloseTo(0.9);
   });
 
   test("a sure-but-unconvinced judge keeps sam's order for the pair — no deviation, no fallback", async () => {

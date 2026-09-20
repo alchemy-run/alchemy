@@ -25,8 +25,10 @@ export const HUMAN: Author & { readonly avatar?: string } = {
   kind: "human",
 };
 
-/** FNV-1a over the name — a stable hue per author. */
-const hueOf = (name: string): number => {
+/** FNV-1a over the name — a stable hue per author. The task board
+ *  reuses this mapping for its agent accents (working borders, the
+ *  NEXT chip), so a desk's color IS its avatar's color. */
+export const hueOf = (name: string): number => {
   let hash = 0x811c9dc5;
   for (let index = 0; index < name.length; index++) {
     hash ^= name.charCodeAt(index);

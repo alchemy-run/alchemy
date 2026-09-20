@@ -1,11 +1,14 @@
 /**
- * THE SCHEDULER'S SCORECARD — the STAGED ranker (MAP urgency/fit
- * Scores, REDUCE pairwise Choices) judged against the REAL System
- * One API (gate.test.ts's pattern; gated on `TYPESAFE_API_KEY`).
- * The claims under test: context AFFINITY beats FIFO on the judged
- * rank; an urgent interrupt outranks adjacency; the human's dragged
- * order carries when signals are weak. The deterministic edges
- * (fallbacks, hint math, deviation records) live in ranking.test.ts.
+ * THE SCHEDULER'S SCORECARD — the WALK ranker (whole-board pick
+ * walks + focused two-option gates, Scheduler.ts) judged against the
+ * REAL System One API (gate.test.ts's pattern; gated on
+ * `TYPESAFE_API_KEY`). The claims under test: context AFFINITY beats
+ * FIFO on the judged rank; an urgent interrupt outranks adjacency;
+ * the human's dragged order carries when signals are weak; and a
+ * routine-looking card whose FULL body hides a prerequisite gets
+ * DRILLED and ranked first. The deterministic edges (fallbacks, hint
+ * math, deviation records, walk traces) live in ranking.test.ts; the
+ * combinator itself in walk.test.ts.
  */
 import * as TS from "@distilled.cloud/typesafe-ai";
 import { RuntimeContext } from "alchemy";
@@ -18,11 +21,7 @@ import {
   type RankBoard,
   type RankEntry,
 } from "../../src/tasks/Scheduler.ts";
-import type {
-  RankWrite,
-  TaskRow,
-  TaskScoreRow,
-} from "../../src/tasks/TasksDO.ts";
+import type { RankWrite, TaskRow } from "../../src/tasks/TasksDO.ts";
 
 const query = ((questions, options) =>
   TS.query(questions, options).pipe(
@@ -56,20 +55,13 @@ const boardOf = (
     at: 1_000 + index,
     updated: 1_000 + index,
   }));
-  const scoreRows: TaskScoreRow[] = [];
   const writes: Array<ReadonlyArray<RankWrite>> = [];
   const board: RankBoard = {
-    list: () => Effect.sync(() => rows.slice()),
+    list: (state) =>
+      Effect.sync(() => (state === "ready" ? rows.slice() : [])),
     deskState: () =>
       Effect.sync(() => ({ working: [], width: 1, recent })),
-    scores: () => Effect.sync(() => scoreRows.slice()),
-    writeScore: (id, hash, urgency, fit) =>
-      Effect.sync(() => {
-        const index = scoreRows.findIndex((row) => row.id === id);
-        const next = { id, hash, urgency, fit, at: 0 };
-        if (index >= 0) scoreRows[index] = next;
-        else scoreRows.push(next);
-      }),
+    events: () => Effect.sync(() => []),
     writeRanks: (entries) =>
       Effect.sync(() => {
         writes.push(entries);
@@ -195,7 +187,40 @@ const SCENARIOS: ReadonlyArray<Scenario> = [
   },
 ];
 
-describe("the staged scheduler", () => {
+/** The misleading card: routine-looking title, a long body whose
+ *  tail reveals the hard prerequisite — the walk's drill subject. */
+const DRILL_BOARD: ReadonlyArray<CardSpec> = [
+  {
+    id: "t-bump",
+    title: "chore(forge): bump the tree-walker dependency",
+    // the clipped card reads as routine hygiene; only the FULL body
+    // (past the 320-char clip) reveals the hard prerequisite
+    body:
+      "Bump the internal tree-walker package from 4.11 to 4.12. " +
+      "Update the lockfile, re-run the codegen that consumes its AST " +
+      "types, and confirm the snapshot fixtures still parse. Version " +
+      "4.12 is a minor with the usual changelog: parser performance, " +
+      "a handful of upstream bugfixes, refreshed type exports. " +
+      "Standard dependency hygiene, the kind of chore that usually " +
+      "waits at the back of the queue. One thing the changelog " +
+      "buries, though: 4.12 is the release that ships the whole-tree " +
+      "snapshot endpoint, and the code-browser sidebar task on this " +
+      "board STRICTLY depends on that endpoint existing — nothing in " +
+      "the sidebar work can even start until this bump lands and " +
+      "deploys. It is the hard PREREQUISITE of the sidebar feature; " +
+      "landing it second wastes a full desk round on a task that " +
+      "cannot proceed.",
+    tags: ["forge"],
+  },
+  {
+    id: "t-sidebar",
+    title: "feat(forge): code browser sidebar",
+    body: "Build the code browser's sidebar tree. High-visibility feature work on the forge UI.",
+    tags: ["forge"],
+  },
+];
+
+describe("the walk scheduler", () => {
   test("an empty board writes an empty rank", async () => {
     const input = boardOf([]);
     const entries = await runRank(input);
@@ -229,6 +254,38 @@ describe("the staged scheduler", () => {
         );
       }
       expect(failures.map((row) => row.scenario.name)).toEqual([]);
+    },
+    { timeout: 90_000 },
+  );
+
+  test.skipIf(!process.env.TYPESAFE_API_KEY)(
+    "walk mechanics: NEXT stamped, traces persisted, ranks materialized",
+    async () => {
+      const input = boardOf(DRILL_BOARD);
+      const entries = await runRank(input);
+      // every ready row ranked, exactly one NEXT for the width-1 desk
+      expect(entries.length).toBe(DRILL_BOARD.length);
+      expect(
+        entries.filter((entry) => entry.nextFor === "engineer").length,
+      ).toBe(1);
+      expect(entries[0]!.nextFor).toBe("engineer");
+      // the pick's walk trace landed with the write
+      const write = input.writes.at(-1)!;
+      const top = write.find((entry) => entry.rank === 1)!;
+      expect(top.trace).toBeDefined();
+      expect(top.trace!.length).toBeGreaterThan(0);
+      expect(top.trace![0]!.question).toContain("engineer");
+      console.log(
+        `walk ranked: ${entries
+          .map((entry) => `${entry.id}#${entry.rank} (${entry.rankWhy})`)
+          .join(" · ")} — trace ${top.trace!.length} step(s), drilled [${[
+          ...new Set(
+            write.flatMap((entry) =>
+              (entry.trace ?? []).flatMap((step) => step.expanded),
+            ),
+          ),
+        ].join(", ")}]`,
+      );
     },
     { timeout: 90_000 },
   );

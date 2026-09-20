@@ -22,14 +22,13 @@ import {
   type RouteInput,
   type TaskEventRow,
   type TaskRow,
-  type TaskScoreRow,
   type TaskState,
 } from "./TasksDO.ts";
 
 /**
  * THE DESK LOOP — the pump that keeps a queue's desks fed. For each
  * queue × member: when the desk is idle, the board's MATERIALIZED
- * rank (Scheduler.ts's staged ranker — human hints + judged order)
+ * rank (Scheduler.ts's walk ranker — human hints + judged order)
  * names the ready task, the board claims it atomically, the
  * identity's self digest is delivered to the desk, and the task
  * card is dispatched INTO the standing desk session. The DISPOSITION
@@ -154,19 +153,8 @@ export interface DeskBoard {
     never,
     RuntimeContext
   >;
-  /** The scheduler's MAP cache + rank materialization (Scheduler.ts's
-   *  RankBoard — the board IS the rank store). */
-  readonly scores: () => Effect.Effect<
-    ReadonlyArray<TaskScoreRow>,
-    never,
-    RuntimeContext
-  >;
-  readonly writeScore: (
-    id: string,
-    hash: string,
-    urgency: number,
-    fit: Record<string, number>,
-  ) => Effect.Effect<void, never, RuntimeContext>;
+  /** The scheduler's rank materialization (Scheduler.ts's RankBoard
+   *  — the board IS the rank store, walk traces included). */
   readonly writeRanks: (
     entries: ReadonlyArray<RankWrite>,
   ) => Effect.Effect<void, never, RuntimeContext>;
@@ -794,9 +782,6 @@ export const DesksLive: Layer.Layer<
         events: (id) => tasks.events(queue, id),
         comment: (id, actor, post) => tasks.comment(queue, id, actor, post),
         spendDispatch: () => tasks.spendDispatch(queue),
-        scores: () => tasks.scores(queue),
-        writeScore: (id, hash, urgency, fit) =>
-          tasks.writeScore(queue, id, hash, urgency, fit),
         writeRanks: (entries) => tasks.writeRanks(queue, entries),
       }),
       post: (input) =>

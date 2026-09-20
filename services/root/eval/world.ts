@@ -21,10 +21,10 @@ import {
   HINT_GAP,
   HINT_NULL_OFFSET,
   transition,
+  type RankWrite,
   type RouteInput,
   type TaskEventRow,
   type TaskRow,
-  type TaskScoreRow,
   type TaskState,
 } from "../src/tasks/TasksDO.ts";
 
@@ -70,6 +70,7 @@ export const deskWorld = (options?: {
     hint?: number;
     rank?: number;
     rankWhy?: string;
+    nextFor?: string;
     at: number;
     updated: number;
   }
@@ -81,10 +82,13 @@ export const deskWorld = (options?: {
   const dispatches: Array<
     { member: string; task: string; key: string; ask: string; at: number }
   > = [];
-  const scoreRows: Array<TaskScoreRow & { fit: Record<string, number> }> = [];
-  const rankWrites: Array<
-    ReadonlyArray<{ id: string; rank: number; rankWhy: string }>
-  > = [];
+  /** Every writeRanks call: when it landed and its full entries
+   *  (why lines, NEXT stamps, walk traces) — the eval's deviation,
+   *  drill, and churn reads. */
+  const rankWrites: Array<{
+    readonly at: number;
+    readonly entries: ReadonlyArray<RankWrite>;
+  }> = [];
   /** Every deskState read, with the recent the caller saw — the
    *  eval's starvation probe (scripted.ts). */
   const snapshots: Array<{
@@ -245,22 +249,19 @@ export const deskWorld = (options?: {
         spent += 1;
         return true;
       }),
-    // the scheduler's MAP cache + rank materialization, in memory
-    scores: () => Effect.sync(() => scoreRows.map((row) => ({ ...row }))),
-    writeScore: (id, hash, urgency, fit) =>
-      Effect.sync(() => {
-        const index = scoreRows.findIndex((row) => row.id === id);
-        const next = { id, hash, urgency, fit, at: tick() };
-        if (index >= 0) scoreRows[index] = next;
-        else scoreRows.push(next);
-      }),
+    // the scheduler's rank materialization (walk traces included),
+    // in memory — TasksDO's writeRanks mirrored
     writeRanks: (entries) =>
       Effect.sync(() => {
-        rankWrites.push(entries.map((entry) => ({ ...entry })));
+        rankWrites.push({
+          at: now,
+          entries: entries.map((entry) => ({ ...entry })),
+        });
         for (const row of rows.values()) {
           if (row.state === "ready") {
             delete row.rank;
             delete row.rankWhy;
+            delete row.nextFor;
           }
         }
         for (const entry of entries) {
@@ -268,16 +269,17 @@ export const deskWorld = (options?: {
           if (row !== undefined && row.state === "ready") {
             row.rank = entry.rank;
             row.rankWhy = entry.rankWhy;
+            if (entry.nextFor !== undefined) row.nextFor = entry.nextFor;
           }
         }
       }),
   };
 
   // the scripted System One: review verdicts and forgotten-line
-  // dispositions answer from code; everything else (the staged
-  // ranker's urgency/fit Scores and pairwise Choices) is unscripted —
-  // a defect tryQuery turns into the hint-then-FIFO fallback, which
-  // is exactly what a deterministic test wants
+  // dispositions answer from code; everything else (the walk
+  // ranker's pick/probe/pair Choices) is unscripted — a defect
+  // tryQuery turns into the hint-then-FIFO fallback, which is
+  // exactly what a deterministic test wants
   const scriptedQuery = ((questions: Record<string, unknown>, opts: {
     state: Record<string, unknown>;
   }) =>
@@ -434,6 +436,8 @@ export const deskWorld = (options?: {
     },
     /** Every event as `task:kind`, in order — cross-task ordering. */
     timeline: () => events.map((row) => `${row.task}:${row.kind}`),
+    /** Every event row, in order — the eval's churn justification. */
+    allEvents: () => events.map((row) => ({ ...row })),
     /** A task wedged in `working` — claimed durably, waiter dead. */
     seedWorking: (
       id: string,
@@ -525,6 +529,7 @@ export const deskWorld = (options?: {
         if (row.state === "ready") {
           delete row.rank;
           delete row.rankWhy;
+          delete row.nextFor;
         }
       }
       event(id, "reordered", "sam", JSON.stringify({ hint: task.hint, ...anchor }));

@@ -63,14 +63,35 @@ export interface Metrics {
   };
   readonly disposition: Ratio;
   readonly review: Ratio;
-  /** The staged ranker (Scheduler.ts): pairwise reduce Choices, the
-   *  deviations it took against the human's dragged order (with
-   *  their why lines), and — when the scenario declares a
-   *  `truthOrder` — the engineer's claim order vs the truth. */
+  /** The walk ranker (Scheduler.ts): pick-walk calls, two-option
+   *  gates/compares, the deviations it took against the human's
+   *  dragged order (with their why lines), the drills it made vs the
+   *  scenario's drill truth, rank CHURN across re-ranks (position
+   *  changes without a justifying event — informational, always-
+   *  fresh re-ranking must move for a reason), and — when the
+   *  scenario declares a `truthOrder` — claim order vs truth. */
   readonly ranking?: {
+    /** Pick-walk fan-out calls (`next`+`probe`). */
+    readonly walks: number;
+    /** Focused two-option calls (deviation gates, compares). */
     readonly pairs: number;
     readonly deviations: number;
     readonly deviationWhys: ReadonlyArray<string>;
+    readonly drill?: {
+      readonly drilled: ReadonlyArray<string>;
+      readonly truth?: ReadonlyArray<string>;
+      readonly precision?: number;
+      readonly recall?: number;
+    };
+    readonly churn?: {
+      /** Consecutive re-rank pairs compared. */
+      readonly transitions: number;
+      /** Relative-order flips among tasks present in both ranks. */
+      readonly movedPairs: number;
+      /** Flips where NO event between the ranks touched either
+       *  task — movement without a visible cause. */
+      readonly unjustifiedPairs: number;
+    };
     readonly order?: {
       readonly truth: ReadonlyArray<string>;
       readonly claimed: ReadonlyArray<string>;
@@ -152,11 +173,31 @@ export const printReport = (report: ScenarioReport, file?: string): void => {
   console.log(`   review       ${pct(m.review)} noul agreement`);
   if (m.ranking !== undefined) {
     console.log(
-      `   ranking      ${m.ranking.pairs} pairwise · ${m.ranking.deviations} deviation(s)` +
+      `   ranking      ${m.ranking.walks} walk calls · ${m.ranking.pairs} pairwise · ${m.ranking.deviations} deviation(s)` +
         (m.ranking.order === undefined
           ? ""
           : ` · order ${m.ranking.order.matched ? "✓" : "✗"} claimed [${m.ranking.order.claimed.join(" ")}] truth [${m.ranking.order.truth.join(" ")}]`),
     );
+    if (m.ranking.drill !== undefined) {
+      const drill = m.ranking.drill;
+      console.log(
+        `   drill        [${drill.drilled.join(" ")}]` +
+          (drill.truth === undefined
+            ? ""
+            : ` truth [${drill.truth.join(" ")}]`) +
+          (drill.precision === undefined
+            ? ""
+            : ` · precision ${(drill.precision * 100).toFixed(0)}%`) +
+          (drill.recall === undefined
+            ? ""
+            : ` · recall ${(drill.recall * 100).toFixed(0)}%`),
+      );
+    }
+    if (m.ranking.churn !== undefined && m.ranking.churn.transitions > 0) {
+      console.log(
+        `   churn        ${m.ranking.churn.movedPairs} moved pair(s) over ${m.ranking.churn.transitions} re-rank(s) · ${m.ranking.churn.unjustifiedPairs} unjustified`,
+      );
+    }
     for (const why of m.ranking.deviationWhys) {
       console.log(`   deviation    ${why}`);
     }

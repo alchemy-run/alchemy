@@ -8,6 +8,12 @@ import {
 } from "./ranking.ts";
 import { reviewBounce } from "./review-bounce.ts";
 import { routing } from "./routing.ts";
+import {
+  walkClear,
+  walkDeviate,
+  walkDrag,
+  walkDrill,
+} from "./walk.ts";
 import { width } from "./width.ts";
 
 /** Every scenario, in the order `all` runs them. */
@@ -17,6 +23,10 @@ export const SCENARIOS: ReadonlyArray<Scenario> = [
   rankingHuman,
   rankingFollows,
   rankingAffinity,
+  walkDrill,
+  walkClear,
+  walkDrag,
+  walkDeviate,
   width,
   parking,
   reviewBounce,

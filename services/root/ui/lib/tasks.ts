@@ -88,9 +88,37 @@ export interface TaskRow {
   /** One line of why — `judge:`-prefixed when the judged rank went
    *  against the human's dragged order. */
   readonly rankWhy?: string;
+  /** The desk whose NEXT pick this ready row is — the board's
+   *  `NEXT · <agent>` chip. */
+  readonly nextFor?: string;
   readonly at: number;
   readonly updated: number;
 }
+
+/** One recorded step of a scheduler pick walk (src/judge/Walk.ts). */
+export interface WalkStep {
+  readonly question: string;
+  readonly answer: string;
+  readonly conviction: number;
+  /** Task ids this step drilled into (bodies, threads). */
+  readonly expanded: ReadonlyArray<string>;
+  readonly elapsedMs: number;
+}
+
+/** The latest rank round's walk traces, per ready task. */
+export interface WalkRound {
+  readonly round: number;
+  readonly at: number;
+  readonly walks: ReadonlyArray<{
+    readonly task: string;
+    readonly trace: ReadonlyArray<WalkStep>;
+  }>;
+}
+
+export const fetchWalks = (queue: string): Promise<WalkRound> =>
+  fetch(`/api/tasks/${encodeURIComponent(queue)}/walks`).then(
+    (response) => response.json() as Promise<WalkRound>,
+  );
 
 /** The hint axis's null band (mirrors src/tasks/TasksDO.ts): an
  *  undragged card's key is its age pushed past any explicit hint. */

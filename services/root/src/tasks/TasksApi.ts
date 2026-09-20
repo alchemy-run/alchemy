@@ -29,6 +29,8 @@ const parseTags = (raw: unknown): ReadonlyArray<string> | undefined =>
  *
  * - `GET  /api/tasks/queues`             — registered queues + desk states
  * - `GET  /api/tasks/:queue`             — the board (tasks by state)
+ * - `GET  /api/tasks/:queue/walks`       — the latest rank round's
+ *   walk traces (the scheduler's decision chains, per ready task)
  * - `GET  /api/tasks/:queue/:id`         — one task + its timeline
  * - `POST /api/tasks`                    — file `{title, body, tags?}`
  *   (the router assigns the area tag when `tags` is absent; unsure
@@ -146,6 +148,24 @@ export const TasksApi = Effect.gen(function* () {
       ]),
     ) as Record<TaskState, unknown>;
     return yield* HttpServerResponse.json({ queue: queue.slug, tasks: byState });
+  });
+
+  /** The latest rank round's walk traces — the board's trace panel
+   *  and "examined this round" markers poll this beside the board. */
+  const walks = Effect.gen(function* () {
+    const queue = yield* knownQueue;
+    if (queue === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such queue" },
+        { status: 404 },
+      );
+    }
+    const rows = yield* tasks.walks(queue.slug);
+    return yield* HttpServerResponse.json({
+      round: rows[0]?.round ?? 0,
+      at: rows[0]?.at ?? 0,
+      walks: rows.map((row) => ({ task: row.task, trace: row.trace })),
+    });
   });
 
   const one = Effect.gen(function* () {
@@ -406,6 +426,8 @@ export const TasksApi = Effect.gen(function* () {
     // the static path registers first — `queues` is never a queue slug
     HttpRouter.add("GET", "/api/tasks/queues", queuesRoute),
     HttpRouter.add("GET", "/api/tasks/:queue", board),
+    // static segment before `:id` — `walks` is never a task id
+    HttpRouter.add("GET", "/api/tasks/:queue/walks", walks),
     HttpRouter.add("GET", "/api/tasks/:queue/:id", one),
     HttpRouter.add("POST", "/api/tasks", file),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/route", route),

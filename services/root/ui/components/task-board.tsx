@@ -8,7 +8,7 @@
  * menu is the human override (a `routed` event with actor `sam`);
  * desk rows click into the desk view.
  */
-import { Avatar } from "@/components/avatar";
+import { Avatar, hueOf } from "@/components/avatar";
 import { PostRef } from "@/components/post-thread";
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ import {
   BOARD_STATES,
   fetchBoard,
   fetchQueues,
+  fetchWalks,
   KNOWN_TAGS,
   parseOrigin,
   readyOrder,
@@ -31,6 +32,8 @@ import {
   type QueueSummary,
   type TaskRow,
   type TaskState,
+  type WalkRound,
+  type WalkStep,
 } from "@/lib/tasks";
 import { showDesk, showTasks, showWork } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -39,9 +42,32 @@ import {
   Loader2,
   MoreHorizontal,
   PauseCircle,
+  Search,
   TriangleAlert,
+  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+/** An agent's accent, from its avatar hue — `light-dark()` keeps
+ *  both themes readable off the same mapping. */
+const agentText = (agent: string): string => {
+  const hue = hueOf(agent);
+  return `light-dark(hsl(${hue} 55% 32%), hsl(${hue} 60% 74%))`;
+};
+const agentBorder = (agent: string, soft: boolean): string => {
+  const hue = hueOf(agent);
+  return soft
+    ? `light-dark(hsl(${hue} 55% 45% / 0.55), hsl(${hue} 55% 60% / 0.55))`
+    : `light-dark(hsl(${hue} 55% 40%), hsl(${hue} 55% 58%))`;
+};
+const agentTint = (agent: string): string =>
+  `hsl(${hueOf(agent)} 55% 50% / 0.14)`;
 
 /** A duration, compact: `4s`, `12m`, `1h 4m`. */
 export const elapsedOf = (ms: number): string => {
@@ -209,12 +235,20 @@ const MoveMenu = ({
  *  cards drag up/down (the code-browser tab pattern) to write a soft
  *  hint, and wear the scheduler's why line: plain muted prose for a
  *  rank that follows your order, a `judge:` badge when it deviates —
- *  the transparency is the feature. */
+ *  the transparency is the feature. The FOCUS MAP rides the border:
+ *  a WORKING card wears its agent's solid accent, a NEXT card (the
+ *  walk's top pick for a desk) the same hue lighter plus the
+ *  `NEXT · <agent>` chip, and a card the walk drilled into this
+ *  round carries a tiny magnifier. Clicking the why line opens the
+ *  pick's full walk trace. */
 const TaskCard = ({
   task,
   now,
   onMoved,
   drag,
+  examined,
+  onTrace,
+  cardRef,
 }: {
   task: TaskRow;
   now: number;
@@ -225,97 +259,251 @@ const TaskCard = ({
     onDragOver: () => void;
     onDragEnd: () => void;
   };
-}) => (
-  <div
-    role="button"
-    tabIndex={0}
-    onClick={() => showTasks(task.queue, task.id)}
-    onKeyDown={(event) => {
-      if (event.key === "Enter") showTasks(task.queue, task.id);
-    }}
-    {...(drag === undefined
-      ? {}
-      : {
-          draggable: true,
-          onDragStart: drag.onDragStart,
-          onDragEnd: drag.onDragEnd,
-          onDragOver: (event: React.DragEvent) => {
-            event.preventDefault();
-            drag.onDragOver();
-          },
-        })}
-    className="group flex w-full cursor-pointer flex-col gap-1.5 rounded-md border border-border/70 bg-background px-2.5 py-2 text-left hover:border-border hover:bg-accent/40"
-  >
-    <div className="flex items-start gap-1.5">
-      <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug">
-        {task.title}
-      </span>
-      {drag !== undefined && (
-        <span
-          aria-hidden
-          title="drag to reorder — your order is a suggestion the scheduler weighs"
-          className="shrink-0 cursor-grab font-mono text-[11px] text-muted-foreground opacity-0 group-hover:opacity-60"
-        >
-          ↕
+  /** The walk drilled into this card's hidden content this round. */
+  examined?: boolean;
+  /** Open the scheduler's walk trace for this card. */
+  onTrace?: () => void;
+  /** The board's FLIP registry — ready cards animate reorders. */
+  cardRef?: (element: HTMLDivElement | null) => void;
+}) => {
+  const workingAgent = task.state === "working" ? task.desk : undefined;
+  const nextAgent = task.state === "ready" ? task.nextFor : undefined;
+  return (
+    <div
+      ref={cardRef}
+      role="button"
+      tabIndex={0}
+      onClick={() => showTasks(task.queue, task.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") showTasks(task.queue, task.id);
+      }}
+      {...(drag === undefined
+        ? {}
+        : {
+            draggable: true,
+            onDragStart: drag.onDragStart,
+            onDragEnd: drag.onDragEnd,
+            onDragOver: (event: React.DragEvent) => {
+              event.preventDefault();
+              drag.onDragOver();
+            },
+          })}
+      style={
+        workingAgent !== undefined
+          ? { borderColor: agentBorder(workingAgent, false) }
+          : nextAgent !== undefined
+            ? { borderColor: agentBorder(nextAgent, true) }
+            : undefined
+      }
+      className="group flex w-full cursor-pointer flex-col gap-1.5 rounded-md border border-border/70 bg-background px-2.5 py-2 text-left hover:border-border hover:bg-accent/40"
+    >
+      <div className="flex items-start gap-1.5">
+        <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug">
+          {task.title}
         </span>
-      )}
-      <MoveMenu task={task} onMoved={onMoved} />
-    </div>
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-        {task.id}
-      </span>
-      {task.tags.map((tag) => (
-        <TagChip key={tag} tag={tag} />
-      ))}
-      {task.origin !== undefined && <OriginChip origin={task.origin} />}
-      {task.priority !== 2 && (
-        <span
-          title={`priority ${task.priority}`}
-          className={cn(
-            "inline-flex shrink-0 items-center gap-0.5 font-mono text-[10px]",
-            task.priority < 2 ? "text-red-400" : "text-muted-foreground",
-          )}
-        >
-          <TriangleAlert className="size-3" />
-          {task.priority}
-        </span>
-      )}
-    </div>
-    {task.state === "ready" && task.rankWhy !== undefined && (
-      <span className="flex min-w-0 items-center">
-        {task.rankWhy.startsWith("judge:") ? (
+        {drag !== undefined && (
           <span
-            title="the judge ranked this against your dragged order — the why is the badge"
-            className="min-w-0 truncate rounded bg-purple-500/15 px-1 py-px font-mono text-[10px] text-purple-700 dark:text-purple-400"
+            aria-hidden
+            title="drag to reorder — your order is a suggestion the scheduler weighs"
+            className="shrink-0 cursor-grab font-mono text-[11px] text-muted-foreground opacity-0 group-hover:opacity-60"
           >
-            {task.rankWhy}
-          </span>
-        ) : (
-          <span
-            className="min-w-0 truncate text-[10px] leading-tight text-muted-foreground/70"
-            title={task.rankWhy}
-          >
-            {task.rankWhy}
+            ↕
           </span>
         )}
-      </span>
-    )}
-    {task.state === "working" && (
-      <span className="flex items-center gap-1.5 text-[11px] text-primary/80">
-        <Loader2 className="size-3 shrink-0 animate-spin" />
-        {task.desk ?? "desk"} · {elapsedOf(now - task.updated)}
-      </span>
-    )}
-    {task.state === "parked" && task.parkedReason !== undefined && (
-      <span className="flex min-w-0 items-center gap-1 text-[11px] text-amber-500">
-        <PauseCircle className="size-3 shrink-0" />
-        <span className="min-w-0 truncate" title={task.parkedReason}>
-          {task.parkedReason}
+        <MoveMenu task={task} onMoved={onMoved} />
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {nextAgent !== undefined && (
+          <span
+            title={`the scheduler's next pick for the ${nextAgent} desk`}
+            style={{
+              background: agentTint(nextAgent),
+              color: agentText(nextAgent),
+            }}
+            className="shrink-0 rounded-full px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide"
+          >
+            NEXT · {nextAgent}
+          </span>
+        )}
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          {task.id}
         </span>
-      </span>
-    )}
-  </div>
+        {task.tags.map((tag) => (
+          <TagChip key={tag} tag={tag} />
+        ))}
+        {task.origin !== undefined && <OriginChip origin={task.origin} />}
+        {task.priority !== 2 && (
+          <span
+            title={`priority ${task.priority}`}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 font-mono text-[10px]",
+              task.priority < 2 ? "text-red-400" : "text-muted-foreground",
+            )}
+          >
+            <TriangleAlert className="size-3" />
+            {task.priority}
+          </span>
+        )}
+        {examined === true && (
+          <span
+            title="examined by the scheduler this round — the walk drilled into this card"
+            className="inline-flex shrink-0 items-center text-muted-foreground"
+          >
+            <Search className="size-3" />
+          </span>
+        )}
+      </div>
+      {task.state === "ready" && task.rankWhy !== undefined && (
+        <span className="flex min-w-0 items-center">
+          {task.rankWhy.startsWith("judge:") ? (
+            <button
+              type="button"
+              title="the judge ranked this against your dragged order — click for the walk trace"
+              onClick={(event) => {
+                if (onTrace === undefined) return;
+                event.stopPropagation();
+                onTrace();
+              }}
+              className="min-w-0 cursor-pointer truncate rounded bg-purple-500/15 px-1 py-px text-left font-mono text-[10px] text-purple-700 hover:bg-purple-500/25 dark:text-purple-400"
+            >
+              {task.rankWhy}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="min-w-0 cursor-pointer truncate text-left text-[10px] leading-tight text-muted-foreground/70 hover:text-muted-foreground hover:underline"
+              title={`${task.rankWhy} — click for the walk trace`}
+              onClick={(event) => {
+                if (onTrace === undefined) return;
+                event.stopPropagation();
+                onTrace();
+              }}
+            >
+              {task.rankWhy}
+            </button>
+          )}
+        </span>
+      )}
+      {task.state === "working" && (
+        <span
+          style={
+            workingAgent === undefined
+              ? undefined
+              : { color: agentText(workingAgent) }
+          }
+          className="flex items-center gap-1.5 text-[11px] text-primary/80"
+        >
+          <Loader2 className="size-3 shrink-0 animate-spin" />
+          {task.desk ?? "desk"} · {elapsedOf(now - task.updated)}
+        </span>
+      )}
+      {task.state === "parked" && task.parkedReason !== undefined && (
+        <span className="flex min-w-0 items-center gap-1 text-[11px] text-amber-500">
+          <PauseCircle className="size-3 shrink-0" />
+          <span className="min-w-0 truncate" title={task.parkedReason}>
+            {task.parkedReason}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+};
+
+/** The WALK TRACE pane — one pick's decision chain, step by step:
+ *  the question, the answer, a conviction bar, what was drilled. */
+const WalkTracePanel = ({
+  task,
+  trace,
+  onClose,
+}: {
+  task: TaskRow;
+  trace: ReadonlyArray<WalkStep> | undefined;
+  onClose: () => void;
+}) => (
+  <aside
+    aria-label={`walk trace ${task.id}`}
+    className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-border bg-muted/20"
+  >
+    <div className="flex shrink-0 items-start gap-2 border-b border-border px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          walk trace
+        </div>
+        <div className="truncate font-mono text-[11px] text-muted-foreground">
+          {task.id}
+        </div>
+        <div className="truncate text-[12px] font-medium">{task.title}</div>
+      </div>
+      <button
+        type="button"
+        aria-label="close the walk trace"
+        onClick={onClose}
+        className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      {trace === undefined || trace.length === 0 ? (
+        <p className="px-3 py-3 text-[11px] leading-snug text-muted-foreground">
+          no walk recorded for this card this round — its rank came from
+          the human order (hint-then-FIFO), not a judged pick.
+        </p>
+      ) : (
+        trace.map((step, index) => (
+          <div
+            key={index}
+            className="border-b border-border/40 px-3 py-2"
+          >
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span className="font-mono font-semibold">{index + 1}</span>
+              <span className="min-w-0 flex-1 truncate" title={step.question}>
+                {step.question}
+              </span>
+              <span className="shrink-0 font-mono">{step.elapsedMs}ms</span>
+            </div>
+            <div className="mt-0.5 text-[12px] leading-snug">
+              → {step.answer}
+            </div>
+            <div
+              className="mt-1 flex items-center gap-1.5"
+              title={`conviction ${(step.conviction * 100).toFixed(0)}%`}
+            >
+              <div className="h-1 min-w-0 flex-1 overflow-hidden rounded bg-border/60">
+                <div
+                  className="h-1 rounded bg-purple-500/70"
+                  style={{
+                    width: `${Math.round(Math.min(1, Math.max(0, step.conviction)) * 100)}%`,
+                  }}
+                />
+              </div>
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                {(step.conviction * 100).toFixed(0)}%
+              </span>
+            </div>
+            {step.expanded.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {step.expanded.map((id) => (
+                  <span
+                    key={id}
+                    title={`the walk drilled into ${id} at this step`}
+                    className="inline-flex items-center gap-0.5 rounded bg-muted px-1 py-px font-mono text-[10px] text-muted-foreground"
+                  >
+                    <Search className="size-2.5" />
+                    {id}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+    <p className="shrink-0 px-3 py-2 text-[10px] leading-snug text-muted-foreground/80">
+      the scheduler re-walks the whole board on every event — each step
+      is one System One judgment; drills open bodies and threads.
+    </p>
+  </aside>
 );
 
 /** The desk's WIDTH stepper — the parallelism dial (− N +, 1..4):
@@ -459,12 +647,24 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
   const [board, setBoard] = useState<
     Record<TaskState, ReadonlyArray<TaskRow>> | undefined
   >();
+  /** The latest rank round's walk traces — the trace panel and the
+   *  "examined this round" magnifiers; polled beside the board. */
+  const [walks, setWalks] = useState<WalkRound | undefined>();
+  /** The card whose walk trace pane is open. */
+  const [traceTask, setTraceTask] = useState<string | undefined>();
   useEffect(() => {
     if (selected === undefined) return;
     setBoard(undefined);
+    setWalks(undefined);
+    setTraceTask(undefined);
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = () => {
+      fetchWalks(selected.slug)
+        .then((round) => {
+          if (alive) setWalks(round);
+        })
+        .catch(() => {});
       fetchBoard(selected.slug)
         .then((next) => {
           if (!alive) return;
@@ -491,8 +691,22 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
       fetchBoard(selected.slug)
         .then(setBoard)
         .catch(() => {});
+      fetchWalks(selected.slug)
+        .then(setWalks)
+        .catch(() => {});
     }
   };
+
+  /** Every card the latest walk round drilled into — the magnifier. */
+  const examined = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of walks?.walks ?? []) {
+      for (const step of row.trace) {
+        for (const id of step.expanded) set.add(id);
+      }
+    }
+    return set;
+  }, [walks]);
 
   // ── READY drag reorder (the code-browser tab pattern) ──────────
   // While a drag is live (and until its reorder lands) `dragOrder`
@@ -502,6 +716,55 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
   const [dragOrder, setDragOrder] = useState<
     ReadonlyArray<string> | undefined
   >();
+
+  // ── FLIP: ready cards SLIDE to their new rank, never teleport ──
+  // Refs of the ready cards' DOM nodes; after every render, any card
+  // whose rect moved animates from its previous position to rest,
+  // and a card whose RANK changed flashes a brief judge-purple glow.
+  const cardRefs = useRef(new Map<string, HTMLDivElement>());
+  const prevRects = useRef(new Map<string, DOMRect>());
+  const prevRanks = useRef(new Map<string, number | undefined>());
+  useLayoutEffect(() => {
+    const ranks = new Map<string, number | undefined>();
+    for (const row of board?.ready ?? []) ranks.set(row.id, row.rank);
+    for (const [id, element] of cardRefs.current) {
+      if (!element.isConnected) {
+        cardRefs.current.delete(id);
+        prevRects.current.delete(id);
+        continue;
+      }
+      const rect = element.getBoundingClientRect();
+      const prev = prevRects.current.get(id);
+      // a live drag owns the motion — FLIP only animates poll moves
+      if (prev !== undefined && dragging === undefined) {
+        const dx = prev.left - rect.left;
+        const dy = prev.top - rect.top;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+          element.animate(
+            [
+              { transform: `translate(${dx}px, ${dy}px)` },
+              { transform: "none" },
+            ],
+            { duration: 320, easing: "cubic-bezier(0.2, 0, 0.2, 1)" },
+          );
+        }
+      }
+      prevRects.current.set(id, rect);
+      const hadRank = prevRanks.current.has(id);
+      const prevRank = prevRanks.current.get(id);
+      const rank = ranks.get(id);
+      if (hadRank && rank !== undefined && prevRank !== rank) {
+        element.animate(
+          [
+            { boxShadow: "0 0 0 2px hsl(270 60% 60% / 0.55)" },
+            { boxShadow: "0 0 0 2px hsl(270 60% 60% / 0)" },
+          ],
+          { duration: 900, easing: "ease-out" },
+        );
+      }
+    }
+    prevRanks.current = ranks;
+  });
   const readyRows = (rows: ReadonlyArray<TaskRow>): ReadonlyArray<TaskRow> => {
     const sorted = [...rows].sort(readyOrder);
     if (dragOrder === undefined) return sorted;
@@ -693,6 +956,22 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
                       task={task}
                       now={now}
                       onMoved={refresh}
+                      {...(state === "ready"
+                        ? {
+                            examined: examined.has(task.id),
+                            onTrace: () =>
+                              setTraceTask((current) =>
+                                current === task.id ? undefined : task.id,
+                              ),
+                            cardRef: (element: HTMLDivElement | null) => {
+                              if (element === null) {
+                                cardRefs.current.delete(task.id);
+                              } else {
+                                cardRefs.current.set(task.id, element);
+                              }
+                            },
+                          }
+                        : {})}
                       {...(state === "ready" && tag === undefined
                         ? {
                             drag: {
@@ -729,6 +1008,25 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
           </div>
         )}
       </div>
+
+      {/* the walk trace pane — one pick's decision chain, opened by
+          a ready card's why line */}
+      {(() => {
+        if (traceTask === undefined || board === undefined) return null;
+        const traced = BOARD_STATES.flatMap(
+          (state) => board[state] ?? [],
+        ).find((task) => task.id === traceTask);
+        if (traced === undefined) return null;
+        return (
+          <WalkTracePanel
+            task={traced}
+            trace={
+              walks?.walks.find((row) => row.task === traced.id)?.trace
+            }
+            onClose={() => setTraceTask(undefined)}
+          />
+        );
+      })()}
     </section>
   );
 };

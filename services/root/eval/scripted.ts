@@ -3,11 +3,12 @@
  * (eval/world.ts, the same fixture desk-loop.test.ts asserts): desks
  * answer from the scenario's scripts, while the CONTROL PLANE is
  * judged by the REAL TypeSafe System One when the key is present —
- * the router's tag Choice per arrival, the staged ranker's map
- * Scores + pairwise Choices per re-rank, the forgotten-line
- * disposition Choice, and the review Noul. Without the key
- * everything degrades to the scripted/hint-then-FIFO fallbacks and
- * the judged metrics are skipped with a notice.
+ * the router's tag Choice per arrival, the walk ranker's pick walks
+ * (whole-board pick+probe fan-outs, drills, two-option gates) per
+ * re-rank, the forgotten-line disposition Choice, and the review
+ * Noul. Without the key everything degrades to the scripted/hint-
+ * then-FIFO fallbacks and the judged metrics are skipped with a
+ * notice.
  */
 import { RuntimeContext } from "alchemy";
 import * as Effect from "effect/Effect";
@@ -152,12 +153,15 @@ export const runScripted = async (
     if (settled || signature() === before) break;
   }
 
-  // ── the staged ranker, scored ────────────────────────────────────
-  // The single wide Choice is gone; ranking is judged by its OUTPUT:
-  // the engineer desk's actual CLAIM ORDER (the materialized rank's
-  // top pops on each claim). Affinity is scored per claim: when a
-  // not-yet-claimed task shared a tag with already-worked tasks and
-  // another didn't, claiming a sharing one is affinity-optimal.
+  // ── the walk ranker, scored ──────────────────────────────────────
+  // Ranking is judged by its OUTPUT: the engineer desk's actual
+  // CLAIM ORDER (the materialized rank's top pops on each claim).
+  // Affinity is scored per claim: when a not-yet-claimed task shared
+  // a tag with already-worked tasks and another didn't, claiming a
+  // sharing one is affinity-optimal.
+  const walkAsks = (recorded?.exchanges ?? []).filter(
+    (exchange) => exchange.kind === "next",
+  );
   const pairAsks = (recorded?.exchanges ?? []).filter(
     (exchange) => exchange.kind === "pair",
   );
@@ -242,16 +246,84 @@ export const runScripted = async (
     });
   }
 
-  // ── ranking: deviations + the scenario's truth order ─────────────
+  // ── ranking: deviations, drills, churn, the truth order ──────────
   const deviationWhys = [
     ...new Set(
       world.rankWrites.flatMap((write) =>
-        write
+        write.entries
           .filter((entry) => entry.rankWhy.startsWith("judge:"))
           .map((entry) => `${entry.id} ${entry.rankWhy}`),
       ),
     ),
   ];
+
+  // every content id the walks drilled into, across all re-ranks
+  const drilled = [
+    ...new Set(
+      world.rankWrites.flatMap((write) =>
+        write.entries.flatMap((entry) =>
+          (entry.trace ?? []).flatMap((step) => step.expanded),
+        ),
+      ),
+    ),
+  ];
+  const drillTruth = scenario.walk?.shouldDrill?.map(
+    (index) => `t-${index}`,
+  );
+  if (judged && drillTruth !== undefined) {
+    for (const id of drillTruth) {
+      if (!drilled.includes(id)) {
+        misses.push({
+          edge: "walk",
+          task: id,
+          expected: `the walk drills into ${id}'s hidden content`,
+          got: `no drill (drilled: [${drilled.join(", ")}])`,
+        });
+      }
+    }
+  }
+  if (judged && scenario.walk?.forbidDrill === true && drilled.length > 0) {
+    misses.push({
+      edge: "walk",
+      expected: "no drills — the visible cards suffice",
+      got: `drilled [${drilled.join(", ")}]`,
+    });
+  }
+
+  // CHURN: relative-order flips between consecutive re-ranks among
+  // tasks present in both, split by whether an event between the
+  // writes touched either task — always-fresh re-ranking must move
+  // for a reason (informational, never a hard fail)
+  const allEvents = world.allEvents();
+  let churnTransitions = 0;
+  let churnMoved = 0;
+  let churnUnjustified = 0;
+  for (let index = 1; index < world.rankWrites.length; index++) {
+    const prev = world.rankWrites[index - 1]!;
+    const next = world.rankWrites[index]!;
+    const prevOrder = prev.entries.map((entry) => entry.id);
+    const nextOrder = next.entries.map((entry) => entry.id);
+    const common = prevOrder.filter((id) => nextOrder.includes(id));
+    if (common.length < 2) continue;
+    churnTransitions += 1;
+    const touched = new Set(
+      allEvents
+        .filter((event) => event.at > prev.at && event.at <= next.at)
+        .map((event) => event.task),
+    );
+    for (let a = 0; a < common.length; a++) {
+      for (let b = a + 1; b < common.length; b++) {
+        const x = common[a]!;
+        const y = common[b]!;
+        const before = prevOrder.indexOf(x) < prevOrder.indexOf(y);
+        const after = nextOrder.indexOf(x) < nextOrder.indexOf(y);
+        if (before !== after) {
+          churnMoved += 1;
+          if (!touched.has(x) && !touched.has(y)) churnUnjustified += 1;
+        }
+      }
+    }
+  }
   const claimedOrder = [
     ...new Set(engineerClaims.map((entry) => entry.task)),
   ];
@@ -405,15 +477,43 @@ export const runScripted = async (
         confusion: confusionOf(routingPairs),
       },
       scheduler: {
-        asks: pairAsks.length,
+        asks: walkAsks.length + pairAsks.length,
         applicable,
         affinityOptimal,
         signalStarved,
       },
       ranking: {
+        walks: walkAsks.length,
         pairs: pairAsks.length,
         deviations: deviationWhys.length,
         deviationWhys,
+        ...(scenario.walk === undefined && drilled.length === 0
+          ? {}
+          : {
+              drill: {
+                drilled,
+                ...(drillTruth === undefined ? {} : { truth: drillTruth }),
+                ...(drillTruth === undefined || drilled.length === 0
+                  ? {}
+                  : {
+                      precision:
+                        drilled.filter((id) => drillTruth.includes(id))
+                          .length / drilled.length,
+                    }),
+                ...(drillTruth === undefined || drillTruth.length === 0
+                  ? {}
+                  : {
+                      recall:
+                        drillTruth.filter((id) => drilled.includes(id))
+                          .length / drillTruth.length,
+                    }),
+              },
+            }),
+        churn: {
+          transitions: churnTransitions,
+          movedPairs: churnMoved,
+          unjustifiedPairs: churnUnjustified,
+        },
         ...(truthOrder === undefined
           ? {}
           : {

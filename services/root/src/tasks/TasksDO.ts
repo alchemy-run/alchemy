@@ -5,6 +5,7 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { WalkStep } from "../judge/Walk.ts";
 import { inWorker } from "../platform/Database.ts";
 
 /**
@@ -103,10 +104,13 @@ export interface TaskRow {
    *  consumed by claims — ZERO judging on the claim path. */
   readonly rank?: number;
   /** One line of why the rank is what it is — `sam's order`,
-   *  `follows t-4f2 (same cloudflare)`, `urgent (82%)`; a `judge:`
+   *  `follows t-4f2 (same cloudflare)`, `walk pick (82%)`; a `judge:`
    *  prefix marks a rank that went AGAINST the human's dragged
    *  order (the transparency is the feature). */
   readonly rankWhy?: string;
+  /** The desk whose NEXT pick this ready row is (rank within the
+   *  desk's width) — the board's `NEXT · <agent>` chip reads this. */
+  readonly nextFor?: string;
   /** The SESSION key the working round dispatched into — the trunk
    *  desk key, or a clone (`<deskKey>#<n>`) when the desk's width
    *  forked one. Recovery reads THIS session's log. */
@@ -197,16 +201,17 @@ const TABLES = [
     hint REAL,
     rank INTEGER,
     rank_why TEXT,
+    next_for TEXT,
     at INTEGER NOT NULL,
     updated INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS tasks_state ON tasks (state)`,
-  `CREATE TABLE IF NOT EXISTS task_scores (
-    id TEXT PRIMARY KEY,
-    hash TEXT NOT NULL,
-    urgency REAL NOT NULL,
-    fit_json TEXT NOT NULL,
-    at INTEGER NOT NULL
+  `CREATE TABLE IF NOT EXISTS rank_walks (
+    round INTEGER NOT NULL,
+    task TEXT NOT NULL,
+    trace TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (round, task)
   )`,
   `CREATE TABLE IF NOT EXISTS task_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,15 +249,15 @@ interface TaskDbRow extends Record<string, Cloudflare.SqlStorageValue> {
   hint: number | null;
   rank: number | null;
   rank_why: string | null;
+  next_for: string | null;
   at: number;
   updated: number;
 }
 
-interface ScoreDbRow extends Record<string, Cloudflare.SqlStorageValue> {
-  id: string;
-  hash: string;
-  urgency: number;
-  fit_json: string;
+interface WalkDbRow extends Record<string, Cloudflare.SqlStorageValue> {
+  round: number;
+  task: string;
+  trace: string;
   at: number;
 }
 
@@ -292,23 +297,18 @@ const toTask = (row: TaskDbRow): TaskRow => ({
   ...(row.hint === null ? {} : { hint: row.hint }),
   ...(row.rank === null ? {} : { rank: row.rank }),
   ...(row.rank_why === null ? {} : { rankWhy: row.rank_why }),
+  ...(row.next_for === null ? {} : { nextFor: row.next_for }),
   at: row.at,
   updated: row.updated,
 });
 
-/** A `fit_json` column parsed defensively — a bad row reads empty. */
-const fitOf = (raw: string): Record<string, number> => {
+/** A walk `trace` column parsed defensively — a bad row reads empty. */
+const traceOf = (raw: string): ReadonlyArray<WalkStep> => {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return typeof parsed === "object" && parsed !== null
-      ? Object.fromEntries(
-          Object.entries(parsed as Record<string, unknown>).filter(
-            (entry): entry is [string, number] => typeof entry[1] === "number",
-          ),
-        )
-      : {};
+    return Array.isArray(parsed) ? (parsed as WalkStep[]) : [];
   } catch {
-    return {};
+    return [];
   }
 };
 
@@ -357,22 +357,29 @@ export interface ReorderInput {
   readonly actor: string;
 }
 
-/** One task's cached MAP scores (Scheduler.ts): keyed by a content
- *  hash so unchanged tasks are never re-judged; `fit` is per desk. */
-export interface TaskScoreRow {
-  readonly id: string;
-  readonly hash: string;
-  readonly urgency: number;
-  readonly fit: Record<string, number>;
-  readonly at: number;
-}
-
-/** One materialized rank row a re-rank writes back to the board. */
+/** One materialized rank row a re-rank writes back to the board —
+ *  the rank, its why line, the NEXT stamp, and the pick walk's full
+ *  decision chain (persisted per round in `rank_walks`). */
 export interface RankWrite {
   readonly id: string;
   readonly rank: number;
   readonly rankWhy: string;
+  /** The desk this row is the next pick for (rank ≤ desk width). */
+  readonly nextFor?: string;
+  /** The walk that ranked this row — the board's trace panel. */
+  readonly trace?: ReadonlyArray<WalkStep>;
 }
+
+/** One task's persisted walk for one rank round. */
+export interface RankWalkRow {
+  readonly round: number;
+  readonly task: string;
+  readonly trace: ReadonlyArray<WalkStep>;
+  readonly at: number;
+}
+
+/** How many rank rounds of walk traces the board keeps. */
+export const WALK_ROUNDS_KEPT = 5;
 
 interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly file: (
@@ -391,17 +398,11 @@ interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
     id: string,
     input: ReorderInput,
   ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
-  readonly scores: () => Effect.Effect<
-    ReadonlyArray<TaskScoreRow>,
+  readonly walks: () => Effect.Effect<
+    ReadonlyArray<RankWalkRow>,
     never,
     RuntimeContext
   >;
-  readonly writeScore: (
-    id: string,
-    hash: string,
-    urgency: number,
-    fit: Record<string, number>,
-  ) => Effect.Effect<void, never, RuntimeContext>;
   readonly writeRanks: (
     entries: ReadonlyArray<RankWrite>,
   ) => Effect.Effect<void, never, RuntimeContext>;
@@ -464,6 +465,13 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
       if (!columns.some((column) => column.name === "session")) {
         yield* sql.exec("ALTER TABLE tasks ADD COLUMN session TEXT");
       }
+      if (!columns.some((column) => column.name === "next_for")) {
+        yield* sql.exec("ALTER TABLE tasks ADD COLUMN next_for TEXT");
+      }
+      // the staged ranker's MAP cache is gone — the walk ranker
+      // re-scores the whole board on every event, so a stale score
+      // cache has nothing left to key
+      yield* sql.exec("DROP TABLE IF EXISTS task_scores");
       if (!columns.some((column) => column.name === "worked_by")) {
         yield* sql.exec(
           "ALTER TABLE tasks ADD COLUMN worked_by TEXT NOT NULL DEFAULT '[]'",
@@ -655,7 +663,7 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             id,
           );
           yield* sql.exec(
-            "UPDATE tasks SET rank = NULL, rank_why = NULL WHERE state = 'ready'",
+            "UPDATE tasks SET rank = NULL, rank_why = NULL, next_for = NULL WHERE state = 'ready'",
           );
           yield* event(
             id,
@@ -673,60 +681,73 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
           return yield* taskOf(id);
         }),
 
-        // the MAP cache — one row per task, keyed by content hash so
-        // an unchanged task never burns a judge call
-        scores: Effect.fn(function* () {
-          const rows = yield* (yield* sql.exec<ScoreDbRow>(
-            "SELECT * FROM task_scores",
+        // the LATEST rank round's walk traces — the board UI's trace
+        // panel and examined markers read this
+        walks: Effect.fn(function* () {
+          const rows = yield* (yield* sql.exec<WalkDbRow>(
+            "SELECT * FROM rank_walks WHERE round = (SELECT MAX(round) FROM rank_walks) ORDER BY task",
           )).toArray();
           return rows.map((row) => ({
-            id: row.id,
-            hash: row.hash,
-            urgency: row.urgency,
-            fit: fitOf(row.fit_json),
+            round: row.round,
+            task: row.task,
+            trace: traceOf(row.trace),
             at: row.at,
           }));
         }),
 
-        writeScore: Effect.fn(function* (id, hash, urgency, fit) {
-          const at = yield* Clock.currentTimeMillis;
-          yield* sql.exec(
-            "INSERT INTO task_scores (id, hash, urgency, fit_json, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET hash = ?, urgency = ?, fit_json = ?, at = ?",
-            id,
-            hash,
-            urgency,
-            JSON.stringify(fit),
-            at,
-            hash,
-            urgency,
-            JSON.stringify(fit),
-            at,
-          );
-        }),
-
         // materialize one re-rank: every ready row's rank is rewritten
-        // (stale ranks cleared), the score cache pruned to ready ids.
+        // (stale ranks cleared), each pick's walk trace persisted as a
+        // new round (old rounds pruned to WALK_ROUNDS_KEPT).
         // `updated` is deliberately untouched — a re-rank is not work.
         writeRanks: Effect.fn(function* (entries) {
           yield* sql.exec(
-            "UPDATE tasks SET rank = NULL, rank_why = NULL WHERE state = 'ready'",
+            "UPDATE tasks SET rank = NULL, rank_why = NULL, next_for = NULL WHERE state = 'ready'",
           );
           yield* Effect.forEach(
             entries,
             (entry) =>
               sql
                 .exec(
-                  "UPDATE tasks SET rank = ?, rank_why = ? WHERE id = ? AND state = 'ready'",
+                  "UPDATE tasks SET rank = ?, rank_why = ?, next_for = ? WHERE id = ? AND state = 'ready'",
                   entry.rank,
                   entry.rankWhy,
+                  entry.nextFor ?? null,
                   entry.id,
                 )
                 .pipe(Effect.asVoid),
             { discard: true },
           );
-          yield* sql.exec(
-            "DELETE FROM task_scores WHERE id NOT IN (SELECT id FROM tasks WHERE state = 'ready')",
+          const traced = entries.filter(
+            (entry) => entry.trace !== undefined,
           );
+          if (traced.length > 0) {
+            const at = yield* Clock.currentTimeMillis;
+            const previous = yield* (yield* sql.exec<
+              { round: number | null } & Record<
+                string,
+                Cloudflare.SqlStorageValue
+              >
+            >("SELECT MAX(round) AS round FROM rank_walks")).toArray();
+            const round = (previous[0]?.round ?? 0) + 1;
+            yield* Effect.forEach(
+              traced,
+              (entry) =>
+                sql
+                  .exec(
+                    "INSERT INTO rank_walks (round, task, trace, at) VALUES (?, ?, ?, ?)",
+                    round,
+                    entry.id,
+                    JSON.stringify(entry.trace ?? []),
+                    at,
+                  )
+                  .pipe(Effect.asVoid),
+              { discard: true },
+            );
+            yield* sql.exec(
+              "DELETE FROM rank_walks WHERE round <= ?",
+              round - WALK_ROUNDS_KEPT,
+            );
+          }
         }),
 
         list: Effect.fn(function* (state?: TaskState) {
@@ -922,17 +943,10 @@ export class Tasks extends Context.Service<
       id: string,
       input: ReorderInput,
     ) => Effect.Effect<TaskRow | undefined>;
-    /** The scheduler's MAP cache (Scheduler.ts). */
-    readonly scores: (
+    /** The latest rank round's walk traces (Scheduler.ts). */
+    readonly walks: (
       queue: string,
-    ) => Effect.Effect<ReadonlyArray<TaskScoreRow>>;
-    readonly writeScore: (
-      queue: string,
-      id: string,
-      hash: string,
-      urgency: number,
-      fit: Record<string, number>,
-    ) => Effect.Effect<void>;
+    ) => Effect.Effect<ReadonlyArray<RankWalkRow>>;
     /** Materialize one re-rank onto the board's ready rows. */
     readonly writeRanks: (
       queue: string,
@@ -994,9 +1008,7 @@ export const TasksLive: Layer.Layer<Tasks, never, Cloudflare.Worker> =
           inWorker(stub(queue).retag(id, tags, actor)),
         reorder: (queue, id, input) =>
           inWorker(stub(queue).reorder(id, input)),
-        scores: (queue) => inWorker(stub(queue).scores()),
-        writeScore: (queue, id, hash, urgency, fit) =>
-          inWorker(stub(queue).writeScore(id, hash, urgency, fit)),
+        walks: (queue) => inWorker(stub(queue).walks()),
         writeRanks: (queue, entries) =>
           inWorker(stub(queue).writeRanks(entries)),
         list: (queue, state) => inWorker(stub(queue).list(state)),

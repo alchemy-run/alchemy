@@ -75,6 +75,15 @@ export interface Scenario {
    *  non-adjacent claim becomes a judged miss. Other scenarios still
    *  report the affinity ratio, informationally. */
   readonly affinity?: boolean;
+  /** Walk-quality ground truth (scenarios/walk.ts). `shouldDrill`
+   *  names the arrivals (1-based indices) whose HIDDEN content the
+   *  walk should open before ranking; `forbidDrill` claims the
+   *  visible cards suffice — any drill is a judged miss. Drill
+   *  precision/recall are reported either way. */
+  readonly walk?: {
+    readonly shouldDrill?: ReadonlyArray<number>;
+    readonly forbidDrill?: boolean;
+  };
   /** Notes for the human watching/steering a live run (`--ui`). */
   readonly interactions?: ReadonlyArray<string>;
   /** Live-mode observation deadline (default 10 minutes). */
