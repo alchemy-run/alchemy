@@ -106,10 +106,11 @@ export const AccountPersonUI = UIProvider.succeed<AccountPerson>(
     icon: "user",
     color: STRIPE_PURPLE,
     category: "billing",
-    summary: (ctx) =>
-      ctx.attrs?.firstName !== undefined || ctx.attrs?.lastName !== undefined
-        ? `${ctx.attrs.firstName ?? ""} ${ctx.attrs.lastName ?? ""}`.trim()
-        : (ctx.attrs?.email ?? ctx.attrs?.id),
+    summary: (ctx) => {
+      const name =
+        `${ctx.attrs?.firstName ?? ""} ${ctx.attrs?.lastName ?? ""}`.trim();
+      return name === "" ? (ctx.attrs?.email ?? ctx.attrs?.id) : name;
+    },
     consoleUrl: (ctx) => dashboardUrl("connect/accounts", ctx.attrs?.account),
     facts: (ctx) => [
       { label: "person id", value: ctx.attrs?.id, mono: true, copy: true },
