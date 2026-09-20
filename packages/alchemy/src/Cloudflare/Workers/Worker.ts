@@ -24,6 +24,7 @@ import {
   type ResourceClassLike,
 } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
+import type { ValidateRpcShape } from "../../RpcObject.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Self as SelfService } from "../../Self.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -2428,15 +2429,21 @@ export const Worker: ResourceClassLike<Worker> &
         Self | Extract<Deps, Container.Application<any>> | Providers
       > &
         Named<Id> & {
+          // MainRpc validates inputs; its index signature is not a client member.
           new (
             _: never,
-          ): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
-          of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
+          ): MakeShape<Shape, Main<WorkerServices>> &
+            Named<Id> &
+            Tag<WorkerTypeId>;
+          of(
+            shape: Shape & WorkerShape & ValidateRpcShape<Shape>,
+          ): MakeShape<Shape, Main<WorkerServices>>;
           make<PropsReq = never, InitReq = never>(
             props:
               | InputProps<WorkerProps>
               | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
-            impl: Effect.Effect<Shape, ConfigError, InitReq>,
+            impl: Effect.Effect<Shape, ConfigError, InitReq> &
+              ValidateRpcShape<Shape>,
           ): Layer.Layer<
             Self,
             never,
@@ -2464,14 +2471,17 @@ export const Worker: ResourceClassLike<Worker> &
         props:
           | InputProps<WorkerProps>
           | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
-        impl: Effect.Effect<Shape, ConfigError, Req>,
+        impl: Effect.Effect<Shape, ConfigError, Req> &
+          ValidateRpcShape<NoInfer<Shape>>,
       ): Effect.Effect<
         Worker & Rpc<Self>,
         never,
         Extract<Req, Container.Application<any>> | Providers | PropsReq
       > &
         Named<Id> & {
-          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag<WorkerTypeId>;
+          new (): MakeShape<Shape, Main<WorkerServices>> &
+            Named<Id> &
+            Tag<WorkerTypeId>;
         };
       /**
        * Class form without an implementation — an external Worker (a plain
@@ -2547,7 +2557,8 @@ export const Worker: ResourceClassLike<Worker> &
     >(
       id: string,
       props: InputProps<WorkerProps>,
-      impl: Effect.Effect<Shape, ConfigError, Req>,
+      impl: Effect.Effect<Shape, ConfigError, Req> &
+        ValidateRpcShape<NoInfer<Shape>>,
     ): Effect.Effect<
       Worker & Rpc<Shape>,
       never,

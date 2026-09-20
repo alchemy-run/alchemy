@@ -1,0 +1,88 @@
+---
+title: RPC objects
+description: Return a stateful object from a Worker or Durable Object and call its Effect and Stream methods.
+sidebar:
+  order: 3
+---
+
+Return an object from a Worker or Durable Object. Its state stays on the server; the caller gets typed methods.
+
+## Return a counter
+
+```typescript title="counter-service.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { RpcObject } from "alchemy/Rpc";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import * as Stream from "effect/Stream";
+
+export default class CounterService extends Cloudflare.Worker<CounterService>()(
+  "CounterService",
+  { main: import.meta.url },
+  Effect.succeed({
+    openCounter: Effect.fn(function* () {
+      const value = yield* Ref.make(0);
+      return {
+        echo: <A>(input: A) => Effect.succeed(input),
+        increment: () => Ref.updateAndGet(value, (n) => n + 1),
+        increments: (count: number) =>
+          Stream.range(1, count).pipe(
+            Stream.mapEffect(() => Ref.updateAndGet(value, (n) => n + 1)),
+          ),
+      } satisfies RpcObject;
+    }),
+  }),
+) {}
+```
+
+Each call creates a new counter. The optional `satisfies RpcObject` checks the methods without losing their inferred types, including generics.
+
+## Call the counter
+
+```typescript title="caller.ts"
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import CounterService from "./counter-service.ts";
+
+export default class Caller extends Cloudflare.Worker<Caller>()(
+  "Caller",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const service = yield* Cloudflare.Workers.bindWorker(CounterService);
+    return {
+      fetch: Effect.gen(function* () {
+        const counter = yield* service.openCounter();
+        const first = yield* counter.increment();
+        const rest = yield* counter.increments(3).pipe(Stream.runCollect);
+        return yield* HttpServerResponse.json({ first, rest });
+      }).pipe(Effect.scoped),
+    };
+  }),
+) {}
+```
+
+```json title="Response"
+{ "first": 1, "rest": [2, 3, 4] }
+```
+
+## Data and streams
+
+Value methods preserve native RPC data types, including `bigint`, `Date`, `Map`, `Set`, buffers, typed arrays, and cyclic data. Non-byte streams transfer native values in batches, without JSON conversion. Byte streams use the native readable-stream transport and must emit `Uint8Array` chunks throughout.
+
+Typed stream failures remain catchable after already-emitted values. Finishing or cancelling a stream releases its resources without closing the parent object.
+
+RPC objects contain only methods. Return child RPC objects directly from methods rather than embedding callable objects inside data records or collections.
+
+## Lifetime
+
+`Effect.scoped` releases the counter, its child objects, and factory-acquired resources when the block ends. Keep method calls and stream consumption inside that scope.
+
+Workers and Durable Objects already provide an event scope. Add an explicit scope when you want earlier release. Finishing one method or stream does not release its parent object.
+
+Returned methods may require `Scope`, but no other services. Resolve dependencies in the factory and close over them.
+
+:::note
+RPC objects are temporary: they do not survive an isolate restart or Durable Object eviction. They work through native Worker and Durable Object bindings, not Container HTTP RPC, schema-based Effect RPC, or browser WebSocket clients.
+:::
