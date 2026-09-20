@@ -4,6 +4,7 @@ export * from "./BucketTypes.ts";
 export * from "./LocalS3.ts";
 export * from "./BucketSippy.ts";
 export * from "./DataCatalog.ts";
+export * from "./SuperSlurperJob.ts";
 export * from "./ReadBucket.ts";
 export * from "./ReadBucketBinding.ts";
 export * from "./ReadBucketHttp.ts";

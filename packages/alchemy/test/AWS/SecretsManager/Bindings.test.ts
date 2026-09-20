@@ -1,19 +1,31 @@
 import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Alchemy";
+import * as IAM from "@distilled.cloud/aws/iam";
+import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import SecretsManagerTestFunctionLive, {
   SecretsManagerTestFunction,
 } from "./handler";
+import GetSecretOnlyTestFunctionLive, {
+  GetSecretOnlyTestFunction,
+} from "./fixtures/get-secret-only-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(testOptions, "SecretsManagerBindings");
+const sharedStack = Core.scratchStack(
+  testOptions,
+  "SecretsManagerBindings",
+  "test/AWS/SecretsManager/Bindings.test.ts",
+);
 
 // Lambda function URL cold-start (DNS, IAM propagation, init) can take
 // well over 60s on a fresh deploy under parallel-suite load. Budget ~150s
@@ -24,6 +36,124 @@ const readinessPolicy = Schedule.max([
 ]);
 
 let baseUrl: string;
+let getOnlyUrl: string;
+let getOnlyFunction: { functionName: string; roleName: string } | undefined;
+let getOnlySecret: { secretArn: string; secretName: string } | undefined;
+
+const policyDocument = Schema.fromJsonString(
+  Schema.Struct({
+    Version: Schema.optional(Schema.String),
+    Id: Schema.optional(Schema.String),
+    Statement: Schema.Array(
+      Schema.Struct({
+        Sid: Schema.optional(Schema.String),
+        Effect: Schema.String,
+        Action: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
+        Resource: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
+      }),
+    ),
+  }),
+);
+
+const secretRolePermissions = Effect.fn(function* (roleName: string) {
+  const pages = yield* IAM.listRolePolicies
+    .pages({ RoleName: roleName })
+    .pipe(Stream.runCollect);
+  const policies = yield* Effect.forEach(
+    pages.flatMap((page) => page.PolicyNames),
+    Effect.fn(function* (PolicyName) {
+      const policy = yield* IAM.getRolePolicy({
+        RoleName: roleName,
+        PolicyName,
+      });
+      const decoded = yield* Effect.try(() =>
+        decodeURIComponent(policy.PolicyDocument),
+      );
+      return yield* Schema.decodeUnknownEffect(policyDocument, {
+        onExcessProperty: "error",
+      })(decoded);
+    }),
+  );
+  return policies.flatMap((policy) =>
+    policy.Statement.flatMap((statement) => {
+      const actions =
+        typeof statement.Action === "string"
+          ? [statement.Action]
+          : statement.Action;
+      const resources =
+        typeof statement.Resource === "string"
+          ? [statement.Resource]
+          : statement.Resource;
+      return actions.flatMap((action) =>
+        resources.map((resource) => ({
+          effect: statement.Effect,
+          action,
+          resource,
+        })),
+      );
+    }),
+  );
+});
+
+const getOnlyValue = Schema.Struct({
+  arn: Schema.String,
+  name: Schema.String,
+  versionId: Schema.String,
+  secretString: Schema.String,
+});
+
+const readGetOnlyValue = (query = "") =>
+  HttpClient.get(`${getOnlyUrl}/get-value${query}`).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.json
+        : Effect.fail(new Error(`GetSecretValue failed: ${response.status}`)),
+    ),
+    Effect.flatMap(Schema.decodeUnknownEffect(getOnlyValue)),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+  );
+
+class FixtureStillExists extends Data.TaggedError("FixtureStillExists")<{
+  readonly resource: string;
+}> {}
+
+const assertGetOnlyResourcesDeleted = Effect.gen(function* () {
+  yield* Effect.all(
+    [
+      getOnlySecret
+        ? secretsmanager
+            .describeSecret({ SecretId: getOnlySecret.secretArn })
+            .pipe(
+              Effect.flatMap(() =>
+                Effect.fail(new FixtureStillExists({ resource: "secret" })),
+              ),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              Effect.retry({
+                while: (error) => error._tag === "FixtureStillExists",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            )
+        : Effect.void,
+      getOnlyFunction
+        ? Lambda.getFunction({
+            FunctionName: getOnlyFunction.functionName,
+          }).pipe(
+            Effect.flatMap(() =>
+              Effect.fail(new FixtureStillExists({ resource: "function" })),
+            ),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            Effect.retry({
+              while: (error) => error._tag === "FixtureStillExists",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 10,
+            }),
+          )
+        : Effect.void,
+    ],
+    { concurrency: "unbounded" },
+  );
+});
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -75,14 +205,40 @@ describe.sequential("SecretsManager Bindings", () => {
       yield* sharedStack.destroy();
 
       yield* Effect.logInfo("SecretsManager test setup: deploying fixture");
-      const { functionUrl } = yield* sharedStack.deploy(
+      const { shared, getOnly } = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          return yield* SecretsManagerTestFunction;
-        }).pipe(Effect.provide(SecretsManagerTestFunctionLive)),
+          return {
+            shared: yield* SecretsManagerTestFunction,
+            getOnly: yield* GetSecretOnlyTestFunction,
+          };
+        }).pipe(
+          Effect.provide(SecretsManagerTestFunctionLive),
+          Effect.provide(GetSecretOnlyTestFunctionLive),
+        ),
       );
 
-      expect(functionUrl).toBeTruthy();
-      baseUrl = functionUrl!.replace(/\/+$/, "");
+      getOnlyFunction = getOnly;
+      expect(getOnly.functionUrl).toBeTruthy();
+      getOnlyUrl = getOnly.functionUrl!.replace(/\/+$/, "");
+      getOnlySecret = yield* HttpClient.get(`${getOnlyUrl}/info`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.json
+            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
+        ),
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.Struct({
+              secretArn: Schema.String,
+              secretName: Schema.String,
+            }),
+          ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+      );
+
+      expect(shared.functionUrl).toBeTruthy();
+      baseUrl = shared.functionUrl!.replace(/\/+$/, "");
       const readinessUrl = `${baseUrl}/describe`;
 
       yield* Effect.logInfo(
@@ -111,11 +267,95 @@ describe.sequential("SecretsManager Bindings", () => {
     { timeout: 240_000 },
   );
 
-  afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), {
-    timeout: 60_000,
-  });
+  afterAll.skipIf(!!process.env.NO_DESTROY)(
+    sharedStack
+      .destroy()
+      .pipe(
+        Effect.andThen(
+          Core.withProviders(
+            assertGetOnlyResourcesDeleted,
+            testOptions,
+            "SecretsManagerBindings",
+          ),
+        ),
+      ),
+    { timeout: 120_000 },
+  );
 
   describe("GetSecretValue", () => {
+    test.provider(
+      "reads a string with only the GetSecretValue binding",
+      (_stack) =>
+        Effect.gen(function* () {
+          const value = yield* readGetOnlyValue();
+          expect(value.secretString).toBe("alchemy-sm-get-only-value");
+          expect(value.arn).toBe(getOnlySecret!.secretArn);
+          expect(value.name).toBe(getOnlySecret!.secretName);
+          expect(value.versionId).toBeTruthy();
+
+          const query = yield* Effect.sync(() =>
+            new URLSearchParams({
+              versionId: value.versionId,
+              versionStage: "AWSCURRENT",
+            }).toString(),
+          );
+          const versioned = yield* readGetOnlyValue(`?${query}`);
+          expect(versioned).toEqual(value);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "grants exactly GetSecretValue on the isolated secret ARN",
+      (_stack) =>
+        Effect.gen(function* () {
+          const roleName = getOnlyFunction!.roleName;
+          const permissions = yield* secretRolePermissions(roleName);
+          expect(permissions).toEqual([
+            {
+              effect: "Allow",
+              action: "secretsmanager:GetSecretValue",
+              resource: getOnlySecret!.secretArn,
+            },
+          ]);
+          const attached = yield* IAM.listAttachedRolePolicies
+            .pages({ RoleName: roleName })
+            .pipe(Stream.runCollect);
+          expect(
+            attached.flatMap((page) =>
+              (page.AttachedPolicies ?? []).map((policy) => policy.PolicyArn),
+            ),
+          ).toEqual([
+            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          ]);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "denies raw DescribeSecret after an authorized GetSecretValue read",
+      (_stack) =>
+        Effect.gen(function* () {
+          const value = yield* readGetOnlyValue();
+          expect(value.secretString).toBe("alchemy-sm-get-only-value");
+          expect(value.arn).toBe(getOnlySecret!.secretArn);
+
+          const response = yield* HttpClient.get(
+            `${getOnlyUrl}/describe-denied`,
+          );
+          expect(response.status).toBe(200);
+          const denied = yield* response.json.pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.Struct({ tag: Schema.Literal("AccessDeniedException") }),
+              ),
+            ),
+          );
+          expect(denied.tag).toBe("AccessDeniedException");
+        }),
+      { timeout: 120_000 },
+    );
+
     test.provider("reads the string secret value round-trip", (_stack) =>
       Effect.gen(function* () {
         // GetSecretValue is eventually consistent right after the fixture
