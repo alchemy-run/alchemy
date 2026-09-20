@@ -81,7 +81,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 ) {}
 ```
 
-`socket.serializeAttachment({ id })` persists a JSON-safe value
+`socket.serializeAttachment({ id })` persists a structured-cloneable value
 **alongside the socket itself**. Cloudflare keeps it across
 hibernation, so when the DO wakes back up the socket still
 remembers which session it belongs to. We'll need that in the next
@@ -205,6 +205,82 @@ so it can only run in the inner (runtime) Effect — which is exactly
 where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.
 :::
+
+## Define an optional attachment codec
+
+The unchecked methods above remain available. For validation, define an
+Effect Schema codec for your application's attachment:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+const Session = Schema.Struct({
+  id: Schema.String,
+  joinedAt: Schema.DateFromString,
+});
+```
+
+The application sees a `Date`; the attachment stores its encoded string.
+Schemas with services retain their requirements: writing needs encoding
+services, and reading needs decoding services.
+
+## Encode typed attachments
+
+Replace the unchecked write in `fetch` with `setAttachment`:
+
+```typescript
+const joinedAt = yield* Effect.sync(() => new Date());
+yield* socket.setAttachment(Session, { id, joinedAt });
+```
+
+`setAttachment` encodes before calling native `serializeAttachment`. It adds
+no envelope: unchecked reads see `{ id, joinedAt: "..." }`, and previously
+stored unchecked values can be decoded if they match the codec's encoded
+shape. The native structured-clone and 16,384-byte serialized-size limit still
+apply; a schema accepting a value does not guarantee the platform can store
+it. Serialization overhead counts toward that limit, not just string length.
+
+## Validate attachments after hibernation
+
+Use `getAttachment` in the restoration loop to validate surviving sockets:
+
+```typescript
+for (const socket of yield* state.getWebSockets()) {
+  yield* socket.getAttachment(Session).pipe(
+    Effect.tap((session) =>
+      Effect.sync(() => sessions.set(session.id, socket)),
+    ),
+    Effect.catchTag("WebSocketAttachmentError", () =>
+      socket.close(1008, "Invalid session"),
+    ),
+  );
+}
+```
+
+This application closes sockets with absent, malformed, or obsolete
+attachments. The wrapper never closes them automatically. A
+`WebSocketAttachmentError` identifies `encode`, `decode`, `missing`, `read`,
+or `write` in its `reason`; `cause` preserves schema errors and native
+exceptions. Nullish attachments count as missing, even with `Schema.Unknown`.
+Older sessions lacking `joinedAt` fail validation unless your codec migrates
+them.
+
+## Choose an attachment error policy
+
+A handler can instead ignore an invalid attachment:
+
+```typescript
+const session = yield* socket.getAttachment(Session).pipe(
+  Effect.catchTag("WebSocketAttachmentError", () =>
+    Effect.succeed(undefined),
+  ),
+);
+if (session === undefined) return;
+```
+
+Omit `catchTag` to propagate the typed failure, or handle it at your normal
+Effect boundary. These helpers are for application-owned attachments, not
+the internal serializer metadata of WebSocket RPC connections.
 
 ## Extract a broadcast helper
 

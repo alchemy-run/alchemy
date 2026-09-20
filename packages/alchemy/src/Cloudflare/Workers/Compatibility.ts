@@ -69,10 +69,11 @@ export const getCompatibility = (props: WorkerProps) => {
   const date = props.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE;
   return {
     date,
-    flags: withDefaultFlags(userFlags, {
+    flags: withDefaultFlags(props.compatibility?.flags, {
       date,
       python,
       isExternal: props.isExternal ?? false,
+      bundle: props.bundle,
     }),
   };
 };

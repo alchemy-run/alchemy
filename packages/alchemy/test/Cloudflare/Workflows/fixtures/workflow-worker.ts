@@ -24,6 +24,13 @@ export default class WorkflowLocalWorker extends Cloudflare.Worker<WorkflowLocal
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
 
+        if (request.url === "/workflow/probe") {
+          const instance = yield* workflow.create({
+            params: { value: "", ready: true },
+          });
+          return yield* HttpServerResponse.json({ instanceId: instance.id });
+        }
+
         if (request.url.startsWith("/workflow/start/")) {
           const value = request.url.split("/workflow/start/")[1] ?? "world";
           const instance = yield* workflow.create({ params: { value } });
