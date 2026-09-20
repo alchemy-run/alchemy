@@ -5,7 +5,7 @@ description: Provision Prisma Postgres and query it with Drizzle from Prisma Com
 
 This is the Prisma cloud provider and Prisma Postgres, not a requirement to use Prisma ORM. Drizzle and Effect SQL can query the database.
 
-## Create a database
+## Prisma Postgres
 
 ```typescript
 import * as Prisma from "alchemy/Prisma";
@@ -19,8 +19,6 @@ const database = yield* Prisma.Postgres("Database", { project });
 ```
 
 See [Prisma Postgres](/prisma/data/postgres) for local development and [branches](/prisma/data/branches) for preview databases.
-
-## Connect an application
 
 [Prisma Compute + Drizzle](/prisma/data/drizzle-postgres) shows application deployment and queries. [Connections](/prisma/data/connections) covers URLs and connecting from other runtimes.
 

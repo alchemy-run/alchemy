@@ -19,7 +19,13 @@ Follow [Lambda + Aurora DSQL + Drizzle](/aws/data/drizzle-dsql) for IAM authenti
 
 Follow [Lambda + Aurora PostgreSQL + Drizzle](/aws/data/drizzle-aurora) for the VPC, database, and Lambda connection. [RDS & Aurora](/aws/data/rds) covers provisioning and the Data API.
 
-## Clients and migrations
+## Aurora MySQL
+
+Use an [RDS DBCluster](/providers/aws/rds/dbcluster) with the `aurora-mysql` engine and the [Drizzle MySQL client](/sql/drizzle/mysql) or [Effect SQL](/sql/effect-sql/mysql) for queries.
+
+## RDS
+
+Use [RDS DBInstance](/providers/aws/rds/dbinstance) for managed database instances, including PostgreSQL and MySQL. See [RDS & Aurora](/aws/data/rds) for networking and database resources.
 
 [Postgres with Drizzle](/sql/drizzle/postgres) and [Effect SQL](/sql/effect-sql/postgres) cover shared client usage. Generate and commit migration files before deployment; use the AWS guide for the target database's application step.
 

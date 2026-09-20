@@ -545,7 +545,7 @@ SQL provider discovery, database comparison, portable Effect SQL and Drizzle cli
 - [AWS](https://alchemy.run/sql/providers/aws) — SQL on AWS with RDS, Aurora PostgreSQL, or Aurora DSQL, connected from Lambda.
 - [Cloudflare](https://alchemy.run/sql/providers/cloudflare) — Choose D1, per-object SQLite, or external Postgres/MySQL through Hyperdrive for a Worker.
 - [Fly](https://alchemy.run/sql/providers/fly) — Connect a Fly Service to Managed Postgres with Drizzle or Effect SQL.
-- [Hetzner](https://alchemy.run/sql/providers/hetzner) — Query Postgres from a Hetzner-hosted application with Drizzle or Effect SQL.
+- [Hetzner](https://alchemy.run/sql/providers/hetzner) — Query external Postgres or MySQL databases from a Hetzner-hosted application.
 - [Neon](https://alchemy.run/sql/providers/neon) — Provision Postgres projects and branches, then connect them to your application runtime.
 - [PlanetScale](https://alchemy.run/sql/providers/planetscale) — Choose PlanetScale Postgres or MySQL/Vitess and connect it to your application runtime.
 - [Prisma](https://alchemy.run/sql/providers/prisma) — Provision Prisma Postgres and query it with Drizzle from Prisma Compute or another runtime.

@@ -1,11 +1,11 @@
 ---
 title: Hetzner
-description: Query Postgres from a Hetzner-hosted application with Drizzle or Effect SQL.
+description: Query external Postgres or MySQL databases from a Hetzner-hosted application.
 ---
 
-Host the application on Hetzner and connect it to a reachable Postgres database, such as Neon. This guide does not provision a managed Hetzner database.
+Hetzner hosts the application; provision Postgres or MySQL separately and connect over a reachable network. These are external database connections, not managed Hetzner database services.
 
-## Query from a handler
+## External Postgres
 
 ```typescript
 import * as Drizzle from "alchemy/Drizzle/Postgres";
@@ -20,8 +20,10 @@ const rows = yield* db.select().from(users);
 
 Follow [Hetzner + Postgres + Drizzle](/hetzner/data/drizzle-postgres) for application deployment and connection configuration.
 
-## Database and client setup
-
 [Neon](/sql/providers/neon) and [PlanetScale](/sql/providers/planetscale) cover managed database options. The [Postgres client guide](/sql/drizzle/postgres) works with either provider.
+
+## External MySQL
+
+Connect to a reachable MySQL database, such as [PlanetScale MySQL](/planetscale/data/mysql), using the [Drizzle MySQL client](/sql/drizzle/mysql) or [Effect SQL](/sql/effect-sql/mysql). Provision the database separately and supply its connection details to the Hetzner application.
 
 See [Hetzner setup](/hetzner/setup) and [generate and commit migrations](/sql/drizzle/migrations).

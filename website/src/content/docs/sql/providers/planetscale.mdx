@@ -20,14 +20,26 @@ const branch = yield* Planetscale.PostgresBranch("App", {
 });
 ```
 
-See [Postgres](/planetscale/data/postgres) for roles and connection origins, or [MySQL](/planetscale/data/mysql) for the Vitess resource family.
+See [Postgres](/planetscale/data/postgres) for roles and connection origins.
 
-## Connect an application
+## MySQL / Vitess
+
+```typescript
+const database = yield* Planetscale.MySQLDatabase("Database", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+
+const branch = yield* Planetscale.MySQLBranch("App", {
+  database,
+  isProduction: false,
+});
+```
+
+See [MySQL](/planetscale/data/mysql) for branches, passwords, and safe migrations.
 
 [PlanetScale with Drizzle](/planetscale/guides/drizzle) covers database configuration. [Worker + Drizzle](/cloudflare/data/drizzle) owns the Cloudflare deployment walkthrough.
 
 Use the portable [Postgres](/sql/drizzle/postgres) or [MySQL](/sql/drizzle/mysql) client guide for other runtimes.
-
-## Setup and migrations
 
 [Configure PlanetScale credentials](/planetscale/setup), then [generate and commit migration files](/sql/drizzle/migrations). [PlanetScale migrations](/planetscale/data/migrations) documents application for each engine.
