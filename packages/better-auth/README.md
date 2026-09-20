@@ -2,6 +2,8 @@
 
 [Better Auth](https://better-auth.com) for [alchemy](https://alchemy.run) — an Effect-native wrapper plus a pluggable database layer per platform.
 
+Follow the [six-part tutorial](https://alchemy.run/better-auth/tutorial/part-1) to build browser sign-in, Effect HTTP API middleware, and GitHub authentication. See [sign-in providers](https://alchemy.run/better-auth/sign-in-providers) and [database guides](https://alchemy.run/better-auth/databases) for other integrations.
+
 ```typescript
 import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
@@ -272,6 +274,6 @@ SQL layers with migration support apply schema changes during `alchemy deploy` v
 - re-runs only when the auth schema (plugins, additional fields, indexes) or the target database changes,
 - applies missing tables, columns, and indexes through Better Auth's migrator; unsafe schema changes surface as `BetterAuthMigrationError`.
 
-For a direct **1.6 → 1.7.5+** upgrade, the core account schema is unchanged: no `issuer` column or identity backfill is needed. Keep the same auth secret and upgrade Better Auth's synchronized packages together. Microsoft identifiers, legacy OIDC/MCP clients, SCIM, and device codes can require manual preparation; Alchemy does not rewrite identities or convert plugin data. See the [upgrade guide](https://alchemy.run/better-auth/upgrading/) before deploying an existing database.
+For a direct **1.6 → 1.7.5+** upgrade, the core account schema is unchanged: no `issuer` column or identity backfill is needed. Keep the same auth secret and upgrade Better Auth's synchronized packages together. Microsoft identifiers, legacy OIDC/MCP clients, SCIM, and device codes can require manual preparation; Alchemy does not rewrite identities or convert plugin data. See the [upgrade guide](https://alchemy.run/better-auth/upgrades/from-1-6-to-1-7) before deploying an existing database.
 
 Opt out with `migrate: false` and manage the schema yourself (`npx auth@1.7.5 generate`). Multiple `BetterAuth` instances in one stack: give each a distinct `id` to disambiguate the secret + migration resources.

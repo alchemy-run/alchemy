@@ -1,0 +1,71 @@
+---
+title: SQLite
+description: Use a local SQLite file for Better Auth in Bun development processes and tests.
+---
+
+Use `SQLite` only in a Bun process or Bun-based tests. A Cloudflare Worker, including one started by `alchemy dev`, runs in workerd and should use [D1](/better-auth/databases/cloudflare-d1) instead.
+
+## Install the integration
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely
+```
+
+The SQL adapter needs the optional `kysely` peer; the SQLite driver is built into Bun as `bun:sqlite`. The standard deployed Lambda runtime cannot load that driver.
+
+## Choose a persistent file
+
+For a Bun host using the tutorial's `Auth` service, create `src/auth-database.ts`:
+
+```typescript
+import { SQLite } from "@alchemy.run/better-auth/SQLite";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Auth.layer.pipe(
+  Layer.provide(SQLite("./auth.sqlite")),
+);
+```
+
+The path is relative to the process working directory, and its parent directory must exist.
+
+## Supply a Bun-only handler
+
+A Bun host can consume the [tutorial's Auth service](/better-auth/tutorial/part-1) at handler construction:
+
+```diff lang="typescript"
+ // src/auth-handler.ts
+ import * as Effect from "effect/Effect";
+ import { Auth } from "./auth.ts";
++import { AuthLive } from "./auth-database.ts";
+
+-export const handler = Effect.map(Auth, (auth) => ({ fetch: auth.fetch }));
++export const handler = Effect.map(Auth, (auth) => ({ fetch: auth.fetch })).pipe(
++  Effect.provide(AuthLive),
++);
+```
+
+This is a handler-construction Effect, not a standalone server. The Bun host must supply the request and execution scope; do not apply this layer to the tutorial's Worker.
+
+## Use Alchemy's runtime directory
+
+To use the default location instead, change the layer:
+
+```diff lang="typescript"
+-  Layer.provide(SQLite("./auth.sqlite")),
++  Layer.provide(SQLite()),
+```
+
+The default is `better-auth.sqlite` inside the resolved Alchemy runtime directory, normally `.alchemy`. Back up the file if the data matters; it is not a managed cloud database.
+
+## Keep migrations and runtime on the same file
+
+During stack deployment, automatic migrations open the configured file on the deploying machine. Runtime must open that same file; deploying a migrated local file does not copy it to another machine.
+
+Outside an Alchemy stack, no migration Action is registered automatically. Prepare the file's schema yourself before using it in standalone tests; see [migrations](/better-auth/guides/migrations).
+
+## Close the database after each execution
+
+The layer opens the database on the request or test execution scope and closes it when that scope ends. Use a persistent filename rather than `:memory:` when migrations and auth run in separate connections.
+
+The signing secret is automatically provisioned in an Alchemy host; standalone tests should provide an explicit test secret and a scoped runtime context. See [configuration](/better-auth/guides/configuration) and the [`SQLite` reference](/providers/betterauth/sqlite).

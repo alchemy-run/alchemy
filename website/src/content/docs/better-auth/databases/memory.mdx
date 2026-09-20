@@ -1,0 +1,75 @@
+---
+title: Memory
+description: Use disposable in-memory storage for Better Auth development and tests.
+---
+
+Use `Memory` for throwaway development and tests, not production authentication. Users and sessions disappear when the process or isolate is replaced.
+
+## Install the integration
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5
+```
+
+No optional database driver is required.
+
+## Supply a shared memory layer
+
+Create `src/auth-database.ts`, reusing the tutorial's `Auth` service:
+
+```typescript
+import { Memory } from "@alchemy.run/better-auth/Memory";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Auth.layer.pipe(Layer.provide(Memory()));
+```
+
+## Replace the Worker pipeline
+
+For disposable development, replace D1's wiring in the [Part 1 Worker](/better-auth/tutorial/part-1):
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+Construct the layer once for the host, not inside `fetch`, so requests in the same isolate share the store.
+
+## Understand the lifetime
+
+Better Auth instances remain request-scoped, while the memory layer retains its backing record across requests. Separate Workers or Lambda instances do not share records, so a request routed to another instance may not find the user or session.
+
+## Supply a store for test inspection
+
+Replace the preceding module when a test needs access to the records:
+
+```typescript
+import { Memory } from "@alchemy.run/better-auth/Memory";
+import type { MemoryDB } from "better-auth/adapters/memory";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const records: MemoryDB = {};
+export const AuthLive = Auth.layer.pipe(Layer.provide(Memory(records)));
+```
+
+The adapter initializes missing model arrays from your auth schema, including plugins. Give independent tests independent stores to prevent users and sessions leaking between cases.
+
+## Skip schema migrations
+
+Memory has no migration support and needs no schema command. Leave `migrate` unset or false in `authOptions`; explicitly setting `migrate: true` fails rather than pretending a migration ran.
+
+## Keep the signing secret separate
+
+The Alchemy host still provisions and binds a stable signing secret automatically. A stable secret does not make the memory store persistent; choose [D1](/better-auth/databases/cloudflare-d1) or another durable database before deployment to users.
+
+See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and the [`Memory` reference](/providers/betterauth/memory).

@@ -1,0 +1,89 @@
+---
+title: MySQL
+description: Connect Better Auth to MySQL with a request-scoped mysql2 pool.
+---
+
+Use `MySQL` for an existing MySQL database reachable over TCP. For Workers, prefer [Hyperdrive](/better-auth/databases/cloudflare-hyperdrive) with a MySQL origin.
+
+## Install the driver
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely mysql2
+```
+
+## Supply the connection URL
+
+Set `DATABASE_URL` in the deploying environment to the database's MySQL connection URL. The database, credentials, and network access must already exist; `MySQL` only supplies a connection layer.
+
+Create `src/auth-database.ts`, reusing the tutorial's `Auth` service:
+
+```typescript
+import { MySQL } from "@alchemy.run/better-auth/MySQL";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.Redacted("DATABASE_URL");
+    return Auth.layer.pipe(Layer.provide(MySQL(url)));
+  }),
+);
+```
+
+Configuration is bound during construction, but the `mysql2` pool opens inside each request or invocation and closes when it settles.
+
+## Replace the host pipeline
+
+For a TCP-reachable database, replace D1's wiring in the [Part 1 Worker](/better-auth/tutorial/part-1):
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+Keep the Worker's `nodejs_compat` flag. The [Lambda host](/better-auth/deployment/aws) uses the same `AuthLive` pipeline.
+
+## Require TLS for a hosted database
+
+For services such as PlanetScale that require TLS, configure the pool in the preceding module:
+
+```diff lang="typescript"
+-    return Auth.layer.pipe(Layer.provide(MySQL(url)));
++    return Auth.layer.pipe(
++      Layer.provide(MySQL(url, {
++        pool: { ssl: { rejectUnauthorized: true } },
++      })),
++    );
+```
+
+Use the database provider's CA configuration when it is not covered by the system trust store. Do not disable certificate verification to make the connection succeed.
+
+## Apply the schema
+
+```sh
+bunx alchemy deploy
+```
+
+Automatic migrations use the resolved URL and the same pool options, so the deployer must reach the server with schema-changing permissions. The layer opens a connection to an existing database; migrations create auth tables, not the database itself.
+
+## Separate migration permissions
+
+Read `DATABASE_MIGRATION_URL` during construction and supply it as the layer's `migrate` option when runtime credentials cannot modify schema. See the complete [Postgres example](/better-auth/databases/postgres#use-a-separate-migration-url); the same option is supported by `MySQL`.
+
+Configuration read in the host is bound into its environment, including a migration URL. Use a deploy-only resource Output instead when the runtime must not receive privileged migration credentials.
+
+## Keep shared auth settings
+
+No manual signing-secret setup is required: the host binds the stable generated secret. Preserve it when upgrading an existing application, and review MySQL index and string-length constraints in the [upgrade guide](/better-auth/upgrades/from-1-6-to-1-7).
+
+See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and the [`MySQL` reference](/providers/betterauth/mysql).

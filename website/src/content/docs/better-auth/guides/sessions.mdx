@@ -1,0 +1,176 @@
+---
+title: Sessions
+description: Read sessions, control their lifetime, and understand refresh and revocation.
+---
+
+This guide extends the auth service from [Part 2](/better-auth/tutorial/part-2) and the client from [Part 3](/better-auth/tutorial/part-3). D1 remains the session store unless you configure [secondary storage](/better-auth/guides/secondary-storage).
+
+## Read the browser session
+
+In a browser module beside `src/client.ts`:
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function currentUser() {
+  const { data, error } = await authClient.getSession();
+  if (error) throw error;
+  return data?.user ?? null;
+}
+```
+
+`null` means there is no valid session. A failed request is not an anonymous user, and a browser session is for UI state rather than server authorization.
+
+## Read the incoming request
+
+Inside the tutorial Worker's request handler, use the `Auth` service:
+
+```typescript
+const auth = yield* Auth;
+const session = yield* auth.getSession();
+```
+
+Import `Auth` from `./auth.ts`. The no-argument overload reads the ambient `HttpServerRequest`; the Worker supplies the runtime context.
+
+## Supply explicit headers
+
+In `src/worker.ts`, after the existing `request` lookup inside `fetch`, the explicit overload accepts a web `Headers` object:
+
+```typescript
+const headers = yield* Effect.sync(() => new Headers(request.headers));
+const session = yield* auth.getSession(headers);
+```
+
+Here `auth` is already captured by the Worker's construction Effect. Forward the incoming headers rather than extracting a token and inventing a different authentication scheme.
+
+## Preserve lookup failures
+
+`auth.getSession()` returns a session or `null` and exposes `BetterAuthApiError` failures. Unexpected failures outside Better Auth's API error handling can also be Effect defects.
+
+Use the [HTTP API middleware](/better-auth/guides/http-api-middleware) to map missing sessions to typed `Unauthorized` responses and lookup failures to `503`. Do not catch every failure and replace it with `null`.
+
+## Set the lifetime
+
+Add this property to `authOptions` in `src/auth.ts`:
+
+```diff lang="typescript"
+ export const authOptions = {
+   basePath: "/api/auth",
+   emailAndPassword: { enabled: true },
++  session: {
++    expiresIn: 60 * 60 * 24 * 7,
++    updateAge: 60 * 60 * 24,
++    freshAge: 60 * 10,
++  },
+ } satisfies BetterAuthProps;
+```
+
+These values are seconds: sessions expire after seven days, eligible activity refreshes them after one day, and sensitive built-in operations require a session created within ten minutes. `freshAge` is not an expiry or automatic reauthentication policy for your own routes.
+
+## Let the browser receive refresh cookies
+
+The tutorial mounts `auth.fetch` at `/api/auth`, so `authClient.getSession()` can receive Better Auth's response cookies. A server-only `auth.getSession()` call returns data, not a response that forwards `Set-Cookie` to the browser.
+
+Keep browser session refreshes on the mounted auth routes. The dispatch in [HTTP API middleware](/better-auth/guides/http-api-middleware) preserves the Better Auth response rather than rebuilding it from session data.
+
+## Decide whether to cache in cookies
+
+Cookie caching is off by default. To opt in, add `cookieCache` inside the existing `session` object in `src/auth.ts`:
+
+```diff lang="typescript"
+   session: {
+     expiresIn: 60 * 60 * 24 * 7,
+     updateAge: 60 * 60 * 24,
+     freshAge: 60 * 10,
++    cookieCache: {
++      enabled: true,
++      maxAge: 60,
++      refreshCache: false,
++    },
+   },
+```
+
+A valid cache can answer a session lookup without reading the server store. With this configuration, revoked sessions or changed user data can remain visible until that cache expires, for up to 60 seconds.
+
+`refreshCache: true` can renew cached data without consulting the store, so do not assume `maxAge` alone bounds staleness when stateless refresh is enabled. Cookie caching is not a replacement for authoritative permission checks.
+
+## Bypass the cache for sensitive requests
+
+In `src/middleware.ts`, replace the session lookup with this request-scoped Effect:
+
+```typescript
+const session = yield* Effect.gen(function* () {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const webRequest = yield* HttpServerRequest.toWeb(request);
+  return yield* auth.api.getSession({
+    headers: webRequest.headers,
+    query: { disableCookieCache: true },
+  });
+}).pipe(
+  Effect.mapError(() => new AuthenticationUnavailable()),
+  Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
+);
+```
+
+Here `auth` and `AuthenticationUnavailable` come from the tutorial's middleware; add `import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"`. Keep the existing anonymous check and `CurrentUser` provisioning after this lookup.
+
+With D1 this reads server-side session state; with secondary storage it reads that store instead.
+
+A client-side bypass only affects that client request. Put the bypass on the server path that authorizes the sensitive action.
+
+## List active sessions
+
+Add this browser helper beside `src/client.ts`:
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function listSessions() {
+  const { data, error } = await authClient.listSessions();
+  if (error) throw error;
+  return data;
+}
+```
+
+Session tokens are credentials. Do not log them or include them in analytics when rendering the device list.
+
+## Revoke a selected session
+
+In the same browser module:
+
+```typescript
+export async function revokeSession(token: string) {
+  const { error } = await authClient.revokeSession({ token });
+  if (error) throw error;
+}
+```
+
+Pass the token from a session returned by `listSessions()`. The server verifies that the session belongs to the caller.
+
+## Revoke other devices
+
+In the same browser module:
+
+```typescript
+export async function revokeOtherSessions() {
+  const { error } = await authClient.revokeOtherSessions();
+  if (error) throw error;
+}
+```
+
+This retains the current session. Revocation removes server-side sessions but cannot erase a valid cookie cache already held by another browser.
+
+## Sign out this browser
+
+In the same browser module:
+
+```typescript
+export async function signOut() {
+  const { error } = await authClient.signOut();
+  if (error) throw error;
+}
+```
+
+Sign-out clears this browser's auth cookies and attempts to delete its server session; it is not a sign-out-everywhere operation. Better Auth can return success even when that deletion fails, so a cleared cookie jar alone does not prove server-side revocation.
+
+Verify the round trip with the [testing guide](/better-auth/guides/testing), and investigate storage failures rather than treating them as a successful revocation.

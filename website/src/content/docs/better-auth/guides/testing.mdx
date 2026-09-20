@@ -1,0 +1,206 @@
+---
+title: Testing
+description: Verify the deployed tutorial's authentication boundary with a real cookie jar.
+---
+
+Use an isolated deployment of the tutorial through [Part 4](/better-auth/tutorial/part-4), following [Part 6](/better-auth/tutorial/part-6) for deployment. These checks exercise the real Worker and D1 database, not a mocked session service.
+
+## Select the deployed origin
+
+In one shell, read the URL printed for your disposable deployment, then press Enter:
+
+```sh
+read -r BASE_URL
+```
+
+Enter the origin without a trailing slash, and ensure it matches Better Auth's configured URL. The production example is `https://auth.example.com`; do not use a production user database for this disposable-account test.
+
+To exercise the local D1 simulator instead, start the tutorial in another terminal:
+
+```sh
+bunx alchemy dev
+```
+
+Paste the origin printed by Alchemy into the test shell:
+
+```sh
+read -r BASE_URL
+```
+
+The local run is useful feedback, but it does not prove that the deployed Worker, bindings, or cloud credentials work.
+
+## Protect temporary credentials
+
+These commands need `curl`, `jq`, and `openssl`:
+
+```sh
+umask 077
+WORK=$(mktemp -d)
+COOKIE_JAR="$WORK/cookies"
+trap 'rm -rf "$WORK"' EXIT
+```
+
+Keep the same shell for the following steps. Cookie jars, session responses, and generated passwords stay in this private directory rather than terminal output or repository files.
+
+## Check the anonymous boundary
+
+```sh
+test "$(curl --silent --show-error \
+  --output "$WORK/anonymous.json" --write-out '%{http_code}' \
+  "$BASE_URL/api/me")" = 401
+jq -e '._tag == "Unauthorized"' "$WORK/anonymous.json"
+```
+
+Expect `401` with the typed `Unauthorized` body. A `503` is a session-service failure, not a successful anonymous test.
+
+## Confirm sign-in routes stay public
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/no-session.json" \
+  "$BASE_URL/api/auth/get-session"
+jq -e '. == null' "$WORK/no-session.json"
+```
+
+A signed-out request to Better Auth's session route returns `null`. It must not be blocked by the application's authentication middleware.
+
+## Create a disposable user
+
+Generate the request body without printing the password:
+
+```sh
+openssl rand -base64 24 | jq -R '{
+  name: "Guide Session",
+  email: "guide-session@example.com",
+  password: .
+}' > "$WORK/signup.json"
+```
+
+Send it to the real sign-up route:
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/signup-response.json" \
+  --header 'Content-Type: application/json' \
+  --header "Origin: $BASE_URL" \
+  --data-binary @"$WORK/signup.json" \
+  "$BASE_URL/api/auth/sign-up/email"
+jq -e '.user.id | type == "string"' "$WORK/signup-response.json"
+```
+
+Stop if sign-up fails; an existing-user error is not permission to ignore every non-200 response. Use a clean disposable deployment when repeating this fixed test account.
+
+## Sign in and save cookies
+
+Extract the credentials into the sign-in body:
+
+```sh
+jq '{email, password}' "$WORK/signup.json" > "$WORK/signin.json"
+```
+
+Capture cookies without printing response headers or tokens:
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/signin-response.json" \
+  --cookie-jar "$COOKIE_JAR" \
+  --header 'Content-Type: application/json' \
+  --header "Origin: $BASE_URL" \
+  --data-binary @"$WORK/signin.json" \
+  "$BASE_URL/api/auth/sign-in/email"
+USER_ID=$(jq -er '.user.id' "$WORK/signin-response.json")
+```
+
+The jar preserves cookie paths and secure attributes. Reconstructing only one cookie by hand can hide problems with the actual browser flow.
+
+## Read the authenticated session
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/session.json" \
+  --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
+  "$BASE_URL/api/auth/get-session"
+jq -e --arg id "$USER_ID" '.user.id == $id' "$WORK/session.json"
+```
+
+This also captures cookies returned by session refresh. No session token needs to appear in the test output.
+
+## Call the protected API
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/me.json" \
+  --cookie "$COOKIE_JAR" \
+  "$BASE_URL/api/me"
+jq -e --arg id "$USER_ID" \
+  '.id == $id and .email == "guide-session@example.com"' "$WORK/me.json"
+```
+
+The response proves that middleware supplied `CurrentUser` from the session. It should contain `id`, `name`, and `email`, not a session token.
+
+## Check an ownership denial
+
+If you added the profile route from [authorization](/better-auth/guides/authorization):
+
+```sh
+test "$(curl --silent --show-error \
+  --output "$WORK/forbidden.json" --write-out '%{http_code}' \
+  --cookie "$COOKIE_JAR" \
+  "$BASE_URL/api/users/not-the-current-user")" = 403
+jq -e '._tag == "Forbidden"' "$WORK/forbidden.json"
+```
+
+This is an authenticated request that lacks access, unlike the anonymous `401` case.
+
+## Sign out and verify the boundary again
+
+```sh
+curl --silent --show-error --fail-with-body \
+  --output "$WORK/signout.json" \
+  --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" \
+  --header 'Content-Type: application/json' \
+  --header "Origin: $BASE_URL" \
+  --data '{}' \
+  "$BASE_URL/api/auth/sign-out"
+jq -e '.success == true' "$WORK/signout.json"
+```
+
+Confirm that the same jar no longer authorizes the protected route:
+
+```sh
+test "$(curl --silent --show-error \
+  --output "$WORK/signed-out.json" --write-out '%{http_code}' \
+  --cookie "$COOKIE_JAR" \
+  "$BASE_URL/api/me")" = 401
+jq -e '._tag == "Unauthorized"' "$WORK/signed-out.json"
+```
+
+This tests the browser's cleared cookie jar, not immediate invalidation of a stolen cookie cache. Test that separately with the authoritative lookup from [sessions](/better-auth/guides/sessions).
+
+## Remove temporary files
+
+```sh
+rm -rf "$WORK"
+trap - EXIT
+```
+
+This removes local credentials, not the server-side test user. Destroy the disposable deployment using its exact stage and profile when finished; never destroy a shared stack just to reset this example.
+
+## Run the repository's live D1 test
+
+From the Alchemy repository root, with the testing profile configured and GNU `timeout` installed:
+
+```sh
+timeout 240 pnpm test ../better-auth/test/Cloudflare/D1.test.ts \
+  --profile testing --retry 0
+```
+
+The [D1 suite](https://github.com/alchemy-run/alchemy/blob/main/packages/better-auth/test/Cloudflare/D1.test.ts) deploys its own Worker, exercises sign-up, sign-in, and sessions, and checks a second deployment. Its fixture uses `/auth` and `/me`, whereas this tutorial uses `/api/auth` and `/api/me`.
+
+The separate [Memory suite](https://github.com/alchemy-run/alchemy/blob/main/packages/better-auth/test/BetterAuth.test.ts) checks wrapper API and plugin behavior in process. Passing it does not establish that a cloud database or deployed binding works.
+
+## Test the remaining boundaries deliberately
+
+Complete the real GitHub redirect flow from [Part 5](/better-auth/tutorial/part-5); an email/password cookie test does not verify OAuth state or provider callbacks. If using secondary storage, also run its [concurrency and failure checks](/better-auth/guides/secondary-storage).
+
+In an isolated environment, verify that a failed session lookup produces `503`, not `401` or a successful anonymous response. Keep such an outage test separate from the successful live cookie-jar flow.

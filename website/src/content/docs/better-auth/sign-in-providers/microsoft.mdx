@@ -1,0 +1,164 @@
+---
+title: Microsoft sign-in
+description: Register an Entra web application, select its tenant boundary, and configure Microsoft sign-in.
+---
+
+Use the [shared Auth service and browser client](/better-auth/sign-in-providers).
+The built-in Better Auth 1.7.5 provider key is `microsoft`, including for Microsoft Entra ID.
+
+## Register the application
+
+Open the [Microsoft Entra admin center](https://entra.microsoft.com/) in the intended
+directory, then select **Entra ID → App registrations → New registration**.
+
+Enter a name and choose **Supported account types** deliberately.
+For a company-only application, select the single-tenant option and record the directory's tenant ID.
+
+For a multitenant product, choose organizational accounts, organizational plus personal
+accounts, or personal accounts according to the users you intend to admit.
+
+Register the app, then copy **Application (client) ID** and **Directory (tenant) ID**
+from **Overview**; follow Microsoft's [app registration guide](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+
+## Register Web callbacks
+
+Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
+setup below; Alchemy allocates an available port and prints the URL.
+
+Open **Authentication → Add a platform → Web**.
+In another terminal, run `read` and paste the printed local origin without a trailing slash or path:
+
+```sh
+read -r AUTH_BASE_URL
+printf '%s/api/auth/callback/microsoft\n' "$AUTH_BASE_URL"
+```
+
+Register the resulting redirect URI; for production, register the callback on your real domain:
+
+```text
+https://auth.example.com/api/auth/callback/microsoft
+```
+
+Use **Web**, not **Single-page application**: Better Auth exchanges the code on the
+server with a client secret, even when your frontend is a SPA.
+
+Replace both origins with your actual dev URL and production domain.
+Use separate app registrations for production isolation, and do not enable implicit grants for this authorization-code flow.
+
+## Create the secret
+
+Under **Certificates & secrets → Client secrets → New client secret**, choose an
+expiry and copy the secret **Value**, not its **Secret ID**.
+
+Store `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` as server configuration,
+and schedule rotation before expiry; see [Configuration](/better-auth/guides/configuration).
+
+Save the captured local origin as server Config value `AUTH_BASE_URL` through that guide.
+For production, use your real origin, such as `https://auth.example.com`, without `/api/auth`.
+
+## Choose the tenant boundary
+
+Set `MICROSOFT_TENANT_ID` to your directory's GUID for a single-tenant application.
+The code below requires an explicit value instead of silently using Better Auth's `common` default.
+
+For a matching multitenant registration, `organizations` admits work/school accounts,
+`consumers` admits personal accounts, and `common` admits both classes.
+
+A multitenant endpoint is not an allowlist of customer organizations.
+Enforce application membership and tenant authorization on the server; email domains and login hints are not proof of tenant membership.
+
+## Import Config support
+
+Add these imports to `src/auth.ts`, keeping its existing imports, `authOptions`,
+and `Auth` class.
+
+```typescript
+import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
+```
+
+## Configure Microsoft
+
+Replace the existing `makeAuth` declaration:
+
+```typescript
+const makeAuth = Effect.gen(function* () {
+  const baseURL = yield* Config.String("AUTH_BASE_URL");
+  const clientId = yield* Config.String("MICROSOFT_CLIENT_ID");
+  const clientSecret = yield* Config.Redacted("MICROSOFT_CLIENT_SECRET");
+  const tenantId = yield* Config.String("MICROSOFT_TENANT_ID");
+
+  return yield* BetterAuth({
+    ...authOptions,
+    baseURL,
+    socialProviders: {
+      microsoft: {
+        clientId,
+        clientSecret: Redacted.value(clientSecret),
+        tenantId,
+        disableProfilePhoto: true,
+        disableDefaultScope: true,
+        scope: ["openid", "profile", "email"],
+      },
+    },
+  });
+});
+```
+
+This sign-in-only configuration omits Graph photos and offline access.
+The built-in defaults also request `User.Read` and `offline_access`; request them only if you need those features and configure the corresponding delegated permissions and consent.
+
+`Auth.layer` reads Config during construction; only the actual Better Auth options
+receive the unwrapped secret, and the Worker continues to own database and runtime provision.
+
+## Start sign-in in the browser
+
+Call this function from a Microsoft button and display any returned message as text.
+The same-origin `authClient` comes from `src/client.ts`.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function signInWithMicrosoft() {
+  try {
+    const { data, error } = await authClient.signIn.social({
+      provider: "microsoft",
+      callbackURL: "/account",
+      disableRedirect: true,
+    });
+    if (error) return "Could not start Microsoft sign-in. Try again.";
+    if (!data?.url) return "No authorization URL was returned.";
+    window.location.assign(data.url);
+  } catch {
+    return "Could not reach the server. Try again.";
+  }
+}
+```
+
+Better Auth displays callback failures on its built-in error page.
+After a successful return to `/account`, check the session using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+
+## Preserve identity and linking safety
+
+The 1.7.5 built-in provider derives its account subject from Microsoft's `oid`.
+Do not substitute mutable email addresses or `preferred_username`, or assume the same person has the same identity in every tenant.
+
+Microsoft does not always supply an email or a trustworthy email-verification signal.
+Do not map every Microsoft email to `emailVerified: true` or add Microsoft to `trustedProviders` just to bypass a linking failure.
+
+Keep `disableImplicitLinking: true`; an existing user signs in first, then uses
+`authClient.linkSocial` with `provider: "microsoft"` and the [shared linking result handling](/better-auth/sign-in-providers#link-accounts-deliberately).
+
+Explicit linking still enforces provider-email trust and the same-email rule.
+If those checks cannot be satisfied, use an audited ownership-verification flow rather than merging rows by email.
+
+## Diagnose a failed return
+
+For `AADSTS50011`, compare the Web redirect registration with the exact origin and
+`/api/auth/callback/microsoft` path; for client failures, check the secret value and expiry.
+
+For tenant or consent errors, check supported account types, `MICROSOFT_TENANT_ID`,
+user assignment, and administrator consent requirements before widening the tenant boundary.
+
+A missing-email failure requires reviewing the claims supplied by your tenant;
+never fabricate an address from a username, and never log tokens or full callback URLs.

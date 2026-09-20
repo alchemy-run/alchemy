@@ -147,6 +147,9 @@ export default defineConfig({
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
+    "/better-auth/database-layers": "/better-auth/databases",
+    "/better-auth/migrations": "/better-auth/guides/migrations",
+    "/better-auth/upgrading": "/better-auth/upgrades/from-1-6-to-1-7",
   },
   prefetch: true,
   trailingSlash: "ignore",
@@ -1157,10 +1160,76 @@ export default defineConfig({
           label: "Better Auth",
           items: [
             { label: "Overview", link: "/better-auth" },
-            { label: "Database layers", link: "/better-auth/database-layers" },
-            { label: "Migrations", link: "/better-auth/migrations" },
-            { label: "Upgrading to 1.7.5", link: "/better-auth/upgrading" },
-            providerResourcesEntry("BetterAuth"),
+            {
+              label: "Tutorial",
+              collapsed: false,
+              items: [{ autogenerate: { directory: "better-auth/tutorial" } }],
+            },
+            {
+              label: "Sign-in providers",
+              items: [
+                {
+                  autogenerate: { directory: "better-auth/sign-in-providers" },
+                },
+              ],
+            },
+            {
+              label: "Databases",
+              items: [{ autogenerate: { directory: "better-auth/databases" } }],
+            },
+            {
+              label: "Deployment",
+              items: [
+                {
+                  label: "Cloudflare",
+                  link: "/better-auth/deployment/cloudflare",
+                },
+                { label: "AWS", link: "/better-auth/deployment/aws" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Configuration",
+                  link: "/better-auth/guides/configuration",
+                },
+                {
+                  label: "HTTP API middleware",
+                  link: "/better-auth/guides/http-api-middleware",
+                },
+                { label: "Sessions", link: "/better-auth/guides/sessions" },
+                {
+                  label: "Authorization",
+                  link: "/better-auth/guides/authorization",
+                },
+                {
+                  label: "Account linking",
+                  link: "/better-auth/guides/account-linking",
+                },
+                { label: "Plugins", link: "/better-auth/guides/plugins" },
+                {
+                  label: "Secondary storage",
+                  link: "/better-auth/guides/secondary-storage",
+                },
+                { label: "Migrations", link: "/better-auth/guides/migrations" },
+                { label: "Testing", link: "/better-auth/guides/testing" },
+                {
+                  label: "Troubleshooting",
+                  link: "/better-auth/guides/troubleshooting",
+                },
+              ],
+            },
+            {
+              label: "Upgrades",
+              items: [
+                {
+                  label: "From 1.6 to 1.7.5",
+                  link: "/better-auth/upgrades/from-1-6-to-1-7",
+                },
+              ],
+            },
+            { ...providerResourcesEntry("BetterAuth"), label: "Reference" },
           ],
         },
         {

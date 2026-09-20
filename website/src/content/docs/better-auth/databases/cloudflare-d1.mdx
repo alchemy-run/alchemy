@@ -1,0 +1,74 @@
+---
+title: Cloudflare D1
+description: Supply a native D1 database to Better Auth on a Cloudflare Worker.
+---
+
+Use D1 for the [Worker tutorial](/better-auth/tutorial/part-1). The database resource creates D1; `CloudflareD1` supplies its native binding to Better Auth.
+
+## Install the integration
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely
+```
+
+Install the optional `kysely` peer for the SQL adapter. D1 itself uses a native Worker binding, so no separate database driver is required.
+
+## Supply D1 to Auth
+
+Create `src/auth-database.ts`, reusing the tutorial's `Auth` service and `AuthDb` resource:
+
+```typescript
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+import { AuthDb } from "./database.ts";
+
+export const AuthLive = Auth.layer.pipe(
+  Layer.provide(CloudflareD1(AuthDb)),
+);
+```
+
+## Replace the Worker pipeline
+
+Extract the inline wiring from the [Part 1 Worker](/better-auth/tutorial/part-1) into this layer:
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+Keep the tutorial's `nodejs_compat` flag and existing routes. [Cloudflare deployment](/better-auth/deployment/cloudflare) shows the host configuration.
+
+## Apply the schema
+
+```sh
+bunx alchemy deploy
+```
+
+Deployment creates the database and applies the auth schema over D1's HTTP API before updating the Worker. Auth requests use the native D1 binding; they do not run migrations.
+
+## Develop against local D1
+
+```sh
+bunx alchemy dev
+```
+
+The same layer uses the local D1 simulator during development, including schema migrations. Do not replace it with `SQLite`: the Worker still runs in workerd, not Bun.
+
+## Check transaction requirements
+
+D1 does not provide interactive transactions. Plugins requiring them, including SCIM in Better Auth 1.7, need another database; consult the [upgrade guide](/better-auth/upgrades/from-1-6-to-1-7).
+
+## Keep shared auth settings
+
+The omitted signing secret is generated once and bound automatically. Keep `/api/auth` and the tutorial's service unchanged; use [configuration](/better-auth/guides/configuration) for origins and [migrations](/better-auth/guides/migrations) for schema ownership.
+
+See the [`CloudflareD1` reference](/providers/betterauth/cloudflared1) for the complete layer API.

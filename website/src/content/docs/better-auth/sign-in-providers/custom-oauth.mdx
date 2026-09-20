@@ -1,0 +1,194 @@
+---
+title: Custom OAuth and OIDC
+description: Add a custom sign-in provider with Better Auth 1.7.5 genericOAuth and a Keycloak OIDC client.
+---
+
+Better Auth **1.7.5** registers `genericOAuth` providers as normal social providers:
+use `authClient.signIn.social`, not the older `signIn.oauth2` API or `/oauth2/callback/...` route.
+
+This example uses Keycloak with provider ID `company` and the
+[shared Auth service and same-origin client](/better-auth/sign-in-providers).
+
+## Create the Keycloak client
+
+In your Keycloak admin console, select the application realm rather than the administration
+realm, then open **Clients → Create client** and select **OpenID Connect**.
+
+Set a client ID such as `alchemy-auth`; enable **Client authentication** and
+**Standard flow**, and leave implicit flow and direct access grants disabled.
+
+Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
+setup below; Alchemy allocates an available port and prints the URL.
+
+In **Login settings**, set the home URL to that printed origin.
+In another terminal, run `read` and paste the origin without a trailing slash or path:
+
+```sh
+read -r AUTH_BASE_URL
+printf '%s/api/auth/callback/company\n' "$AUTH_BASE_URL"
+```
+
+Add the resulting URL to **Valid redirect URIs**; for production, register the callback
+on your real domain:
+
+```text
+https://auth.example.com/api/auth/callback/company
+```
+
+Use your actual development URL and production domain rather than wildcard callbacks.
+Separate clients, or separate realms, can isolate development from production.
+
+Save the client and copy the **Client secret** from its **Credentials** tab.
+Keep the client ID and secret on the server; the browser never exchanges the authorization code itself.
+
+## Configure identity claims
+
+Ensure the client's `profile` and `email` scopes provide `sub`, `name`, `email`, and
+`email_verified`, and require S256 PKCE in the client's advanced settings if that setting is available.
+
+Use users with genuinely verified email addresses; configure your realm's email delivery
+and verification policy before relying on `email_verified`, rather than marking arbitrary addresses verified.
+
+Keycloak's [server administration guide](https://www.keycloak.org/docs/latest/server_admin/#_oidc_clients)
+covers client settings; its [OIDC endpoints guide](https://www.keycloak.org/securing-apps/oidc-layers) defines discovery URLs.
+
+## Supply server configuration
+
+Set `OIDC_CLIENT_ID`, secret `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` using
+[Configuration](/better-auth/guides/configuration); a Keycloak discovery URL has this shape:
+
+```text
+https://identity.example.com/realms/my-app/.well-known/openid-configuration
+```
+
+Use your actual realm URL, reachable from the Worker, and HTTPS in production.
+Discovery must publish the expected issuer, authorization/token endpoints, signing algorithms, and `jwks_uri`.
+
+Save the captured local origin as server Config value `AUTH_BASE_URL` through the configuration guide.
+For production, use your real origin, such as `https://auth.example.com`, without `/api/auth`.
+
+## Import the plugin
+
+Add these imports to `src/auth.ts`; keep its existing `BetterAuth`, `Context`, `Effect`,
+and `Layer` imports and the exported `authOptions`.
+
+```typescript
+import { genericOAuth } from "better-auth/plugins/generic-oauth";
+import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
+```
+
+## Configure discovery
+
+Replace the existing `makeAuth` declaration:
+
+```typescript
+const makeAuth = Effect.gen(function* () {
+  const baseURL = yield* Config.String("AUTH_BASE_URL");
+  const clientId = yield* Config.String("OIDC_CLIENT_ID");
+  const clientSecret = yield* Config.Redacted("OIDC_CLIENT_SECRET");
+  const discoveryUrl = yield* Config.String("OIDC_DISCOVERY_URL");
+
+  return yield* BetterAuth({
+    ...authOptions,
+    baseURL,
+    plugins: [
+      genericOAuth({
+        config: [{
+          providerId: "company",
+          clientId,
+          clientSecret: Redacted.value(clientSecret),
+          discoveryUrl,
+          scopes: ["openid", "profile", "email"],
+          pkce: true,
+          authentication: "basic",
+          requireIdTokenVerification: true,
+          requireEmailVerification: true,
+          disableProviderLogout: true,
+        }],
+      }),
+    ],
+  });
+});
+```
+
+`Auth.layer` reads Config during construction and unwraps the secret only for the
+plugin options; keep the `Auth` class and host-owned Cloudflare + D1 provision unchanged.
+
+This example explicitly uses HTTP Basic client authentication at the token endpoint,
+which Keycloak supports for a client-secret client; match the registered authentication method when using another vendor.
+
+`requireIdTokenVerification` fails closed when discovery cannot supply verification
+metadata, and nonce binding remains enabled; do not disable these checks to accommodate bad discovery settings.
+
+`disableProviderLogout` keeps application sign-out local instead of terminating a
+shared Keycloak SSO session; remove it only after deliberately configuring and reviewing provider logout.
+
+If your application already has plugins, preserve those entries alongside `genericOAuth`
+instead of replacing the plugin array.
+
+## Start sign-in in the browser
+
+No `genericOAuthClient` plugin is needed for this 1.7.5 flow.
+Call the function below from a button and render its returned message as text.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function signInWithCompany() {
+  try {
+    const { data, error } = await authClient.signIn.social({
+      provider: "company",
+      callbackURL: "/account",
+      disableRedirect: true,
+    });
+    if (error) return "Could not start company sign-in. Try again.";
+    if (!data?.url) return "No authorization URL was returned.";
+    window.location.assign(data.url);
+  } catch {
+    return "Could not reach the server. Try again.";
+  }
+}
+```
+
+Better Auth displays callback failures on its built-in error page.
+After a successful return to `/account`, check the session using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+
+## Keep provider identity stable
+
+The provider ID `company` determines both the callback path and the stored provider
+identity; do not rename it or point it at an unrelated issuer after users have linked accounts.
+
+For discovery-based OIDC, 1.7.5 uses the provider's `sub` as the account subject.
+Profile mapping must not replace it with an email address or another mutable field.
+
+Keep `disableImplicitLinking: true` from the starter and use `authClient.linkSocial`
+with `provider: "company"` only for an already authenticated user, following the [linking example](/better-auth/sign-in-providers#link-accounts-deliberately).
+
+Keep same-email and verified-email checks, and do not add `company` to
+`trustedProviders` unless you have audited the issuer's ownership guarantees.
+
+## Adapt a non-OIDC provider
+
+For plain OAuth, `genericOAuth` accepts `authorizationUrl`, `tokenUrl`, and `userInfoUrl`
+instead of discovery; its default account subject is the raw profile's immutable `id`.
+
+A nonstandard profile needs a reviewed `getUserInfo` or `mapProfileToUser` implementation,
+and an `accountSubject` resolver if the vendor uses a different immutable identity field.
+
+Do not reuse this OIDC configuration by merely removing token verification: confirm the
+vendor's token authentication, PKCE support, email trust, and identity guarantees first.
+
+## Diagnose failures
+
+For an unknown provider, check discovery reachability and the required issuer/JWKS
+metadata; for a callback mismatch, check the exact `/api/auth/callback/company` registration.
+
+`requireEmailVerification` checks the local user's verification state and can leave a
+created or linked account without a session; existing unverified users need a real local verification flow.
+
+For `email_not_verified`, review both issuer and local verification state;
+for token-exchange errors, compare the secret and token authentication method.
+
+Restart the sign-in flow after a fix instead of replaying codes.
+Never record client secrets, ID tokens, or full callback URLs in logs.

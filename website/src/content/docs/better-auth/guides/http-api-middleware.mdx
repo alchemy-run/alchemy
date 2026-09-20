@@ -1,0 +1,143 @@
+---
+title: HTTP API middleware
+description: Authenticate each request and provide a typed current user to Effect HTTP API handlers.
+---
+
+Use native Effect HTTP API middleware to protect application endpoints. This guide builds on the tutorial's [Auth service](/better-auth/tutorial/part-1) and [CurrentUser service](/better-auth/tutorial/part-4).
+
+## Implement authentication
+
+```typescript
+// src/middleware.ts
+import { RuntimeContext } from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import { Auth } from "./auth.ts";
+import { CurrentUser } from "./current-user.ts";
+
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()(
+  "Unauthorized", {}, { httpApiStatus: 401 },
+) {}
+
+export class AuthenticationUnavailable extends Schema.TaggedError<AuthenticationUnavailable>()(
+  "AuthenticationUnavailable", {}, { httpApiStatus: 503 },
+) {}
+
+export class Authentication extends HttpApiMiddleware.Service<
+  Authentication,
+  { provides: CurrentUser }
+>()("app/Authentication", {
+  error: [Unauthorized, AuthenticationUnavailable],
+}) {
+  static readonly layer = Layer.effect(
+    Authentication,
+    Effect.gen(function* () {
+      const auth = yield* Auth;
+      return (httpEffect) => Effect.gen(function* () {
+        const session = yield* auth.getSession().pipe(
+          Effect.mapError(() => new AuthenticationUnavailable()),
+          Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
+        );
+        if (session === null) return yield* Effect.fail(new Unauthorized());
+        return yield* Effect.provideService(httpEffect, CurrentUser, {
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+        });
+      }).pipe(Effect.provide(RuntimeContext.phantom));
+    }),
+  );
+}
+```
+
+Read the session inside the returned request effect, never while constructing the layer. The phantom layer satisfies Alchemy's runtime marker at the native HTTP boundary; it does not authenticate the request.
+
+## Apply it to a private group
+
+```typescript
+// src/api.ts
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+import { User } from "./current-user.ts";
+import { Authentication } from "./middleware.ts";
+
+export class PrivateApi extends HttpApiGroup.make("private")
+  .add(HttpApiEndpoint.get("me", "/api/me", { success: User }))
+  .middleware(Authentication) {}
+
+export class AppApi extends HttpApi.make("app").add(PrivateApi) {}
+```
+
+Attach middleware to each group that needs authentication. A public group can be added to the same API without this middleware.
+
+## Consume the current user
+
+```typescript
+// src/http.ts
+import * as Http from "alchemy/Http";
+import * as Layer from "effect/Layer";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { AppApi } from "./api.ts";
+import { CurrentUser } from "./current-user.ts";
+import { Authentication } from "./middleware.ts";
+
+const PrivateLive = HttpApiBuilder.group(AppApi, "private", (handlers) =>
+  handlers.handle("me", () => CurrentUser),
+);
+
+export const HttpLive = HttpApiBuilder.layer(AppApi).pipe(
+  Layer.provide(PrivateLive),
+  Layer.provide(Authentication.layer),
+  Layer.provide(Http.Platform),
+);
+```
+
+The host provides `Auth.layer` with its chosen database layer. Middleware supplies the request's user before the handler runs.
+
+## Keep authentication routes public
+
+The Worker's fetch effect dispatches Better Auth before the protected API:
+
+```typescript
+const request = yield* HttpServerRequest;
+const pathname = request.url.split("?")[0];
+if (pathname === "/api/auth" || pathname.startsWith("/api/auth/")) {
+  return yield* auth.fetch;
+}
+return yield* fetch;
+```
+
+Use the [complete Worker composition](/better-auth/tutorial/part-2). Forwarding `auth.fetch` preserves Better Auth's status, redirect, and `Set-Cookie` headers.
+
+## Handle optional sessions
+
+On an intentionally public handler, resolve the session directly:
+
+```typescript
+const auth = yield* Auth;
+const session = yield* auth.getSession();
+return { signedIn: session !== null };
+```
+
+Only `null` means anonymous. Keep lookup failures in the error channel or map them to a declared server error.
+
+## Check the boundary
+
+Paste the URL printed by Alchemy after `read`, then press Enter:
+
+```sh
+read -r DEV_URL
+curl -i "$DEV_URL/api/me"
+```
+
+```http
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{"_tag":"Unauthorized"}
+```
+
+The [testing guide](/better-auth/guides/testing) repeats this check with a real session cookie and after sign-out. Authentication identifies the caller; [authorization](/better-auth/guides/authorization) decides what that caller may do.

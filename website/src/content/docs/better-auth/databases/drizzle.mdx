@@ -1,0 +1,159 @@
+---
+title: Drizzle
+description: Generate a Relations v2 auth schema and supply a request-scoped raw Drizzle database.
+---
+
+Use `Drizzle` when your application owns its schema and migrations. Pass a raw `drizzle(...)` database, not an Alchemy Drizzle proxy whose queries return Effects.
+
+## Install compatible packages
+
+This Postgres example uses the Relations v2 versions supported by the integration:
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 @better-auth/drizzle-adapter@^1.7.5 pg drizzle-orm@1.0.0-rc.5-ab785fc
+bun add -d drizzle-kit@1.0.0-rc.5-ab785fc @types/pg
+```
+
+Use a compatible Drizzle ORM and Kit pair when upgrading. The database and its credentials must already exist; this layer does not provision either.
+
+## Export an upstream instance for the CLI
+
+Create `auth.cli.ts` at the project root, alongside the tutorial's `src/auth.ts`:
+
+```typescript
+import type { BetterAuthProps } from "@alchemy.run/better-auth";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { betterAuth } from "better-auth";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { authOptions } from "./src/auth.ts";
+
+const { id, migrate, secret, ...options }: BetterAuthProps = authOptions;
+const database = drizzle({
+  client: new Pool({ connectionString: process.env.DATABASE_URL }),
+});
+
+export const auth = betterAuth({
+  ...options,
+  database: drizzleAdapter(database, { provider: "pg" }),
+});
+```
+
+The CLI needs the upstream `betterAuth` instance, not an Effect or `Auth.layer`. This keeps schema options aligned while removing Alchemy-only fields; the CLI-only pool is not imported by the runtime.
+
+## Generate the auth schema
+
+Use Node.js 22.12 or newer for the CLI:
+
+```sh
+npx auth@1.7.5 generate --config ./auth.cli.ts --output ./src/auth-schema.ts
+```
+
+Omit `--adapter drizzle`: it selects the legacy Relations v1 generator instead of the configured Relations v2 adapter. Confirm the generated file exports `authRelations` alongside the auth tables.
+
+## Configure SQL migrations
+
+Set `DATABASE_URL` in the environment and create `drizzle.config.ts`:
+
+```typescript
+import { defineConfig } from "drizzle-kit";
+
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required");
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/auth-schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url },
+});
+```
+
+If the application already has a Drizzle configuration, include the generated auth tables in its schema input instead of creating a second migration history.
+
+## Apply reviewed migrations
+
+```sh
+bunx drizzle-kit generate
+bunx drizzle-kit migrate
+```
+
+Review the generated SQL before applying it to an existing database. Apply it before deploying the new auth code; the Better Auth Drizzle layer never runs these migrations for you.
+
+## Acquire the runtime database per request
+
+Create `src/auth-database.ts`, importing the tutorial's `Auth` service:
+
+```typescript
+import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { Pool } from "pg";
+import { Auth } from "./auth.ts";
+import * as schema from "./auth-schema.ts";
+
+export const AuthLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.Redacted("DATABASE_URL");
+    const database = Effect.gen(function* () {
+      const client = yield* Effect.acquireRelease(
+        Effect.sync(() => new Pool({
+          connectionString: Redacted.value(url),
+          max: 1,
+        })),
+        (pool) => Effect.promise(() => pool.end()),
+      );
+      return yield* Effect.sync(() => drizzle({
+        client,
+        relations: schema.authRelations,
+      }));
+    });
+    return Auth.layer.pipe(
+      Layer.provide(Drizzle(database, { provider: "pg", schema })),
+    );
+  }),
+);
+```
+
+The inner Effect acquires and releases the pool per request. Do not move `new Pool` into module scope or the outer layer-construction Effect.
+
+## Replace the host pipeline
+
+For a Worker with TCP access to Postgres, replace D1's wiring from [Part 1](/better-auth/tutorial/part-1):
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+Keep `nodejs_compat` enabled. The [Lambda host](/better-auth/deployment/aws) uses the same `AuthLive` pipeline.
+
+## Merge application relations
+
+If your application already exports Relations v2 `relations` from `src/app-schema.ts`, merge the generated auth relations last:
+
+```diff lang="typescript"
++import { relations } from "./app-schema.ts";
+
+-        relations: schema.authRelations,
++        relations: { ...relations, ...schema.authRelations },
+```
+
+These are the relations returned by your application's `defineRelations`, not the legacy `relations()` API. Keep the generated schema in the adapter's `schema` option too.
+
+## Deploy without automatic migrations
+
+Leave `migrate` unset or false in `authOptions`; setting it to true fails because Drizzle does not support the wrapper's migration Action. For Lambda with `pg`, add `build: { install: ["pg"] }` to the function props.
+
+The signing secret is still generated and bound automatically by the host. See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), the [upgrade guide](/better-auth/upgrades/from-1-6-to-1-7), and the [`Drizzle` reference](/providers/betterauth/drizzle).

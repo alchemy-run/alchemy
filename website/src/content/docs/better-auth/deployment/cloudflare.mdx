@@ -1,0 +1,177 @@
+---
+title: Deploy to Cloudflare
+description: Deploy the Better Auth service on a Cloudflare Worker with D1 and automatic migrations.
+---
+
+Start with the `src/auth.ts` service from [Part 1](/better-auth/tutorial/part-1). This page supplies the Worker host; [Part 2](/better-auth/tutorial/part-2) shows how to serve an application API alongside `/api/auth`.
+
+## Install the integration
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely
+```
+
+D1 uses a native binding, while Better Auth's SQL adapter needs the optional `kysely` peer. Configure a [Cloudflare profile](/cloudflare/setup) with your own account credentials before deploying.
+
+## Declare the database
+
+Keep the tutorial's `src/database.ts`:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const AuthDb = Cloudflare.D1.Database("AuthDb");
+```
+
+This resource creates the database. The Better Auth layer below supplies its binding and registers the schema migration.
+
+## Supply the Auth layer
+
+Create `src/auth-database.ts`:
+
+```typescript
+import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+import { AuthDb } from "./database.ts";
+
+export const AuthLive = Auth.layer.pipe(
+  Layer.provide(CloudflareD1(AuthDb)),
+);
+```
+
+Change only this module to use [Neon](/better-auth/databases/neon) or [Hyperdrive](/better-auth/databases/cloudflare-hyperdrive). Keep database pools out of Worker construction; connection layers acquire them in each request.
+
+## Update the tutorial's host pipeline
+
+When keeping the [Part 1 Worker](/better-auth/tutorial/part-1), replace only its database wiring:
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+This also preserves the router, middleware, and assets added in later parts.
+
+## Serve only the auth routes
+
+For an auth-only endpoint, create `src/worker.ts` as below. If continuing the full tutorial, keep its router and browser assets rather than replacing them with this minimal host.
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Auth } from "./auth.ts";
+import { AuthLive } from "./auth-database.ts";
+
+export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
+  "AuthApi",
+  {
+    main: import.meta.url,
+    compatibility: { flags: ["nodejs_compat"] },
+  },
+  Effect.gen(function* () {
+    const auth = yield* Auth;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const pathname = new URL(request.url, "http://worker").pathname;
+        if (pathname === "/api/auth" || pathname.startsWith("/api/auth/")) {
+          return yield* auth.fetch;
+        }
+        return HttpServerResponse.text("Not found", { status: 404 });
+      }),
+    };
+  }).pipe(Effect.provide(AuthLive)),
+) {}
+```
+
+Keep auth routes public so users can sign in. Protect application routes separately with the middleware from [Part 4](/better-auth/tutorial/part-4).
+
+## Declare the stack
+
+Create `alchemy.run.ts`:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import AuthApi from "./src/worker.ts";
+
+export default Alchemy.Stack(
+  "BetterAuthTutorial",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* AuthApi;
+    return { url: api.url };
+  }),
+);
+```
+
+Keep the existing stack name and state backend when continuing an application. Preserve and protect the state directory: it tracks resources and the generated signing secret.
+
+## Deploy a stage
+
+```sh
+bunx alchemy deploy --stage prod
+```
+
+Deployment creates D1, applies the auth schema, provisions a stable signing secret, and deploys the Worker with its bindings. Later deployments reuse the secret and skip unchanged schema migrations.
+
+## Set the public auth origin
+
+In `src/auth.ts`, set `baseURL` to your deployed Worker origin or a custom domain you have configured:
+
+```diff lang="typescript"
+ export const authOptions = {
++  baseURL: "https://auth.example.com",
+   basePath: "/api/auth",
+```
+
+This diff targets Part 1's `authOptions`; after [Part 6](/better-auth/tutorial/part-6), set `AUTH_BASE_URL` in the deploying environment instead. That tutorial's `makeAuth` reads the origin from configuration.
+
+Replace the example origin with your own and redeploy. This option does not create DNS, a custom domain, or a proxy; keep the externally visible path aligned with `/api/auth`.
+
+## Trust the frontend origin
+
+For a frontend on a different origin, add its exact origin to `authOptions`:
+
+```diff lang="typescript"
+   basePath: "/api/auth",
++  trustedOrigins: ["https://app.example.com"],
+```
+
+Cross-origin browser requests also need credentialed CORS responses from your HTTP host and `credentials: "include"` on the client. `trustedOrigins` is an auth security setting, not a CORS configuration.
+
+## Register OAuth callbacks
+
+For GitHub, register the callback with your OAuth application:
+
+```text
+https://auth.example.com/api/auth/callback/github
+```
+
+Supply your own OAuth client ID and secret as shown in [Part 5](/better-auth/tutorial/part-5). Alchemy generates the signing secret, not OAuth registrations, email-delivery credentials, or account API tokens.
+
+## Verify the deployed endpoint
+
+Set `AUTH_ORIGIN` to the deployed origin, then request an anonymous session:
+
+```sh
+curl -i "$AUTH_ORIGIN/api/auth/get-session"
+```
+
+Expect a successful response with `null` for an anonymous request. Use the browser client from [Part 3](/better-auth/tutorial/part-3) to verify sign-up, sign-in, and session cookies.
+
+For the full application, retain the tutorial's routes and assets and follow [Part 6's deployment checks](/better-auth/tutorial/part-6). Its scripts rebuild the browser bundle; the standalone `bunx alchemy deploy` command above does not.
+
+Before upgrading an existing app, read [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and [upgrading from 1.6](/better-auth/upgrades/from-1-6-to-1-7).

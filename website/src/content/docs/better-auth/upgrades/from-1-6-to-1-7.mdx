@@ -14,9 +14,9 @@ Follow the [upstream issuer cleanup instructions](https://better-auth.com/docs/g
 
 ## Back up existing data
 
-Back up the database and rehearse on a copy with existing users, accounts,
-and sessions. **Keep the same auth secret.** Resolve duplicate provider/account
-ID pairs using your configured table names; never merge users by email alone.
+Back up the database and rehearse on a copy with existing users, accounts, and sessions. **Keep the same auth secret.**
+
+Resolve duplicate provider/account ID pairs using your configured table names. Never merge users by email alone.
 
 These integrations need manual preparation. Follow the corresponding
 [upstream instructions](https://better-auth.com/docs/guides/1-7-upgrade-guide):
@@ -30,9 +30,7 @@ These integrations need manual preparation. Follow the corresponding
 | Device Authorization | Resolve duplicate device/user codes; use bounded strings on MySQL and SQL Server. |
 
 :::caution[Deployment does not pause existing traffic]
-Use a maintenance window for incompatible changes. Alchemy delays the new
-host deployment, but old instances keep running. An application rollback
-does not reverse database changes.
+Alchemy delays the new host deployment, but old instances keep running; use a maintenance window for incompatible changes. An application rollback does not reverse database changes.
 :::
 
 ## Upgrade packages together
@@ -44,13 +42,13 @@ align Better Auth and its synchronized plugins/adapters:
 npx auth@1.7.5 upgrade
 ```
 
-Use Node.js 22.12 or newer and the CLI version matching your target release.
-Review workspace catalogs and overrides. The command updates dependencies,
-not application code or identity data.
+Use Node.js 22.12 or newer and the CLI version matching your target release. Review workspace catalogs and overrides.
+
+The command updates dependencies, not application code or identity data.
 
 ## Apply the schema
 
-For [SQL layers with automatic migrations](/better-auth/migrations#per-layer-transport),
+For [SQL layers with automatic migrations](/better-auth/guides/migrations#per-layer-transport),
 the wrapper stays unchanged:
 
 ```typescript
@@ -90,9 +88,8 @@ Omit the adapter CLI flag, which selects the legacy generator:
 + npx auth@1.7.5 generate --config ./auth.cli.ts
 ```
 
-Apply the schema through Drizzle's migration tooling and include the generated
-auth relations when constructing the database. See the complete
-[Drizzle configuration](/providers/betterauth/drizzle).
+Apply the schema through Drizzle's migration tooling and include the generated auth relations when constructing the database. See the complete [Drizzle configuration](/better-auth/databases/drizzle).
+
 With automatic migrations disabled, apply your schema before deploying too.
 
 ## Update application APIs
@@ -133,15 +130,14 @@ increment(key, ttl)
 getAndDelete(key)
 ```
 
-The TTL is required, in seconds; subsequent increments must preserve the
-original expiration. Custom rate-limit storage now uses an atomic consume
-operation instead of separate reads and writes. Check the upstream guide for
-SSO, MCP, mobile, and proxy changes.
+The TTL is required, in seconds; subsequent increments must preserve the original expiration. Custom rate-limit storage now uses an atomic consume operation instead of separate reads and writes.
+
+Check the upstream guide for SSO, MCP, mobile, and proxy changes.
 
 ## Verify existing users
 
-Test an existing session, existing-user sign-in, new-user sign-up, and sign-out.
-Exercise every configured provider and account link/list/refresh/unlink flow.
+Test an existing session, existing-user sign-in, new-user sign-up, and sign-out. Exercise every configured provider and account link/list/refresh/unlink flow.
+
 Confirm user IDs are preserved and no duplicate users appear.
 
 Deploy again to confirm the migration is a no-op:

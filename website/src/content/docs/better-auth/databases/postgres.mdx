@@ -1,0 +1,103 @@
+---
+title: Postgres
+description: Connect Better Auth to an existing PostgreSQL database with a request-scoped pg pool.
+---
+
+Use `Postgres` when the host can reach PostgreSQL over TCP. Prefer [Neon](/better-auth/databases/neon), [Aurora Data API](/better-auth/databases/aurora-data-api), or [Hyperdrive](/better-auth/databases/cloudflare-hyperdrive) when they fit your host.
+
+## Install the driver
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely pg
+```
+
+## Supply the connection URL
+
+Set `DATABASE_URL` in the deploying environment to your existing database's connection URL. This layer does not provision the database, create credentials, or configure network access.
+
+Create `src/auth-database.ts`, importing the tutorial's `Auth` service:
+
+```typescript
+import { Postgres } from "@alchemy.run/better-auth/Postgres";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.Redacted("DATABASE_URL");
+    return Auth.layer.pipe(Layer.provide(Postgres(url)));
+  }),
+);
+```
+
+Resolving configuration here binds the URL during construction. The layer defers opening its pool until an auth operation runs inside a request.
+
+## Replace the host pipeline
+
+For a TCP-reachable database, replace D1's wiring in the [Part 1 Worker](/better-auth/tutorial/part-1):
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+Keep the Worker's `nodejs_compat` flag. The [Lambda host](/better-auth/deployment/aws) uses the same `AuthLive` pipeline.
+
+## Package pg for Lambda
+
+Add the driver's installation to your Lambda props:
+
+```diff lang="typescript"
+   memorySize: 512,
++  build: { install: ["pg"] },
+```
+
+The dynamic `pg` import needs a conventional npm layout in the deployment artifact. A private database also requires Lambda VPC connectivity and security-group access; the connection layer does not create either.
+
+## Apply the schema
+
+```sh
+bunx alchemy deploy
+```
+
+The resolved URL also supplies automatic migrations, so the deployer must reach the database with schema-changing permissions. The host's pool defaults to one connection per execution and closes when the request or invocation settles.
+
+## Use a separate migration URL
+
+If the runtime uses a pooler or restricted database role, replace `src/auth-database.ts` with:
+
+```typescript
+import { Postgres } from "@alchemy.run/better-auth/Postgres";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.Redacted("DATABASE_URL");
+    const migrationUrl = yield* Config.Redacted("DATABASE_MIGRATION_URL");
+    return Auth.layer.pipe(
+      Layer.provide(Postgres(url, { migrate: migrationUrl })),
+    );
+  }),
+);
+```
+
+Both configuration values are read during host construction and bound to the host. For credentials that must stay deploy-only, use a resource Output as the migration source rather than reading privileged credentials through host configuration.
+
+## Keep the auth service unchanged
+
+The layer also accepts connection-string resource Outputs, including PlanetScale's `role.connectionUrl`. Swapping the layer preserves `/api/auth` and the automatic signing secret; it does not transfer existing auth records.
+
+See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and the [`Postgres` reference](/providers/betterauth/postgres).

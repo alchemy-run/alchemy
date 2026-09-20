@@ -1,0 +1,100 @@
+---
+title: Migrations
+description: Apply Better Auth schema changes at deploy, or manage the schema yourself.
+---
+
+Alchemy applies supported database migrations during deployment. Drizzle schemas remain application-owned.
+
+## Deploy a schema change
+
+Add a field to the tutorial's auth options:
+
+```diff lang="typescript"
+ // src/auth.ts
+ export const authOptions = {
+   basePath: "/api/auth",
+   emailAndPassword: { enabled: true },
++  user: {
++    additionalFields: {
++      timezone: { type: "string", required: false },
++    },
++  },
+ } satisfies BetterAuthProps;
+```
+
+Deploy the updated configuration:
+
+```sh
+bunx alchemy deploy
+```
+
+The migration action applies missing tables, columns, and indexes before the new host is deployed. Existing application instances continue serving traffic.
+
+## Repeat an unchanged deployment
+
+```sh
+bunx alchemy deploy
+```
+
+An unchanged schema and database identity skip the migration action. Plugin fields, model names, and indexes are included in the schema fingerprint.
+
+## Retry a migration explicitly
+
+```sh
+bunx alchemy deploy --force
+```
+
+Force reapplies the deployment, including the migration action. Migrations add missing schema objects; they do not merge users or rewrite account identities.
+
+## Handle existing data safely
+
+```text
+Back up → rehearse on a copy → resolve incompatible data → deploy
+```
+
+Unsafe schema changes fail with `BetterAuthMigrationError`. Use a maintenance window for incompatible changes; rolling back application code does not undo database changes.
+
+## Per-layer transport
+
+| Database layer | Migration connection |
+| --- | --- |
+| [D1](/better-auth/databases/cloudflare-d1) | D1 HTTP API, or the local simulator |
+| [Neon](/better-auth/databases/neon) | The serverless driver and supplied connection URL |
+| [Aurora Data API](/better-auth/databases/aurora-data-api) | RDS Data API with deployment credentials |
+| [Hyperdrive](/better-auth/databases/cloudflare-hyperdrive) | The origin connection supplied to the layer |
+| [Postgres](/better-auth/databases/postgres) / [MySQL](/better-auth/databases/mysql) | The connection URL, or a separate migration connection |
+| [SQLite](/better-auth/databases/sqlite) | The same local database file |
+| [Drizzle](/better-auth/databases/drizzle) | Your migration tooling |
+| [Memory](/better-auth/databases/memory) | No SQL migration |
+
+## Manage the schema yourself
+
+```diff lang="typescript"
+ // src/auth.ts
+ export const authOptions = {
+   basePath: "/api/auth",
++  migrate: false,
+   emailAndPassword: { enabled: true },
+ } satisfies BetterAuthProps;
+```
+
+Generate the schema from a separate, CLI-loadable upstream Better Auth configuration:
+
+```sh
+npx auth@1.7.5 generate --config ./auth.cli.ts
+```
+
+Apply it with your database tooling before deploying. The [Drizzle guide](/better-auth/databases/drizzle) includes a complete configuration; an Alchemy stack is not a CLI configuration.
+
+## Separate multiple instances
+
+```typescript
+const customerAuth = yield* BetterAuth({ id: "Customers" });
+const staffAuth = yield* BetterAuth({ id: "Staff" });
+```
+
+Distinct IDs separate migration actions and generated secrets. They do not automatically separate tables; use separate databases or explicit model names where isolation is required.
+
+## Upgrading from 1.6 to 1.7.5 or newer
+
+Follow the [dedicated upgrade guide](/better-auth/upgrades/from-1-6-to-1-7) before deploying an existing 1.6 installation.

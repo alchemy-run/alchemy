@@ -1,0 +1,154 @@
+---
+title: Google sign-in
+description: Configure Google consent, a web OAuth client, and Effect-native Google sign-in.
+---
+
+Start with the [shared Auth service and browser client](/better-auth/sign-in-providers).
+This uses Google's server-side authorization-code flow, not a browser-only Google Identity Services integration.
+
+## Configure the consent screen
+
+In the [Google Cloud console](https://console.cloud.google.com/), select or create a project,
+then open **Google Auth platform → Branding → Get started** if the platform is not configured.
+
+Enter the app name, support email, and developer contact information.
+Supply your production homepage, privacy policy, and authorized domain before publishing.
+
+In **Audience**, choose **Internal** only for an eligible Workspace organization whose
+users should have access; choose **External** to admit accounts outside that organization.
+
+For an External app in testing, open **Audience → Test users → Add users** and save
+the Google accounts that will exercise the integration.
+
+In **Data Access**, configure only the basic identity scopes `openid`, `email`, and
+`profile`; do not request Drive, Gmail, or other API access for ordinary sign-in.
+
+Before a public launch, review publishing status and complete any required brand or
+scope verification; testing-mode access is not a production rollout.
+
+Google documents these settings in [Configure OAuth consent](https://developers.google.com/workspace/guides/configure-oauth-consent).
+Workspace administrators can still restrict access independently of your test-user list.
+
+## Create a web client
+
+Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
+setup below; Alchemy allocates an available port and prints the URL.
+
+Open **Google Auth platform → Clients → Create client** and select **Web application**.
+Give the client a name and derive its local **Authorized redirect URI** in another terminal.
+
+Run `read`, paste the printed local origin without a trailing slash or path,
+then register the resulting callback URL:
+
+```sh
+read -r AUTH_BASE_URL
+printf '%s/api/auth/callback/google\n' "$AUTH_BASE_URL"
+```
+
+For production, register the callback on your real domain:
+
+```text
+https://auth.example.com/api/auth/callback/google
+```
+
+Separate production clients/projects are preferable for isolation.
+Match the exact origin and callback path in each environment.
+
+Authorized JavaScript origins are not a substitute for redirect URIs.
+This server-side flow does not require the Google browser SDK.
+
+Create the client and securely save its **Client ID** and **Client secret** when shown.
+Google's [web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server) describes client creation and exact redirect matching.
+
+## Supply server configuration
+
+Store `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` through [Configuration](/better-auth/guides/configuration).
+Save the captured local origin as `AUTH_BASE_URL`; for production, use your real origin, such as `https://auth.example.com`, without the callback path.
+
+## Import Config support
+
+Add these imports to `src/auth.ts`, keeping the existing imports and `authOptions`
+from the shared setup.
+
+```typescript
+import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
+```
+
+## Configure Google
+
+Replace the existing `makeAuth` declaration:
+
+```typescript
+const makeAuth = Effect.gen(function* () {
+  const baseURL = yield* Config.String("AUTH_BASE_URL");
+  const clientId = yield* Config.String("GOOGLE_CLIENT_ID");
+  const clientSecret = yield* Config.Redacted("GOOGLE_CLIENT_SECRET");
+
+  return yield* BetterAuth({
+    ...authOptions,
+    baseURL,
+    socialProviders: {
+      google: {
+        clientId,
+        clientSecret: Redacted.value(clientSecret),
+      },
+    },
+  });
+});
+```
+
+Config is read when `Auth.layer` is constructed, and the secret is unwrapped only
+for Better Auth; keep the `Auth` class and host-owned Cloudflare + D1 layer provision unchanged.
+
+Better Auth 1.7.5 supplies `openid`, `email`, and `profile` by default.
+Do not request extra scopes or force consent merely to create a local application session.
+
+## Start sign-in in the browser
+
+Call this from your Google button and display any returned message as text.
+`src/client.ts` remains the same-origin `createAuthClient()` client.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function signInWithGoogle() {
+  try {
+    const { data, error } = await authClient.signIn.social({
+      provider: "google",
+      callbackURL: "/account",
+      disableRedirect: true,
+    });
+    if (error) return "Could not start Google sign-in. Try again.";
+    if (!data?.url) return "No authorization URL was returned.";
+    window.location.assign(data.url);
+  } catch {
+    return "Could not reach the server. Try again.";
+  }
+}
+```
+
+Better Auth displays callback failures on its built-in error page.
+After a successful return to `/account`, check the session using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+
+## Keep account linking explicit
+
+Retain the starter's `disableImplicitLinking: true` policy.
+Users who already have an account should authenticate with that method, then use `authClient.linkSocial({ provider: "google", callbackURL: "/account" })`.
+
+Handle the result as in the [linking example](/better-auth/sign-in-providers#link-accounts-deliberately).
+Keep email-verification and same-email checks instead of adding `trustedProviders` to suppress a collision.
+
+Google's stable subject identifies the provider account; an email suffix or a
+hosted-domain login hint alone is not an authorization policy for your application's data.
+
+## Diagnose a failed return
+
+`redirect_uri_mismatch` means the exact callback differs from the client's registered
+redirect URIs; inspect `AUTH_BASE_URL`, the port, and `/api/auth/callback/google`.
+
+For `access_denied` or `org_internal`, check audience, test-user membership, publishing
+status, and Workspace policy before changing application security settings.
+
+For `invalid_client`, verify the credential pair and rotate an expired or revoked
+secret; never log credentials, tokens, or complete callback URLs.

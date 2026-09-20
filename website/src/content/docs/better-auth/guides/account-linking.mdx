@@ -1,0 +1,107 @@
+---
+title: Account linking
+description: Link and unlink sign-in methods without merging identities by email.
+---
+
+A user is your application's identity; an account is one sign-in method attached to it. Start with the tutorial through [Part 3](/better-auth/tutorial/part-3), then configure [GitHub sign-in](/better-auth/sign-in-providers/github).
+
+## Require an explicit link
+
+Add this property to `authOptions` in `src/auth.ts`, keeping the configured GitHub provider:
+
+```diff lang="typescript"
+ export const authOptions = {
+   basePath: "/api/auth",
+   emailAndPassword: { enabled: true },
++  account: {
++    accountLinking: {
++      enabled: true,
++      disableImplicitLinking: true,
++      allowDifferentEmails: false,
++      allowUnlinkingAll: false,
++    },
++  },
+ } satisfies BetterAuthProps;
+```
+
+Users must sign in to the existing local user before linking another provider. Ordinary OAuth sign-in no longer links accounts merely because their email addresses match.
+
+## Keep verification checks
+
+Better Auth 1.7.5 requires the existing local user's email to be verified before implicit linking, in addition to the provider-side verification or trust requirement. Keep that default even if you later enable implicit linking.
+
+Do not add a provider to `trustedProviders` just to suppress a linking error. Trusting a provider relaxes the provider-email verification check; it does not prove that two existing application users should be merged.
+
+## Link GitHub from a signed-in page
+
+Create `src/accounts.ts` next to the tutorial's browser client:
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function linkGitHub() {
+  const { error } = await authClient.linkSocial({
+    provider: "github",
+    callbackURL: "/",
+  });
+  if (error) throw error;
+}
+```
+
+Call this from a signed-in account-settings action. The client follows the provider redirect and returns to the application's root page.
+
+## Use the correct callback URL
+
+GitHub's OAuth application callback is the Better Auth route, not the `callbackURL` passed above. With `bunx alchemy dev` running, paste its printed origin into another shell, without a trailing slash:
+
+```sh
+read -r BASE_URL
+printf '%s/api/auth/callback/github\n' "$BASE_URL"
+```
+
+Register the printed callback URL with the local GitHub OAuth application. If Alchemy's origin changes on a later run, update the registration to match.
+
+For production, run the same command with the actual deployed origin, such as `https://auth.example.com`, and register the result with the production OAuth application.
+
+Use the matching provider application credentials for each environment. The browser's `callbackURL: "/"` is the destination after Better Auth finishes the OAuth callback.
+
+## Read linked accounts
+
+Append to `src/accounts.ts`:
+
+```typescript
+export async function listAccounts() {
+  const { data, error } = await authClient.listAccounts();
+  if (error) throw error;
+  return data;
+}
+```
+
+Render the returned provider names as sign-in methods. Keep application ownership keyed by the user ID, not email or provider account ID.
+
+## Unlink a selected account
+
+Append to `src/accounts.ts`:
+
+```typescript
+export async function unlinkAccount(accountId: string) {
+  const { error } = await authClient.unlinkAccount({ accountId });
+  if (error) throw error;
+}
+```
+
+In Better Auth 1.7.5, pass the selected account's **`id`** from `listAccounts()`. Do not pass its provider-side `accountId` or a `providerId` in place of that local row ID.
+
+Unlinking requires a fresh session and, with the configuration above, cannot remove the last account. Ask the user to sign in again if Better Auth returns `SESSION_NOT_FRESH`.
+
+## Treat conflicts as conflicts
+
+If the provider identity already belongs to another user, linking must fail. Do not rewrite `userId`, update email verification flags, or delete an existing account to force the operation through.
+
+Recovery for two existing users needs an explicit ownership-verification and data-transfer process outside this guide. An email comparison is not that process.
+
+## Verify the user identity stays stable
+
+Read `/api/auth/get-session` before linking, complete the provider flow, and read it again. The user ID should remain the same while `listAccounts()` gains the additional sign-in method.
+
+Also check that linking while signed out fails, that a different-email identity is rejected, and that unlinking the last account fails. See [testing](/better-auth/guides/testing) for the cookie-jar flow and [sessions](/better-auth/guides/sessions) for freshness and revocation.

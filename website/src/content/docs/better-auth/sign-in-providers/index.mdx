@@ -1,0 +1,171 @@
+---
+title: Sign-in providers
+description: Add email/password, GitHub, Google, Microsoft, or a custom OAuth provider to an Effect-native Auth service.
+sidebar:
+  order: 0
+---
+
+Sign-in providers share one Better Auth instance, database, and session cookie.
+These examples target Better Auth **1.7.5** and the tutorial's same-origin Cloudflare Worker with D1.
+
+## Start with the Auth service
+
+Use this shape in `src/auth.ts`; provider pages replace only `makeAuth` and add the imports they need.
+Keep this module server-only; compared with the tutorial's minimal options, this adds an explicit-linking policy.
+
+```typescript
+import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const authOptions = {
+  basePath: "/api/auth",
+  emailAndPassword: { enabled: true },
+  account: {
+    accountLinking: { disableImplicitLinking: true },
+  },
+} satisfies BetterAuthProps;
+
+const makeAuth = BetterAuth(authOptions);
+
+export class Auth extends Context.Service<
+  Auth,
+  Effect.Success<typeof makeAuth>
+>()("app/Auth") {
+  static readonly layer = Layer.effect(Auth, makeAuth);
+}
+```
+
+The Worker owns provision of `Auth.layer`, `CloudflareD1(AuthDb)`, and runtime services,
+and forwards `/api/auth/*` to `auth.fetch`; provider setup does not create another host or database.
+
+Alchemy provisions the signing secret and runs supported database migrations automatically.
+OAuth applications and their credentials are external: create them in the vendor console, not with a manual auth-secret or migration step.
+
+## Create the browser client
+
+In `src/client.ts`, use the same-origin client; its default path matches `/api/auth`.
+Never import `src/auth.ts` into the browser bundle.
+
+```typescript
+import { createAuthClient } from "better-auth/client";
+
+export const authClient = createAuthClient();
+```
+
+## Choose a provider
+
+[Email and password](/better-auth/sign-in-providers/email-password) covers registration,
+verification email delivery, sign-in, and password recovery.
+
+[GitHub](/better-auth/sign-in-providers/github) uses an OAuth App with profile and email access.
+[Tutorial part 5](/better-auth/tutorial/part-5) adds it to the Cloudflare + D1 application.
+
+[Google](/better-auth/sign-in-providers/google) covers a web OAuth client,
+consent-screen audience, and test users.
+
+[Microsoft](/better-auth/sign-in-providers/microsoft) covers an Entra application,
+tenant selection, and identity boundaries.
+
+[Custom OAuth](/better-auth/sign-in-providers/custom-oauth) uses the 1.7.5 `genericOAuth`
+plugin with a concrete Keycloak OIDC setup.
+
+## Configure each environment
+
+Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
+examples below; this first run does not require `AUTH_BASE_URL`.
+
+Alchemy allocates an available port and prints the URL.
+Use that actual origin for local configuration and derive each vendor callback from it; no fixed port is required.
+
+If the printed origin changes, update `AUTH_BASE_URL` and the vendor's callback registration
+before retrying OAuth; production examples use `https://auth.example.com`, replaced with your real domain.
+
+Read client IDs with `Config.String` and secrets with `Config.Redacted` inside
+`makeAuth`, evaluated by `Auth.layer`; unwrap secrets only when passing the actual Better Auth options.
+
+Set `AUTH_BASE_URL` to the origin for that environment, without `/api/auth`.
+Follow [Configuration](/better-auth/guides/configuration) to supply server-side Config values and secret bindings to the host.
+
+Each example replaces the minimal `makeAuth`; when combining pages, retain existing
+mail hooks, verification policy, and plugins in that same Effect.
+
+Keep built-in providers together in one `socialProviders` object;
+replacing the object with another page's example would remove the previous entries.
+
+Do not expose secrets through `VITE_*`, public frontend config, source control, or logs.
+Keep production credentials separate from development credentials.
+
+## Distinguish the two redirects
+
+The vendor's **redirect URI** is the server endpoint, such as
+`https://auth.example.com/api/auth/callback/github`.
+
+The client's **callbackURL** is an application page after successful authentication, such as `/account`.
+Create that page or use your existing route; the tutorial's minimal UI uses `/`.
+
+Better Auth handles the authorization code, state, PKCE, and session cookie.
+Do not implement your own callback handler or disable state/origin checks to fix a URL mismatch.
+
+## Handle the returned result
+
+The provider-page functions return a safe message for initiation or network failures;
+render it as text in the form, and render nothing while the browser leaves for the provider.
+
+After the redirect, check the session rather than treating an OAuth URL or a successful
+initiation response as proof of authentication.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function readSignedInUser() {
+  try {
+    const { data, error } = await authClient.getSession();
+    if (error) return { message: "Could not check your session. Try again." };
+    if (!data) return { message: "Sign in to continue." };
+    return { user: data.user };
+  } catch {
+    return { message: "Could not reach the server. Try again." };
+  }
+}
+```
+
+Callback failures use Better Auth's built-in error page at `/api/auth/error`.
+No application error route or query-string handler is needed.
+
+Keep `/account` protected by a server-side session check as well as the browser UI.
+Never log callback URLs containing authorization codes or tokens.
+
+## Link accounts deliberately
+
+The starter policy disables automatic email-based linking while retaining explicit linking.
+Ask the user to sign in with their existing method before offering a provider-link button in account settings.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function linkGitHub() {
+  try {
+    const { data, error } = await authClient.linkSocial({
+      provider: "github",
+      callbackURL: "/account",
+      disableRedirect: true,
+    });
+    if (error) return "Could not link GitHub. Sign in again and retry.";
+    if (!data?.url) return "No authorization URL was returned.";
+    window.location.assign(data.url);
+  } catch {
+    return "Could not reach the server. Try again.";
+  }
+}
+```
+
+Use the selected provider ID in `linkSocial`; callback failures use the same built-in error page.
+After a successful return, confirm the linked account with `authClient.listAccounts()`.
+
+Keep verified-email checks and the same-email restriction; do not add a provider to
+`trustedProviders` or enable `allowDifferentEmails` merely to make a linking error disappear.
+
+A matching email address is not a substitute for proving ownership of both accounts.
+Do not merge database rows yourself, and retain a working sign-in method before unlinking one.

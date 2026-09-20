@@ -1,0 +1,103 @@
+---
+title: Aurora Data API
+description: Connect Better Auth on Lambda to Aurora PostgreSQL over HTTPS with IAM permissions.
+---
+
+Use `AuroraDataApi` for Aurora PostgreSQL from Lambda. The cluster needs a VPC, but the Lambda can access the Data API over HTTPS without joining it.
+
+## Install the optional peers
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely @distilled.cloud/aws
+```
+
+No `pg` driver or TCP pool is needed.
+
+## Create the cluster network
+
+Create `src/database.ts`:
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+
+export const AuthNetwork = AWS.EC2.Network("AuthNetwork", {
+  cidrBlock: "10.42.0.0/16",
+  availabilityZones: 2,
+});
+
+export const AuthSecurityGroup = Effect.gen(function* () {
+  const network = yield* AuthNetwork;
+  return yield* AWS.EC2.SecurityGroup("AuthSecurityGroup", {
+    vpcId: network.vpcId,
+    description: "Aurora auth database",
+  });
+});
+```
+
+The Data API does not require inbound Postgres access from the Lambda. This security group therefore declares no ingress rules.
+
+## Create Aurora PostgreSQL
+
+Append to `src/database.ts`:
+
+```typescript
+export const AuthDb = Effect.gen(function* () {
+  const network = yield* AuthNetwork;
+  const securityGroup = yield* AuthSecurityGroup;
+  return yield* AWS.RDS.Aurora("AuthDb", {
+    databaseName: "auth",
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [securityGroup.groupId],
+    dataApi: true,
+  });
+});
+```
+
+The Aurora composite creates the cluster, writer, and database-credentials secret. Use an AWS region and Aurora PostgreSQL version that support the Data API.
+
+## Supply Aurora to Auth
+
+Create `src/auth-database.ts`:
+
+```typescript
+import { AuroraDataApi } from "@alchemy.run/better-auth/AuroraDataApi";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+import { AuthDb } from "./database.ts";
+
+export const AuthLive = Auth.layer.pipe(
+  Layer.provide(AuroraDataApi(AuthDb, { database: "auth" })),
+);
+```
+
+## Supply the Lambda pipeline
+
+Apply the [tutorial's host-layer pattern](/better-auth/tutorial/part-1) to the Lambda implementation, not its request handler:
+
+```diff lang="typescript"
+ // src/function.ts
++import { AuthLive } from "./auth-database.ts";
+
+-  }),
++  }).pipe(Effect.provide(AuthLive)),
+ ) {}
+```
+
+The [complete Lambda host](/better-auth/deployment/aws#serve-the-auth-routes) already has this pipeline. The layer binds the cluster and secret and grants the required Data API and Secrets Manager access to the function.
+
+## Apply the schema
+
+```sh
+bunx alchemy deploy
+```
+
+Automatic migrations wait for the writer and use the Data API with deploy-time AWS credentials. Those credentials need database and secret access too; runtime IAM bindings do not grant permissions to the deployer.
+
+The layer uses bounded retries while a Serverless v2 cluster resumes. SQL operations run within each invocation rather than retaining a connection across invocations.
+
+## Connect a bare cluster
+
+For an existing `AWS.RDS.DBCluster` resource, pass its credentials as the `secret` option containing an `AWS.SecretsManager.Secret` resource. Passing the Aurora composite avoids this extra wiring and includes the writer dependency for migrations.
+
+The database-credentials secret is separate from Better Auth's automatically generated signing secret. See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), [AWS deployment](/better-auth/deployment/aws), and the [`AuroraDataApi` reference](/providers/betterauth/auroradataapi).

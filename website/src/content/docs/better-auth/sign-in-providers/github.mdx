@@ -1,0 +1,135 @@
+---
+title: GitHub sign-in
+description: Register a GitHub OAuth App and add GitHub sign-in to the Auth layer.
+---
+
+Use the [shared Auth service and browser client](/better-auth/sign-in-providers)
+from the Cloudflare + D1 tutorial; [part 5](/better-auth/tutorial/part-5) introduces this integration.
+
+## Create the OAuth App
+
+Start the basic email/password tutorial with `alchemy dev` before adding the Config-based
+setup below; Alchemy allocates an available port and prints the URL.
+
+Open GitHub **Settings → Developer settings → OAuth Apps → New OAuth App**.
+Enter an application name and set **Homepage URL** to the printed local origin.
+
+In another terminal, run `read`, paste that origin without a trailing slash or path,
+then use the printed result as **Authorization callback URL**:
+
+```sh
+read -r AUTH_BASE_URL
+printf '%s/api/auth/callback/github\n' "$AUTH_BASE_URL"
+```
+
+Register a separate production OAuth App with homepage `https://auth.example.com`
+and this callback:
+
+```text
+https://auth.example.com/api/auth/callback/github
+```
+
+GitHub also supports multiple callbacks, but separate apps keep production credentials isolated.
+Use your actual dev URL and production domain; the registered callback must match the URL Better Auth sends.
+
+Leave device flow disabled for this browser redirect flow.
+See GitHub's [OAuth App registration instructions](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+
+## Store the credentials
+
+On each app's settings page, copy **Client ID**, then **Generate a new client secret**.
+Store the matching pair as server-side `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` using [Configuration](/better-auth/guides/configuration).
+
+Save the captured local origin as server Config value `AUTH_BASE_URL` through that guide.
+For production, use your real origin, such as `https://auth.example.com`, without the callback path.
+
+## Import Config support
+
+Add these imports to `src/auth.ts`; keep its existing `BetterAuth`, `Context`, `Effect`,
+and `Layer` imports and exported `authOptions`.
+
+```typescript
+import * as Config from "effect/Config";
+import * as Redacted from "effect/Redacted";
+```
+
+## Configure GitHub
+
+Replace `const makeAuth = BetterAuth(authOptions)` with:
+
+```typescript
+const makeAuth = Effect.gen(function* () {
+  const baseURL = yield* Config.String("AUTH_BASE_URL");
+  const clientId = yield* Config.String("GITHUB_CLIENT_ID");
+  const clientSecret = yield* Config.Redacted("GITHUB_CLIENT_SECRET");
+
+  return yield* BetterAuth({
+    ...authOptions,
+    baseURL,
+    socialProviders: {
+      github: {
+        clientId,
+        clientSecret: Redacted.value(clientSecret),
+      },
+    },
+  });
+});
+```
+
+`Auth.layer` evaluates Config during construction, not at module import time.
+Keep the existing `Auth` class; the host still owns the database and runtime layers, signing secret, and migrations.
+
+Better Auth 1.7.5 requests `read:user` and `user:email` by default; keep those
+minimal sign-in scopes rather than adding `repo`, `workflow`, or organization administration access.
+
+`user:email` lets Better Auth retrieve a private email and its verification status.
+GitHub sign-in does not need repository access or a personal access token.
+
+## Start sign-in in the browser
+
+Call this function from a button and render its returned message as text.
+It uses `authClient` exported by `src/client.ts`, never server credentials.
+
+```typescript
+import { authClient } from "./client.ts";
+
+export async function signInWithGitHub() {
+  try {
+    const { data, error } = await authClient.signIn.social({
+      provider: "github",
+      callbackURL: "/account",
+      disableRedirect: true,
+    });
+    if (error) return "Could not start GitHub sign-in. Try again.";
+    if (!data?.url) return "No authorization URL was returned.";
+    window.location.assign(data.url);
+  } catch {
+    return "Could not reach the server. Try again.";
+  }
+}
+```
+
+Better Auth displays callback failures on its built-in error page.
+After a successful return to `/account`, check `getSession()` using the [shared result handling](/better-auth/sign-in-providers#handle-the-returned-result).
+
+## Link an existing account safely
+
+Keep `authOptions.account.accountLinking.disableImplicitLinking: true` from the starter.
+An existing email/password user should sign in first, then call `authClient.linkSocial` with `provider: "github"` from account settings.
+
+Keep the same-email and verified-email checks; do not trust arbitrary GitHub email
+claims or manually merge users after a collision.
+
+If GitHub reports an unverified or missing email, resolve that on the GitHub account
+instead of bypassing verification; see the [explicit linking example](/better-auth/sign-in-providers#link-accounts-deliberately).
+
+## Diagnose a failed return
+
+For a callback mismatch, compare the scheme, hostname, port, and `/api/auth/callback/github`
+path with the app registration and `AUTH_BASE_URL`.
+
+For a client error, check that the ID and secret belong to the same OAuth App;
+organization OAuth restrictions can also require administrator approval.
+
+Restart sign-in after correcting settings instead of replaying an authorization code.
+Never log the full callback URL, provider token, or client secret.

@@ -1,0 +1,143 @@
+---
+title: Authorization
+description: Authorize protected API operations using the CurrentUser supplied by authentication middleware.
+---
+
+Continue from [Part 4](/better-auth/tutorial/part-4). Authentication identifies the caller; authorization decides whether that caller may perform an operation.
+
+## Keep identity request-scoped
+
+The tutorial declares this service in `src/current-user.ts`:
+
+```typescript
+import * as Context from "effect/Context";
+import * as Schema from "effect/Schema";
+
+export const User = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  email: Schema.String,
+});
+
+export class CurrentUser extends Context.Service<
+  CurrentUser,
+  typeof User.Type
+>()("app/CurrentUser") {}
+```
+
+`Authentication` in `src/middleware.ts` provides this service after checking the incoming session. Do not supply a user from a request body or a process-wide `Layer.succeed`.
+
+## Distinguish denied access
+
+Create `src/authorization.ts`:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+export class Forbidden extends Schema.TaggedError<Forbidden>()(
+  "Forbidden",
+  {},
+  { httpApiStatus: 403 },
+) {}
+```
+
+`401` means there is no authenticated caller; `403` means the authenticated caller lacks permission. Session-service failures remain `503`, not either of those outcomes.
+
+## Compare the owner to the caller
+
+Add these imports to `src/authorization.ts`:
+
+```typescript
+import * as Effect from "effect/Effect";
+import { CurrentUser } from "./current-user.ts";
+```
+
+Append the check:
+
+```typescript
+export const requireOwner = Effect.fn(function* (ownerId: string) {
+  const user = yield* CurrentUser;
+  if (user.id !== ownerId) return yield* Effect.fail(new Forbidden());
+  return user;
+});
+```
+
+The helper requires `CurrentUser` in its Effect environment. It cannot silently fall back to an anonymous user.
+
+## Declare a protected profile route
+
+Import the error in the tutorial's `src/api.ts`:
+
+```typescript
+import { Forbidden } from "./authorization.ts";
+```
+
+Replace only `PrivateApi` with this definition, retaining the existing imports of `Schema`, `HttpApiGroup`, `HttpApiEndpoint`, `User`, and `Authentication`:
+
+```typescript
+export class PrivateApi extends HttpApiGroup.make("private")
+  .add(HttpApiEndpoint.get("me", "/api/me", { success: User }))
+  .add(
+    HttpApiEndpoint.get("profile", "/api/users/:userId", {
+      params: { userId: Schema.String },
+      success: User,
+      error: Forbidden,
+    }),
+  )
+  .middleware(Authentication) {}
+```
+
+Both endpoints require authentication. The new route additionally declares its authorization failure in the API contract.
+
+## Check access in the handler
+
+Import the helper in `src/http.ts`:
+
+```typescript
+import { requireOwner } from "./authorization.ts";
+```
+
+Replace the existing `PrivateLive` definition:
+
+```typescript
+const PrivateLive = HttpApiBuilder.group(AppApi, "private", (handlers) =>
+  handlers
+    .handle("me", () => CurrentUser)
+    .handle("profile", ({ params }) => requireOwner(params.userId)),
+);
+```
+
+The route returns only the current user's profile, and only when the requested ID matches that user. Keep the tutorial's existing `Authentication.layer` and host-provided `Auth.layer` composition.
+
+## Use stored ownership for application records
+
+For a project, document, or order, load its owner from your database and pass that stored ID to `requireOwner` before reading or changing protected data. A client-supplied `ownerId` is a claim, not evidence of ownership.
+
+Use the stable user ID as the relationship key. Names and email addresses can change and are not role assignments.
+
+## Keep lookup failures separate
+
+Inside the request Effect in `src/middleware.ts`, the session lookup can explicitly map both typed API errors and unexpected defects:
+
+```typescript
+const session = yield* auth.getSession().pipe(
+  Effect.mapError(() => new AuthenticationUnavailable()),
+  Effect.catchDefect(() => Effect.fail(new AuthenticationUnavailable())),
+);
+```
+
+Keep the existing `session === null` branch returning `Unauthorized`, then provide `CurrentUser` only for a successful session. This catch belongs around session resolution, not around the downstream handler, where it would hide unrelated application defects.
+
+The middleware's error declaration must include both `Unauthorized` with HTTP `401` and `AuthenticationUnavailable` with HTTP `503`. Their complete definitions and response handling are in [HTTP API middleware](/better-auth/guides/http-api-middleware).
+
+## Recheck changing permissions
+
+Do not trust a browser-side role check to enforce access. Query authoritative membership or permission data on the server when the operation needs current access rights.
+
+If cookie caching is enabled, user/session data can be stale after revocation or a role change. Use the authoritative lookup described in [sessions](/better-auth/guides/sessions) for sensitive operations.
+
+## Keep sign-in public
+
+Leave `/api/auth` routed to `auth.fetch` before the application router, as in [Part 2](/better-auth/tutorial/part-2). Applying `Authentication` to those routes would prevent a signed-out user from signing in.
+
+The public `/api/health` route stays outside `PrivateApi`. Verify anonymous, authenticated, wrong-owner, and service-failure cases with the [testing guide](/better-auth/guides/testing).

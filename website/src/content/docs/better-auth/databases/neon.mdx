@@ -1,0 +1,106 @@
+---
+title: Neon
+description: Connect Better Auth to Neon from a Worker or Lambda with the serverless driver.
+---
+
+Use Neon's serverless driver from either a Worker or Lambda. It uses WebSockets, so you do not need Hyperdrive or `pg`.
+
+## Install the driver
+
+```sh
+bun add alchemy "effect@4.0.0-rc.115" @alchemy.run/better-auth better-auth@^1.7.5 kysely @neondatabase/serverless
+```
+
+## Provision a project
+
+Create `src/database.ts`:
+
+```typescript
+import * as Neon from "alchemy/Neon";
+
+export const AuthDb = Neon.Project("AuthDb");
+```
+
+`Neon.Project` provisions the database and exposes its `connectionUri` Output. Supply your own Neon account credentials through an Alchemy [profile](/environments/profiles) or `NEON_API_KEY`; Alchemy does not create the API key.
+
+## Supply the connection to Auth
+
+Create `src/auth-database.ts`, reusing the tutorial's `src/auth.ts`:
+
+```typescript
+import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+import { AuthDb } from "./database.ts";
+
+const AuthDatabase = Layer.unwrap(
+  Effect.map(AuthDb, (db) => NeonDatabase(db.connectionUri)),
+);
+
+export const AuthLive = Auth.layer.pipe(Layer.provide(AuthDatabase));
+```
+
+## Replace the host pipeline
+
+Replace D1's inline wiring in the [Part 1 Worker](/better-auth/tutorial/part-1):
+
+```diff lang="typescript"
+ // src/worker.ts
+-import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
+-import * as Layer from "effect/Layer";
+-import { AuthDb } from "./database.ts";
++import { AuthLive } from "./auth-database.ts";
+
+   }).pipe(
+-    Effect.provide(Auth.layer.pipe(Layer.provide(CloudflareD1(AuthDb)))),
++    Effect.provide(AuthLive),
+   ),
+```
+
+The connection URI is bound into the host environment, and the driver pool is acquired and closed per request. The [Lambda host](/better-auth/deployment/aws) uses the same `AuthLive` pipeline per invocation.
+
+## Register the Neon provider
+
+For a Worker stack, use this provider layer in `Alchemy.Stack`:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Neon from "alchemy/Neon";
+import * as Layer from "effect/Layer";
+
+const providers = Layer.mergeAll(Cloudflare.providers(), Neon.providers());
+```
+
+For Lambda, merge `AWS.providers()` with `Neon.providers()` instead. The [AWS deployment page](/better-auth/deployment/aws) shows the complete stack.
+
+## Apply the schema
+
+```sh
+bunx alchemy deploy
+```
+
+The deploy-time migration connects using the same project URI before the host is updated. No migration code runs in requests, and the automatically generated signing secret stays stable across deploys.
+
+## Connect an existing project
+
+Replace `src/auth-database.ts` with this version when you already have a Neon URL:
+
+```typescript
+import { Neon } from "@alchemy.run/better-auth/Neon";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Auth } from "./auth.ts";
+
+export const AuthLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const url = yield* Config.Redacted("DATABASE_URL");
+    return Auth.layer.pipe(Layer.provide(Neon(url)));
+  }),
+);
+```
+
+Set `DATABASE_URL` in the deploying environment; this version creates no Neon resources and needs no Neon provider. The deploy process must be able to reach the database for automatic migrations.
+
+See [configuration](/better-auth/guides/configuration), [migrations](/better-auth/guides/migrations), and the [`Neon` reference](/providers/betterauth/neon).
