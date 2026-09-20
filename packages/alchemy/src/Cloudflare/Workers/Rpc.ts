@@ -78,17 +78,23 @@ export const makeRpcStub = <Shape>(
                 prop,
                 () =>
                   options?.invocations
-                    ? (stub as any)
-                        [NativeInvocation](prop)
-                        .catch((error: unknown) => {
+                    ? (stub as any)[NativeInvocation](prop).then(
+                        (value: unknown) =>
+                          value === undefined
+                            ? (stub as any)[prop](...args)
+                            : value,
+                        (error: unknown) => {
                           if (
                             error instanceof Error &&
-                            error.message ===
-                              `The RPC receiver does not implement the method "${NativeInvocation}".`
+                            (error.message ===
+                              `The RPC receiver does not implement the method "${NativeInvocation}".` ||
+                              error.message ===
+                                `Method "${NativeInvocation}" not found on worker. Make sure it's returned from the worker's default export.`)
                           )
                             return (stub as any)[prop](...args);
                           throw error;
-                        })
+                        },
+                      )
                     : (stub as any)[prop](...args),
                 revive,
                 undefined,

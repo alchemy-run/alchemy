@@ -165,6 +165,36 @@ describe.concurrent.each([
       );
 
     test(
+      `${transport}: legacy receivers fall back before application execution`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const result = yield* call<{ value: string; failure: Failure }>(
+          url,
+          "legacy",
+        );
+        expect(result.value).toBe(idFor("legacy"));
+        expect(result.failure.failed).toBe(true);
+        expect(result.failure.diagnostic).toContain(
+          "legacy application failure",
+        );
+      }),
+      options,
+    );
+
+    test(
+      `${transport}: native stream batches account for typed-array backing buffers`,
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        expect(yield* call(url, "backing-buffers")).toEqual({
+          count: 65,
+          sum: 2080,
+        });
+        yield* closed(url, idFor("backing-buffers"));
+      }),
+      options,
+    );
+
+    test(
       `${transport}: pure factories use the event scope and preserve generic/correlated values`,
       Effect.gen(function* () {
         const { url } = yield* stack;

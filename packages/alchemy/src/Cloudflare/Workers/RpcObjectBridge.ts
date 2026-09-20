@@ -414,8 +414,8 @@ const valueSize = (
   if (seen.has(value)) return 32;
   if (depth >= 32) return Infinity;
   seen.add(value);
-  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value))
-    return 64 + value.byteLength;
+  if (value instanceof ArrayBuffer) return 64 + value.byteLength;
+  if (ArrayBuffer.isView(value)) return 64 + value.buffer.byteLength;
   if (value instanceof Date) return 64;
   if (value instanceof RegExp) return 64 + value.source.length * 3;
   let size = 64;

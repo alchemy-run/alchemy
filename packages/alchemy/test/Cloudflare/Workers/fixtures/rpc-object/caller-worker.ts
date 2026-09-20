@@ -76,7 +76,22 @@ const normalizeStreamValue = (
 
 export default class RpcObjectCaller extends Cloudflare.Worker<RpcObjectCaller>()(
   "RpcObjectCaller",
-  { main: import.meta.url },
+  Effect.gen(function* () {
+    const legacy = yield* Cloudflare.Worker("RpcObjectLegacyWorker", {
+      main: `${import.meta.dirname}/legacy-worker.ts`,
+    });
+    return {
+      main: import.meta.url,
+      env: {
+        LegacyWorker: Cloudflare.WorkerEntrypoint(legacy, {
+          entrypoint: "LegacyWorker",
+        }),
+        LegacyObject: Cloudflare.WorkerEntrypoint(legacy, {
+          entrypoint: "LegacyObject",
+        }),
+      },
+    };
+  }),
   Effect.gen(function* () {
     const worker = yield* Cloudflare.Workers.bindWorker(RpcObjectTargetWorker);
     const objects = yield* RpcObjectTarget;
@@ -106,6 +121,38 @@ export default class RpcObjectCaller extends Cloudflare.Worker<RpcObjectCaller>(
       id: string,
     ) {
       const target = transport === "worker" ? worker : objects.getByName(id);
+
+      if (scenario === "legacy") {
+        const environment = yield* Cloudflare.WorkerEnvironment;
+        const legacy = Cloudflare.makeRpcStub<{
+          echo(value: string): Effect.Effect<string>;
+          fail(): Effect.Effect<never>;
+        }>(
+          environment[transport === "worker" ? "LegacyWorker" : "LegacyObject"],
+          {
+            invocations: true,
+          },
+        );
+        return {
+          value: yield* legacy.echo(id),
+          failure: failure(yield* legacy.fail().pipe(Effect.exit)),
+        };
+      }
+
+      if (scenario === "backing-buffers") {
+        return yield* Effect.gen(function* () {
+          const object = yield* target.open(id);
+          return yield* object.backingBuffers().pipe(
+            Stream.runFold(
+              () => ({ count: 0, sum: 0 }),
+              (total, view) => ({
+                count: total.count + 1,
+                sum: total.sum + view[0],
+              }),
+            ),
+          );
+        }).pipe(Effect.scoped);
+      }
 
       if (scenario === "pure") {
         // The factory has no Scope requirement; the Worker event owns its stub.

@@ -209,6 +209,14 @@ export const makeApi = Effect.gen(function* () {
             active: index % 2 === 0,
           })),
         ),
+      backingBuffers: () =>
+        Stream.range(0, 64).pipe(
+          Stream.map((index) => {
+            const view = new Uint16Array(new ArrayBuffer(512 * 1024), 0, 1);
+            view[0] = index;
+            return view;
+          }),
+        ),
       largeRecords: () =>
         Stream.range(0, 127).pipe(
           Stream.map((index) => ({
