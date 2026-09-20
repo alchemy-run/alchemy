@@ -41,7 +41,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // ~1-4 min under full-suite load), so it is opt-in. The stripe-billing
 // example integ exercises the same end-to-end delivery in its own run.
 test.skipIf(process.env.STRIPE_TEST_REAL_DELIVERY !== "1")(
-  "consumeEvents records a CustomerCreated delivery",
+  "consumeEvents delivers CustomerCreated to both subscribers through one endpoint",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");

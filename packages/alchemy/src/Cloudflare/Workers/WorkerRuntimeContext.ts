@@ -28,6 +28,7 @@ export interface WorkerRuntimeContext extends Serverless.FunctionContext {
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+  let applicationHandler: Serverless.FunctionListener | undefined;
   const exports: Record<string, DurableObjectExport | WorkflowExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
@@ -63,7 +64,9 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       // expose any non-handler methods on it as RPC methods on the
       // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
       if (options?.shape) userShape = options.shape;
-      return ctx.listen(makeRequestHandler(handler));
+      return Effect.sync(() => {
+        applicationHandler = makeRequestHandler(handler);
+      });
     },
     listen: ((
       handler:
@@ -108,6 +111,10 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             if (Effect.isEffect(eff)) {
               effects.push(eff);
             }
+          }
+          if (type === "fetch" && effects.length === 0) {
+            const effect = applicationHandler?.(event);
+            if (Effect.isEffect(effect)) effects.push(effect);
           }
           if (effects.length === 1) {
             return [effects[0], services];
