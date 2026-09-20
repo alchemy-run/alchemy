@@ -1,3 +1,4 @@
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
@@ -26,26 +27,31 @@ const getBodyWhenReady = (url: string, expected: string) =>
   }).pipe(
     Effect.retry({
       while: (error) => error instanceof AssetNotReady,
-      schedule: Schedule.max([
-        Schedule.min([
-          Schedule.exponential("500 millis"),
-          Schedule.spaced("3 seconds"),
-        ]),
-        Schedule.recurs(20),
+      schedule: Schedule.min([
+        Schedule.exponential("500 millis"),
+        Schedule.spaced("5 seconds"),
       ]),
+      times: 10,
     }),
   );
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  profile: process.env.ALCHEMY_PROFILE,
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
-// First deploy runs the full vinext Vite + prerender pipeline.
-const stack = beforeAll(deploy(Stack).pipe(Effect.tap(Console.log)), {
-  timeout: 600_000,
-});
+// Pre-deploy cleanup must not close the suite's shared runtime scope.
+const stack = beforeAll(
+  Effect.sync(Test.defaultStage).pipe(
+    Effect.flatMap((stage) => Alchemy.destroy({ stack: Stack, stage })),
+    Effect.andThen(deploy(Stack)),
+    Effect.tap(Console.log),
+  ),
+  {
+    timeout: 600_000,
+  },
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const base = Effect.map(stack, ({ url }) => {
@@ -98,7 +104,7 @@ test(
 
     const stamp = (body: string) => {
       const match = body.match(
-        /data-testid="isr-time"[^>]*>[\s\S]*?Rendered at:\s*([^<]+)/,
+        /data-testid="isr-time"[^>]*>[\s\S]*?<time dateTime="([^"]+)"/,
       );
       return match?.[1]?.trim();
     };

@@ -22,6 +22,8 @@ import * as PlatformFileSystem from "effect/FileSystem";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { dotAlchemyDirectory } from "../../AlchemyContext.ts";
+import { isPathWithin } from "../../Util/isPathWithin.ts";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -45,7 +47,7 @@ import { sha256 } from "../../Util/sha256.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import {
   isLiveId,
-  LOCAL_ENTRY_URL,
+  LOCAL_PROVIDERS_URL,
   LocalRuntimeState,
   localStorageDirectory,
 } from "../LocalRuntime.ts";
@@ -135,9 +137,11 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
 export const LocalWorkerProvider = () =>
   LocalProvider.make(
     Worker,
-    LOCAL_ENTRY_URL,
+    LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
+      const runtimeBase = process.cwd();
+      const dotAlchemy = yield* dotAlchemyDirectory;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const storageDirectory = yield* localStorageDirectory;
@@ -379,7 +383,9 @@ export const LocalWorkerProvider = () =>
         // change (a Dockerfile edit, a rebuilt bundle) would never change
         // the config and the running container would serve stale code.
         const containerHashes: Record<string, string> = {};
+        const boundEnv: Record<string, any> = { ...props.env };
         for (const { data } of bindings) {
+          if (data.env) Object.assign(boundEnv, data.env);
           for (const binding of data.bindings ?? []) {
             if (
               binding.type === "durable_object_namespace" &&
@@ -476,7 +482,7 @@ export const LocalWorkerProvider = () =>
           name,
           compatibility,
           /** User env (Redacted preserved — the canonical hasher unwraps). */
-          env: props.env,
+          env: Object.keys(boundEnv).length > 0 ? boundEnv : props.env,
           /**
            * Raw inline module source (mutually exclusive with `main`).
            * Serves as-is without the bundler; part of the hashed config so
@@ -695,8 +701,8 @@ export const LocalWorkerProvider = () =>
           for (const namespace of worker.durableObjectNamespaces) {
             const image = namespace.container;
             if (image === undefined || !("dockerfile" in image)) continue;
-            const context = path.resolve(image.context ?? ".");
-            if (context.split(path.sep).includes(".alchemy")) continue;
+            const context = path.resolve(runtimeBase, image.context ?? ".");
+            if (isPathWithin(dotAlchemy, context, runtimeBase)) continue;
             watched.set(context, {
               dockerfile:
                 image.dockerfile !== undefined
@@ -1047,14 +1053,17 @@ export const LocalWorkerProvider = () =>
                   Effect.log(`[${worker.fqn}] Rebuilding`),
                   // Tells the proxy to queue requests until the updated
                   // worker is ready.
-                  Effect.forkChild(proxy.unset()),
+                  proxy.unset(),
                 ]);
               }
             } else if (event._tag === "Error") {
-              return Effect.logError(
-                `[${worker.fqn}] Bundle error`,
-                event.error,
-              );
+              return Effect.all([
+                Effect.logError(`[${worker.fqn}] Bundle error`, event.error),
+                // No updated worker is coming from this build: answer
+                // parked requests with the error now instead of after the
+                // pending timeout.
+                proxy.fail(event.error.message),
+              ]);
             }
             return Effect.void;
           }),
@@ -1083,10 +1092,13 @@ export const LocalWorkerProvider = () =>
                   status = "update";
                   return message;
                 } else {
-                  return Effect.logError(
-                    `[${worker.fqn}] Error`,
-                    Cause.squash(exit.cause),
-                  );
+                  return Effect.all([
+                    Effect.logError(
+                      `[${worker.fqn}] Error`,
+                      Cause.squash(exit.cause),
+                    ),
+                    proxy.fail(Cause.pretty(exit.cause)),
+                  ]);
                 }
               }),
             ),
@@ -1238,7 +1250,7 @@ export const LocalWorkerProvider = () =>
                 }
               }
               // Queue requests while the child is (re)starting.
-              yield* proxy.unset().pipe(Effect.forkChild);
+              yield* proxy.unset();
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(rootDir ?? process.cwd());
@@ -1286,6 +1298,7 @@ export const LocalWorkerProvider = () =>
                         workflows: worker.workflows,
                         hyperdrives: worker.hyperdrives,
                         queueConsumers,
+                        crons: worker.crons,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
                     },
@@ -1308,17 +1321,19 @@ export const LocalWorkerProvider = () =>
                 );
                 workerdScopes.set(worker.fqn, scope);
                 latestViteServes.set(worker.fqn, args);
-                // Unexpected child death: log, park the proxy, and mark the
-                // instance for update on the next plan. Forked into the
-                // child's scope so a deliberate restart or teardown
-                // interrupts the watcher before the process is killed.
+                // Unexpected child death: log, fail the proxy so requests
+                // see why instead of parking, and mark the instance for
+                // update on the next plan. Forked into the child's scope so
+                // a deliberate restart or teardown interrupts the watcher
+                // before the process is killed.
                 yield* child.exitCode.pipe(
-                  Effect.flatMap((exitCode) =>
-                    Effect.logWarning(
-                      `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`,
-                    ),
-                  ),
-                  Effect.andThen(proxy.unset().pipe(Effect.ignore)),
+                  Effect.flatMap((exitCode) => {
+                    const message = `[${worker.fqn}] Dev server child exited unexpectedly with code ${exitCode}`;
+                    return Effect.all([
+                      Effect.logWarning(message),
+                      proxy.fail(message),
+                    ]);
+                  }),
                   Effect.andThen(invalidate),
                   Effect.forkIn(scope),
                 );
@@ -1386,7 +1401,7 @@ export const LocalWorkerProvider = () =>
         // Queue requests until the source's first output is served —
         // whether that's the first workerd serve (bundle mode) or the dev
         // server URL (server mode).
-        yield* proxy.unset().pipe(Effect.forkChild);
+        yield* proxy.unset();
         // `loadSource` is typed against the full `SourceServices` union
         // (which includes the per-run Artifacts cache the live provider
         // supplies); local dev has no run-scoped cache, so hand the
@@ -1398,6 +1413,7 @@ export const LocalWorkerProvider = () =>
           ),
         );
         const devCtx: DevContext = {
+          dotAlchemy,
           id: worker.id,
           fqn: worker.fqn,
           workerName: worker.name,

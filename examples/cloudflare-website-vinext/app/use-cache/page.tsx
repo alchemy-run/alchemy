@@ -19,7 +19,10 @@ export default async function UseCachePage() {
         <p className="text-sm text-slate-900" data-testid="use-cache-request">
           Request: <LocalTime value={request} />
         </p>
-        <p className="mt-2 text-sm text-slate-900" data-testid="use-cache-cached">
+        <p
+          className="mt-2 text-sm text-slate-900"
+          data-testid="use-cache-cached"
+        >
           Cached: <LocalTime value={cached} />
         </p>
         <form action={refreshCachedStamp}>

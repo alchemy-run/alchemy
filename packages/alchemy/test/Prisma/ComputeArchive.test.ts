@@ -8,6 +8,8 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { gunzipSync } from "node:zlib";
 
 interface TarEntry {
@@ -70,6 +72,34 @@ describe("createComputeArchive", () => {
     ).resolves.toBeUndefined();
   });
 
+  it.effect("rejects exclusions that remove a required static index", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-prisma-required-index-",
+      });
+      yield* fs.makeDirectory(path.join(root, "public"));
+      yield* fs.writeFileString(path.join(root, "server.mjs"), "export {};");
+      yield* fs.writeFileString(
+        path.join(root, "public", "index.html"),
+        "site",
+      );
+
+      const error = yield* createComputeArchive({
+        directory: root,
+        entrypoint: "server.mjs",
+        ignorePrefix: "public",
+        ignore: ["*.html"],
+        requiredFiles: ["public/index.html"],
+      }).pipe(Effect.flip);
+
+      expect(error.message).toContain(
+        "Required file not found in compute artifact: public/index.html",
+      );
+    }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+  );
+
   it.effect("creates the tar.gz format expected by Prisma Compute", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -98,6 +128,51 @@ describe("createComputeArchive", () => {
         entrypoint: "bundle/src/main.ts",
       });
     }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "round-trips long framework chunk names and symlink targets through tar",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-prisma-long-path-",
+        });
+        const output = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-prisma-extract-",
+        });
+        const name = `${"framework-".repeat(12)}é.js`;
+        yield* fs.writeFileString(
+          path.join(root, name),
+          "export const greeting = 'vinext';",
+        );
+        yield* fs.symlink(name, path.join(root, "server.js"));
+        const archive = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.js",
+        });
+        const again = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.js",
+        });
+        expect(again).toEqual(archive);
+        const archivePath = path.join(output, "site.tar.gz");
+        yield* fs.writeFile(archivePath, archive);
+        const extracted = yield* spawner.exitCode(
+          ChildProcess.make("tar", ["-xzf", archivePath, "-C", output]),
+        );
+        expect(Number(extracted)).toBe(0);
+        expect(
+          yield* fs.readFileString(path.join(output, "bundle", name)),
+        ).toBe("export const greeting = 'vinext';");
+        expect(
+          (yield* fs.readLink(
+            path.join(output, "bundle", "server.js"),
+          )).normalize("NFC"),
+        ).toBe(name);
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
 
   it.effect("produces deterministic bytes for unchanged input", () =>
@@ -379,6 +454,28 @@ describe("createComputeArchive", () => {
       }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect("validates custom ignore patterns before applying a prefix", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-prefixed-ignore-validation-",
+      });
+      yield* fs.writeFileString(path.join(root, "server.ts"), "safe");
+
+      const unsafe = yield* Effect.exit(
+        createComputeArchive({
+          directory: root,
+          entrypoint: "server.ts",
+          ignore: ["../outside"],
+          ignorePrefix: "public",
+        }),
+      );
+
+      expect(unsafe._tag).toBe("Failure");
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect("reports invalid archive limits as typed errors", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -491,7 +588,7 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("rejects symlink targets that cannot fit the tar format", () =>
+  it.effect("encodes long nested symlink targets with PAX records", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -510,13 +607,17 @@ describe("createComputeArchive", () => {
       yield* fs.writeFileString(path.join(root, target), "target");
       yield* fs.symlink(target, path.join(root, "long-link.ts"));
 
-      const error = yield* createComputeArchive({
+      const archive = yield* createComputeArchive({
         directory: root,
         entrypoint: "server.ts",
-      }).pipe(Effect.flip);
-
-      expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain("symlink target is too long");
+      });
+      const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
+      expect(
+        entries.some(
+          (entry) =>
+            entry.type === "x" && entry.body.includes(`linkpath=${target}\n`),
+        ),
+      ).toBe(true);
     }).pipe(Effect.provide(PlatformServices)),
   );
 });

@@ -842,6 +842,7 @@ export const makeVinextSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       const output = yield* runBuildChild({
+        runtime: "node",
         module: import.meta.url,
         rootDir,
         framework: "vinext",

@@ -13,5 +13,10 @@
     "allowImportingTsExtensions": true,
     "types": ["bun", "vinext/types"]
   },
-  "include": ["alchemy.run.ts", "vite.config.ts", "app", "test"]
+  "include": ["alchemy.run.ts", "vite.config.ts", "app", "test"],
+  "references": [
+    {
+      "path": "../../packages/alchemy"
+    }
+  ]
 }

@@ -160,13 +160,15 @@ export const tracedWorkerImpl = Effect.gen(function* () {
       }
 
       if (url.pathname === "/sampled") {
-        const sampled = yield* Effect.gen(function* () {
-          const outer = yield* currentSampled;
-          const child = yield* currentSampled.pipe(
-            Effect.withSpan("sampled.child"),
-          );
-          return { operation: outer, child };
-        }).pipe(Effect.withSpan("operation"));
+        const sampled = yield* operation(
+          Effect.gen(function* () {
+            const outer = yield* currentSampled;
+            const child = yield* currentSampled.pipe(
+              Effect.withSpan("sampled.child"),
+            );
+            return { operation: outer, child };
+          }),
+        );
         return yield* HttpServerResponse.json({
           marker: "native-did-sample",
           ...sampled,

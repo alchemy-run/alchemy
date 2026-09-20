@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { forwardSignals } from "../packages/alchemy-test/src/DevCli.ts";
 
 const example = process.argv[2];
 if (example === undefined) {
@@ -13,7 +14,7 @@ const devOnly = process.argv.includes("--dev-only");
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const exampleRoot = path.resolve(repositoryRoot, example);
-// The real launcher, not `bin/alchemy.ts`: it pins bun's tsconfig to
+// The real launcher, not `bin/alchemy.js`: it pins bun's tsconfig to
 // alchemy's own, so the CLI's .tsx files are not transpiled with the
 // example's JSX settings (solid-js examples otherwise crash the CLI).
 const alchemyBin = path.join(
@@ -72,6 +73,7 @@ const run = (
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     const killGroup = () => {
       if (child.pid === undefined) return;
@@ -107,6 +109,7 @@ const runDev = (): Promise<CommandResult> =>
       env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    forwardSignals(child);
     let output = "";
     let settled = false;
     let ready = false;

@@ -9,10 +9,9 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const redis = yield* Fly.Redis("Cache", { eviction: true });
     const site = yield* Fly.Website.Vinext("Vinext", {
-      redis,
       memo: {
+        lockfile: true,
         include: [
           "app/**",
           "public/**",

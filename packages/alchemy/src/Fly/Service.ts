@@ -363,6 +363,12 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Configure routing health checks
  * The generated service includes a TCP check on `port`. To customize
  * it, provide `services` and configure each service's `checks` property.
+ * After each replica is `started`, reconcile waits until those checks
+ * are passing before updating the next replica. Missing or non-passing
+ * results are polled for up to 60 seconds, then fail deployment with
+ * `Fly.ReplicaChecksNotPassing` and the last observed check results.
+ * Later replicas remain unchanged; earlier updates are not rolled back.
+ * A single replica still updates in place and can be unavailable.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -1126,11 +1132,27 @@ export const ServiceProvider = () =>
           return toAttrs(set, codeHash);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ id, olds, output }) {
+          const appName = output.appName ?? appNameOf(olds.app);
+          if (appName === undefined) return;
+          const current =
+            machineIdsOf(output).length > 0
+              ? output
+              : yield* observeReplicaSet({
+                  appName,
+                  id,
+                  type: "Fly.Service",
+                  baseName: yield* resolveMachineName(
+                    id,
+                    olds.name,
+                    output.name,
+                  ),
+                });
+          if (current === undefined) return;
           yield* deleteReplicaSet({
-            appName: output.appName,
-            machineIds: machineIdsOf(output),
-            volumeIds: volumeIdsOf(output),
+            appName,
+            machineIds: current.machineIds,
+            volumeIds: volumeIdsOf(current),
           });
         }),
       });

@@ -36,18 +36,13 @@ export type LoadedPrerenderPairs = {
 };
 
 const resolveVinextRoot = (cwd: string): string | undefined => {
-  try {
-    const require = createRequire(`${cwd.replace(/\/+$/, "")}/package.json`);
-    return nodePath.dirname(require.resolve("vinext/package.json"));
-  } catch {
-    try {
-      return nodePath.dirname(
-        createRequire(import.meta.url).resolve("vinext/package.json"),
-      );
-    } catch {
-      return undefined;
-    }
+  const projectRequire = createRequire(nodePath.join(cwd, "package.json"));
+  // vinext does not export package.json; use Node's package search directories.
+  for (const directory of projectRequire.resolve.paths("vinext") ?? []) {
+    const root = nodePath.join(directory, "vinext");
+    if (existsSync(nodePath.join(root, "package.json"))) return root;
   }
+  return undefined;
 };
 
 const resolveServerDir = (cwd: string): string | undefined => {
@@ -56,6 +51,7 @@ const resolveServerDir = (cwd: string): string | undefined => {
   const candidates = [
     nodePath.join(cwd, "dist", "server"),
     nodePath.join(cwd, "server"),
+    cwd,
   ];
   for (const dir of candidates) {
     if (existsSync(nodePath.join(dir, "vinext-prerender.json"))) return dir;
@@ -113,7 +109,13 @@ export const seedPrerenderTo = <E, R>(
 
 const promiseSink = (store: DataCacheStore): SeedSink => ({
   putText: (key, value, ttlMs) =>
-    Effect.promise(() => store.putText(key, value, ttlMs)),
+    Effect.promise(() => store.getText(key)).pipe(
+      Effect.flatMap((existing) =>
+        existing === undefined
+          ? Effect.promise(() => store.putText(key, value, ttlMs))
+          : Effect.void,
+      ),
+    ),
 });
 
 export const seedStoreFromPrerender = async (

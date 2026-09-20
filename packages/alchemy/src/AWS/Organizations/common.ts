@@ -104,7 +104,10 @@ export const updateResourceTags = Effect.fn(function* ({
   olds: Record<string, string> | undefined;
   news: Record<string, string> | undefined;
 }) {
-  const oldTags = yield* createManagedTags(id, olds);
+  // `olds` is freshly read from AWS. Do not synthesize ownership tags into
+  // that baseline: doing so hides missing tags from the diff while returning
+  // them as if they had been persisted.
+  const oldTags = olds ?? {};
   const newTags = yield* createManagedTags(id, news);
   const { removed, upsert } = diffTags(oldTags, newTags);
 

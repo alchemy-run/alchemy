@@ -1,54 +1,49 @@
-# Railway Website: vinext
+# vinext on Railway
 
-Deploys a [vinext](https://vinext.dev) site to Railway with
-`Railway.Website.Vinext` — Next.js API on Vite, as a long-running Node
-process. Not OpenNext and not the Cloudflare Worker path.
+Deploy a vinext App Router application with `Railway.Website.Vinext`.
+Production uses vinext's production Node server in a Railway service.
 
-- `app/page.tsx` is prerendered (no `process.env` on the page).
-- `app/api/hello/route.ts` is an App Router API route.
-- `app/isr/page.tsx` is ISR (`revalidate: 60`) stored in Redis via
-  `vinext({ ...alchemy() })` / `REDIS_URL`.
-- This is `vinext build` plus vinext's production server.
-
-```ts
-const project = yield* Railway.Project("Project");
-const redis = yield* Railway.Redis("Cache", { project });
-const site = yield* Railway.Website.Vinext("Vinext", {
-  project,
-  env: {
-    GREETING: "Hello from vinext on Railway!",
-    REDIS_URL: Railway.ref(redis, "REDIS_URL"),
-  },
+```typescript
+const site = yield* Railway.Website.Vinext("Web", {
+  env: { GREETING: "Hello from vinext on Railway!" },
 });
 ```
 
-The integration package must be installed in the project (it is loaded
-dynamically at deploy time):
+The example includes client hydration, Home/ISR navigation, an environment-aware
+`/api/hello?name=Alchemy` endpoint, ISR, and public assets.
+The default cache is process-local. Configure a shared Redis store through `env.REDIS_URL` for persistence across restarts and replicas.
+The Vite configuration spreads `alchemy()` into `vinext()` to select the
+platform's cache adapter. This is a vinext build, not an OpenNext build.
+
+## Run locally
 
 ```sh
-bun add -d @alchemy.run/frontend-frameworks
+bun install
+bun alchemy dev
 ```
+
+The Website runs native `vinext dev` with hot reload and creates no cloud
+resources. Apply `Alchemy.remote()` to deploy live during development.
 
 ## Deploy
 
-```sh
-bun run deploy
-```
-
-Unchanged sources skip the build entirely on subsequent deploys — the
-input files are content-hashed (scoped by `memo.include`).
-
-## Dev
+Configure [Railway credentials](https://alchemy.run/railway/setup), then run:
 
 ```sh
-bun run dev
+bun alchemy deploy
 ```
 
-`alchemy dev` runs vinext's own dev server (HMR included) and no cloud
-resources are created.
+Shared props are `rootDir`, `env`, `memo`, `assets`, `dev`, and `domain`.
+The integration package must be installed in the application; it is loaded
+at build time.
 
-## Destroy
+## Test and clean up
 
 ```sh
-bun run destroy
+bun test test/dev.test.ts
+ALCHEMY_PROFILE=testing bun test test/integ.test.ts
+bun alchemy destroy
 ```
+
+The live suite destroys its previous stack before deploying and cleans up
+afterward. See the [vinext guide](https://alchemy.run/railway/frontend/vinext).

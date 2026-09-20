@@ -9,11 +9,9 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
-    const project = yield* Railway.Project("Project");
-    const redis = yield* Railway.Redis("Cache", { project });
     const site = yield* Railway.Website.Vinext("Vinext", {
-      project,
       memo: {
+        lockfile: true,
         include: [
           "app/**",
           "public/**",
@@ -22,7 +20,6 @@ export default Alchemy.Stack(
           "tsconfig.json",
         ],
       },
-      redis,
       env: {
         GREETING: "Hello from vinext on Railway!",
       },

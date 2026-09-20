@@ -1,3 +1,4 @@
+import { Counter } from "./components/Counter.tsx";
 import { Card } from "./components/Card.tsx";
 
 export default function Home() {
@@ -8,6 +9,7 @@ export default function Home() {
         title="Styled with Tailwind CSS"
         body="This card is a React component styled with Tailwind utilities."
       />
+      <Counter />
     </main>
   );
 }

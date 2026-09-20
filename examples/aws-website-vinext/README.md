@@ -1,47 +1,49 @@
-# AWS Website: vinext
+# vinext on AWS
 
-Deploys a [vinext](https://vinext.dev) site to AWS with
-`AWS.Website.Vinext` — Next.js API on Vite, RSC on a streaming Lambda
-Function URL, static assets on S3 + CloudFront. Not OpenNext and not
-the Cloudflare Worker path.
+Deploy a vinext App Router application with `AWS.Website.Vinext`.
+Production uses a streaming Lambda behind CloudFront, with assets and the data cache in S3.
 
-- `app/page.tsx` is prerendered (no `process.env` on the page).
-- `app/api/hello/route.ts` is an App Router API route.
-- `app/isr/page.tsx` is ISR (`revalidate: 60`) stored in S3 via
-  `vinext({ ...alchemy() })` / `CACHE_BUCKET_NAME` (provisioned by
-  the resource).
-- This is `vinext build` plus a Lambda fetch-handler wrap.
-
-```ts
-const site = yield* AWS.Website.Vinext("Vinext", {
+```typescript
+const site = yield* AWS.Website.Vinext("Web", {
   env: { GREETING: "Hello from vinext on AWS!" },
 });
 ```
 
-The integration package must be installed in the project (it is loaded
-dynamically at deploy time):
+The example includes client hydration, Home/ISR navigation, an environment-aware
+`/api/hello?name=Alchemy` endpoint, ISR, and public assets.
+The Website provisions its S3 data-cache bucket automatically.
+The Vite configuration spreads `alchemy()` into `vinext()` to select the
+platform's cache adapter. This is a vinext build, not an OpenNext build.
+
+## Run locally
 
 ```sh
-bun add -d @alchemy.run/frontend-frameworks
+bun install
+bun alchemy dev
 ```
+
+The Website runs native `vinext dev` with hot reload and creates no cloud
+resources. Apply `Alchemy.remote()` to deploy live during development.
 
 ## Deploy
 
-```sh
-bun run deploy
-```
-
-## Dev
+Configure [AWS credentials](https://alchemy.run/aws/setup), then run:
 
 ```sh
-bun run dev
+bun alchemy deploy
 ```
 
-`alchemy dev` runs vinext's own dev server (HMR included) and no cloud
-resources are created.
+Shared props are `rootDir`, `env`, `memo`, `assets`, `dev`, and `domain`.
+The integration package must be installed in the application; it is loaded
+at build time.
 
-## Destroy
+## Test and clean up
 
 ```sh
-bun run destroy
+bun test test/dev.test.ts
+ALCHEMY_PROFILE=testing bun test test/integ.test.ts
+bun alchemy destroy
 ```
+
+The live suite destroys its previous stack before deploying and cleans up
+afterward. See the [vinext guide](https://alchemy.run/aws/frontend/vinext).

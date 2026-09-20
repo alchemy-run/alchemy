@@ -17,6 +17,7 @@ import { createRequire } from "node:module";
 import type * as NodeChildProcessModule from "node:child_process";
 import type * as NodeNet from "node:net";
 import { findEphemeralPort } from "../core/DevPort.ts";
+import { resolveProjectPackageDirectory } from "../core/Loader.ts";
 import { toOutputFile, type BuildOutput } from "../core/index.ts";
 
 export const failFramework = (message: string) => (cause: unknown) =>
@@ -29,16 +30,14 @@ export const VINEXT_RSC_ENTRY = "server/index.js";
 export const VINEXT_PAGES_ENTRY = "server/entry.js";
 
 export const resolveVinextCli = (root: string) =>
-  Effect.try({
-    try: () => {
-      const require = createRequire(`${root.replace(/\/+$/, "")}/package.json`);
-      return require.resolve("vinext/dist/cli.js");
-    },
-    catch: failFramework(
-      `Failed to resolve "vinext" from ${root}. ` +
-        "It must be installed in your project.",
+  resolveProjectPackageDirectory(root, "vinext").pipe(
+    Effect.map((directory) => `${directory}/dist/cli.js`),
+    Effect.mapError(
+      failFramework(
+        `Failed to resolve "vinext" from ${root}. It must be installed in your project.`,
+      ),
     ),
-  });
+  );
 
 export const runVinextBuild = (options: {
   readonly root: string;

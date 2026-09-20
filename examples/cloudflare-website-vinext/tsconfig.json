@@ -21,5 +21,10 @@
     "worker",
     "src",
     "test"
+  ],
+  "references": [
+    {
+      "path": "../../packages/alchemy"
+    }
   ]
 }

@@ -223,7 +223,11 @@ export const make: (
   ) {
     const root = yield* resolveRoot(buildOptions?.root);
     const nodeTarget = makeNodeTarget({ root });
-    const output = yield* nodeTarget.build!({ root, framework: "vinext" }).pipe(
+    const output = yield* nodeTarget.build!({
+      root,
+      framework: "vinext",
+      env: buildOptions?.env,
+    }).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.mapError((error) => failFramework(error.message)(error.cause)),

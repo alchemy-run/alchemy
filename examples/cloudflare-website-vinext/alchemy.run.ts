@@ -7,6 +7,7 @@ import { KV, DB } from "./src/Bindings";
 /** Do not bind `VINEXT_KV_CACHE` — Website.Vinext provisions it. */
 export class Vinext extends Cloudflare.Website.Vinext<Vinext>()("Vinext", {
   memo: {
+    lockfile: true,
     include: [
       "app/**",
       "public/**",

@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { resolveVinextCli } from "../cli.ts";
 import { NODE_BUNDLE_CONDITIONS } from "../../core/NodeServe.ts";
 import {
   SERVER_ENTRY_NAME,
@@ -9,6 +14,22 @@ import {
 } from "../node.ts";
 
 describe("makeNodeTarget", () => {
+  it("resolves the installed CLI without requiring an exported CLI subpath", () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* path.fromFileUrl(
+          new URL(
+            "../../../../../examples/prisma-website-vinext/",
+            import.meta.url,
+          ),
+        );
+        const cli = yield* resolveVinextCli(root);
+        expect(cli).toMatch(/vinext\/dist\/cli\.js$/);
+        expect(yield* fs.exists(cli)).toBe(true);
+      }).pipe(Effect.provide(NodeServices.layer)),
+    ));
   it("declares the node platform and a wholesale vinext build (not Cloudflare)", () => {
     const node = makeNodeTarget();
     expect(node.platform).toBe("node");

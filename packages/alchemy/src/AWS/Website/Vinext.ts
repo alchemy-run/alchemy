@@ -25,7 +25,7 @@ export const VINEXT_CACHE_BUCKET_ENV = "CACHE_BUCKET_NAME";
 export interface VinextProps extends FrameworkSiteProps {}
 
 /**
- * Deploy a [vinext](https://vinext.dev) application to AWS: the RSC
+ * Deploy a [vinext](https://vinext.dev) App Router application to AWS: the RSC
  * server on a streaming Lambda Function URL, static assets in S3, and a
  * CloudFront distribution whose edge router serves uploaded files from S3
  * and forwards everything else to the server.
@@ -36,6 +36,10 @@ export interface VinextProps extends FrameworkSiteProps {}
  * `vinext({ ...alchemy() })` — the AWS build bakes the S3 adapter.
  * A dedicated cache bucket keeps the graph acyclic (the asset bucket
  * is bound to CloudFront).
+ *
+ * Requires vinext 1.0.0-beta.10 or newer. The Lambda build uses vinext's
+ * standalone packaging to include external runtime dependencies. Pages Router
+ * applications require a Node deployment target instead of Lambda.
  *
  * This is **not** `AWS.Website.Nextjs` (OpenNext) and **not**
  * `Cloudflare.Website.Vinext`. During `alchemy dev` the site is
@@ -52,6 +56,7 @@ export interface VinextProps extends FrameworkSiteProps {}
  * **Example:** vite.config.ts (platform-agnostic)
  * ```typescript
  * import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
+ * import { defineConfig } from "vite";
  * import vinext from "vinext";
  *
  * export default defineConfig({

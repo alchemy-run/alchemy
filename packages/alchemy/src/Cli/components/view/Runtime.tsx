@@ -1,4 +1,4 @@
-/** @jsxImportSource react */
+/** @jsxImportSource @alchemy.run/sigil */
 import { stripVTControlCharacters } from "node:util";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -14,7 +14,8 @@ import {
   Static,
   useTitle,
 } from "@alchemy.run/sigil";
-import { type ReactNode, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "@alchemy.run/sigil/react";
+import type { ReactNode } from "react";
 import { Spinner, Status } from "../ui/Feedback.tsx";
 import { CliEnvironment } from "../ui/Environment.tsx";
 import { useTerminalInput } from "../ui/Interactive.tsx";
@@ -457,7 +458,7 @@ export const makeRuntime = (
         exitOnCtrlC: false,
         interactive: capabilities.input,
         alternateScreen: alternateScreen,
-        colorProfile: capabilities.colors ? "truecolor" : "none",
+        colorProfile: capabilities.colors ? undefined : "none",
         ...(captureDirectStdio
           ? {
               patchConsole: "stdio" as const,

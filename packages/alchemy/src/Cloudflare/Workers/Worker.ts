@@ -1,9 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -35,15 +32,22 @@ import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
+import type {
+  WorkflowBinding,
+  WorkflowExport,
+  WorkflowLike,
+} from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
-import {
-  resolveAccessContext,
-  type WorkerAccessConfig,
-  type WorkerAccessIdentity,
-  type WorkerExecutionContextAccess,
+import type {
+  WorkerAccessConfig,
+  WorkerAccessIdentity,
 } from "./WorkerAccess.ts";
+import {
+  WorkerEnvironment,
+  WorkerExecutionContext,
+  WorkerTypeId,
+} from "./WorkerRuntime.ts";
 import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
@@ -59,183 +63,10 @@ import {
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
 
-export const WorkerTypeId = "Cloudflare.Worker";
-export type WorkerTypeId = typeof WorkerTypeId;
+export * from "./WorkerRuntime.ts";
 
 export const isWorker = <T>(value: T): value is T & Worker =>
   isResourceOfType(value, WorkerTypeId);
-
-export class WorkerEnvironment extends Context.Service<
-  WorkerEnvironment,
-  Record<string, any>
->()("Cloudflare.Workers.WorkerEnvironment") {}
-
-export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
-  message: string;
-  cause?: unknown;
-}> {}
-
-/**
- * Effect-native view of the Workers Cache runtime API on the execution
- * context (`ctx.cache`). Only available when the Worker has Workers Cache
- * enabled (the `cache` prop or `yield* Cloudflare.cache()`).
- */
-export interface WorkerExecutionContextCache {
-  /**
-   * Purge cached responses by `Cache-Tag`, path prefix, or everything.
-   */
-  purge(
-    options: cf.CachePurgeOptions,
-  ): Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>;
-}
-
-export class WorkerExecutionContext extends Context.Service<
-  WorkerExecutionContext,
-  {
-    /**
-     * Run an Effect in the background without blocking the response, keeping
-     * the Worker alive until it settles. The Effect runs with the caller's
-     * full context (services, tracing), and the resulting promise is
-     * registered with workerd's `ctx.waitUntil`.
-     */
-    waitUntil<A, E, R>(
-      effect: Effect.Effect<A, E, R>,
-    ): Effect.Effect<void, never, R | RuntimeContext>;
-    /**
-     * Forward the request to the origin if the Worker throws an unhandled
-     * exception, instead of returning an error page.
-     */
-    passThroughOnException(): Effect.Effect<void, never, RuntimeContext>;
-    /**
-     * The Workers Cache runtime API (`ctx.cache`).
-     */
-    readonly cache: WorkerExecutionContextCache;
-    /**
-     * The Cloudflare Access context for the current request (`ctx.access`),
-     * or `undefined` when the request did not pass through Access. Under
-     * `alchemy dev` the Worker's `dev.access` config simulates it.
-     */
-    readonly access: Effect.Effect<
-      WorkerExecutionContextAccess | undefined,
-      never,
-      RuntimeContext
-    >;
-    /**
-     * The raw workerd ExecutionContext, for interop with async APIs.
-     */
-    readonly raw: cf.ExecutionContext;
-  }
->()("Cloudflare.Workers.WorkerExecutionContext") {}
-
-export const fromExecutionContext = (
-  ctx: cf.ExecutionContext,
-  env?: Record<string, unknown>,
-): WorkerExecutionContext["Service"] => ({
-  raw: ctx,
-  access: Effect.sync(() => resolveAccessContext(ctx, env)),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // invocation's lifetime without blocking the response.
-      yield* Effect.sync(() =>
-        ctx.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
-      );
-    }),
-  passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
-  cache: {
-    purge: (options) =>
-      ctx.cache
-        ? Effect.tryPromise({
-            try: () => ctx.cache!.purge(options),
-            catch: (cause) =>
-              new CachePurgeError({
-                message:
-                  cause instanceof Error
-                    ? cause.message
-                    : "Unknown cache purge error",
-                cause,
-              }),
-          })
-        : Effect.fail(
-            new CachePurgeError({
-              message:
-                "ctx.cache is not available — enable Workers Cache on this " +
-                "Worker (the `cache` prop or `yield* Cloudflare.cache()`) " +
-                "and note it is not supported in local dev.",
-            }),
-          ),
-  },
-});
-
-/**
- * A {@link WorkerExecutionContext} whose methods resolve the live per-event
- * context from the calling fiber at call time. Provided during the Worker's
- * init phase (plan and runtime module init) so the service can be yielded
- * and closed over in the top-level closure; every method is colored with
- * `RuntimeContext`, so it can only be *run* inside a handler, where the
- * bridge provides the real per-event context that these methods defer to.
- */
-export const deferredExecutionContext: WorkerExecutionContext["Service"] = {
-  get raw(): cf.ExecutionContext {
-    throw new Error(
-      "WorkerExecutionContext.raw is only available inside a request handler",
-    );
-  },
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.waitUntil(effect)),
-    ) as Effect.Effect<void, never, R | RuntimeContext>,
-  passThroughOnException: () =>
-    liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.passThroughOnException()),
-    ) as Effect.Effect<void, never, RuntimeContext>,
-  cache: {
-    purge: (options) =>
-      liveExecutionContext.pipe(
-        Effect.flatMap((live) => live.cache.purge(options)),
-      ) as Effect.Effect<cf.CachePurgeResult, CachePurgeError, RuntimeContext>,
-  },
-  // A getter so this module-level literal doesn't eagerly reference
-  // `liveExecutionContext` before its declaration below.
-  get access() {
-    return liveExecutionContext.pipe(
-      Effect.flatMap((live) => live.access),
-    ) as Effect.Effect<
-      WorkerExecutionContextAccess | undefined,
-      never,
-      RuntimeContext
-    >;
-  },
-};
-
-const liveExecutionContext = WorkerExecutionContext.pipe(
-  Effect.flatMap((live) =>
-    live === deferredExecutionContext
-      ? Effect.die(
-          new Error(
-            "WorkerExecutionContext can only be used inside a request handler",
-          ),
-        )
-      : Effect.succeed(live),
-  ),
-);
-
-export type WorkerEvent = Exclude<
-  {
-    [type in keyof cf.ExportedHandler]: {
-      kind: "Cloudflare.Workers.WorkerEvent";
-      type: type;
-      input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
-      env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
-      context: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[2];
-    };
-  }[keyof cf.ExportedHandler],
-  undefined
->;
-
-export const isWorkerEvent = (value: any): value is WorkerEvent =>
-  value?.kind === "Cloudflare.Workers.WorkerEvent";
 
 /**
  * Assets configuration that includes a pre-computed hash.
@@ -270,17 +101,6 @@ export type WorkerPlacement = Exclude<
   undefined
 >;
 
-export const ExportedHandlerMethods = [
-  "fetch",
-  "tail",
-  "trace",
-  "tailStream",
-  "scheduled",
-  "test",
-  "email",
-  "queue",
-] as const satisfies (keyof cf.ExportedHandler)[];
-
 export type WorkerServices =
   | Worker
   | Request
@@ -310,27 +130,36 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
-type Unwrap<T> = T extends Output.Output<infer A, infer _Req> ? A : T;
-
-// NOTE: `Worker<NormalizedBindings<...>>` must provably satisfy the
-// `WorkerBindings` constraint for *generic* `Bindings`, which restricts the
-// shapes usable here: conditional checks on the naked parameter `T` and an
-// outermost `Extract<..., WorkerBindingResource>` are provable; e.g.
-// `Unwrap<T> extends ...` as a check type is not.
 export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
 > = {
-  [B in keyof Bindings]: Bindings[B] extends Effect.Effect<
-    infer T extends WorkerBindingResource,
-    any,
-    any
-  >
-    ? T extends Redacted.Redacted<infer V> | Config.Config<infer V>
-      ? V
-      : Unwrap<T>
-    : Extract<Unwrap<Bindings[B]>, WorkerBindingResource>;
+  // Containers are declarations and Outputs stay deferred at declaration time.
+  [B in keyof Bindings]: Bindings[B] extends
+    | Container.Decl.Any
+    | Output.Output<any, any>
+    ? Bindings[B]
+    : Bindings[B] extends Effect.Effect<
+          infer T extends WorkerBindingResource,
+          any,
+          any
+        >
+      ? T
+      : Extract<Bindings[B], WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
+
+/**
+ * An external Worker's declared `env` as exposed on its declaration
+ * (`worker.env`): every entry is the binding value as declared (with
+ * Effect-valued entries resolved), except a Workflow binding, which surfaces
+ * as a {@link WorkflowBinding} carrying the Workflow's physical name as an
+ * `Output` of the current deploy.
+ */
+export type WorkerEnvBindings<Bindings> = {
+  readonly [B in keyof Bindings]: Bindings[B] extends WorkflowLike<infer Params>
+    ? WorkflowBinding<Params>
+    : Bindings[B];
+};
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
@@ -880,7 +709,36 @@ export interface WorkerProps<
   script?: string;
   compatibility?: {
     date?: string;
-    flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
+    /**
+     * Cloudflare runtime compatibility flags.
+     *
+     * For external Workers with `bundle: false`, an explicitly provided array
+     * is used exactly as declared, including `[]`. Omit this field to apply
+     * Alchemy's defaults.
+     *
+     * For all other Workers, supplied flags extend Alchemy's defaults:
+     * - `new_module_registry` is added unless `legacy_module_registry` is set.
+     * - `nodejs_compat` is added for dates before `2026-08-04` unless
+     *   `no_nodejs_compat` is set. External Workers also require a date on or
+     *   after `2024-09-23` for this default.
+     * - Effect Workers get `handle_cross_request_promise_resolution` for dates
+     *   before `2024-10-14`; explicitly disabling it is rejected.
+     * - Python Workers get `python_workers` instead of the JavaScript defaults.
+     *
+     * Duplicate flags are removed when defaults are applied.
+     */
+    flags?: (
+      | "nodejs_compat"
+      | "nodejs_compat_v2"
+      | "no_nodejs_compat"
+      | "nodejs_als"
+      | "new_module_registry"
+      | "legacy_module_registry"
+      | "handle_cross_request_promise_resolution"
+      | "no_handle_cross_request_promise_resolution"
+      | "python_workers"
+      | (string & {})
+    )[];
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
@@ -1002,9 +860,11 @@ export interface WorkerProps<
   /**
    * Extra bundler options applied on top of the standard rolldown
    * input/output options used to build this Worker. Includes the generic
-   * bundle extras (pure-annotation packages, bundle analyzer) plus an
-   * `output` field of rolldown output overrides (e.g. `codeSplitting`
-   * groups) merged over Alchemy's defaults. See {@link WorkerBuildOptions}.
+   * bundle extras (pure-annotation packages, bundle analyzer) plus
+   * `input` and `output` overrides. Input plugins run before Alchemy's
+   * plugins; `input.resolve.alias` takes precedence over Node compatibility
+   * shims. The entry remains {@link main}. Ignored when {@link bundle} is
+   * `false`. See {@link WorkerBuildOptions}.
    */
   build?: WorkerBuildOptions;
   /**
@@ -1409,6 +1269,13 @@ export type Worker<Bindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     /**
+     * Extra env vars merged into the Worker at reconcile. `Redacted`
+     * values deploy as `secret_text`. Used by later resources (e.g. a
+     * Stripe webhook signing secret) to attach env without the Worker
+     * init depending on that resource.
+     */
+    env?: Record<string, any>;
+    /**
      * Workers Cache settings contributed by `yield* Cloudflare.cache()`.
      * Merged into the upload metadata's `cache_options`; an explicit
      * `WorkerProps.cache` takes precedence.
@@ -1449,6 +1316,26 @@ export type Worker<Bindings = any> = Resource<
   },
   Providers
 >;
+
+/** An external/async Worker declared without an Effect implementation. */
+export type ExternalWorker<Bindings = {}> = Worker<Bindings> & {
+  /**
+   * The external Worker's declared `env`. Not available on persisted references
+   * or Effect-native Worker construction results.
+   * A Workflow binding is exposed as a {@link WorkflowBinding} whose
+   * `workflowName` is an `Output` resolved in the same deploy, so a sibling
+   * resource (e.g. a Queue subscription to the Workflow's events) can
+   * consume the Workflow's physical name on its first deployment:
+   *
+   * ```typescript
+   * source: {
+   *   type: "workflows.workflow",
+   *   workflowName: worker.env.MY_WORKFLOW.workflowName,
+   * }
+   * ```
+   */
+  readonly env: WorkerEnvBindings<Bindings>;
+};
 
 /** The env key the resolved URL is injected under when `yield*`-ed. */
 const SELF_URL_BINDING_NAME = "WORKER_URL";
@@ -1959,6 +1846,32 @@ export const isSelf = (value: unknown): value is Self =>
  *     pure: { packages: ["my-lib", "@my-scope/*"] },
  *   },
  * }
+ * ```
+ *
+ * **Example:** Replace Node modules with Worker-compatible stubs
+ * Use Rolldown's `build.input.resolve.alias` for module replacements.
+ * Aliases apply to imports and static `require()` calls before Node
+ * compatibility shims. Use absolute paths for file replacements.
+ * Keep bundling enabled: `bundle: false` uploads files unchanged and
+ * does not apply aliases. Alternatively, apply aliases in your external
+ * build before uploading its output with `bundle: false`.
+ * ```typescript
+ * import * as Path from "effect/Path";
+ *
+ * const path = yield* Path.Path;
+ * const stub = yield* path.fromFileUrl(
+ *   new URL("./.mastra/output/module-stub.mjs", import.meta.url),
+ * );
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./.mastra/output/index.mjs",
+ *   compatibility: {
+ *     date: "2025-04-01",
+ *     flags: ["nodejs_compat", "nodejs_compat_populate_process_env"],
+ *   },
+ *   build: {
+ *     input: { resolve: { alias: { module: stub, "node:module": stub } } },
+ *   },
+ * });
  * ```
  *
  * **Example:** Turn it off
@@ -2571,14 +2484,34 @@ export const Worker: ResourceClassLike<Worker> &
        * }) {}
        * ```
        */
-      <const Id extends string, Req = never>(
+      <
+        const Id extends string,
+        const Bindings extends WorkerBindingProps = {},
+        const Assets extends WorkerAssetsConfig | undefined = undefined,
+        Req = never,
+      >(
         id: Id,
         props:
-          | InputProps<WorkerProps>
-          | Effect.Effect<InputProps<WorkerProps>, ConfigError, Req>,
-      ): Effect.Effect<Worker & Rpc<{}>, never, Req | Providers> &
+          | InputProps<WorkerProps<Bindings, Assets>>
+          | Effect.Effect<
+              InputProps<WorkerProps<Bindings, Assets>>,
+              ConfigError,
+              Req
+            >,
+      ): Effect.Effect<
+        ExternalWorker<NormalizedBindings<Bindings, Assets>> & Rpc<{}>,
+        never,
+        Req | Providers
+      > &
         Named<Id> & {
-          new (): Named<Id> & Tag<WorkerTypeId>;
+          new (): Named<Id> &
+            Tag<WorkerTypeId> & {
+              /** @internal phantom */
+              readonly "~alchemy/WorkerEnv": NormalizedBindings<
+                Bindings,
+                Assets
+              >;
+            };
         };
     };
     <
@@ -2595,7 +2528,7 @@ export const Worker: ResourceClassLike<Worker> &
             Req
           >,
     ): Effect.Effect<
-      Worker<{
+      ExternalWorker<{
         [
           binding in keyof NormalizedBindings<Bindings, Assets>
         ]: NormalizedBindings<Bindings, Assets>[binding];
@@ -2631,13 +2564,7 @@ export const Worker: ResourceClassLike<Worker> &
   } = Platform(
   WorkerTypeId,
   {
-    // Both hooks are wrapped in arrows so the imported references are resolved
-    // at call time rather than at module-load time. Worker.ts forms import
-    // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
-    // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
-    // here). Reading either binding eagerly here hits TDZ when Bun loads the
-    // package from node_modules in a different module-init order than the local
-    // workspace.
+    // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
     onCreate: (resource, props) =>
       bindWorkerAsyncBindings(resource as Worker, props),
     createRuntimeContext: (id) => makeWorkerRuntimeContext(id),

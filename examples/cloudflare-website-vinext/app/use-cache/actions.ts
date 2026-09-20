@@ -1,7 +1,9 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { updateTag } from "next/cache";
+import { redirect } from "next/navigation";
 
 export async function refreshCachedStamp() {
-  revalidateTag("demo-stamp", "max");
+  updateTag("demo-stamp");
+  redirect("/use-cache");
 }

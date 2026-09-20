@@ -134,7 +134,13 @@ export const resolvePort = (options: { port?: number } | undefined) =>
 export interface BunHttpServerOptions {
   /**
    * Network interface on which the Bun HTTP server listens.
-   * Omit to use Bun's default.
+   *
+   * Always passed explicitly to `Bun.serve` so container bootstraps bind a
+   * predictable IPv4 wildcard regardless of the platform default
+   * (`@effect/platform-bun` ≥ 4.0.0-rc.115 defaults to `::`; rc.113/114
+   * crash-looped on the omitted-hostname case).
+   *
+   * @default "0.0.0.0"
    */
   hostname?: string;
 }
@@ -152,9 +158,7 @@ export const BunHttpServer = (serverOptions?: BunHttpServerOptions) =>
             const port = yield* resolvePort(options);
             const server = yield* BunHttpServerPlatform.make({
               port,
-              ...(serverOptions?.hostname === undefined
-                ? {}
-                : { hostname: serverOptions.hostname }),
+              hostname: serverOptions?.hostname ?? "0.0.0.0",
             });
             yield* server.serve(safeHttpEffect(handler));
           }).pipe(Effect.orDie),

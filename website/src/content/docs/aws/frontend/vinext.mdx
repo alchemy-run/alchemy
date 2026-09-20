@@ -1,6 +1,6 @@
 ---
 title: vinext
-description: Deploy a vinext app to AWS with AWS.Website.Vinext — vinext build plus a streaming Lambda RSC handler, S3 + CloudFront assets, and vinext dev under alchemy dev.
+description: Deploy vinext to AWS with the shared Website API, native local development, and a platform-specific data cache.
 sidebar:
   order: 9.6
 ---
@@ -9,42 +9,33 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
-`AWS.Website.Vinext` deploys a [vinext](https://vinext.dev) app to
-AWS: the RSC server on a streaming Lambda Function URL, static
-assets in S3, and a CloudFront distribution whose edge router
-serves uploaded files from S3 and forwards everything else to the
-server.
+`AWS.Website.Vinext` runs `vinext build` for production and native
+`vinext dev` locally. The React Server Components handler runs on a streaming Lambda Function URL.
+S3 stores assets and CloudFront routes asset requests to S3 and other requests
+to Lambda. This uses vinext, not OpenNext.
 
-This is **not** `AWS.Website.Nextjs` (OpenNext) and **not**
-`Cloudflare.Website.Vinext` (Workers). The build runs `vinext
-build` and wraps the App Router entry as a Lambda handler. Server
-components and route handlers read `process.env`.
+The Lambda target supports **App Router** applications. Use a Node deployment
+target such as [Prisma](/prisma/frontend/vinext) or [Fly](/fly/frontend/vinext)
+for Pages Router applications.
 
 ## Install
 
+Keep `vinext`, `react`, `react-dom`, and `react-server-dom-webpack` in your
+application dependencies, with `vite` and `@vitejs/plugin-rsc` for building.
+Use vinext **1.0.0-beta.10 or newer**. Alchemy uses its standalone packaging
+to include external runtime dependencies in the Lambda archive. Add the Alchemy integration:
+
 <Tabs syncKey="pkgManager">
-  <TabItem label="bun" icon="bun">
-    <Code code={`bun add -d ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="npm" icon="npm">
-    <Code code={`npm install -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="pnpm" icon="pnpm">
-    <Code code={`pnpm add -D ${devDeps}`} lang="sh" />
-  </TabItem>
-  <TabItem label="yarn" icon="seti:yarn">
-    <Code code={`yarn add -D ${devDeps}`} lang="sh" />
-  </TabItem>
+  <TabItem label="bun" icon="bun"><Code code={`bun add -d ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="npm" icon="npm"><Code code={`npm install -D ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="pnpm" icon="pnpm"><Code code={`pnpm add -D ${devDeps}`} lang="sh" /></TabItem>
+  <TabItem label="yarn" icon="seti:yarn"><Code code={`yarn add -D ${devDeps}`} lang="sh" /></TabItem>
 </Tabs>
 
-ISR / `"use cache"` on AWS is S3, not Cloudflare KV.
-`AWS.Website.Vinext` provisions a dedicated cache bucket, sets
-`CACHE_BUCKET_NAME`, and grants the Lambda Get/Put/Delete/List.
-Register `vinext({ ...alchemy() })` — the AWS build sets
-`ALCHEMY_VINEXT_CACHE=s3` so the S3 adapter is baked in. Local
-`alchemy dev` has no bucket and stays in memory.
+## Configure vinext
 
 ```typescript
+// vite.config.ts
 import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
@@ -54,38 +45,97 @@ export default defineConfig({
 });
 ```
 
+The same configuration selects the appropriate cache adapter for each target.
+Leave Cloudflare plugins and Worker entrypoints out of this application.
+
 ## Declare the Website
 
 ```typescript
+// alchemy.run.ts
 import * as AWS from "alchemy/AWS";
 
 export const Website = AWS.Website.Vinext("Website", {
-  env: {
-    GREETING: "Hello from vinext on AWS!",
-  },
+  rootDir: ".",
 });
 ```
 
-```typescript
-// app/page.tsx
-export const dynamic = "force-dynamic";
+`rootDir`, `env`, `memo`, `assets`, `dev`, and `domain` use the same vocabulary
+as the other Website constructors. Framework configuration stays in
+`vite.config.ts` rather than a nested server configuration object.
 
-export default function Home() {
-  return <h1>{process.env.GREETING ?? "Hello!"}</h1>;
-}
+## Add it to the Stack
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyVinextSite",
+  { providers: AWS.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
 ```
+
+Keep the local state available for subsequent deploys and teardown.
+
+## Add environment variables
+
+```typescript
+export const Website = AWS.Website.Vinext("Website", {
+  env: { GREETING: "Hello from vinext on AWS!" },
+});
+```
+
+`env` is available during build, development, and production. Server code reads
+`process.env`; public framework variables may be compiled into browser assets.
+Keep secrets out of public keys and wrap credentials in `Redacted`.
+
+## Read the runtime environment
 
 ```typescript
 // app/api/hello/route.ts
-export function GET() {
-  return Response.json({ hello: "world" });
+export function GET(request: Request) {
+  const name = new URL(request.url).searchParams.get("name") ?? "world";
+  return Response.json({ name, greeting: process.env.GREETING ?? "hello" });
 }
 ```
 
-`alchemy dev` runs `vinext dev`; wrap the site in `Alchemy.remote()`
-to deploy the live Lambda + CloudFront path during dev.
+Request-dependent route handlers read the production environment. A prerendered
+page reflects its build-time inputs instead.
+
+## Configure the data cache
+
+The Website provisions an S3 bucket for ISR and `"use cache"`, sets
+`CACHE_BUCKET_NAME`, and grants the Lambda access. The build selects the S3
+adapter. Local development uses memory and creates no bucket.
+
+## Local development
+
+```sh
+bun alchemy dev
+```
+
+The Website runs `vinext dev` with native HMR and creates no cloud resources.
+Other resources declared in the Stack retain their own provider behavior.
+Apply `.pipe(Alchemy.remote())` to the Website for a live deployment during dev.
+
+## Custom domains
+
+```typescript
+const site = yield* AWS.Website.Vinext("Web", {
+  domain: "app.example.com",
+});
+```
+
+See [Website domains](/aws/frontend/websites) for platform-specific DNS and
+certificate configuration.
 
 ## Where next
 
-- [`AWS.Website.Vinext` reference](/providers/aws/website/vinext)
-- [vinext on Cloudflare](/cloudflare/frontend/vinext)
+- [vinext API reference](/providers/aws/website/vinext).
+- [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-website-vinext).
+- [Website overview](/aws/frontend/websites).
+- [vinext on Cloudflare](/cloudflare/frontend/vinext) and [Prisma](/prisma/frontend/vinext).

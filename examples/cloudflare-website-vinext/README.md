@@ -28,7 +28,22 @@ export class Vinext extends Cloudflare.Website.Vinext<Vinext>()("Vinext", {
 });
 ```
 
-## Notes
+## Run locally
+
+```sh
+bun alchemy dev
+```
+
+Alchemy starts Vite with hot module replacement and local Worker bindings.
+The example includes a counter, cache-refresh server actions, and Notes CRUD.
+
+## Deploy
+
+```sh
+bun alchemy deploy --profile testing
+```
+
+## Cache and bindings
 
 - Install `vinext`, `@vitejs/plugin-rsc`, and `react-server-dom-webpack`
   in the app. `react-server-dom-webpack` is vinext's RSC flight runtime
@@ -44,3 +59,22 @@ export class Vinext extends Cloudflare.Website.Vinext<Vinext>()("Vinext", {
   no-ops the official plugin if it is still present.
 - Unchanged sources skip the Vite build on subsequent deploys (the
   project tree is content-hashed, scoped by `memo.include`).
+
+## Test
+
+```sh
+ALCHEMY_PROFILE=testing bun test test/dev.test.ts
+ALCHEMY_PROFILE=testing bun test test/integ.test.ts
+```
+
+The development suite verifies local routes, bindings, and hot module replacement.
+The live suite verifies rendered routes, caching, static assets, the proxy,
+D1 writes, and KV round trips. It destroys its deployment after the tests.
+
+## Clean up
+
+```sh
+bun alchemy destroy --profile testing
+```
+
+See the [vinext guide](https://alchemy.run/cloudflare/frontend/vinext/).

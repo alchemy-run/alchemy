@@ -1,4 +1,5 @@
 export * from "./AccountSetting.ts";
+export { UnsupportedAlarmSchemaVersion } from "./DurableObjectAlarmStorage.ts";
 export * from "./AI.ts";
 export * from "./AIBinding.ts";
 export * from "./Assets.ts";
@@ -25,6 +26,7 @@ export * from "./Request.ts";
 export * from "./Route.ts";
 export * from "./Rpc.ts";
 export * from "./RpcDurableObject.ts";
+export * as RpcWebSocketClient from "./RpcWebSocketClient.ts";
 export * from "./RpcWorker.ts";
 export * from "./RuntimeBindings.ts";
 export * from "./ScheduledEvents.ts";

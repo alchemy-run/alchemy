@@ -1,4 +1,4 @@
-// App Router route handler — the integ test asserts this JSON shape.
-export function GET() {
-  return Response.json({ hello: "world" });
+export function GET(request: Request) {
+  const name = new URL(request.url).searchParams.get("name") ?? "world";
+  return Response.json({ name, greeting: process.env.GREETING ?? "hello" });
 }

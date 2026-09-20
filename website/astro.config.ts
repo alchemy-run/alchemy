@@ -34,9 +34,11 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
+      { label: "ACME", link: "/acme" },
     ],
   };
 }
@@ -141,6 +143,7 @@ function copyMarkdownSources(): AstroIntegration {
 export default defineConfig({
   site: "https://alchemy.run",
   redirects: {
+    "/infrastructure-as-effects": "/what-is-alchemy",
     "/cli/login": "/cli/profile",
     "/drizzle": "/sql",
     "/drizzle/migrations": "/sql/drizzle/migrations",
@@ -240,10 +243,6 @@ export default defineConfig({
             {
               label: "Infrastructure as Effects",
               items: [
-                {
-                  label: "Overview",
-                  link: "/infrastructure-as-effects",
-                },
                 {
                   label: "Runtime",
                   link: "/infrastructure-as-effects/runtime",
@@ -1078,6 +1077,17 @@ export default defineConfig({
             { label: "Overview", link: "/prisma" },
             { label: "Setup", link: "/prisma/setup" },
             {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "prisma/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Apps", link: "/prisma/compute/apps" },
+                { label: "Deployments", link: "/prisma/compute/deployments" },
+              ],
+            },
+            {
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
@@ -1087,10 +1097,29 @@ export default defineConfig({
               ],
             },
             {
-              label: "Compute",
+              label: "Frontend",
               items: [
-                { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
+                { label: "Overview", link: "/prisma/frontend/websites" },
+                { label: "Astro", link: "/prisma/frontend/astro" },
+                { label: "Foldkit", link: "/prisma/frontend/foldkit" },
+                { label: "Next.js", link: "/prisma/frontend/nextjs" },
+                { label: "vinext", link: "/prisma/frontend/vinext" },
+                { label: "Nuxt", link: "/prisma/frontend/nuxt" },
+                { label: "Octane", link: "/prisma/frontend/octane" },
+                {
+                  label: "React Router",
+                  link: "/prisma/frontend/react-router",
+                },
+                { label: "SolidStart", link: "/prisma/frontend/solidstart" },
+                { label: "Static sites", link: "/prisma/frontend/static-site" },
+                { label: "SvelteKit", link: "/prisma/frontend/sveltekit" },
+                {
+                  label: "TanStack Start",
+                  link: "/prisma/frontend/tanstack-start",
+                },
+                { label: "Vite", link: "/prisma/frontend/vite" },
+                { label: "Vocs", link: "/prisma/frontend/vocs" },
+                { label: "Waku", link: "/prisma/frontend/waku" },
               ],
             },
             {
@@ -1103,6 +1132,31 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Prisma"),
+          ],
+        },
+        {
+          label: "Stripe",
+          items: [
+            { label: "Overview", link: "/stripe" },
+            { label: "Setup", link: "/stripe/setup" },
+            {
+              label: "Guides",
+              items: [
+                {
+                  label: "Sell a subscription",
+                  link: "/stripe/guides/subscriptions",
+                },
+                {
+                  label: "Onboard merchants with Connect",
+                  link: "/stripe/guides/connect",
+                },
+                {
+                  label: "React to Stripe events",
+                  link: "/stripe/guides/webhooks",
+                },
+              ],
+            },
+            providerResourcesEntry("Stripe"),
           ],
         },
         {
@@ -1148,6 +1202,83 @@ export default defineConfig({
             },
             { label: "Webhooks & events", link: "/github/events" },
             providerResourcesEntry("GitHub"),
+          ],
+        },
+        {
+          label: "Git",
+          items: [
+            { label: "Overview", link: "/git" },
+            { label: "Getting Started", link: "/git/getting-started" },
+            {
+              label: "Tutorial",
+              items: [
+                {
+                  label: "Part 1: Push your first repository",
+                  link: "/git/tutorial/part-1",
+                },
+                {
+                  label: "Part 2: Control access",
+                  link: "/git/tutorial/part-2",
+                },
+                {
+                  label: "Part 3: Publish a repository",
+                  link: "/git/tutorial/part-3",
+                },
+                {
+                  label: "Part 4: Give users their own credentials",
+                  link: "/git/tutorial/part-4",
+                },
+                {
+                  label: "Part 5: Add your application's API",
+                  link: "/git/tutorial/part-5",
+                },
+                {
+                  label: "Part 6: Protect a branch",
+                  link: "/git/tutorial/part-6",
+                },
+              ],
+            },
+            {
+              label: "Using your host",
+              items: [
+                { label: "Cloning & pushing", link: "/git/clone-and-push" },
+                { label: "Repositories", link: "/git/repositories" },
+                { label: "Pull requests", link: "/git/pull-requests" },
+                {
+                  label: "GitHub API compatibility",
+                  link: "/git/github-api",
+                },
+              ],
+            },
+            {
+              label: "Building blocks",
+              items: [
+                { label: "Overview", link: "/git/blocks" },
+                { label: "HTTP routes", link: "/git/blocks/server" },
+                { label: "Engine operations", link: "/git/blocks/engine" },
+                { label: "Repository", link: "/git/blocks/repositories" },
+                { label: "Registry", link: "/git/blocks/registry" },
+                { label: "Blob Store", link: "/git/blocks/blob-store" },
+                { label: "Hasher", link: "/git/blocks/hasher" },
+                { label: "Auth", link: "/git/blocks/auth" },
+              ],
+            },
+            {
+              label: "Recipes",
+              items: [
+                { label: "Overview", link: "/git/recipes" },
+                { label: "Scaling", link: "/git/recipes/scaling" },
+                { label: "All on Cloudflare", link: "/git/recipes/cloudflare" },
+                {
+                  label: "Bytes in S3, hashing on Lambda",
+                  link: "/git/recipes/cloudflare-aws",
+                },
+                {
+                  label: "Bring your own store",
+                  link: "/git/recipes/your-own-store",
+                },
+              ],
+            },
           ],
         },
         {
@@ -1199,6 +1330,23 @@ export default defineConfig({
             },
             { label: "Dev servers", link: "/command/dev-servers" },
             providerResourcesEntry("Command"),
+          ],
+        },
+        {
+          label: "ACME",
+          items: [
+            { label: "Overview", link: "/acme" },
+            { label: "Getting started", link: "/acme/getting-started" },
+            {
+              label: "Certificate authorities",
+              link: "/acme/certificate-authorities",
+            },
+            { label: "DNS validation", link: "/acme/dns-validation" },
+            { label: "Renewal & revocation", link: "/acme/renewal" },
+            { label: "Runtime issuance", link: "/acme/runtime" },
+            { label: "Using certificates", link: "/acme/using-certificates" },
+            { label: "Troubleshooting", link: "/acme/troubleshooting" },
+            providerResourcesEntry("ACME"),
           ],
         },
         providersSidebarEntry(),

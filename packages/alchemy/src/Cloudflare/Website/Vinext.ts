@@ -235,6 +235,7 @@ export const Vinext: {
             source: {
               provider: "@alchemy.run/frontend-frameworks/vinext/source",
               devMode: "server",
+              runtime: "node",
               rootDir: props?.rootDir,
               options: {
                 main: props?.main ?? DEFAULT_WORKER_ENTRY,

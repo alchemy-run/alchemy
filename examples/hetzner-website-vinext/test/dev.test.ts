@@ -1,176 +1,79 @@
-/**
- * True `alchemy dev` end-to-end for the vinext site: spawns the REAL CLI,
- * which runs `vinext dev` as the local `Website.Server` provider — no
- * Hetzner Server; the only cloud touch is the state store.
- *
- * Coverage:
- *   - stack output    → `url` is a local dev-server address
- *   - Home page       → `/` serves the prerendered heading
- *   - API route       → `/api/hello` serves the route handler
- *   - static assets   → `/robots.txt` from public/
- *   - HOT RELOAD      → editing app/page.tsx is served by vinext's HMR
- *                       without a redeploy
- */
-import { afterAll, expect, test } from "bun:test";
-import { spawn, spawnSync } from "node:child_process";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import * as Cloud from "alchemy/Hetzner";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 
-const root = path.resolve(import.meta.dirname, "..");
-const alchemyBin = path.join(
-  root,
-  "node_modules",
-  "alchemy",
-  "bin",
-  "alchemy.ts",
-);
-const STAGE = "dev-cli-test";
+const { test } = Test.make({ providers: Cloud.providers(), dev: true });
 
-const pagePath = path.join(root, "app", "page.tsx");
-const pageSource = fs.readFileSync(pagePath, "utf8");
-const MARKER = "Hello from vinext on Hetzner!";
-const MARKER_V2 = "Hello from vinext on Hetzner! [dev-v2]";
-
-let proc: ReturnType<typeof spawn> | undefined;
-let output = "";
-
-const pump = (stream: NodeJS.ReadableStream) => {
-  stream.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    output += text;
-    if (process.env.DEBUG) process.stderr.write(text);
-  });
-};
-
-const pollUntil = async <T>(
-  what: string,
-  f: () => T | undefined | Promise<T | undefined>,
-  { tries = 30, delayMs = 1000 }: { tries?: number; delayMs?: number } = {},
-): Promise<T> => {
-  for (let i = 0; i < tries; i++) {
-    const value = await f();
-    if (value !== undefined) return value;
-    await Bun.sleep(delayMs);
-  }
-  throw new Error(
-    `Timed out waiting for ${what}.\n--- alchemy dev output (tail) ---\n${output.slice(-4000)}`,
-  );
-};
-
-const fetchOk = async (
-  url: string | URL,
-  { tries = 30, delayMs = 1000 }: { tries?: number; delayMs?: number } = {},
-) => {
-  let last: Response | undefined;
-  for (let i = 0; i < tries; i++) {
-    try {
-      last = await fetch(url);
-      if (last.ok) return last;
-    } catch {
-      // dev server not listening yet
-    }
-    await Bun.sleep(delayMs);
-  }
-  throw new Error(
-    `GET ${url} never returned 2xx (last status: ${last?.status})`,
-  );
-};
-
-const outputUrl = () => output.match(/\burl:\s*['"]?(http[^\s'",]+)/)?.[1];
-
-afterAll(async () => {
-  fs.writeFileSync(pagePath, pageSource);
-
-  if (proc?.pid) {
-    const killGroup = (signal: NodeJS.Signals) => {
-      try {
-        process.kill(-proc!.pid!, signal);
-      } catch {
-        // group already gone
-      }
-    };
-    const exited = new Promise((resolve) => proc!.once("exit", resolve));
-    killGroup("SIGINT");
-    await Promise.race([exited, Bun.sleep(15_000)]);
-    if (proc.exitCode === null && proc.signalCode === null) {
-      killGroup("SIGKILL");
-      await Promise.race([exited, Bun.sleep(5_000)]);
-    }
-  }
-  if (!process.env.NO_DESTROY) {
-    spawnSync("bun", [alchemyBin, "destroy", "--stage", STAGE, "--yes"], {
-      cwd: root,
-      stdio: "inherit",
-      timeout: 120_000,
-    });
-  }
-}, 180_000);
-
-test(
-  "alchemy dev serves the vinext site locally with hot reload",
-  async () => {
-    proc = spawn("bun", [alchemyBin, "dev", "--stage", STAGE], {
-      cwd: root,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    pump(proc.stdout!);
-    pump(proc.stderr!);
-
-    const url = await pollUntil("url in stack outputs", outputUrl, {
-      tries: 180,
-      delayMs: 1000,
-    });
-
-    expect(new URL(url).hostname).toBe("localhost");
-    expect(url).not.toContain("example.invalid");
-
-    const home = await (await fetchOk(url)).text();
-    expect(home).toContain(MARKER);
-    expect(home).toContain("vinext on Hetzner");
-
-    const hello = (await (
-      await fetchOk(new URL("/api/hello", url))
-    ).json()) as { hello: string };
-    expect(hello).toEqual({ hello: "world" });
-
-    const robots = await (await fetchOk(new URL("/robots.txt", url))).text();
-    expect(robots).toContain("User-agent:");
-
-    const isr = await (await fetchOk(new URL("/isr", url))).text();
-    expect(isr).toContain("ISR");
-
-    fs.writeFileSync(pagePath, pageSource.replace(MARKER, MARKER_V2));
-    await pollUntil(
-      "hot-reloaded page (v2 marker)",
-      async () => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return undefined;
-          const html = await res.text();
-          return html.includes(MARKER_V2) ? true : undefined;
-        } catch {
-          return undefined;
-        }
-      },
-      { tries: 120, delayMs: 500 },
-    );
-
-    fs.writeFileSync(pagePath, pageSource);
-    await pollUntil(
-      "restored page (v2 marker gone)",
-      async () => {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) return undefined;
-          const html = await res.text();
-          return html.includes(MARKER_V2) ? undefined : true;
-        } catch {
-          return undefined;
-        }
-      },
-      { tries: 120, delayMs: 500 },
-    );
-  },
-  { timeout: 600_000 },
+test.provider(
+  "native vinext development serves routes, environment, and hot reload",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const rootDir = yield* path.fromFileUrl(new URL("../", import.meta.url));
+      const { site } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return {
+            site: yield* Cloud.Website.Vinext("Web", {
+              rootDir,
+              env: { GREETING: "Hello from vinext on Hetzner!" },
+            }),
+          };
+        }),
+      );
+      expect(site.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+/);
+      const url = String(site.url).replace(/\/+$/, "");
+      const home = yield* Test.getWhenReady(url).pipe(
+        Effect.flatMap((response) => response.text),
+      );
+      expect(home).toContain("Hello from vinext on Hetzner!");
+      const api = yield* Test.getWhenReady(`${url}/api/hello?name=Alchemy`);
+      expect(yield* api.json).toEqual({
+        name: "Alchemy",
+        greeting: "Hello from vinext on Hetzner!",
+      });
+      const robots = yield* Test.getWhenReady(`${url}/robots.txt`);
+      expect(yield* robots.text).toContain("User-agent:");
+      const isr = yield* Test.getWhenReady(`${url}/isr`);
+      expect(yield* isr.text).toContain("ISR");
+      const page = path.join(rootDir, "app/page.tsx");
+      const source = yield* fs.readFileString(page);
+      const marker = "Updated by the vinext development test";
+      yield* Effect.acquireUseRelease(
+        fs.writeFileString(
+          page,
+          source.replace("Hello from vinext on Hetzner!", marker),
+        ),
+        () =>
+          Test.getWhenReady(url).pipe(
+            Effect.flatMap((response) => response.text),
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              times: 20,
+              until: (body) => body.includes(marker),
+            }),
+            Effect.tap((body) =>
+              Effect.sync(() => expect(body).toContain(marker)),
+            ),
+          ),
+        () => fs.writeFileString(page, source).pipe(Effect.orDie),
+      );
+      const restored = yield* Test.getWhenReady(url).pipe(
+        Effect.flatMap((response) => response.text),
+        Effect.repeat({
+          schedule: Schedule.spaced("500 millis"),
+          times: 20,
+          until: (body) => !body.includes(marker),
+        }),
+      );
+      expect(restored).toContain("Hello from vinext on Hetzner!");
+      expect(restored).not.toContain(marker);
+      yield* stack.destroy();
+    }),
+  { timeout: 120_000 },
 );

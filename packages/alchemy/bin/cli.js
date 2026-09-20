@@ -1,32 +1,74 @@
 #!/usr/bin/env node
 // @ts-check
-// alchemy CLI launcher
-//
-// Resolves the alchemy CLI entrypoint via node module resolution and execs it
-// under whichever runtime the user invoked us with. The shebang forces this
-// launcher to run as node even when bun was the invoker, but bun forwards
-// signals about itself via env vars on every child it spawns:
-//
-//   - `npm_execpath`           → path to bun (set for `bun run <script>`)
-//   - `npm_config_user_agent`  → "bun/<version> ..." (set for `bun run`,
-//                                `bunx`, and direct bun-launched bins)
-//
-// Either signal is enough to know bun is the outer runtime.
-//
-// Dev vs published: when this launcher runs out of an alchemy checkout
-// (i.e. *not* from inside a `node_modules/` tree) and bun is available, we
-// run the .ts source directly so dev iteration is edit → reload, no rebuild.
-// The published tarball ships the .ts files as well (alchemy's `bun`/`worker`
-// exports point at .ts source), but consumers install into `node_modules/`,
-// so the path check sends them to the bundled `alchemy.js` regardless.
-//
-// Own the spawn so runtime diagnostics can be filtered while signals, IPC
-// messages, and the child's exit status are forwarded.
+
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { accessSync, existsSync, constants as fsConstants } from "node:fs";
+import * as NodeModule from "node:module";
 import { constants } from "node:os";
-import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import path from "pathe";
+
+NodeModule.enableCompileCache?.();
+
+const binDir = path.dirname(import.meta.filename);
+const entry = path.join(binDir, "alchemy.js");
+const isDev = !(
+  binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
+);
+
+const execpath = (process.env.npm_execpath ?? "").toLowerCase();
+const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
+
+const runningInBun =
+  // @ts-ignore
+  "Bun" in globalThis && typeof globalThis.Bun !== "undefined";
+
+const runtime =
+  runningInBun || execpath.includes("bun") || userAgent.startsWith("bun/")
+    ? "bun"
+    : "node";
+
+if (runtime === "node") {
+  // Oxc's loader requires module.registerHooks. Keep this gate in sync with
+  // src/Util/Node.ts; the launcher must run before TypeScript can be loaded.
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  const supportsHooks =
+    (major === 22 && minor >= 15) ||
+    (major === 23 && minor >= 5) ||
+    major >= 24;
+  if (!supportsHooks) {
+    process.stderr.write(
+      `alchemy: node ${process.versions.node} is not supported ` +
+        "(module.registerHooks needs node 22.15+, 23.5+, or 24+).\n" +
+        "Use a newer node, or run alchemy with bun.\n",
+    );
+    process.exit(1);
+  }
+
+  process.env.NODE_ENV = "production";
+  const loader = isDev ? "register-dev-mode.js" : "register-oxc.js";
+  await import(new URL(loader, import.meta.url).href);
+  await import(pathToFileURL(entry).href);
+} else {
+  // Bun always loads source. Start a child so its JSX settings are established
+  // before loading the CLI, independent of the caller's tsconfig.
+  const tsconfig = path.join(binDir, isDev ? ".." : ".", "tsconfig.json");
+  const bun = runningInBun ? process.execPath : (findBun() ?? "bun");
+  const args = [
+    `--tsconfig-override=${tsconfig}`,
+    entry,
+    ...process.argv.slice(2),
+  ];
+
+  process.env.NODE_ENV = "production";
+  // Bun's tsconfig override can emit this benign diagnostic (oven-sh/bun#25730).
+  // Keep the parent to filter it and forward signals, IPC and exit status.
+  foregroundChild(
+    bun,
+    args,
+    (line) => !line.includes("directory mismatch for directory"),
+  );
+}
 
 /**
  * Run the CLI as a foreground child while retaining the launcher's filtered
@@ -38,13 +80,10 @@ import path from "pathe";
  * @param {ReadonlyArray<string>} args
  * @param {(line: string) => boolean} stderrFilter
  */
-const foregroundChild = (program, args, stderrFilter) => {
+function foregroundChild(program, args, stderrFilter) {
   /** @type {import("node:child_process").StdioOptions} */
   const stdio = process.send ? [0, 1, "pipe", "ipc"] : [0, 1, "pipe"];
-  const child = spawn(program, args, {
-    env: { ...process.env, NODE_ENV: "production" },
-    stdio,
-  });
+  const child = spawn(program, args, { stdio });
   /** @type {Map<NodeJS.Signals, () => void>} */
   const listeners = new Map();
 
@@ -105,122 +144,26 @@ const foregroundChild = (program, args, stderrFilter) => {
       process.exit(code ?? 0);
     }
   });
-};
-
-const execpath = (process.env.npm_execpath ?? "").toLowerCase();
-const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
-// `typeof Bun`: someone ran `bun bin/cli.js` directly (no bun env markers,
-// shebang bypassed) — the launcher itself IS bun, so bun is the runtime.
-const invokedByBun =
-  execpath.includes("bun") ||
-  userAgent.startsWith("bun/") ||
-  typeof globalThis.Bun !== "undefined";
-
-// Derive the bin dir from this launcher's own location rather than
-// require.resolve("alchemy/bin/alchemy.js"). The bundled alchemy.js is a
-// build artifact (tsdown output) and may not exist in a fresh checkout
-// (e.g. CI before `bun run build`); resolving it would throw
-// MODULE_NOT_FOUND before we get a chance to fall back to the .ts source.
-const binDir = path.dirname(fileURLToPath(import.meta.url));
-const jsEntry = path.join(binDir, "alchemy.js");
-const tsEntry = path.join(binDir, "alchemy.ts");
-
-const [nodeMajor = 0, nodeMinor = 0] = process.versions.node
-  .split(".")
-  .map(Number);
+}
 
 /**
- * Whether this node has `module.registerHooks` (v22.15 / v23.5 / v24+).
- * Alchemy loads every `.ts`/`.tsx` — its own source in a checkout, the
- * user's stack everywhere — through the Oxc loader those hooks install, and
- * never through Node's built-in TypeScript support (strip-only, and its
- * transform flag was removed in Node 26). So this is THE gate for running
- * under node at all. Mirrors `src/Util/Node.ts#isRegisterHooksSupported` —
- * duplicated because this launcher must run under plain node first.
+ * The bun executable, as an absolute path, or `undefined` when it cannot be
+ * found. `bun run` names itself in `npm_execpath`; otherwise walk `PATH`.
+ *
+ * @returns {string | undefined}
  */
-const nodeSupportsHooks =
-  (nodeMajor === 22 && nodeMinor >= 15) ||
-  (nodeMajor === 23 && nodeMinor >= 5) ||
-  nodeMajor >= 24;
-
-// Treat any install-tree path as published.
-const isDev = !(
-  binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
-);
-
-// We no longer force bun in dev when node is the invoker because this prevents us from testing in node.
-const runtime = invokedByBun ? "bun" : "node";
-
-if (runtime === "node" && !nodeSupportsHooks) {
-  process.stderr.write(
-    `alchemy: node ${process.versions.node} is not supported ` +
-      "(module.registerHooks needs node 22.15+, 23.5+, or 24+).\n" +
-      "Use a newer node, or run alchemy with bun.\n",
-  );
-  process.exit(1);
+function findBun() {
+  const execpath = process.env.npm_execpath;
+  if (execpath && path.basename(execpath).startsWith("bun")) {
+    return existsSync(execpath) ? execpath : undefined;
+  }
+  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (directory === "") continue;
+    const candidate = path.join(directory, "bun");
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      return candidate;
+    } catch {}
+  }
+  return undefined;
 }
-
-const args = [];
-
-if (runtime === "bun" && isDev) {
-  // Pin bun's tsconfig to alchemy's, not whatever happens to be in the
-  // invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json`, which
-  // means invoking `alchemy` from e.g. `examples/cloudflare-solidstart`
-  // would transpile alchemy's own .tsx files with that example's JSX
-  // settings (jsx: "preserve", jsxImportSource: "solid-js"), breaking the
-  // React files inside the alchemy CLI.
-  args.push(`--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`);
-}
-
-if (runtime === "node") {
-  // Checkout: run the source directly, no build required — the
-  // register-dev-mode hooks load .ts/.tsx through Oxc AND resolve the
-  // monorepo's own packages (`alchemy/*`, `@alchemy.run/*`,
-  // `@distilled.cloud/*`) through their `bun` export condition onto src/,
-  // so the CLI, the user's stack, and every workspace dependency load one
-  // source universe instead of whatever built lib/ happens to be around.
-  // Published: only the Oxc loader, for the user's own .ts/.tsx.
-  args.push(
-    "--import",
-    new URL(isDev ? "register-dev-mode.js" : "register-oxc.js", import.meta.url)
-      .href,
-  );
-}
-const entry = runtime === "bun" || isDev ? tsEntry : jsEntry;
-if (entry === jsEntry && !existsSync(jsEntry)) {
-  process.stderr.write(
-    `alchemy: ${jsEntry} has not been built.\n` +
-      "Run `pnpm build` in packages/alchemy.\n",
-  );
-  process.exit(1);
-}
-args.push(entry, ...process.argv.slice(2));
-
-// Substring match (not regex) — bun may wrap the line in ANSI color codes
-// when stderr is piped to a TTY-aware parent, so anchored regex is fragile.
-//
-// "directory mismatch for directory" is bun's known-benign internal warning
-// triggered by --tsconfig-override (oven-sh/bun#25730): the resolver openat()s
-// the tsconfig basename against a cached dir fd that isn't its parent, falls
-// back to an absolute open, and logs. Bun's own tsconfig-override tests
-// tolerate the same line. Only our dev path passes --tsconfig-override, which
-// is why published installs never see it.
-// For node, spawn the launcher's OWN binary rather than whatever PATH
-// resolves: the version gates above interrogated process.versions, so the
-// flags must go to that exact node (an explicit `/opt/node24/bin/node
-// bin/cli.js` with an older PATH node would otherwise die on unknown
-// options). `runtime === "node"` implies the launcher IS node — a bun
-// launcher forces the bun branch. For bun, the usual shebang case means the
-// launcher is node and bun comes from PATH; a direct `bun bin/cli.js` run
-// reuses that same bun via execPath.
-const program =
-  runtime === "bun"
-    ? typeof globalThis.Bun !== "undefined"
-      ? process.execPath
-      : "bun"
-    : process.execPath;
-foregroundChild(
-  program,
-  args,
-  (line) => !line.includes("directory mismatch for directory"),
-);

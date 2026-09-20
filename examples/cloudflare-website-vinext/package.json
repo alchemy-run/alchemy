@@ -11,23 +11,23 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:effect",
-    "react": "catalog:frontend",
-    "react-dom": "catalog:frontend",
-    "react-server-dom-webpack": "catalog:frontend",
-    "vinext": "^1.0.0-beta.9"
+    "effect": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-server-dom-webpack": "catalog:",
+    "vinext": "^1.0.0-beta.10"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:cloudflare-runtime",
-    "@tailwindcss/vite": "catalog:frontend",
-    "@types/react": "catalog:frontend",
-    "@types/react-dom": "catalog:frontend",
-    "@vitejs/plugin-react": "catalog:frontend",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "@vitejs/plugin-rsc": "^0.5.34",
-    "tailwindcss": "catalog:frontend",
-    "typescript": "catalog:frontend",
-    "vite": "catalog:build"
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
   },
   "engines": {
     "node": ">=22"

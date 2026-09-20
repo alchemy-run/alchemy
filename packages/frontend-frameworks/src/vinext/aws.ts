@@ -25,6 +25,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { fileURLToPath } from "node:url";
+import { resolveProjectPackageDirectory } from "../core/Loader.ts";
 import { runBuildChild } from "../core/BuildChild.ts";
 import {
   DeployTargetError,
@@ -163,11 +164,50 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
           ),
         ),
       );
-    return yield* pinServeModule(
+    const output = yield* pinServeModule(
       dist,
       SERVE_ENTRY_NAME,
       makeLambdaEntrySource(config.config.streaming !== false),
     );
+    // Preserve vinext's separate RSC/SSR module graphs and package its externals.
+    const vinextRoot = yield* resolveProjectPackageDirectory(root, "vinext");
+    const standaloneUrl = yield* path.toFileUrl(
+      path.join(vinextRoot, "dist/build/standalone.js"),
+    );
+    const standalone = yield* Effect.tryPromise({
+      try: () =>
+        import(/* @vite-ignore */ standaloneUrl.href) as Promise<{
+          emitStandaloneOutput(options: {
+            root: string;
+            outDir: string;
+            vinextPackageRoot: string;
+          }): { standaloneDir: string };
+        }>,
+      catch: failFramework(
+        "Failed to load vinext standalone packaging; install vinext 1.0.0-beta.10 or newer",
+      ),
+    });
+    const packaged = yield* Effect.try({
+      try: () =>
+        standalone.emitStandaloneOutput({
+          root,
+          outDir: dist.distDirectory!,
+          vinextPackageRoot: vinextRoot,
+        }),
+      catch: failFramework(
+        "Failed to package vinext Lambda runtime dependencies",
+      ),
+    });
+    yield* fs.rename(
+      path.join(packaged.standaloneDir, "node_modules"),
+      path.join(dist.serverDir, "node_modules"),
+    );
+    yield* fs.remove(packaged.standaloneDir, { recursive: true });
+    yield* fs.writeFileString(
+      path.join(dist.serverDir, "package.json"),
+      '{"type":"module"}',
+    );
+    return output;
   });
 
 const makeAwsChildTarget = (
@@ -252,6 +292,7 @@ export const make: (
       const output = yield* awsTarget.build!({
         root,
         framework: "vinext",
+        env: buildOptions?.env,
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),

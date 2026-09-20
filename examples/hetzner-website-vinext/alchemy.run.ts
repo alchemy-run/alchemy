@@ -11,6 +11,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const site = yield* Hetzner.Website.Vinext("Vinext", {
       memo: {
+        lockfile: true,
         include: [
           "app/**",
           "public/**",

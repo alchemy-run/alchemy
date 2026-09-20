@@ -1,21 +1,49 @@
-# Fly Website: vinext
+# vinext on Fly
 
-Deploys a [vinext](https://vinext.dev) site to Fly with
-`Fly.Website.Vinext` — Next.js API on Vite, as a long-running Node
-process on a Machine. Not OpenNext and not the Cloudflare Worker path.
-ISR / `"use cache"` persist in Upstash Redis (`vinext({ ...alchemy() })`).
+Deploy a vinext App Router application with `Fly.Website.Vinext`.
+Production uses vinext's production Node server in a Fly Machine.
 
-```ts
-const redis = yield* Fly.Redis("Cache", { eviction: true });
-const site = yield* Fly.Website.Vinext("Vinext", {
-  redis,
+```typescript
+const site = yield* Fly.Website.Vinext("Web", {
   env: { GREETING: "Hello from vinext on Fly!" },
 });
 ```
 
+The example includes client hydration, Home/ISR navigation, an environment-aware
+`/api/hello?name=Alchemy` endpoint, ISR, and public assets.
+The default cache is process-local. Configure a shared Redis store through `env.REDIS_URL` for persistence across restarts and replicas.
+The Vite configuration spreads `alchemy()` into `vinext()` to select the
+platform's cache adapter. This is a vinext build, not an OpenNext build.
+
+## Run locally
+
 ```sh
-bun add -d @alchemy.run/frontend-frameworks
-bun run deploy
-bun run dev
-bun run destroy
+bun install
+bun alchemy dev
 ```
+
+The Website runs native `vinext dev` with hot reload and creates no cloud
+resources. Apply `Alchemy.remote()` to deploy live during development.
+
+## Deploy
+
+Configure [Fly credentials](https://alchemy.run/fly/setup), then run:
+
+```sh
+bun alchemy deploy
+```
+
+Shared props are `rootDir`, `env`, `memo`, `assets`, `dev`, and `domain`.
+The integration package must be installed in the application; it is loaded
+at build time.
+
+## Test and clean up
+
+```sh
+bun test test/dev.test.ts
+ALCHEMY_PROFILE=testing bun test test/integ.test.ts
+bun alchemy destroy
+```
+
+The live suite destroys its previous stack before deploying and cleans up
+afterward. See the [vinext guide](https://alchemy.run/fly/frontend/vinext).

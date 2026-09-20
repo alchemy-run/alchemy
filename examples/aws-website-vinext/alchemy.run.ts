@@ -13,6 +13,7 @@ export default Alchemy.Stack(
       // Only hash the files that affect the build, so unchanged sources
       // skip the vinext build (and the deploy) entirely.
       memo: {
+        lockfile: true,
         include: [
           "app/**",
           "public/**",
@@ -29,6 +30,7 @@ export default Alchemy.Stack(
 
     return {
       url: site.url,
+      cacheBucketName: site.cacheBucket?.bucketName,
     };
   }),
 );
