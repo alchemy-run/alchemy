@@ -15,7 +15,9 @@ const { test } = Test.make({ providers: providers() });
 
 describe.sequential("Neon Website production Fetch artifacts", () => {
   for (const { slug, name } of frameworks) {
-    test.provider(
+    // Production builds spawn multi-GiB build children (nuxt/vocs ~3 GiB)
+    // that cannot share a 4 GiB budget with a long-lived suite process.
+    test.provider.skipIf(!!process.env.FAST)(
       slug,
       (stack) =>
         Effect.gen(function* () {

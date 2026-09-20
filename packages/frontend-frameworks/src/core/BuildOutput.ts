@@ -51,8 +51,7 @@ export const toOutputFile = (
 ): Effect.Effect<OutputFile> =>
   Effect.sync(() => ({
     name,
-    // Normalize binary content to Buffer so JSON.stringify produces the
-    // `{ type: "Buffer", data: [...] }` shape that readBuildOutput revives.
+    // Keep one binary representation across framework collectors.
     content: typeof content === "string" ? content : Buffer.from(content),
     hash: NodeCrypto.createHash("sha256").update(content).digest("hex"),
   }));
@@ -74,17 +73,30 @@ export const sortServerModules = (
 
 /**
  * Serialize a {@link BuildOutput} for persistence (`dist/build.json`).
- * Sets are serialized as sorted arrays; binary content relies on Buffer's
- * `{ type: "Buffer", data }` JSON form.
+ * Sets are serialized as sorted arrays; binary modules use base64 rather
+ * than expanding every byte into a JSON array element.
  *
  * @internal harness plumbing (the e2e harness's persistence mechanism), not
  * part of the public framework-integration API.
  */
 export const stringifyBuildOutput = (output: BuildOutput): string =>
   JSON.stringify(
-    output,
-    (_, value) =>
-      value instanceof Set ? Array.from(value as Set<string>).sort() : value,
+    {
+      ...output,
+      serverModules: output.serverModules?.map((module) => ({
+        ...module,
+        content:
+          typeof module.content === "string"
+            ? module.content
+            : {
+                type: "Buffer",
+                encoding: "base64",
+                data: Buffer.from(module.content).toString("base64"),
+              },
+      })),
+      externalWorkspaces: Array.from(output.externalWorkspaces).sort(),
+    },
+    null,
     2,
   );
 
@@ -96,16 +108,26 @@ export const stringifyBuildOutput = (output: BuildOutput): string =>
  * part of the public framework-integration API.
  */
 export const parseBuildOutput = (content: string): BuildOutput => {
-  const parsed = JSON.parse(content, (_, value) => {
+  const parsed = JSON.parse(content) as BuildOutput & {
+    externalWorkspaces: unknown;
+  };
+  parsed.serverModules = parsed.serverModules?.map((module) => {
+    const value = module.content;
     if (
       Predicate.hasProperty(value, "type") &&
       value.type === "Buffer" &&
       Predicate.hasProperty(value, "data")
     ) {
-      return Buffer.from(value.data as Array<number>);
+      return {
+        ...module,
+        content:
+          typeof value.data === "string"
+            ? Buffer.from(value.data, "base64")
+            : Buffer.from(value.data as Array<number>),
+      };
     }
-    return value;
-  }) as BuildOutput & { externalWorkspaces: unknown };
+    return module;
+  });
   parsed.externalWorkspaces = new Set(
     Array.isArray(parsed.externalWorkspaces)
       ? (parsed.externalWorkspaces as Array<string>)

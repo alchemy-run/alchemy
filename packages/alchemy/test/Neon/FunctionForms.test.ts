@@ -188,12 +188,13 @@ test.provider(
           .pipe(Effect.flatMap((response) => response.text)),
       ).toBe("hono");
       const marker = "alchemy-neon-hono-log-probe";
+      // Log ingestion is eventually consistent; poll up to 2 minutes.
       const lines = yield* FunctionLogs(host, { limit: 100, since }).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("5 seconds"),
-          times: 8,
           until: (lines) => lines.some((line) => line.message.includes(marker)),
         }),
+        Effect.timeout("2 minutes"),
       );
       const observed = yield* SDK.queryProjectBranchLogs({
         project_id: host.projectId,
@@ -242,14 +243,21 @@ test.provider(
         return yield* Effect.fail(
           new Error("Missing sibling Function for log isolation check"),
         );
+      // The sibling's records ingest independently; poll until they appear.
       const unrelated = yield* FunctionLogs(
         { ...host, functionId: sibling.id, slug: sibling.slug },
         { limit: 100, since },
+      ).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (lines) => lines.length > 0,
+        }),
+        Effect.timeout("2 minutes"),
       );
       expect(unrelated.length).toBeGreaterThan(0);
       expect(unrelated.some((line) => line.message.includes(marker))).toBe(
         false,
       );
     }),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );

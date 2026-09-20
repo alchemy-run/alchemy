@@ -64,6 +64,19 @@ At the user's request, a separate bounded run left both functions without invoca
 
 A preceding same-day 30-second-idle rerun still failed (16 A / 0 B on the warmed function; 5 A / 11 B on the other). The five-minute result is evidence that deployment state can converge after an idle interval, not evidence of permanent inability to update. It does not identify the exact convergence time, distinguish elapsed-time propagation from idle-instance retirement, establish behavior under continuous traffic, or guarantee five minutes is always sufficient. The projects were separate; this does not measure one deployment's transition from stale to fresh. No production delay or weakened stable-URL assertion was added, and the full Website matrix was not rerun.
 
+## Continuous polling: observed cutover near two minutes
+
+A follow-up using `neonctl@5.0.0` sent requests immediately after management readiness, with no idle wait. Each round used four fresh curl processes: GET and POST for both previously invoked and previously uninvoked functions, with approximately two seconds between rounds.
+
+- **140 of 308 requests (45.5%)** still executed the old code/environment after deployment was active/completed.
+- The last old response arrived approximately **113 seconds** after readiness for the previously invoked function and **110 seconds** for the previously uninvoked function.
+- The previously uninvoked function returned **46 old responses after its first new response**. One current response is therefore insufficient evidence of completed rollout.
+- The final **120 responses (100%)**, spanning approximately 68 seconds, all executed the new code/environment.
+
+Project: `blue-waterfall-07906044`; branch: `br-jolly-darkness-b5lld7i1`; region: `aws-us-east-2`; runtime: `nodejs24`. Readiness was observed at `2026-09-18T20:51:37.040Z` and `2026-09-18T20:51:40.308Z` respectively. Raw timestamps are retained in [the structured cutover evidence](./function-cutover-evidence.json). This measures convergence in one continuously sampled rollout, not a universal maximum delay or the internal cause.
+
+Deployment tests now poll the stable invocation URL until repeated samples consistently execute the requested version, then make their strict code/environment assertions. They retain active-deployment, stable-identity, no-op, and independent cleanup checks; no five-minute sleep is used.
+
 ## Minimal official-CLI reproduction
 
 Use an owned disposable project in `aws-us-east-2`, its default branch, an authorized `NEON_API_KEY` in the environment, and two unused alphanumeric slugs. Never run this against existing application functions. This is a manual reproduction of the completed automated experiment, not an alternative passing acceptance test.

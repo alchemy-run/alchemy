@@ -12,7 +12,9 @@ const { test } = Test.make({ providers: providers(), dev: true });
 
 describe.sequential("Neon Website native frameworks", () => {
   for (const { slug, name, website } of frameworks) {
-    test.provider(
+    // Each dev server spawns 1-3 GiB toolchain children; the matrix cannot
+    // share a 4 GiB budget with a long-lived suite process.
+    test.provider.skipIf(!!process.env.FAST)(
       slug,
       (stack) =>
         Effect.gen(function* () {

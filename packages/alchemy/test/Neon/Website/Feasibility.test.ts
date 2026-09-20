@@ -9,13 +9,15 @@ import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { functionRolloutTimeout } from "../FunctionRollout.ts";
+import { exampleRoot, updatedBodyContaining } from "./Fixture.ts";
 
 const { test } = Test.make({ providers: providers() });
 
 describe.sequential("Neon Website feasibility", () => {
-  test.provider(
+  // Live deploy + rollout polling takes minutes; skip under --fast.
+  test.provider.skipIf(!!process.env.FAST)(
     "static Fetch files deploy, update, no-op, HEAD, and destroy",
     (stack) =>
       Effect.gen(function* () {
@@ -75,16 +77,11 @@ describe.sequential("Neon Website feasibility", () => {
         expect(updated.function!.activeDeploymentId).not.toBe(
           fn.activeDeploymentId,
         );
-        expect(
-          yield* HttpClient.get(String(updated.url)).pipe(
-            Effect.flatMap((res) => res.text),
-            Effect.repeat({
-              schedule: Schedule.spaced("1 second"),
-              times: 8,
-              until: (body) => body.includes("Neon static updated"),
-            }),
-          ),
-        ).toContain("Neon static updated");
+        expect(updated.url).toBe(site.url);
+        yield* updatedBodyContaining(
+          String(updated.url),
+          "Neon static updated",
+        );
         yield* stack.destroy();
         expect(
           yield* getProject({ project_id: fn.projectId }).pipe(
@@ -93,25 +90,19 @@ describe.sequential("Neon Website feasibility", () => {
           ),
         ).toBe(true);
       }).pipe(Effect.scoped),
-    { timeout: 120_000 },
+    { timeout: functionRolloutTimeout },
   );
 
   for (const [slug, website] of [
     ["astro", Astro],
     ["nextjs", Nextjs],
   ] as const) {
-    test.provider(
+    test.provider.skipIf(!!process.env.FAST)(
       `${slug} real framework deploy feasibility`,
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
-          const path = yield* Path.Path;
-          const rootDir = yield* path.fromFileUrl(
-            new URL(
-              `../../../../../examples/neon-website-${slug}/`,
-              import.meta.url,
-            ),
-          );
+          const rootDir = yield* exampleRoot(slug);
           const site = yield* stack.deploy(
             website("Web", {
               rootDir,

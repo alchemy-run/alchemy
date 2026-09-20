@@ -6,10 +6,12 @@ import * as Test from "@/Test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import {
+  functionRolloutSamples,
+  functionRolloutTimeout,
+  functionTextSamples,
+} from "./FunctionRollout.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -50,7 +52,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+// Live lifecycles below poll deployment rollout for minutes; skip under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "native Function create, no-op, name update, environment removal and deletion",
   (stack) =>
     Effect.gen(function* () {
@@ -106,17 +109,20 @@ test.provider(
       expect(updated.api.activeDeploymentId).not.toBe(
         first.api.activeDeploymentId,
       );
-      const changedEnv = yield* client.get(`${updated.api.url}env`).pipe(
-        Effect.flatMap((response) => response.json),
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          times: 8,
-          until: (body) =>
-            typeof body === "object" &&
-            body !== null &&
-            "value" in body &&
-            body.value === "two",
-        }),
+      expect(updated.api.url).toBe(first.api.url);
+      const changedEnv = yield* functionRolloutSamples(
+        client.get(`${updated.api.url}env`).pipe(
+          Effect.flatMap((response) => {
+            expect(response.status).toBe(200);
+            return response.json;
+          }),
+        ),
+        (body) =>
+          typeof body === "object" &&
+          body !== null &&
+          "value" in body &&
+          body.value === "two" &&
+          !("removed" in body),
       );
       yield* Effect.logInfo(
         JSON.stringify({
@@ -130,8 +136,10 @@ test.provider(
           },
         }),
       );
-      expect(changedEnv).toMatchObject({ value: "two" });
-      expect(changedEnv).not.toHaveProperty("removed");
+      for (const body of changedEnv) {
+        expect(body).toMatchObject({ value: "two" });
+        expect(body).not.toHaveProperty("removed");
+      }
       const state = yield* NeonApi.getProjectBranchFunction({
         project_id: updated.api.projectId,
         branch_id: updated.api.branchId,
@@ -154,10 +162,10 @@ test.provider(
       expect(absent).toBe(true);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { timeout: functionRolloutTimeout },
 );
 
-test.provider(
+test.provider.skipIf(!!process.env.FAST)(
   "code update after a config-only deployment serves the requested artifact",
   (stack) =>
     Effect.gen(function* () {
@@ -211,31 +219,11 @@ test.provider(
       );
       expect(code.functionId).toBe(first.functionId);
       expect(code.url).toBe(first.url);
-      // A single fresh response can hide other instances still serving old code.
-      const samples: string[] = [];
-      for (let round = 0; round < 8; round++) {
-        if (round > 0) yield* Effect.sleep("5 seconds");
-        const response = yield* client.get(code.url);
-        expect(response.status).toBe(200);
-        const text = yield* response.text;
-        const proc = yield* ChildProcess.make("curl", [
-          "--silent",
-          "--show-error",
-          "--fail",
-          "--max-time",
-          "10",
-          code.url,
-        ]);
-        const [exit, fresh] = yield* Effect.all(
-          [proc.exitCode, proc.stdout.pipe(Stream.decodeText, Stream.mkString)],
-          { concurrency: "unbounded" },
-        );
-        expect(Number(exit)).toBe(0);
-        samples.push(text, fresh);
-        yield* Effect.logInfo(
-          JSON.stringify({ functionStableUrl: { round, text, fresh } }),
-        );
-      }
+      const samples = yield* functionTextSamples(
+        code.url,
+        (body) => body === "bare-v2",
+      );
+      yield* Effect.logInfo(JSON.stringify({ functionStableUrl: samples }));
       const noop = yield* deploy(
         new URL("./fixtures/function-bare.ts", import.meta.url).href,
         "two",
@@ -250,5 +238,5 @@ test.provider(
       ).toBe(true);
       for (const text of samples) expect(text).toBe("bare-v2");
     }),
-  { timeout: 120_000 },
+  { timeout: functionRolloutTimeout },
 );

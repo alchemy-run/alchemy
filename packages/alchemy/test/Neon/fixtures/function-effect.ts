@@ -74,7 +74,6 @@ export const nativeDiagnosticFetch = (request: Request) =>
       });
     }
     return yield* Effect.sync(() => {
-      let count = 0;
       const stream = new ReadableStream<Uint8Array>({
         pull(controller) {
           return Effect.runPromise(
@@ -84,10 +83,6 @@ export const nativeDiagnosticFetch = (request: Request) =>
                   controller.enqueue(
                     new TextEncoder().encode("data: tick\n\n"),
                   );
-                  if (++count === 100) {
-                    controller.close();
-                    recordNativeLifecycle(id, "completed");
-                  }
                 }),
               ),
             ),
@@ -217,10 +212,9 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
         }
         if (url.pathname === "/stream-cancel")
           return HttpServerResponse.stream(
-            Stream.range(0, 100).pipe(
-              Stream.mapEffect(() =>
-                Effect.sleep("100 millis").pipe(Effect.as("tick")),
-              ),
+            Stream.fromEffectRepeat(
+              Effect.sleep("100 millis").pipe(Effect.as("tick")),
+            ).pipe(
               Stream.encodeText,
               Stream.ensuring(report("stream-released")),
             ),

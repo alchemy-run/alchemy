@@ -53,13 +53,14 @@ test(
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
     expect((yield* client.post(`${url}upload`)).status).toBe(204);
+    // Bucket event delivery is eventually consistent; poll up to 2 minutes.
     const events = yield* client.get(url).pipe(
       Effect.flatMap((response) => response.json),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
-        times: 9,
         until: (body) => JSON.stringify(body).includes("incoming/test.txt"),
       }),
+      Effect.timeout("2 minutes"),
     );
     expect(events).toEqual(
       expect.arrayContaining([
@@ -71,7 +72,7 @@ test(
     );
     expect(JSON.stringify(events)).not.toContain("outside.txt");
   }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test(

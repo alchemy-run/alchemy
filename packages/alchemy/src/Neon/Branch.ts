@@ -333,7 +333,11 @@ export const BranchProvider = () =>
         return undefined;
       }
       const name = yield* createBranchName(id, olds.name);
-      const matches = yield* findBranchByName(projectId, name);
+      // The whole project may already be gone (out-of-band deletion); the
+      // branch is gone with it, so recovery observes an absent branch.
+      const matches = yield* findBranchByName(projectId, name).pipe(
+        Effect.catchTag("NotFound", () => Effect.succeed([])),
+      );
       if (matches.length > 1)
         return yield* new BranchStateError({ reason: "Ambiguous branch name" });
       const match = matches[0];

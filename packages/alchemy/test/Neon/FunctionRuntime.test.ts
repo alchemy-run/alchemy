@@ -11,6 +11,9 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import RuntimeFunction from "./fixtures/function-effect.ts";
 
@@ -66,7 +69,14 @@ afterAll(
 );
 const reportRuntimeLogs = Effect.gen(function* () {
   const { api, native } = yield* stack;
+  const client = yield* HttpClient.HttpClient;
   for (const resource of [api, native]) {
+    const lifecycle = yield* client
+      .get(`${resource.url}diagnostics`)
+      .pipe(Effect.flatMap((response) => response.json));
+    yield* Effect.logInfo(
+      JSON.stringify({ native: resource === native, lifecycle }),
+    );
     const lines = yield* FunctionLogs(resource, { limit: 1000 });
     yield* Effect.logInfo(
       JSON.stringify({
@@ -141,7 +151,8 @@ test(
   { timeout: 120_000 },
 );
 
-test.provider(
+// Waits up to two minutes for durable finalizer evidence; skip under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "WebSocket upgrade preserves native metadata and closes the request scope",
   () =>
     Effect.gen(function* () {
@@ -192,25 +203,26 @@ test.provider(
       const completed = yield* client.get(`${url}finalized`).pipe(
         Effect.flatMap((response) => response.json),
         Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
-          times: 8,
+          schedule: Schedule.spaced("1 second"),
           until: (body) => JSON.stringify(body).includes("websocket"),
         }),
+        Effect.timeout("2 minutes"),
       );
-      yield* Effect.logInfo(
-        JSON.stringify({
-          lifecycle: yield* (yield* client.get(`${native.url}diagnostics`))
-            .json,
-        }),
+      const lifecycle = yield* (yield* client.get(`${native.url}diagnostics`))
+        .json;
+      yield* Effect.logInfo(JSON.stringify({ lifecycle }));
+      expect(lifecycle).toEqual(
+        expect.arrayContaining([{ id: "native-websocket", phase: "close" }]),
       );
       expect(completed).toMatchObject({
         finalized: expect.arrayContaining(["websocket"]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
-test.provider(
+// Waits up to two minutes for durable finalizer evidence; skip under --fast.
+test.provider.skipIf(!!process.env.FAST)(
   "cancelling a streamed response releases its request scope",
   () =>
     Effect.gen(function* () {
@@ -221,38 +233,68 @@ test.provider(
         [native.url, "native-sse", "&sse"],
         [url, "cancelled-sse", "&sse"],
       ]) {
-        const controller = yield* Effect.sync(() => new AbortController());
-        const response = yield* Effect.tryPromise((signal) =>
-          fetch(`${target}stream-cancel?id=${id}${suffix}`, {
-            signal: AbortSignal.any([signal, controller.signal]),
-          }),
-        );
-        const reader = yield* Effect.sync(() => response.body!.getReader());
-        const first = yield* Effect.tryPromise(() => reader.read());
-        expect(first.done).toBe(false);
-        yield* Effect.sync(() => controller.abort());
-        yield* Effect.tryPromise(() => reader.cancel()).pipe(Effect.ignore);
+        yield* Effect.gen(function* () {
+          const child = yield* ChildProcess.make("curl", [
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--no-buffer",
+            "--http1.1",
+            "--noproxy",
+            "*",
+            "--max-time",
+            "15",
+            "-H",
+            "Connection: close",
+            `${target}stream-cancel?id=${id}${suffix}`,
+          ]);
+          const first = yield* child.stdout.pipe(
+            Stream.decodeText,
+            Stream.filter((chunk) => chunk.includes("tick")),
+            Stream.runHead,
+            Effect.timeout("10 seconds"),
+          );
+          expect(Option.isSome(first)).toBe(true);
+          // Terminating the client proves the transport closed, not just its reader.
+          if (yield* child.isRunning) yield* child.kill();
+          expect(yield* child.isRunning).toBe(false);
+        }).pipe(Effect.scoped);
       }
       const client = yield* HttpClient.HttpClient;
       const completed = yield* client.get(`${url}finalized`).pipe(
         Effect.flatMap((response) => response.json),
         Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
-          times: 8,
-          until: (body) => JSON.stringify(body).includes("cancelled-stream"),
+          schedule: Schedule.spaced("1 second"),
+          until: (body) =>
+            ["cancelled-stream", "cancelled-sse"].every((id) =>
+              JSON.stringify(body).includes(id),
+            ),
         }),
+        Effect.timeout("2 minutes"),
       );
-      yield* Effect.logInfo(
-        JSON.stringify({
-          lifecycle: yield* (yield* client.get(`${native.url}diagnostics`))
-            .json,
-        }),
+      const lifecycle = yield* (yield* client.get(`${native.url}diagnostics`))
+        .json;
+      yield* Effect.logInfo(JSON.stringify({ lifecycle }));
+      expect(lifecycle).toEqual(
+        expect.arrayContaining([
+          {
+            id: "native-stream",
+            phase: expect.stringMatching(/^(abort|cancel)$/),
+          },
+          {
+            id: "native-sse",
+            phase: expect.stringMatching(/^(abort|cancel)$/),
+          },
+        ]),
       );
       expect(completed).toMatchObject({
-        finalized: expect.arrayContaining(["cancelled-stream"]),
+        finalized: expect.arrayContaining([
+          "cancelled-stream",
+          "cancelled-sse",
+        ]),
       });
     }).pipe(Effect.ensuring(reportRuntimeLogs.pipe(Effect.orDie))),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );
 
 test(

@@ -92,6 +92,7 @@ export const target = (config?: Parameters<typeof makeNodeTarget>[0]) => ({
     >[0],
   ) =>
     runBuildChild({
+      runtime: "node",
       module: import.meta.url,
       rootDir: context.root,
       config: { root: context.root },
@@ -191,6 +192,9 @@ export const make = Effect.fn(function* (
         return { url };
       }
       return yield* runDevChild({
+        // Vocs's Vite dev server (like its build) exhausts memory under
+        // Bun; run the dev child under Node from PATH.
+        runtime: "node",
         framework: "vocs",
         module: import.meta.url,
         callerUrl: import.meta.url,

@@ -49,7 +49,7 @@ for (const slug of ["nextjs", "vocs"] as const)
           );
         }
         const artifact = yield* packageWebsiteArtifact(
-          yield* buildPortableExample(slug),
+          yield* buildPortableExample(slug, root),
         );
         const directory = yield* fs.makeTempDirectoryScoped();
         const zip = path.join(directory, "site.zip");

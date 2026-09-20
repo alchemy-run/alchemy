@@ -19,6 +19,8 @@ import { sha256 } from "../../Util/sha256.ts";
 import { zipFiles, type ZipFile } from "../../Util/zip.ts";
 import { packSiteExtraFiles } from "../../Website/packExtraFiles.ts";
 import { validateFunctionZip } from "../FunctionArtifact.ts";
+import { traceWebsiteFiles } from "./Trace.ts";
+import { packageWebsiteInChild } from "./Package.ts";
 import {
   nativeArtifactError,
   neonRuntimeTarget as runtimeTarget,
@@ -420,38 +422,25 @@ export const stageWebsiteArtifact = Effect.fn(function* (
     if (candidate === path.dirname(candidate)) break;
   }
   const traceBase = path.parse(root).root;
-  const trace =
+  const tracedFiles =
     seeds.size === 0
-      ? { fileList: new Set<string>() }
-      : yield* Effect.tryPromise({
-          try: () =>
-            import("@vercel/nft").then(({ nodeFileTrace }) =>
-              nodeFileTrace([...seeds], {
-                base: traceBase,
-                processCwd: root,
-                conditions: ["node", "production"],
-                // Next's production manifests already trace its dependencies without dev bundlers.
-                ignore:
-                  props.layout === "next"
-                    ? (file) =>
-                        file
-                          .replaceAll("\\", "/")
-                          .includes("/node_modules/next/")
-                    : undefined,
-                analysis: {
-                  emitGlobs: true,
-                  computeFileReferences: true,
-                  evaluatePureExpressions: true,
-                },
+      ? []
+      : yield* traceWebsiteFiles({
+          seeds: [...seeds],
+          base: traceBase,
+          root,
+          next: props.layout === "next",
+        }).pipe(
+          Effect.timeout("60 seconds"),
+          Effect.mapError(
+            () =>
+              new WebsiteArtifactError({
+                message:
+                  "Runtime tracing failed. Node 24 and @vercel/nft are required in the deployment workspace.",
               }),
-            ),
-          catch: () =>
-            new WebsiteArtifactError({
-              message:
-                "Runtime tracing failed. Install @vercel/nft in the deployment workspace.",
-            }),
-        }).pipe(Effect.timeout("60 seconds"));
-  for (const file of trace.fileList)
+          ),
+        );
+  for (const file of tracedFiles)
     if (!sourceOnly(file)) files.add(path.resolve(traceBase, file));
   if (files.size > MAX_ENTRIES)
     return yield* fail("Dependency trace exceeds the 50,000-entry limit.");
@@ -710,7 +699,7 @@ export const WebsiteArtifactProvider = () =>
           )
             return { action: "update" as const };
           // Dependencies outside the framework root can change without its build hash.
-          const { hash } = yield* packageWebsiteArtifact(news).pipe(
+          const { hash } = yield* packageWebsiteInChild(news).pipe(
             Effect.scoped,
           );
           return {
@@ -726,7 +715,7 @@ export const WebsiteArtifactProvider = () =>
             "neon-websites",
             name,
           );
-          const { archive, hash } = yield* packageWebsiteArtifact(news).pipe(
+          const { archive, hash } = yield* packageWebsiteInChild(news).pipe(
             Effect.scoped,
           );
           yield* fs.makeDirectory(directory, { recursive: true });
