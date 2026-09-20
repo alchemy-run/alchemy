@@ -1,8 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { waitUntil as nativeWaitUntil } from "@neon/functions";
-import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Duration from "effect/Duration";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -30,71 +28,6 @@ const closeRequestScope = (scope: Scope.Scope) => {
         Effect.ignoreCause({ log: "Error" }),
       ),
     ),
-  );
-};
-
-/**
- * Neon's host neither aborts `request.signal` nor cancels the response body
- * when the client disconnects mid-stream — it silently stops pulling, leaving
- * the handler suspended on backpressure forever (measured: zero pulls, no
- * cancel, no abort for 3+ minutes after a killed client). Detect that state
- * from inside: when the host has no read in flight and has not pulled for the
- * idle window, treat the client as gone — cancel the source (running stream
- * finalizers) and release the request scope. A pending read never counts as
- * idle, so slow-but-alive consumers are unaffected.
- */
-const streamIdleTimeout = Config.Duration(
-  "ALCHEMY_NEON_STREAM_IDLE_TIMEOUT",
-).pipe(Config.withDefault(Duration.seconds(30)));
-
-const withStreamIdleWatchdog = (
-  web: Response,
-  idleMs: number,
-  onDisconnect: () => void,
-): Response => {
-  const body = web.body;
-  if (!body || idleMs <= 0) return web;
-  const reader = body.getReader();
-  let lastSettled = Date.now();
-  let pending = false;
-  const timer = setInterval(
-    () => {
-      if (pending || Date.now() - lastSettled < idleMs) return;
-      clearInterval(timer);
-      void reader
-        .cancel(new Error("client stopped consuming the response stream"))
-        .catch(() => {});
-      onDisconnect();
-    },
-    Math.max(1000, Math.min(idleMs, 5000)),
-  );
-  (timer as { unref?: () => void }).unref?.();
-  return new Response(
-    new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        pending = true;
-        try {
-          const { done, value } = await reader.read();
-          if (done) {
-            clearInterval(timer);
-            controller.close();
-          } else {
-            controller.enqueue(value);
-          }
-        } catch (error) {
-          clearInterval(timer);
-          controller.error(error);
-        } finally {
-          pending = false;
-          lastSettled = Date.now();
-        }
-      },
-      cancel(reason) {
-        clearInterval(timer);
-        return reader.cancel(reason);
-      },
-    }),
-    { status: web.status, statusText: web.statusText, headers: web.headers },
   );
 };
 
@@ -171,25 +104,9 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
             HttpServerRequest.fromWeb(request),
           ),
         );
-        const handler = Effect.gen(function* () {
-          // toHandled owns the request scope; an outer scope cannot close its resources.
-          const scope = yield* Effect.scope;
-          const onAbort = () => {
-            closeRequestScope(scope);
-          };
-          yield* Effect.addFinalizer(() =>
-            Effect.sync(() =>
-              request.signal.removeEventListener("abort", onAbort),
-            ),
-          );
-          yield* Effect.sync(() => {
-            request.signal.addEventListener("abort", onAbort, { once: true });
-            if (request.signal.aborted) onAbort();
-          });
-          return yield* safeHttpEffect(
-            built.dispatch(new URL(request.url).pathname),
-          );
-        }).pipe(Effect.interruptible);
+        const handler = safeHttpEffect(
+          built.dispatch(new URL(request.url).pathname),
+        ).pipe(Effect.interruptible);
         return yield* EffectHttp.toHandled(handler, (req, res) =>
           Effect.gen(function* () {
             const scope = yield* Effect.scope;
@@ -199,13 +116,18 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               const socket = FunctionUpgradeSockets.get(res.body.body);
               if (socket && socket.readyState !== socket.CLOSED) {
                 EffectHttp.scopeDisableClose(scope);
-                socket.addEventListener(
-                  "close",
-                  () => {
-                    closeRequestScope(scope);
-                  },
-                  { once: true },
+                const onClose = () => closeRequestScope(scope);
+                socket.addEventListener("close", onClose, { once: true });
+                request.signal.addEventListener("abort", onClose, {
+                  once: true,
+                });
+                yield* Effect.addFinalizer(() =>
+                  Effect.sync(() => {
+                    socket.removeEventListener("close", onClose);
+                    request.signal.removeEventListener("abort", onClose);
+                  }),
                 );
+                if (request.signal.aborted) onClose();
               }
               yield* Deferred.succeed(response, res.body.body);
               return;
@@ -218,13 +140,22 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
               withoutBody,
               context,
             });
+            // The body outlives fetch; propagate actual request aborts to its producer.
             yield* Deferred.succeed(
               response,
-              res.body._tag === "Stream" && !withoutBody
-                ? withStreamIdleWatchdog(
-                    web,
-                    Duration.toMillis(yield* streamIdleTimeout),
-                    () => closeRequestScope(scope),
+              res.body._tag === "Stream" && web.body
+                ? new Response(
+                    web.body.pipeThrough(
+                      new TransformStream<Uint8Array, Uint8Array>(),
+                      {
+                        signal: request.signal,
+                      },
+                    ),
+                    {
+                      status: web.status,
+                      statusText: web.statusText,
+                      headers: web.headers,
+                    },
                   )
                 : web,
             );

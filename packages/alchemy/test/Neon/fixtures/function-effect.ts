@@ -10,14 +10,13 @@ import { Project } from "@/Neon/Project";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import * as Redacted from "effect/Redacted";
 import { Postgres } from "@/SQL/Postgres";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const diagnosticSql = Effect.gen(function* () {
   return yield* Postgres({
-    url: Effect.sync(() => Redacted.make(process.env.DATABASE_URL!)),
+    url: Config.Redacted("DATABASE_URL"),
     maxConnections: 1,
   });
 });
@@ -120,7 +119,7 @@ export default class RuntimeFunction extends Function<RuntimeFunction>()(
       Config.withDefault("effect"),
     );
     const sql = yield* Postgres({
-      url: Effect.sync(() => Redacted.make(process.env.DATABASE_URL!)),
+      url: Config.Redacted("DATABASE_URL"),
       maxConnections: 1,
     });
     let active = 0;
