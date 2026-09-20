@@ -92,11 +92,8 @@ export type ZoneTransferPeer = Resource<
  * account. Cloudflare's create API only accepts a name; the provider
  * follows up with an update when `ip`, `port`, `tsigId`, or
  * `ixfrEnable` are declared, all of which remain mutable in place.
- * @resource
- * @product DNS
- * @category Domains & DNS
- * @section Creating a Peer
- * @example Primary nameserver to transfer from
+ * ### Creating a Peer
+ * **Example:** Primary nameserver to transfer from
  * ```typescript
  * const peer = yield* Cloudflare.DNS.ZoneTransferPeer("Primary", {
  *   ip: "192.0.2.53",
@@ -104,7 +101,7 @@ export type ZoneTransferPeer = Resource<
  * });
  * ```
  *
- * @example Peer with TSIG authentication
+ * **Example:** Peer with TSIG authentication
  * ```typescript
  * const tsig = yield* Cloudflare.DNS.ZoneTransferTsig("TransferKey", {
  *   algo: "hmac-sha512.",
@@ -118,6 +115,10 @@ export type ZoneTransferPeer = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/dns/zone-setups/zone-transfers/
+ *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  */
 export const ZoneTransferPeer = Resource<ZoneTransferPeer>(TypeId, {
   aliases: ["Cloudflare.Dns.ZoneTransferPeer"],

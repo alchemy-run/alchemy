@@ -63,18 +63,17 @@ export type SshKey = Resource<
  * A Hetzner Cloud SSH key. Public keys are injected into Servers at create
  * time. The public key is immutable — changing it replaces the key.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#ssh-keys
  *
- * @section Creating an SSH Key
- * @example Generated name
+ * ### Creating an SSH Key
+ * **Example:** Generated name
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
  *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
  * });
  * ```
  *
- * @example Explicit name and labels
+ * **Example:** Explicit name and labels
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
  *   name: "deploy-key",
@@ -82,6 +81,8 @@ export type SshKey = Resource<
  *   labels: { role: "deploy" },
  * });
  * ```
+ *
+ * @resource
  */
 export const SshKey = Resource<SshKey>("Hetzner.SshKey");
 

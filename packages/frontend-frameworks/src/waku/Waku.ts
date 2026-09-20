@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as NodePath from "node:path";
 import type * as ViteModule from "vite";
@@ -494,6 +495,7 @@ const setPreviewServerGlobal = (
   vitePlugins: WakuVitePluginsModule,
   root: string,
   previewConfig: ResolvedWakuConfig,
+  port: number,
 ): void => {
   (globalThis as Record<string, unknown>)[PREVIEW_SERVER_GLOBAL] =
     async (): Promise<WakuPreviewServer> => {
@@ -501,6 +503,8 @@ const setPreviewServerGlobal = (
         configFile: false,
         root,
         plugins: [vitePlugins.unstable_combinedPlugins(previewConfig)],
+        // localhost can resolve to another build's listener on the other IP family.
+        preview: { host: "127.0.0.1", port },
       });
       const baseUrl = server.resolvedUrls?.local[0];
       if (!baseUrl) {
@@ -748,7 +752,7 @@ export const make = (
         );
       });
 
-    return FrameworkCore.Framework.of({
+    const inProcess = FrameworkCore.Framework.of({
       build: Effect.fn(function* (buildOptions) {
         const root = yield* resolveRoot(buildOptions?.root);
         const target = yield* resolveTarget(root);
@@ -757,7 +761,12 @@ export const make = (
           // The inline waku options ride along so a child-process build can
           // reconstruct the framework with the same options.
           return yield* target
-            .build({ root, framework: "waku", waku: options?.waku })
+            .build({
+              root,
+              framework: "waku",
+              env: buildOptions?.env,
+              waku: options?.waku,
+            })
             .pipe(
               Effect.provideService(FileSystem.FileSystem, fs),
               Effect.provideService(Path.Path, path),
@@ -776,6 +785,9 @@ export const make = (
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
+        const previewPort = yield* FrameworkCore.resolveViteDevPort(
+          project.vite.version,
+        );
         // Entry selection (the user-entry seam): when the deploy target
         // carries a user worker entry, the chunk built from it must become
         // `serverModules[0]` — waku's own `server/index.js` remains an
@@ -821,6 +833,7 @@ export const make = (
                 project.vitePlugins,
                 root,
                 wakuConfig,
+                previewPort,
               );
               try {
                 await builder.buildApp();
@@ -896,17 +909,65 @@ export const make = (
           ),
           (server) => Effect.promise(async () => await server.close()),
         );
-        const url = server.resolvedUrls?.local[0];
-        if (url === undefined) {
+        const resolved = server.resolvedUrls?.local[0];
+        if (resolved === undefined) {
           return yield* Effect.fail(
             fail("Could not determine the URL of the waku dev server")(
               undefined,
             ),
           );
         }
+        // Vite's `resolvedUrls.local[0]` is `http://host:port/` — strip
+        // the trailing slash so callers can concatenate paths (`${url}/`)
+        // without producing `//`, which waku's router does not match.
+        const url = resolved.replace(/\/+$/, "");
+        // Bounded readiness probe: any HTTP response counts (waku's
+        // first RSC compile is lazy; we only need the listener to answer).
+        yield* Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`${url}/`, { redirect: "manual" });
+            await response.arrayBuffer().catch(() => {});
+          },
+          catch: fail("The waku dev server did not become reachable"),
+        }).pipe(
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+        );
         return { url };
       }),
     });
+
+    // Waku's toolchain assumes `cwd === root` at dev startup (the html shell
+    // and relative inputs resolve from the cwd), so its startup window
+    // chdirs — which must not happen in a process hosting other sites' dev
+    // servers (the alchemy dev sidecar). Run the dev server in a dedicated
+    // child whose cwd IS the root instead (see core/DevChild.ts). Inside
+    // that child — or when the options cannot cross the process boundary
+    // (e.g. a deploy-target VALUE from the e2e harness) — the in-process
+    // path runs directly.
+    const dev: FrameworkCore.Framework["Service"]["dev"] = (devOptions) => {
+      if (
+        FrameworkCore.isInsideDevChild() ||
+        !FrameworkCore.isJsonSerializable(options)
+      ) {
+        return inProcess.dev(devOptions);
+      }
+      const root = devOptions?.root ?? options?.root ?? process.cwd();
+      const port = devOptions?.port ?? options?.port;
+      return FrameworkCore.runDevChild({
+        framework: "waku",
+        module: "@alchemy.run/frontend-frameworks/waku",
+        callerUrl: import.meta.url,
+        rootDir: root,
+        makeOptions: { ...options, root },
+        devOptions: {
+          root,
+          ...(port !== undefined ? { port } : {}),
+          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
+        },
+      });
+    };
+
+    return FrameworkCore.Framework.of({ build: inProcess.build, dev });
   });
 
 /**

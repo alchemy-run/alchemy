@@ -102,9 +102,8 @@ export interface EmailIdentity extends Resource<
  * a verification email, and domain identities get Easy DKIM tokens (exposed
  * as the `dkimTokens` attribute) to publish as CNAME records. The identity
  * is usable for sending once `verificationStatus` is `SUCCESS`.
- * @resource
- * @section Creating Identities
- * @example Domain Identity
+ * ### Creating Identities
+ * **Example:** Domain Identity
  * ```typescript
  * import * as SES from "alchemy/AWS/SES";
  *
@@ -114,7 +113,7 @@ export interface EmailIdentity extends Resource<
  * // publish identity.dkimTokens as CNAME records to verify
  * ```
  *
- * @example Email Address Identity
+ * **Example:** Email Address Identity
  * ```typescript
  * const identity = yield* SES.EmailIdentity("Sender", {
  *   emailIdentity: "hello@example.com",
@@ -122,8 +121,8 @@ export interface EmailIdentity extends Resource<
  * // SES emails hello@example.com a verification link
  * ```
  *
- * @section Configuration Set Association
- * @example Apply a Configuration Set by Default
+ * ### Configuration Set Association
+ * **Example:** Apply a Configuration Set by Default
  * ```typescript
  * const configSet = yield* SES.ConfigurationSet("Tracking", {});
  * const identity = yield* SES.EmailIdentity("Sender", {
@@ -132,8 +131,8 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
- * @section DKIM and Feedback
- * @example Turn Easy DKIM Signing Off
+ * ### DKIM and Feedback
+ * **Example:** Turn Easy DKIM Signing Off
  * ```typescript
  * // Omit the prop entirely to leave SES's current setting alone.
  * const identity = yield* SES.EmailIdentity("Sender", {
@@ -142,7 +141,7 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
- * @example Stop Forwarding Bounces and Complaints by Email
+ * **Example:** Stop Forwarding Bounces and Complaints by Email
  * ```typescript
  * // Turn this off once a configuration set event destination is handling
  * // bounces and complaints, so they stop arriving as mail.
@@ -152,8 +151,8 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
- * @section Custom MAIL FROM Domain
- * @example Send with Your Own Envelope Domain
+ * ### Custom MAIL FROM Domain
+ * **Example:** Send with Your Own Envelope Domain
  * ```typescript
  * // mailFromDomain must be a subdomain of the identity, and needs MX and
  * // SPF records published before SES will use it.
@@ -166,8 +165,8 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
- * @section Sending Email at Runtime
- * @example Send Through the Identity from a Lambda Function
+ * ### Sending Email at Runtime
+ * **Example:** Send Through the Identity from a Lambda Function
  * ```typescript
  * // init
  * const sendEmail = yield* SES.SendEmail(identity);
@@ -184,6 +183,8 @@ export interface EmailIdentity extends Resource<
  *   },
  * });
  * ```
+ *
+ * @resource
  */
 export const EmailIdentity = Resource<EmailIdentity>("AWS.SES.EmailIdentity");
 

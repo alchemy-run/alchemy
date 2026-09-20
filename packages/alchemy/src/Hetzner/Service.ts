@@ -18,6 +18,7 @@ import {
   collectBindingState,
   createHetznerHostedSupport,
   createHetznerHostRuntimeContext,
+  type HetznerBuildOptions,
   type HetznerHostRuntimeContext,
 } from "./hosted.ts";
 
@@ -58,9 +59,20 @@ export interface ServiceProps extends PlatformProps {
   env?: Record<string, any>;
   /**
    * Bundler configuration for `main`: rolldown `input`/`output` overrides
-   * plus pure-annotation options (`pure`).
+   * plus pure-annotation options (`pure`) and `install` for packages that
+   * must ship as real `node_modules` (see {@link HetznerBuildOptions}).
    */
-  build?: Bundle.BundleConfig;
+  build?: HetznerBuildOptions;
+  /**
+   * Extra host directories packed into the unit archive next to the
+   * bundled entry (e.g. a website `clientDirectory` at `dist/`). Hashed
+   * into `code.hash` so asset changes update the unit. Destination is
+   * relative to the unit root (`/opt/<unit>/`).
+   */
+  extraFiles?: ReadonlyArray<{
+    source: string;
+    destination: string;
+  }>;
 }
 
 export type Service = Resource<
@@ -106,11 +118,10 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * at a path — the same `(volume, server, path)` from two Services is one
  * attach and one mount.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#servers
  *
- * @section Hosting a Service
- * @example HTTP server on a Server
+ * ### Hosting a Service
+ * **Example:** HTTP server on a Server
  * ```typescript
  * const server = yield* Hetzner.Server("box", {
  *   serverType: "cpx12",
@@ -129,12 +140,14 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ) {}
  * ```
  *
- * @section Volumes
- * @example Mount a Volume
+ * ### Volumes
+ * **Example:** Mount a Volume
  * ```typescript
  * const mount = yield* Hetzner.MountVolume(volume, { path: "/data" });
  * // write/read files under mount.path inside the hosted process
  * ```
+ *
+ * @resource
  */
 export const Service: Platform<
   Service,
@@ -287,13 +300,16 @@ export const ServiceProvider = () =>
             ...news.env,
           };
 
-          const { archive, hash } = yield* hosted.bundleProgram(id, news);
+          const { archive, hash, entryRel } = yield* hosted.bundleProgram(
+            id,
+            news,
+          );
 
           const ssh = yield* openSession(news);
           yield* Effect.ensuring(
             Effect.gen(function* () {
               yield* hosted.waitForSsh(ssh);
-              // Attach (automount ok) then mkdir+mount+fstab. The same
+              // Attach (no automount) then mkdir+mount+fstab. The same
               // (volume, server, path) from two Services is one attach
               // and one mount — both steps are independently idempotent.
               yield* hosted.attachAndMount({
@@ -306,6 +322,7 @@ export const ServiceProvider = () =>
                 unitName,
                 archive,
                 env,
+                entryRel,
               });
             }),
             ssh.close,

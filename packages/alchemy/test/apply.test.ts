@@ -1,11 +1,17 @@
+import { Action } from "@/Action";
+import { isResolved } from "@/Diff";
+import * as ProviderLayer from "@/Local/ProviderLayer";
+import { Resource } from "@/Resource";
+import * as Context from "effect/Context";
 import { adopt, Unowned } from "@/AdoptPolicy";
-import type { DestroyError } from "@/Apply";
-import { Cli } from "@/Cli/Cli";
+import { apply, DestroyError } from "@/Apply";
+import { Cli } from "@/Report.ts";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
+import { remote } from "@/ProviderMode.ts";
 import { Stack } from "@/Stack";
 import {
   type CreatingResourceState,
@@ -13,6 +19,7 @@ import {
   type ReplacingResourceState,
   type ResourceState,
   State,
+  StateStoreError,
 } from "@/State";
 import * as Test from "@/Test/Alchemy";
 import { assert, describe, expect } from "alchemy-test";
@@ -23,6 +30,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
   AliasedWidget,
@@ -42,6 +50,7 @@ import {
   modalCalls,
   type ModalResourceProps,
   PhasedTarget,
+  ProbeBinding,
   StaticStablesResource,
   TestLayers,
   TestResource,
@@ -71,6 +80,29 @@ const listState = Effect.fn(function* () {
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
+
+const recordingCli = (events: Array<{ id: string; status: string }>) =>
+  Cli.of({
+    startPlanningSession: () =>
+      Effect.succeed({
+        update: () => Effect.void,
+        succeed: () => Effect.void,
+        fail: () => Effect.void,
+        close: Effect.void,
+      }),
+    approvePlan: () => Effect.succeed(true),
+    displayPlan: () => Effect.void,
+    startApplySession: () =>
+      Effect.succeed({
+        done: () => Effect.void,
+        emit: (event) =>
+          Effect.sync(() => {
+            if (event._tag === "apply.resource.status") {
+              events.push({ id: event.id, status: event.status });
+            }
+          }),
+      }),
+  });
 
 const expectConvergedStatus = (status: ResourceState["status"] | undefined) => {
   expect(["created", "updated"]).toContain(status);
@@ -645,6 +677,35 @@ describe("linear update propagation", () => {
         // sequence as long as no stale value leaked through.
         expect(sawByB.length).toBeGreaterThan(0);
         expect(sawByB.every((v) => v === "v2")).toBe(true);
+      }),
+  );
+
+  // Regression: a dependent that repins from upstream A to upstream B updates
+  // *itself*, while A and B are both noops. The noop pass must still persist
+  // their new `downstream` — delete ordering reads it from the persisted row,
+  // so a stale list would delete B concurrently with the dependent that still
+  // references it (and needlessly wait on A).
+  test.provider(
+    "noop upstreams persist a repinned dependent's downstream edge",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (pin: "A" | "B") =>
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "a" });
+            const B = yield* TestResource("B", { string: "b" });
+            const C = yield* TestResource("C", {
+              string: (pin === "A" ? A : B).string,
+            });
+            return { A, B, C };
+          });
+
+        yield* stack.deploy(program("A"));
+        expect((yield* getState("A"))?.downstream).toEqual(["C"]);
+        expect((yield* getState("B"))?.downstream).toEqual([]);
+
+        yield* stack.deploy(program("B"));
+        expect((yield* getState("A"))?.downstream).toEqual([]);
+        expect((yield* getState("B"))?.downstream).toEqual(["C"]);
       }),
   );
 });
@@ -1402,6 +1463,13 @@ describe("prop-flow convergence", () => {
       Effect.gen(function* () {
         const events: Array<{ id: string; status: string }> = [];
         const cli = Cli.of({
+          startPlanningSession: () =>
+            Effect.succeed({
+              update: () => Effect.void,
+              succeed: () => Effect.void,
+              fail: () => Effect.void,
+              close: Effect.void,
+            }),
           approvePlan: () => Effect.succeed(true),
           displayPlan: () => Effect.void,
           startApplySession: () =>
@@ -1409,7 +1477,7 @@ describe("prop-flow convergence", () => {
               done: () => Effect.void,
               emit: (event) =>
                 Effect.sync(() => {
-                  if (event.kind === "status-change") {
+                  if (event._tag === "apply.resource.status") {
                     events.push({
                       id: event.id,
                       status: event.status,
@@ -1456,6 +1524,39 @@ describe("prop-flow convergence", () => {
         expect(terminal("A")).toEqual(["updated"]);
         expect(terminal("B")).toEqual(["updated"]);
       }),
+  );
+
+  test.provider("apply sessions finalize after a resource failure", (stack) =>
+    Effect.gen(function* () {
+      let finalized = 0;
+      const cli = Cli.of({
+        startPlanningSession: () =>
+          Effect.succeed({
+            update: () => Effect.void,
+            succeed: () => Effect.void,
+            fail: () => Effect.void,
+            close: Effect.void,
+          }),
+        approvePlan: () => Effect.succeed(true),
+        displayPlan: () => Effect.void,
+        startApplySession: () =>
+          Effect.succeed({
+            done: () =>
+              Effect.sync(() => {
+                finalized += 1;
+              }),
+            emit: () => Effect.void,
+          }),
+      });
+
+      yield* TestResource("A", { string: "value" }).pipe(
+        stack.deploy,
+        hook(failOn("A", "create")),
+        Effect.provide(Layer.succeed(Cli, cli)),
+      );
+
+      expect(finalized).toBe(1);
+    }),
   );
 
   // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
@@ -2566,6 +2667,7 @@ describe("retain removal policy on replace", () => {
     (stack) =>
       Effect.gen(function* () {
         const deleted: string[] = [];
+        const events: Array<{ id: string; status: string }> = [];
 
         yield* Effect.gen(function* () {
           yield* TestResource("A", { string: "v1" }).pipe(
@@ -2574,8 +2676,11 @@ describe("retain removal policy on replace", () => {
         }).pipe(stack.deploy);
         expect((yield* getState("A"))?.status).toEqual("created");
 
-        // Destroy removes the resource from the stack (orphan delete). Retain
-        // (persisted in state) must skip provider.delete and just drop state.
+        const plan = yield* Effect.void.pipe(stack.plan);
+        expect(plan.deletions.A?.action).toBe("orphaned");
+
+        // Destroy removes the resource from the stack. The explicit orphaned
+        // action must skip provider.delete and just drop state.
         yield* stack.destroy().pipe(
           hook({
             delete: (id) =>
@@ -2583,10 +2688,16 @@ describe("retain removal policy on replace", () => {
                 deleted.push(id);
               }),
           }),
+          Effect.provide(Layer.succeed(Cli, recordingCli(events))),
         );
 
         expect(deleted).not.toContain("A");
         expect(yield* getState("A")).toBeUndefined();
+        expect(
+          events
+            .filter((event) => event.id === "A")
+            .map((event) => event.status),
+        ).toEqual(["orphaning", "orphaned"]);
       }),
   );
 
@@ -5379,7 +5490,7 @@ describe("stack output persistence", () => {
         }).pipe(stack.deploy);
         expect(result).toEqual({ url: "hello" });
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "hello" });
@@ -5400,7 +5511,7 @@ describe("stack output persistence", () => {
           return { url: A.string };
         }).pipe(stack.deploy);
 
-        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+        const persisted = yield* getStackOutput(stack.name, stack.stage).pipe(
           Effect.provide(stack.state),
         );
         expect(persisted).toEqual({ url: "v2" });
@@ -5612,24 +5723,28 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
     redactedArray: undefined,
   };
 
-  const adoptHooks = Layer.succeed(TestResourceHooks, {
-    read: () => Effect.succeed(Unowned(ownedAttrs)),
-  });
-
   test.provider(
     "a dry-run plan writes nothing to the state store; applying persists",
     (stack) =>
       Effect.gen(function* () {
+        const events: Array<{ id: string; status: string }> = [];
+        let creates = 0;
+        let updates = 0;
+        const hooks = Layer.succeed(TestResourceHooks, {
+          read: () => Effect.succeed(Unowned(ownedAttrs)),
+          create: () => Effect.sync(() => creates++),
+          update: () => Effect.sync(() => updates++),
+        });
         // ── dry-run: build a plan that adopts the unowned cloud resource ──
         const plan = yield* TestResource("Adopted", { string: "hello" }).pipe(
           adopt(true),
           stack.plan,
-          Effect.provide(adoptHooks),
+          Effect.provide(hooks),
         );
 
-        // The adopted state rides on the plan node as a forced update (so the
+        // The adopted state rides on an explicit plan node (which still
         // provider re-syncs ownership tags / config) — it is not persisted.
-        expect(plan.resources.Adopted!.action).toBe("update");
+        expect(plan.resources.Adopted!.action).toBe("adopted");
         expect(plan.resources.Adopted!.state?.status).toBe("created");
 
         // The critical invariant of #793: planning persisted nothing, so a
@@ -5643,13 +5758,25 @@ describe("engine-level adoption persists at apply, not plan (issue #793)", () =>
         yield* TestResource("Adopted", { string: "hello" }).pipe(
           adopt(true),
           stack.deploy,
-          Effect.provide(adoptHooks),
+          Effect.provide(hooks),
+          Effect.provide(Layer.succeed(Cli, recordingCli(events))),
         );
 
         // Applying DOES persist the adopted state.
         const persisted = yield* getState("Adopted");
         expect(["created", "updated"]).toContain(persisted?.status);
         expect(yield* listState()).toEqual(["Adopted"]);
+        // Adoption is the reconciler's `output defined, olds undefined` path.
+        expect(creates).toBe(1);
+        expect(updates).toBe(0);
+        const statuses = events
+          .filter((event) => event.id === "Adopted")
+          .map((event) => event.status);
+        expect(statuses).toContain("adopting");
+        expect(statuses).toContain("adopted");
+        expect(statuses.indexOf("adopting")).toBeLessThan(
+          statuses.indexOf("adopted"),
+        );
       }),
   );
 });
@@ -5684,6 +5811,655 @@ describe("interrupted create persists no unresolved Output exprs", () => {
         expect(yield* listState()).toEqual([]);
       }),
   );
+});
+
+describe("interrupted replacement destruction", () => {
+  type Attributes = {
+    physicalId: string;
+    revision: string;
+    dependency?: string;
+  };
+  interface Generation extends Resource<
+    "Test.DestructionGeneration",
+    { revision: string; dependency?: string },
+    Attributes
+  > {}
+  const Generation = Resource<Generation>("Test.DestructionGeneration");
+  class Registry extends Context.Service<
+    Registry,
+    {
+      physical: Map<string, Attributes>;
+      calls: Array<{ op: "read" | "delete"; physicalId: string; mode: string }>;
+      reconcile?: (
+        attrs: Attributes,
+        create: Effect.Effect<void>,
+      ) => Effect.Effect<void>;
+      remove?: (attrs: Attributes) => Effect.Effect<void, ResourceFailure>;
+      unowned?: boolean;
+    }
+  >()("DestructionGeneration.Registry") {}
+  const variant = (mode: "live" | "local", precreate = false) =>
+    Provider.succeed(Generation, {
+      ...(precreate
+        ? {
+            precreate: Effect.fn(function* ({
+              instanceId,
+              news,
+            }: {
+              instanceId: string;
+              news: Generation["Props"];
+            }) {
+              const registry = yield* Registry;
+              const attrs = {
+                physicalId: instanceId,
+                revision: "stub",
+                dependency: news.dependency,
+              };
+              registry.physical.set(instanceId, attrs);
+              return attrs;
+            }),
+          }
+        : {}),
+      diff: Effect.fn(function* ({ news, olds }) {
+        if (
+          "revision" in news &&
+          isResolved(news.revision) &&
+          news.revision !== olds?.revision
+        ) {
+          return { action: "replace" };
+        }
+      }),
+      read: Effect.fn(function* ({ instanceId }) {
+        const registry = yield* Registry;
+        registry.calls.push({ op: "read", physicalId: instanceId, mode });
+        const attrs = registry.physical.get(instanceId);
+        return attrs && registry.unowned ? Unowned(attrs) : attrs;
+      }),
+      reconcile: Effect.fn(function* ({ instanceId, news }) {
+        const registry = yield* Registry;
+        const attrs = { physicalId: instanceId, ...news };
+        const create = Effect.sync(() => {
+          registry.physical.set(instanceId, attrs);
+        });
+        yield* registry.reconcile ? registry.reconcile(attrs, create) : create;
+        return attrs;
+      }),
+      delete: Effect.fn(function* ({ instanceId, output }) {
+        const registry = yield* Registry;
+        expect(output.physicalId).toBe(instanceId);
+        registry.calls.push({ op: "delete", physicalId: instanceId, mode });
+        if (registry.remove) yield* registry.remove(output);
+        expect(
+          [...registry.physical.values()].some(
+            (value) => value.dependency === instanceId,
+          ),
+        ).toBe(false);
+        registry.physical.delete(instanceId);
+      }),
+    });
+  const makeRegistry = (): Registry["Service"] => ({
+    physical: new Map(),
+    calls: [],
+  });
+  const { test: generationTest } = Test.make({
+    providers: ProviderLayer.dual(Generation, {
+      live: () => variant("live"),
+      local: () => variant("local"),
+    }).pipe(
+      Layer.provideMerge(
+        Layer.effect(
+          Registry,
+          Effect.serviceOption(Registry).pipe(
+            Effect.map(Option.getOrElse(makeRegistry)),
+          ),
+        ),
+      ),
+    ),
+  });
+
+  generationTest.provider(
+    "GC preserves dependency direction across pending generations",
+    (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* Generation("A", { revision: "one" });
+            const B = yield* Generation("B", {
+              revision: "one",
+              dependency: A.physicalId,
+            });
+            return { A, B };
+          }),
+        );
+        registry.remove = (attrs) =>
+          attrs.physicalId === first.B.physicalId
+            ? Effect.fail(new ResourceFailure())
+            : Effect.void;
+        const replacement = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const B = yield* Generation("B", { revision: "two" });
+              return yield* Generation("A", {
+                revision: "two",
+                dependency: B.physicalId,
+              });
+            }),
+          )
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(replacement)).toBe(true);
+        const A = yield* getState("A");
+        const B = yield* getState("B");
+        assert(A.status === "replaced" && B.status === "replaced");
+        registry.remove = undefined;
+        registry.calls.length = 0;
+        const current = yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* Generation("A", { revision: "three" });
+            const B = yield* Generation("B", { revision: "three" });
+            return { A, B };
+          }),
+        );
+        expect(
+          registry.calls
+            .filter((call) => call.op === "delete")
+            .map((call) => call.physicalId),
+        ).toEqual([
+          A.instanceId,
+          B.instanceId,
+          first.B.physicalId,
+          first.A.physicalId,
+        ]);
+        expect([...registry.physical.keys()].sort()).toEqual(
+          [current.A.physicalId, current.B.physicalId].sort(),
+        );
+        yield* stack.destroy();
+        expect([...registry.physical.values()]).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  generationTest.provider(
+    "GC waits for a deferred physical deletion before deleting its dependency",
+    (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* Generation("A", { revision: "one" });
+            const B = yield* Generation("B", {
+              revision: "one",
+              dependency: A.physicalId,
+            });
+            const C = yield* Generation("C", { revision: "one" });
+            return { A, B, C };
+          }),
+        );
+        registry.remove = (attrs) =>
+          attrs.physicalId === first.C.physicalId
+            ? Effect.fail(new ResourceFailure())
+            : Effect.void;
+        const replacement = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const A = yield* Generation("A", { revision: "one" });
+              const B = yield* Generation("B", {
+                revision: "one",
+                dependency: A.physicalId,
+              });
+              return yield* Generation("C", {
+                revision: "two",
+                dependency: B.physicalId,
+              });
+            }),
+          )
+          .pipe(Effect.exit);
+        assert(Exit.isFailure(replacement));
+        const C = yield* getState("C");
+        assert(C.status === "replaced");
+        expect(C.old.instanceId).toBe(first.C.physicalId);
+        registry.remove = undefined;
+        registry.calls.length = 0;
+        const current = yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* Generation("A", { revision: "two" });
+            const C = yield* Generation("C", { revision: "three" });
+            return { A, C };
+          }),
+        );
+        const deleted = registry.calls
+          .filter((call) => call.op === "delete")
+          .map((call) => call.physicalId);
+        expect(deleted).toEqual([
+          C.instanceId,
+          first.C.physicalId,
+          first.B.physicalId,
+          first.A.physicalId,
+        ]);
+        expect(yield* getState("B")).toBeUndefined();
+        expect([...registry.physical.keys()].sort()).toEqual(
+          [current.A.physicalId, current.C.physicalId].sort(),
+        );
+        yield* stack.destroy();
+        expect([...registry.physical.values()]).toEqual([]);
+        expect(yield* listState()).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  const { test: stubTest } = Test.make({
+    providers: variant("live", true).pipe(
+      Layer.provideMerge(
+        Layer.effect(
+          Registry,
+          Effect.serviceOption(Registry).pipe(
+            Effect.map(Option.getOrElse(makeRegistry)),
+          ),
+        ),
+      ),
+    ),
+  });
+  stubTest.provider(
+    "unfinished precreate remains resumable after its deleting checkpoint fails",
+    (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Generation("R", { revision: "one" }));
+        const reached = yield* Deferred.make<void>();
+        registry.reconcile = () =>
+          Deferred.succeed(reached, undefined).pipe(
+            Effect.andThen(Effect.never),
+          );
+        const fiber = yield* stack
+          .deploy(Generation("R", { revision: "two" }))
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+        yield* Fiber.interrupt(fiber);
+        const pending = yield* getState("R");
+        assert(pending.status === "replacing");
+        expect(pending.attr?.revision).toBe("stub");
+        const plan = yield* stack.plan(Effect.void);
+        const state = yield* yield* State;
+        const exit = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                request.fqn === "R" && request.value.status === "deleting"
+                  ? Effect.fail(
+                      new StateStoreError({
+                        message: "Deleting checkpoint failed",
+                      }),
+                    )
+                  : state.set(request),
+            }),
+          ),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(exit));
+        expect(registry.physical.has(first.physicalId)).toBe(false);
+        const checkpoint = yield* getState("R");
+        let reconciles = 0;
+        registry.reconcile = (_, create) =>
+          Effect.sync(() => {
+            reconciles++;
+          }).pipe(Effect.andThen(create));
+        const output = yield* stack.deploy(
+          Generation("R", { revision: "two" }),
+        );
+        expect(reconciles).toBe(1);
+        expect(checkpoint.status).toBe("creating");
+        expect(checkpoint.attr).toEqual(pending.attr);
+        expect(output.revision).toBe("two");
+        yield* stack.destroy();
+        expect([...registry.physical.values()]).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  for (const phase of [
+    "before-create",
+    "after-create",
+    "after-reconcile",
+  ] as const) {
+    generationTest.provider(
+      `destroy drains generations interrupted ${phase}`,
+      (stack) =>
+        Effect.gen(function* () {
+          const registry = yield* Registry;
+          yield* stack.destroy();
+          const first = yield* inDev(
+            stack.deploy(Generation("R", { revision: "one" })),
+          );
+          const reached = yield* Deferred.make<void>();
+          registry.reconcile = (_, create) =>
+            Effect.gen(function* () {
+              if (phase !== "before-create") yield* create;
+              if (phase !== "after-reconcile") {
+                yield* Deferred.succeed(reached, undefined);
+                yield* Effect.never;
+              }
+            });
+          registry.remove = () =>
+            Deferred.succeed(reached, undefined).pipe(
+              Effect.andThen(Effect.never),
+            );
+          const fiber = yield* stack
+            .deploy(Generation("R", { revision: "two" }))
+            .pipe(Effect.forkChild);
+          yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+          yield* Fiber.interrupt(fiber);
+          const pending = yield* getState("R");
+          assert(
+            pending?.status === "replacing" || pending?.status === "replaced",
+          );
+          expect(pending.instanceId).not.toBe(first.physicalId);
+          expect(pending.old.instanceId).toBe(first.physicalId);
+          registry.reconcile = undefined;
+          registry.remove = undefined;
+          registry.calls.length = 0;
+          yield* stack.destroy();
+          expect(yield* listState()).toEqual([]);
+          expect([...registry.physical.values()]).toEqual([]);
+          expect(registry.calls).toContainEqual({
+            op: "delete",
+            physicalId: first.physicalId,
+            mode: "local",
+          });
+          expect(registry.calls).toContainEqual({
+            op: phase === "before-create" ? "read" : "delete",
+            physicalId: pending.instanceId,
+            mode: "live",
+          });
+          yield* stack.destroy();
+        }),
+      { timeout: 10_000 },
+    );
+  }
+
+  generationTest.provider(
+    "replacement GC blocks a planned dependency deletion until its entire old chain drains",
+    (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* stack.destroy();
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const dependency = yield* Generation("Dependency", {
+              revision: "dependency",
+            });
+            return yield* Generation("R", {
+              revision,
+              dependency: dependency.physicalId,
+            });
+          });
+        const first = yield* stack.deploy(program("one"));
+        const reached = yield* Deferred.make<void>();
+        registry.reconcile = (attrs, create) =>
+          create.pipe(
+            Effect.andThen(
+              attrs.revision === "two"
+                ? Deferred.succeed(reached, undefined).pipe(
+                    Effect.andThen(Effect.never),
+                  )
+                : Effect.void,
+            ),
+          );
+        const fiber = yield* stack
+          .deploy(program("two"))
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+        yield* Fiber.interrupt(fiber);
+        registry.reconcile = undefined;
+        registry.remove = () => Effect.fail(new ResourceFailure());
+        expect(
+          Exit.isFailure(
+            yield* stack.deploy(program("three")).pipe(Effect.exit),
+          ),
+        ).toBe(true);
+        const pending = yield* getState("R");
+        assert(pending?.status === "replaced");
+        assert(pending.old.status === "replacing");
+        registry.remove = (attrs) =>
+          attrs.physicalId === first.physicalId
+            ? Effect.fail(new ResourceFailure())
+            : Effect.void;
+        const survivor = Generation("R", { revision: "three" });
+        const exit = yield* stack.deploy(survivor).pipe(Effect.exit);
+        assert(Exit.isFailure(exit));
+        const error = exit.cause.reasons.find(Cause.isFailReason)?.error;
+        assert(error instanceof DestroyError);
+        expect(error.failures.map((entry) => entry.fqn)).toEqual(["R"]);
+        expect(error.blocked.map((entry) => entry.fqn)).toEqual(["Dependency"]);
+        expect(registry.physical.has(pending.old.instanceId)).toBe(false);
+        expect(registry.physical.has(first.physicalId)).toBe(true);
+        expect(yield* getState("Dependency")).toBeDefined();
+        registry.remove = undefined;
+        yield* stack.deploy(survivor);
+        expect([...registry.physical.keys()]).toEqual([pending.instanceId]);
+        expect(yield* getState("Dependency")).toBeUndefined();
+        yield* stack.destroy();
+        expect([...registry.physical.values()]).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  generationTest.provider(
+    "retries an old-generation delete when its cleanup checkpoint fails",
+    (stack) =>
+      Effect.gen(function* () {
+        const registry = yield* Registry;
+        yield* stack.destroy();
+        const first = yield* stack.deploy(Generation("R", { revision: "one" }));
+        const reached = yield* Deferred.make<void>();
+        registry.reconcile = (_, create) =>
+          create.pipe(
+            Effect.andThen(Deferred.succeed(reached, undefined)),
+            Effect.andThen(Effect.never),
+          );
+        const fiber = yield* stack
+          .deploy(Generation("R", { revision: "two" }))
+          .pipe(Effect.forkChild);
+        yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+        yield* Fiber.interrupt(fiber);
+        const pending = yield* getState("R");
+        assert(pending?.status === "replacing");
+        const plan = yield* stack.plan(Effect.void);
+        const state = yield* yield* State;
+        const exit = yield* apply(plan).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                request.fqn === "R" && request.value.status === "creating"
+                  ? Effect.fail(
+                      new StateStoreError({ message: "Checkpoint failed" }),
+                    )
+                  : state.set(request),
+            }),
+          ),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(exit));
+        const error = exit.cause.reasons.find(Cause.isFailReason)?.error;
+        assert(error instanceof DestroyError);
+        expect(error.failures.map((entry) => entry.fqn)).toEqual(["R"]);
+        expect(registry.physical.has(first.physicalId)).toBe(false);
+        expect(registry.physical.has(pending.instanceId)).toBe(true);
+        expect(yield* getState("R")).toEqual(pending);
+        yield* stack.destroy();
+        expect(
+          registry.calls.filter(
+            (call) =>
+              call.op === "delete" && call.physicalId === first.physicalId,
+          ),
+        ).toHaveLength(2);
+        expect([...registry.physical.values()]).toEqual([]);
+        expect(yield* listState()).toEqual([]);
+      }),
+    { timeout: 10_000 },
+  );
+
+  for (const policy of ["unowned", "retain"] as const) {
+    generationTest.provider(
+      `preserves ${policy} physical resources during interrupted replacement cleanup`,
+      (stack) =>
+        Effect.gen(function* () {
+          const registry = yield* Registry;
+          yield* stack.destroy();
+          const program = (revision: string) =>
+            Generation("R", { revision }).pipe(
+              RemovalPolicy.retain(policy === "retain"),
+            );
+          const first = yield* stack.deploy(program("one"));
+          const reached = yield* Deferred.make<void>();
+          registry.reconcile = (_, create) =>
+            create.pipe(
+              Effect.andThen(Deferred.succeed(reached, undefined)),
+              Effect.andThen(Effect.never),
+            );
+          const fiber = yield* stack
+            .deploy(program("two"))
+            .pipe(Effect.forkChild);
+          yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+          yield* Fiber.interrupt(fiber);
+          const pending = yield* getState("R");
+          assert(pending?.status === "replacing");
+          registry.unowned = policy === "unowned";
+          registry.calls.length = 0;
+          yield* stack.destroy();
+          expect(yield* listState()).toEqual([]);
+          expect(registry.physical.has(pending.instanceId)).toBe(true);
+          expect(registry.physical.has(first.physicalId)).toBe(
+            policy === "retain",
+          );
+          expect(
+            registry.calls
+              .filter((call) => call.op === "delete")
+              .map((call) => call.physicalId),
+          ).toEqual(policy === "retain" ? [] : [first.physicalId]);
+        }),
+      { timeout: 10_000 },
+    );
+  }
+
+  for (const failure of ["fail", "interrupt"] as const) {
+    for (const target of ["newest", "oldest"] as const) {
+      generationTest.provider(
+        `${failure} deleting ${target} preserves the chain and blocks dependencies`,
+        (stack) =>
+          Effect.gen(function* () {
+            const registry = yield* Registry;
+            yield* stack.destroy();
+            const program = (revision: string) =>
+              Effect.gen(function* () {
+                const dependency = yield* Generation("Dependency", {
+                  revision: "dependency",
+                });
+                yield* Generation("Sibling", { revision: "sibling" });
+                const resource = Generation("R", {
+                  revision,
+                  dependency: dependency.physicalId,
+                });
+                return yield* revision === "two"
+                  ? resource.pipe(remote())
+                  : resource;
+              });
+            const first = yield* inDev(stack.deploy(program("one")));
+            for (const revision of ["two", "three"]) {
+              const reached = yield* Deferred.make<void>();
+              registry.reconcile = (attrs, create) =>
+                create.pipe(
+                  Effect.andThen(
+                    attrs.revision === revision
+                      ? Deferred.succeed(reached, undefined).pipe(
+                          Effect.andThen(Effect.never),
+                        )
+                      : Effect.void,
+                  ),
+                );
+              const fiber = yield* inDev(stack.deploy(program(revision))).pipe(
+                Effect.forkChild,
+              );
+              yield* Deferred.await(reached).pipe(Effect.timeout("2 seconds"));
+              yield* Fiber.interrupt(fiber);
+            }
+            const pending = yield* getState("R");
+            assert(pending?.status === "replacing");
+            assert(pending.old.status === "replacing");
+            expect(
+              new Set([
+                first.physicalId,
+                pending.old.instanceId,
+                pending.instanceId,
+              ]).size,
+            ).toBe(3);
+            const blocked = yield* Deferred.make<void>();
+            registry.remove = (attrs) =>
+              attrs.physicalId ===
+              (target === "newest" ? pending.instanceId : first.physicalId)
+                ? failure === "fail"
+                  ? Effect.fail(new ResourceFailure())
+                  : Deferred.succeed(blocked, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                    )
+                : Effect.void;
+            if (failure === "fail") {
+              const exit = yield* stack.destroy().pipe(Effect.exit);
+              assert(Exit.isFailure(exit));
+              const error = exit.cause.reasons.find(Cause.isFailReason)?.error;
+              assert(error instanceof DestroyError);
+              expect(error.failures.map((entry) => entry.fqn)).toEqual(["R"]);
+              expect(
+                error.blocked.map((entry) => ({
+                  fqn: entry.fqn,
+                  blockedBy: entry.blockedBy,
+                })),
+              ).toEqual([{ fqn: "Dependency", blockedBy: ["R"] }]);
+            } else {
+              const fiber = yield* stack.destroy().pipe(Effect.forkChild);
+              yield* Deferred.await(blocked).pipe(Effect.timeout("2 seconds"));
+              yield* Fiber.interrupt(fiber);
+            }
+            expect(yield* getState("Dependency")).toBeDefined();
+            const checkpoint = yield* getState("R");
+            assert(checkpoint !== undefined);
+            if (target === "oldest") {
+              assert(checkpoint.status === "replacing");
+              expect(checkpoint.old.instanceId).toBe(first.physicalId);
+              expect(registry.physical.has(first.physicalId)).toBe(true);
+            } else {
+              expect(checkpoint.status).toBe("deleting");
+              expect(checkpoint.instanceId).toBe(pending.instanceId);
+              expect(registry.physical.has(first.physicalId)).toBe(false);
+            }
+            if (failure === "fail")
+              expect(yield* getState("Sibling")).toBeUndefined();
+            registry.remove = undefined;
+            yield* stack.destroy();
+            expect([...registry.physical.values()]).toEqual([]);
+            expect(yield* listState()).toEqual([]);
+            for (const [physicalId, mode] of [
+              [first.physicalId, "local"],
+              [pending.old.instanceId, "live"],
+              [pending.instanceId, "local"],
+            ]) {
+              expect(registry.calls).toContainEqual({
+                op: "delete",
+                physicalId,
+                mode,
+              });
+            }
+          }),
+        { timeout: 10_000 },
+      );
+    }
+  }
 });
 
 // A single failed provider.delete used to abort the whole destroy, stranding
@@ -6321,6 +7097,57 @@ describe("provider modes (local ⇄ live)", () => {
 
         yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+describe("binding client data-plane routing (apply)", () => {
+  // Action bodies invoke Binding.Service clients at apply time. In a
+  // `dev` run the wrap must route local resources to the emulator plane
+  // and `Alchemy.remote()` resources to the live plane — the inverse of
+  // each other, and never ambient.
+
+  test.provider(
+    "dev Action on a local resource hits the emulator plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" });
+            const Probe = Action(
+              "ProbeLocal",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("local");
+      }),
+  );
+
+  test.provider(
+    "dev Action on a remote() resource hits the live plane",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* inDev(
+          Effect.gen(function* () {
+            const resource = yield* ModalResource("A", { value: "v1" }).pipe(
+              remote(),
+            );
+            const Probe = Action(
+              "ProbeRemote",
+              Effect.gen(function* () {
+                const read = yield* ProbeBinding(resource);
+                return () => read();
+              }),
+            );
+            return yield* Probe({});
+          }).pipe(stack.deploy),
+        );
+        expect(out).toBe("live");
       }),
   );
 });

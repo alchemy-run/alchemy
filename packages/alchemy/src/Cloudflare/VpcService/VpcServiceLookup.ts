@@ -42,28 +42,29 @@ const toLookup = (attrs: Attributes): VpcServiceLookup => ({
  * `serviceId` or `name` and returns an `Output` of its {@link Attributes},
  * resolved during plan/deploy and inert inside deployed bundles. Place it
  * in a Worker's `env` to attach a `vpc_service` binding.
- * @resource
- * @product Workers VPC
- * @category Network
- * @example Look up by ID
+ * **Example:** Look up by ID
  * ```typescript
  * const service = Cloudflare.VpcService.lookup({
  *   serviceId: "123e4567-e89b-12d3-a456-426614174000",
  * });
  * ```
  *
- * @example Look up by name
+ * **Example:** Look up by name
  * ```typescript
  * const service = Cloudflare.VpcService.lookup({ name: "my-vpc-service" });
  * ```
  *
- * @example Bind to a Worker
+ * **Example:** Bind to a Worker
  * ```typescript
  * const worker = yield* Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   env: { VPC: Cloudflare.VpcService.lookup({ name: "my-vpc-service" }) },
  * });
  * ```
+ *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  */
 export const lookup = (props: VpcServiceLookupProps) =>
   Output.fromEffect(

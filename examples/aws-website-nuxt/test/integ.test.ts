@@ -45,7 +45,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: AWS.providers(),
   state: AWS.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Nuxt build AND creates a CloudFront
@@ -84,7 +83,7 @@ test(
     // The `GREETING` env value from alchemy.run.ts, read via
     // `process.env` during SSR — proves the Lambda rendered it at
     // request time.
-    expect(html).toContain("Hello from alchemy");
+    expect(html).toContain("Hello from Nuxt on AWS!");
   }),
   { timeout: 180_000 },
 );
@@ -95,9 +94,11 @@ test(
     const url = yield* base;
     const body = yield* getBodyWhenReady(
       `${url}/api/hello`,
-      "Hello from alchemy",
+      "Hello from Nuxt on AWS!",
     );
-    expect(JSON.parse(body)).toEqual({ greeting: "Hello from alchemy" });
+    expect(JSON.parse(body)).toEqual({
+      greeting: "Hello from Nuxt on AWS!",
+    });
   }),
   { timeout: 180_000 },
 );

@@ -151,9 +151,8 @@ export interface LayerVersion extends Resource<
  * it supersedes. `layerVersionArn` and `version` therefore change on update;
  * `layerName` and `layerArn` stay put.
  *
- * @resource
- * @section Publishing a Layer
- * @example Package a Local Directory
+ * ### Publishing a Layer
+ * **Example:** Package a Local Directory
  * ```typescript
  * // ./layers/deps contains nodejs/node_modules/...
  * const deps = yield* LayerVersion("Deps", {
@@ -162,7 +161,7 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @example Publish an Existing Archive
+ * **Example:** Publish an Existing Archive
  * ```typescript
  * const layer = yield* LayerVersion("Ffmpeg", {
  *   path: "./dist/ffmpeg-layer.zip",
@@ -171,7 +170,7 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @example Publish From S3
+ * **Example:** Publish From S3
  * ```typescript
  * const layer = yield* LayerVersion("BigLayer", {
  *   s3: {
@@ -181,14 +180,16 @@ export interface LayerVersion extends Resource<
  * });
  * ```
  *
- * @section Attaching to a Function
- * @example Use a Layer in a Function
+ * ### Attaching to a Function
+ * **Example:** Use a Layer in a Function
  * ```typescript
  * const fn = yield* Function("Handler", {
  *   main: import.meta.resolve("./handler.ts"),
  *   layers: [deps],
  * });
  * ```
+ *
+ * @resource
  */
 export const LayerVersion = Resource<LayerVersion>("AWS.Lambda.LayerVersion");
 

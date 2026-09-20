@@ -10,9 +10,8 @@ import * as Binding from "../../Binding.ts";
  * reputation dashboard over the account's dedicated IPs. Account-level
  * operation. Provide the implementation with
  * `Effect.provide(AWS.SES.GetBlacklistReportsHttp)`.
- * @binding
- * @section Deliverability Insights
- * @example Check Blacklist Status for Dedicated IPs
+ * ### Deliverability Insights
+ * **Example:** Check Blacklist Status for Dedicated IPs
  * ```typescript
  * // init — account-level binding, no resource argument
  * const getBlacklists = yield* SES.GetBlacklistReports();
@@ -22,6 +21,8 @@ import * as Binding from "../../Binding.ts";
  *   BlacklistItemNames: ["192.0.2.1"],
  * });
  * ```
+ *
+ * @binding
  */
 export interface GetBlacklistReports extends Binding.Service<
   GetBlacklistReports,

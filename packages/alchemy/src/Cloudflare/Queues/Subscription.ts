@@ -1,14 +1,24 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import type { PropsInput } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
-import { Resource } from "../../Resource.ts";
+import {
+  isResourceOfType,
+  Resource,
+  type ResourceClass,
+} from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import type {
+  WorkflowBinding,
+  WorkflowResource,
+} from "../Workflows/Workflow.ts";
 
 const TypeId = "Cloudflare.Queues.Subscription" as const;
 type TypeId = typeof TypeId;
@@ -68,8 +78,11 @@ export type SubscriptionProps = {
   name?: string;
   /**
    * The event source to subscribe to (e.g. `{ type: "r2" }` for R2 bucket
-   * events). Fixed at creation — changing it triggers a replacement.
-   * Cloudflare allows at most one subscription per source per account.
+   * events). The constructor also accepts a Workflow binding, WorkflowResource,
+   * or `yield* Cloudflare.Workflow.ref(...)`, normalized to its deferred physical
+   * workflow name. References read persisted state without owning the Workflow.
+   * Fixed at creation — changing it triggers a replacement. Cloudflare
+   * allows at most one subscription per source per account.
    */
   source: SubscriptionSource;
   /**
@@ -137,6 +150,59 @@ export type Subscription = Resource<
   Providers
 >;
 
+/** Constructor inputs; Workflow sources are normalized before registration. */
+export type SubscriptionInput = Omit<
+  PropsInput<SubscriptionProps>,
+  "source"
+> & {
+  /** An explicit source, Workflow binding, Workflow resource, or `Workflow.ref`. */
+  source:
+    | PropsInput<SubscriptionProps>["source"]
+    | WorkflowBinding
+    | WorkflowResource;
+};
+
+type SubscriptionConstructor<Req = never> = {
+  Type: TypeId;
+  Props: SubscriptionProps;
+  <const Methods extends Record<string, any>>(
+    methods: Methods,
+  ): SubscriptionClass & Methods;
+  (
+    id: string,
+    props: SubscriptionInput,
+  ): Effect.Effect<Subscription, never, Req>;
+  <PropsReq = never>(
+    id: string,
+    props: Effect.Effect<SubscriptionInput, never, PropsReq>,
+  ): Effect.Effect<Subscription, never, PropsReq | Req>;
+};
+
+type SubscriptionClass = SubscriptionConstructor<Providers> &
+  Effect.Effect<SubscriptionConstructor> &
+  Pick<ResourceClass<Subscription>, "Self" | "Provider" | "Aliases" | "ref">;
+
+const SubscriptionResource = Resource<Subscription>(TypeId, {
+  aliases: ["Cloudflare.Queue.Subscription"],
+});
+
+const isWorkflowSource = (
+  source: SubscriptionInput["source"],
+): source is WorkflowBinding | WorkflowResource =>
+  isResourceOfType(source, "Cloudflare.Workflow") ||
+  (typeof source === "object" &&
+    source !== null &&
+    (source as WorkflowBinding).kind === "Cloudflare.Workflow");
+
+const normalizeSubscriptionProps = (
+  props: SubscriptionInput,
+): PropsInput<SubscriptionProps> => ({
+  ...props,
+  source: isWorkflowSource(props.source)
+    ? { type: "workflows.workflow", workflowName: props.source.workflowName }
+    : props.source,
+});
+
 /**
  * A Cloudflare Queues event subscription — delivers platform events
  * (R2 bucket events, KV namespace events, Workers Builds, Workflows,
@@ -146,11 +212,8 @@ export type Subscription = Resource<
  * creation (changing it replaces the subscription). `name`, `events`,
  * `enabled`, and the destination `queueId` are all mutable in place.
  * Cloudflare allows at most one subscription per source per account.
- * @resource
- * @product Queues
- * @category Storage & Databases
- * @section Creating a Subscription
- * @example R2 bucket events into a Queue
+ * ### Creating a Subscription
+ * **Example:** R2 bucket events into a Queue
  * ```typescript
  * const queue = yield* Cloudflare.Queues.Queue("EventsQueue");
  *
@@ -161,7 +224,7 @@ export type Subscription = Resource<
  * });
  * ```
  *
- * @example KV namespace events with an explicit name
+ * **Example:** KV namespace events with an explicit name
  * ```typescript
  * const subscription = yield* Cloudflare.Queues.Subscription("KvEvents", {
  *   name: "kv-events",
@@ -171,17 +234,59 @@ export type Subscription = Resource<
  * });
  * ```
  *
- * @example Workers Builds events for one Worker
+ * **Example:** Workers Builds events for one Worker
  * ```typescript
  * const subscription = yield* Cloudflare.Queues.Subscription("BuildEvents", {
  *   source: { type: "workersBuilds.worker", workerName: "my-worker" },
- *   events: ["build.started", "build.completed"],
+ *   events: ["build.started", "build.succeeded"],
  *   queueId: queue.queueId,
  * });
  * ```
  *
- * @section Pausing delivery
- * @example Disable a subscription without deleting it
+ * **Example:** Workflow lifecycle events, from a Workflow bound in this stack
+ * Pass the Workflow binding from the host Worker's `env` directly. Its
+ * physical name remains an `Output`, so the subscription works on the
+ * Workflow's first deployment and follows later renames. Only the source
+ * type and physical workflow name are persisted, not the binding metadata.
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { INGESTION: Cloudflare.Workflow("Ingestion", { className: "IngestionWorkflow" }) },
+ * });
+ *
+ * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: worker.env.INGESTION,
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Workflow lifecycle events from a persisted resource reference
+ * Use the logical resource ID, including any namespace. References read
+ * persisted state, so deploy the host first. Omitting the options uses the
+ * current stack and stage; the reference does not take ownership of the host.
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: yield* Cloudflare.Workflow.ref("Ingestion", {
+ *     stack: "workflow-host",
+ *     stage: "production",
+ *   }),
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * **Example:** Workflow lifecycle events by an existing physical name
+ * ```typescript
+ * const subscription = yield* Cloudflare.Queues.Subscription("WorkflowEvents", {
+ *   source: { type: "workflows.workflow", workflowName: "existing-ingestion" },
+ *   events: ["instance.completed", "instance.errored"],
+ *   queueId: queue.queueId,
+ * });
+ * ```
+ *
+ * ### Pausing delivery
+ * **Example:** Disable a subscription without deleting it
  * ```typescript
  * const subscription = yield* Cloudflare.Queues.Subscription("R2Events", {
  *   source: { type: "r2" },
@@ -192,10 +297,41 @@ export type Subscription = Resource<
  * ```
  *
  * @see https://developers.cloudflare.com/queues/event-subscriptions/
+ *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  */
-export const Subscription = Resource<Subscription>(TypeId, {
-  aliases: ["Cloudflare.Queue.Subscription"],
-});
+export const Subscription: SubscriptionClass = Object.assign(
+  (
+    ...args:
+      | [
+          id: string,
+          props:
+            | SubscriptionInput
+            | Effect.Effect<SubscriptionInput, never, any>,
+        ]
+      | [methods: Record<string, any>]
+  ) => {
+    if (typeof args[0] === "object") {
+      return Object.assign(Subscription, args[0]);
+    }
+    const [id, props] = args as [
+      string,
+      SubscriptionInput | Effect.Effect<SubscriptionInput, never, any>,
+    ];
+    // Resource supplies Self while evaluating Effect-valued props.
+    return Effect.isEffect(props)
+      ? SubscriptionResource(id, Effect.map(props, normalizeSubscriptionProps))
+      : SubscriptionResource(id, normalizeSubscriptionProps(props));
+  },
+  SubscriptionResource,
+  Effectable.Prototype({
+    label: `Resource<${TypeId}>`,
+    evaluate: (): Effect.Effect<SubscriptionConstructor> =>
+      Effect.succeed(Subscription),
+  }),
+) as SubscriptionClass;
 
 /**
  * Returns true if the given value is a Subscription resource.
@@ -204,13 +340,17 @@ export const isSubscription = (value: unknown): value is Subscription =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
 export const SubscriptionProvider = () =>
-  Provider.succeed(Subscription, {
+  Provider.succeed(SubscriptionResource, {
     stables: ["subscriptionId", "accountId", "source", "createdAt"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
+      }
+      // An unresolved immutable source may change with its upstream resource.
+      // Delete first in case it resolves to the same account-unique source.
+      if (!("source" in news) || !isResolved(news.source)) {
+        return { action: "replace", deleteFirst: true } as const;
       }
       // The source is fixed at creation.
       const oldSource = output?.source ?? olds?.source;

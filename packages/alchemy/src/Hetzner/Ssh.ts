@@ -52,19 +52,20 @@ export interface SshClient {
  * SSH exec/scp against a Hetzner Server. Uses the Server's Alchemy-managed
  * deploy key (injected at create) unless `privateKey` is passed.
  *
- * @binding
- * @section Remote access
- * @example Exec a command
+ * ### Remote access
+ * **Example:** Exec a command
  * ```typescript
  * const ssh = yield* Hetzner.Ssh(server);
  * const { stdout } = yield* ssh.exec("uname -a");
  * ```
  *
- * @example Copy a file
+ * **Example:** Copy a file
  * ```typescript
  * const ssh = yield* Hetzner.Ssh(server);
  * yield* ssh.scp("/tmp/app.zip", "/opt/app/bundle.zip");
  * ```
+ *
+ * @binding
  */
 export interface Ssh extends Binding.Service<
   Ssh,

@@ -148,18 +148,17 @@ export type Network = Resource<
  * and labels are synced on the Network itself; `network_actions` are not
  * modeled as their own resources.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#networks
  *
- * @section Creating a Network
- * @example Basic Network
+ * ### Creating a Network
+ * **Example:** Basic Network
  * ```typescript
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
  * });
  * ```
  *
- * @example Network with a cloud subnet
+ * **Example:** Network with a cloud subnet
  * ```typescript
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
@@ -169,8 +168,8 @@ export type Network = Resource<
  * });
  * ```
  *
- * @section Routes and protection
- * @example Static route and delete protection
+ * ### Routes and protection
+ * **Example:** Static route and delete protection
  * ```typescript
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
@@ -182,14 +181,16 @@ export type Network = Resource<
  * });
  * ```
  *
- * @section Labels
- * @example User labels
+ * ### Labels
+ * **Example:** User labels
  * ```typescript
  * const network = yield* Hetzner.Network("vpc", {
  *   ipRange: "10.0.0.0/16",
  *   labels: { env: "prod", role: "vpc" },
  * });
  * ```
+ *
+ * @resource
  */
 export const Network = Resource<Network>("Hetzner.Network");
 

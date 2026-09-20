@@ -35,14 +35,8 @@ export interface DrizzleLayerConfig {
  * tables). Spread generated `authRelations` after your app's
  * `defineRelations` when constructing the db.
  *
- * @layer
- * @provides BetterAuth.Database
- * @peer drizzle-orm
- * @peer @better-auth/drizzle-adapter
- * @product Drizzle
- *
- * @section Bringing your own Drizzle db
- * @example Postgres drizzle instance with generated auth relations
+ * ### Bringing your own Drizzle db
+ * **Example:** Postgres drizzle instance with generated auth relations
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Drizzle } from "@alchemy.run/better-auth/Drizzle";
@@ -60,6 +54,12 @@ export interface DrizzleLayerConfig {
  *   // ...
  * }).pipe(Effect.provide(Drizzle(db, { provider: "pg", schema })))
  * ```
+ *
+ * @layer
+ * @provides BetterAuth.Database
+ * @peer drizzle-orm
+ * @peer @better-auth/drizzle-adapter
+ * @product Drizzle
  */
 export const Drizzle = (
   db:

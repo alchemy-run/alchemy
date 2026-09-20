@@ -143,11 +143,10 @@ export type PrimaryIp = Resource<
  * them replaces the Primary IP (new address). `name`, `autoDelete`,
  * `labels`, and `deleteProtection` update in place.
  *
- * @resource
  * @see https://docs.hetzner.cloud/reference/cloud#primary-ips
  *
- * @section Creating a Primary IP
- * @example IPv6 in Nuremberg
+ * ### Creating a Primary IP
+ * **Example:** IPv6 in Nuremberg
  * ```typescript
  * const ip = yield* Hetzner.PrimaryIp("web-ipv6", {
  *   type: "ipv6",
@@ -155,7 +154,7 @@ export type PrimaryIp = Resource<
  * });
  * ```
  *
- * @example IPv4 placed by datacenter
+ * **Example:** IPv4 placed by datacenter
  * ```typescript
  * const ip = yield* Hetzner.PrimaryIp("web-ipv4", {
  *   type: "ipv4",
@@ -163,8 +162,8 @@ export type PrimaryIp = Resource<
  * });
  * ```
  *
- * @section Labels and auto-delete
- * @example Named IP with labels
+ * ### Labels and auto-delete
+ * **Example:** Named IP with labels
  * ```typescript
  * const ip = yield* Hetzner.PrimaryIp("mail", {
  *   name: "mail-ipv4",
@@ -174,6 +173,8 @@ export type PrimaryIp = Resource<
  *   labels: { role: "mail" },
  * });
  * ```
+ *
+ * @resource
  */
 export const PrimaryIp = Resource<PrimaryIp>("Hetzner.PrimaryIp");
 

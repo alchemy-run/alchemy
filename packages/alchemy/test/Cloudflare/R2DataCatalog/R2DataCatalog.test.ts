@@ -71,7 +71,7 @@ const expectGone = (accountId: string, bucketName: string) =>
   );
 
 test.provider(
-  "enable, sync maintenance config, register credential, destroy",
+  "register credential before initial maintenance config, update, destroy",
   (stack) =>
     Effect.gen(function* () {
       const env = yield* yield* CloudflareEnvironment;
@@ -79,8 +79,19 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Create — enable the catalog on a fresh bucket.
-      const initial = yield* stack.deploy(program());
+      // Create — when API-token credentials are available, reproduce the
+      // greenfield case where the catalog needs both a credential and a
+      // non-default maintenance config in the same reconciliation.
+      const initial = yield* stack.deploy(
+        program(
+          env.type === "apiToken"
+            ? {
+                compaction: { state: "enabled", targetSizeMb: "256" },
+                token: env.apiToken,
+              }
+            : {},
+        ),
+      );
 
       expect(initial.catalog.catalogId).toBeTruthy();
       expect(initial.catalog.bucketName).toEqual(initial.bucket.bucketName);
@@ -92,53 +103,27 @@ test.provider(
       expect(initial.catalog.catalogUri).toEqual(
         `https://catalog.cloudflarestorage.com/${accountId}/${initial.bucket.bucketName}`,
       );
-      expect(initial.catalog.credentialStatus).toEqual("absent");
+      expect(initial.catalog.credentialStatus).toEqual(
+        env.type === "apiToken" ? "present" : "absent",
+      );
 
       const live = yield* getCatalog(accountId, initial.bucket.bucketName);
       expect(live.id).toEqual(initial.catalog.catalogId);
       expect(live.status).toEqual("active");
 
-      // Update — sync maintenance config in place (same catalog id).
-      const updated = yield* stack.deploy(
-        program({
-          compaction: { state: "disabled", targetSizeMb: "256" },
-          snapshotExpiration: {
-            state: "disabled",
-            maxSnapshotAge: "3d",
-            minSnapshotsToKeep: 5,
-          },
-        }),
-      );
-
-      expect(updated.catalog.catalogId).toEqual(initial.catalog.catalogId);
-      expect(updated.catalog.compaction).toEqual({
-        state: "disabled",
-        targetSizeMb: "256",
-      });
-      expect(updated.catalog.snapshotExpiration).toEqual({
-        state: "disabled",
-        maxSnapshotAge: "3d",
-        minSnapshotsToKeep: 5,
-      });
-
-      const liveUpdated = yield* getCatalog(
-        accountId,
-        initial.bucket.bucketName,
-      );
-      expect(liveUpdated.maintenanceConfig?.compaction).toEqual({
-        state: "disabled",
-        targetSizeMb: "256",
-      });
-      expect(liveUpdated.maintenanceConfig?.snapshotExpiration).toEqual({
-        state: "disabled",
-        maxSnapshotAge: "3d",
-        minSnapshotsToKeep: 5,
-      });
-
-      // Update — register a maintenance credential (write-only; observable
-      // only as credential_status flipping to "present").
       if (env.type === "apiToken") {
-        const withCredential = yield* stack.deploy(
+        expect(initial.catalog.compaction).toEqual({
+          state: "enabled",
+          targetSizeMb: "256",
+        });
+        expect(live.credentialStatus).toEqual("present");
+        expect(live.maintenanceConfig?.compaction).toEqual({
+          state: "enabled",
+          targetSizeMb: "256",
+        });
+
+        // Update — sync maintenance config in place (same catalog id).
+        const updated = yield* stack.deploy(
           program({
             compaction: { state: "disabled", targetSizeMb: "256" },
             snapshotExpiration: {
@@ -149,16 +134,32 @@ test.provider(
             token: env.apiToken,
           }),
         );
-        expect(withCredential.catalog.catalogId).toEqual(
-          initial.catalog.catalogId,
-        );
-        expect(withCredential.catalog.credentialStatus).toEqual("present");
 
-        const liveCredential = yield* getCatalog(
+        expect(updated.catalog.catalogId).toEqual(initial.catalog.catalogId);
+        expect(updated.catalog.compaction).toEqual({
+          state: "disabled",
+          targetSizeMb: "256",
+        });
+        expect(updated.catalog.snapshotExpiration).toEqual({
+          state: "disabled",
+          maxSnapshotAge: "3d",
+          minSnapshotsToKeep: 5,
+        });
+
+        const liveUpdated = yield* getCatalog(
           accountId,
           initial.bucket.bucketName,
         );
-        expect(liveCredential.credentialStatus).toEqual("present");
+        expect(liveUpdated.credentialStatus).toEqual("present");
+        expect(liveUpdated.maintenanceConfig?.compaction).toEqual({
+          state: "disabled",
+          targetSizeMb: "256",
+        });
+        expect(liveUpdated.maintenanceConfig?.snapshotExpiration).toEqual({
+          state: "disabled",
+          maxSnapshotAge: "3d",
+          minSnapshotsToKeep: 5,
+        });
       }
 
       yield* stack.destroy();

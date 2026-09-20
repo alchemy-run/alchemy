@@ -10,7 +10,14 @@ import {
 } from "./Internal/DevStub.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import { Resource } from "../Resource.ts";
-import { PrismaClient, isNotFound } from "./Client.ts";
+import {
+  type GetBucketsResponse,
+  deleteBucket,
+  getBuckets,
+  getBucket,
+  createBucket,
+} from "@distilled.cloud/prisma/management";
+import { Retry } from "@distilled.cloud/prisma";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -20,7 +27,8 @@ import {
   resolveProjectId,
   unresolvedProjectIdOf,
 } from "./Refs.ts";
-import type { Bucket as ApiBucket } from "./Types.ts";
+import type { ObservedBucket } from "./Internal/Observed.ts";
+import { PrismaPaginationError } from "./Internal/Pagination.ts";
 
 export interface BucketProps {
   /**
@@ -73,9 +81,8 @@ export interface Bucket extends Resource<
  * deletes the bucket, its objects, and any remaining access keys — the
  * Management API cascades the deletion server-side.
  *
- * @resource
- * @section Creating a Bucket
- * @example Bucket in a project
+ * ### Creating a Bucket
+ * **Example:** Bucket in a project
  * ```typescript
  * const bucket = yield* Prisma.Bucket("uploads", {
  *   project,
@@ -83,14 +90,16 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
- * @section Accessing a Bucket
- * @example S3 credentials for a bucket
+ * ### Accessing a Bucket
+ * **Example:** S3 credentials for a bucket
  * ```typescript
  * const key = yield* Prisma.BucketAccessKey("uploads-key", {
  *   bucket,
  *   role: "read_write",
  * });
  * ```
+ *
+ * @resource
  */
 export const Bucket = Resource<Bucket>("Prisma.Bucket");
 
@@ -108,24 +117,45 @@ export class BucketProjectMismatchError extends Data.TaggedError(
   message: string;
 }> {}
 
-const attrsFrom = (bucket: ApiBucket): Bucket["Attributes"] => ({
+const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
   bucketId: bucket.id,
   name: bucket.name,
   projectId: bucket.project.id,
   createdAt: bucket.createdAt,
 });
 
+// Distilled emits the cursor-paginated list operations as plain ops, so
+// callers walk `pagination` themselves (see `src/Neon/Project.ts`).
+const listBuckets = () =>
+  Effect.gen(function* () {
+    const buckets: GetBucketsResponse["data"][number][] = [];
+    let cursor: string | undefined;
+    while (true) {
+      const page = yield* getBuckets(cursor === undefined ? {} : { cursor });
+      buckets.push(...page.data);
+      const nextCursor = page.pagination.nextCursor;
+      if (!page.pagination.hasMore) break;
+      if (nextCursor === null) {
+        return yield* Effect.fail(
+          new PrismaPaginationError({
+            message:
+              "Invalid Prisma Management API pagination response from getBuckets: hasMore was true without a non-empty nextCursor",
+          }),
+        );
+      }
+      cursor = nextCursor;
+    }
+    return buckets;
+  });
+
 const ProviderLive = () =>
   Provider.effect(
     Bucket,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["bucketId"],
         list: () =>
-          client
-            .listBuckets()
-            .pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
+          listBuckets().pipe(Effect.map((buckets) => buckets.map(attrsFrom))),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.bucketId)) {
@@ -161,9 +191,10 @@ const ProviderLive = () =>
             ? undefined
             : output?.bucketId;
           if (!bucketId) return undefined;
-          const bucket = yield* client
-            .getBucket(bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const bucket = yield* getBucket({ bucketId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           return bucket ? attrsFrom(bucket) : undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
@@ -172,11 +203,10 @@ const ProviderLive = () =>
             ? undefined
             : output?.bucketId;
           const observed = bucketId
-            ? yield* client
-                .getBucket(bucketId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* getBucket({ bucketId }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
             : undefined;
           if (observed) {
             if (observed.project.id !== projectId) {
@@ -189,18 +219,28 @@ const ProviderLive = () =>
             }
             return attrsFrom(observed);
           }
-          const created = yield* client.createBucket({
+          const created = yield* createBucket({
             projectId,
-            name: news.name,
-            branchId: news.branchId,
-          });
+            ...(news.name === undefined ? {} : { name: news.name }),
+            ...(news.branchId === undefined || news.branchId === null
+              ? {}
+              : { branchId: news.branchId }),
+          }).pipe(
+            // A replayed create would make a second bucket; the retry policy
+            // cannot see the request, so opt out explicitly.
+            Retry.none,
+            Effect.map((response) => response.data),
+          );
           return attrsFrom(created);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.bucketId)) return;
-          const bucket = yield* client
-            .getBucket(output.bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          const bucket = yield* getBucket({
+            bucketId: output.bucketId,
+          }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
           if (!bucket) return;
           if (bucket.project.id !== output.projectId) {
             return yield* new BucketProjectMismatchError({
@@ -212,9 +252,9 @@ const ProviderLive = () =>
           }
           // Deletion cascades server-side: the Management API removes the
           // bucket together with its objects and any remaining keys.
-          yield* client
-            .deleteBucket(output.bucketId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteBucket({
+            bucketId: output.bucketId,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),

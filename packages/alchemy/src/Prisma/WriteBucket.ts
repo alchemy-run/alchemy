@@ -77,8 +77,8 @@ export interface WriteBucketClient {
  * {@link WriteBucketClient} exposes no read operations — and becomes a
  * server-side boundary if Prisma grows a write-only role.
  *
- * @section Binding a Bucket
- * @example Write objects from Prisma Compute
+ * ### Binding a Bucket
+ * **Example:** Write objects from Prisma Compute
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
