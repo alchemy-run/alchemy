@@ -206,10 +206,11 @@ where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.
 :::
 
-## Define an optional attachment codec
+## Define the session data
 
-The unchecked methods above remain available. For validation, define an
-Effect Schema codec for your application's attachment:
+You can save session data on a WebSocket and validate it when reading it
+back—even after the Durable Object wakes from hibernation. First, define
+what a valid session contains:
 
 ```typescript
 import * as Schema from "effect/Schema";
@@ -220,25 +221,35 @@ const Session = Schema.Struct({
 });
 ```
 
-The application sees a `Date`; the attachment stores its encoded string.
-Schemas with services retain their requirements: writing needs encoding
-services, and reading needs decoding services.
+`id` is a string. `joinedAt` is a `Date` in your code; this schema converts
+it to a string for storage and back to a `Date` when you read it.
 
-## Encode typed attachments
+## Save session data on a socket
 
-Replace the unchecked write in `fetch` with `setAttachment`:
+Replace the `serializeAttachment` call in `fetch` with:
 
 ```typescript
 const joinedAt = yield* Effect.sync(() => new Date());
 yield* socket.setAttachment(Session, { id, joinedAt });
 ```
 
-`setAttachment` encodes before calling native `serializeAttachment`. It adds
-no envelope: unchecked reads see `{ id, joinedAt: "..." }`, and previously
-stored unchecked values can be decoded if they match the codec's encoded
-shape. The native structured-clone and 16,384-byte serialized-size limit still
-apply; a schema accepting a value does not guarantee the platform can store
-it. Serialization overhead counts toward that limit, not just string length.
+This saves the session on this connection, so it survives hibernation.
+Cloudflare must be able to serialize the stored value, and the serialized
+attachment must fit within 16,384 bytes, including serialization overhead.
+
+## Read the session back
+
+```typescript
+const session = yield* socket.getAttachment(Session);
+
+session.id;       // string
+session.joinedAt; // Date
+```
+
+`getAttachment` checks the saved data against `Session`. Missing or invalid
+data fails with `WebSocketAttachmentError` instead of returning an invalid
+session. The existing `serializeAttachment` and `deserializeAttachment`
+methods remain available if you do not want schema validation.
 
 ## Validate attachments after hibernation
 
@@ -257,13 +268,13 @@ for (const socket of yield* state.getWebSockets()) {
 }
 ```
 
-This application closes sockets with absent, malformed, or obsolete
-attachments. The wrapper never closes them automatically. A
-`WebSocketAttachmentError` identifies `encode`, `decode`, `missing`, `read`,
-or `write` in its `reason`; `cause` preserves schema errors and native
-exceptions. Nullish attachments count as missing, even with `Schema.Unknown`.
-Older sessions lacking `joinedAt` fail validation unless your codec migrates
-them.
+This example closes connections whose sessions are missing or invalid,
+including older sessions without `joinedAt`. Your code chooses this behavior;
+`getAttachment` does not close the connection for you.
+
+For diagnostics, `WebSocketAttachmentError.reason` identifies `encode`,
+`decode`, `missing`, `read`, or `write`; `cause` contains the original error.
+A stored `null` or `undefined` counts as missing.
 
 ## Choose an attachment error policy
 
