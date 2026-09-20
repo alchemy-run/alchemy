@@ -71,6 +71,11 @@ export const publish = Effect.fn("publish")(function* (
     });
   }
 
+  if (manifest.packages.length === 0) {
+    yield* Console.log("No affected packages to publish.");
+    return { packages: [] };
+  }
+
   const upload = (pkg: Manifest["packages"][number]) =>
     Effect.gen(function* () {
       const bytes = yield* fs.readFile(path.join(dir, pkg.file));
