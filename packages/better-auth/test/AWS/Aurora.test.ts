@@ -19,7 +19,11 @@ const enabled = !process.env.FAST;
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
-const sharedStack = Core.scratchStack(testOptions, "BetterAuthAurora");
+const sharedStack = Core.scratchStack(
+  testOptions,
+  "BetterAuthAurora",
+  "test/AWS/Aurora.test.ts",
+);
 
 let baseUrl: string;
 
@@ -33,7 +37,9 @@ beforeAll(
     if (!enabled) {
       return;
     }
-    yield* sharedStack.destroy();
+    if (!process.env.NO_DESTROY) {
+      yield* sharedStack.destroy();
+    }
     const { functionUrl } = yield* sharedStack.deploy(
       Effect.gen(function* () {
         return yield* AuroraAuthFunction;
