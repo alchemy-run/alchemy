@@ -1,3 +1,4 @@
+import { Bucket } from "@/Neon/Bucket";
 import { Credential } from "@/Neon/Credential";
 import { Project } from "@/Neon/Project";
 import { providers } from "@/Neon/Providers";
@@ -91,18 +92,28 @@ test.provider(
   { timeout: 120_000 },
 );
 
-// Neon currently returns AccessDeniedException: Access Denied. for storage:write-only ListBuckets.
-test.provider.skipIf(!process.env.NEON_TEST_WRITE_IMPLIES_READ)(
-  "documented storage:write implies reads",
+// Neon's docs state storage:write includes all read operations, but the data
+// plane enforces write-only strictly: Put/Delete succeed while GetObject,
+// HeadObject, ListObjectsV2, and ListBuckets all return AccessDenied
+// (measured 2026-09-20; reported upstream). Managed write clients therefore
+// request storage:read alongside storage:write. This probe pins the observed
+// contract — it fails if Neon ships the documented implied read, at which
+// point write clients can drop the extra read scope.
+test.provider(
+  "storage:write-only is enforced strictly write-only (documented implied read is absent)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const { credential } = yield* stack.deploy(
+      const { bucket, credential } = yield* stack.deploy(
         Effect.gen(function* () {
           const project = yield* Project("WriteImpliesReadProject", {
             region: "aws-us-east-2",
           });
           return {
+            bucket: yield* Bucket("Probe", {
+              project,
+              name: "write-only-probe",
+            }),
             credential: yield* Credential("Writer", {
               project,
               scopes: ["storage:write"],
@@ -114,19 +125,46 @@ test.provider.skipIf(!process.env.NEON_TEST_WRITE_IMPLIES_READ)(
         project_id: credential.projectId,
         branch_id: credential.branchId,
       });
-      const result = yield* S3.listBuckets({}).pipe(
-        Effect.provide(
-          storageLayer({
-            endpoint: storage.s3_endpoint,
-            region: storage.region,
-            accessKeyId: credential.tokenId,
-            secretAccessKey: credential.s3SecretAccessKey,
+      const layer = storageLayer({
+        endpoint: storage.s3_endpoint,
+        region: storage.region,
+        accessKeyId: credential.tokenId,
+        secretAccessKey: credential.s3SecretAccessKey,
+      });
+      const outcome = <A, E>(op: Effect.Effect<A, E, any>) =>
+        op.pipe(
+          Effect.provide(layer),
+          Effect.result,
+          Effect.map((result) =>
+            Result.isSuccess(result)
+              ? "ok"
+              : ((result.failure as { _tag: string })._tag ?? "unknown"),
+          ),
+        );
+      const matrix = {
+        PutObject: yield* outcome(
+          S3.putObject({
+            Bucket: bucket.bucketName,
+            Key: "probe.txt",
+            Body: new TextEncoder().encode("probe"),
           }),
         ),
-        Effect.result,
-      );
+        GetObject: yield* outcome(
+          S3.getObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
+        ),
+        HeadObject: yield* outcome(
+          S3.headObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
+        ),
+        ListObjectsV2: yield* outcome(
+          S3.listObjectsV2({ Bucket: bucket.bucketName }),
+        ),
+        ListBuckets: yield* outcome(S3.listBuckets({})),
+        DeleteObject: yield* outcome(
+          S3.deleteObject({ Bucket: bucket.bucketName, Key: "probe.txt" }),
+        ),
+      };
       yield* Effect.log(
-        `Neon storage:write ListBuckets: ${Result.isSuccess(result) ? "ok" : result.failure._tag}`,
+        `Neon storage:write-only matrix: ${JSON.stringify(matrix)}`,
       );
       yield* stack.destroy();
       expect(
@@ -137,8 +175,14 @@ test.provider.skipIf(!process.env.NEON_TEST_WRITE_IMPLIES_READ)(
       ).toBe(true);
       yield* Effect.log("Write-only storage fixture project is absent");
       yield* stack.destroy();
-      if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
-      expect(result.success.Buckets ?? []).toEqual([]);
+      expect(matrix).toEqual({
+        PutObject: "ok",
+        GetObject: "AccessDeniedException",
+        HeadObject: "AccessDeniedException",
+        ListObjectsV2: "AccessDeniedException",
+        ListBuckets: "AccessDeniedException",
+        DeleteObject: "ok",
+      });
     }),
   { timeout: 120_000 },
 );

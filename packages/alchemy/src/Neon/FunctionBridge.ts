@@ -1,6 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { waitUntil as nativeWaitUntil } from "@neon/functions";
+import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Duration from "effect/Duration";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -28,6 +30,71 @@ const closeRequestScope = (scope: Scope.Scope) => {
         Effect.ignoreCause({ log: "Error" }),
       ),
     ),
+  );
+};
+
+/**
+ * Neon's host neither aborts `request.signal` nor cancels the response body
+ * when the client disconnects mid-stream — it silently stops pulling, leaving
+ * the handler suspended on backpressure forever (measured: zero pulls, no
+ * cancel, no abort for 3+ minutes after a killed client). Detect that state
+ * from inside: when the host has no read in flight and has not pulled for the
+ * idle window, treat the client as gone — cancel the source (running stream
+ * finalizers) and release the request scope. A pending read never counts as
+ * idle, so slow-but-alive consumers are unaffected.
+ */
+const streamIdleTimeout = Config.Duration(
+  "ALCHEMY_NEON_STREAM_IDLE_TIMEOUT",
+).pipe(Config.withDefault(Duration.seconds(30)));
+
+const withStreamIdleWatchdog = (
+  web: Response,
+  idleMs: number,
+  onDisconnect: () => void,
+): Response => {
+  const body = web.body;
+  if (!body || idleMs <= 0) return web;
+  const reader = body.getReader();
+  let lastSettled = Date.now();
+  let pending = false;
+  const timer = setInterval(
+    () => {
+      if (pending || Date.now() - lastSettled < idleMs) return;
+      clearInterval(timer);
+      void reader
+        .cancel(new Error("client stopped consuming the response stream"))
+        .catch(() => {});
+      onDisconnect();
+    },
+    Math.max(1000, Math.min(idleMs, 5000)),
+  );
+  (timer as { unref?: () => void }).unref?.();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        pending = true;
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            clearInterval(timer);
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          clearInterval(timer);
+          controller.error(error);
+        } finally {
+          pending = false;
+          lastSettled = Date.now();
+        }
+      },
+      cancel(reason) {
+        clearInterval(timer);
+        return reader.cancel(reason);
+      },
+    }),
+    { status: web.status, statusText: web.statusText, headers: web.headers },
   );
 };
 
@@ -147,12 +214,19 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
             const transferred = HttpServerResponse.omitsBody(res, withoutBody)
               ? res
               : EffectHttp.scopeTransferToStream(res);
+            const web = HttpServerResponse.toWeb(transferred, {
+              withoutBody,
+              context,
+            });
             yield* Deferred.succeed(
               response,
-              HttpServerResponse.toWeb(transferred, {
-                withoutBody,
-                context,
-              }),
+              res.body._tag === "Stream" && !withoutBody
+                ? withStreamIdleWatchdog(
+                    web,
+                    Duration.toMillis(yield* streamIdleTimeout),
+                    () => closeRequestScope(scope),
+                  )
+                : web,
             );
           }),
         ).pipe(

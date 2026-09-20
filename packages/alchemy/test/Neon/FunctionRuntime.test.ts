@@ -272,21 +272,26 @@ test.provider.skipIf(!!process.env.FAST)(
         }),
         Effect.timeout("2 minutes"),
       );
-      const lifecycle = yield* (yield* client.get(`${native.url}diagnostics`))
-        .json;
+      const lifecycle = (yield* (yield* client.get(`${native.url}diagnostics`))
+        .json) as { id: string; phase: string }[];
       yield* Effect.logInfo(JSON.stringify({ lifecycle }));
-      expect(lifecycle).toEqual(
-        expect.arrayContaining([
-          {
-            id: "native-stream",
-            phase: expect.stringMatching(/^(abort|cancel)$/),
-          },
-          {
-            id: "native-sse",
-            phase: expect.stringMatching(/^(abort|cancel)$/),
-          },
-        ]),
-      );
+      // Pin the measured platform gap: after a client disconnect the host
+      // stops pulling but never aborts request.signal or cancels the body, so
+      // a bare native handler observes nothing. The Alchemy bridge compensates
+      // with a stream idle watchdog (asserted via `finalized` above); if this
+      // pin fails, Neon ships real disconnect signals and the watchdog can go.
+      for (const id of ["native-stream", "native-sse"]) {
+        expect(lifecycle).toEqual(
+          expect.arrayContaining([{ id, phase: "entered" }]),
+        );
+        expect(
+          lifecycle.filter(
+            (row) =>
+              row.id === id &&
+              (row.phase === "abort" || row.phase === "cancel"),
+          ),
+        ).toEqual([]);
+      }
       expect(completed).toMatchObject({
         finalized: expect.arrayContaining([
           "cancelled-stream",
