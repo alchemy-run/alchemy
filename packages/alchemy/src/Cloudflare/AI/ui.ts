@@ -6,6 +6,7 @@ import type { Evaluation } from "./Evaluation.ts";
 import type { Gateway } from "./Gateway.ts";
 import type { GatewayDynamicRouting } from "./GatewayDynamicRouting.ts";
 import type { GatewayProvider } from "./GatewayProvider.ts";
+import type { Model } from "./Model.ts";
 import type { SearchInstance } from "./SearchInstance.ts";
 import type { SearchNamespace } from "./SearchNamespace.ts";
 import type { SearchToken } from "./SearchToken.ts";
@@ -233,6 +234,22 @@ export const CustomTopicsUI = UIProvider.succeed<CustomTopics>(
   },
 );
 
+export const ModelUI = UIProvider.succeed<Model>("Cloudflare.AI.Model", {
+  displayName: "Workers AI Model",
+  icon: "brain",
+  color: "#F6821F",
+  category: "ai",
+  summary: (ctx) => ctx.attrs?.modelName,
+  consoleUrl: (ctx) =>
+    ctx.attrs?.accountId === undefined
+      ? undefined
+      : `https://dash.cloudflare.com/${ctx.attrs.accountId}/ai/workers-ai`,
+  facts: (ctx) => [
+    { label: "model", value: ctx.attrs?.modelName, mono: true, copy: true },
+    { label: "account", value: ctx.attrs?.accountId, mono: true, copy: true },
+  ],
+});
+
 export const ui = () =>
   Layer.mergeAll(
     GatewayUI,
@@ -245,4 +262,5 @@ export const ui = () =>
     SearchTokenUI,
     SecuritySettingsUI,
     CustomTopicsUI,
+    ModelUI,
   );

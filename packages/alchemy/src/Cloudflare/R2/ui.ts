@@ -4,6 +4,7 @@ import type { Bucket } from "./Bucket.ts";
 import type { BucketEventNotification } from "./BucketEventNotification.ts";
 import type { BucketSippy } from "./BucketSippy.ts";
 import type { DataCatalog } from "./DataCatalog.ts";
+import type { SuperSlurperJob } from "./SuperSlurperJob.ts";
 
 /**
  * Dashboard UI providers for Cloudflare R2 resources.
@@ -125,10 +126,40 @@ export const DataCatalogUI = UIProvider.succeed<DataCatalog>(
   },
 );
 
+export const SuperSlurperJobUI = UIProvider.succeed<SuperSlurperJob>(
+  "Cloudflare.R2.SuperSlurperJob",
+  {
+    displayName: "R2 Super Slurper Job",
+    icon: "cloud-download",
+    color: "#F6821F",
+    category: "storage",
+    summary: (ctx) =>
+      ctx.props?.source?.bucket === undefined
+        ? ctx.attrs?.jobId
+        : `${ctx.props.source.bucket} -> ${ctx.props.target?.bucket ?? "?"}`,
+    consoleUrl: (ctx) =>
+      ctx.attrs?.accountId === undefined
+        ? undefined
+        : `https://dash.cloudflare.com/${ctx.attrs.accountId}/r2/migration`,
+    facts: (ctx) => [
+      { label: "job id", value: ctx.attrs?.jobId, mono: true, copy: true },
+      { label: "status", value: ctx.attrs?.status },
+      { label: "source vendor", value: ctx.props?.source?.vendor },
+      { label: "source bucket", value: ctx.props?.source?.bucket, copy: true },
+      { label: "target bucket", value: ctx.props?.target?.bucket, copy: true },
+      { label: "overwrite", value: ctx.props?.overwrite },
+      { label: "created", value: ctx.attrs?.createdAt },
+      { label: "finished", value: ctx.attrs?.finishedAt },
+      { label: "account", value: ctx.attrs?.accountId, mono: true, copy: true },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     BucketUI,
     BucketSippyUI,
     BucketEventNotificationUI,
     DataCatalogUI,
+    SuperSlurperJobUI,
   );

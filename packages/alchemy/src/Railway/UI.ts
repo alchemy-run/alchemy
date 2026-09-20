@@ -16,6 +16,7 @@ import type { Project } from "./Project.ts";
 import type { Environment } from "./ProjectEnvironment.ts";
 import type { Redis } from "./Redis.ts";
 import type { Sandbox } from "./Sandbox.ts";
+import type { SandboxCheckpoint } from "./SandboxCheckpoint.ts";
 import type { Service } from "./Service.ts";
 import type { TcpProxy } from "./TcpProxy.ts";
 import type { Template } from "./Template.ts";
@@ -689,6 +690,30 @@ export const CdnUI = UIProvider.succeed<Cdn>("Railway.Website.Cdn", {
   ],
 });
 
+export const SandboxCheckpointUI = UIProvider.succeed<SandboxCheckpoint>(
+  "Railway.SandboxCheckpoint",
+  {
+    displayName: "Railway Sandbox Checkpoint",
+    icon: "camera",
+    color: RAILWAY_PURPLE,
+    category: "compute",
+    summary: (ctx) => ctx.attrs?.name,
+    facts: (ctx) => [
+      { label: "name", value: ctx.attrs?.name, copy: true },
+      {
+        label: "checkpoint id",
+        value: ctx.attrs?.sandboxCheckpointId,
+        mono: true,
+        copy: true,
+      },
+      { label: "key", value: ctx.attrs?.key, mono: true },
+      { label: "sandbox", value: ctx.attrs?.sandboxId, mono: true },
+      { label: "environment", value: ctx.attrs?.environmentId, mono: true },
+      { label: "created", value: ctx.attrs?.createdAt },
+    ],
+  },
+);
+
 export const ui = () =>
   Layer.mergeAll(
     ProjectUI,
@@ -711,6 +736,7 @@ export const ui = () =>
     TemplateUI,
     CloudAgentUI,
     SandboxUI,
+    SandboxCheckpointUI,
     UsageLimitUI,
     CdnUI,
   );
