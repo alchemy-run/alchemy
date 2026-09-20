@@ -171,8 +171,12 @@ export class EventSource extends Context.Service<
  * Deploy-time: provisions a {@link WebhookEndpoint} pointing at this Worker
  * (at the subscribed path) and binds its minted signing secret onto the
  * Worker so deliveries can be verified. Runtime: registers a `fetch`
- * listener that claims requests on that path, verifies `Stripe-Signature`,
- * and runs the handler once per event.
+ * listener that claims requests on that path and verifies `Stripe-Signature`.
+ * Subscriptions sharing a path and endpoint ID combine their event selections.
+ * Each delivery is verified and decoded once, then sent to every matching
+ * subscriber. All subscribers must succeed within 30 seconds for a 200 response;
+ * failure or timeout returns 503. Redelivery runs successful subscribers again,
+ * so handlers must tolerate duplicates.
  *
  * @layer
  * @provides Stripe.EventSource
