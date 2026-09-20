@@ -5,9 +5,12 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as LanguageModel from "effect/unstable/ai/LanguageModel";
 import { Posts } from "../chat/Posts.ts";
 import { tryQuery } from "../engineering/Swarm.ts";
 import { inWorker } from "../platform/Database.ts";
+import { Haiku } from "../platform/Model.ts";
 import { lineage } from "../Lineage.ts";
 import { EngineeringTasks } from "./Engineering.ts";
 import { reviewVerdict } from "./Review.ts";
@@ -47,9 +50,27 @@ import {
  * follow-up pump (TriagePump's sleeper pattern) so a settling round
  * re-arms the loop without a standing alarm.
  *
- * BUDGETS: at most {@link MAX_WORKING_DESKS} desks working org-wide
- * (an isolate-level set — the DO turn still owns claim atomicity),
- * and at most 20 dispatches/hour per queue (a counter in the DO).
+ * DESK WIDTH: a desk is LINEAR by default (width 1 — one standing
+ * session, one task at a time). Raising its width (≤4, the board's
+ * `setWidth`) makes parallelism an explicit fork-and-merge exception:
+ * the first concurrent slot is the TRUNK session; each further claim
+ * FORKS — `Sessions.branch` clones the trunk at its current tip, so
+ * the clone is born with every folded note — and works its one task
+ * serially under a fresh clone key (`<deskKey>#<n>`, n never reused).
+ * When a clone's task settles, its learnings MERGE home: the
+ * compaction observer distills the clone's round and the notes land
+ * on the trunk as a quiet `[merge from <cloneKey> · <taskId>]`
+ * message its next reflection folds in. (Durable 🔴 journals already
+ * reach the identity's self-thread — clones share the term.) Clones
+ * are ephemeral: retired after merge, the session kept inspectable.
+ * A driver that cannot branch degrades to a COLD clone (a fresh
+ * session, no inherited notes, `· cold clone` in the merge header) —
+ * a branch refusal never fails the claim.
+ *
+ * BUDGETS: at most {@link MAX_WORKING_DESKS} sessions working
+ * org-wide — each active clone counts (an isolate-level set — the DO
+ * turn still owns claim atomicity), and at most 20 dispatches/hour
+ * per queue (a counter in the DO).
  */
 
 /** Org-wide ceiling on concurrently working desks. */
@@ -102,7 +123,13 @@ export interface DeskBoard {
   ) => Effect.Effect<ReadonlyArray<TaskRow>, never, RuntimeContext>;
   readonly claimNext: (
     desk: string,
-    options?: { readonly from?: "ready" | "review"; readonly preferred?: string },
+    options?: {
+      readonly from?: "ready" | "review";
+      readonly preferred?: string;
+      /** The session key the claim's round will dispatch into —
+       *  recorded on the task row (recovery reads it). */
+      readonly session?: string;
+    },
   ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
   readonly route: (
     id: string,
@@ -159,8 +186,30 @@ export interface DeskDeps {
     never,
     RuntimeContext
   >;
+  /** Fork a clone session at a trunk generation (`Sessions.branch`). */
+  readonly branch: (
+    ref: string,
+    options: { readonly key: string },
+  ) => Effect.Effect<
+    { readonly session: string; readonly ref: string },
+    AI.BranchError,
+    RuntimeContext
+  >;
+  /** A QUIET send into a session (`wake: false`) — the merge's door. */
+  readonly send: (
+    member: DeskMember,
+    key: string,
+    text: string,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  /** Distill a clone round's transcript into merge notes — the
+   *  compaction observer run standalone; undefined declines. */
+  readonly observe: (
+    transcript: string,
+  ) => Effect.Effect<string | undefined, never, RuntimeContext>;
   readonly budget: { readonly maxWorkingDesks: number };
-  /** Org-wide working-desk registry (`<queue>/<member>` entries). */
+  /** Org-wide working-session registry — one entry per active slot:
+   *  `<queue>/<member>` for the trunk, `<queue>/<member>#<n>` per
+   *  clone, so every clone spends the budget. */
   readonly active: Set<string>;
 }
 
@@ -271,9 +320,50 @@ const lastSummary = (
 
 // ── the loop ────────────────────────────────────────────────────────
 
+/** A clone round's observations as a plain transcript for the
+ *  observer — inputs and assistant replies; tool minutiae stays in
+ *  the clone's own log. */
+const renderRound = (log: ReadonlyArray<AI.SessionObservation>): string =>
+  log
+    .map((row) =>
+      row.type === "input"
+        ? `[${row.author ?? "input"}]\n${row.text}`
+        : row.type === "assistant" && row.text.length > 0
+          ? `[assistant]\n${row.text}`
+          : "",
+    )
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+
+/** A settled CLONE's learnings, merged home: distill the clone
+ *  round's transcript (the compaction observer, standalone) and
+ *  deliver the notes QUIET to the trunk — its next reflection folds
+ *  them in. Nothing distilled means nothing to merge; the clone is
+ *  retired either way (its key is never reused). */
+const mergeHome = Effect.fn("root/tasks/Desks.mergeHome")(function* (
+  deps: DeskDeps,
+  queue: QueueSpec,
+  member: DeskMember,
+  task: TaskRow,
+  clone: string,
+  cold: boolean,
+) {
+  const transcript = renderRound(yield* deps.history(member, clone));
+  if (transcript.length === 0) return;
+  const notes = yield* deps.observe(transcript);
+  if (notes === undefined || notes.length === 0) return;
+  yield* deps.send(
+    member,
+    deps.deskKey(queue.slug, member),
+    `[merge from ${clone} · ${task.id}${cold ? " · cold clone" : ""}]\n${notes}`,
+  );
+});
+
 /** Apply a finished round's reply to the board — post it into the
  *  task's thread, then route by disposition (worker) or verdict
- *  (reviewer). Shared by the live path and crash recovery. */
+ *  (reviewer). Shared by the live path and crash recovery. A round
+ *  that ran at a CLONE session merges its learnings home on settle;
+ *  the trunk's notes fold naturally at its own next compaction. */
 const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
   deps: DeskDeps,
   queue: QueueSpec,
@@ -281,6 +371,7 @@ const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
   from: "ready" | "review",
   task: TaskRow,
   reply: string,
+  slot?: { readonly key: string; readonly cold: boolean },
 ) {
   const board = deps.board(queue.slug);
   if (task.rootPost !== undefined && reply.length > 0) {
@@ -344,6 +435,11 @@ const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
           data: clip(reply, 2_000),
         });
   }
+  // the merge: recovery settles carry the session on the task row
+  const key = slot?.key ?? task.session;
+  if (key !== undefined && key !== deps.deskKey(queue.slug, member)) {
+    yield* mergeHome(deps, queue, member, task, key, slot?.cold ?? false);
+  }
 });
 
 /**
@@ -356,7 +452,9 @@ const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
  * the claim already ran the round, so harvest its final reply and
  * settle it; parked BEFORE the claim means the ask never landed, so
  * hand the task back for a fresh claim. A running session is just
- * busy — not stuck.
+ * busy — not stuck. A multi-task desk recovers each stuck task
+ * against the SESSION its claim recorded — trunk or clone — never
+ * one shared log.
  */
 const recoverDesk = Effect.fn("root/tasks/Desks.recoverDesk")(function* (
   deps: DeskDeps,
@@ -366,7 +464,7 @@ const recoverDesk = Effect.fn("root/tasks/Desks.recoverDesk")(function* (
   stuck: TaskRow,
 ) {
   const board = deps.board(queue.slug);
-  const key = deps.deskKey(queue.slug, member);
+  const key = stuck.session ?? deps.deskKey(queue.slug, member);
   const log = yield* deps.history(member, key);
   const last = log[log.length - 1];
   const now = yield* Clock.currentTimeMillis;
@@ -421,8 +519,83 @@ const recoverDesk = Effect.fn("root/tasks/Desks.recoverDesk")(function* (
   return true;
 });
 
-/** One desk's pass: claim, dispatch, disposition. Answers whether it
- *  progressed (a claim happened) — the pump re-passes on progress. */
+/** Mint a clone slot: branch the trunk at its current tip so the
+ *  clone is born with every folded note. Keys are `<trunk>#<n>` with
+ *  a fresh n per fork — never persisted, never reused (retired
+ *  clones stay inspectable). An `occupied` refusal picks another n;
+ *  any other refusal (a driver that cannot branch, a bad ref)
+ *  degrades to a COLD clone — a fresh session, no inherited notes —
+ *  so a branch refusal never fails the claim. */
+const forkClone = Effect.fn("root/tasks/Desks.forkClone")(function* (
+  deps: DeskDeps,
+  member: DeskMember,
+  trunk: string,
+) {
+  // the trunk's tip: its latest ledgered generation, or birth (@0)
+  const log = yield* deps.history(member, trunk);
+  let tip = `${member.term}/${trunk}@0`;
+  for (let index = log.length - 1; index >= 0; index--) {
+    const row = log[index]!;
+    if (row.type === "compaction") {
+      tip = row.record.ref;
+      break;
+    }
+  }
+  const minted = yield* Clock.currentTimeMillis;
+  for (let attempt = 0; ; attempt++) {
+    const key = `${trunk}#${minted.toString(36)}${attempt === 0 ? "" : `-${attempt}`}`;
+    const branched = yield* Effect.result(deps.branch(tip, { key }));
+    if (Result.isSuccess(branched)) return { key, cold: false };
+    if (branched.failure.reason === "occupied") {
+      if (attempt < 4) continue;
+      // give up branching — a fresh, never-tried key, cold
+      return { key: `${trunk}#${minted.toString(36)}-${attempt + 1}`, cold: true };
+    }
+    return { key, cold: true };
+  }
+});
+
+/** ONE round at one session slot: digest, the pickup post, the
+ *  dispatch, the settle (a clone's settle merges home). */
+const runRound = Effect.fn("root/tasks/Desks.runRound")(function* (
+  deps: DeskDeps,
+  queue: QueueSpec,
+  member: DeskMember,
+  from: "ready" | "review",
+  task: TaskRow,
+  key: string,
+  cold: boolean,
+) {
+  const board = deps.board(queue.slug);
+  // the identity's self digest lands before the work (Phase 3);
+  // delivery dedupes by tip, so a stale desk costs nothing
+  yield* deps.deliverDigest(member, key);
+  if (task.rootPost !== undefined) {
+    yield* deps.post({
+      channel: channelOf(queue),
+      replyTo: task.rootPost,
+      author: member.slug,
+      text:
+        from === "ready"
+          ? `Picked up ${task.id} at desk ${key}.`
+          : `Reviewing ${task.id} at desk ${key}.`,
+    });
+  }
+  const ask =
+    from === "ready"
+      ? workAsk(queue, task)
+      : reviewAsk(queue, task, lastSummary(yield* board.events(task.id)));
+  const reply = yield* deps.dispatch(member, { key, ask });
+  yield* settleRound(deps, queue, member, from, task, reply, { key, cold });
+});
+
+/** One desk's pass: recover what's stuck (each task against its own
+ *  recorded session), then claim into every free slot (width minus
+ *  working, bounded by the org budget — clones count) and run the
+ *  claimed rounds TOGETHER; slot one is the trunk session, each
+ *  further slot a branched clone. The pump still awaits every round,
+ *  so the caller's waitUntil keeps them all alive. Answers whether
+ *  it progressed — the pump re-passes on progress. */
 const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
   deps: DeskDeps,
   queue: QueueSpec,
@@ -431,67 +604,90 @@ const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
 ) {
   const board = deps.board(queue.slug);
   const deskId = `${queue.slug}/${member.slug}`;
-  // org-wide concurrency: a desk not already counted may not start
-  // past the ceiling
-  if (
-    deps.active.size >= deps.budget.maxWorkingDesks &&
-    !deps.active.has(deskId)
-  ) {
-    return false;
-  }
+  const trunk = deps.deskKey(queue.slug, member);
   const desk = yield* board.deskState(member.slug);
-  if (desk.working !== undefined) {
-    return yield* recoverDesk(deps, queue, member, from, desk.working);
-  }
-  const candidates = yield* board.list(from);
-  if (candidates.length === 0) return false;
-  // the scheduler advises on `ready`; reviews are worked in arrival
-  // order — a review queue needs no affinity
-  const preferred =
-    from === "ready"
-      ? yield* nextTask(
-          deps.query,
-          { desk: member.slug, recent: desk.recent },
-          candidates.map((task) => ({
-            id: task.id,
-            title: task.title,
-            body: task.body,
-            priority: task.priority,
-            tags: task.tags,
-            ...(task.origin === undefined ? {} : { origin: task.origin }),
-          })),
-        )
-      : candidates[0]!.id;
-  if (preferred === undefined) return false;
-  if (!(yield* board.spendDispatch())) return false;
-  const task = yield* board.claimNext(member.slug, { from, preferred });
-  if (task === undefined) return false;
-
-  deps.active.add(deskId);
-  return yield* Effect.gen(function* () {
-    const key = deps.deskKey(queue.slug, member);
-    // the identity's self digest lands before the work (Phase 3);
-    // delivery dedupes by tip, so a stale desk costs nothing
-    yield* deps.deliverDigest(member, key);
-    if (task.rootPost !== undefined) {
-      yield* deps.post({
-        channel: channelOf(queue),
-        replyTo: task.rootPost,
-        author: member.slug,
-        text:
-          from === "ready"
-            ? `Picked up ${task.id} at desk ${key}.`
-            : `Reviewing ${task.id} at desk ${key}.`,
-      });
+  // recovery first — a settle or re-queue changes the board, so the
+  // pass ends and the pump re-passes over fresh state
+  if (desk.working.length > 0) {
+    let recovered = false;
+    for (const stuck of desk.working) {
+      if (yield* recoverDesk(deps, queue, member, from, stuck)) {
+        recovered = true;
+      }
     }
-    const ask =
+    if (recovered) return true;
+  }
+  if (desk.working.length >= desk.width) return false;
+
+  // claim into every free slot; a session already carrying a round
+  // (in flight in another pump) is never re-used — a trunk round in
+  // flight in THIS isolate shows in `active` before the DO sees it
+  const inUse = new Set(desk.working.map((task) => task.session ?? trunk));
+  if (deps.active.has(deskId)) inUse.add(trunk);
+  const rounds: Array<Effect.Effect<void, never, RuntimeContext>> = [];
+  let refreshed = false;
+  while (desk.working.length + rounds.length < desk.width) {
+    // org-wide concurrency: every slot — trunk or clone — counts
+    if (deps.active.size >= deps.budget.maxWorkingDesks) break;
+    const candidates = yield* board.list(from);
+    if (candidates.length === 0) break;
+    // the scheduler advises on `ready`; reviews are worked in arrival
+    // order — a review queue needs no affinity
+    const preferred =
       from === "ready"
-        ? workAsk(queue, task)
-        : reviewAsk(queue, task, lastSummary(yield* board.events(task.id)));
-    const reply = yield* deps.dispatch(member, { key, ask });
-    yield* settleRound(deps, queue, member, from, task, reply);
-    return true;
-  }).pipe(Effect.ensuring(Effect.sync(() => deps.active.delete(deskId))));
+        ? yield* nextTask(
+            deps.query,
+            { desk: member.slug, recent: desk.recent },
+            candidates.map((task) => ({
+              id: task.id,
+              title: task.title,
+              body: task.body,
+              priority: task.priority,
+              tags: task.tags,
+              ...(task.origin === undefined ? {} : { origin: task.origin }),
+            })),
+          )
+        : candidates[0]!.id;
+    if (preferred === undefined) break;
+    if (!(yield* board.spendDispatch())) break;
+    const slot = inUse.has(trunk)
+      ? yield* forkClone(deps, member, trunk)
+      : { key: trunk, cold: false };
+    const task = yield* board.claimNext(member.slug, {
+      from,
+      preferred,
+      session: slot.key,
+    });
+    if (task === undefined) {
+      // a racing pump may have landed a round on the trunk between
+      // our deskState read and the claim (the DO refuses the shared
+      // session) — refresh the in-use set ONCE and retry; the next
+      // slot forks a clone instead
+      if (!refreshed && slot.key === trunk) {
+        refreshed = true;
+        for (const row of (yield* board.deskState(member.slug)).working) {
+          inUse.add(row.session ?? trunk);
+        }
+        inUse.add(trunk);
+        continue;
+      }
+      break;
+    }
+    inUse.add(slot.key);
+    const slotId =
+      slot.key === trunk
+        ? deskId
+        : `${deskId}#${slot.key.slice(trunk.length + 1)}`;
+    deps.active.add(slotId);
+    rounds.push(
+      runRound(deps, queue, member, from, task, slot.key, slot.cold).pipe(
+        Effect.ensuring(Effect.sync(() => deps.active.delete(slotId))),
+      ),
+    );
+  }
+  if (rounds.length === 0) return false;
+  yield* Effect.all(rounds, { concurrency: "unbounded", discard: true });
+  return true;
 });
 
 /** Pump one queue: pass over its desks while claims make progress. */
@@ -548,6 +744,7 @@ export const DesksLive: Layer.Layer<
   | Posts
   | AI.Sessions
   | TypeSafe.SystemOne
+  | Haiku
 > = Layer.effect(
   Desks,
   Effect.gen(function* () {
@@ -556,6 +753,8 @@ export const DesksLive: Layer.Layer<
     const posts = yield* Posts;
     const sessions = yield* AI.Sessions;
     const query = yield* TypeSafe.SystemOne;
+    // the merge's observer — the cheap watcher, same as the digests'
+    const haiku = yield* Haiku;
     const context = yield* Effect.context<AI.Sessions>();
 
     const views: ReadonlyArray<QueueView> = [engineering].map((queue) => ({
@@ -618,6 +817,23 @@ export const DesksLive: Layer.Layer<
         ),
       deskKey: (queue, member) => deskKey(queue, member.slug),
       history: (member, key) => sessions.history(member.term, key),
+      branch: (ref, options) => sessions.branch(ref, options),
+      send: (member, key, text) =>
+        sessions.send(member.term, key, text, { wake: false }),
+      observe: (transcript) =>
+        Effect.gen(function* () {
+          const model = yield* LanguageModel.LanguageModel;
+          const parsed = yield* AI.observeTranscript(model, transcript);
+          if (parsed === undefined) return undefined;
+          // journal bullets ride the merge too — the trunk's next
+          // reflection folds them; durable journaling stays with the
+          // clone's own compactions (clones share the term)
+          return parsed.journal.length === 0
+            ? parsed.log
+            : `${parsed.log}\n\n${parsed.journal
+                .map((entry) => `- ${entry}`)
+                .join("\n")}`;
+        }).pipe(Effect.provide(haiku)),
       budget: { maxWorkingDesks: MAX_WORKING_DESKS },
       active,
     };

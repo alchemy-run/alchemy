@@ -88,6 +88,10 @@ export interface TaskRow {
   readonly tags: ReadonlyArray<string>;
   /** The member slug working/last working it (`engineer`). */
   readonly desk?: string;
+  /** The SESSION key the working round dispatched into — the trunk
+   *  desk key, or a clone (`<deskKey>#<n>`) when the desk's width
+   *  forked one. Recovery reads THIS session's log. */
+  readonly session?: string;
   /** The task's thread root in ChatDO (`tasks:<queue>` channel). */
   readonly rootPost?: string;
   /** Where it came from: `github:org/alchemy#1521` | `post:p-…` | `human`. */
@@ -110,11 +114,16 @@ export interface TaskEventRow {
   readonly at: number;
 }
 
-/** What a desk looks like from the outside: its working task and the
- *  recent tasks it touched (title + tags) — the scheduler's affinity
- *  signal. */
+/** What a desk looks like from the outside: its working tasks, its
+ *  width, and the recent tasks it touched (title + tags) — the
+ *  scheduler's affinity signal. */
 export interface DeskView {
-  readonly working?: TaskRow;
+  /** The tasks the desk is working right now, oldest claim first —
+   *  width 1 (the linear default) keeps this a 0/1-element list. */
+  readonly working: ReadonlyArray<TaskRow>;
+  /** How many tasks the desk may work at once (1..{@link MAX_DESK_WIDTH})
+   *  — width 1 is linear; >1 forks clone sessions (Desks.ts). */
+  readonly width: number;
   readonly recent: ReadonlyArray<{
     readonly title: string;
     readonly tags: ReadonlyArray<string>;
@@ -132,6 +141,10 @@ export const mintTaskId: Effect.Effect<string> = Effect.map(
 /** Dispatches one queue may spend per hour (Desks.ts's budget). */
 export const DISPATCHES_PER_HOUR = 20;
 
+/** The desk-width ceiling — parallelism stays an explicit, bounded
+ *  exception to the linear desk (`setWidth` clamps into 1..this). */
+export const MAX_DESK_WIDTH = 4;
+
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -141,6 +154,7 @@ const TABLES = [
     state TEXT NOT NULL,
     tags TEXT NOT NULL DEFAULT '[]',
     desk TEXT,
+    session TEXT,
     root_post TEXT,
     origin TEXT,
     priority INTEGER NOT NULL DEFAULT 2,
@@ -162,6 +176,10 @@ const TABLES = [
     bucket INTEGER PRIMARY KEY,
     n INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS desk_settings (
+    desk TEXT PRIMARY KEY,
+    width INTEGER NOT NULL DEFAULT 1
+  )`,
 ];
 
 interface TaskDbRow extends Record<string, Cloudflare.SqlStorageValue> {
@@ -172,6 +190,7 @@ interface TaskDbRow extends Record<string, Cloudflare.SqlStorageValue> {
   state: string;
   tags: string;
   desk: string | null;
+  session: string | null;
   root_post: string | null;
   origin: string | null;
   priority: number;
@@ -207,6 +226,7 @@ const toTask = (row: TaskDbRow): TaskRow => ({
   state: row.state as TaskState,
   tags: tagsOf(row.tags),
   ...(row.desk === null ? {} : { desk: row.desk }),
+  ...(row.session === null ? {} : { session: row.session }),
   ...(row.root_post === null ? {} : { rootPost: row.root_post }),
   ...(row.origin === null ? {} : { origin: row.origin }),
   priority: row.priority,
@@ -274,11 +294,21 @@ interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
   ) => Effect.Effect<ReadonlyArray<TaskEventRow>, never, RuntimeContext>;
   readonly claimNext: (
     desk: string,
-    options?: { readonly from?: "ready" | "review"; readonly preferred?: string },
+    options?: {
+      readonly from?: "ready" | "review";
+      readonly preferred?: string;
+      /** The session key the claim's round will dispatch into —
+       *  recorded on the task row (recovery reads it). */
+      readonly session?: string;
+    },
   ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
   readonly deskState: (
     desk: string,
   ) => Effect.Effect<DeskView, never, RuntimeContext>;
+  readonly setWidth: (
+    desk: string,
+    width: number,
+  ) => Effect.Effect<number, never, RuntimeContext>;
   readonly comment: (
     id: string,
     actor: string,
@@ -304,6 +334,22 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
           sql.exec(table.trim().replaceAll(/\s+/g, " ")).pipe(Effect.asVoid),
         { discard: true },
       );
+      // tasks written under earlier schemas — PRAGMA-guarded so a
+      // re-run never throws duplicate-column and poisons the DO
+      const columns = yield* (yield* sql.exec<
+        { name: string } & Record<string, Cloudflare.SqlStorageValue>
+      >("SELECT name FROM pragma_table_info('tasks')")).toArray();
+      if (!columns.some((column) => column.name === "session")) {
+        yield* sql.exec("ALTER TABLE tasks ADD COLUMN session TEXT");
+      }
+
+      /** The desk's width (1 unless dialed up — `setWidth`). */
+      const widthOf = Effect.fn(function* (desk: string) {
+        const rows = yield* (yield* sql.exec<
+          { width: number } & Record<string, Cloudflare.SqlStorageValue>
+        >("SELECT width FROM desk_settings WHERE desk = ?", desk)).toArray();
+        return rows[0]?.width ?? 1;
+      });
 
       const taskOf = Effect.fn(function* (id: string) {
         const rows = yield* (yield* sql.exec<TaskDbRow>(
@@ -423,16 +469,31 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
           return rows.map(toEvent);
         }),
 
-        // ATOMIC claim: the DO turn is the lock. A busy desk claims
-        // nothing; the scheduler's preference is advisory — taken
-        // only if the task is still in the source state.
+        // ATOMIC claim: the DO turn is the lock. A desk at its width
+        // claims nothing; the scheduler's preference is advisory —
+        // taken only if the task is still in the source state. The
+        // caller's session key (trunk or clone) rides the claim so
+        // recovery knows which session's log to read.
         claimNext: Effect.fn(function* (desk, options) {
           const from = options?.from ?? "ready";
-          const busy = yield* (yield* sql.exec<TaskDbRow>(
-            "SELECT * FROM tasks WHERE state = 'working' AND desk = ? LIMIT 1",
+          const busy = yield* (yield* sql.exec<
+            { n: number } & Record<string, Cloudflare.SqlStorageValue>
+          >(
+            "SELECT COUNT(*) AS n FROM tasks WHERE state = 'working' AND desk = ?",
             desk,
           )).toArray();
-          if (busy.length > 0) return undefined;
+          if ((busy[0]?.n ?? 0) >= (yield* widthOf(desk))) return undefined;
+          // one round per session: two pumps racing the same trunk
+          // slot must not both land on it — the loser re-reads and
+          // forks a clone instead (Desks.ts's refresh-once retry)
+          if (options?.session !== undefined) {
+            const conflict = yield* (yield* sql.exec<TaskDbRow>(
+              "SELECT id FROM tasks WHERE state = 'working' AND desk = ? AND session = ? LIMIT 1",
+              desk,
+              options.session,
+            )).toArray();
+            if (conflict.length > 0) return undefined;
+          }
           let chosen: TaskRow | undefined;
           if (options?.preferred !== undefined) {
             const preferred = yield* taskOf(options.preferred);
@@ -448,11 +509,23 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             chosen = rows[0] === undefined ? undefined : toTask(rows[0]);
           }
           if (chosen === undefined) return undefined;
+          // always rewritten — a stale session from a past round must
+          // never point recovery at the wrong log
+          yield* sql.exec(
+            "UPDATE tasks SET session = ? WHERE id = ?",
+            options?.session ?? null,
+            chosen.id,
+          );
           yield* event(
             chosen.id,
             "assigned",
             "scheduler",
-            JSON.stringify({ desk }),
+            JSON.stringify({
+              desk,
+              ...(options?.session === undefined
+                ? {}
+                : { session: options.session }),
+            }),
           );
           return yield* move(chosen, {
             state: "working",
@@ -464,7 +537,7 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
 
         deskState: Effect.fn(function* (desk) {
           const working = yield* (yield* sql.exec<TaskDbRow>(
-            "SELECT * FROM tasks WHERE state = 'working' AND desk = ? LIMIT 1",
+            "SELECT * FROM tasks WHERE state = 'working' AND desk = ? ORDER BY updated",
             desk,
           )).toArray();
           const recent = yield* (yield* sql.exec<TaskDbRow>(
@@ -472,14 +545,28 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             desk,
           )).toArray();
           return {
-            ...(working[0] === undefined
-              ? {}
-              : { working: toTask(working[0]) }),
+            working: working.map(toTask),
+            width: yield* widthOf(desk),
             recent: recent.map((row) => ({
               title: row.title,
               tags: tagsOf(row.tags),
             })),
           };
+        }),
+
+        // the desk's parallelism dial — clamped, never trusted raw
+        setWidth: Effect.fn(function* (desk, width) {
+          const clamped = Math.min(
+            MAX_DESK_WIDTH,
+            Math.max(1, Math.round(width)),
+          );
+          yield* sql.exec(
+            "INSERT INTO desk_settings (desk, width) VALUES (?, ?) ON CONFLICT (desk) DO UPDATE SET width = ?",
+            desk,
+            clamped,
+            clamped,
+          );
+          return clamped;
         }),
 
         comment: Effect.fn(function* (id, actor, post) {
@@ -545,12 +632,20 @@ export class Tasks extends Context.Service<
       options?: {
         readonly from?: "ready" | "review";
         readonly preferred?: string;
+        readonly session?: string;
       },
     ) => Effect.Effect<TaskRow | undefined>;
     readonly deskState: (
       queue: string,
       desk: string,
     ) => Effect.Effect<DeskView>;
+    /** Dial the desk's width (clamped 1..{@link MAX_DESK_WIDTH});
+     *  answers the clamped value. */
+    readonly setWidth: (
+      queue: string,
+      desk: string,
+      width: number,
+    ) => Effect.Effect<number>;
     readonly comment: (
       queue: string,
       id: string,
@@ -579,6 +674,8 @@ export const TasksLive: Layer.Layer<Tasks, never, Cloudflare.Worker> =
         claimNext: (queue, desk, options) =>
           inWorker(stub(queue).claimNext(desk, options)),
         deskState: (queue, desk) => inWorker(stub(queue).deskState(desk)),
+        setWidth: (queue, desk, width) =>
+          inWorker(stub(queue).setWidth(desk, width)),
         comment: (queue, id, actor, post) =>
           inWorker(stub(queue).comment(id, actor, post)),
         spendDispatch: (queue) => inWorker(stub(queue).spendDispatch()),

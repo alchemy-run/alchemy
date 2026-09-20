@@ -14,7 +14,7 @@ import {
   GenerationRail,
   type GenerationNode,
 } from "@/components/generation-rail";
-import { useQueues } from "@/components/task-board";
+import { useQueues, WidthStepper } from "@/components/task-board";
 import { deskSessionId } from "@/lib/tasks";
 import { openPane, showAgent, showTasks } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -184,12 +184,16 @@ export const DeskView = ({
         >
           {view.name} desk
         </span>
-        {desk.working !== undefined && (
+        {desk.working.length > 0 && (
           <span className="flex items-center gap-1 text-[11px] text-primary/80">
             <Loader2 className="size-3 shrink-0 animate-spin" />
-            working {desk.working}
+            working {desk.working.map((work) => work.id).join(", ")}
           </span>
         )}
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          width
+          <WidthStepper queue={queue} desk={desk.slug} width={desk.width} />
+        </span>
         <button
           type="button"
           onClick={() => showAgent(desk.term, "self")}
@@ -232,6 +236,25 @@ export const DeskView = ({
               what the desk sees now
             </span>
           </button>
+          {/* active CLONES — extra width slots forked from the trunk;
+              each opens its clone session as a pane */}
+          {desk.working
+            .filter((work) => work.session !== desk.deskKey)
+            .map((work) => (
+              <button
+                key={work.session}
+                type="button"
+                onClick={() =>
+                  openPane({ kind: "agent", id: `${desk.term}:${work.session}` })
+                }
+                title={`open the clone session working ${work.id}`}
+                className="flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1 pl-[26px] pr-2 text-left font-mono text-[10.5px] text-muted-foreground hover:bg-accent/60"
+              >
+                <GitBranch className="size-3 shrink-0" />
+                clone #{work.session.slice(work.session.lastIndexOf("#") + 1)} ·{" "}
+                {work.id}
+              </button>
+            ))}
           {lineage === undefined ? (
             <div className="px-2 py-4 text-[11px] text-muted-foreground">
               loading the chain…

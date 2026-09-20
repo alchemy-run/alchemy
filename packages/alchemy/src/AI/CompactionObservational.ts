@@ -159,6 +159,34 @@ export const observationalPolicy = (
     }),
 });
 
+/**
+ * Run the OBSERVER once over an already-rendered transcript,
+ * standalone — the door for callers holding a transcript OUTSIDE a
+ * thread (a clone desk's round being merged home to its trunk). Same
+ * prompt and `## Journal` split as the policy; a model failure or an
+ * empty log answers undefined (the caller declines the distillation).
+ */
+export const observeTranscript = (
+  model: LanguageModel.LanguageModel,
+  transcript: string,
+  existingLog = "",
+): Effect.Effect<
+  { readonly log: string; readonly journal: ReadonlyArray<string> } | undefined
+> =>
+  Effect.gen(function* () {
+    const today = yield* Effect.sync(() =>
+      new Date().toISOString().slice(0, 10),
+    );
+    const sampled = yield* Effect.result(
+      model.generateText({
+        prompt: observerPrompt(existingLog, transcript, today),
+      }),
+    );
+    if (Result.isFailure(sampled)) return undefined;
+    const parsed = splitJournal(sampled.success.text);
+    return parsed.log.length === 0 ? undefined : parsed;
+  });
+
 /** Chars/4 estimate of a string — the same heuristic as `thread.tokens`. */
 const estimate = (text: string): number => Math.ceil(text.length / 4);
 

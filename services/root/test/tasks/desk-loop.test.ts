@@ -39,9 +39,11 @@ interface WorldPost {
   readonly text: string;
 }
 
+const TRUNK = "root::tasks::engineering::engineer";
+
 /** The whole fixture, explicitly: rows, a clock counter, per-member
  *  answer scripts, and a System One that answers from code. */
-const deskWorld = () => {
+const deskWorld = (options?: { maxWorkingDesks?: number }) => {
   interface Row {
     id: string;
     queue: string;
@@ -50,6 +52,7 @@ const deskWorld = () => {
     state: TaskState;
     tags: ReadonlyArray<string>;
     desk?: string;
+    session?: string;
     rootPost?: string;
     origin?: string;
     priority: number;
@@ -61,9 +64,15 @@ const deskWorld = () => {
   const events: Array<Omit<TaskEventRow, "id"> & { id: number }> = [];
   const posts: WorldPost[] = [];
   const scripts: Record<string, string[]> = {};
-  const dispatches: Array<{ member: string; task: string; ask: string }> = [];
+  const dispatches: Array<
+    { member: string; task: string; key: string; ask: string }
+  > = [];
   const digests: Array<{ term: string; key: string }> = [];
   const digestSends: Array<{ term: string; key: string }> = [];
+  const widths: Record<string, number> = {};
+  const branches: Array<{ ref: string; key: string }> = [];
+  const merges: Array<{ term: string; key: string; text: string }> = [];
+  const observed: string[] = [];
   let now = 0;
   let spent = 0;
 
@@ -116,10 +125,14 @@ const deskWorld = () => {
     claimNext: (desk, options) =>
       Effect.sync(() => {
         const from = options?.from ?? "ready";
+        const working = [...rows.values()].filter(
+          (row) => row.state === "working" && row.desk === desk,
+        );
+        if (working.length >= (widths[desk] ?? 1)) return undefined;
+        // one round per session — the trunk-race refusal (TasksDO)
         if (
-          [...rows.values()].some(
-            (row) => row.state === "working" && row.desk === desk,
-          )
+          options?.session !== undefined &&
+          working.some((row) => row.session === options.session)
         ) {
           return undefined;
         }
@@ -132,7 +145,18 @@ const deskWorld = () => {
             ? preferred
             : ordered(from)[0];
         if (chosen === undefined) return undefined;
-        event(chosen.id, "assigned", "scheduler", JSON.stringify({ desk }));
+        chosen.session = options?.session;
+        event(
+          chosen.id,
+          "assigned",
+          "scheduler",
+          JSON.stringify({
+            desk,
+            ...(options?.session === undefined
+              ? {}
+              : { session: options.session }),
+          }),
+        );
         return move(chosen, {
           state: "working",
           desk,
@@ -149,19 +173,18 @@ const deskWorld = () => {
         return move(row, input);
       }),
     deskState: (desk) =>
-      Effect.sync(() => {
-        const working = [...rows.values()].find(
-          (row) => row.state === "working" && row.desk === desk,
-        );
-        return {
-          ...(working === undefined ? {} : { working: toTask(working) }),
-          recent: [...rows.values()]
-            .filter((row) => row.desk === desk && row.state !== "working")
-            .sort((a, b) => b.updated - a.updated)
-            .slice(0, 5)
-            .map((row) => ({ title: row.title, tags: row.tags })),
-        };
-      }),
+      Effect.sync(() => ({
+        working: [...rows.values()]
+          .filter((row) => row.state === "working" && row.desk === desk)
+          .sort((a, b) => a.updated - b.updated)
+          .map(toTask),
+        width: widths[desk] ?? 1,
+        recent: [...rows.values()]
+          .filter((row) => row.desk === desk && row.state !== "working")
+          .sort((a, b) => b.updated - a.updated)
+          .slice(0, 5)
+          .map((row) => ({ title: row.title, tags: row.tags })),
+      })),
     events: (id) =>
       Effect.sync(() => events.filter((row) => row.task === id)),
     comment: (id, actor, post) =>
@@ -203,14 +226,18 @@ const deskWorld = () => {
       throw new Error("unscripted question");
     })) as unknown as typeof TypeSafe.SystemOne.Service;
 
-  // the desk session's durable log, as recovery reads it — tests
-  // seed it to simulate a round that finished with no waiter alive
+  // the desk sessions' durable logs BY KEY, as recovery reads them —
+  // tests seed them to simulate rounds that finished with no waiter
+  // alive; `sessionLog` stays the engineer TRUNK's log
+  const sessionLogs = new Map<string, Array<AI.SessionObservation>>();
   const sessionLog: Array<AI.SessionObservation> = [];
+  sessionLogs.set(TRUNK, sessionLog);
 
   const deps: DeskDeps = {
     query,
     board: () => board,
-    history: () => Effect.succeed(sessionLog.slice()),
+    history: (_member, key) =>
+      Effect.sync(() => (sessionLogs.get(key) ?? []).slice()),
     post: (input) =>
       Effect.sync(() => {
         const id = `w-${posts.length + 1}`;
@@ -225,8 +252,36 @@ const deskWorld = () => {
     dispatch: (member: DeskMember, input) =>
       Effect.sync(() => {
         const task = /\[(?:task|review) (t-[\w-]+)/.exec(input.ask)?.[1] ?? "?";
-        dispatches.push({ member: member.slug, task, ask: input.ask });
-        return scripts[member.slug]?.shift() ?? "done.";
+        dispatches.push({
+          member: member.slug,
+          task,
+          key: input.key,
+          ask: input.ask,
+        });
+        const reply = scripts[member.slug]?.shift() ?? "done.";
+        // the round lands DURABLY in the session's own log — what the
+        // merge's harvest (and recovery) reads
+        const list = sessionLogs.get(input.key) ?? [];
+        list.push(
+          {
+            term: member.term,
+            key: input.key,
+            seq: list.length,
+            type: "input",
+            at: tick(),
+            text: input.ask,
+          } as AI.SessionObservation,
+          {
+            term: member.term,
+            key: input.key,
+            seq: list.length + 1,
+            type: "assistant",
+            at: tick(),
+            text: reply,
+          } as AI.SessionObservation,
+        );
+        sessionLogs.set(input.key, list);
+        return reply;
       }),
     // the live seam dedupes by digest tip; the fake mirrors it with
     // one constant tip per term
@@ -242,7 +297,25 @@ const deskWorld = () => {
         }
       }),
     deskKey: (queue, member) => `root::tasks::${queue}::${member.slug}`,
-    budget: { maxWorkingDesks: 4 },
+    // the fork: register an empty log under the clone's key — the
+    // scripted world's stand-in for "born at the trunk's tip"
+    branch: (ref, options) =>
+      Effect.sync(() => {
+        branches.push({ ref, key: options.key });
+        if (!sessionLogs.has(options.key)) sessionLogs.set(options.key, []);
+        return { session: options.key, ref: `${options.key}@0` };
+      }),
+    send: (member: DeskMember, key, text) =>
+      Effect.sync(() => {
+        merges.push({ term: member.term, key, text });
+      }),
+    // the observer, scripted: one constant distillation per transcript
+    observe: (transcript) =>
+      Effect.sync(() => {
+        observed.push(transcript);
+        return "- 🟡 clone learnings";
+      }),
+    budget: { maxWorkingDesks: options?.maxWorkingDesks ?? 4 },
     active: new Set<string>(),
   };
 
@@ -253,8 +326,39 @@ const deskWorld = () => {
     digests,
     digestSends,
     sessionLog,
+    branches,
+    merges,
+    observed,
+    /** The desk's width dial — the board's `setWidth`, in memory. */
+    setWidth: (desk: string, width: number) => {
+      widths[desk] = width;
+    },
+    /** Seed one session's durable log under its own key. */
+    log: (
+      key: string,
+      entries: ReadonlyArray<{ type: string; at: number; text?: string }>,
+    ) => {
+      const list = sessionLogs.get(key) ?? [];
+      for (const entry of entries) {
+        list.push({
+          term: "Engineer",
+          key,
+          seq: list.length,
+          ...entry,
+        } as AI.SessionObservation);
+      }
+      sessionLogs.set(key, list);
+    },
+    /** Every event as `task:kind`, in order — cross-task ordering. */
+    timeline: () => events.map((row) => `${row.task}:${row.kind}`),
     /** A task wedged in `working` — claimed durably, waiter dead. */
-    seedWorking: (id: string, title: string, desk: string, updated: number) => {
+    seedWorking: (
+      id: string,
+      title: string,
+      desk: string,
+      updated: number,
+      session?: string,
+    ) => {
       rows.set(id, {
         id,
         queue: QUEUE.slug,
@@ -263,6 +367,7 @@ const deskWorld = () => {
         state: "working",
         tags: [],
         desk,
+        ...(session === undefined ? {} : { session }),
         rootPost: `p-${id}`,
         priority: 2,
         at: updated - 10,
@@ -393,6 +498,134 @@ describe("the desk loop", () => {
       { term: "Engineer", key: "root::tasks::engineering::engineer" },
       { term: "Reviewer", key: "root::tasks::engineering::reviewer" },
     ]);
+
+    // width 1 stays LINEAR: every round ran at the trunk — no clone
+    // forked, nothing merged
+    expect(world.branches).toEqual([]);
+    expect(world.merges).toEqual([]);
+  });
+
+  test("width 2: two tasks claimed together — the trunk plus a branched clone that merges home", async () => {
+    const world = deskWorld();
+    world.setWidth("engineer", 2);
+    world.file("t-1", "fix(kv): ttl clamp", "Clamp negative TTLs.");
+    world.file("t-2", "fix(do): stub cache", "Stub cache leaks per call.");
+    world.answer("engineer", "Clamped.\nDISPOSITION: complete — ttl clamped");
+    world.answer("engineer", "Cached.\nDISPOSITION: complete — stub cached");
+    world.answer("reviewer", "LGTM.");
+    world.answer("reviewer", "LGTM.");
+
+    await run(world);
+
+    expect(world.task("t-1").state).toBe("done");
+    expect(world.task("t-2").state).toBe("done");
+
+    // ONE fork: slot one held the trunk, slot two branched a clone
+    // at the trunk's tip (no compactions yet — the birth generation)
+    expect(world.branches).toHaveLength(1);
+    expect(world.branches[0]!.ref).toBe(`Engineer/${TRUNK}@0`);
+    const clone = world.branches[0]!.key;
+    expect(clone).toMatch(
+      /^root::tasks::engineering::engineer#[a-z0-9]+(-\d+)?$/,
+    );
+
+    // the two engineer rounds ran at DIFFERENT sessions
+    expect(
+      world.dispatches
+        .filter((entry) => entry.member === "engineer")
+        .map((entry) => `${entry.key} → ${entry.task}`)
+        .sort(),
+    ).toEqual([`${TRUNK} → t-1`, `${clone} → t-2`].sort());
+
+    // claimed CONCURRENTLY: both starts landed before either settle
+    const timeline = world.timeline();
+    const settles = [
+      timeline.indexOf("t-1:review_requested"),
+      timeline.indexOf("t-2:review_requested"),
+    ];
+    expect(timeline.indexOf("t-1:started")).toBeLessThan(Math.min(...settles));
+    expect(timeline.indexOf("t-2:started")).toBeLessThan(Math.min(...settles));
+
+    // the clone's settle merged home: exactly ONE quiet send to the
+    // TRUNK carrying the distilled notes; the trunk task merged nothing
+    expect(world.merges).toEqual([
+      {
+        term: "Engineer",
+        key: TRUNK,
+        text: `[merge from ${clone} · t-2]\n- 🟡 clone learnings`,
+      },
+    ]);
+    expect(world.observed).toHaveLength(1);
+  });
+
+  test("recovery: two stuck tasks on one desk each recover against their own session's log", async () => {
+    const world = deskWorld();
+    world.setWidth("engineer", 2);
+    const clone = `${TRUNK}#abc`;
+    world.seedWorking("t-a", "stuck on the trunk", "engineer", 100, TRUNK);
+    world.seedWorking("t-b", "stuck on a clone", "engineer", 100, clone);
+    // each session finished its round durably — with DIFFERENT ends
+    world.log(TRUNK, [
+      { type: "input", at: 110, text: "work t-a" },
+      {
+        type: "assistant",
+        at: 200,
+        text: "Trunk done.\nDISPOSITION: complete — trunk result",
+      },
+      { type: "parked", at: 210 },
+    ]);
+    world.log(clone, [
+      { type: "input", at: 120, text: "work t-b" },
+      {
+        type: "assistant",
+        at: 220,
+        text: "Blocked.\nDISPOSITION: park — no access to the entitlement",
+      },
+      { type: "parked", at: 230 },
+    ]);
+    world.answer("reviewer", "LGTM.");
+
+    await run(world);
+
+    // t-a's TRUNK log said complete → review → approved → done;
+    // t-b's CLONE log said park — one settle per session, never mixed
+    expect(world.task("t-a").state).toBe("done");
+    expect(world.task("t-b").state).toBe("parked");
+    expect(world.task("t-b").parkedReason).toContain("entitlement");
+    // recovery harvests, never re-runs
+    expect(
+      world.dispatches.filter((entry) => entry.member === "engineer"),
+    ).toHaveLength(0);
+    // the clone's recovered settle still merged home
+    expect(world.merges).toHaveLength(1);
+    expect(
+      world.merges[0]!.text.startsWith(`[merge from ${clone} · t-b]`),
+    ).toBe(true);
+    expect(world.merges[0]!.key).toBe(TRUNK);
+  });
+
+  test("the org budget counts clones — a saturated org narrows a wide desk", async () => {
+    const world = deskWorld({ maxWorkingDesks: 1 });
+    world.setWidth("engineer", 2);
+    world.file("t-1", "fix(a): first", "first");
+    world.file("t-2", "fix(b): second", "second");
+    world.answer("engineer", "done.\nDISPOSITION: complete — a");
+    world.answer("engineer", "done.\nDISPOSITION: complete — b");
+    world.answer("reviewer", "LGTM.");
+    world.answer("reviewer", "LGTM.");
+
+    await run(world);
+
+    // both flowed to done — but SERIALLY: the second slot would have
+    // busted the org budget, so no clone was ever forked
+    expect(world.task("t-1").state).toBe("done");
+    expect(world.task("t-2").state).toBe("done");
+    expect(world.branches).toEqual([]);
+    expect(
+      world.dispatches
+        .filter((entry) => entry.member === "engineer")
+        .map((entry) => entry.key),
+    ).toEqual([TRUNK, TRUNK]);
   });
 
   test("a wedged working task is recovered from the session's log", async () => {

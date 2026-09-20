@@ -23,6 +23,7 @@ import {
   KNOWN_TAGS,
   parseOrigin,
   routeTask,
+  setDeskWidth,
   tagColor,
   TRANSITIONS,
   type QueueSummary,
@@ -265,43 +266,120 @@ const TaskCard = ({
   </div>
 );
 
-/** One desk of the sidebar — the agent, and what it is working. */
+/** The desk's WIDTH stepper — the parallelism dial (− N +, 1..4):
+ *  width 1 is the linear default; >1 forks clone sessions from the
+ *  trunk that merge their notes home. Optimistic; the poll confirms. */
+export const WidthStepper = ({
+  queue,
+  desk,
+  width,
+}: {
+  queue: string;
+  desk: string;
+  width: number;
+}) => {
+  const [local, setLocal] = useState<number | undefined>();
+  // the poll caught up with the optimistic value — let it own it again
+  useEffect(() => {
+    setLocal((current) => (current === width ? undefined : current));
+  }, [width]);
+  const shown = local ?? width;
+  const step = (delta: number) => {
+    const next = Math.min(4, Math.max(1, shown + delta));
+    if (next === shown) return;
+    setLocal(next);
+    setDeskWidth(queue, desk, next).catch(() => setLocal(undefined));
+  };
+  return (
+    <span
+      onClick={(event) => event.stopPropagation()}
+      title="desk width — how many tasks this desk works at once (extra slots fork clone sessions that merge their notes home)"
+      className="flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground"
+    >
+      <button
+        type="button"
+        aria-label={`narrow ${desk}`}
+        disabled={shown <= 1}
+        onClick={() => step(-1)}
+        className="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+      >
+        −
+      </button>
+      <span className="w-3 text-center font-mono">{shown}</span>
+      <button
+        type="button"
+        aria-label={`widen ${desk}`}
+        disabled={shown >= 4}
+        onClick={() => step(1)}
+        className="flex size-4 cursor-pointer items-center justify-center rounded hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+      >
+        +
+      </button>
+    </span>
+  );
+};
+
+/** One desk of the sidebar — the agent, its width dial, and what it
+ *  is working (each working task on its own clickable line). */
 const DeskRow = ({
   queue,
   desk,
   now,
-  workingSince,
+  sinceOf,
 }: {
   queue: string;
   desk: QueueSummary["desks"][number];
   now: number;
-  /** The working task's claim time, when the board knows it. */
-  workingSince?: number;
+  /** A working task's claim time, when the board knows it. */
+  sinceOf: (id: string) => number | undefined;
 }) => (
-  <button
-    type="button"
+  <div
+    role="button"
+    tabIndex={0}
     onClick={() => showDesk(queue, desk.slug)}
+    onKeyDown={(event) => {
+      if (event.key === "Enter") showDesk(queue, desk.slug);
+    }}
     title={`open the ${desk.slug} desk — its one long-lived working thread`}
-    className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-accent/60"
+    className="flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-left text-[12px] hover:bg-accent/60"
   >
     <Avatar name={desk.slug} kind="agent" size={18} />
     <span className="min-w-0 flex-1">
-      <span className="block truncate font-mono font-semibold">
-        {desk.slug}
-      </span>
-      {desk.working !== undefined ? (
-        <span className="flex items-center gap-1 text-[10.5px] text-primary/80">
-          <Loader2 className="size-3 shrink-0 animate-spin" />
-          <span className="truncate">
-            {desk.working}
-            {workingSince !== undefined && <> · {elapsedOf(now - workingSince)}</>}
-          </span>
+      <span className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate font-mono font-semibold">
+          {desk.slug}
         </span>
+        <WidthStepper queue={queue} desk={desk.slug} width={desk.width} />
+      </span>
+      {desk.working.length > 0 ? (
+        <>
+          <span className="flex items-center gap-1 text-[10.5px] text-primary/80">
+            <Loader2 className="size-3 shrink-0 animate-spin" />
+            working {desk.working.length}/{desk.width}
+          </span>
+          {desk.working.map((work) => (
+            <button
+              key={work.id}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                showTasks(queue, work.id);
+              }}
+              title={`open ${work.id}`}
+              className="block w-full truncate pl-4 text-left font-mono text-[10.5px] text-primary/80 hover:underline"
+            >
+              {work.id}
+              {sinceOf(work.id) !== undefined && (
+                <> · {elapsedOf(now - sinceOf(work.id)!)}</>
+              )}
+            </button>
+          ))}
+        </>
       ) : (
         <span className="block text-[10.5px] text-muted-foreground">idle</span>
       )}
     </span>
-  </button>
+  </div>
 );
 
 /** A sidebar section's tiny caption — the mental model, in place. */
@@ -422,9 +500,7 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
             queue={selected.slug}
             desk={desk}
             now={now}
-            workingSince={
-              working.find((task) => task.id === desk.working)?.updated
-            }
+            sinceOf={(id) => working.find((task) => task.id === id)?.updated}
           />
         ))}
 

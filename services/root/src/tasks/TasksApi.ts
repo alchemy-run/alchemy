@@ -36,6 +36,8 @@ const parseTags = (raw: unknown): ReadonlyArray<string> | undefined =>
  * - `POST /api/tasks/:queue/:id/route`   — human override `{state, desk?}`
  * - `POST /api/tasks/:queue/:id/retag`   — replace the tags `{tags}`
  * - `POST /api/tasks/:queue/:id/comment` — a comment into the task thread
+ * - `POST /api/tasks/:queue/desks/:desk/width` — the desk's
+ *   parallelism dial `{width}` (clamped 1..4; Desks.ts's fork-and-merge)
  *
  * Every mutation pumps the queue's desks (Desks.ts) and schedules a
  * debounced follow-up pump — the TriagePump sleeper pattern — so a
@@ -73,11 +75,18 @@ export const TasksApi = Effect.gen(function* () {
         const members = yield* Effect.forEach(queue.members, (member) =>
           Effect.gen(function* () {
             const state = yield* tasks.deskState(queue.slug, member.slug);
+            const deskKey = desks.deskKey(queue.slug, member.slug);
             return {
               term: member.term,
               slug: member.slug,
-              deskKey: desks.deskKey(queue.slug, member.slug),
-              working: state.working?.id,
+              deskKey,
+              width: state.width,
+              // each working task with the session its round runs in
+              // (a legacy row without one ran at the trunk)
+              working: state.working.map((task) => ({
+                id: task.id,
+                session: task.session ?? deskKey,
+              })),
               recent: state.recent,
             };
           }),
@@ -255,6 +264,41 @@ export const TasksApi = Effect.gen(function* () {
     return yield* HttpServerResponse.json({ task });
   });
 
+  /** The desk's WIDTH — the parallelism dial (clamped 1..4 by the
+   *  board): 1 is the linear default; >1 lets the desk fork clone
+   *  sessions that merge their learnings home (Desks.ts). */
+  const width = Effect.gen(function* () {
+    const queue = yield* knownQueue;
+    if (queue === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such queue" },
+        { status: 404 },
+      );
+    }
+    const params = yield* HttpRouter.params;
+    const desk = String(params.desk ?? "");
+    if (!queue.members.some((member) => member.slug === desk)) {
+      return yield* HttpServerResponse.json(
+        { error: "no such desk" },
+        { status: 404 },
+      );
+    }
+    const request = yield* HttpServerRequest;
+    const body = (yield* request.json.pipe(
+      Effect.catch(() => Effect.succeed({})),
+    )) as { width?: number };
+    if (typeof body.width !== "number" || !Number.isFinite(body.width)) {
+      return yield* HttpServerResponse.json(
+        { error: "width required" },
+        { status: 400 },
+      );
+    }
+    const clamped = yield* tasks.setWidth(queue.slug, desk, body.width);
+    // new capacity may admit claims right away
+    yield* rearm(queue.slug);
+    return yield* HttpServerResponse.json({ desk, width: clamped });
+  });
+
   const comment = Effect.gen(function* () {
     const queue = yield* knownQueue;
     if (queue === undefined) {
@@ -307,5 +351,6 @@ export const TasksApi = Effect.gen(function* () {
     HttpRouter.add("POST", "/api/tasks/:queue/:id/route", route),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/retag", retag),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/comment", comment),
+    HttpRouter.add("POST", "/api/tasks/:queue/desks/:desk/width", width),
   );
 });

@@ -95,6 +95,14 @@ export interface TaskEventRow {
   readonly at: number;
 }
 
+/** One working round of a desk: the task and the session it runs in. */
+export interface DeskWorking {
+  readonly id: string;
+  /** The round's session key — the trunk desk key, or a clone
+   *  (`<deskKey>#<n>`) when the desk's width forked one. */
+  readonly session: string;
+}
+
 export interface DeskSummary {
   /** The agent's TERM (`Engineer`) — the session id's first half. */
   readonly term: string;
@@ -102,8 +110,11 @@ export interface DeskSummary {
   readonly slug: string;
   /** The desk's FULL session key (`root::tasks::<queue>::<agent>`). */
   readonly deskKey: string;
-  /** The id of the task the desk is working, if any. */
-  readonly working?: string;
+  /** How many tasks the desk may work at once (1..4) — 1 is the
+   *  linear default; >1 forks clone sessions from the trunk. */
+  readonly width: number;
+  /** The tasks the desk is working right now, oldest claim first. */
+  readonly working: ReadonlyArray<DeskWorking>;
   /** Recent tasks the desk touched (title + tags) — the affinity
    *  signal. */
   readonly recent: ReadonlyArray<{
@@ -183,6 +194,22 @@ export const retagTask = (
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ tags }),
+    },
+  );
+
+/** Dial the desk's width — the parallelism control (clamped 1..4 by
+ *  the board). */
+export const setDeskWidth = (
+  queue: string,
+  desk: string,
+  width: number,
+): Promise<Response> =>
+  fetch(
+    `/api/tasks/${encodeURIComponent(queue)}/desks/${encodeURIComponent(desk)}/width`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ width }),
     },
   );
 

@@ -582,7 +582,7 @@ export const TaskPage = ({ queue, id }: { queue: string; id: string }) => {
               >
                 <Avatar name={task.desk} kind="agent" size={18} />
                 {task.desk}
-                {desk?.working === task.id && (
+                {desk?.working.some((work) => work.id === task.id) && (
                   <Loader2 className="size-3 animate-spin text-primary/70" />
                 )}
               </button>
