@@ -42,6 +42,16 @@ const GLYPHS: Record<string, typeof Eye> = {
   branch: GitBranch,
 };
 
+/** Plain-language names for what each compaction kind DID — the rail
+ *  must read without knowing the engine's vocabulary. */
+const LABELS: Record<string, string> = {
+  observe: "folded into notes",
+  reflect: "notes rewritten",
+  drop: "trimmed",
+  reset: "summarized",
+  branch: "branched",
+};
+
 const tokens = (value: number): string =>
   value >= 1_000 ? `${(value / 1_000).toFixed(1)}k` : String(value);
 
@@ -60,15 +70,12 @@ const RailNode = ({
     <>
       <span className="flex items-center gap-1.5">
         <Glyph className="size-3 shrink-0 text-muted-foreground/70" />
-        <span className="font-mono text-[12px] font-medium">
-          @{node.generation}
-        </span>
-        <span className="text-[10.5px] text-muted-foreground">
-          {node.kind}
+        <span className="text-[11.5px]">
+          {LABELS[node.kind] ?? node.kind}
         </span>
       </span>
       <span className="flex items-center gap-2 pl-[18px] font-mono text-[10px] text-muted-foreground">
-        {tokens(node.tokensBefore)}→{tokens(node.tokensAfter)}
+        {tokens(node.tokensBefore)} → {tokens(node.tokensAfter)} tokens
         <span className="font-sans">{timeAgo(node.at)}</span>
       </span>
     </>

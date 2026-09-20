@@ -178,7 +178,10 @@ export const DeskView = ({
         <Avatar name={desk.slug} kind="agent" size={20} />
         <span className="font-mono text-xs font-semibold">{desk.slug}</span>
         <KindBadge kind="agent" />
-        <span className="text-xs text-muted-foreground">
+        <span
+          className="text-xs text-muted-foreground"
+          title={`${desk.slug}'s standing seat at the ${view.name} queue — every task this queue assigns ${desk.slug} runs through this one long-lived thread, so its context carries from task to task`}
+        >
           {view.name} desk
         </span>
         {desk.working !== undefined && (
@@ -204,24 +207,29 @@ export const DeskView = ({
           aria-label="context chain"
           className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-border bg-muted/20 p-2"
         >
-          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            context
+          <div className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            memory
           </div>
+          <p className="px-2 pb-2 text-[10.5px] leading-snug text-muted-foreground/80">
+            one thread works every task here; when it grows too long
+            it is folded into notes. Newest first — click a fold to
+            read what the notes kept.
+          </p>
           <button
             type="button"
             aria-current={selected === "live" ? "true" : undefined}
             onClick={() => setSelected("live")}
             className={cn(
-              "flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-left",
+              "flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left",
               selected === "live" ? "bg-accent font-medium" : "hover:bg-accent/60",
             )}
           >
-            <Radio className="size-3 shrink-0 text-moss" />
-            <span className="font-mono text-[12px] font-medium">
-              @{lineage?.[0]?.generation ?? 0}
+            <span className="flex items-center gap-1.5">
+              <Radio className="size-3 shrink-0 text-moss" />
+              <span className="text-[11.5px]">live transcript</span>
             </span>
-            <span className="text-[10.5px] text-muted-foreground">
-              live · the transcript
+            <span className="pl-[18px] text-[10px] text-muted-foreground">
+              what the desk sees now
             </span>
           </button>
           {lineage === undefined ? (
@@ -252,9 +260,9 @@ export const DeskView = ({
                 {node.kind} · {node.author}
               </span>
               <span className="font-mono text-[10.5px] text-muted-foreground">
-                {node.tokensBefore.toLocaleString()}→
+                {node.tokensBefore.toLocaleString()} →{" "}
                 {node.tokensAfter.toLocaleString()} tokens ·{" "}
-                {node.dropped} shadowed · {timeAgo(node.at)}
+                {node.dropped} messages folded away · {timeAgo(node.at)}
               </span>
               <BranchButton term={desk.term} deskKey={desk.deskKey} node={node} />
             </div>
