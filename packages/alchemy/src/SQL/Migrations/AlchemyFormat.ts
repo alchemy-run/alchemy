@@ -13,7 +13,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { quoteIdentifier, sqlLiteral } from "./Records.ts";
+import { quoteIdentifier, sqlLiteral } from "./Utils.ts";
 
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 

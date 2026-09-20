@@ -80,6 +80,12 @@ so you can only *use* them in the inner (runtime) Effect. That's why
 `state` is yielded above but `state.storage.get(...)` lives below.
 :::
 
+For SQL tables, load checked-in files with
+[`Cloudflare.SqlMigrations("./drizzle")`](/sql/effect-sql/migrations#durable-object-migrations)
+in the outer Effect and apply them in the inner Effect before activation.
+[Drizzle's Durable Object integration](/sql/drizzle/migrations#durable-object-migrations)
+accepts the same migrations alongside your typed schema.
+
 ## Add `increment` and `get`
 
 Any function you return from the inner Effect that produces an

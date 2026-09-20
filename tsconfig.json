@@ -125,6 +125,9 @@
       "path": "./examples/cloudflare-agent/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-durable-object-sql/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {

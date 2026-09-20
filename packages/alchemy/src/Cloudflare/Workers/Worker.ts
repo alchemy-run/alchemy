@@ -33,7 +33,6 @@ import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
 import type {
@@ -45,7 +44,6 @@ import {
   WorkerExecutionContext,
   WorkerTypeId,
 } from "./WorkerRuntime.ts";
-import { type DurableObjectExport } from "./DurableObject.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -57,6 +55,7 @@ import type {
 } from "./WorkerBinding.ts";
 import {
   makeWorkerRuntimeContext,
+  type WorkerExport,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
 
@@ -706,7 +705,7 @@ export interface WorkerProps<
    * Populated automatically from bindings; do not set manually.
    * @internal
    */
-  exports?: Record<string, DurableObjectExport | WorkflowExport>;
+  exports?: Record<string, WorkerExport>;
   /**
    * Environment variables and native Cloudflare Bindings to bind to
    * the Worker. Accepts:

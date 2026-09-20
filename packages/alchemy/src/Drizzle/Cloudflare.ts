@@ -5,6 +5,8 @@ import { migrate } from "drizzle-orm/effect-sqlite-do/migrator";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { DurableObjectState } from "../Cloudflare/Workers/DurableObjectState.ts";
+import { applySqlMigrations } from "../Cloudflare/Workers/SqlMigrationsApply.ts";
+import type { SqlMigrationSnapshot } from "../Cloudflare/Workers/SqlMigrationsRuntime.ts";
 
 /**
  * Migrations for {@link DurableObject} — the shape of the `migrations.js`
@@ -23,17 +25,25 @@ export interface DurableObjectConfig<
   "storage"
 > {
   /**
-   * Migrations to apply before the db is returned — pass the default
-   * export of drizzle-kit's generated `migrations.js` directly.
+   * Migrations applied before the database is returned. Prefer a snapshot
+   * from `Cloudflare.SqlMigrations(dir)`: SQL is read during construction
+   * and applied with Alchemy's `__alchemy_migrations` bookkeeping.
+   * The generated Drizzle `migrations.js` input remains supported and uses
+   * Drizzle's own migrator; its SQL imports still require loader support.
    */
-  readonly migrations?: DurableObjectMigrations | undefined;
+  readonly migrations?:
+    | SqlMigrationSnapshot
+    | DurableObjectMigrations
+    | undefined;
 }
 
 /**
  * Open a Drizzle database over the current Durable Object's SQLite
  * storage using the `drizzle-orm/effect-sqlite-do` integration (driven by
- * `@effect/sql-sqlite-do`'s `SqliteClient`), applying drizzle-kit's
- * generated migrations first when provided.
+ * `@effect/sql-sqlite-do`'s `SqliteClient`), applying migrations first
+ * when provided. `Cloudflare.SqlMigrations` captures a SQL directory during
+ * construction without importing `.sql` files. Each instance applies pending
+ * files on activation using Alchemy's shared migration history.
  *
  * Every query is an Effect with a typed error channel — drizzle's
  * `EffectDrizzleQueryError` (query + params + cause, wrapping the
@@ -70,12 +80,12 @@ export interface DurableObjectConfig<
  *
  * ```typescript
  * import * as Drizzle from "alchemy/Drizzle/Cloudflare";
- * import migrations from "./drizzle/migrations.js";
  * import { posts, relations, users } from "./schema.ts";
  *
  * export class Users extends Cloudflare.DurableObject<Users>()(
  *   "Users",
  *   Effect.gen(function* () {
+ *     const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
  *     return Effect.gen(function* () {
  *       const db = yield* Drizzle.DurableObject({ migrations, relations });
  *
@@ -118,7 +128,9 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
     >),
     storage,
   }).pipe(Effect.provideContext(services));
-  if (migrations !== undefined) {
+  if (migrations !== undefined && "_tag" in migrations) {
+    yield* applySqlMigrations(migrations).pipe(Effect.orDie);
+  } else if (migrations !== undefined) {
     // A migration that cannot apply leaves the instance unusable — there
     // is no meaningful recovery at init, so it dies rather than forcing
     // every caller to handle (or orDie) an error channel.
