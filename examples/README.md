@@ -9,6 +9,7 @@ Use the [SQL documentation](https://alchemy.run/sql) to choose a client or
 
 | Runtime | Database | Client | Runnable project |
 | --- | --- | --- | --- |
+| AWS Lambda | Aurora PostgreSQL | Drizzle | [aws-aurora-drizzle](./aws-aurora-drizzle) |
 | AWS Lambda | Aurora PostgreSQL | `pg` | [aws-rds](./aws-rds) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Drizzle | [cloudflare-neon-drizzle](./cloudflare-neon-drizzle) |
 | Cloudflare Workers | PlanetScale Postgres through Hyperdrive | Drizzle | [cloudflare-planetscale-postgres-drizzle](./cloudflare-planetscale-postgres-drizzle) |
@@ -20,10 +21,11 @@ Use the [SQL documentation](https://alchemy.run/sql) to choose a client or
 
 ### Looking for Drizzle + Aurora?
 
-The current `aws-rds` application uses **plain `pg`**, not Drizzle.
-An [Aurora PostgreSQL + Drizzle IAM test fixture](../packages/alchemy/test/AWS/RDSData/drizzle-iam-handler.ts)
-exists, but depends on the surrounding test infrastructure and database-user
-bootstrap. It is not a standalone example.
+Start with [aws-aurora-drizzle](./aws-aurora-drizzle): a standalone Lambda
+application with private Aurora PostgreSQL, IAM authentication, verified TLS,
+and deployment-time schema setup. Its [integration guide](https://alchemy.run/aws/data/drizzle-aurora)
+explains the connection and migration placement. The separate `aws-rds`
+application uses **plain `pg`**, not Drizzle.
 
 The [AWS full-stack Drizzle guide](https://alchemy.run/aws/frontend/full-stack-tanstack-rpc-drizzle)
 uses **Aurora DSQL**, a different database and deployment from Aurora

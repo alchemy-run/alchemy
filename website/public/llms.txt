@@ -314,6 +314,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Data
 
+- [Drizzle + Aurora PostgreSQL](https://alchemy.run/aws/data/drizzle-aurora) — Deploy Drizzle with Aurora PostgreSQL and AWS Lambda using IAM authentication, verified TLS, private networking, and controlled schema setup.
 - [DynamoDB](https://alchemy.run/aws/data/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
 - [RDS & Aurora](https://alchemy.run/aws/data/rds) — Stand up an Aurora cluster in one call with the Aurora helper, connect from Lambda over the Connect binding with pg, or skip connections entirely with the Data API.
 - [S3](https://alchemy.run/aws/data/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.

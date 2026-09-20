@@ -19,13 +19,16 @@ Current material has different scopes:
 
 | Material | What it covers |
 | --- | --- |
+| [Drizzle + Aurora PostgreSQL guide](/aws/data/drizzle-aurora) | Lambda, private networking, IAM authentication, verified TLS, and deployment-time schema setup |
+| [Runnable aws-aurora-drizzle example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) | Complete Drizzle + Aurora PostgreSQL application, bootstrap, and opt-in integration test |
 | [RDS & Aurora guide](/aws/data/rds) | Cluster provisioning, Lambda networking, `pg` connections, and the Data API |
 | [Runnable aws-rds example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-rds) | Aurora PostgreSQL + Lambda using `pg`, not Drizzle |
 | [Drizzle IAM test fixture](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/test/AWS/RDSData/drizzle-iam-handler.ts) | Drizzle over an IAM-authenticated Aurora socket; requires the surrounding test infrastructure and database-user bootstrap |
 
-A standalone Drizzle + Aurora PostgreSQL example is not yet documented here.
-The test fixture is implementation evidence, not a complete application to
-copy. Use the [Drizzle client guide](/sql/drizzle/postgres) for the query API.
+Start with the standalone example for a complete deployment. Its Data API
+bootstrap uses deployment credentials; the application receives only a
+restricted database login. Use the [Drizzle client guide](/sql/drizzle/postgres)
+for the portable query API.
 
 ## Aurora DSQL
 

@@ -752,6 +752,10 @@ export default defineConfig({
                 { label: "DynamoDB", link: "/aws/data/dynamodb" },
                 { label: "S3", link: "/aws/data/s3" },
                 { label: "RDS & Aurora", link: "/aws/data/rds" },
+                {
+                  label: "Drizzle + Aurora PostgreSQL",
+                  link: "/aws/data/drizzle-aurora",
+                },
               ],
             },
             {
