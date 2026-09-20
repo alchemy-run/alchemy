@@ -585,7 +585,68 @@ describe("S3 Bindings", () => {
   });
 
   describe("PresignGetObject", () => {
-    test.provider("grants only unversioned object reads", () =>
+    test.provider(
+      "pins downloads across overwrites and signs versioned response overrides and expiry",
+      () =>
+        Effect.gen(function* () {
+          const key = "presign/pinned-before-overwrite.txt";
+          const old = yield* S3.putObject({
+            Bucket: getOnlyBucket.bucketName,
+            Key: key,
+            Body: "before overwrite",
+          });
+          const mint = (versionId?: string, expiresIn = 900) =>
+            Effect.gen(function* () {
+              const path = yield* Effect.sync(() =>
+                route("/presign", {
+                  key,
+                  expiresIn: String(expiresIn),
+                  contentType: "text/markdown",
+                  ...(versionId === undefined ? {} : { versionId }),
+                }),
+              );
+              const response = yield* send(
+                HttpClientRequest.get(`${getOnlyUrl}${path}`),
+              );
+              expect(response.status).toBe(200);
+              return (yield* response.json.pipe(
+                Effect.flatMap(
+                  Schema.decodeUnknownEffect(
+                    Schema.Struct({ url: Schema.String }),
+                  ),
+                ),
+              )).url;
+            });
+          const pinned = yield* mint(old.VersionId!);
+          const current = yield* mint();
+          const latest = yield* S3.putObject({
+            Bucket: getOnlyBucket.bucketName,
+            Key: key,
+            Body: "after overwrite",
+          });
+          for (const [url, body, version] of [
+            [pinned, "before overwrite", old.VersionId],
+            [current, "after overwrite", latest.VersionId],
+          ] as const) {
+            const response = yield* sendPresigned(HttpClientRequest.get(url));
+            expect(yield* response.text).toBe(body);
+            expect(response.headers["x-amz-version-id"]).toBe(version);
+            expect(response.headers["content-type"]).toBe("text/markdown");
+          }
+          const expiring = yield* mint(old.VersionId!, 1);
+          const status = yield* send(HttpClientRequest.get(expiring)).pipe(
+            Effect.map((response) => response.status),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              times: 8,
+              until: (status) => status === 403,
+            }),
+          );
+          expect(status).toBe(403);
+        }),
+    );
+
+    test.provider("grants only current and versioned object reads", () =>
       Effect.gen(function* () {
         expect(yield* s3RolePermissions(getOnlyRoleName)).toEqual([
           {
@@ -593,49 +654,128 @@ describe("S3 Bindings", () => {
             action: "s3:GetObject",
             resource: `${getOnlyBucket.bucketArn}/*`,
           },
+          {
+            effect: "Allow",
+            action: "s3:GetObjectVersion",
+            resource: `${getOnlyBucket.bucketArn}/*`,
+          },
         ]);
       }),
     );
 
     test.provider(
-      "reads the current version and denies explicit version access with only PresignGetObject bound",
+      "downloads current and older versions with only PresignGetObject bound and rejects version tampering",
       () =>
         Effect.gen(function* () {
-          const key = "presign/least-privilege.txt";
+          const key = "presign/versions/a b+%?#/雪.txt";
+          const oldBody = "previous value from an isolated presigner";
+          const currentBody = "current value with different bytes and length";
+          yield* S3.putBucketVersioning({
+            Bucket: getOnlyBucket.bucketName,
+            VersioningConfiguration: { Status: "Suspended" },
+          });
+          yield* S3.putObject({
+            Bucket: getOnlyBucket.bucketName,
+            Key: key,
+            Body: "null version",
+          });
+          yield* S3.putBucketVersioning({
+            Bucket: getOnlyBucket.bucketName,
+            VersioningConfiguration: { Status: "Enabled" },
+          });
           const oldVersion = yield* S3.putObject({
             Bucket: getOnlyBucket.bucketName,
             Key: key,
-            Body: "previous value",
+            Body: oldBody,
           });
-          const currentBody = "current value from an isolated presigner";
-          yield* S3.putObject({
+          const currentVersion = yield* S3.putObject({
             Bucket: getOnlyBucket.bucketName,
             Key: key,
             Body: currentBody,
           });
           expect(oldVersion.VersionId).toBeTruthy();
-          const signed = yield* send(
-            HttpClientRequest.get(`${getOnlyUrl}${route("/presign", { key })}`),
-          );
-          expect(signed.status).toBe(200);
-          const result = yield* signed.json.pipe(
-            Effect.flatMap(
-              Schema.decodeUnknownEffect(Schema.Struct({ url: Schema.String })),
-            ),
-          );
-          expect(new URL(result.url).searchParams.has("versionId")).toBe(false);
-          const downloaded = yield* sendPresigned(
-            HttpClientRequest.get(result.url),
-          );
-          expect(downloaded.status).toBe(200);
-          expect(yield* downloaded.text).toBe(currentBody);
-          const denied = yield* send(
-            HttpClientRequest.get(
-              `${getOnlyUrl}${route("/version", { key, versionId: oldVersion.VersionId! })}`,
-            ),
-          );
-          expect(denied.status).toBe(403);
-          expect(yield* denied.json).toEqual({ tag: "AccessDeniedException" });
+          expect(currentVersion.VersionId).toBeTruthy();
+          expect(currentVersion.VersionId).not.toBe(oldVersion.VersionId);
+          for (const [versionId, body, expectedVersionId] of [
+            [undefined, currentBody, currentVersion.VersionId],
+            [currentVersion.VersionId!, currentBody, currentVersion.VersionId],
+            [oldVersion.VersionId!, oldBody, oldVersion.VersionId],
+            ["null", "null version", "null"],
+          ] as const) {
+            const path = yield* Effect.sync(() =>
+              route("/presign", {
+                key,
+                ...(versionId === undefined ? {} : { versionId }),
+              }),
+            );
+            const signed = yield* send(
+              HttpClientRequest.get(`${getOnlyUrl}${path}`),
+            );
+            expect(signed.status).toBe(200);
+            const result = yield* signed.json.pipe(
+              Effect.flatMap(
+                Schema.decodeUnknownEffect(
+                  Schema.Struct({ url: Schema.String }),
+                ),
+              ),
+            );
+            const parsed = yield* Effect.sync(() => new URL(result.url));
+            expect(parsed.searchParams.get("versionId")).toBe(
+              versionId ?? null,
+            );
+            expect(parsed.searchParams.get("X-Amz-Signature")).toMatch(
+              /^[0-9a-f]{64}$/,
+            );
+            expect(
+              yield* Effect.sync(() => decodeURIComponent(parsed.pathname)),
+            ).toBe(`/${key}`);
+            expect(parsed.hash).toBe("");
+            if (versionId === oldVersion.VersionId) {
+              yield* S3.deleteObject({
+                Bucket: getOnlyBucket.bucketName,
+                Key: key,
+              });
+            }
+            const downloaded = yield* sendPresigned(
+              HttpClientRequest.get(result.url),
+            );
+            expect(downloaded.status).toBe(200);
+            expect(yield* downloaded.text).toBe(body);
+            expect(downloaded.headers["x-amz-version-id"]).toBe(
+              expectedVersionId,
+            );
+
+            const tamperedUrl = yield* Effect.sync(() => {
+              const url = new URL(result.url);
+              url.searchParams.set(
+                "versionId",
+                versionId === oldVersion.VersionId
+                  ? currentVersion.VersionId!
+                  : oldVersion.VersionId!,
+              );
+              return url.toString();
+            });
+            const tampered = yield* send(HttpClientRequest.get(tamperedUrl));
+            expect(tampered.status).toBe(403);
+            expect(yield* tampered.text).toContain(
+              "<Code>SignatureDoesNotMatch</Code>",
+            );
+
+            if (versionId !== undefined) {
+              const withoutVersion = yield* Effect.sync(() => {
+                const url = new URL(result.url);
+                url.searchParams.delete("versionId");
+                return url.toString();
+              });
+              const removed = yield* send(
+                HttpClientRequest.get(withoutVersion),
+              );
+              expect(removed.status).toBe(403);
+              expect(yield* removed.text).toContain(
+                "<Code>SignatureDoesNotMatch</Code>",
+              );
+            }
+          }
         }),
     );
   });

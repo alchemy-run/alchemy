@@ -1,6 +1,5 @@
 import * as Lambda from "@/AWS/Lambda";
 import * as S3 from "@/AWS/S3";
-import * as S3Api from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -16,7 +15,6 @@ export default PresignGetOnlyTestFunction.make(
       forceDestroy: true,
       versioning: "Enabled",
     });
-    const getObject = yield* S3Api.getObject;
     const presignGet = yield* S3.PresignGetObject(bucket);
     const bucketName = yield* bucket.bucketName;
     const bucketArn = yield* bucket.bucketArn;
@@ -34,20 +32,15 @@ export default PresignGetOnlyTestFunction.make(
         const key = url.searchParams.get("key");
         if (!key)
           return HttpServerResponse.text("Missing key", { status: 400 });
-        if (url.pathname === "/version") {
-          return yield* getObject({
-            Bucket: yield* bucketName,
-            Key: key,
-            VersionId: url.searchParams.get("versionId") ?? undefined,
-          }).pipe(
-            Effect.as(HttpServerResponse.text("Unexpected version access")),
-            Effect.catchTag("AccessDeniedException", (error) =>
-              HttpServerResponse.json({ tag: error._tag }, { status: 403 }),
-            ),
-          );
-        }
         return yield* HttpServerResponse.json({
-          url: yield* presignGet({ key }),
+          url: yield* presignGet({
+            key,
+            versionId: url.searchParams.get("versionId") ?? undefined,
+            contentType: url.searchParams.get("contentType") ?? undefined,
+            expiresIn: url.searchParams.has("expiresIn")
+              ? Number(url.searchParams.get("expiresIn"))
+              : undefined,
+          }),
         });
       }).pipe(Effect.orDie),
     };
