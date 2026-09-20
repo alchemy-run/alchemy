@@ -1,38 +1,69 @@
 ---
 title: Blue/green deployments
-description: Readiness, traffic, and application-owned shutdown for Fly replacement deployments.
+description: Deploy replacements, check readiness, and shut down old Fly processes.
 ---
 
-Declare **one** `Fly.Service`. Its props describe the Machines you want; its Effect describes the application they run. With `deploy: { strategy: "bluegreen" }`, Alchemy prepares a replacement generation before retiring the previous one. You do not declare separate blue and green Services or call a promotion API. Use the usual `alchemy deploy` command.
+Enable blue/green on your Service to prepare new Machines before retiring the old ones. Keep one Service declaration. Alchemy manages both versions.
 
-`Fly.Machine` and Fly websites accept the same deployment policy. The default remains `rolling`: sequential in-place updates. A single Machine can be unavailable during an in-place update.
+```typescript title="api.ts"
+import * as Fly from "alchemy/Fly";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-:::note[Contract and verification]
-The behavior below describes the blue/green contract and its limits, not a claim of complete, live-tested flyctl parity. Live acceptance of replacement, idle-capacity, recovery, and external-server behavior is still being completed. In particular, passing HTTP checks is not evidence that arbitrary background jobs or external servers drain correctly.
-:::
+export const app = Fly.App("App");
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  {
+    app,
+    main: import.meta.url,
+    deploy: { strategy: "bluegreen" },
+  },
+  Effect.succeed({
+    fetch: Effect.succeed(HttpServerResponse.text("hello")),
+  }),
+) {}
+```
+
+The props configure the Machines. The Effect defines the application they run. `Fly.Machine` and Fly websites accept the same deployment policy.
+
+The default is `rolling`. It updates Machines in place, one at a time. A single Machine can be unavailable during that update.
 
 ## Enable replacement deployments
 
-Add the policy to your existing Service:
+Add the Service to your stack. A public App also needs an [IP assignment](/fly/networking).
 
-```diff lang="typescript"
- export default class Api extends Fly.Service<Api>()(
-   "Api",
-   {
-     app: Site,
-     main: import.meta.url,
-+    deploy: { strategy: "bluegreen" },
-   },
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Fly from "alchemy/Fly";
+import * as Effect from "effect/Effect";
+import Api, { app } from "./api.ts";
+
+export default Alchemy.Stack(
+  "Site",
+  { providers: Fly.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    yield* Fly.IpAssignment("PublicIp", { app, type: "shared_v4" });
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
 ```
 
-`Site` is the parent Fly App; `Api` remains one logical workload. For an always-running `count: 1` Service, a code change temporarily runs two Machines. The App URL stays the same; the physical Machine ID changes. With multiple replicas, Alchemy prepares the desired replacement topology before retiring the previous one, including when changing `count`.
+Deploy with the usual command. There is no separate promotion command.
+
+```sh
+alchemy deploy
+```
+
+For an always-running Service with `count: 1`, a code change temporarily runs two Machines. The App URL stays the same. The Machine ID changes. With more replicas, Alchemy prepares the replacement set before retiring the old set. The same process handles changes to `count`.
 
 ## Choose a readiness check
 
-Services include a TCP check by default. To verify application readiness rather than only a listening port, configure an HTTP check on each published service:
+Services include a TCP check by default. Use an HTTP check when a listening port is not enough to prove the application is ready.
 
 ```typescript
-services: [{
+const http: Fly.MachineService = {
   protocol: "tcp",
   internalPort: 3000,
   autostop: "off",
@@ -47,100 +78,145 @@ services: [{
     interval: "5s",
     timeout: "2s",
   }],
-}],
+};
 ```
 
-Implement `/healthz` in your handler. It should succeed only when the process can serve requests and its required dependencies are usable. Alchemy does not invent this endpoint. Port 443 with TLS/HTTP handlers publishes `https://<app>.fly.dev`; port 80 redirects to HTTPS. The App still needs an [IP assignment](/fly/networking).
+Pass `services: [http]` in the Service props. Implement `/healthz` in your handler and return success only when the application and its dependencies are ready. Alchemy does not create the endpoint for you.
 
-Alchemy waits for every configured check on each candidate required to run. Missing, stale, warning, unknown, or failed reports do not prove readiness of a new instance. Named top-level `checks` are useful for private workers; they do not replace checks on published `services` or publish a port themselves.
+Every published service needs a service check. Named top-level `checks` are useful for private workers, but do not replace checks on public services or publish a port.
 
-Fly caps `services[].checks[].interval` at 60 seconds; Alchemy applies that cap when sending service configuration. Named top-level checks retain longer intervals. Set the readiness deadline to accommodate the effective check cadence and application startup.
+Alchemy requires passing reports for the current instance of every candidate it starts. Missing, stale, warning, or failed reports do not count. Fly caps service-check intervals at 60 seconds. Named top-level checks can use longer intervals.
 
 ## Set the readiness deadline
 
+Set `deploy.healthTimeout` in the Service props to allow more time for initialization and check reporting.
+
 ```typescript
-deploy: { strategy: "bluegreen", healthTimeout: "90 seconds" },
+const deploy: Fly.MachineDeploy = {
+  strategy: "bluegreen",
+  healthTimeout: "90 seconds",
+};
 ```
 
-The default is 60 seconds after a separately bounded startup wait. The maximum is 300 seconds. Use a larger explicit budget for slower initialization or check cadence; changing only this deadline does not create a new application generation.
+The default is 60 seconds after a separate startup wait. The maximum is 300 seconds. Changing only this deadline does not create a new application generation.
 
-## Understand a version-one to version-two update
+## How replacement works
 
-For an always-running single replica:
+For an always-running single replica, deployment follows these steps.
 
-1. Alchemy observes the old Machine and acquires its native lease before mutation.
-2. It creates a version-two candidate that starts and runs checks while **cordoned**: excluded from normal new Fly Proxy traffic. Version one remains available.
-3. After readiness, it records promotion intent and uncordons the candidate. A 10-second routing overlap allows propagation; both versions may receive requests.
-4. It revalidates readiness, cordons the old Machine, and allows another 10 seconds for routing propagation.
-5. It asks the old process to stop using **the old Machine's own signal and timeout**, waits for retirement, and verifies deletion.
+1. Acquire a native lease on the old Machine before mutating it.
+2. Start a replacement and wait for readiness. Keep it excluded from normal Fly Proxy traffic while the old Machine serves requests.
+3. Record promotion intent and admit traffic to the replacement. Allow 10 seconds for routing propagation.
+4. Check readiness again, exclude the old Machine from new proxy traffic, and allow another 10 seconds for propagation.
+5. Stop the old Machine using its own shutdown policy. Wait for it to retire and verify deletion.
 
-Changing version two's timeout from 60 seconds to 10 seconds must not shorten version one's 60-second window. A new policy cannot retroactively change an old process's signal handlers either.
+The traffic switch is not atomic. Both versions can receive requests during the overlap. Database changes and shared services must support both versions.
 
-Readiness asks **“can this process do useful work?”** Cordoning asks **“may Fly Proxy send it new traffic?”** Shutdown asks **“how does the application finish or release work it already owns?”** They are separate responsibilities.
-
-This is not a globally atomic traffic switch. Both versions must tolerate overlap, including database-schema and shared-service changes. Cordoning does not stop private-network calls, queue acquisition, or scheduled jobs. Long-lived connections and work exceeding the grace period can still be terminated. Temporary replacement capacity incurs additional charges; there is no coordinator Machine or extra deployment service.
+Excluding a Machine from proxy traffic is called cordoning. It does not stop private-network calls, queue consumers, or scheduled jobs. Replacement Machines also cost money while they overlap with the old ones. Alchemy does not add a coordinator Machine or deployment service.
 
 ## Keep idle capacity with stop or suspend
 
-`count` describes **provisioned Machines**, not necessarily continuously running processes. On a proxy service, set `autostop: "stop"` or `"suspend"`, `autostart: true` to wake capacity on requests, and `minMachinesRunning` for Fly's minimum-running behavior. Regional and per-service platform rules still apply.
+`count` is the number of provisioned Machines. It does not require every process to run continuously.
 
-| Policy | Process lifetime |
+These Service props provision three Machines and let Fly stop idle capacity. They reuse the `http` service above.
+
+```typescript
+const props: Fly.ServiceProps = {
+  app,
+  main: import.meta.url,
+  count: 3,
+  deploy: { strategy: "bluegreen" },
+  services: [{
+    ...http,
+    autostop: "stop",
+    autostart: true,
+    minMachinesRunning: 1,
+  }],
+};
+```
+
+Use `"suspend"` instead of `"stop"` to allow suspension. Fly's regional and per-service minimum-running rules still apply.
+
+| Policy | Process behavior |
 | --- | --- |
-| `autostop: "off"` | Desired replicas stay running; the replacement set starts and is checked. |
-| `autostop: "stop"` | Fly can shut down idle capacity. A later start boots a new process; durable state belongs outside that process. |
-| `autostop: "suspend"` | Fly can pause and resume a Machine, with possible fallback to a cold start. Suspension is not SIGTERM shutdown; do not rely on finalizers running when it suspends. |
+| `"off"` | Keep the desired replicas running. |
+| `"stop"` | Shut down idle capacity. A later start boots a new process. |
+| `"suspend"` | Pause and resume a Machine when supported. A resume can fall back to a cold start. |
 
-During replacement, idle nonrepresentatives can remain unstarted rather than permanently waking every replica. Alchemy starts and checks at least one representative of the logical resource, plus the required running floor, even when all old replicas were idle. Every candidate it starts must pass readiness. The desired autostop policy is restored before old retirement, with fresh checks if restoration starts a new instance. An intentionally stopped candidate is not required to claim a currently passing process.
+During replacement, Alchemy starts and checks at least one candidate and any additional candidates needed for the running floor. Other idle candidates can stay unstarted. It restores the desired autostop policy before retiring the old Machines. If restoration starts a new instance, that instance must pass fresh checks.
 
-A replacement for a suspended Machine is new code and new process capacity, not a transfer of the old Machine's memory snapshot. Idle old replicas should not be restarted just to retire them. Complete outputs include intentional idle capacity; autostop alone should not trigger a fresh rollout.
+Idle Machines remain in the resource outputs. Stopping or suspending them does not by itself trigger a new rollout. Alchemy does not restart an idle predecessor just to retire it.
+
+Suspension is not SIGTERM shutdown. Do not rely on finalizers running when a Machine suspends. Replacing a suspended Machine creates a new process rather than transferring its memory snapshot.
 
 ## Set the shutdown deadline
 
+Set `shutdown` in the Service props to give the old process time to finish work.
+
 ```typescript
-shutdown: { signal: "SIGTERM", timeout: "45 seconds" },
+const shutdown: Fly.MachineShutdown = {
+  signal: "SIGTERM",
+  timeout: "45 seconds",
+};
 ```
 
-Blue/green defaults to SIGTERM and 30 seconds. Durations must be positive, finite, expressible in whole milliseconds, and at most 300 seconds. Explicit `shutdown` also enables graceful retirement for rolling scale-down and destroy. Omitting both options preserves the default rolling/runtime behavior; shutdown does not make an in-place update continuously available.
+Blue/green defaults to SIGTERM and 30 seconds. The maximum is 300 seconds. Durations must be positive and finite, with whole-millisecond precision. Managed Services support SIGTERM and SIGINT.
 
-For **managed Effect Services**, the Fly bootstrap handles SIGTERM and SIGINT. The first signal starts one absolute deadline; repeated signals do not reset it. HTTP acceptance stops while existing responses and streamed bodies drain. Runtime `run` resources begin their cleanup concurrently, while HTTP request scopes and shared dependencies remain alive. Shared dependencies close after HTTP and worker cleanup settle.
+Retirement uses the old Machine's signal and timeout. Giving the new version a shorter timeout does not shorten the old version's window.
 
-Graceful HTTP draining gets 80% of the configured window. Remaining connections close at that point; an independent hard-exit deadline at 90% bounds even stuck finalizers. Application-owned jobs need their own bounded finish/checkpoint logic: the runtime cannot discover or join arbitrary work scopes. A hard exit is not proof that all work finished.
+Managed Effect Services stop accepting HTTP requests and drain existing responses, including streamed bodies. Worker cleanup begins at the same time. Request scopes and shared dependencies stay alive until HTTP and worker cleanup settle.
 
-:::caution[First migration]
-An already-running process using an older Alchemy bootstrap cannot gain a shutdown handler retroactively. Its first replacement may interrupt existing requests. Raw Machine images and external website servers do not use this managed bootstrap at all.
+HTTP draining gets 80% of the shutdown window. Remaining connections close after that. A hard exit at 90% bounds stuck finalizers. The first signal starts the deadline and later signals do not extend it. A hard exit does not mean all work finished.
+
+Setting `shutdown` also enables graceful rolling scale-down and deletion. It does not make a single Machine continuously available during an in-place update. Omitting both policies preserves the existing rolling and runtime defaults.
+
+:::caution[The first replacement]
+An already-running process cannot gain a shutdown handler retroactively. Its first replacement may interrupt requests. Raw images and external website servers must implement their own shutdown handling.
 :::
 
 ## Deploy a private worker
 
-For a private Service, set `services: []` and configure a named check:
+Set `services: []` to avoid publishing proxy ports. Add a named check that the worker actually serves.
 
 ```typescript
-checks: {
-  ready: {
-    type: "http",
-    port: 3000,
-    path: "/ready",
-    interval: "5s",
-    timeout: "2s",
+const workerProps: Fly.ServiceProps = {
+  app,
+  main: import.meta.url,
+  services: [],
+  deploy: { strategy: "bluegreen" },
+  checks: {
+    ready: { type: "http", port: 3000, path: "/ready" },
   },
-},
+};
 ```
 
-The process must actually serve `/ready`, using a private `fetch` handler or an application-owned readiness server. Returning only `run` does not invent an HTTP endpoint. A raw `Fly.Machine` can use the same check and shutdown props, but its image owns signal handling. Prefer immutable image tags or digests; repushing an unchanged tag is not a declared configuration change.
+A Service can return `fetch`, `run`, or both. In this example, `readiness` and `runJobs` are Effects defined by your application.
 
-Return `{ run: workerProgram }`, or `{ fetch: httpHandler, run: workerProgram }` for mixed work, from Service initialization. Construct the worker Effect there, but acquire connections and start consumers **inside `run`**: the outer initialization Effect also participates in deployment evaluation.
+```typescript
+import { readiness, runJobs } from "./jobs.ts";
+
+const program = Effect.succeed({
+  fetch: readiness,
+  run: runJobs,
+});
+```
+
+Pass `workerProps` and `program` to `Fly.Service`. A private `fetch` handler can serve the readiness endpoint without publishing it through Fly Proxy. A run-only program must start its own readiness server.
+
+Acquire connections and start consumers inside `run`. The outer initialization Effect also runs during deployment evaluation.
+
+Raw `Fly.Machine` images accept the same check and shutdown props, but own their signal handling. Use immutable image tags or digests. Repushing an unchanged tag does not declare a configuration change.
 
 ## Own the job drain with ordinary scopes
 
-An Effect scope is an **in-process resource lifetime**, not another Machine. Alchemy provides no special public shutdown hook and does not infer queue semantics from a health endpoint.
+Alchemy cannot infer queue behavior from a health endpoint. Use ordinary Effect finalizers to stop acquiring jobs, then finish or checkpoint work already owned by the process.
 
-Place the application's stop-acquisition barrier and finish/checkpoint operation **in one finalizer, in that order**. Jobs that must survive interruption of the worker loop need a separately owned work scope. Keep the queue client alive until the drain and work-scope closure finish.
-
-```typescript
+```typescript title="jobs.ts"
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
+import { QueueClient, Jobs } from "./queue.ts";
 
-const workerProgram = Effect.scoped(Effect.gen(function* () {
+export const runJobs = Effect.scoped(Effect.gen(function* () {
   const client = yield* QueueClient.acquire;
   const workScope = yield* Scope.make();
   yield* Effect.addFinalizer((exit) => Scope.close(workScope, exit));
@@ -153,81 +229,95 @@ const workerProgram = Effect.scoped(Effect.gen(function* () {
 }));
 ```
 
-`QueueClient`, `Jobs`, `stopAcquiring`, and `awaitIdle` above are **application-defined abstractions**, not Alchemy APIs or a complete queue implementation. `QueueClient.acquire` registers connection cleanup. `Jobs.start` puts jobs in `workScope` with `forkIn(workScope)` and owns its acquisition loop separately. Sequential LIFO finalization runs the last-registered stop/drain finalizer first, then closes the work scope, then releases the client.
+`QueueClient` and `Jobs` are application code, not Alchemy APIs. Here, `QueueClient.acquire` registers connection cleanup and `Jobs.start` forks jobs into `workScope`. Finalizers run in reverse order. Stop and drain the worker first, close its work scope next, then release the client.
 
-`stopAcquiring` must close the claim gate and account for a claim already in flight before `awaitIdle` can conclude there is no more work. An empty job set before that barrier is not a completed drain. Ordinary child fibers, or jobs forked into the scope already closing, may be interrupted before they finish; `Effect.scoped` guarantees cleanup, not successful completion of arbitrary jobs.
+`stopAcquiring` must also account for a claim already in flight. Seeing no active jobs before closing that gate does not prove the drain is complete. Jobs in the worker's own closing scope may be interrupted, which is why this example gives them a separate work scope.
 
-Give independent workers independent sequential resource scopes so their stop/drain cleanup can begin concurrently. If stopping acquisition fails, cancel the affected poller and finish, checkpoint, or release claims best-effort; do not proceed as though the gate closed successfully. Bound that cleanup within the running process's own deadline.
+Give independent workers separate scopes so they can begin cleanup concurrently. Keep cleanup within the process deadline. If acquisition cannot be stopped, cancel the poller and finish, checkpoint, or release claims where possible.
 
-Both generations can consume jobs or run periodic work before and during public promotion. Queue leases, deduplication, idempotency, and overlapping schedules remain application responsibilities. Blue/green does not provide exactly-once delivery or single-consumer execution.
+Both generations can consume jobs before and during promotion. Queue leases, deduplication, and idempotency belong to the application. Blue/green does not provide exactly-once delivery or single-consumer execution.
 
 ## Retry a failed deployment
 
-Before promotion, a definitive readiness failure preserves the old generation and removes only candidates proven owned and unpromoted. Uncertain creation, ownership, or cleanup produces a bounded error rather than a successful rollback claim.
+Before promotion, a definite readiness failure preserves the old generation. Alchemy removes only candidates it can prove are owned and unpromoted. Uncertain creation or cleanup returns an error rather than claiming rollback succeeded.
 
-After promotion may have happened, Alchemy preserves potentially serving replacement capacity instead of blindly deleting it. Retry `alchemy deploy` to finish the transition. `rolloutPending` identifies unfinished work; healthy replacement outputs alone do not prove every predecessor was removed. `alchemy destroy` discovers owned unfinished generations even when their output IDs were not saved. Avoid manually removing Alchemy metadata.
+After promotion may have happened, Alchemy preserves replacements that might be serving traffic. Run the same command to finish the transition.
 
-For a genuinely unreachable host, retirement may force-delete an **owned, stateless predecessor** after replacement readiness, following Fly's deployment behavior. It cannot prove the old process drained. Jobs may be lost or reclaimed. Client transport failures, foreign leases, ambiguous ownership, and attached storage are not permission to use that fallback. Residual retirement must be reported, not hidden as success.
+```sh
+alchemy deploy
+```
+
+`rolloutPending` reports unfinished work. Healthy replacement outputs do not mean every predecessor was removed. `alchemy destroy` also discovers owned unfinished generations whose IDs were never saved. Keep Alchemy's ownership metadata intact.
+
+A genuinely unreachable host may require force-deleting an owned, stateless predecessor after the replacement is ready. This cannot prove the old process drained. Transport failures, foreign leases, unclear ownership, and attached storage do not authorize that fallback. Failed retirement remains an error.
 
 ## Understand native lease limits
 
-Alchemy uses Fly's native Machine leases for reachable existing targets and candidates, with bounded acquisition, renewal, and release. It mutates its owned snapshot and recorded predecessors, not every Machine later listed in the App. Contention fails boundedly; loss of lease authority stops scheduling new mutations, but cannot undo a request Fly already accepted.
+Alchemy acquires and renews native Machine leases for the targets it owns. It stops scheduling new mutations if it loses a lease. It cannot undo a request Fly already accepted.
 
-Fly rejects Machine exec requests while a native lease is held, including requests carrying the holder's lease nonce. Wait until the deployment releases its lease before using exec; readiness checks do not require exec access.
+Machine leases are not an App-wide deployment lock. A first deployment has no old Machine to lock. Older binaries and direct API writers can also overlap. Serialize deployments to the same stack and resource in CI.
 
-A Machine lease is **not an App-wide or deployment-wide lock**. First deployments have no old Machine on which to coordinate. Different snapshots, older binaries, and direct API writers can overlap. Serialize CI deployments for the same stack/resource; do not assume exactly one simultaneous first deployment can succeed.
+LocalState outputs are cached observations, not a cross-process lock. State-store locking depends on the chosen backend. Ownership is checked again before deleting an old Machine.
 
-LocalState outputs are unfenced caches, not a cross-process lock. Re-observation and ownership checks must prevent stale output IDs from authorizing deletion of a successor. Database-backed state locking is backend-specific, not a Fly provider guarantee.
+Fly rejects exec requests while a native lease is held, even with the holder's nonce. Wait for the deployment to release its lease before using exec. Readiness checks do not need exec access.
 
-App deletion is addressed by name and has no Machine-lease or App-incarnation precondition. An ambiguous App deletion needs operator reconciliation; do not blindly retry or recreate the same name while a delayed delete may still act. This is not a durable cross-process tombstone or global protection against another writer recreating the name.
+App deletion uses a name rather than a leased App instance. If its outcome is unclear, inspect and reconcile the App before retrying or reusing that name. A delayed delete could still act on it.
 
 ## Treat secret versions as a floor
 
-Service-bound secrets are prepared before candidate creation; the required `minSecretsVersion` is an **at-least version floor**, not an immutable snapshot. Candidates must not knowingly predate that floor. Native Machine leases do not serialize the App's shared secret vault.
+Service-bound secrets are prepared before candidate creation. `minSecretsVersion` is the oldest acceptable secret version, not a fixed snapshot. Candidates must not knowingly start below that floor.
 
-Standalone `Fly.Secret`, another Service, direct SDK calls, and runtime writers can advance the shared vault concurrently. An out-of-band secret change does not itself guarantee a new Service rollout. Use an explicit deployment input change when rotation needs replacement; standalone Machines can declare `minSecretsVersion`. There is no automatic secret watching or rollback of the App's secret values.
+Other Services, standalone `Fly.Secret` resources, and runtime writers can update the same App vault. Machine leases do not serialize those writes. Alchemy does not roll back the App's secret values.
+
+An out-of-band secret update does not guarantee a Service rollout. Change a deployment input when rotation needs new Machines. Standalone Machines can set `minSecretsVersion` explicitly.
 
 ## Use stable outputs
 
-The logical resource and App URL remain stable. Physical `machineId`, `machineIds`, private IPs, and `name` can change. An explicit `name` is a base for generation-qualified names, not a fixed Machine name; `baseName` records that base separately.
+The logical resource and App URL stay stable during an update. `machineId`, `machineIds`, private IPs, and physical names can change.
 
-Continuity applies to workload updates within the same App and region. App, region, and logical-name changes retain their normal replacement semantics and may be disruptive.
+An explicit `name` is the base for generation-qualified names. `baseName` records that base. Changes to the App, region, or logical name keep their normal replacement behavior and may be disruptive.
 
 ## Check incompatible settings
 
-Blue/green rejects attached volumes, including resolved `MountVolume` bindings, because two generations cannot safely share a Fly volume. It also rejects missing checks, published services without service checks, explicit `skipLaunch`, auto-destroy/one-shot configuration, SIGKILL, and invalid durations or signals. Stop and suspend autostop policies are not blanket rejections; they use the idle-capacity rules above.
+Blue/green requires a persistent process with readiness checks. It rejects attached volumes, including `MountVolume` bindings, because both generations cannot safely share a Fly volume.
 
-Choose rolling updates for volume-backed workloads, or design a separate data migration. Alchemy does not silently downgrade an unsupported blue/green deployment.
+It also rejects explicit `skipLaunch`, auto-destroy or one-shot configuration, SIGKILL, and invalid durations or signals. Every published service needs a service check. Alchemy reports these errors rather than silently switching to rolling.
+
+Use rolling updates for volume-backed workloads, or design a separate data migration. Stop and suspend are supported through the idle-capacity behavior described above.
 
 ## Forward policies through websites
 
+Declare a website with the same policies, then yield it in your stack.
+
 ```typescript
-const site = yield* Fly.Website.Vite("Web", {
+const site = Fly.Website.Vite("Web", {
   rootDir: "./web",
   deploy: { strategy: "bluegreen" },
   shutdown: { timeout: "30 seconds" },
 });
 ```
 
-Fly framework websites and `StaticSite` forward `deploy`, `shutdown`, `checks`, and `services` to their hosted Service. Omitting the policies still selects rolling. Changes to static HTML or SSR code must become new build/image inputs; changing the deployment strategy does not replace the website build step.
+Framework websites and `StaticSite` forward `deploy`, `shutdown`, `checks`, and `services` to their hosted Service. Static HTML and server code changes feed into the build and image hash. Omitting the deployment policy still selects rolling.
 
-These sites run **external server programs**, not managed Effect Service handlers. Forwarding a shutdown policy configures Fly's stop request; it does not inject the managed bootstrap or its scope/finalizer behavior. The generated Node serve entry does not currently add a signal handler. External SSR applications must own signal handling, stop admitting work, drain or checkpoint active work, and exit within their configured budget. Static asset delivery through Tigris is separate from origin-process lifetime.
+Websites run external server programs rather than managed Effect handlers. The shutdown props configure Fly's stop request. They do not install signal handlers in the application. The generated Node serve entry does not add one either.
 
-Website acceptance must observe version-one to version-two traffic and actual long responses through replacement. A passing static-page request alone does not prove process shutdown or SSR streaming support, and a fixture with explicit application shutdown handling does not prove every framework's default server drains.
+An external server must stop accepting work, drain or checkpoint active work, and exit within its budget. Passing a readiness check does not prove this behavior. Static assets served from Tigris have a separate lifetime from the origin process.
 
 ## Return to rolling updates
 
+Change the deployment strategy back to rolling. Keep `shutdown` if you still want graceful scale-down and deletion.
+
 ```typescript
-deploy: { strategy: "rolling" },
-shutdown: { timeout: "30 seconds" },
+const deploy: Fly.MachineDeploy = { strategy: "rolling" };
+const shutdown: Fly.MachineShutdown = { timeout: "30 seconds" };
 ```
 
-Rolling updates modify the current Machines in place. Keep `shutdown` if you still want graceful scale-down and deletion; it cannot make an in-place update of a single Machine continuously available.
+Rolling updates change Machines in place. A shutdown policy does not remove the availability gap for a single Machine.
 
 ## Where next
 
-- [Machines](/fly/compute/machines) — container images and replica configuration.
-- [Services](/fly/compute/services) — Effect HTTP and background programs.
-- [Networking](/fly/networking) — public addresses and domains.
-- [Secrets](/fly/data/secrets) — App vault values and runtime configuration.
-- [Machine reference](/providers/fly/machine) and [Service reference](/providers/fly/service) — complete properties and outputs.
+- [Machines](/fly/compute/machines) for container images and replica configuration.
+- [Services](/fly/compute/services) for Effect HTTP and background programs.
+- [Networking](/fly/networking) for public addresses and domains.
+- [Secrets](/fly/data/secrets) for App vault values and runtime configuration.
+- [Machine reference](/providers/fly/machine) and [Service reference](/providers/fly/service) for the complete API.

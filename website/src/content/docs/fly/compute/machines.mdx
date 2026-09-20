@@ -170,24 +170,22 @@ predecessors, signals each with its own persisted shutdown policy, waits
 for it to stop, and verifies deletion. A new generation's shorter timeout
 must not shorten the old process's grace window.
 
-A raw image owns signal handling, admission control, and request/job drain;
-these props do not inject an Effect bootstrap into it. Genuine unreachable-host
-retirement can force-delete owned stateless predecessors after replacement
-readiness, but cannot prove their work drained. See the
+A raw image must handle signals, stop accepting work, and drain requests or jobs.
+These props do not install the Effect runtime in it. A genuinely unreachable
+host may require force-deleting an owned stateless predecessor once its
+replacement is ready. This cannot prove the old work drained. See the
 [deployment and recovery limits](/fly/compute/deployments).
 
-Lifecycle mutations use native target Machine leases, not an App-wide lock.
-Lease contention is a bounded failure, not permission to force-steal a lease.
-Simultaneous first deployments and different snapshots are not globally
-excluded; serialize CI for the same resource. LocalState is not a cross-process
-lock, and App deletion is name-addressed without a Machine-lease precondition.
+Alchemy uses native Machine leases. It reports contention rather than stealing
+a lease. These leases do not lock the whole App or serialize every first
+deployment. Serialize CI deployments to the same resource. LocalState is not
+a cross-process lock, and App deletion has no Machine-lease precondition.
 
-`autoDestroy: true` tears a Machine down when its process exits. Blue/green
-rejects auto-destroy/one-shot configuration, explicit `skipLaunch`, attached
-volumes (including bindings), and missing readiness checks. It does not
-silently fall back to rolling. Stop/suspend autostop instead uses the documented
-idle-capacity rules. Live acceptance remains distinct from a full flyctl-parity
-claim.
+`autoDestroy: true` removes a Machine when its process exits. Blue/green requires
+a persistent process and rejects this option, explicit `skipLaunch`, attached
+volumes, and missing readiness checks. It reports unsupported settings rather
+than silently switching to rolling. Stop and suspend are supported through the
+[idle-capacity rules](/fly/compute/deployments#keep-idle-capacity-with-stop-or-suspend).
 
 ## Service or Sprite
 

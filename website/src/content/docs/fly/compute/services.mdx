@@ -177,11 +177,10 @@ reconcile waits for configured readiness checks before proceeding.
 By default, changed code produces a new image and an in-place Machine update.
 Unchanged desired inputs are a no-op. Opt into `deploy: { strategy: "bluegreen" }` to
 [prepare healthy replacements before retiring the old generation](/fly/compute/deployments).
-Keep one Service declaration: Alchemy manages both generations. Health checks,
-proxy traffic, and application shutdown are separate responsibilities.
-The guide covers old-generation shutdown budgets, ordinary Effect finalizers,
-native Machine lease limits, and recovery; it does not claim full live-tested
-flyctl parity.
+Keep one Service declaration. Alchemy manages both generations and uses the
+old Machine's shutdown policy when retiring it. The guide explains readiness,
+traffic overlap, Effect finalizers, idle capacity, and recovery. Raw images and
+external servers must handle their own shutdown.
 
 Override the base image with `image` (must still run Node). Pass
 `services: []` for a process that should not be published.
