@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { dotAlchemyDirectory } from "../../../AlchemyContext.ts";
 import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
@@ -142,6 +143,7 @@ const configureCloudflarePlugins = (
 export const WorkerBundle = Effect.gen(function* () {
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  const dotAlchemy = yield* dotAlchemyDirectory;
 
   const makeOptions = Effect.fn(function* (options: WorkerBundleOptions) {
     // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
@@ -236,7 +238,7 @@ export const WorkerBundle = Effect.gen(function* () {
       // modules so evaluation follows ESM semantics regardless of how the
       // graph was chunked. See DrizzleSchemaChunks.test.ts.
       strictExecutionOrder: true,
-      dir: `.alchemy/bundles/${options.id}`,
+      dir: path.join(dotAlchemy, "bundles", options.id),
       ...options.extraOptions?.output,
     };
     return { inputOptions, outputOptions, extraOptions: options.extraOptions };

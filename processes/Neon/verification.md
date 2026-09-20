@@ -1,6 +1,17 @@
 # Neon backend implementation verification
 
-Integration snapshot, 2026-09-18. All 38 required source contracts are present, including 13 Website constructors. Source coverage is not acceptance: two complete scoped, leak-free rounds have not passed.
+All 38 required source contracts are present, including 13 Website constructors. The dated sections below preserve historical results; later sections supersede earlier failures and limitations. The user dropped the second full acceptance round in favor of focused verification. The completed 108-entry round had 287 passes, two platform-related failures, seven gated cases, and no new projects; it was complete, not green.
+
+## Merge-readiness follow-up (2026-09-20)
+
+- Integrated Alchemy main `9b6426e93` and its required Distilled revision `541008479`, preserving the Neon companion changes. Regenerated the dependency lockfile and documentation index; frozen installation passed.
+- Fixed the Function ZIP upload boundary by copying archive bytes into an ArrayBuffer-backed `Uint8Array`, rather than casting away the `BlobPart` type error. The changed runtime and domain tests pass scoped typechecking against rebuilt shared runtime declarations.
+- Extended the existing CustomDomain lifecycle to manage a real Cloudflare DNS-only CNAME in `alchemy-test-2.us`. The 44.9-second test verified Neon's active/DNS/binding status and the exact `bare-v2` response over trusted HTTPS. It then removed the DNS record and domain while retaining the Function/project, independently confirmed both absent, destroyed the remaining stack, and independently confirmed the project absent. Peak owned RSS was 844 MiB. Evidence: `.alchemy/neon-domain-live-dns-ready.log` and `packages/alchemy/.alchemy/log/test/2026-09-20T07-45-14-pid16415.log`.
+- The first HTTPS attempt polled before DNS validation and never established transport within its bounded attempts. The revised test waits for Neon's observed DNS validation before probing HTTPS, then tolerates bounded first-request certificate issuance; it does not disable TLS verification or substitute the native URL.
+- Documented the unresolved native-host disconnect limitation in the public Function reference. Organization governance live mutations and actual third-party OAuth sign-in remain unverified; configuration/safety coverage is not advertised as those end-to-end capabilities.
+- Other sessions' compilers triggered warning-level system pressure during small runs. Subsequent runs retained the 4 GiB aggregate owned-process cap and critical-pressure stop while permitting warning-level pressure. No other session's process was stopped.
+- Post-integration bridge/storage regressions passed all 11 cases; the separate census also passed but found one project from an interrupted custom-domain creation, so it is not zero-leak evidence. The successful domain lifecycle's own project was independently absent.
+- The merged SDK passed 542 core/Neon/XML tests and the strict Neon package typecheck. Scoped Alchemy checking passed. Full workspace checking exceeded the 4 GiB owned-process ceiling and was stopped; the current-head CI full typecheck remains required before claiming merge readiness.
 
 ## Serving-version polling follow-up
 

@@ -268,7 +268,7 @@ export const FunctionProviderLive = () =>
           ? undefined
           : yield* Effect.sync(
               () =>
-                new File([artifact.archive], "function.zip", {
+                new File([new Uint8Array(artifact.archive)], "function.zip", {
                   type: "application/zip",
                 }),
             );
