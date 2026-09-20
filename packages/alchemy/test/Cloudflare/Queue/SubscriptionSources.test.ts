@@ -14,7 +14,15 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import {
+  hasReadySubscriptionEvent,
+  matchesSubscriptionEvent,
+  SubscriptionEvent,
+  type SubscriptionProbe,
+} from "./SubscriptionEvent.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 type Kind = "images" | "kv" | "r2" | "vectorize" | "model" | "worker";
@@ -144,9 +152,52 @@ const triggerEvent = (kind: Kind, accountId: string, name: string) =>
             .deleteIndex({ accountId, indexName: eventName })
             .pipe(Effect.orDie),
       );
+      yield* Effect.logInfo("Vectorize index created", {
+        name: index.name,
+        createdOn: index.createdOn,
+      });
       return index.name!;
     }
     return yield* Effect.fail(new Error(`No lifecycle trigger for ${kind}`));
+  });
+
+const pullEvents = (
+  accountId: string,
+  queueId: string,
+  received: SubscriptionEvent[] = [],
+) =>
+  Effect.gen(function* () {
+    const batch = yield* queues
+      .pullMessage({
+        accountId,
+        queueId,
+        batchSize: 100,
+        visibilityTimeoutMs: 30_000,
+      })
+      .pipe(
+        Effect.retry({
+          while: (error) => error._tag === "QueueHttpPullNotEnabled",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 8,
+        }),
+      );
+    const events = yield* Effect.forEach(
+      (batch.messages ?? []).flatMap(({ body }) => (body ? [body] : [])),
+      (body) => Schema.decodeUnknownEffect(SubscriptionEvent)(body),
+    );
+    received.push(...events);
+    if (events.length) {
+      yield* Effect.logInfo("Subscription events received", events);
+    }
+    const acks = (batch.messages ?? []).flatMap(({ leaseId }) =>
+      leaseId ? [{ leaseId }] : [],
+    );
+    if (acks.length) {
+      const result = yield* queues.ackMessage({ accountId, queueId, acks });
+      expect(result.ackCount).toBe(acks.length);
+      expect(Object.keys(result.warnings ?? {})).toHaveLength(0);
+    }
+    return events;
   });
 
 const waitForDelivery = (
@@ -154,46 +205,55 @@ const waitForDelivery = (
   accountId: string,
   queueId: string,
   subscriptionId: string,
+  readyAfter: number,
 ) =>
   Effect.gen(function* () {
-    const probes: string[] = [];
+    const probes: SubscriptionProbe[] = [];
     let ready = false;
-    // Consumer readiness does not establish that the product has picked up a new subscription.
-    yield* Effect.gen(function* () {
-      probes.push(
-        yield* triggerEvent(
+    const createProbe = Effect.gen(function* () {
+      const createdAt = yield* Clock.currentTimeMillis;
+      probes.push({
+        createdAt,
+        identity: yield* triggerEvent(
           kind,
           accountId,
           `${kind}-${subscriptionId}-${probes.length}`,
         ),
-      );
-      const batch = yield* queues.pullMessage({
-        accountId,
-        queueId,
-        batchSize: 100,
-        visibilityTimeoutMs: 1000,
       });
-      ready = (batch.messages ?? []).some(
-        ({ body }) =>
-          body?.includes(`cf.${kind}.${eventType(kind)}`) &&
-          body.includes(accountId) &&
-          body.includes(subscriptionId) &&
-          probes.some((id) => body.includes(id)),
+    });
+    const observe = Effect.gen(function* () {
+      const events = yield* pullEvents(accountId, queueId);
+      ready = hasReadySubscriptionEvent(events, probes, {
+        source: kind,
+        type: eventType(kind),
+        accountId,
+        subscriptionId,
+        readyAfter,
+      });
+    });
+    if (kind === "vectorize") {
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.sleep(Math.max(0, readyAfter - now));
+      yield* createProbe;
+      yield* observe.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 8,
+          until: () => ready,
+        }),
       );
-      const acks = (batch.messages ?? []).flatMap((message) =>
-        message.leaseId ? [{ leaseId: message.leaseId }] : [],
+    } else {
+      yield* createProbe.pipe(
+        Effect.andThen(observe),
+        Effect.repeat({
+          schedule: Schedule.spaced("7 seconds"),
+          times: 8,
+          until: () => ready,
+        }),
       );
-      if (acks.length) yield* queues.ackMessage({ accountId, queueId, acks });
-    }).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("7 seconds"),
-        times: 8,
-        until: () => ready,
-      }),
-      Effect.timeout("75 seconds"),
-    );
+    }
     expect(ready).toBe(true);
-  });
+  }).pipe(Effect.timeout("80 seconds"));
 
 // Account-wide subscriptions are unique per product, regardless of the selected resource.
 describe.sequential("resource subscription sources", () => {
@@ -228,6 +288,7 @@ describe.sequential("resource subscription sources", () => {
               return { resource, queue, subscription };
             });
           const initial = yield* stack.deploy(program(false));
+          const configuredAt = yield* Clock.currentTimeMillis;
           expect(initial.subscription.accountId).toBe(accountId);
           const expected =
             kind === "model"
@@ -262,104 +323,103 @@ describe.sequential("resource subscription sources", () => {
               queueId: initial.queue.queueId,
               type: "http_pull",
             });
-            yield* queues
-              .pullMessage({
-                accountId,
-                queueId: initial.queue.queueId,
-                batchSize: 1,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) => error._tag === "QueueHttpPullNotEnabled",
-                  schedule: Schedule.spaced("2 seconds"),
-                  times: 8,
-                }),
-              );
+            yield* pullEvents(accountId, initial.queue.queueId);
           }
           const referenced = yield* stack.deploy(program(true));
           expect(referenced.subscription.subscriptionId).toBe(
             initial.subscription.subscriptionId,
           );
           if (receivesLifecycle) {
-            yield* waitForDelivery(
-              kind,
-              accountId,
-              referenced.queue.queueId,
-              referenced.subscription.subscriptionId,
-            );
-            const identity = yield* triggerEvent(
-              kind,
-              accountId,
-              referenced.queue.queueName,
-            );
-            const bodies: string[] = [];
             yield* Effect.gen(function* () {
-              const batch = yield* queues
-                .pullMessage({
-                  accountId,
-                  queueId: referenced.queue.queueId,
-                  batchSize: 100,
-                  visibilityTimeoutMs: 1000,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: (error) => error._tag === "QueueHttpPullNotEnabled",
-                    schedule: Schedule.spaced("2 seconds"),
-                    times: 8,
-                  }),
-                );
-              for (const message of batch.messages ?? []) {
-                if (message.body) bodies.push(message.body);
-              }
-              const acks = (batch.messages ?? []).flatMap((message) =>
-                message.leaseId ? [{ leaseId: message.leaseId }] : [],
+              yield* waitForDelivery(
+                kind,
+                accountId,
+                referenced.queue.queueId,
+                referenced.subscription.subscriptionId,
+                // Allow the observed Vectorize propagation interval before probing.
+                kind === "vectorize" ? configuredAt + 60_000 : 0,
               );
-              if (acks.length)
-                yield* queues.ackMessage({
+              const identities = [
+                yield* triggerEvent(
+                  kind,
                   accountId,
-                  queueId: referenced.queue.queueId,
-                  acks,
-                });
-            }).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("5 seconds"),
-                times: 10,
-                until: () =>
-                  bodies.some(
-                    (body) =>
-                      body.includes(`cf.${kind}.${eventType(kind)}`) &&
-                      body.includes(identity!) &&
-                      body.includes(accountId) &&
-                      body.includes(referenced.subscription.subscriptionId),
-                  ),
-              }),
-              Effect.timeout("60 seconds"),
-            );
-            if (!bodies.length)
-              yield* Effect.logInfo("Empty subscription delivery", {
-                subscription: yield* queues.getSubscription({
-                  accountId,
-                  subscriptionId: referenced.subscription.subscriptionId,
+                  referenced.queue.queueName,
+                ),
+              ];
+              if (kind === "vectorize") {
+                for (const suffix of ["second", "third"]) {
+                  identities.push(
+                    yield* triggerEvent(
+                      kind,
+                      accountId,
+                      `vec-${referenced.subscription.subscriptionId}-${suffix}`,
+                    ),
+                  );
+                }
+              }
+              const events: SubscriptionEvent[] = [];
+              const missing = () =>
+                identities.filter(
+                  (identity) =>
+                    !events.some((event) =>
+                      matchesSubscriptionEvent(event, {
+                        source: kind,
+                        type: eventType(kind),
+                        accountId,
+                        subscriptionId: referenced.subscription.subscriptionId,
+                        identity,
+                      }),
+                    ),
+                );
+              yield* pullEvents(
+                accountId,
+                referenced.queue.queueId,
+                events,
+              ).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 10,
+                  until: () => missing().length === 0,
                 }),
-                queue: yield* queues.getQueue({
-                  accountId,
-                  queueId: referenced.queue.queueId,
-                }),
-                metrics: yield* queues.getMetricsQueue({
-                  accountId,
-                  queueId: referenced.queue.queueId,
-                }),
-                identity,
-              });
-            expect(
-              bodies.some(
-                (body) =>
-                  body.includes(`cf.${kind}.${eventType(kind)}`) &&
-                  body.includes(identity!) &&
-                  body.includes(accountId) &&
-                  body.includes(referenced.subscription.subscriptionId),
-              ),
-            ).toBe(true);
+                Effect.timeout("60 seconds"),
+                Effect.onExit(() =>
+                  Effect.gen(function* () {
+                    if (missing().length === 0) return;
+                    yield* Effect.logInfo("Missing subscription delivery", {
+                      expected: identities,
+                      missing: missing(),
+                      received: events,
+                    });
+                    yield* Effect.all({
+                      subscription: queues.getSubscription({
+                        accountId,
+                        subscriptionId: referenced.subscription.subscriptionId,
+                      }),
+                      queue: queues.getQueue({
+                        accountId,
+                        queueId: referenced.queue.queueId,
+                      }),
+                      metrics: queues.getMetricsQueue({
+                        accountId,
+                        queueId: referenced.queue.queueId,
+                      }),
+                    }).pipe(
+                      Effect.tap((state) =>
+                        Effect.logInfo("Subscription delivery state", state),
+                      ),
+                      Effect.timeout("5 seconds"),
+                      Effect.catch((error) =>
+                        Effect.logWarning(
+                          "Subscription delivery state unavailable",
+                          { error: error._tag },
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              );
+              expect(missing()).toEqual([]);
+            }).pipe(Effect.timeout("90 seconds"));
           }
           yield* stack.deploy(createSource(kind));
           yield* gone(accountId, initial.subscription.subscriptionId);

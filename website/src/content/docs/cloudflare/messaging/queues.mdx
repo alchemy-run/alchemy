@@ -313,6 +313,8 @@ The resource's account must match the subscription's Cloudflare account. Account
 
 Event delivery can lag subscription creation or replacement even after the destination Queue accepts messages. Deployment confirms configuration, not delivery readiness. Verify delivery before emitting events that must be observed.
 
+During Vectorize subscription replacement, Cloudflare can still route new events to the previous Queue with the deleted subscription's ID. A single early event does not prove that routing has fully propagated. Keep the previous destination available during the transition and check `metadata.eventSubscriptionId` as well as the event's resource identity when verifying the new destination.
+
 ### Account-wide resource events
 
 ```typescript
