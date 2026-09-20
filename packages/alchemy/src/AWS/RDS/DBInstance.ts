@@ -197,7 +197,12 @@ export interface DBInstanceProps {
    */
   caCertificateIdentifier?: string;
   /**
-   * Enable IAM database authentication. In-place modify.
+   * Enable IAM database authentication. Omission/removal disables it, including
+   * after adoption or drift. Cluster members inherit their cluster's setting.
+   * Applying a change or a queued IAM change uses ApplyImmediately, which also
+   * applies unrelated pending RDS modifications. Supported on standalone
+   * PostgreSQL, MySQL, and MariaDB; unsupported on RDS Custom.
+   * @default false
    */
   enableIAMDatabaseAuthentication?: boolean;
   /**
@@ -223,16 +228,25 @@ export interface DBInstanceProps {
    */
   monitoringRoleArn?: string;
   /**
-   * Log types to export to CloudWatch Logs. Diffed against observed state and
-   * applied via the delta-shaped `CloudwatchLogsExportConfiguration` on modify.
+   * Log types to export to CloudWatch Logs, compared as a set. Omission/removal
+   * disables all exports. Changes apply immediately without flushing unrelated
+   * pending modifications. Cluster members inherit their cluster's exports.
+   * Unsupported on RDS Custom.
+   * @default []
    */
   enableCloudwatchLogsExports?: string[];
   /**
-   * Block accidental deletion. In-place modify.
+   * Block accidental deletion. Omission/removal disables protection, including
+   * after adoption or drift. Ignored for cluster members: configure DBCluster.
+   * Aurora cluster protection does not prevent deleting individual instances.
+   * @default false
    */
   deletionProtection?: boolean;
   /**
-   * Network type: `IPV4` | `DUAL`. In-place modify.
+   * Network type: `IPV4` | `DUAL`. Omission/removal restores IPv4. DUAL requires
+   * IPv6-enabled subnets. Ignored for cluster members: configure DBCluster.
+   * Changes apply immediately and can also apply unrelated pending RDS changes.
+   * @default "IPV4"
    */
   networkType?: string;
   /**
@@ -240,7 +254,11 @@ export interface DBInstanceProps {
    */
   allowMajorVersionUpgrade?: boolean;
   /**
-   * Whether the instance is publicly reachable. In-place modify.
+   * Whether the instance has a public address. Omission/removal restores private
+   * access, including after adoption or drift. Also managed on Aurora instances;
+   * non-Aurora Multi-AZ cluster members inherit their cluster's configuration.
+   * Changes apply immediately without flushing unrelated pending modifications.
+   * @default false
    */
   publiclyAccessible?: boolean;
   /**
@@ -340,6 +358,10 @@ export interface DBInstance extends Resource<
      */
     vpcSecurityGroupIds: string[];
     /**
+     * Observed VPC security-group application states, such as `active`.
+     */
+    vpcSecurityGroupStatuses: Record<string, string | undefined>;
+    /**
      * Allocated storage in GiB.
      */
     allocatedStorage: number | undefined;
@@ -399,6 +421,11 @@ export interface DBInstance extends Resource<
      * Whether IAM database authentication is enabled.
      */
     iamDatabaseAuthenticationEnabled: boolean | undefined;
+    /**
+     * Observed IAM authentication change awaiting application. A pending value
+     * is not evidence that authentication has changed on the database.
+     */
+    pendingIamDatabaseAuthenticationEnabled: boolean | undefined;
     /**
      * Whether Performance Insights is enabled.
      */
@@ -697,6 +724,55 @@ export interface DBInstance extends Resource<
  * manage parameter groups or modify existing security-group attachments;
  * Db2 BYOL requires an explicit parameter group with IBM licensing IDs.
  *
+ * ### Security Defaults
+ * Omission is desired configuration, not permission to retain external state:
+ * IAM authentication, public access, and deletion protection default to false,
+ * network type to IPV4, and log exports to an empty set. Removal and unchanged
+ * declarations repair these settings after drift or adoption.
+ *
+ * **Example:** Enable IAM authentication and PostgreSQL log exports
+ * ```typescript
+ * const db = yield* DBInstance("Db", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t3.micro",
+ *   masterUsername: "admin",
+ *   manageMasterUserPassword: true,
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ *   enableIAMDatabaseAuthentication: true,
+ *   enableCloudwatchLogsExports: ["postgresql"],
+ * });
+ * ```
+ *
+ * Removing the last two properties disables IAM authentication and log exports.
+ * Public access remains instance-managed for Aurora, while IAM authentication,
+ * deletion protection, network type, and exports belong to DBCluster. Requested
+ * or observed cluster membership suppresses instance writes to those settings.
+ * Non-Aurora Multi-AZ cluster members also inherit public accessibility.
+ *
+ * ### Pending Security Changes
+ * **Example:** Inspect applied and pending IAM authentication separately
+ * ```typescript
+ * return {
+ *   enabled: db.iamDatabaseAuthenticationEnabled,
+ *   pending: db.pendingIamDatabaseAuthenticationEnabled,
+ *   securityGroupStatuses: db.vpcSecurityGroupStatuses,
+ * };
+ * ```
+ *
+ * Deployment waits for applied security settings and an operational instance.
+ * A matching queued IAM value is promoted with ApplyImmediately without
+ * resending the IAM field; an incompatible queued value is overwritten even
+ * when the applied value already matches. AWS has no selective queue flush:
+ * applying IAM or network-type changes immediately can apply unrelated pending
+ * modifications and cause downtime. Alchemy does not wait until maintenance.
+ * Network type has no field in AWS PendingModifiedValues, so an externally
+ * queued network change cannot be detected until it starts applying.
+ * Public access, deletion protection, and log exports use ApplyImmediately:false
+ * because AWS applies these immediately regardless of that flag. They do not
+ * flush the maintenance queue. Other declared updates retain their existing
+ * immediate-application behavior. Static parameter changes remain pending-reboot;
+ * Alchemy never calls RebootDBInstance automatically.
+ *
  * ### Managed Master Secret Policy
  * **Example:** Allow a role to read the RDS-managed master secret
  * ```typescript
@@ -857,6 +933,13 @@ const toAttrs = ({
   vpcSecurityGroupIds: (instance.VpcSecurityGroups ?? []).flatMap((group) =>
     group.VpcSecurityGroupId ? [group.VpcSecurityGroupId] : [],
   ),
+  vpcSecurityGroupStatuses: Object.fromEntries(
+    (instance.VpcSecurityGroups ?? []).flatMap((group) =>
+      group.VpcSecurityGroupId
+        ? [[group.VpcSecurityGroupId, group.Status]]
+        : [],
+    ),
+  ),
   allocatedStorage: instance.AllocatedStorage,
   maxAllocatedStorage: instance.MaxAllocatedStorage,
   storageType: instance.StorageType,
@@ -872,6 +955,8 @@ const toAttrs = ({
   storageEncrypted: instance.StorageEncrypted,
   caCertificateIdentifier: instance.CACertificateIdentifier,
   iamDatabaseAuthenticationEnabled: instance.IAMDatabaseAuthenticationEnabled,
+  pendingIamDatabaseAuthenticationEnabled:
+    instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled,
   performanceInsightsEnabled: instance.PerformanceInsightsEnabled,
   monitoringInterval: instance.MonitoringInterval,
   enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
@@ -923,6 +1008,99 @@ const sameMembers = (
   return want.size === have.size && [...want].every((value) => have.has(value));
 };
 
+const clusterOwnsConfiguration = (
+  props: DBInstanceProps,
+  observed?: rds.DBInstance,
+) =>
+  props.dbClusterIdentifier !== undefined ||
+  observed?.DBClusterIdentifier !== undefined ||
+  props.engine.startsWith("aurora") ||
+  observed?.Engine?.startsWith("aurora") === true;
+
+const securityConfiguration = (
+  props: DBInstanceProps,
+  observed?: rds.DBInstance,
+) => {
+  const clusterOwned = clusterOwnsConfiguration(props, observed);
+  const custom =
+    props.engine.startsWith("custom-") ||
+    observed?.Engine?.startsWith("custom-") === true;
+  const supportsIam = ["postgres", "mysql", "mariadb"].includes(
+    observed?.Engine ?? props.engine,
+  );
+  return {
+    publiclyAccessible:
+      clusterOwned &&
+      !props.engine.startsWith("aurora") &&
+      !observed?.Engine?.startsWith("aurora")
+        ? undefined
+        : (props.publiclyAccessible ?? false),
+    iamAuthentication: clusterOwned
+      ? undefined
+      : (props.enableIAMDatabaseAuthentication ??
+        (supportsIam ? false : undefined)),
+    deletionProtection: clusterOwned
+      ? undefined
+      : (props.deletionProtection ?? false),
+    networkType: clusterOwned ? undefined : (props.networkType ?? "IPV4"),
+    logExports: clusterOwned
+      ? undefined
+      : (props.enableCloudwatchLogsExports ?? (custom ? undefined : [])),
+  };
+};
+
+type SecurityConfiguration = ReturnType<typeof securityConfiguration>;
+
+const pendingLogExports = (instance: rds.DBInstance) =>
+  instance.PendingModifiedValues?.PendingCloudwatchLogsExports;
+
+const effectiveLogExports = (instance: rds.DBInstance) => {
+  const exports = new Set(instance.EnabledCloudwatchLogsExports ?? []);
+  for (const log of pendingLogExports(instance)?.LogTypesToDisable ?? []) {
+    exports.delete(log);
+  }
+  for (const log of pendingLogExports(instance)?.LogTypesToEnable ?? []) {
+    exports.add(log);
+  }
+  return [...exports];
+};
+
+const iamConverged = (
+  desired: SecurityConfiguration,
+  instance: rds.DBInstance,
+) =>
+  desired.iamAuthentication === undefined ||
+  (desired.iamAuthentication === instance.IAMDatabaseAuthenticationEnabled &&
+    instance.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled ===
+      undefined);
+
+const securityConverged = (
+  desired: SecurityConfiguration,
+  instance: rds.DBInstance,
+) =>
+  iamConverged(desired, instance) &&
+  (desired.publiclyAccessible === undefined ||
+    desired.publiclyAccessible === instance.PubliclyAccessible) &&
+  (desired.deletionProtection === undefined ||
+    desired.deletionProtection === instance.DeletionProtection) &&
+  (desired.networkType === undefined ||
+    desired.networkType === instance.NetworkType) &&
+  (desired.logExports === undefined ||
+    (sameMembers(
+      desired.logExports,
+      instance.EnabledCloudwatchLogsExports ?? [],
+    ) &&
+      (pendingLogExports(instance)?.LogTypesToEnable?.length ?? 0) === 0 &&
+      (pendingLogExports(instance)?.LogTypesToDisable?.length ?? 0) === 0));
+
+class DBInstanceSecurityPending extends Data.TaggedError(
+  "DBInstanceSecurityPending",
+)<{ instanceId: string }> {
+  override get message() {
+    return `DB instance '${this.instanceId}' security configuration did not converge`;
+  }
+}
+
 class InvalidDBInstanceAssociations extends Data.TaggedError(
   "InvalidDBInstanceAssociations",
 )<{
@@ -935,10 +1113,12 @@ const resolveAssociations = Effect.fn(function* (
 ) {
   const clusterIdentifier =
     props.dbClusterIdentifier ?? observed?.DBClusterIdentifier;
-  const clusterOwned =
-    clusterIdentifier !== undefined || props.engine.startsWith("aurora");
+  const clusterOwned = clusterOwnsConfiguration(props, observed);
+  const aurora =
+    props.engine.startsWith("aurora") ||
+    observed?.Engine?.startsWith("aurora") === true;
   const custom = props.engine.startsWith("custom-");
-  if (clusterOwned && !props.engine.startsWith("aurora")) {
+  if (clusterOwned && !aurora) {
     if (props.dbParameterGroupName !== undefined) {
       return yield* new InvalidDBInstanceAssociations({
         message: "Multi-AZ DB cluster associations are managed on the cluster",
@@ -1092,11 +1272,7 @@ const desiredInstancePort = Effect.fn(function* (
   props: DBInstanceProps,
   observed?: rds.DBInstance,
 ) {
-  if (
-    props.dbClusterIdentifier !== undefined ||
-    observed?.DBClusterIdentifier !== undefined ||
-    props.engine.startsWith("aurora")
-  ) {
+  if (clusterOwnsConfiguration(props, observed)) {
     return undefined;
   }
   if (props.port !== undefined) {
@@ -1485,6 +1661,27 @@ export const DBInstanceProvider = () =>
         );
       });
 
+      const waitForSecurity = Effect.fn(function* (
+        instanceId: string,
+        desired: SecurityConfiguration,
+      ) {
+        const instance = yield* observeReadiness(instanceId).pipe(
+          Effect.repeat({
+            schedule: Schedule.min([
+              Schedule.exponential("5 seconds"),
+              Schedule.spaced("1 minute"),
+            ]),
+            times: 10,
+            until: (instance) =>
+              instanceReady(instance) && securityConverged(desired, instance),
+          }),
+        );
+        if (!instanceReady(instance) || !securityConverged(desired, instance)) {
+          return yield* new DBInstanceSecurityPending({ instanceId });
+        }
+        return instance;
+      });
+
       const waitForAssociations = Effect.fn(function* (
         instanceId: string,
         desired: Associations,
@@ -1747,6 +1944,11 @@ export const DBInstanceProvider = () =>
               !autoscalingConverged(storage, instance) ||
               !portConverged(instance, port) ||
               !associationsConverged(associations, instance) ||
+              !securityConverged(
+                securityConfiguration(news, instance),
+                instance,
+              ) ||
+              !Object.hasOwn(output, "vpcSecurityGroupStatuses") ||
               (news.masterUserSecretResourcePolicy !== undefined &&
                 instance.MasterUserSecret?.SecretArn === undefined) ||
               (news.masterUserSecretResourcePolicy === undefined
@@ -1836,6 +2038,7 @@ export const DBInstanceProvider = () =>
                 "A master secret resource policy requires an instance-managed secret; enable manageMasterUserPassword on a standalone DBInstance",
             });
           }
+          let security = securityConfiguration(news, observed);
           let port = yield* desiredInstancePort(news, observed);
           let associations = yield* resolveAssociations(news, observed);
           let desiredStorage = yield* resolveStorage(
@@ -1875,19 +2078,18 @@ export const DBInstanceProvider = () =>
                 StorageEncrypted: news.storageEncrypted,
                 KmsKeyId: news.kmsKeyId,
                 CACertificateIdentifier: news.caCertificateIdentifier,
-                EnableIAMDatabaseAuthentication:
-                  news.enableIAMDatabaseAuthentication,
+                EnableIAMDatabaseAuthentication: security.iamAuthentication,
                 EnablePerformanceInsights: news.enablePerformanceInsights,
                 PerformanceInsightsKMSKeyId: news.performanceInsightsKMSKeyId,
                 PerformanceInsightsRetentionPeriod:
                   performanceInsightsRetentionDays,
                 MonitoringInterval: monitoringIntervalSeconds,
                 MonitoringRoleArn: news.monitoringRoleArn,
-                EnableCloudwatchLogsExports: news.enableCloudwatchLogsExports,
-                DeletionProtection: news.deletionProtection,
-                NetworkType: news.networkType,
+                EnableCloudwatchLogsExports: security.logExports,
+                DeletionProtection: security.deletionProtection,
+                NetworkType: security.networkType,
                 VpcSecurityGroupIds: associations.vpcSecurityGroupIds,
-                PubliclyAccessible: news.publiclyAccessible,
+                PubliclyAccessible: security.publiclyAccessible,
                 PromotionTier: news.promotionTier,
                 AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
                 CopyTagsToSnapshot: news.copyTagsToSnapshot,
@@ -1955,19 +2157,15 @@ export const DBInstanceProvider = () =>
             setIf("OptionGroupName", news.optionGroupName, undefined);
             setIf("LicenseModel", news.licenseModel, observed.LicenseModel);
             setIf("CACertificateIdentifier", news.caCertificateIdentifier, observed.CACertificateIdentifier); // prettier-ignore
-            setIf("EnableIAMDatabaseAuthentication", news.enableIAMDatabaseAuthentication, observed.IAMDatabaseAuthenticationEnabled); // prettier-ignore
             setIf("EnablePerformanceInsights", news.enablePerformanceInsights, observed.PerformanceInsightsEnabled); // prettier-ignore
             setIf("PerformanceInsightsKMSKeyId", news.performanceInsightsKMSKeyId, observed.PerformanceInsightsKMSKeyId); // prettier-ignore
             setIf("PerformanceInsightsRetentionPeriod", performanceInsightsRetentionDays, observed.PerformanceInsightsRetentionPeriod); // prettier-ignore
             setIf("MonitoringInterval", monitoringIntervalSeconds, observed.MonitoringInterval); // prettier-ignore
             setIf("MonitoringRoleArn", news.monitoringRoleArn, observed.MonitoringRoleArn); // prettier-ignore
-            setIf("DeletionProtection", news.deletionProtection, observed.DeletionProtection); // prettier-ignore
-            setIf("NetworkType", news.networkType, observed.NetworkType);
             if (!parameterGroupMatches(associations, observed)) {
               core.DBParameterGroupName = associations.dbParameterGroupName;
               coreDirty = true;
             }
-            setIf("PubliclyAccessible", news.publiclyAccessible, observed.PubliclyAccessible); // prettier-ignore
             setIf("PromotionTier", news.promotionTier, observed.PromotionTier);
             setIf("AutoMinorVersionUpgrade", news.autoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade); // prettier-ignore
             setIf("CopyTagsToSnapshot", news.copyTagsToSnapshot, observed.CopyTagsToSnapshot); // prettier-ignore
@@ -2027,21 +2225,6 @@ export const DBInstanceProvider = () =>
                   storageConverged(instance, desiredStorage),
                 );
               }
-            }
-
-            // syncCloudwatchLogsExports — delta-shaped; separate call so it
-            // never mixes the full-set fields above.
-            const logDelta = logExportDelta(
-              observed.EnabledCloudwatchLogsExports,
-              news.enableCloudwatchLogsExports,
-            );
-            if (logDelta) {
-              yield* rds.modifyDBInstance({
-                DBInstanceIdentifier: identifier,
-                CloudwatchLogsExportConfiguration: logDelta,
-                ApplyImmediately: true,
-              });
-              observed = yield* waitForInstance(identifier);
             }
           }
 
@@ -2144,6 +2327,55 @@ export const DBInstanceProvider = () =>
             }
             observed = yield* waitForAssociations(identifier, associations);
           }
+
+          security = securityConfiguration(news, observed);
+          const iamPending =
+            observed.PendingModifiedValues?.IAMDatabaseAuthenticationEnabled;
+          const iamChanged = !iamConverged(security, observed);
+          const networkChanged =
+            security.networkType !== undefined &&
+            security.networkType !== observed.NetworkType;
+          if (iamChanged || networkChanged) {
+            // IAM and network changes honor maintenance scheduling. AWS cannot
+            // selectively apply one queued change without applying the rest.
+            yield* rds.modifyDBInstance({
+              DBInstanceIdentifier: identifier,
+              EnableIAMDatabaseAuthentication:
+                iamChanged && iamPending !== security.iamAuthentication
+                  ? security.iamAuthentication
+                  : undefined,
+              NetworkType: networkChanged ? security.networkType : undefined,
+              ApplyImmediately: true,
+            });
+            observed = yield* waitForInstance(identifier);
+          }
+
+          const publicChanged =
+            security.publiclyAccessible !== undefined &&
+            security.publiclyAccessible !== observed.PubliclyAccessible;
+          const protectionChanged =
+            security.deletionProtection !== undefined &&
+            security.deletionProtection !== observed.DeletionProtection;
+          const logDelta = logExportDelta(
+            effectiveLogExports(observed),
+            security.logExports,
+          );
+          if (publicChanged || protectionChanged || logDelta) {
+            // These fields apply immediately even with false; leave unrelated
+            // maintenance-window changes queued rather than flushing them.
+            yield* rds.modifyDBInstance({
+              DBInstanceIdentifier: identifier,
+              PubliclyAccessible: publicChanged
+                ? security.publiclyAccessible
+                : undefined,
+              DeletionProtection: protectionChanged
+                ? security.deletionProtection
+                : undefined,
+              CloudwatchLogsExportConfiguration: logDelta,
+              ApplyImmediately: false,
+            });
+          }
+          observed = yield* waitForSecurity(identifier, security);
 
           const dbInstanceArn = observed.DBInstanceArn ?? "";
 

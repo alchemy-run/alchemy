@@ -28,7 +28,7 @@ import {
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const repoRoot = pathe.resolve(import.meta.dirname, "../../../../..");
-const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.ts");
+const workspaceCli = pathe.join(repoRoot, "packages/alchemy/bin/alchemy.js");
 
 const STACK = "B67MigrationTest";
 const STAGE = "b67mig";

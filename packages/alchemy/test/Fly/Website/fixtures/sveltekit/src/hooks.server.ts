@@ -1,4 +1,4 @@
-import type { Handle } from "@sveltejs/kit";
+import type { Handle } from "@sveltejs/kit/hooks";
 import { accepting } from "./routes/api/deployment/[operation]/state.ts";
 
 export const handle: Handle = ({ event, resolve }) =>
