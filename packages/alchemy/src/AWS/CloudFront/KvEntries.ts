@@ -9,6 +9,7 @@ import {
   extractValue,
   getKvsEtag,
   isKvsPreconditionFailed,
+  cappedKvsRetrySchedule,
   retryForKvsReadiness,
   withKvsRegionFn,
 } from "./common.ts";
@@ -128,7 +129,7 @@ export const KvEntriesProvider = () =>
       ) {
         let remainingPuts = puts;
         let remainingDeletes = deletes;
-        let currentEtag = etag ?? (yield* getKvsEtag(store));
+        let currentEtag: string | undefined = etag;
 
         while (remainingPuts.length > 0 || remainingDeletes.length > 0) {
           const batchPuts = remainingPuts.slice(0, BATCH_SIZE);
@@ -137,20 +138,28 @@ export const KvEntriesProvider = () =>
             BATCH_SIZE - batchPuts.length,
           );
 
-          const resp = yield* sendBatch(
-            store,
-            currentEtag,
-            batchPuts,
-            batchDeletes,
-          ).pipe(
+          // A precondition failure means a concurrent writer (another
+          // KvEntries / KvRoutesUpdate on the same store) advanced the
+          // etag between our read and this batch — the retry MUST re-read
+          // the etag or it can never succeed. `stale` drops the cached
+          // etag on the failed attempt so the retried generator fetches a
+          // fresh one.
+          let stale = currentEtag;
+          const resp = yield* Effect.gen(function* () {
+            const attemptEtag = stale ?? (yield* getKvsEtag(store));
+            stale = undefined;
+            return yield* sendBatch(
+              store,
+              attemptEtag,
+              batchPuts,
+              batchDeletes,
+            );
+          }).pipe(
             Effect.retry({
               while: (error) =>
                 error._tag === "ValidationException" &&
                 isKvsPreconditionFailed(error),
-              schedule: Schedule.max([
-                Schedule.exponential("100 millis"),
-                Schedule.recurs(24),
-              ]),
+              schedule: cappedKvsRetrySchedule,
             }),
           );
 

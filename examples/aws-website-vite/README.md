@@ -1,33 +1,43 @@
-# AWS Vite Example
+# AWS Website: Vite
 
-This example builds a Vite app and deploys it with:
+Deploys a [Vite](https://vite.dev) React SPA to AWS with
+`AWS.Website.Vite` — static assets (the `vite build` output) in S3
+behind a CloudFront distribution. No server function is created; the
+page renders entirely in the browser.
 
-- `Build.Build` for the frontend build step
-- `AWS.Website.StaticSite` for S3 + CloudFront hosting
-- optional ACM + Route 53 custom-domain wiring
+- `src/main.tsx` mounts the React app into `index.html`.
+- Tailwind CSS v4 is wired through `@tailwindcss/vite` in the project's
+  own `vite.config.ts`, which Alchemy loads natively — plugins included.
+- `spa` defaults on, so unmatched paths answer with the index page.
 
-## Commands
+The integration package must be installed in the project (it is loaded
+dynamically at deploy time):
+
+```sh
+bun add -d @alchemy.run/frontend-frameworks
+```
+
+## Deploy
 
 ```sh
 bun install
-bun run --filter aws-vite-example build
-bun run --filter aws-vite-example deploy
+bun run deploy
 ```
 
-For local frontend development:
+Unchanged sources skip the Vite build entirely on subsequent deploys —
+the input files are content-hashed (scoped by `memo.include`).
+
+## Local development
 
 ```sh
-bun run --filter aws-vite-example dev:vite
+bun run dev
 ```
 
-## Optional Custom Domain
+`alchemy dev` runs Vite's own dev server (HMR included) — no cloud
+resources are created.
 
-Set these environment variables before deploy:
+## Destroy
 
 ```sh
-export WEBSITE_DOMAIN=app.example.com
-export WEBSITE_ZONE_ID=Z1234567890
-export WEBSITE_ALIASES=www.app.example.com
+bun run destroy
 ```
-
-Without them, the example still deploys and returns the CloudFront URL.

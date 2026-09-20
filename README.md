@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://alchemy.run">
-  <img src="./images/readme-hero.png" alt="Alchemy — Infrastructure as Effects" width="360" />
+  <img src="https://raw.githubusercontent.com/alchemy-run/alchemy/main/images/readme-hero.webp" alt="Alchemy — Infrastructure as Effects" width="360" />
 </a>
 
 <br />
@@ -94,6 +94,12 @@ dependencies or breaking conventions.
 - [llms.txt](https://alchemy.run/llms.txt) — agent-ready documentation index
 
 > **alchemy** is in alpha. Expect breaking changes. Come hang in our [Discord](https://discord.gg/jwKw8dBJdN).
+
+## Credits
+
+### Blacksmith
+
+Thanks to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. Their fast Linux, macOS, and Windows runners help us test our packages across platforms and deploy our content-heavy website in mere minutes.
 
 ## License
 

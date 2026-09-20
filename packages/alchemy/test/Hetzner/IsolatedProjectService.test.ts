@@ -61,5 +61,5 @@ test.provider.skipIf(!hasHetznerCreds)(
         yield* removeIsolatedProject(project);
       }
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );

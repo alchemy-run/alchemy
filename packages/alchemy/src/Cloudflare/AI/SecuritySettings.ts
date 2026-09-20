@@ -102,6 +102,7 @@ export const SecuritySettings = Resource<SecuritySettings>(
 
 export const SecuritySettingsProvider = () =>
   Provider.succeed(SecuritySettings, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 
     list: Effect.fn(function* () {

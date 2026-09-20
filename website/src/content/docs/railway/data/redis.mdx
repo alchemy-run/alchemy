@@ -52,7 +52,7 @@ const cache = yield* Railway.Redis("Cache", {
 ## Bind from a Service
 
 Yield `Railway.ReadWriteRedis` (or `ReadRedis` / `WriteRedis`) in
-Service init. Provide the matching `*Http` layer. Runtime commands
+the Service's constructor. Provide the matching `*Http` layer. Runtime commands
 use `REDIS_URL` (`{name}.railway.internal`).
 
 ```typescript
@@ -62,7 +62,7 @@ const Cache = Railway.Redis("Cache", { project: Site });
 
 export default class Api extends Railway.Service<Api>()(
   "Api",
-  { project: Site, main: import.meta.url, registry: "ghcr.io/acme", port: 3000 },
+  { project: Site, main: import.meta.url, port: 3000 },
   Effect.gen(function* () {
     const cache = yield* Railway.ReadWriteRedis(Cache);
     return {

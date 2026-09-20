@@ -15,6 +15,9 @@ const server = http.createServer(async (req, res) => {
       JSON.stringify({
         TARGET_URL: process.env.TARGET_URL,
         PPG_URL: process.env.PPG_URL,
+        NEON_URL: process.env.NEON_URL,
+        PLANETSCALE_PG_URL: process.env.PLANETSCALE_PG_URL,
+        PLANETSCALE_MYSQL_URL: process.env.PLANETSCALE_MYSQL_URL,
       }),
     );
     return;

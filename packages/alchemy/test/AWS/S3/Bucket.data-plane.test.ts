@@ -5,6 +5,7 @@ import { flociServices } from "@/AWS/Local/FlociServices.ts";
 import { Bucket, PutObject, PutObjectHttp } from "@/AWS/S3";
 import { remote } from "@/ProviderMode.ts";
 import * as Test from "@/Test/Alchemy";
+import { liveContext } from "../Local/fixtures/live.ts";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -94,11 +95,13 @@ devTest.provider.skipIf(inSweep)(
       }).pipe(Effect.provide(flociServices()));
       expect(local.ETag).toBe(output.put.etag);
 
-      // ...and the bucket never existed on the real cloud (the test body's
-      // ambient SDK is the live `testing` environment).
+      // ...and the bucket never existed on the real cloud. Ambient in a
+      // `dev` run is the emulator, so the live probe must opt into the
+      // registration-captured live chain (see Actions.local.test.ts).
       const live = yield* S3.headBucket({ Bucket: output.bucketName }).pipe(
         Effect.map(() => "found" as const),
         Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+        Effect.provide(liveContext),
       );
       expect(live).toBe("not-found");
 
@@ -137,14 +140,19 @@ devTest.provider.skipIf(inSweep)(
       expect(output.put.etag).toBeDefined();
 
       // Out-of-band via the live SDK: the write landed on the real bucket.
-      const live = yield* S3.headObject({
-        Bucket: output.bucketName,
-        Key: "remote.txt",
-      });
-      expect(live.ETag).toBe(output.put.etag);
+      // Ambient in a `dev` run is the emulator, so this probe (and the
+      // post-destroy check) must opt into the registration-captured live
+      // chain.
+      yield* Effect.gen(function* () {
+        const live = yield* S3.headObject({
+          Bucket: output.bucketName,
+          Key: "remote.txt",
+        });
+        expect(live.ETag).toBe(output.put.etag);
 
-      yield* stack.destroy();
-      yield* assertBucketDeleted(output.bucketName);
+        yield* stack.destroy();
+        yield* assertBucketDeleted(output.bucketName);
+      }).pipe(Effect.provide(liveContext));
     }),
 );
 

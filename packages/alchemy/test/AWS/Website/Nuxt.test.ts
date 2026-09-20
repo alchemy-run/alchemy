@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 // Gated with the rest of the AWS.Website suites: the CloudFront lifecycle
 // dominates the runtime (create ~5-15 min, destroy ~5-15 min).
-const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_WEBSITE_TESTS === "true";
+const runLive = !process.env.FAST;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixtures", "nuxt-app");
 
@@ -29,8 +29,15 @@ const fixtureEntries = [
   "public",
 ];
 
+// Under the floci runner the standalone composite deploys only the framework
+// dev server (no Lambda/S3/CloudFront), so the standalone test below is
+// live-only; the shared-Router test runs in both modes because the Router
+// pipeline deploys fully against the emulator, which serves the router's
+// edge on a local plain-HTTP port.
+const runEmulated = process.env.ALCHEMY_TEST_DEV === "1";
+
 describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
-  test.provider(
+  test.provider.skipIf(runEmulated)(
     "deploys SSR on a streaming Lambda URL with S3 assets behind CloudFront",
     (stack) =>
       Effect.gen(function* () {
@@ -142,10 +149,8 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
               rootDir,
               forceDestroy: true,
               domain: { router },
-              server: {
-                environment: {
-                  NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
-                },
+              env: {
+                NUXT_PUBLIC_ENV_MARKER: "nuxt-aws-live-env-marker",
               },
             });
             return { router, site };
@@ -153,7 +158,11 @@ describe.skipIf(!runLive)("AWS.Website.Nuxt", () => {
         );
 
         const url = deployed.router.url as string;
-        expect(url).toMatch(/^https:\/\//);
+        // `https://{id}.cloudfront.net` live; the emulator serves the
+        // router's edge on a local plain-HTTP port.
+        expect(url).toMatch(
+          runEmulated ? /^http:\/\/localhost:\d+/ : /^https:\/\//,
+        );
 
         // SSR through the ROUTER's distribution (the site registered
         // itself in the router's KV store — no site-owned distribution).

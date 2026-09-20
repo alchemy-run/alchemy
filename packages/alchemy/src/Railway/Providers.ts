@@ -1,7 +1,8 @@
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import * as Command from "../Command/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import { RailwayAuth } from "./AuthProvider.ts";
@@ -41,7 +42,16 @@ import { ReadWriteRedisHttp } from "./ReadWriteRedisHttp.ts";
 import { Redis, RedisProvider } from "./Redis.ts";
 import { Service } from "./Service.ts";
 import { ServiceProvider } from "./ServiceProvider.ts";
+import { Cdn, CdnProvider } from "./Website/Cdn.ts";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "../Website/Server.ts";
 import { ExecHttp, Sandbox, SandboxProvider } from "./Sandbox.ts";
+import {
+  SandboxCheckpoint,
+  SandboxCheckpointProvider,
+} from "./SandboxCheckpoint.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeBackup, VolumeBackupProvider } from "./VolumeBackup.ts";
 import { WriteRedisHttp } from "./WriteRedisHttp.ts";
@@ -89,6 +99,7 @@ export const providers = () =>
       PrivateNetworkEndpoint,
       MySQL,
       Mongo,
+      Cdn,
       CustomDomain,
       Environment,
       Function,
@@ -104,7 +115,9 @@ export const providers = () =>
       Bucket,
       CloudAgent,
       Sandbox,
+      SandboxCheckpoint,
       Random,
+      WebsiteServer,
     ]),
   ).pipe(
     Layer.provide(
@@ -115,6 +128,7 @@ export const providers = () =>
         PrivateNetworkEndpointProvider(),
         MySQLProvider(),
         MongoProvider(),
+        CdnProvider(),
         CustomDomainProvider(),
         EnvironmentProvider(),
         FunctionProvider(),
@@ -130,7 +144,9 @@ export const providers = () =>
         BucketProvider(),
         CloudAgentProvider(),
         SandboxProvider(),
+        SandboxCheckpointProvider(),
         RandomProvider(),
+        WebsiteServerProvider(),
       ),
     ),
     Layer.provideMerge(
@@ -153,8 +169,9 @@ export const providers = () =>
     Layer.provideMerge(fromCredentials()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(RailwayAuth),
-    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(ProfileStoreLive),
     Layer.provideMerge(CredentialsStoreLive),
     Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(Command.providers()),
     Layer.orDie,
   );

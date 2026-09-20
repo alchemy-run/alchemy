@@ -21,7 +21,10 @@ import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
-import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
+import { ProfileStoreLive } from "../Auth/Profile.ts";
+import { withProfileOverride } from "../Auth/Resolve.ts";
+import * as Interaction from "../Interaction.ts";
+import { userStage } from "../Cli/commands/flags.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -51,9 +54,14 @@ export interface MakeOptions<ROut = any> {
   providers: Layer.Layer<ROut, never, StackServices>;
   /** State store for top-level `deploy(Stack)` / `destroy(Stack)`; defaults to {@link State.localState}. */
   state?: Layer.Layer<State.State, never, StackServices>;
-  /** Override `ALCHEMY_PROFILE`; otherwise resolved from env / .env. */
+  /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
-  /** Default stage for deploy/destroy (default `"test"`). */
+  /**
+   * Default stage for deploy/destroy. Defaults to `test_$USER` (or
+   * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
+   * people running the same suite against one account don't collide.
+   * Does **not** read `$ALCHEMY_STAGE` — that is the CLI deploy/dev stage.
+   */
   stage?: string;
   /**
    * Engine-level adoption policy for this test run. When `true`, resources
@@ -125,7 +133,7 @@ export const sidecarProxy = (options: { profile?: string }) =>
  * in place. Accepts the usual truthy/falsey strings (`true`/`1`/`yes`/`on`,
  * `false`/`0`/`no`/`off`).
  */
-export const ALCHEMY_TEST_DEV = Config.boolean("ALCHEMY_TEST_DEV").pipe(
+export const ALCHEMY_TEST_DEV = Config.Boolean("ALCHEMY_TEST_DEV").pipe(
   Config.option,
 );
 
@@ -144,6 +152,19 @@ export const resolveDev = (options: { dev?: boolean }): boolean => {
 /** Resolve the effective `sidecar` flag: defaults to the resolved `dev` flag. */
 export const resolveSidecar = (options: MakeOptions): boolean =>
   options.sidecar ?? resolveDev(options);
+
+/**
+ * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
+ * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
+ * concurrent worktrees that share a cloud account.
+ * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
+ */
+export const defaultStage = (): string =>
+  process.env.ALCHEMY_TEST_STAGE || Effect.runSync(userStage("test"));
+
+/** File-level stage: `options.stage` if set, otherwise {@link defaultStage}. */
+export const resolveStage = (options: { stage?: string }): string =>
+  options.stage ?? defaultStage();
 
 /**
  * The sidecar runtime handed to each adapter's `make(...)`.
@@ -181,8 +202,8 @@ interface SidecarSingleton {
 
 const sidecarSingletons = new Map<string, SidecarSingleton>();
 
-export const makeSidecarHandle = (
-  options: MakeOptions,
+export const makeSidecarHandle = <ROut = any>(
+  options: MakeOptions<ROut>,
 ): SidecarHandle | undefined => {
   if (!resolveSidecar(options)) return undefined;
   const key = options.profile ?? process.env.ALCHEMY_PROFILE ?? "";
@@ -197,20 +218,25 @@ export const makeSidecarHandle = (
         // Capture the ambient platform context (provided by `toEffect`) so
         // the deferred spawner build can run inside a provider's `get`
         // without leaking platform requirements onto the RpcProviderProxy
-        // interface. The shared MemoMap dedupes concurrent first calls, so
-        // the PROCESS gets exactly one spawner no matter how many files race.
-        const context = yield* Effect.context<never>();
+        // interface. Omit Scope: that key is the calling file's sharedScope
+        // (closed in afterAll). Merging it in would pin the process-wide
+        // spawner HTTP server to a file that exits while others still need
+        // it. Provide the sidecar singleton scope instead.
+        const ambient = Context.omit(Scope.Scope)(
+          yield* Effect.context<never>(),
+        );
         const realProxy = Layer.buildWithMemoMap(real, memoMap, scope).pipe(
           Effect.map((built) =>
             Context.get(built, RpcProviderProxy.RpcProviderProxy),
           ),
-          Effect.provideContext(context as Context.Context<any>),
+          Effect.provideContext(ambient as Context.Context<any>),
+          Scope.provide(scope),
           Effect.orDie,
         );
         return RpcProviderProxy.RpcProviderProxy.of({
-          get: (serverEntryUrl, providerName) =>
+          get: (providersUrl, providerName) =>
             Effect.flatMap(realProxy, (proxy) =>
-              proxy.get(serverEntryUrl, providerName),
+              proxy.get(providersUrl, providerName),
             ),
         });
       }),
@@ -310,16 +336,20 @@ const platformLayer = () =>
     Option.getOrElse(alchemyTestDevOverride(), () => false)
       ? flociWebsiteHttp
       : FetchHttpClient.layer,
-    Layer.provide(ProfileLive, PlatformServices),
+    Layer.provide(ProfileStoreLive, PlatformServices),
     Layer.provide(CredentialsStoreLive, PlatformServices),
   );
 
-const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
+const alchemyLayer = Layer.mergeAll(
+  LoggingCli,
+  Interaction.layerNonInteractive(),
+  AlchemyContextLive,
+);
 
 /**
  * Build the per-test runtime and return a self-contained Effect.
  *
- * Mirrors {@link "../bin/alchemy.ts"} composition: ConfigProvider via
+ * Mirrors {@link "../bin/alchemy.js"} composition: ConfigProvider via
  * `loadConfigProvider` + `withProfileOverride`, an empty `AuthProviders`
  * registry that the user's `providers` layer populates, the platform layers,
  * and the configured state store. Adapters wrap this into runner-specific
@@ -332,9 +362,9 @@ const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
  * When `scope` is omitted, the effect runs with `Effect.scoped` and any
  * scoped resources are torn down as soon as it resolves.
  */
-export const toEffect = <A>(
+export const toEffect = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Effect.Effect<A, any, never> => {
@@ -374,9 +404,9 @@ export const toEffect = <A>(
 };
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
-export const run = <A>(
+export const run = <A, ROut = any>(
   effect: TestEffect<A>,
-  options: MakeOptions,
+  options: MakeOptions<ROut>,
   scope?: Scope.Scope,
   sidecar?: SidecarHandle,
 ): Promise<A> => Effect.runPromise(toEffect(effect, options, scope, sidecar));
@@ -398,19 +428,20 @@ export const withProviders = <A, E, R, ROut>(
     Option.getOrElse(alchemyTestDevOverride(), () => false) === true
       ? Effect.provide(effect, flociServices())
       : effect;
+  const stage = resolveStage(options);
   return body.pipe(
     Effect.provide(
       (options.providers as Layer.Layer<any, never, any>).pipe(
         Layer.provideMerge(
           Layer.succeed(Stack, {
             name: stackName,
-            stage: options.stage ?? "test",
+            stage,
             resources: {},
             bindings: {},
             actions: {},
           }),
         ),
-        Layer.provideMerge(Layer.succeed(Stage, options.stage ?? "test")),
+        Layer.provideMerge(Layer.succeed(Stage, stage)),
       ),
     ),
   ) as Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>>;
@@ -433,7 +464,7 @@ export const deploy = <A>(
 ) =>
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
-    stage: callOptions?.stage ?? options.stage ?? "test",
+    stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
@@ -445,7 +476,7 @@ export const destroy = (
 ) =>
   _destroy({
     stack: stack as Effect.Effect<CompiledStack, never, any>,
-    stage: callOptions?.stage ?? options.stage ?? "test",
+    stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
     scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
@@ -471,6 +502,8 @@ export const destroy = (
  */
 export interface ScratchStack<ROut = any> {
   readonly name: string;
+  /** Stage this scratch deploys to ({@link resolveStage} of the file options). */
+  readonly stage: string;
   /** The shared in-memory state Layer for this scratch. @internal */
   readonly state: Layer.Layer<State.State, never, never>;
   deploy<A, E, R>(
@@ -521,7 +554,7 @@ export const scratchStack = <ROut>(
   name: string,
   file?: string,
 ): ScratchStack<ROut> => {
-  const stage = options.stage ?? "test";
+  const stage = resolveStage(options);
   const stackName = sanitizeStackName(
     file === undefined ? name : `${scratchNamespace(file)}-${name}`,
   );
@@ -576,6 +609,7 @@ export const scratchStack = <ROut>(
 
   return {
     name: stackName,
+    stage,
     state: stateLayer,
     deploy: ((effect: Effect.Effect<any, any, any>) =>
       buildAndApply(effect)) as ScratchStack<ROut>["deploy"],

@@ -1,3 +1,4 @@
+import type { InputProps } from "../../Input.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -17,7 +18,7 @@ import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { AssetDeployment } from "./AssetDeployment.ts";
 import { asRouterDomain, registerDevRouterRoute } from "./DevRouterRoute.ts";
-import { Server, type ServerDevProps } from "./Server.ts";
+import { Server, type ServerDevProps } from "../../Website/Server.ts";
 import { makeKvSite, type StaticSiteProps } from "./StaticSite.ts";
 import {
   normalizeWebsiteDomain,
@@ -56,32 +57,31 @@ export interface NextjsProps {
   /**
    * SSR server (Lambda) configuration.
    */
-  server?: {
-    /**
-     * Memory allocated to the server function, in MB.
-     * @default 1024
-     */
-    memorySize?: number;
-    /**
-     * Maximum request duration.
-     * @default 30 seconds
-     */
-    timeout?: Duration.Duration;
-    /**
-     * Environment variables for the server function.
-     */
-    environment?: Record<string, any>;
-    /**
-     * Instruction set architecture.
-     * @default "x86_64"
-     */
-    architecture?: "x86_64" | "arm64";
-    /**
-     * Lambda runtime for the server function.
-     * @default "nodejs24.x"
-     */
-    runtime?: FunctionProps["runtime"];
-  };
+  /**
+   * Memory allocated to the server function, in MB.
+   * @default 1024
+   */
+  memorySize?: number;
+  /**
+   * Maximum server request duration.
+   * @default 30 seconds
+   */
+  timeout?: Duration.Duration;
+  /**
+   * Environment variables for the SSR server (Lambda environment).
+   * Values accept `Output`s (e.g. `API_URL: api.url`).
+   */
+  env?: Record<string, any>;
+  /**
+   * Server instruction set architecture.
+   * @default "x86_64"
+   */
+  architecture?: "x86_64" | "arm64";
+  /**
+   * Lambda runtime for the server function.
+   * @default "nodejs24.x"
+   */
+  runtime?: FunctionProps["runtime"];
   /**
    * Image optimization (Lambda) configuration.
    */
@@ -177,19 +177,19 @@ export interface NextjsProps {
  * ```typescript
  * const site = yield* AWS.Website.Nextjs("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
  *   },
  * });
  * ```
  *
  * @resource
  */
+
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
-  function* (id: string, props: NextjsProps = {}) {
+  function* (id: string, propsIn: InputProps<NextjsProps> = {}) {
+    const props = propsIn as NextjsProps;
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
     // Mirrors the other Website composites: during `alchemy dev` the site
@@ -201,7 +201,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       framework: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       target: NEXTJS_AWS_FRAMEWORK_SPECIFIER,
       root: props.rootDir,
-      env: props.server?.environment,
+      env: props.env,
       memo: props.memo,
       dev: props.dev,
     });
@@ -306,10 +306,10 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       // OpenNext's server-functions/default is a complete deployment unit
       // (entry + traced .next output + its own node_modules) — ship as-is.
       bundle: false,
-      runtime: props.server?.runtime ?? "nodejs24.x",
-      architecture: props.server?.architecture,
-      memorySize: props.server?.memorySize ?? 1024,
-      timeout: props.server?.timeout ?? Duration.seconds(30),
+      runtime: props.runtime ?? "nodejs24.x",
+      architecture: props.architecture,
+      memorySize: props.memorySize ?? 1024,
+      timeout: props.timeout ?? Duration.seconds(30),
       env: {
         // The env names OpenNext's s3/sqs/dynamodb overrides read. Regions
         // are omitted: the SDK falls back to the Lambda runtime's own
@@ -318,7 +318,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
         CACHE_BUCKET_KEY_PREFIX: NEXTJS_CACHE_PREFIX,
         REVALIDATION_QUEUE_URL: revalidationQueue.queueUrl,
         CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
-        ...props.server?.environment,
+        ...props.env,
       },
       functionUrl: {
         authType: "NONE",

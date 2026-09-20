@@ -231,7 +231,7 @@ describe.concurrent("Astro dev", () => {
   );
 
   // ─────────────────────────────────────────────────────────────────────
-  // Declared-static app in dev: `astro: { output: "static" }` produces no
+  // Declared-static app in dev: `output: "static"` produces no
   // server modules — the dev server must still answer every route from the
   // assets-only dispatch, including the custom 404 page.
   // ─────────────────────────────────────────────────────────────────────

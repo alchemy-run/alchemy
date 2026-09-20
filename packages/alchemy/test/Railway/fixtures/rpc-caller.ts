@@ -3,7 +3,7 @@ import { Function } from "@/Railway/Function.ts";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Greeter from "./rpc-greeter.ts";
-import { Site } from "./rpc-shared.ts";
+import { Partition, Site } from "./rpc-shared.ts";
 
 /**
  * Tagged Function that binds {@link Greeter} and calls `.greet` over the
@@ -14,6 +14,7 @@ export default class Caller extends Function<Caller>()(
   "Caller",
   {
     project: Site,
+    environment: Partition,
     main: import.meta.url,
   },
   Effect.gen(function* () {

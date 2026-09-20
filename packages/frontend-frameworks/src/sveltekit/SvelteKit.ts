@@ -519,7 +519,11 @@ export const make: (
     function* (buildOptions) {
       const root = buildOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
-      const targetContext = { root, framework: "sveltekit" };
+      const targetContext = {
+        root,
+        framework: "sveltekit",
+        env: buildOptions?.env,
+      };
 
       // Wholesale build takeover (targets that own the entire pipeline).
       if (target.build !== undefined) {
@@ -571,63 +575,99 @@ export const make: (
     },
   );
 
-  const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+  const devInProcess: Framework["Service"]["dev"] = Effect.fn(
+    function* (devOptions) {
+      const root = devOptions?.root ?? baseRoot;
+      const target = yield* resolveTarget(root);
+      yield* requireAdapterHook(target);
+      const adapter = target.adapter({
+        root,
+        dev: {
+          env: options?.dev?.env,
+          bindings: options?.dev?.bindings,
+          services: options?.dev?.services,
+        },
+      });
+      // Registered before the server is acquired so it runs after the server
+      // closes (finalizers are LIFO): the dev platform (e.g. the Cloudflare
+      // target's platform proxy) outlives the last in-flight request.
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          try {
+            await adapter.dispose?.();
+          } catch {
+            // dev-platform teardown is best-effort
+          }
+        }),
+      );
+      const vite = yield* loadVite(root);
+      const config = yield* resolveViteConfig(root, adapter);
+      // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
+      // on older Vite — see `resolveViteDevPort`.
+      const port = yield* FrameworkCore.resolveViteDevPort(
+        vite.version,
+        devOptions?.port ?? options?.dev?.port,
+      );
+      const host = devOptions?.host;
+
+      const server = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: async () => {
+            const server = await vite.createServer({
+              ...config,
+              server: {
+                ...config.server,
+                port,
+                ...(host !== undefined ? { host } : undefined),
+              },
+            });
+            return await server.listen();
+          },
+          catch: (error) => fail("Failed to start the dev server", error),
+        }),
+        (server) => Effect.promise(async () => await server.close()),
+      );
+      const url = server.resolvedUrls?.local[0];
+      if (url === undefined) {
+        return yield* Effect.fail(
+          fail("Could not determine the dev server URL"),
+        );
+      }
+      return { url };
+    },
+  );
+
+  // Constructing the SvelteKit plugin loads the project's `@sveltejs/kit`
+  // module graph, which misbehaves when several projects load it
+  // concurrently in one process (partially-initialized module bindings —
+  // `Cannot access 'kit_options' before initialization`). A process hosting
+  // many sites' dev servers (the alchemy dev sidecar) hits exactly that, so
+  // run the dev server in a dedicated child process instead (see
+  // core/DevChild.ts). Inside that child — or when the options cannot cross
+  // the process boundary (deploy-target VALUES, live vite plugins from the
+  // e2e harness) — the in-process path runs directly.
+  const dev: Framework["Service"]["dev"] = (devOptions) => {
+    if (
+      FrameworkCore.isInsideDevChild() ||
+      !FrameworkCore.isJsonSerializable(options)
+    ) {
+      return devInProcess(devOptions);
+    }
     const root = devOptions?.root ?? baseRoot;
-    const target = yield* resolveTarget(root);
-    yield* requireAdapterHook(target);
-    const adapter = target.adapter({
-      root,
-      dev: {
-        env: options?.dev?.env,
-        bindings: options?.dev?.bindings,
-        services: options?.dev?.services,
+    const port = devOptions?.port ?? options?.dev?.port;
+    return FrameworkCore.runDevChild({
+      framework: "sveltekit",
+      module: "@alchemy.run/frontend-frameworks/sveltekit",
+      callerUrl: import.meta.url,
+      rootDir: root,
+      makeOptions: { ...options, root },
+      devOptions: {
+        root,
+        ...(port !== undefined ? { port } : {}),
+        ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
       },
     });
-    // Registered before the server is acquired so it runs after the server
-    // closes (finalizers are LIFO): the dev platform (e.g. the Cloudflare
-    // target's platform proxy) outlives the last in-flight request.
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(async () => {
-        try {
-          await adapter.dispose?.();
-        } catch {
-          // dev-platform teardown is best-effort
-        }
-      }),
-    );
-    const vite = yield* loadVite(root);
-    const config = yield* resolveViteConfig(root, adapter);
-    // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
-    // on older Vite — see `resolveViteDevPort`.
-    const port = yield* FrameworkCore.resolveViteDevPort(
-      vite.version,
-      devOptions?.port ?? options?.dev?.port,
-    );
-    const host = devOptions?.host;
-
-    const server = yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: async () => {
-          const server = await vite.createServer({
-            ...config,
-            server: {
-              ...config.server,
-              port,
-              ...(host !== undefined ? { host } : undefined),
-            },
-          });
-          return await server.listen();
-        },
-        catch: (error) => fail("Failed to start the dev server", error),
-      }),
-      (server) => Effect.promise(async () => await server.close()),
-    );
-    const url = server.resolvedUrls?.local[0];
-    if (url === undefined) {
-      return yield* Effect.fail(fail("Could not determine the dev server URL"));
-    }
-    return { url };
-  });
+  };
 
   return Framework.of({ build, dev });
 });

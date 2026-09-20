@@ -6,13 +6,22 @@ import {
 import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import { describe, expect, test } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 
 describe("Cloudflare zone lookup", () => {
-  const withoutCredentials = <A, E>(effect: Effect.Effect<A, E, Credentials>) =>
+  const withoutCredentials = <A, E>(
+    effect: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
+  ) =>
     effect.pipe(
       Effect.provideService(
         Credentials,
         Effect.die("explicit zone IDs must not resolve credentials"),
+      ),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() =>
+          Effect.die("explicit zone IDs must not list zones"),
+        ),
       ),
       Effect.runSync,
     );

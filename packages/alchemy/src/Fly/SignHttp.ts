@@ -1,12 +1,11 @@
-import { CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { CredentialsFromAmbientOrEnv } from "./Credentials.ts";
 import {
   base64ToBytes,
   bytesToBase64,
-  flyKmsPost,
   makeHttpSecretKeyBinding,
 } from "./SecretKeyHttp.ts";
 import { Sign, type SignRequest } from "./Sign.ts";
@@ -34,19 +33,6 @@ export const SignHttp = Layer.effect(
     makeHttpSecretKeyBinding({
       makeClient: (auth, appName, secretName) =>
         Effect.fn("Fly.Sign")(function* (request: SignRequest) {
-          if (globalThis.__ALCHEMY_RUNTIME__) {
-            const res = yield* flyKmsPost(
-              yield* appName,
-              yield* secretName,
-              "sign",
-              { plaintext: bytesToBase64(request.plaintext) },
-            );
-            return {
-              signature: base64ToBytes(
-                typeof res.signature === "string" ? res.signature : undefined,
-              ),
-            };
-          }
           const res = yield* auth.authorize(
             machines.signSecretKey({
               app_name: yield* appName,
@@ -58,4 +44,7 @@ export const SignHttp = Layer.effect(
         }),
     }),
   ),
-).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(CredentialsFromEnv));
+).pipe(
+  Layer.provide(FetchHttpClient.layer),
+  Layer.provide(CredentialsFromAmbientOrEnv),
+);

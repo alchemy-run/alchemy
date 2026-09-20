@@ -1,3 +1,4 @@
+import { Action } from "@/Action";
 import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
@@ -8,6 +9,7 @@ import * as Provider from "@/Provider";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
+import { Progress, type ProgressEvent } from "@/Report.ts";
 import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -39,6 +41,7 @@ import {
   ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
+  ProbeBinding,
   Queue,
   TestLayers,
   TestResource,
@@ -223,6 +226,160 @@ test(
         (d: any) => Object.keys(d).length === 0,
         "empty object",
       ),
+    });
+  }),
+);
+
+test(
+  "reports each diffed resource and action through the ambient Progress reporter",
+  Effect.gen(function* () {
+    yield* seed({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.BindingTarget",
+        status: "created",
+        props: {
+          name: "target",
+        },
+        attr: {
+          name: "target",
+          env: {},
+        },
+        bindings: [],
+        downstream: [],
+      },
+    });
+    const Announce = Action("Announce", (_: { table: string }) =>
+      Effect.succeed(1),
+    );
+    const events: Array<ProgressEvent> = [];
+    yield* Effect.gen(function* () {
+      const target = yield* BindingTarget("A", { name: "target" });
+      yield* target.bind("TestBinding", { env: { FEATURE_FLAG: "on" } });
+      yield* Queue("MyQueue", { name: "test-queue" });
+      yield* Announce({ table: "users" });
+    }).pipe(
+      makePlan,
+      Effect.provideService(Progress, (event) =>
+        Effect.sync(() => {
+          events.push(event);
+        }),
+      ),
+    );
+
+    // Phase markers land before any node event: state loads, then diffing.
+    expect(
+      events
+        .filter((event) => event._tag === "plan.phase")
+        .map(({ phase }) => phase),
+    ).toEqual(["loading-state", "computing-plan"]);
+    expect(events[0]).toMatchObject({
+      _tag: "plan.phase",
+      phase: "loading-state",
+    });
+    expect(events[1]).toMatchObject({
+      _tag: "plan.phase",
+      phase: "computing-plan",
+    });
+
+    // Each resource diff announces its start before the planned completion.
+    expect(
+      events
+        .filter((event) => event._tag === "plan.resource.started")
+        .map(({ logicalId }) => logicalId)
+        .sort(),
+    ).toEqual(["A", "MyQueue"]);
+
+    const nodes = events.filter(
+      (event) =>
+        event._tag === "plan.resource.completed" ||
+        event._tag === "plan.action.completed",
+    );
+    const byId = Object.fromEntries(
+      nodes.map((event) => [event.logicalId, event]),
+    );
+    // resource rows carry their binding rows across the wire
+    expect(byId.A).toMatchObject({
+      _tag: "plan.resource.completed",
+      action: "update",
+      bindings: [{ sid: "TestBinding", action: "create" }],
+      total: 2,
+    });
+    expect(byId.MyQueue).toMatchObject({
+      _tag: "plan.resource.completed",
+      action: "create",
+      bindings: [],
+      total: 2,
+    });
+    // stack actions get their own events
+    expect(byId.Announce).toMatchObject({
+      _tag: "plan.action.completed",
+      actionType: "Announce",
+      action: "run",
+      completed: 1,
+      total: 1,
+    });
+    expect(
+      events
+        .filter((event) => event._tag === "plan.resource.completed")
+        .map(({ completed }) => completed)
+        .sort(),
+    ).toEqual([1, 2]);
+  }),
+);
+
+test(
+  "destroy plans report deletions through the ambient Progress reporter",
+  Effect.gen(function* () {
+    yield* seed({
+      MyBucket: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "MyBucket",
+        fqn: "MyBucket",
+        namespace: undefined,
+        resourceType: "Test.Bucket",
+        status: "created",
+        props: { name: "test-bucket" },
+        attr: { name: "test-bucket" },
+        bindings: [],
+        downstream: [],
+      },
+    });
+    const events: Array<ProgressEvent> = [];
+    const { name, stage } = yield* resolveStackId;
+    const plan = yield* Plan.destroy({ name, stage }).pipe(
+      Effect.provideService(Progress, (event) =>
+        Effect.sync(() => {
+          events.push(event);
+        }),
+      ),
+      Effect.provide(TestLayers()),
+    );
+
+    expect(plan.deletions.MyBucket).toMatchObject({ action: "delete" });
+    expect(
+      events
+        .filter((event) => event._tag === "plan.phase")
+        .map(({ phase }) => phase),
+    ).toEqual(["loading-state", "computing-plan"]);
+    const nodes = events.filter(
+      (event) => event._tag === "plan.resource.completed",
+    );
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0]).toMatchObject({
+      _tag: "plan.resource.completed",
+      fqn: "MyBucket",
+      logicalId: "MyBucket",
+      resourceType: "Test.Bucket",
+      action: "delete",
+      bindings: [],
+      completed: 1,
+      total: 1,
     });
   }),
 );
@@ -485,7 +642,7 @@ test(
 );
 
 test(
-  "delete orphaned resources",
+  "plan retained resources as orphaned",
   Effect.gen(function* () {
     yield* seed({
       MyBucket: {
@@ -504,6 +661,7 @@ test(
         },
         bindings: [],
         downstream: [],
+        removalPolicy: "retain",
       },
       MyQueue: {
         instanceId,
@@ -543,7 +701,7 @@ test(
       },
       deletions: {
         MyBucket: {
-          action: "delete",
+          action: "orphaned",
           bindings: [],
           state: {
             status: "created",
@@ -1001,7 +1159,7 @@ test.provider(
       const state = yield* yield* State;
       yield* state.set({
         stack: scratch.name,
-        stage: TEST_STAGE,
+        stage: scratch.stage,
         fqn: "A",
         value: {
           instanceId,
@@ -1045,7 +1203,7 @@ test.provider(
       expect(
         yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "A",
         }),
       ).toMatchObject({
@@ -1554,6 +1712,65 @@ describe("prior crash in 'updating' state", () => {
       },
     },
   });
+});
+
+describe("pending replacement deletion plans", () => {
+  for (const status of ["replacing", "replaced"] as const) {
+    test(
+      `preserves the complete ${status} chain and all generation dependencies`,
+      Effect.gen(function* () {
+        const oldest: ResourceState = {
+          status: "created",
+          fqn: "R",
+          logicalId: "R",
+          namespace: undefined,
+          instanceId: "oldest",
+          resourceType: "Test.ModalResource",
+          providerVersion: 0,
+          props: { value: "one" },
+          attr: { value: "one", runtime: "live" },
+          providerMode: "live",
+          downstream: ["OldDependent"],
+          bindings: [],
+        };
+        const middle: ResourceState = {
+          ...oldest,
+          status: "replacing",
+          instanceId: "middle",
+          props: { value: "two" },
+          attr: undefined,
+          providerMode: "local",
+          downstream: ["MiddleDependent"],
+          deleteFirst: false,
+          old: oldest,
+        };
+        const pending: ResourceState = {
+          ...oldest,
+          status,
+          instanceId: "newest",
+          props: { value: "three" },
+          attr: { value: "three", runtime: "live" },
+          downstream: ["NewDependent"],
+          deleteFirst: false,
+          old: middle,
+        };
+        yield* seed({ R: pending });
+        const plan = yield* makePlan(Effect.void);
+        expect(plan.deletions.R?.action).toBe("delete");
+        expect(plan.deletions.R?.mode).toBe("live");
+        expect(plan.deletions.R?.state).toEqual(pending);
+        expect(plan.deletions.R?.downstream).toEqual([
+          "NewDependent",
+          "MiddleDependent",
+          "OldDependent",
+        ]);
+        const state = yield* yield* State;
+        expect(
+          yield* state.get({ stack: TEST_STACK, stage: TEST_STAGE, fqn: "R" }),
+        ).toEqual(pending);
+      }),
+    );
+  }
 });
 
 describe("prior crash in 'replacing' state", () => {
@@ -3053,7 +3270,7 @@ describe("engine-level adoption", () => {
       expect(
         yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "Adopted",
         }),
       ).toMatchObject({
@@ -3099,7 +3316,7 @@ describe("engine-level adoption", () => {
         expect(
           yield* state.get({
             stack: scratch.name,
-            stage: TEST_STAGE,
+            stage: scratch.stage,
             fqn: "Adopted",
           }),
         ).toMatchObject({
@@ -3115,7 +3332,7 @@ describe("engine-level adoption", () => {
         expect(updates).toBe(0);
         const completed = yield* state.get({
           stack: scratch.name,
-          stage: TEST_STAGE,
+          stage: scratch.stage,
           fqn: "Adopted",
         });
         expect(completed).toMatchObject({ status: "updated" });
@@ -3215,11 +3432,11 @@ describe("engine-level adoption", () => {
         { readHook: () => Effect.succeed(ownedAttrs) },
       );
 
-      // Cold-start adoption forces an update so the provider can re-sync
+      // Cold-start adoption is surfaced explicitly while the provider re-syncs
       // tags / config against `news` — even when read returns plain
       // (owned) attrs, the cloud resource may carry drift the engine
       // can't detect from `props` alone.
-      expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted!.action).toBe("adopted");
       expect(plan.resources.Adopted).toMatchObject({
         adopting: true,
         state: {
@@ -3258,11 +3475,11 @@ describe("engine-level adoption", () => {
         },
       );
 
-      // Takeover of an Unowned resource forces `update` so the provider's
+      // Takeover of an Unowned resource is planned as `adopted` so the provider's
       // update path can rewrite ownership tags / config to match this
       // logical id (a plain noop would leave the resource looking
       // foreign-owned to subsequent deploys).
-      expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted!.action).toBe("adopted");
       expect(plan.resources.Adopted).toMatchObject({
         adopting: true,
         state: { status: "created" },
@@ -3345,7 +3562,7 @@ describe("engine-level adoption", () => {
         },
       );
 
-      expect(plan.resources.Adopted!.action).toBe("update");
+      expect(plan.resources.Adopted!.action).toBe("adopted");
       expect(plan.resources.Adopted).toMatchObject({
         adopting: true,
         state: { status: "created" },
@@ -4238,6 +4455,82 @@ describe("provider modes (local ⇄ live)", () => {
       const same = yield* inDev(makePlan(program));
       expect(same.resources.A).toMatchObject({ action: "noop" });
       expect(same.resources.B).toMatchObject({ action: "noop" });
+    }),
+  );
+});
+
+describe("binding client data-plane routing (plan)", () => {
+  // Binding.Service wraps deploy-time clients so they hit the plane the
+  // bound resource actually lives on. In a `dev` run ambient is the
+  // emulator; `Alchemy.remote()` must still wrap with the live layer (the
+  // inverse of the local wrap). Plan-time `yield* client()` is the same
+  // routing `Service.execute` uses.
+
+  test(
+    "in a dev run, a local resource's binding client hits the emulator plane",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const a = yield* ModalResource("A", { value: "v1" });
+            const read = yield* ProbeBinding(a);
+            return yield* read();
+          }),
+        ),
+      );
+      expect(plan.output).toBe("local");
+    }),
+  );
+
+  test(
+    "in a dev run, a remote() resource's binding client hits the live plane",
+    Effect.gen(function* () {
+      const plan = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const a = yield* ModalResource("A", { value: "v1" }).pipe(remote());
+            const read = yield* ProbeBinding(a);
+            return yield* read();
+          }),
+        ),
+      );
+      expect(plan.output).toBe("live");
+    }),
+  );
+
+  test(
+    "a live-mode run wraps remote/live clients with the live plane (not ambient)",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          const a = yield* ModalResource("A", { value: "v1" });
+          const read = yield* ProbeBinding(a);
+          return yield* read();
+        }),
+      );
+      expect(plan.output).toBe("live");
+    }),
+  );
+
+  test(
+    "a binding spanning local and remote() resources dies",
+    Effect.gen(function* () {
+      const exit = yield* inDev(
+        makePlan(
+          Effect.gen(function* () {
+            const local = yield* ModalResource("A", { value: "v1" });
+            const live = yield* ModalResource("B", { value: "v1" }).pipe(
+              remote(),
+            );
+            const read = yield* ProbeBinding([local, live]);
+            return yield* read();
+          }),
+        ),
+      ).pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        expect(String(Cause.squash(exit.cause))).toContain("mixed data planes");
+      }
     }),
   );
 });

@@ -1,6 +1,6 @@
 import { Postgres } from "@/Railway/Postgres.ts";
-import { Project } from "@/Railway/Project.ts";
+import { Partition, Site } from "./suite-env.ts";
 
-export const Site = Project("Site");
+export { Site };
 
-export const Db = Postgres("Db", { project: Site });
+export const Db = Postgres("Db", { project: Site, environment: Partition });

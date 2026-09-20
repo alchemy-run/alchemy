@@ -237,7 +237,6 @@ test.provider.skipIf(!!process.env.FAST)(
             Schedule.recurs(60),
           ]),
         }),
-        Effect.ignore,
       );
     }),
   { timeout: 900_000 },
