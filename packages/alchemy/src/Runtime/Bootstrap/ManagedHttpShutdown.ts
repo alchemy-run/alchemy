@@ -24,6 +24,38 @@ export class ManagedHttpShutdown extends Context.Service<
   }
 >()("Alchemy.Runtime.ManagedHttpShutdown") {}
 
+/**
+ * Coordinate shutdown of an Alchemy-owned Fly Service process, including HTTP
+ * requests, background runners, and their shared dependencies.
+ *
+ * The Fly bootstrap enables this when `ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS` is set.
+ * The Service provider sets it for managed Services using blue/green or an
+ * explicit shutdown policy. Raw images and external servers own their shutdown.
+ *
+ * This is a process-entrypoint helper, not a request timeout or a general-purpose
+ * Effect combinator. Running it installs process-wide SIGTERM and SIGINT
+ * listeners. They coexist with other listeners, but cannot prevent another
+ * listener from exiting the process. Importing this module installs no listeners.
+ *
+ * Shutdown stops HTTP acceptance and interrupts background runners concurrently.
+ * Existing responses and request finalizers drain before shared dependencies
+ * close. Deadlines start on a signal, runner failure, completion of all runner
+ * bodies, or program completion, not after `timeoutMs` of normal execution.
+ *
+ * At 80% of the budget, remaining HTTP connections are forcibly closed. At 90%,
+ * a native timer calls `process.exit(1)`, even if Effect finalizers are still
+ * running. This reserves time before Fly's own termination deadline; it does
+ * not guarantee cleanup completes. These timers require a responsive event loop.
+ * Repeated signals do not extend the budget. Listeners and timers are removed
+ * when the wrapper's scope closes, unless the process exits first.
+ *
+ * @param program - The whole managed process program, not an individual handler.
+ * @param timeoutMs - Fly's configured shutdown budget, from 1 to 300000 ms.
+ * @returns Whether shutdown was requested before the program completed.
+ * Cleanup failures and exceeded drain deadlines fail the Effect; the caller
+ * owns the normal process exit after successful cleanup.
+ * @internal
+ */
 export const withManagedHttpShutdown = (
   program: Effect.Effect<unknown, unknown>,
   timeoutMs: number,

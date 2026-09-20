@@ -149,29 +149,38 @@ Idle Machines remain in the resource outputs. Stopping or suspending them does n
 
 Suspension is not SIGTERM shutdown. Do not rely on finalizers running when a Machine suspends. Replacing a suspended Machine creates a new process rather than transferring its memory snapshot.
 
-## Set the shutdown deadline
+## Give streaming responses time to finish
 
-Set `shutdown` in the Service props to give the old process time to finish work.
+If your API streams responses that can take 40 seconds, increase blue/green's default 30-second shutdown budget. Add `shutdown` to the `Api` Service props from the first example:
 
-```typescript
-const shutdown: Fly.MachineShutdown = {
-  signal: "SIGTERM",
-  timeout: "45 seconds",
-};
+```diff lang="typescript" title="api.ts"
+   {
+     app,
+     main: import.meta.url,
+     deploy: { strategy: "bluegreen" },
++    shutdown: { timeout: "60 seconds" },
+   },
 ```
 
-Blue/green defaults to SIGTERM and 30 seconds. The maximum is 300 seconds. Durations must be positive and finite, with whole-millisecond precision. Managed Services support SIGTERM and SIGINT.
+:::caution[Deploy the shutdown policy before relying on it]
+Deploy this configuration first. It applies to the new process; it cannot change the shutdown behavior of the version already running. That first replacement may still interrupt requests. Later replacements use the old version's own shutdown policy, even if you give the new version a shorter timeout.
+:::
 
-Retirement uses the old Machine's signal and timeout. Giving the new version a shorter timeout does not shorten the old version's window.
+On a subsequent deployment, Alchemy starts and checks the replacement before retiring this version. When the old process receives SIGTERM, its 60-second budget works like this:
 
-Managed Effect Services stop accepting HTTP requests and drain existing responses, including streamed bodies. Worker cleanup begins at the same time. Request scopes and shared dependencies stay alive until HTTP and worker cleanup settle.
+```text
+ 0s   Stop accepting new requests. Existing responses continue.
+48s   Close remaining HTTP connections (80% of the budget).
+54s   Force the process to exit if cleanup is still running (90%).
+60s   Fly's configured termination deadline.
+```
 
-HTTP draining gets 80% of the shutdown window. Remaining connections close after that. A hard exit at 90% bounds stuck finalizers. The first signal starts the deadline and later signals do not extend it. A hard exit does not mean all work finished.
+A response with 40 seconds of work remaining has time to finish. A stream still open after 48 seconds is disconnected. Choose the budget with that cutoff in mind, rather than assuming `60 seconds` means 60 seconds of HTTP draining. Sending another signal does not restart the deadline.
 
-Setting `shutdown` also enables graceful rolling scale-down and deletion. It does not make a single Machine continuously available during an in-place update. Omitting both policies preserves the existing rolling and runtime defaults.
+For background jobs, [register cleanup in the worker's Effect scope](#own-the-job-drain-with-ordinary-scopes). Workers begin cleanup while HTTP responses drain, and shared dependencies remain available until both finish or the process exits.
 
-:::caution[The first replacement]
-An already-running process cannot gain a shutdown handler retroactively. Its first replacement may interrupt requests. Raw images and external website servers must implement their own shutdown handling.
+:::note[Using your own server]
+This automatic draining applies to Alchemy-managed Effect Services. With a raw `Fly.Machine` image or an external website server, implement SIGTERM handling in your application; `shutdown.timeout` configures Fly's deadline but does not add a handler to your process.
 :::
 
 ## Deploy a private worker

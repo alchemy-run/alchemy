@@ -109,6 +109,10 @@ export const runProcess = (
   program: Effect.Effect<unknown, unknown>,
   options?: {
     readonly exitOnComplete?: boolean;
+    /**
+     * Enable process-wide SIGTERM/SIGINT handling and bounded cleanup for the
+     * managed Fly bootstrap. May force process exit; see {@link withManagedHttpShutdown}.
+     */
     readonly managedHttpShutdownTimeoutMs?: number;
   },
 ): Promise<void> => {
