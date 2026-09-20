@@ -565,16 +565,32 @@ const desiredOptions = (
   return options;
 };
 
+class RedisSecretVersionMissing extends Data.TaggedError(
+  "Fly.RedisSecretVersionMissing",
+)<{ appName: string }> {}
+
+const redisSecretVersion = (
+  appName: string,
+  response: machines.AppSecretsUpdateResp | machines.SetAppSecretResponse,
+) => {
+  const version = response.version ?? response.Version;
+  return version !== undefined && Number.isSafeInteger(version) && version >= 0
+    ? Effect.succeed(version)
+    : Effect.fail(new RedisSecretVersionMissing({ appName }));
+};
+
 /**
  * Write `REDIS_URL` onto an App from attached Redis add-on names.
  * Called from {@link Service} reconcile so the secret exists before
- * Machines boot.
+ * Machines boot. Returns the highest accepted secret-version floor, or
+ * `undefined` when no secret was written; this is not a vault snapshot.
  */
 export const attachRedisSecrets = Effect.fn(function* (
   appName: string,
   attached: readonly { name: string; id?: string }[],
 ) {
-  if (appName.length === 0 || attached.length === 0) return;
+  if (appName.length === 0 || attached.length === 0) return undefined;
+  const versions: number[] = [];
   for (const item of attached) {
     const name = item.name;
     const id = item.id;
@@ -597,7 +613,12 @@ export const attachRedisSecrets = Effect.fn(function* (
       }),
       Effect.catchTag("Fly.RedisPending", () => findRedisAddOn({ id, name })),
     );
-    if (row === undefined) continue;
+    if (row === undefined) {
+      return yield* new RedisPending({
+        redisId: id ?? name,
+        status: "missing",
+      });
+    }
     let url = unwrapSensitive(row.publicUrl);
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* addons
@@ -607,23 +628,38 @@ export const attachRedisSecrets = Effect.fn(function* (
         );
       url = unwrapSensitive(detail?.publicUrl);
     }
-    if (url === undefined || url.length === 0) continue;
-    const updated = yield* Effect.result(
-      machines.updateSecrets({
-        app_name: appName,
-        values: { [REDIS_URL_ENV]: url },
-      }),
-    );
-    if (Result.isFailure(updated)) {
-      yield* machines
-        .createSecret({
-          app_name: appName,
-          secret_name: REDIS_URL_ENV,
-          value: url,
-        })
-        .pipe(Effect.catchTag("Conflict", () => Effect.void));
+    if (url === undefined || url.length === 0) {
+      return yield* new RedisPending({
+        redisId: row.id ?? id ?? name,
+        status: "credentials missing",
+      });
     }
+    const value = url;
+    const update = machines
+      .updateSecrets({
+        app_name: appName,
+        values: { [REDIS_URL_ENV]: value },
+      })
+      .pipe(
+        Effect.flatMap((response) => redisSecretVersion(appName, response)),
+      );
+    const version = yield* update.pipe(
+      Effect.catchTag("NotFound", () =>
+        machines
+          .createSecret({
+            app_name: appName,
+            secret_name: REDIS_URL_ENV,
+            value,
+          })
+          .pipe(
+            Effect.flatMap((response) => redisSecretVersion(appName, response)),
+            Effect.catchTag("Conflict", () => update),
+          ),
+      ),
+    );
+    versions.push(version);
   }
+  return versions.length > 0 ? Math.max(...versions) : undefined;
 });
 
 export const RedisProvider = () =>

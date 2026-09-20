@@ -15,6 +15,7 @@ const frameworks = [
   ["solidstart", "SolidStart", Prisma.Website.SolidStart],
   ["sveltekit", "SvelteKit", Prisma.Website.SvelteKit],
   ["tanstack-start", "TanStack Start", Prisma.Website.TanStackStart],
+  ["vinext", "vinext", Prisma.Website.Vinext],
   ["vite", "Vite", Prisma.Website.Vite],
   ["vocs", "Prisma", Prisma.Website.Vocs],
   ["waku", "Waku", Prisma.Website.Waku],
