@@ -31,6 +31,7 @@ const workerFixtureDir = pathe.resolve(
   import.meta.dirname,
   "foldkit-worker-fixture",
 );
+const ssrFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-ssr-fixture");
 
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
 
@@ -62,13 +63,12 @@ const htmlPage = (marker: string) => `<!doctype html>
 `;
 
 describe.concurrent("Foldkit", () => {
-  // The resource's reason to exist: a Foldkit app routes on the client, so
-  // `notFoundHandling` defaults to `single-page-application` and deep links
-  // boot the app without the caller configuring anything. The same project
-  // through `Website.Vite` 404s on `/counter/42` unless `assets` is passed
-  // by hand.
+  // A client-only build writes no `foldkit.build.json`, and that absence is
+  // what gives it the single-page-application fallback: a deep link serves
+  // the template and the app's router resolves it. A server-rendered build
+  // records itself and gets the opposite — see FoldkitBuild.ts.
   test.provider(
-    "Foldkit: deploys with SPA fallback by default",
+    "Foldkit: a client-only app gets the single-page-application fallback",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -83,7 +83,8 @@ describe.concurrent("Foldkit", () => {
 
         const site = yield* stack.deploy(
           Effect.gen(function* () {
-            // Deliberately no `assets` — the default is what's under test.
+            // Deliberately no `assets` — the derived default is what is
+            // under test.
             return yield* Cloudflare.Website.Foldkit(
               "FixFoldkitDefault",
               foldkitProps(rootDir),
@@ -99,10 +100,12 @@ describe.concurrent("Foldkit", () => {
           timeout: "120 seconds",
           label: "foldkit index",
         });
-        // Deep link falls back to index.html so client-side routing can boot.
+        // The deep link matches no file; the fallback answers it with the
+        // template and the app boots. A declaration still wins over the
+        // default; see the next case.
         yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
           timeout: "60 seconds",
-          label: "foldkit spa fallback",
+          label: "foldkit deep link fallback",
         });
 
         yield* stack.destroy();
@@ -111,11 +114,9 @@ describe.concurrent("Foldkit", () => {
     { timeout: 360_000 },
   );
 
-  // An explicit `assets` must win over the built-in default rather than be
-  // overridden by it — a spread in the wrong order would silently ignore
-  // whatever the caller passed.
+  // An explicit `assets` wins over the derived default.
   test.provider(
-    "Foldkit: an explicit assets config overrides the SPA default",
+    "Foldkit: an explicit assets config is passed through",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -160,10 +161,10 @@ describe.concurrent("Foldkit", () => {
     { timeout: 360_000 },
   );
 
-  // A Foldkit deployment may carry a Worker entry in front of the assets
-  // (API routes, error reporting, Durable Objects). The client build still
-  // serves through the ASSETS binding, and the SPA fallback still applies
-  // behind it.
+  // A client-only Foldkit deployment may carry a Worker entry in front of
+  // the assets (API routes, error reporting, Durable Objects). The client
+  // build still serves through the ASSETS binding, and the derived
+  // single-page-application fallback still applies behind it.
   test.provider(
     "Foldkit: a custom main entry serves API routes alongside the app",
     (stack) =>
@@ -207,11 +208,128 @@ describe.concurrent("Foldkit", () => {
           timeout: "60 seconds",
           label: "foldkit worker index",
         });
-        // `runWorkerFirst` is merged over the SPA default, not instead of
-        // it — the deep link still falls back through `env.ASSETS.fetch`.
+        // The derived fallback still answers the deep link through
+        // `env.ASSETS.fetch`.
         yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
           timeout: "60 seconds",
           label: "foldkit worker spa fallback",
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // With `ssr.build` the one `vite build` also emits `dist/server/fetch.js`,
+  // and that handler is the Worker. The fixture prerenders `/about` and not
+  // `/`, and the build keeps the unfilled template out of the client
+  // output, so the front page has to reach the handler. Each page stamps
+  // the `count` query into its markup, which tells a file served by the
+  // asset layer (the count it was built with) from a page rendered on
+  // request (the query's).
+  test.provider(
+    "Foldkit: a server-rendered app deploys its fetch handler and serves the front page from it",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(ssrFixtureDir, {
+          prefix: "alchemy-foldkit-ssr-",
+          tempRoot,
+          entries: fixtureEntries,
+        });
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            // No `main`, no `assets`: the handler and the routing both come
+            // from the build.
+            return yield* Cloudflare.Website.Foldkit(
+              "FixFoldkitSsr",
+              foldkitProps(rootDir),
+            );
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // The front page renders on request — a served template would
+        // carry an empty `<div id="root">` and no count at all.
+        yield* expectUrlContains(`${site.url!}/?count=7`, ">7<", {
+          timeout: "120 seconds",
+          label: "foldkit ssr front page",
+        });
+        // A prerendered route is a file: the asset layer answers it and the
+        // query never reaches a render.
+        yield* expectUrlContains(`${site.url!}/about/?count=7`, ">0<", {
+          timeout: "60 seconds",
+          label: "foldkit ssr prerendered page",
+        });
+        // A deep link matches no file and is rendered, not answered with a
+        // single-page-application fallback.
+        yield* expectUrlContains(`${site.url!}/counter/42?count=3`, ">3<", {
+          timeout: "60 seconds",
+          label: "foldkit ssr deep link",
+        });
+        // The handler classifies an asset-shaped miss itself.
+        yield* expectDirectStatus(`${site.url!}/assets/missing.js`, 404, {
+          timeout: "60 seconds",
+          label: "foldkit ssr asset miss",
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+      }).pipe(logLevel),
+    { timeout: 360_000 },
+  );
+
+  // When `/` itself is prerendered, the build writes `index.html` as a
+  // page: the front page is a file, and only the routes the build did not
+  // list reach the handler.
+  test.provider(
+    "Foldkit: a prerendered front page is served as a file",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+
+        yield* stack.destroy();
+
+        const rootDir = yield* cloneFixture(ssrFixtureDir, {
+          prefix: "alchemy-foldkit-prerendered-",
+          tempRoot,
+          entries: fixtureEntries,
+        });
+        yield* fs.writeFileString(
+          path.join(rootDir, "src", "prerender.ts"),
+          'export const prerenderPaths = ["/"];\n',
+        );
+
+        const site = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Website.Foldkit(
+              "FixFoldkitPrerendered",
+              foldkitProps(rootDir),
+            );
+          }),
+        );
+
+        expect(site.url).toBeDefined();
+        yield* expectWorkerExists(site.workerName, accountId);
+
+        // The front page is the prerendered file: the query is ignored.
+        yield* expectUrlContains(`${site.url!}/?count=7`, ">0<", {
+          timeout: "120 seconds",
+          label: "foldkit prerendered front page",
+        });
+        // An unlisted route still renders on request.
+        yield* expectUrlContains(`${site.url!}/counter/42?count=3`, ">3<", {
+          timeout: "60 seconds",
+          label: "foldkit prerendered deep link",
         });
 
         yield* stack.destroy();

@@ -1421,6 +1421,9 @@ export const LocalWorkerProvider = () =>
           entry: worker.bundleOptions.entry,
           stack: { name: stack.name, stage: stack.stage },
           env: worker.env,
+          // Dev hands `env` to the source unresolved; the Worker's own URL
+          // is only substituted into a build's inlined env on deploy.
+          selfUrl: undefined,
           extraOptions: worker.bundleOptions.extraOptions,
           assets: worker.assets,
           worker: {

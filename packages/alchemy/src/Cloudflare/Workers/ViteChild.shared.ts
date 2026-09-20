@@ -80,6 +80,7 @@ export interface ViteBuildChildConfig {
 /** Result the build child writes to `outputPath` (V8-serialized). */
 export interface ViteBuildChildResult {
   clientDirectory: string | undefined;
+  serverDirectory: string | undefined;
   base: string | undefined;
   serverBundle: BundleOutput | undefined;
   externalWorkspaces: string[];
