@@ -1,101 +1,52 @@
 ---
 title: Connection lifecycle
-description: SQL clients build lazily on first query, memoize per execution, and tear down when the event settles — why, and what that means on workerd and Lambda.
+description: One SQL client per execution scope, opened on first query and closed with the scope.
 ---
-
-Alchemy's Effect SQL, Drizzle, and Prisma Postgres adapters resolve clients
-lazily and memoize them per execution scope. Connection setup is separate from
-runtime initialization, whether the application runs in Lambda, a container,
-or a Worker.
 
 ## Construction runs once, events run many times
 
-A Lambda instance, container server, or Worker initializes once and handles
-many requests. Construct the adapter during initialization; acquire its
-connections only inside the execution that uses them:
-
 ```typescript
 Effect.gen(function* () {
-  const sql = yield* SQL.Postgres({ url });
-  // ✓ resolves a *recipe* in the constructor — no connection yet
+  const sql = yield* SQL.Postgres({ url }); // No connection yet.
 
   return {
     fetch: Effect.gen(function* () {
       const users = yield* sql`SELECT * FROM users`;
-      // ✓ the pool is created here, on the first query of the event
+      return yield* HttpServerResponse.json(users);
     }),
   };
 });
 ```
 
-`yield* SQL.Postgres(...)` in the constructor does not connect. It returns a
-chainable proxy over a memoized build — a recipe for a client, not a
-client.
+Construct the adapter during initialization. The first query opens its connection in the handler's scope.
 
 ## One client per execution
 
-The first query of an execution — a `fetch`/`queue`/`scheduled`
-event, a Durable Object call, a Workflow task attempt, a Lambda invocation —
-builds the real client and memoizes it on that execution's scope.
-Every later query in the same execution reuses it. When the event
-settles, the scope closes and the client's finalizer runs: the pool
-ends, the statement cache drops.
+```typescript
+const users = yield* sql`SELECT * FROM users`;
+const posts = yield* sql`SELECT * FROM posts`;
+```
 
-Constructing a runtime adapter during plan or deploy does not open a
-connection. Migration resources are separate: they connect from the deployment
-runner or a controlled migration task when applying schema changes.
+Both queries share the execution's client. Closing the scope releases it; migration resources connect separately during deployment.
 
 ## Why not a global pool
 
-On workerd, sockets and other I/O objects are pinned to the request
-that created them (the `IoContext`). A pool created during one
-request and reused by the next is a runtime error — so a
-per-execution pool is the only correct shape, and the per-execution
-memo makes it cost one build per event instead of one per query.
-Cross-request pooling is Hyperdrive's job: it holds the warm
-connections at the edge, and the Worker opens a cheap local
-connection to it each event. See
-[Hyperdrive](/cloudflare/data/hyperdrive).
-
-D1 is a native binding rather than a socket, but its client carries a
-prepared-statement cache with the same per-request constraint — same
-contract, same memo.
+Workerd sockets belong to the request that created them. Use [Hyperdrive](/cloudflare/data/hyperdrive) for cross-request pooling, not an isolate-wide socket pool.
 
 ## Narrowing with Effect.scoped
 
-The memo keys on the current scope, so wrapping queries in a nested
-`Effect.scoped` narrows both the memo and the client's lifetime to
-that block:
-
 ```typescript
-fetch: Effect.gen(function* () {
-  yield* Effect.scoped(
-    Effect.gen(function* () {
-      yield* sql`...`; // client built here…
-    }),
-  ); // …and released here, before the response
-}),
+const users = yield* Effect.scoped(sql`SELECT * FROM users`);
 ```
 
-Memo key and finalizer target are always the same scope object, so
-they cannot disagree.
+The client closes at the end of this block, before the surrounding handler finishes.
 
 ## Lambda and servers
 
-Alchemy gives each Lambda invocation and server request a fresh execution
-scope. Clients build on first query and release when it settles. A standalone
-Effect program supplies its own scope with `Effect.scoped`; these adapters do
-not create a process-wide pool automatically.
-[Runtime](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
-covers the instance-scope rules — what the constructor may do, when instance
-finalizers run, and the Lambda SIGTERM window.
+Alchemy supplies a scope per invocation or request. Standalone programs use `Effect.scoped`.
+
+[Runtime scopes](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope) · [Worker scopes](/cloudflare/compute/workers#background-work-and-scopes)
 
 ## Where next
 
-- [Postgres](/sql/effect-sql/postgres) /
-  [MySQL](/sql/effect-sql/mysql) / [D1](/sql/effect-sql/d1) — the
-  clients this contract governs.
-- [Workers: isolate scope vs request scope](/cloudflare/compute/workers#background-work-and-scopes)
-  — the same rules from the Worker's point of view.
-- [Runtime](/infrastructure-as-effects/runtime)
-  — the cross-cloud runtime model.
+[Postgres](/sql/effect-sql/postgres) · [MySQL](/sql/effect-sql/mysql) · [D1](/sql/effect-sql/d1)

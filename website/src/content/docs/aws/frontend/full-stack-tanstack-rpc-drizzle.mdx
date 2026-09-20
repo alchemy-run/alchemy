@@ -10,26 +10,9 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const deps = `@distilled.cloud/aws @effect/atom-react @effect/sql-pg drizzle-orm effect pg`;
 export const devDeps = `@alchemy.run/frontend-frameworks`;
 
-This guide ties four pieces into one deployable app:
-
-- **[TanStack Start](/aws/frontend/tanstack-start)** — the React frontend,
-  deployed as a streaming Lambda Function URL behind CloudFront via
-  `AWS.Website.TanStackStart`.
-- **[Effect RPC](/aws/apis/effect-rpc)** — a typed backend served by a separate
-  `AWS.Lambda.Function`.
-- **[Drizzle + Aurora DSQL](/aws/data/drizzle-dsql)** — reached through the
-  `AWS.DSQL.Connect` binding, which mints an IAM auth token per invocation.
-- **Atom RPC** — Effect 4's native `effect/unstable/reactivity/AtomRpc`, plus
-  the React bindings from `@effect/atom-react`, for reactive queries and
-  mutations in the browser.
-
-We'll build a Todo app and follow a single value — a `Todo` — from the Postgres
-row all the way to a checkbox in the browser.
+[TanStack Start](/aws/frontend/tanstack-start) · [Effect RPC](/aws/apis/effect-rpc) · [Drizzle + DSQL](/aws/data/drizzle-dsql)
 
 ## The shape
-
-Data flows through five hops, and one `RpcGroup` value pins the types at every
-boundary:
 
 ```
 Browser (React)
@@ -47,14 +30,9 @@ Backend RPC Lambda (TodoRpcs)         (src/backend/api.ts)
 Aurora DSQL cluster
 ```
 
-The browser posts to a same-origin `/rpc` route and the frontend Lambda
-forwards the body to the backend's Function URL. Same origin means no CORS to
-configure, and the browser never learns the backend's address.
+The browser calls a same-origin `/rpc` route; the frontend Lambda forwards requests to the backend.
 
 ## Install
-
-The TanStack Start build integration is a dev dependency; everything else runs
-in the Lambda:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -73,10 +51,7 @@ in the Lambda:
 
 ## 1. The shared RPC contract
 
-Everything starts from one module imported by **both** ends — the backend that
-serves the procedures and the browser client that calls them. One `Schema`
-codec round-trips every value, so the React UI is typed against the exact
-shapes the Postgres-backed handlers return.
+Share the RPC contract between the backend and browser:
 
 ```typescript
 // src/backend/rpc.ts
@@ -111,28 +86,19 @@ export class TodoRpcs extends RpcGroup.make(
 ) {}
 ```
 
-`TodoRpcs` is a plain value-level description — nothing executes yet. See the
-[Effect RPC guide](/aws/apis/effect-rpc) for a deeper tour of `Rpc.make` and
-schema-backed errors.
+[RPC contracts and errors](/aws/apis/effect-rpc)
 
 ## 2. The database
 
-Start with [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql) for cluster setup,
-IAM role mapping, TLS, and schema deployment. Copy `database.ts`, `bootstrap.ts`,
-and `client.ts` from its [standalone example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle/src)
-into `src/backend/`; this tutorial adds RPC and a frontend to that integration.
+Copy `database.ts`, `bootstrap.ts`, and `client.ts` from the [DSQL example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle/src) into `src/backend/`. [Database setup](/aws/data/drizzle-dsql).
 
 ## 3. The table
 
-Copy the example's `schema.ts` into `src/backend/` too. Its `Todos` table has
-`id`, `text`, `done`, and `createdAt` fields matching the RPC contract above.
-The deployment Action creates `app.todos`; application requests have no DDL privileges.
+Copy the example's [`schema.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/schema.ts) into `src/backend/`.
 
 ## 4. The backend RPC Lambda
 
-Reuse `connectDatabase` from the database integration. It resolves a fresh
-IAM token for `app_user` and requires verified TLS; the Lambda receives only
-`dsql:DbConnect` on this cluster.
+`connectDatabase` uses the non-admin `app_user` role with verified TLS.
 
 ```typescript
 // src/backend/api.ts
@@ -220,22 +186,9 @@ export default class Backend extends AWS.Lambda.Function<Backend>()(
 ) {}
 ```
 
-A few things worth calling out:
-
-- `new Todo(row)` works because the Drizzle row's shape matches the `Todo`
-  schema (including `createdAt: Schema.Date`). The class instance is then
-  encoded by the RPC server and decoded back into a `Todo` on the client.
-- Database failures are unexpected, so `Effect.orDie` turns them into defects —
-  that keeps each handler's typed error channel aligned with its RPC schema
-  (`never` for list/create, `TodoNotFound` for toggle/delete). Note the pipe
-  order: `orDie` comes **before** the `flatMap`, so the `TodoNotFound` raised
-  inside stays a normal, typed failure the client can catch.
-- The serialization (`RpcSerialization.layerJson`) **must** match the client.
+`Effect.orDie` handles database failures before `flatMap`, preserving the typed `TodoNotFound` failure. Client and server must both use `RpcSerialization.layerJson`.
 
 ## 5. Wire it into the Stack
-
-The frontend is an `AWS.Website.TanStackStart` site. The backend's Function URL
-travels to it as a plain environment variable:
 
 ```typescript
 // alchemy.run.ts
@@ -274,22 +227,15 @@ export default Alchemy.Stack(
 );
 ```
 
-The deployment Action creates the table and maps the backend's IAM role to
-`app_user`. `Alchemy.remote()` keeps this backend on AWS during local development
-so DSQL sees its real execution-role credentials; it has no effect on normal deployment.
+`BootstrapDatabase` initializes the schema. `Alchemy.remote()` keeps the backend on AWS during local development.
 
 :::caution
-`functionUrl: true` creates a **public** Function URL (`authType: "NONE"`).
-Proxying through `/rpc` keeps the browser same-origin and keeps the address out
-of the client bundle, but anyone who learns the URL can call it. Switch to
-`functionUrl: { authType: "AWS_IAM" }` when you're ready to SigV4-sign the
-proxy's requests.
+The backend Function URL is public. Add authentication before exposing private data; `AWS_IAM` requires SigV4-signed proxy requests.
 :::
 
 ## 6. The `/rpc` proxy route
 
-`RpcClient.layerProtocolHttp` always POSTs, so one server route handler is
-enough. It forwards the body to the backend and returns the response as-is:
+Forward POST requests to the backend:
 
 ```typescript
 // src/routes/rpc.ts
@@ -309,16 +255,9 @@ export const Route = createFileRoute("/rpc")({
 });
 ```
 
-Server routes run on the site's own Lambda, so they read `process.env` directly
-— the same `BACKEND_URL` the Stack set under `env`.
-
 ## 7. The atom RPC client
 
-Effect 4 ships atom RPC in core — there's no third-party `@effect-atom` package
-to add (that one targets Effect 3). `AtomRpc.Service` turns the shared
-`RpcGroup` into a client whose `.query()` and `.mutation()` methods return
-**atoms**. The transport is a plain HTTP client over `fetch`, pointed at the
-same-origin `/rpc` route:
+Create the browser client with Effect 4’s `AtomRpc`:
 
 ```typescript
 // src/rpc-client.ts
@@ -345,20 +284,11 @@ export const toggleTodoAtom = TodoClient.mutation("toggleTodo");
 export const deleteTodoAtom = TodoClient.mutation("deleteTodo");
 ```
 
-The `reactivityKeys: ["todos"]` on the query is the key to reactivity: when a
-mutation runs with a matching key (step 9), the list query is invalidated and
-refetched automatically — no manual cache busting.
-
-:::note
-`RpcSerialization.layerJson` here must match the backend's serialization from
-step 4. Mismatch the codecs and the wire won't decode.
-:::
+Mutations with `reactivityKeys: ["todos"]` invalidate and refetch the list.
 
 ## 8. Provide a registry
 
-Atoms resolve against an `AtomRegistry`. `@effect/atom-react` — versioned in
-lockstep with `effect`, so no version juggling — provides `RegistryProvider`.
-Wrap it once at the root:
+Wrap the application in `RegistryProvider`:
 
 ```tsx
 // src/routes/__root.tsx
@@ -380,10 +310,7 @@ function RootComponent() {
 
 ## 9. The UI
 
-`useAtomValue` subscribes to the list query and re-renders as its
-`AsyncResult` moves through waiting → success. `useAtomSet` turns a mutation
-atom into a setter; calling it with `reactivityKeys: ["todos"]` invalidates the
-list:
+Read the query with `useAtomValue`; call mutations with `useAtomSet`:
 
 ```tsx
 // src/routes/index.tsx
@@ -458,26 +385,15 @@ function TodoList() {
 }
 ```
 
-`todos` are decoded `Todo` instances — the same class the backend constructed
-from a Postgres row, round-tripped through the shared `Schema` codec. No
-hand-written DTOs, no `fetch` URLs, no response parsing.
-
 ## 10. Deploy
 
-Deploying creates the DSQL cluster, uploads the backend Lambda with its
-cluster-scoped role, builds the TanStack Start app, and puts the client assets
-behind CloudFront. If you haven't configured [AWS](/aws/setup) credentials yet,
-Alchemy will guide you through it on the first deploy.
+[AWS setup](/aws/setup)
 
 ```sh
 bun alchemy deploy
 ```
 
-The deployment Action initializes the database with administrative credentials
-from the deployment runner. There is no public setup endpoint.
-
-Open `websiteUrl` and add a few todos — each checkbox toggle and delete
-round-trips through the full stack and the list refreshes itself.
+Open `websiteUrl` to create, toggle, and delete todos.
 
 ## Local dev
 
@@ -485,32 +401,12 @@ round-trips through the full stack and the list refreshes itself.
 bun alchemy dev
 ```
 
-The frontend runs TanStack Start's Vite dev server locally, while
-`Alchemy.remote()` keeps the backend Lambda and its DSQL access on AWS.
-`BACKEND_URL` points the same-origin proxy at that backend. DSQL has no local
-emulation, and this development mode still incurs AWS charges.
+The frontend runs locally; the backend Lambda and DSQL remain on AWS and incur charges.
 
 ## Recap
 
-- One `RpcGroup` (`TodoRpcs`) is the single source of truth — served by the
-  backend, consumed by the browser, typed end to end.
-- The **backend** is an `AWS.Lambda.Function` running Drizzle over Aurora DSQL
-  via `DSQL.Connect`; DB errors `orDie` into defects so typed channels match
-  the RPC schemas.
-- The **frontend** is an `AWS.Website.TanStackStart` site whose server route
-  proxies `/rpc` to the backend's Function URL.
-- The **browser** uses Effect 4's native `AtomRpc` (`effect/unstable/reactivity`)
-  plus `@effect/atom-react` hooks; `reactivityKeys` wire mutations to refetch
-  the affected query.
+`TodoRpcs` defines the API; the frontend proxies `/rpc`; mutation keys refresh the list.
 
 ## Where to go next
 
-- [Effect RPC on Lambda](/aws/apis/effect-rpc) — the RPC server/client model in
-  depth, including a typed standalone client.
-- [TanStack Start](/aws/frontend/tanstack-start) — every prop on the site
-  resource: custom domains, shared routers, build output.
-- [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql) — the standalone database integration.
-- [Drizzle on Postgres](/sql/drizzle/postgres) — schema modules, generated
-  migrations, and the query API.
-- [RDS & Aurora](/aws/data/rds) — the VPC-based Postgres alternative, with the
-  `Connect` binding and the Data API.
+[Effect RPC](/aws/apis/effect-rpc) · [TanStack Start](/aws/frontend/tanstack-start) · [Drizzle + DSQL](/aws/data/drizzle-dsql) · [Drizzle queries](/sql/drizzle/postgres) · [RDS & Aurora](/aws/data/rds)

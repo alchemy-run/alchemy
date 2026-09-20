@@ -1,9 +1,8 @@
 # Alchemy examples
 
-Each example is its own application. Read its README, provider setup, and test
-configuration before deploying: examples can create billable infrastructure.
-Use the [SQL documentation](https://alchemy.run/sql) to choose a client or
-[find an integration by provider](https://alchemy.run/sql#find-your-provider).
+[SQL clients](https://alchemy.run/sql) · [Providers](https://alchemy.run/sql#find-your-provider)
+
+Examples create billable infrastructure. Follow each README's cleanup commands.
 
 ## SQL integrations
 
@@ -22,17 +21,9 @@ Use the [SQL documentation](https://alchemy.run/sql) to choose a client or
 
 ### Looking for Drizzle + Aurora?
 
-Start with [aws-aurora-drizzle](./aws-aurora-drizzle): a standalone Lambda
-application with private Aurora PostgreSQL, IAM authentication, verified TLS,
-and deployment-time schema setup. Its [integration guide](https://alchemy.run/aws/data/drizzle-aurora)
-explains the connection and migration placement. The separate `aws-rds`
-application uses **plain `pg`**, not Drizzle.
+[Aurora PostgreSQL guide](https://alchemy.run/aws/data/drizzle-aurora) · [Aurora DSQL guide](https://alchemy.run/aws/data/drizzle-dsql)
 
-For **Aurora DSQL**, use [aws-dsql-drizzle](./aws-dsql-drizzle) and its
-[integration guide](https://alchemy.run/aws/data/drizzle-dsql). It is a different
-database and deployment from Aurora PostgreSQL. The
-[full-stack guide](https://alchemy.run/aws/frontend/full-stack-tanstack-rpc-drizzle)
-adds TanStack Start and Effect RPC to the DSQL integration.
+These are separate database integrations. `aws-rds` uses plain `pg`, not Drizzle.
 
 ## Guides and lifecycle
 
@@ -40,8 +31,3 @@ adds TanStack Start and Effect RPC to the DSQL integration.
 - [Drizzle](https://alchemy.run/sql/drizzle/postgres) and [Prisma contracts](https://alchemy.run/sql/prisma/contracts).
 - [Connection lifecycle](https://alchemy.run/sql/effect-sql/lifecycle).
 - [AWS](https://alchemy.run/aws/setup), [Cloudflare](https://alchemy.run/cloudflare/setup), [Fly](https://alchemy.run/fly/setup), [Hetzner](https://alchemy.run/hetzner/setup), and [Railway](https://alchemy.run/railway/setup) credentials.
-
-A guide, a runnable application, and an internal test fixture serve different
-purposes. Check the selected project's supported runtime/database combination,
-migration path, and cleanup instructions rather than assuming all SQL clients
-support every database with a similar connection string.

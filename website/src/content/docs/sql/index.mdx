@@ -1,69 +1,54 @@
 ---
 title: SQL
-description: Use Effect SQL, Drizzle, or Prisma ORM across AWS, Cloudflare, Fly.io, Hetzner, Neon, PlanetScale, Prisma, and Railway. Find database guides and runnable examples.
+description: SQL clients, database providers, and runnable integrations.
 ---
 
-Use SQL from a Lambda, Worker, container service, or an application you run
-yourself. Choose a query client independently of where your application and
-database are hosted. Alchemy provides database resources, runtime connection
-bindings, and migration tooling; the available combination depends on the
-database and runtime.
+<span id="clients" />
 
 ## Choose a client
 
-| Client | Use it for | Guides |
-| --- | --- | --- |
-| Effect SQL | Tagged-template SQL with Effect errors and transactions | [Postgres](/sql/effect-sql/postgres), [MySQL](/sql/effect-sql/mysql), [D1](/sql/effect-sql/d1) |
-| Drizzle | TypeScript schemas, query builders, and relational queries | [Postgres](/sql/drizzle/postgres), [MySQL](/sql/drizzle/mysql), [D1](/sql/drizzle/d1) |
-| Prisma ORM v8 | PSL or TypeScript contracts with Effect-native queries | [Contracts](/sql/prisma/contracts), [Postgres](/sql/prisma/postgres) |
+| Client | Guides |
+| --- | --- |
+| Effect SQL | [Postgres](/sql/effect-sql/postgres) · [MySQL](/sql/effect-sql/mysql) · [D1](/sql/effect-sql/d1) |
+| Drizzle | [Postgres](/sql/drizzle/postgres) · [MySQL](/sql/drizzle/mysql) · [D1](/sql/drizzle/d1) |
+| Prisma ORM v8 | [Contracts](/sql/prisma/contracts) · [Postgres](/sql/prisma/postgres) |
 
-Prisma ORM v8 currently targets PostgreSQL 17+. A Postgres-compatible protocol
-does not guarantee that every ORM feature or migration works on a particular
-database. D1 is Cloudflare's SQLite-based database and uses its own binding.
+Prisma ORM v8 requires PostgreSQL 17+.
+
+<span id="databases" />
 
 ## Find your provider
 
-Start with the platform where your application runs, or the provider that
-hosts your database. These pages explain the choices and link to the complete
-integration guides; they do not require your application and database to use
-the same provider.
-
-| Provider | Start here |
+| Provider | Databases and connections |
 | --- | --- |
-| [AWS](/sql/providers/aws) | Lambda connections to Aurora PostgreSQL, Aurora DSQL, and the RDS Data API |
-| [Cloudflare](/sql/providers/cloudflare) | Workers with D1 or Hyperdrive in front of Postgres/MySQL |
-| [Fly.io](/sql/providers/fly) | Services with Fly Managed Postgres or an external database |
-| [Hetzner](/sql/providers/hetzner) | Services using an external database, including the Neon + Drizzle example |
-| [Neon](/sql/providers/neon) | Postgres projects, branches, connection URLs, and migrations |
-| [PlanetScale](/sql/providers/planetscale) | Postgres or MySQL/Vitess databases and runtime integrations |
-| [Prisma Postgres & Compute](/sql/providers/prisma) | Managed Postgres, connection credentials, and Prisma-hosted applications |
-| [Railway](/sql/providers/railway) | Services with private Postgres/MySQL connections |
+| [AWS](/sql/providers/aws) | Aurora PostgreSQL, Aurora DSQL, RDS Data API |
+| [Cloudflare](/sql/providers/cloudflare) | D1, Hyperdrive |
+| [Fly.io](/sql/providers/fly) | Managed Postgres |
+| [Hetzner](/sql/providers/hetzner) | Services with an external database |
+| [Neon](/sql/providers/neon) | Postgres |
+| [PlanetScale](/sql/providers/planetscale) | Postgres, MySQL/Vitess |
+| [Prisma](/sql/providers/prisma) | Postgres, Compute |
+| [Railway](/sql/providers/railway) | Postgres, MySQL |
 
-Looking for **Aurora**, **D1**, or another database by name? See
-[Choose a database](/sql/databases).
+[Choose a database](/sql/databases)
+
+<span id="what-are-you-building" />
 
 ## Find an integration
 
-| What you want | Where to go |
+| Integration | Guide |
 | --- | --- |
-| Drizzle + Aurora PostgreSQL + Lambda | [AWS Drizzle + Aurora guide](/aws/data/drizzle-aurora) — standalone example with IAM, TLS, and schema setup |
-| Drizzle + Aurora DSQL + Lambda | [AWS Drizzle + DSQL guide](/aws/data/drizzle-dsql) — standalone example for the separate Aurora DSQL database |
-| Drizzle + Neon or PlanetScale + Workers | [Cloudflare Drizzle integration](/cloudflare/data/drizzle) |
-| Drizzle + D1 + Workers | [Cloudflare D1 integration](/cloudflare/data/d1-drizzle) |
-| Drizzle + Fly Managed Postgres | [Fly Postgres](/fly/data/postgres) |
-| Drizzle + Railway Postgres | [Railway Postgres](/railway/data/postgres) |
-| Prisma ORM + Neon + Workers | [Cloudflare Prisma integration](/cloudflare/data/prisma) |
+| Lambda + Aurora PostgreSQL + Drizzle | [AWS](/aws/data/drizzle-aurora) |
+| Lambda + Aurora DSQL + Drizzle | [AWS](/aws/data/drizzle-dsql) |
+| Workers + Neon or PlanetScale + Drizzle | [Cloudflare](/cloudflare/data/drizzle) |
+| Workers + D1 + Drizzle | [Cloudflare](/cloudflare/data/d1-drizzle) |
+| Fly Service + Postgres + Drizzle | [Fly](/fly/data/postgres) |
+| Railway Service + Postgres + Drizzle | [Railway](/railway/data/postgres) |
+| Workers + Neon + Prisma ORM | [Cloudflare](/cloudflare/data/prisma) |
 
-For runnable projects on GitHub, use the
-[SQL examples index](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md).
-A test fixture demonstrates an implementation but is not necessarily a
-self-contained application; provider pages label the two separately.
+[Runnable examples](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md)
 
 ## Already have a database?
-
-Alchemy's SQL clients also accept a connection Effect. You can obtain the
-redacted URL from configuration instead of provisioning the database with
-Alchemy:
 
 ```typescript
 import * as SQL from "alchemy/SQL/Postgres";
@@ -76,18 +61,10 @@ const query = Effect.gen(function* () {
 });
 ```
 
-Run database work in the scope supplied by your application's runtime, or use
-`Effect.scoped` in a standalone program. Your application still needs network
-access, database credentials, and the correct driver. See
-[Connection lifecycle](/sql/effect-sql/lifecycle) for acquisition and cleanup.
+Use the application's execution scope, or `Effect.scoped` in a standalone program. [Connection lifecycle](/sql/effect-sql/lifecycle).
+
+<span id="where-next" />
 
 ## Manage schema changes
 
-Schema generation and migration application are separate responsibilities.
-Some database resources accept migrations directly; private databases may need
-a migration runner inside their network. Follow your provider's integration
-rather than assuming every database has a `migrations` property.
-
-- [Effect SQL migrations](/sql/effect-sql/migrations) — hand-written SQL files.
-- [Drizzle migrations](/sql/drizzle/migrations) — generate SQL from TypeScript schemas.
-- [Prisma ORM migrations](/sql/prisma/migrations) — emit contracts and plan/apply migration packages.
+[SQL files](/sql/effect-sql/migrations) · [Drizzle migrations](/sql/drizzle/migrations) · [Prisma migrations](/sql/prisma/migrations)

@@ -1,54 +1,38 @@
 ---
 title: SQL on Railway
-description: Connect Railway Services to private Postgres or MySQL databases, find the Drizzle example, and choose the right endpoint for queries and migrations.
+description: Private Postgres and MySQL connections for Railway Services.
 ---
 
-Railway hosts both application Services and database Services in a project.
-Application connections normally use the private network. Public connection
-endpoints serve a different purpose, such as local development or a migration
-runner outside Railway.
+## Postgres
 
-## Choose the database
+```typescript
+import * as Railway from "alchemy/Railway";
 
-| Database | Integration |
-| --- | --- |
-| Postgres | [Railway Postgres](/railway/data/postgres), `Railway.ConnectPostgres`, [Drizzle Postgres](/sql/drizzle/postgres), [Effect SQL Postgres](/sql/effect-sql/postgres) |
-| MySQL | [Railway MySQL](/railway/data/mysql), matching [Drizzle](/sql/drizzle/mysql) or [Effect SQL](/sql/effect-sql/mysql) client |
+const project = yield* Railway.Project("App");
+const database = yield* Railway.Postgres("Database", { project });
+```
 
-The Postgres guide contains the complete Service binding shape. Supply
-`Railway.ConnectPostgresHttp` and pass `conn.connectionString` to the
-client. The [railway-service example](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service)
-is a runnable multi-service application using Drizzle and Postgres, alongside
-other Railway capabilities.
+In a Service:
 
-## Application runtime
+```typescript
+const connection = yield* Railway.ConnectPostgres(database);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
 
-Use a [Service](/railway/compute/services) for the database-backed API.
-Follow the Service's packaging configuration for the `pg` driver; the Postgres
-guide calls out `build.install: ["pg"]`. A different Railway execution product
-may have different package or size constraints—do not assume a Service example
-can be copied unchanged into every runtime.
+Provide `Railway.ConnectPostgresHttp` on the Service. Private database hostnames are reachable inside Railway; external migration runners need the public endpoint.
 
-Railway variables can contain either resolved values or resource reference
-templates. See [Variables](/railway/data/variables) for secret/configuration
-binding and `Railway.ref`.
+[Postgres guide](/railway/data/postgres) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/railway-service) · [Migrations](/sql/drizzle/migrations)
 
-## Before deploying
+## MySQL
 
-Private hostnames are not automatically reachable from your laptop or CI.
-Choose the migration execution location and endpoint explicitly. Disabling
-the database's public TCP proxy changes which external tools can reach it;
-it does not prevent same-project private connections.
+```typescript
+const database = yield* Railway.MySQL("Database", { project });
+```
 
-The documented default Postgres image is **version 16**. Prisma ORM v8 requires
-**PostgreSQL 17+**; select and verify a compatible engine before considering
-that integration. The existing Drizzle example is not proof of Prisma support.
-
-Database replacement can delete the old volume. Review project changes,
-backups, and cleanup behavior before deploying to persistent data.
+[MySQL guide](/railway/data/mysql) · [Drizzle MySQL](/sql/drizzle/mysql) · [Effect SQL MySQL](/sql/effect-sql/mysql)
 
 ## Next steps
 
-- [Railway setup](/railway/setup), [Services](/railway/compute/services), and [Networking](/railway/networking).
-- [Connection lifecycle](/sql/effect-sql/lifecycle) and [migration choices](/sql#manage-schema-changes).
-- [Choose a database](/sql/databases) for external alternatives.
+[Railway setup](/railway/setup) · [Services](/railway/compute/services) · [Variables](/railway/data/variables)
+
+Prisma ORM v8 needs PostgreSQL 17+; Railway's default Postgres image is version 16. See [engine selection](/railway/data/postgres#image).

@@ -1,53 +1,38 @@
 ---
 title: SQL on Fly.io
-description: Connect Fly Services to Managed Postgres or an external database, and find the Drizzle example, connection binding, and private-network migration guidance.
+description: Fly Managed Postgres with SQL migrations and a Service connection binding.
 ---
-
-Fly hosts application Services and Managed Postgres. A Service can also use
-an external database. Keep database placement, application region, and
-network access explicit rather than assuming every Postgres endpoint is
-reachable from your deployment machine.
 
 ## Fly Managed Postgres
 
-The [Fly Postgres guide](/fly/data/postgres) owns the complete setup:
-provision `Fly.Postgres`, bind `Fly.ConnectPostgres` in a
-[Service](/fly/compute/services), provide `Fly.ConnectPostgresHttp`, and
-pass the connection Effect to the selected client.
+```typescript
+import * as Fly from "alchemy/Fly";
 
-| Material | What it covers |
-| --- | --- |
-| [Postgres guide](/fly/data/postgres) | Cluster, service connection, pooled/direct URLs, and migration configuration |
-| [fly-postgres example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-postgres) | Runnable Service + Managed Postgres + Drizzle application |
-| [Drizzle Postgres](/sql/drizzle/postgres) | Schema and query API |
-| [Effect SQL Postgres](/sql/effect-sql/postgres) | Tagged-template SQL API |
+const database = yield* Fly.Postgres("Database", {
+  region: "iad",
+  migrations: "./migrations",
+});
+```
 
-Managed Postgres is billed. Review the database guide's replacement and cost
-notes before deploying or changing regions.
+In a Service:
+
+```typescript
+const connection = yield* Fly.ConnectPostgres(database);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
+
+Provide `Fly.ConnectPostgresHttp` on the Service. Deployment-time migrations need access to Fly's private network.
+
+[Postgres guide](/fly/data/postgres) · [Migrations](/fly/data/postgres#migrations) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-postgres)
 
 ## External databases
 
-A Fly Service can receive a database URL through its secret/configuration
-mechanism and use an appropriate SQL client. Start with
-[Service configuration](/fly/compute/services), then the database provider's
-[connection guide](/sql/databases). This is not a claim that every provider
-and authentication mode has a dedicated Fly example.
+```typescript
+const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
+```
 
-## Before deploying
-
-Fly Managed Postgres lives on the organization's private network. Migration
-execution needs a route to that network; simply running `alchemy deploy` on a
-laptop does not create one. The runnable example describes its application-side
-migration path. Review that path before using it for production data.
-
-Use the direct connection when required by the migration tool, and the pooled
-connection when appropriate for application queries. The
-[connection lifecycle guide](/sql/effect-sql/lifecycle) describes scoped query
-clients. Check engine version and driver behavior before using
-[Prisma ORM v8](/sql/prisma/contracts); its PostgreSQL 17+ requirement is
-independent of Fly's provisioning interface.
+[Service configuration](/fly/compute/services) · [Secrets](/fly/data/secrets) · [Choose a database](/sql/databases)
 
 ## Next steps
 
-- [Fly setup](/fly/setup), [Services](/fly/compute/services), and [Networking](/fly/networking).
-- [SQL client choices](/sql#choose-a-client) and [migration choices](/sql#manage-schema-changes).
+[Fly setup](/fly/setup) · [Drizzle queries](/sql/drizzle/postgres) · [Effect SQL](/sql/effect-sql/postgres)

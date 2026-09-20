@@ -1,19 +1,9 @@
 ---
 title: Drizzle + Aurora DSQL
-description: Deploy Drizzle with Aurora DSQL from AWS Lambda using IAM authentication, verified TLS, a non-admin database role, and controlled schema setup.
+description: Drizzle on Lambda with Aurora DSQL, a non-admin database role, and deployment-time schema setup.
 ---
 
-Run Drizzle queries from an Effect-native Lambda against **Aurora DSQL**.
-The [standalone example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle)
-includes the cluster, deployment-time schema setup, IAM-authenticated HTTP API,
-and a real AWS integration test.
-
-:::note[Choose the right Aurora integration]
-Aurora DSQL is a separate serverless database with a PostgreSQL-compatible wire
-endpoint. For Aurora PostgreSQL in a VPC, use [Drizzle + Aurora PostgreSQL](/aws/data/drizzle-aurora).
-The [RDS Data API](/aws/data/rds#the-data-api) executes SQL over HTTPS;
-it is not the transport used by this Drizzle integration.
-:::
+[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle) · [AWS setup](/aws/setup) · [Aurora PostgreSQL instead](/aws/data/drizzle-aurora)
 
 ## Start from the example
 
@@ -24,19 +14,15 @@ pnpm install
 cd examples/aws-dsql-drizzle
 ```
 
-Configure [AWS credentials](/aws/setup) with a DSQL-supported region such as
-`us-west-2`. The deployment runner needs `dsql:DbConnectAdmin`, provisioning
-permissions, and network access to the public database endpoint on port 5432.
+Use a DSQL-supported region such as `us-west-2`. Deployment needs `dsql:DbConnectAdmin` and access to the cluster on port 5432.
 
-:::caution[Cost and data]
-The example creates billable AWS resources. Deletion protection is disabled
-for cleanup; destroying the stack permanently removes the database data.
+:::caution
+These resources are billable. Deletion protection is disabled; destroy deletes the database data.
 :::
 
 ## Create the cluster
 
 ```typescript
-// src/database.ts
 import * as AWS from "alchemy/AWS";
 
 export const Database = AWS.DSQL.Cluster("Database", {
@@ -44,13 +30,11 @@ export const Database = AWS.DSQL.Cluster("Database", {
 });
 ```
 
-The cluster supplies a public endpoint and authenticates using IAM tokens.
-This example needs neither a VPC nor a password secret.
+[DSQL cluster reference](/providers/aws/dsql/cluster)
 
 ## Define the table
 
 ```typescript
-// src/schema.ts
 import { boolean, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const Todos = pgSchema("app").table("todos", {
@@ -63,14 +47,11 @@ export const Todos = pgSchema("app").table("todos", {
 });
 ```
 
-Use caller-supplied UUIDs rather than sequences or `serial`. DSQL is not full
-PostgreSQL: review its [SQL compatibility](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility.html),
-including foreign-key and transaction restrictions.
+Use UUIDs instead of `serial`. Check [DSQL's PostgreSQL compatibility](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility.html).
 
 ## Separate schema setup from application access
 
 ```typescript
-// Inside the stack Effect, after yielding the cluster and Lambda:
 const schemaVersion = yield* BootstrapDatabase({
   endpoint: cluster.endpoint,
   roleArn: api.roleArn,
@@ -78,23 +59,15 @@ const schemaVersion = yield* BootstrapDatabase({
 });
 ```
 
-The example's [BootstrapDatabase Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/bootstrap.ts)
-runs on the deployment machine, creates `app.todos`, and maps `app_user` to the
-Lambda's IAM role. The application receives schema usage and table CRUD only.
-
-```sql
-GRANT USAGE ON SCHEMA app TO app_user;
-GRANT SELECT, INSERT, UPDATE, DELETE ON app.todos TO app_user;
-AWS IAM GRANT app_user TO 'arn:aws:iam::<account>:role/<lambda-role>';
-```
-
-DSQL requires catalog changes to run as separate autocommit statements. The
-Action checks existing roles and IAM mappings before creating them, so setup
-can be replayed without exposing an administrative HTTP route.
+The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/bootstrap.ts) creates `app.todos` and maps the Lambda role to `app_user`. It grants table CRUD, not schema administration.
 
 ## Connect from Lambda
 
 ```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
 const cluster = yield* Database;
 const connect = yield* AWS.DSQL.Connect(cluster, { username: "app_user" });
 const db = yield* Drizzle.Postgres(
@@ -108,12 +81,7 @@ const db = yield* Drizzle.Postgres(
 );
 ```
 
-Import `Drizzle` from `alchemy/Drizzle/Postgres` and provide `AWS.DSQL.ConnectHttp`
-on the Lambda Effect. The binding grants cluster-scoped `dsql:DbConnect`, not
-`dsql:DbConnectAdmin`; the URL override requires certificate and hostname verification.
-
-The connection Effect signs a fresh token when the invocation first opens its
-client. The pool closes with that invocation's scope; see [Connection lifecycle](/sql/effect-sql/lifecycle).
+Provide `AWS.DSQL.ConnectHttp` on the Lambda Effect. [Complete handler](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/src/Api.ts) · [Connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Query with Drizzle
 
@@ -126,9 +94,7 @@ const [created] = yield* db.insert(Todos).values({
 }).returning();
 ```
 
-The example uses `@effect/sql-pg` for the PostgreSQL wire connection and includes
-`pg` among its optional peers. [Drizzle Postgres](/sql/drizzle/postgres) covers the
-shared query API; database-specific SQL and transaction limits still apply.
+[Drizzle query API](/sql/drizzle/postgres)
 
 ## Deploy
 
@@ -136,54 +102,34 @@ shared query API; database-specific SQL and transaction limits still apply.
 pnpm deploy --profile testing
 ```
 
-Deployment creates the cluster and Lambda, then runs the schema Action using
-the Lambda's resolved role ARN. The Function URL requires AWS IAM authentication.
-
 ## Verify the connection
 
 ```sh
 aws lambda invoke --region us-west-2 \
-  --function-name <functionName> \
+  --function-name '<functionName>' \
   --cli-binary-format raw-in-base64-out \
   --payload file://health-event.json response.json
-cat response.json
 ```
 
-Use the printed `functionName`. The health response identifies `app_user`; the
-[test signing helper](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/test/integ.test.ts)
-shows SigV4 HTTP requests for the complete CRUD API.
+Use the printed function name. The Function URL requires [SigV4-signed requests](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-dsql-drizzle/test/integ.test.ts).
 
 ```sh
 ALCHEMY_PROFILE=testing bun test test/integ.test.ts
 ```
 
-The live test checks repeat deployment, IAM restrictions, anonymous rejection,
-CRUD, invalid input, repeated invocations, and acceptance of cluster deletion.
-
 ## Evolve the schema
 
-`AWS.DSQL.Cluster` has no `migrations` prop. `CREATE TABLE IF NOT EXISTS` only
-bootstraps the first table; changing a Drizzle schema does not alter existing columns.
-
-Apply reviewed, versioned DSQL-compatible SQL from an authorized deployment task.
-Keep DDL outside application requests and account for DSQL's asynchronous index
-creation and transaction restrictions rather than passing arbitrary PostgreSQL
-migration output through unchanged.
+Initial setup does not alter existing tables. Apply versioned, DSQL-compatible migrations from a deployment task, with [one DDL statement per transaction](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-ddl.html).
 
 ## Clean up
 
 ```sh
 pnpm destroy --profile testing
+aws dsql get-cluster --region us-west-2 --identifier '<clusterId>'
 ```
 
-This deletes the Lambda, its execution role, and logs, and requests deletion of
-the DSQL cluster and its data. DSQL can remain `DELETING` for several minutes;
-check the printed cluster ID with `aws dsql get-cluster` until it is `DELETED`
-or returns `ResourceNotFoundException`.
+Deletion is asynchronous. Wait for `DELETED` or `ResourceNotFoundException`.
 
 ## Where next
 
-- [Full-stack TanStack Start + RPC + Drizzle](/aws/frontend/full-stack-tanstack-rpc-drizzle) — add a frontend and typed RPC.
-- [Drizzle + Aurora PostgreSQL](/aws/data/drizzle-aurora) — the separate VPC-based integration.
-- [SQL on AWS](/sql/providers/aws) — database and transport choices.
-- [DSQL cluster reference](/providers/aws/dsql/cluster).
+[Frontend + RPC](/aws/frontend/full-stack-tanstack-rpc-drizzle) · [Aurora PostgreSQL](/aws/data/drizzle-aurora) · [SQL on AWS](/sql/providers/aws)

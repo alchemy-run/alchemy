@@ -1,69 +1,68 @@
 ---
 title: SQL on AWS
-description: Find Lambda integrations for Drizzle and Aurora PostgreSQL, Aurora DSQL, RDS connections, and the RDS Data API, with explicit guide and example availability.
+description: Aurora PostgreSQL, Aurora DSQL, and the RDS Data API.
 ---
-
-AWS hosts both application runtimes and databases. Start with your runtime—
-[Lambda](/aws/compute/lambda) or [ECS](/aws/compute/ecs)—then choose the
-database and connection method. The integrations below describe Lambda;
-ECS deployment and connection setup should not be assumed identical.
 
 ## Aurora PostgreSQL and Drizzle
 
-Aurora PostgreSQL connections use the Postgres wire protocol. The application
-needs network access to the cluster or proxy, a database user, and password
-or IAM authentication. `AWS.RDS.Connect` supplies connection information;
-`Drizzle.Postgres` consumes the URL Effect.
+```typescript
+const database = yield* AWS.RDS.Aurora("Database", {
+  engine: "aurora-postgresql",
+  databaseName: "app",
+  subnetIds,
+  securityGroupIds,
+  dataApi: true,
+  cluster: { enableIAMDatabaseAuthentication: true },
+});
+```
 
-Current material has different scopes:
+In a Lambda:
 
-| Material | What it covers |
-| --- | --- |
-| [Drizzle + Aurora PostgreSQL guide](/aws/data/drizzle-aurora) | Lambda, private networking, IAM authentication, verified TLS, and deployment-time schema setup |
-| [Runnable aws-aurora-drizzle example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) | Complete Drizzle + Aurora PostgreSQL application, bootstrap, and opt-in integration test |
-| [RDS & Aurora guide](/aws/data/rds) | Cluster provisioning, Lambda networking, `pg` connections, and the Data API |
-| [Runnable aws-rds example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-rds) | Aurora PostgreSQL + Lambda using `pg`, not Drizzle |
-| [Drizzle IAM test fixture](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/test/AWS/RDSData/drizzle-iam-handler.ts) | Drizzle over an IAM-authenticated Aurora socket; requires the surrounding test infrastructure and database-user bootstrap |
+```typescript
+const connect = yield* AWS.RDS.Connect(database.cluster, {
+  auth: "iam",
+  username: "app_iam",
+  database: "app",
+  subnetIds,
+  securityGroupIds,
+});
+```
 
-Start with the standalone example for a complete deployment. Its Data API
-bootstrap uses deployment credentials; the application receives only a
-restricted database login. Use the [Drizzle client guide](/sql/drizzle/postgres)
-for the portable query API.
+[Drizzle integration](/aws/data/drizzle-aurora) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) · [Networking and TLS](/aws/data/rds)
 
 ## Aurora DSQL
 
-Aurora DSQL is a separate database with its own connection binding and SQL
-restrictions. `AWS.DSQL.Connect` produces an IAM-authenticated connection URL.
-It is not the same deployment as an Aurora PostgreSQL cluster in a VPC.
+```typescript
+const cluster = yield* AWS.DSQL.Cluster("Database", {
+  deletionProtectionEnabled: false,
+});
+```
 
-Start with [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql) and the
-[standalone aws-dsql-drizzle example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle).
-They cover a non-admin Lambda database role, verified TLS, controlled schema
-setup, and signed HTTP CRUD. The [full-stack guide](/aws/frontend/full-stack-tanstack-rpc-drizzle)
-adds TanStack Start and Effect RPC to that integration.
+```typescript
+const connect = yield* AWS.DSQL.Connect(cluster, {
+  username: "app_user",
+});
+```
 
-DSQL has no `migrations` property. Follow its SQL and DDL restrictions rather
-than assuming general PostgreSQL migration compatibility or Prisma ORM support.
+DSQL is separate from Aurora PostgreSQL. The example creates the database role during deployment, not from an HTTP endpoint.
+
+[Drizzle integration](/aws/data/drizzle-dsql) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle) · [Frontend + RPC](/aws/frontend/full-stack-tanstack-rpc-drizzle)
 
 ## RDS Data API
 
-The [RDS Data API](/aws/data/rds#the-data-api) runs SQL over HTTPS through
-`AWS.RDSData` bindings. It does not return a socket connection for
-`Drizzle.Postgres`. Choose the Data API intentionally rather than substituting
-it into a connection-string example.
+```typescript
+const execute = yield* AWS.RDSData.ExecuteStatement(database.cluster, {
+  secret: database.secret,
+  database: "app",
+});
 
-## Before deploying
+yield* execute({ sql: "SELECT 1 AS value" });
+```
 
-- Configure [AWS credentials](/aws/setup), database access, and the runtime's permissions separately.
-- For private clusters, ensure the Lambda and migration runner can reach the database. See [Networking](/aws/networking).
-- Database IAM permission does not create a database user or grant SQL table privileges.
-- Keep token generation lazy so a later invocation does not reuse an expired authentication token.
-- Package the driver as required by the chosen Lambda integration; server runtimes do not automatically inherit Worker bundling behavior.
-- Review costs, deletion behavior, and cleanup before provisioning Aurora.
+This runs SQL over HTTPS, rather than opening a Drizzle connection.
+
+[Data API](/aws/data/rds#the-data-api) · [Deployment-time schema setup](/aws/data/drizzle-aurora#initialize-the-schema-during-deployment)
 
 ## Next steps
 
-- [Choose a database](/sql/databases) — distinguish Aurora engines, DSQL, and other providers.
-- [Drizzle Postgres](/sql/drizzle/postgres) and [Effect SQL Postgres](/sql/effect-sql/postgres) — query APIs.
-- [Prisma ORM contracts](/sql/prisma/contracts) — PostgreSQL 17+ requirements; compatibility must be verified for the chosen database.
-- [SQL examples](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md) — runnable projects by runtime and database.
+[AWS setup](/aws/setup) · [Drizzle queries](/sql/drizzle/postgres) · [Choose a database](/sql/databases)

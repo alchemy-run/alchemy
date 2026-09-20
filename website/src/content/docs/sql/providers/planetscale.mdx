@@ -1,54 +1,48 @@
 ---
 title: SQL with PlanetScale
-description: Choose PlanetScale Postgres or MySQL/Vitess, configure branches and credentials, and find SQL and Drizzle runtime integrations.
+description: PlanetScale Postgres and MySQL databases, branches, and migrations.
 ---
 
-PlanetScale provides both Postgres and MySQL/Vitess. Pick the database product
-before choosing the driver, credentials, or migration flow; the two products
-are not interchangeable variants of one connection API.
+## Postgres
 
-## Configure the database
+```typescript
+import * as Planetscale from "alchemy/Planetscale";
 
-| Task | Guide |
-| --- | --- |
-| Provision Postgres | [PlanetScale Postgres](/planetscale/data/postgres) |
-| Provision MySQL/Vitess | [PlanetScale MySQL](/planetscale/data/mysql) |
-| Create connection credentials | [Credentials](/planetscale/data/credentials) |
-| Understand migration behavior | [Migrations](/planetscale/data/migrations) |
-| Generate a Drizzle schema | [Drizzle with PlanetScale](/planetscale/guides/drizzle) |
+const database = yield* Planetscale.PostgresDatabase("Database", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+const branch = yield* Planetscale.PostgresBranch("App", {
+  database,
+  migrations: "./migrations",
+});
+```
 
-[Setup](/planetscale/setup) covers API credentials. Database connection
-credentials are a separate concern; keep them in the backend runtime.
+[Postgres](/planetscale/data/postgres) · [Credentials](/planetscale/data/credentials) · [Migrations](/planetscale/data/migrations)
 
-## Choose an application integration
+## MySQL
 
-The [Cloudflare Drizzle guide](/cloudflare/data/drizzle) shows a Worker with
-Hyperdrive and includes PlanetScale Postgres wiring. The
-[cloudflare-planetscale-postgres-drizzle example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle)
-is the complete runnable project for that combination.
+```typescript
+const database = yield* Planetscale.MySQLDatabase("Database", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+const branch = yield* Planetscale.MySQLBranch("App", {
+  database,
+  isProduction: false,
+  migrations: "./migrations",
+});
+```
 
-Other backends can use an accessible connection URL with the matching client:
+[MySQL](/planetscale/data/mysql) · [Safe migrations](/planetscale/data/migrations) · [Preview branches](/planetscale/guides/preview-branches)
 
-- Postgres: [Effect SQL](/sql/effect-sql/postgres) or [Drizzle](/sql/drizzle/postgres).
-- MySQL: [Effect SQL](/sql/effect-sql/mysql) or [Drizzle](/sql/drizzle/mysql).
+## Workers with Hyperdrive
 
-These client links describe the API, not a verified deployment on every cloud.
-Use your [runtime provider's guide](/sql#find-your-provider) for environment
-binding, driver packaging, and connection lifetime.
+```typescript
+const connection = yield* Cloudflare.Hyperdrive.Connect(hyperdrive);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
 
-## Before deploying
+Use `Drizzle.MySQL` for MySQL. The integration guide includes branch credentials and Hyperdrive setup.
 
-Choose the database branch and credentials deliberately, especially for
-previews. Verify network access from both the application and the migration
-runner. Follow the product-specific migration instructions rather than
-assuming Postgres and Vitess accept identical schema changes.
-
-Prisma ORM v8 currently supports PostgreSQL 17+ only, not PlanetScale's
-MySQL/Vitess product. A Postgres connection URL alone does not establish
-full Prisma migration/runtime compatibility for a given deployment.
-
-## Next steps
-
-- [PlanetScale overview](/planetscale) and [preview branches](/planetscale/guides/preview-branches).
-- [SQL on Cloudflare](/sql/providers/cloudflare) for the existing Worker integration.
-- [Choose a database](/sql/databases) to compare connection paths.
+[Worker integration](/cloudflare/data/drizzle) · [Postgres example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) · [PlanetScale setup](/planetscale/setup)

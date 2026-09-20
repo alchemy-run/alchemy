@@ -3,10 +3,10 @@ title: Prisma ORM with Postgres
 description: Deploy Prisma ORM v8 on Cloudflare Workers with Neon Postgres, Hyperdrive, controlled migrations, and Effect-native queries.
 ---
 
-Use Prisma ORM v8 from a Worker through Hyperdrive. This guide owns the Worker setup; [Contracts](/sql/prisma/contracts) covers models and generation, and [Prisma Postgres queries](/sql/prisma/postgres) covers the client API.
+[Contracts](/sql/prisma/contracts) · [Query API](/sql/prisma/postgres) · [Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
 
 :::caution
-This integration targets Prisma ORM **8.0.0-rc** and **PostgreSQL 17+**. Pin the ORM and CLI versions used by your Alchemy release. PostgreSQL wire compatibility alone does not establish Prisma compatibility with another database service.
+Requires Prisma ORM **8.0.0-rc** and **PostgreSQL 17+**. Pin the ORM and CLI versions used by your Alchemy release.
 :::
 
 ## Install the dependencies
@@ -16,7 +16,7 @@ bun add alchemy effect @prisma/orm-postgres arktype
 bun add -d prisma
 ```
 
-Start with [Cloudflare setup](/cloudflare/setup) and [Neon setup](/neon/setup). Define a TypeScript or PSL contract and `prisma.config.ts` using the [Contracts guide](/sql/prisma/contracts).
+[Cloudflare setup](/cloudflare/setup) · [Neon setup](/neon/setup) · [Define a contract](/sql/prisma/contracts)
 
 ## Configure validation for Workers
 
@@ -27,9 +27,20 @@ import { configure } from "arktype/config";
 configure({ jitless: true });
 ```
 
-Import `./validation.ts` first in `src/prisma/contract.ts`, before the native `defineContract` import. Workers prohibit runtime JavaScript compilation; this configures Prisma's Arktype dependency to avoid it.
+Import the bootstrap before the contract builder:
 
-If your package declares `"sideEffects": false`, preserve the bootstrap with `"sideEffects": ["./src/prisma/validation.ts"]`. PSL-first Workers use generated bindings and do not need this native-authoring bootstrap.
+```typescript
+import "./validation.ts";
+import { defineContract } from "alchemy/Prisma/ORM";
+```
+
+If your package uses `"sideEffects": false`, preserve this module:
+
+```json
+{ "sideEffects": ["./src/prisma/validation.ts"] }
+```
+
+PSL-first projects skip this step.
 
 ## Provision the database and migrations
 
@@ -53,7 +64,7 @@ export const Db = Effect.gen(function* () {
 });
 ```
 
-`Prisma.Contract` emits the contract and plans migration packages; `Prisma.Migrate` applies them from the deployment runner over the direct connection. Review the [migration workflow](/sql/prisma/migrations), including changes that require an explicit decision.
+[Migration workflow](/sql/prisma/migrations)
 
 ## Add Hyperdrive
 
@@ -70,7 +81,7 @@ export const Hyperdrive = Effect.gen(function* () {
 });
 ```
 
-Hyperdrive pools runtime connections. Query caching is disabled so reads immediately reflect writes; pooling and result caching are separate settings.
+Caching is disabled so reads immediately reflect writes. [Hyperdrive guide](/cloudflare/data/hyperdrive).
 
 ## Connect in a Worker
 
@@ -100,7 +111,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-The client connects on the first query of each event and closes when its execution scope ends. The migration resource connects separately during deployment; see [Connection lifecycle](/sql/effect-sql/lifecycle).
+[Connection lifecycle](/sql/effect-sql/lifecycle)
 
 ## Use a PSL contract
 
@@ -111,7 +122,7 @@ const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
 const db = yield* makeDatabase(conn.connectionString);
 ```
 
-For PSL-first projects, replace the authored-contract import and client construction with the generated factory. [Generate the client](/sql/prisma/contracts#query-a-psl-contract) before compiling or bundling; the handler and binding layer stay the same.
+[Generate the PSL client](/sql/prisma/contracts#query-a-psl-contract) before compiling. The handler and binding layer stay the same.
 
 ## Wire the stack
 
@@ -142,8 +153,6 @@ export default Alchemy.Stack(
 );
 ```
 
-The stack registers all three resource providers. The Worker binding brings in Hyperdrive and the database dependencies.
-
 ## Deploy and query
 
 ```sh
@@ -151,7 +160,7 @@ bun alchemy deploy
 curl https://<your-worker>.workers.dev
 ```
 
-The response lists users from the contract's `public.User` model. This demonstration route is public; add application authentication before exposing private data.
+This demo route is public. Add authentication before exposing private data.
 
 ## Clean up
 

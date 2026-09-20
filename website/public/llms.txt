@@ -315,8 +315,8 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Data
 
-- [Drizzle + Aurora DSQL](https://alchemy.run/aws/data/drizzle-dsql) — Deploy Drizzle with Aurora DSQL from AWS Lambda using IAM authentication, verified TLS, a non-admin database role, and controlled schema setup.
-- [Drizzle + Aurora PostgreSQL](https://alchemy.run/aws/data/drizzle-aurora) — Deploy Drizzle with Aurora PostgreSQL and AWS Lambda using IAM authentication, verified TLS, private networking, and controlled schema setup.
+- [Drizzle + Aurora DSQL](https://alchemy.run/aws/data/drizzle-dsql) — Drizzle on Lambda with Aurora DSQL, a non-admin database role, and deployment-time schema setup.
+- [Drizzle + Aurora PostgreSQL](https://alchemy.run/aws/data/drizzle-aurora) — Drizzle on Lambda with private Aurora PostgreSQL, IAM authentication, and verified TLS.
 - [DynamoDB](https://alchemy.run/aws/data/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
 - [RDS & Aurora](https://alchemy.run/aws/data/rds) — Stand up an Aurora cluster in one call with the Aurora helper, connect from Lambda over the Connect binding with pg, or skip connections entirely with the Data API.
 - [S3](https://alchemy.run/aws/data/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
@@ -517,20 +517,20 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 
 One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, Prisma ORM v8 (Postgres-only), the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.
 
-- [SQL](https://alchemy.run/sql) — Use Effect SQL, Drizzle, or Prisma ORM across AWS, Cloudflare, Fly.io, Hetzner, Neon, PlanetScale, Prisma, and Railway. Find database guides and runnable examples.
-- [Choose a database](https://alchemy.run/sql/databases) — Find Aurora PostgreSQL, Aurora DSQL, D1, Neon, PlanetScale, Prisma Postgres, Fly Postgres, Railway, or an existing database and the corresponding SQL integration.
-- [SQL on AWS](https://alchemy.run/sql/providers/aws) — Find Lambda integrations for Drizzle and Aurora PostgreSQL, Aurora DSQL, RDS connections, and the RDS Data API, with explicit guide and example availability.
-- [SQL on Cloudflare](https://alchemy.run/sql/providers/cloudflare) — Choose D1 or Hyperdrive-backed Postgres/MySQL for Workers, and find the Drizzle, Effect SQL, and Prisma ORM integrations and examples.
-- [SQL on Fly.io](https://alchemy.run/sql/providers/fly) — Connect Fly Services to Managed Postgres or an external database, and find the Drizzle example, connection binding, and private-network migration guidance.
-- [SQL on Hetzner](https://alchemy.run/sql/providers/hetzner) — Run SQL clients in Hetzner Services with an external database, including the runnable Neon Postgres and Drizzle website example.
-- [SQL with Neon](https://alchemy.run/sql/providers/neon) — Provision Neon Postgres, choose direct or pooled connections, and find Drizzle and Prisma ORM integrations for Cloudflare Workers and Hetzner Services.
-- [SQL with PlanetScale](https://alchemy.run/sql/providers/planetscale) — Choose PlanetScale Postgres or MySQL/Vitess, configure branches and credentials, and find SQL and Drizzle runtime integrations.
-- [SQL with Prisma Postgres and Compute](https://alchemy.run/sql/providers/prisma) — Distinguish Prisma's managed Postgres and Compute platform from Prisma ORM, and find database, connection, hosting, and Worker integration guides.
-- [SQL on Railway](https://alchemy.run/sql/providers/railway) — Connect Railway Services to private Postgres or MySQL databases, find the Drizzle example, and choose the right endpoint for queries and migrations.
+- [SQL](https://alchemy.run/sql) — SQL clients, database providers, and runnable integrations.
+- [Choose a database](https://alchemy.run/sql/databases) — Database integration guides for Aurora, D1, Fly, Neon, PlanetScale, Prisma, and Railway.
+- [SQL on AWS](https://alchemy.run/sql/providers/aws) — Aurora PostgreSQL, Aurora DSQL, and the RDS Data API.
+- [SQL on Cloudflare](https://alchemy.run/sql/providers/cloudflare) — D1 and Hyperdrive-backed Postgres or MySQL for Workers.
+- [SQL on Fly.io](https://alchemy.run/sql/providers/fly) — Fly Managed Postgres with SQL migrations and a Service connection binding.
+- [SQL on Hetzner](https://alchemy.run/sql/providers/hetzner) — Connect a Hetzner Service to an external Postgres database.
+- [SQL with Neon](https://alchemy.run/sql/providers/neon) — Provision Neon Postgres, apply migrations, and connect your application.
+- [SQL with PlanetScale](https://alchemy.run/sql/providers/planetscale) — PlanetScale Postgres and MySQL databases, branches, and migrations.
+- [SQL with Prisma Postgres and Compute](https://alchemy.run/sql/providers/prisma) — Prisma-hosted Postgres and Compute, separate from the Prisma ORM client.
+- [SQL on Railway](https://alchemy.run/sql/providers/railway) — Private Postgres and MySQL connections for Railway Services.
 - [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 - [D1](https://alchemy.run/sql/effect-sql/d1) — SQL.D1 wraps a bound D1 database in an @effect/sql-d1 client — tagged-template queries with typed errors over the native binding.
 - [Migrations](https://alchemy.run/sql/effect-sql/migrations) — Commit a directory of ordered .sql files and point a database resource's migrations prop at it — pending files apply as part of every deploy, tracked in one Alchemy-owned table.
-- [Connection lifecycle](https://alchemy.run/sql/effect-sql/lifecycle) — SQL clients build lazily on first query, memoize per execution, and tear down when the event settles — why, and what that means on workerd and Lambda.
+- [Connection lifecycle](https://alchemy.run/sql/effect-sql/lifecycle) — One SQL client per execution scope, opened on first query and closed with the scope.
 - [Postgres](https://alchemy.run/sql/drizzle/postgres) — Drizzle on Postgres — declare the schema, generate and apply migrations on deploy, and query with Drizzle.Postgres.
 - [D1](https://alchemy.run/sql/drizzle/d1) — Drizzle on Cloudflare D1 — declare the schema, generate and apply migrations on deploy, and query from a Worker with Drizzle.D1.
 - [Migrations](https://alchemy.run/sql/drizzle/migrations) — Drizzle.Schema runs drizzle-kit generate as part of deploy — unambiguous schema changes regenerate automatically, ambiguous ones stop and ask you.
@@ -550,4 +550,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~966 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~965 KB) — only fetch it when you need to locate a specific resource's reference page.

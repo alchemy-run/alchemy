@@ -7,12 +7,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const deps = `@effect/sql-pg pg`;
 
-`SQL.Postgres` opens an `@effect/sql-pg` client (a connection pool)
-from a connection URL. Queries are Effects: they carry `SqlError` in
-the error channel, participate in interruption, and trace like
-everything else in your program.
-
-Install the driver — both are optional peers of alchemy:
+Install the optional Postgres driver:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -42,12 +37,7 @@ const listUsers = Effect.gen(function* () {
 });
 ```
 
-The URL can be a redacted value or an Effect that resolves it, including a
-runtime binding. Client options pass through to `@effect/sql-pg`.
-
-The first query opens the pool in the current execution scope; later queries
-reuse it until that scope closes. Alchemy runtimes provide the scope, while
-standalone programs use `Effect.scoped`. See [Connection lifecycle](/sql/effect-sql/lifecycle).
+Pass a redacted URL or a connection Effect. [Connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Queries
 
@@ -63,10 +53,7 @@ const rows = yield* sql`
 `;
 ```
 
-Rows come back as plain objects typed by your annotation:
-`sql<{ id: number; name: string }>\`...\``. The full statement API —
-fragments, `sql.csv`, `sql.and`, identifier escaping — is
-[`effect/unstable/sql/Statement`](https://effect.website).
+Rows are plain objects; supply a row type with `sql<Row>`. [Effect SQL](https://effect.website).
 
 ## Errors
 
@@ -79,9 +66,6 @@ const users = yield* sql`SELECT * FROM users`.pipe(
   ),
 );
 ```
-
-Uncaught, the error propagates like any Effect failure — no
-try/catch, no unhandled rejection.
 
 ## Transactions
 
@@ -99,9 +83,7 @@ yield* sql.withTransaction(
 
 ## Provide as a service
 
-For services that shouldn't know which database they run on, depend
-on the generic `SqlClient` tag and provide the database with
-`SQL.PostgresLayer`:
+Depend on `SqlClient`, then provide the database layer:
 
 ```typescript
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -118,30 +100,12 @@ const users = yield* makeUsers.pipe(
 );
 ```
 
-The layer provides two tags from one per-execution pool: the generic
-`SqlClient.SqlClient`, and `@effect/sql-pg`'s `PgClient` for code
-that needs Postgres-specific capabilities — including drizzle's
-`effect-postgres` driver. Swapping `SQL.PostgresLayer` for
-[`SQL.D1Layer`](/sql/effect-sql/d1#provide-as-a-service) reuses the
-service interface, but SQL syntax and database-specific behavior must also be
-compatible with the destination dialect.
+The layer provides `SqlClient` and the driver-specific client. Changing databases still requires compatible SQL.
 
 ## Deploy this client
 
-[Choose a database](/sql/databases) for connection and runtime options.
-[Workers with Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) shows the
-Effect SQL binding; the [provider overview](/sql) links AWS, Fly, Hetzner,
-Railway, and database-provider documentation.
+[Choose a database](/sql/databases) · [Hyperdrive](/cloudflare/data/hyperdrive#use-effect-sql) · [All providers](/sql#find-your-provider)
 
 ## Where next
 
-- [Migrations](/sql/effect-sql/migrations) — apply `.sql` files as
-  part of deploy.
-- [Connection lifecycle](/sql/effect-sql/lifecycle) — when the pool
-  is built and torn down.
-- [Drizzle on Postgres](/sql/drizzle/postgres) — the same driver
-  behind a typed schema.
-- [Add Drizzle ORM](/cloudflare/data/drizzle) — full Worker wiring
-  with Neon / PlanetScale via Hyperdrive.
-- [Fly Postgres](/fly/data/postgres) — the same client on a Fly
-  Service via `ConnectPostgres`.
+[Migrations](/sql/effect-sql/migrations) · [Connection lifecycle](/sql/effect-sql/lifecycle) · [Drizzle](/sql/drizzle/postgres)

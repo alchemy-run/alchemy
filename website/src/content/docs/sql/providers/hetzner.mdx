@@ -1,56 +1,36 @@
 ---
 title: SQL on Hetzner
-description: Run SQL clients in Hetzner Services with an external database, including the runnable Neon Postgres and Drizzle website example.
+description: Connect a Hetzner Service to an external Postgres database.
 ---
-
-Alchemy deploys application [Services](/hetzner/compute/services) to
-Hetzner [Servers](/hetzner/compute/servers). The existing SQL example uses
-**Neon Postgres as an external database**; it does not provision a managed
-Hetzner Postgres product.
 
 ## Service + Neon + Drizzle
 
-The [hetzner-website-vite example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite)
-contains a Vite frontend and an Effect API Service. Its shared infrastructure
-creates a Neon project and branch, supplies a database URL to the API, and
-queries it with `Drizzle.Postgres`.
+```typescript
+const project = yield* Neon.Project("Database");
+const branch = yield* Neon.Branch("App", {
+  project,
+  migrations: "./migrations",
+});
+```
 
-| Part | Documentation |
-| --- | --- |
-| Application runtime | [Hetzner Services](/hetzner/compute/services) |
-| Website hosting | [Vite on Hetzner](/hetzner/frontend/vite) |
-| Database provisioning and URLs | [SQL with Neon](/sql/providers/neon), [Neon connections](/neon/data/connections) |
-| Query client | [Drizzle Postgres](/sql/drizzle/postgres) |
-| Complete application | [Example README](https://github.com/alchemy-run/alchemy/blob/main/examples/hetzner-website-vite/README.md) |
+Pass the connection URL to the backend Service:
 
-The example is the runnable integration; the Service and Vite pages describe
-the hosting components rather than a separate SQL tutorial.
+```typescript
+env: { DATABASE_URL: branch.connectionUri }
+```
+
+```typescript
+const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
+```
+
+This uses external Neon Postgres, not a Hetzner-managed database resource.
+
+[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) · [Services](/hetzner/compute/services) · [Neon migrations](/neon/data/migrations)
 
 ## Other database choices
 
-Use an [existing Postgres or MySQL connection](/sql#already-have-a-database)
-when your Service can reach it. Supply credentials only to the backend Service,
-not browser-side Vite variables. The database's authentication, TLS, and
-network policy still apply.
-
-Running Postgres yourself on a Hetzner Server is a separate operational choice.
-A Server or Volume resource does not by itself provide database backups,
-replication, upgrades, or a managed SQL lifecycle. This page does not present
-the external-Neon example as a self-managed database deployment.
-
-## Before deploying
-
-Choose nearby application/database regions, configure outbound connectivity,
-and determine where migrations will execute. Keep application credentials in
-the Service configuration and preserve TLS verification for remote databases.
-Use the [connection lifecycle guide](/sql/effect-sql/lifecycle) for scoped
-connections rather than sharing disposable clients across request scopes.
-
-[Prisma ORM v8](/sql/prisma/contracts) requires PostgreSQL 17+ and its own
-migration flow; the Drizzle example does not establish that combination's
-runtime validation.
+[Postgres and MySQL](/sql/databases) · [Drizzle queries](/sql/drizzle/postgres) · [Connection lifecycle](/sql/effect-sql/lifecycle)
 
 ## Next steps
 
-- [Hetzner setup](/hetzner/setup) and [Networking](/hetzner/networking).
-- [Choose a database](/sql/databases) and [SQL client APIs](/sql#choose-a-client).
+[Hetzner setup](/hetzner/setup) · [Networking](/hetzner/networking) · [Vite hosting](/hetzner/frontend/vite)

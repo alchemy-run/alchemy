@@ -1,53 +1,45 @@
 ---
 title: SQL on Cloudflare
-description: Choose D1 or Hyperdrive-backed Postgres/MySQL for Workers, and find the Drizzle, Effect SQL, and Prisma ORM integrations and examples.
+description: D1 and Hyperdrive-backed Postgres or MySQL for Workers.
 ---
 
-Cloudflare Workers can use a native D1 binding or connect to Postgres/MySQL
-through Hyperdrive. These are different database paths, with different
-clients and migration behavior. Cloudflare does not need to host your
-Postgres database: Neon, PlanetScale, Prisma Postgres, or another reachable
-origin can supply it.
+## D1
 
-## Choose the connection
+```typescript
+const database = yield* Cloudflare.D1.Database("Database", {
+  migrations: "./migrations",
+});
+```
 
-| Database path | Start here |
-| --- | --- |
-| D1: Cloudflare-hosted SQLite | [D1](/cloudflare/data/d1), [Drizzle + D1](/cloudflare/data/d1-drizzle), [Effect SQL D1](/sql/effect-sql/d1) |
-| Postgres through Hyperdrive | [Hyperdrive](/cloudflare/data/hyperdrive), [Drizzle integration](/cloudflare/data/drizzle) |
-| MySQL through Hyperdrive | [Hyperdrive](/cloudflare/data/hyperdrive), [Effect SQL MySQL](/sql/effect-sql/mysql), [Drizzle MySQL](/sql/drizzle/mysql) |
-| Prisma ORM v8 + Postgres | [Prisma runtime walkthrough](/cloudflare/data/prisma), [Contracts](/sql/prisma/contracts) |
+In a Worker:
 
-Prisma ORM v8 does not support D1 or MySQL. D1 support in another client does
-not imply support in Prisma.
+```typescript
+const connection = yield* Cloudflare.D1.QueryDatabase(database);
+const db = yield* Drizzle.D1(connection);
+```
 
-## Runnable examples
+[Drizzle + D1](/cloudflare/data/d1-drizzle) · [Effect SQL](/sql/effect-sql/d1) · [Migrations](/cloudflare/data/d1)
 
-| Example | Integration |
-| --- | --- |
-| [cloudflare-neon-drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) | Worker + Hyperdrive + Neon + Drizzle |
-| [cloudflare-planetscale-postgres-drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) | Worker + Hyperdrive + PlanetScale Postgres + Drizzle |
-| [cloudflare-neon-prisma](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma) | TypeScript-first Prisma contract |
-| [cloudflare-neon-prisma-psl](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl) | PSL-first Prisma contract with generated bindings |
+## Postgres and MySQL
 
-## Before deploying
+```typescript
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("Database", {
+  origin: branch.origin,
+  caching: { disabled: true },
+});
+```
 
-Resolve bindings during Worker initialization, but acquire disposable database
-connections within each event's scope. Workerd sockets belong to the request
-that created them. [Connection lifecycle](/sql/effect-sql/lifecycle) explains
-how Alchemy's clients handle this separation.
+```typescript
+const connection = yield* Cloudflare.Hyperdrive.Connect(hyperdrive);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
 
-Hyperdrive pools connections across requests. Query caching is a separate
-choice: disable it when immediate reads must reflect writes. Native Prisma
-contract authoring also needs the Worker-specific Arktype configuration in
-the [Prisma walkthrough](/cloudflare/data/prisma#configure-validation-for-workers).
+Use `Drizzle.MySQL` for a MySQL origin. Apply migrations through the database provider, not Hyperdrive.
 
-Apply migrations using the database's migration path, not by treating a
-Hyperdrive binding as a schema-management resource. For D1, follow the native
-[D1 migration guide](/cloudflare/data/d1).
+[Hyperdrive](/cloudflare/data/hyperdrive) · [Drizzle](/cloudflare/data/drizzle) · [Prisma ORM](/cloudflare/data/prisma) · [Connection lifecycle](/sql/effect-sql/lifecycle)
 
-## Next steps
+## Examples
 
-- [Worker setup](/cloudflare/compute/workers) and [Cloudflare credentials](/cloudflare/setup).
-- [Neon](/sql/providers/neon), [PlanetScale](/sql/providers/planetscale), and [Prisma Postgres](/sql/providers/prisma) — database-side configuration.
-- [SQL overview](/sql) — client APIs and integrations on other runtimes.
+[Neon + Drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) · [PlanetScale + Drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-planetscale-postgres-drizzle) · [Prisma TypeScript](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma) · [Prisma PSL](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl)
+
+[Cloudflare setup](/cloudflare/setup) · [Choose a database](/sql/databases)

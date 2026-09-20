@@ -1,51 +1,38 @@
 ---
 title: SQL with Neon
-description: Provision Neon Postgres, choose direct or pooled connections, and find Drizzle and Prisma ORM integrations for Cloudflare Workers and Hetzner Services.
+description: Provision Neon Postgres, apply migrations, and connect your application.
 ---
 
-Neon supplies the Postgres database. Choose the application runtime separately:
-the examples below run on Cloudflare and Hetzner. Neon's project, branch,
-connection, and migration documentation is shared across those integrations.
+## Postgres
 
-## Configure the database
+```typescript
+import * as Neon from "alchemy/Neon";
 
-Start with [Neon setup](/neon/setup), then choose a project and branch.
-[Connection URLs](/neon/data/connections) distinguish direct and pooled
-connections, while [branching](/neon/data/branching) covers preview databases.
-The database URL belongs in your backend, not your browser application.
+const project = yield* Neon.Project("Database");
+const branch = yield* Neon.Branch("App", {
+  project,
+  migrations: "./migrations",
+});
+```
 
-| Database task | Guide |
-| --- | --- |
-| Get a direct or pooled connection | [Connections](/neon/data/connections) |
-| Apply SQL migrations | [Neon migrations](/neon/data/migrations) |
-| Generate migrations with Drizzle | [Drizzle with Neon](/neon/guides/drizzle) |
-| Create a branch per preview | [Preview branches](/neon/guides/preview-branches) |
+[Setup](/neon/setup) · [Migrations](/neon/data/migrations) · [Preview branches](/neon/guides/preview-branches)
 
-## Choose an application integration
+For a Worker, pass the direct origin to Hyperdrive:
 
-| Runtime and client | Guide or runnable example |
-| --- | --- |
-| Workers + Hyperdrive + Drizzle | [Cloudflare integration](/cloudflare/data/drizzle), [cloudflare-neon-drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) |
-| Workers + Hyperdrive + Prisma ORM | [Prisma runtime walkthrough](/sql/prisma/postgres), [TypeScript-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma), [PSL-first example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl) |
-| Hetzner Service + Drizzle | [SQL on Hetzner](/sql/providers/hetzner), [hetzner-website-vite](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) |
-| Your existing backend | [Effect SQL Postgres](/sql/effect-sql/postgres) or [Drizzle Postgres](/sql/drizzle/postgres) with an accessible connection URL |
+```typescript
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("Database", {
+  origin: branch.origin,
+  caching: { disabled: true },
+});
+```
 
-The backend row describes a connection option, not a tested example for every
-runtime. Follow your host's packaging, secrets, and network requirements.
+```typescript
+const connection = yield* Cloudflare.Hyperdrive.Connect(hyperdrive);
+const db = yield* Drizzle.Postgres(connection.connectionString);
+```
 
-## Before deploying
+[Connection URLs](/neon/data/connections) · [Worker + Drizzle](/cloudflare/data/drizzle) · [Worker + Prisma ORM](/cloudflare/data/prisma)
 
-Choose the connection endpoint for its purpose. Hyperdrive already supplies
-pooling; the Cloudflare guide uses Neon's direct origin. Migration tools may
-need a direct connection even when application queries use a pooled endpoint.
-Keep schema generation separate from provider-specific migration application.
+## Examples
 
-For [Prisma ORM v8](/sql/prisma/contracts), verify PostgreSQL 17+ and use
-[Prisma migration packages](/sql/prisma/migrations). A Drizzle migration
-resource is not a substitute for that contract-based workflow.
-
-## Next steps
-
-- [Neon overview](/neon) — database resources and configuration.
-- [SQL provider index](/sql#find-your-provider) — choose a different runtime.
-- [Connection lifecycle](/sql/effect-sql/lifecycle) — scoped query clients.
+[Drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle) · [Prisma TypeScript](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma) · [Prisma PSL](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl) · [Hetzner Service](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite)

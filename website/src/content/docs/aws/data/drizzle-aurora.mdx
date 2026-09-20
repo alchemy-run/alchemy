@@ -1,25 +1,28 @@
 ---
 title: Drizzle + Aurora PostgreSQL
-description: Deploy Drizzle with Aurora PostgreSQL and AWS Lambda using IAM authentication, verified TLS, private networking, and controlled schema setup.
+description: Drizzle on Lambda with private Aurora PostgreSQL, IAM authentication, and verified TLS.
 ---
 
-Use **Drizzle + Aurora PostgreSQL from AWS Lambda** when you want Drizzle's PostgreSQL query builder over a private database connection. The [standalone example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) includes the network, database, schema setup, HTTP handler, and integration test.
-
-This guide covers Aurora **PostgreSQL**, not Aurora MySQL or [Aurora DSQL](/sql/providers/aws/#aurora-dsql). The RDS Data API is used only for deployment-time setup; runtime Drizzle queries use the PostgreSQL wire protocol.
+[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) · [AWS setup](/aws/setup) · [Aurora DSQL instead](/aws/data/drizzle-dsql)
 
 ## Prerequisites
 
-Complete [AWS setup](/aws/setup). The example targets `us-west-2`, Aurora PostgreSQL 17.5, and the managed Node.js 22 Lambda runtime. Its two subnets use `us-west-2a` and `us-west-2b`; change both availability zones if you change region, and check engine/Data API availability there.
+```sh
+git clone https://github.com/alchemy-run/alchemy.git
+cd alchemy
+pnpm install
+cd examples/aws-aurora-drizzle
+```
 
-:::caution[Cost and retention]
-Aurora creation and deletion take several minutes. The example keeps at least 0.5 Aurora capacity units running and incurs charges until destroyed. Its database is disposable; configure backups, deletion protection, and retention before adapting it for production.
+The example uses `us-west-2`, Aurora PostgreSQL 17.5, and Node.js 22. Change both subnet availability zones if you change region.
+
+:::caution
+Aurora is billable until destroyed. This example is disposable: destroy deletes its database data.
 :::
 
 ## Provision a private database
 
-The example's [`src/database.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/database.ts) creates an isolated VPC, two subnets, and separate application/database security groups. The database security group accepts port 5432 only from the application security group.
-
-```ts
+```typescript
 const aurora = yield* AWS.RDS.Aurora("Database", {
   databaseName: "app",
   engine: "aurora-postgresql",
@@ -36,24 +39,22 @@ const aurora = yield* AWS.RDS.Aurora("Database", {
 });
 ```
 
-The helper creates the admin secret, subnet group, cluster, and writer. See [RDS and Aurora](/aws/data/rds) for provisioning options. The application needs no NAT gateway: it signs IAM database tokens locally using its Lambda credentials and connects inside the VPC.
+[Network setup](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/database.ts) allows port 5432 only from the Lambda's security group. [Aurora options](/aws/data/rds).
 
 ## Initialize the schema during deployment
 
-[`src/bootstrap.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/bootstrap.ts) declares an `Alchemy.Action` that waits for the writer, then submits one atomic PostgreSQL `DO` block through `AWS.RDSData.ExecuteStatement`.
+```typescript
+import { bootstrap } from "./bootstrap.ts";
 
-That initial migration creates `todos` and the `app_iam` login, grants the login `rds_iam`, and grants only CONNECT, schema USAGE, and table SELECT/INSERT/UPDATE/DELETE. The database administrator owns the table. The application cannot create tables or read the admin secret.
+const schemaVersion = yield* bootstrap;
+```
 
-The Action uses the deployment identity over HTTPS, so the deployment machine does **not** need private VPC connectivity. The Lambda's schema-version input depends on the Action output, ordering application deployment after setup. The application has no setup or migration endpoint.
-
-This is a replay-safe **initial migration**, not automatic Drizzle migration-directory support. Actions rerun when inputs change or deployment is forced. For subsequent schema changes, use reviewed versioned migrations with recorded history; do not replace an already-applied migration with different SQL. A separate socket-based migration runner would need VPC access and a dedicated DDL-capable identity.
+The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/bootstrap.ts) creates `todos` and the restricted `app_iam` login through the Data API. Later schema changes need versioned migrations; this is initial setup only.
 
 ## Bind the application identity
 
-Inside the Lambda's initialization Effect, bind the cluster as the restricted database login:
-
-```ts
-const connect = yield* AWS.RDS.Connect(cluster, {
+```typescript
+const connect = yield* AWS.RDS.Connect(aurora.cluster, {
   auth: "iam",
   username: "app_iam",
   database: "app",
@@ -62,31 +63,19 @@ const connect = yield* AWS.RDS.Connect(cluster, {
 });
 ```
 
-`RDS.ConnectHttp` attaches the function to these subnets and grants `rds-db:connect` for this database user. Provide that implementation on the Lambda Effect:
-
-```ts
-Effect.gen(function* () {
-  // Bind the connection and return the HTTP handler here.
-}).pipe(Effect.provide(AWS.RDS.ConnectHttp));
-```
-
-IAM permission alone does not create a PostgreSQL login or grant table access. That is why the separate bootstrap step is necessary.
+Provide `AWS.RDS.ConnectHttp` on the Lambda Effect. [Complete handler](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/Api.ts).
 
 ## Verify the database certificate
 
-Set the following Lambda environment variable before the Node.js process starts:
+Set the Lambda environment:
 
-```ts
-{
-  env: {
-    NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem",
-  },
-}
+```typescript
+env: { NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem" }
 ```
 
-The [managed Lambda runtime supplies Amazon CA certificates](https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-certificate-loading) at that path. Then override the current RDS binding's `no-verify` URL mode when constructing Drizzle:
+Require certificate and hostname verification:
 
-```ts
+```typescript
 import * as Drizzle from "alchemy/Drizzle/Postgres";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -102,51 +91,38 @@ const db = yield* Drizzle.Postgres(
 );
 ```
 
-This keeps certificate-chain and hostname verification enabled. The CA path belongs to the managed Lambda runtime; a container or other host needs its own trusted RDS certificate bundle.
+The CA path is specific to [managed Lambda Node.js runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-certificate-loading).
 
 ## Package the driver
-
-Install the client dependencies in your application:
 
 ```sh
 pnpm add alchemy effect drizzle-orm @effect/sql-pg pg
 pnpm add -D @types/pg
 ```
 
-The repository example includes these optional peers and packages `pg` with
-`build: { install: ["pg"] }`. Queries run through `@effect/sql-pg`, whose pinned
-version implements the PostgreSQL wire protocol directly using Node's socket
-and TLS APIs. Use the managed Node.js runtime rather than a browser runtime;
-no Cloudflare compatibility flags or Hyperdrive binding are involved.
+```typescript
+build: { install: ["pg"] }
+```
 
 ## Query with Drizzle
 
-Define your table with `drizzle-orm/pg-core`, then yield ordinary Drizzle query Effects inside the handler:
-
-```ts
+```typescript
 const rows = yield* db.select().from(todos);
 ```
 
-The connection Effect signs a fresh IAM token when the first query opens a pool in the invocation. Queries share that pool within the invocation; the invocation scope closes it afterward. See [Drizzle Postgres](/sql/drizzle/postgres) for schemas, queries, and transactions, and [connection lifecycle](/sql/effect-sql/lifecycle) for execution scopes.
+[Schema and queries](/sql/drizzle/postgres) · [Connection lifecycle](/sql/effect-sql/lifecycle)
 
 ## Deploy and invoke
 
-From `examples/aws-aurora-drizzle` in the repository:
-
 ```sh
 pnpm deploy --profile testing --stage aurora-example
-```
-
-The output includes the function name and an **IAM-authenticated** Function URL. Use a SigV4 client authorized for `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction`, or invoke the HTTP handler through the AWS CLI:
-
-```sh
 aws lambda invoke --region us-west-2 \
   --function-name '<functionName>' \
   --cli-binary-format raw-in-base64-out \
   --payload file://health-event.json response.json
 ```
 
-The AWS CLI uses its own credential configuration. The supplied event requests `/health`, which reports the database username, TLS status, and SQL privileges without returning credentials. The example README lists the create/read/update/delete routes and how to change the event. Unsigned Function URL requests are rejected.
+Use the printed function name. The Function URL requires [SigV4-signed requests](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/test/integ.test.ts).
 
 ## Run the integration test
 
@@ -154,9 +130,7 @@ The AWS CLI uses its own credential configuration. The supplied event requests `
 AWS_TEST_SLOW=1 ALCHEMY_PROFILE=testing bun test test/integ.test.ts
 ```
 
-The opt-in suite deploys and redeploys the example, rejects unsigned HTTP requests,
-checks the IAM-authenticated Function URL with SigV4-signed HTTP, exercises CRUD
-and repeated calls, and destroys the test-stage stack. Aurora setup and teardown have finite 25-minute budgets; query assertions have a two-minute budget. With the flag absent, no test infrastructure is created.
+This deploys real AWS resources and destroys them afterward; provisioning and cleanup take several minutes.
 
 ## Clean up
 
@@ -164,11 +138,8 @@ and repeated calls, and destroys the test-stage stack. Aurora setup and teardown
 pnpm destroy --profile testing --stage aurora-example
 ```
 
-Wait for deletion to finish. This removes the example database and its data. Use the same profile and stage if cleanup must be resumed.
+Wait for deletion to finish. Reuse the same profile and stage if cleanup is interrupted.
 
 ## Next steps
 
-- [SQL on AWS](/sql/providers/aws) — distinguish Aurora PostgreSQL, DSQL, MySQL, and the Data API.
-- [Drizzle Postgres](/sql/drizzle/postgres) — portable client and query concepts.
-- [RDS and Aurora](/aws/data/rds) — database configuration and connection choices.
-- [Lambda](/aws/compute/lambda) — function packaging and runtime behavior.
+[SQL on AWS](/sql/providers/aws) · [Aurora configuration](/aws/data/rds) · [Lambda](/aws/compute/lambda)

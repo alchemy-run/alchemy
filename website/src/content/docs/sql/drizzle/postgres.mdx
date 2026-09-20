@@ -8,11 +8,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const deps = `drizzle-orm @effect/sql-pg pg`;
 export const devDeps = `drizzle-kit`;
 
-Define a typed Postgres schema, then query it with `Drizzle.Postgres`.
-Connection credentials and deployment resources come from your chosen runtime
-and database provider; the query API stays in your application code.
-
-Install the toolchain — all optional peers of alchemy:
+Install the optional Postgres dependencies:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -63,9 +59,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 
 ## Declare the schema resource and database
 
-[Drizzle migrations](/sql/drizzle/migrations) covers generating, reviewing,
-committing, and applying schema changes. Database provisioning and migration
-placement belong to the chosen [provider integration](/sql/databases).
+[Migrations](/sql/drizzle/migrations) · [Database setup](/sql/databases)
 
 ## Connect
 
@@ -81,19 +75,15 @@ const listUsers = Effect.gen(function* () {
 });
 ```
 
-Pass an Effect that resolves a redacted URL, including a runtime binding.
-The pool opens on the first query of an execution scope and closes with it;
-see [Connection lifecycle](/sql/effect-sql/lifecycle).
+Pass a connection URL Effect from configuration or a runtime binding. [Connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Connect in a Worker
 
-[Drizzle on Cloudflare](/cloudflare/data/drizzle) owns the complete Worker,
-Hyperdrive, database provisioning, and deployment setup.
+[Cloudflare integration](/cloudflare/data/drizzle)
 
 ## Connect in a Fly Service
 
-[Fly Postgres](/fly/data/postgres) owns the Service binding and private-network
-migration setup. The same Drizzle query API applies.
+[Fly integration](/fly/data/postgres)
 
 ## Queries are Effects
 
@@ -126,25 +116,8 @@ const user = yield* db.query.Users.findFirst({
 
 ## Deploy this client
 
-Choose your application runtime and database independently. The provider pages
-route to connection setup and runnable projects:
-
-- [AWS](/sql/providers/aws#aurora-postgresql-and-drizzle) — Aurora PostgreSQL and the separate Aurora DSQL integration.
-- [Cloudflare](/sql/providers/cloudflare) — Workers and Hyperdrive.
-- [Fly.io](/sql/providers/fly), [Hetzner](/sql/providers/hetzner), and [Railway](/sql/providers/railway) — Service integrations.
-- [Neon](/sql/providers/neon), [PlanetScale](/sql/providers/planetscale), and [Prisma Postgres](/sql/providers/prisma) — database-side configuration.
+[AWS](/sql/providers/aws) · [Cloudflare](/sql/providers/cloudflare) · [Fly](/sql/providers/fly) · [Railway](/sql/providers/railway) · [All providers](/sql#find-your-provider)
 
 ## Where next
 
-- [Migrations](/sql/drizzle/migrations) — generate, review, commit, and deploy schema changes.
-- [Add Drizzle ORM (Cloudflare tutorial)](/cloudflare/data/drizzle)
-  — the same flow in the Cloudflare hub, with Neon / PlanetScale
-  tabs and deploy walkthrough.
-- [Example: cloudflare-neon-drizzle](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-drizzle)
-  — Worker + Hyperdrive + Neon.
-- [Example: fly-postgres](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-postgres)
-  — Service + ConnectPostgres + Fly Managed Postgres.
-- [Fly Postgres](/fly/data/postgres) — the Fly cluster, `migrations`,
-  and `ConnectPostgres`.
-- [Effect SQL: Postgres](/sql/effect-sql/postgres) — tagged-template
-  SQL over the same pool, no ORM.
+[Migrations](/sql/drizzle/migrations) · [Effect SQL](/sql/effect-sql/postgres) · [Examples](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md)

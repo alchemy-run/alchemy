@@ -1,58 +1,42 @@
 ---
 title: SQL with Prisma Postgres and Compute
-description: Distinguish Prisma's managed Postgres and Compute platform from Prisma ORM, and find database, connection, hosting, and Worker integration guides.
+description: Prisma-hosted Postgres and Compute, separate from the Prisma ORM client.
 ---
 
-**Prisma Postgres** is a hosted database. **Prisma Compute** hosts applications.
-**Prisma ORM** is a query/model tool. You can use the hosted database with
-another SQL client, or use Prisma ORM with a different Postgres provider.
+## Prisma Postgres
 
-## Configure Prisma Postgres
+```typescript
+import * as Prisma from "alchemy/Prisma";
 
-The [Postgres resource guide](/prisma/data/postgres) covers projects,
-databases, branch attachment, and local development. The
-[connection guide](/prisma/data/connections) explains credentials, URLs, and
-origins for external runtimes.
+const project = yield* Prisma.Project("App", {
+  createDatabase: false,
+  region: "us-east-1",
+});
+const database = yield* Prisma.Postgres("Database", { project });
+```
 
-| Task | Guide |
-| --- | --- |
-| Provision the database | [Prisma Postgres](/prisma/data/postgres) |
-| Configure database access | [Connections](/prisma/data/connections) |
-| Organize preview databases | [Branches](/prisma/data/branches) |
-| Run an app beside the database | [Prisma Compute](/prisma/compute/apps) |
-| Connect a Cloudflare Worker | [Worker integration](/prisma/guides/cloudflare-workers) |
+[Database guide](/prisma/data/postgres) · [Connections](/prisma/data/connections) · [Branches](/prisma/data/branches) · [Worker integration](/prisma/guides/cloudflare-workers)
 
-Prisma projects can supply database environment variables to their Compute
-applications. Follow the Compute guide for that runtime rather than copying
-Cloudflare-specific binding code.
+## Prisma Compute
 
-## Choose a client
+```typescript
+const db = yield* Drizzle.Postgres(Config.Redacted("DATABASE_URL"));
+```
 
-For ordinary Postgres connections, start with [Effect SQL](/sql/effect-sql/postgres)
-or [Drizzle](/sql/drizzle/postgres). The client's setup is separate from
-provisioning a `Prisma.Postgres` resource.
+Compute applications receive database variables from their project.
 
-For **Prisma ORM v8**, start with [Contracts](/sql/prisma/contracts) and the
-[Postgres runtime guide](/sql/prisma/postgres). Verify PostgreSQL 17+ and the
-selected connection/migration path. The current
-[TypeScript-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
-and [PSL-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl)
-ORM examples use **Neon**, not Prisma-hosted Postgres; their names describe
-the ORM integration.
+[Compute guide](/prisma/compute/apps) · [Setup](/prisma/setup)
 
-## Before deploying
+## Prisma ORM
 
-Keep project-management credentials separate from database credentials. Choose
-the direct or pooled endpoint appropriate to the query/migration tool, and
-confirm that the application and migration runner can both reach it.
-Destroying a project or database can remove data; the database guide documents
-ownership and lifecycle behavior.
+```typescript
+const contract = yield* Prisma.Contract("Contract");
+yield* Prisma.Migrate("Migrate", {
+  url: yield* Config.Redacted("DATABASE_URL"),
+  contract,
+});
+```
 
-A platform resource, a query client, and a runnable integration example prove
-different things. This page links those pieces without claiming every ORM,
-hosting mode, and connection option has a dedicated validated example.
+Prisma ORM is separate from Prisma hosting. ORM v8 requires PostgreSQL 17+; its current Worker examples use Neon.
 
-## Next steps
-
-- [Prisma platform setup](/prisma/setup) and [overview](/prisma).
-- [SQL client choices](/sql#choose-a-client) and [other database providers](/sql/databases).
+[Contracts](/sql/prisma/contracts) · [Migrations](/sql/prisma/migrations) · [Query API](/sql/prisma/postgres) · [Worker example](/cloudflare/data/prisma)

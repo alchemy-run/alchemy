@@ -8,11 +8,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 export const deps = `drizzle-orm @effect/sql-mysql2 mysql2`;
 export const devDeps = `drizzle-kit`;
 
-Define a typed MySQL schema, then query it with `Drizzle.MySQL`.
-Connection credentials and deployment resources come from your chosen runtime
-and database provider; the query API stays in your application code.
-
-Install the toolchain — all optional peers of alchemy:
+Install the optional MySQL dependencies:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -61,9 +57,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 
 ## Declare the schema resource and database
 
-[Drizzle migrations](/sql/drizzle/migrations) covers generating, reviewing,
-committing, and applying schema changes. Database provisioning and migration
-placement belong to the chosen [provider integration](/sql/databases).
+[Migrations](/sql/drizzle/migrations) · [Database setup](/sql/databases)
 
 ## Connect
 
@@ -79,14 +73,11 @@ const listUsers = Effect.gen(function* () {
 });
 ```
 
-Pass an Effect that resolves a redacted URL, including a runtime binding.
-The pool opens on the first query of an execution scope and closes with it;
-see [Connection lifecycle](/sql/effect-sql/lifecycle).
+Pass a connection URL Effect from configuration or a runtime binding. [Connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Connect in a Worker
 
-[Drizzle on Cloudflare](/cloudflare/data/drizzle) owns the complete Worker,
-Hyperdrive, database provisioning, and deployment setup.
+[Cloudflare integration](/cloudflare/data/drizzle)
 
 ## Connection options
 
@@ -134,18 +125,8 @@ const user = yield* db.query.Users.findFirst({
 
 ## Deploy this client
 
-[Cloudflare](/cloudflare/data/drizzle) covers Workers with Hyperdrive and
-PlanetScale MySQL. [PlanetScale](/sql/providers/planetscale) owns database
-provisioning; [AWS](/sql/providers/aws) explains Aurora MySQL connection choices
-without claiming the PostgreSQL Drizzle example supports MySQL.
+[Cloudflare](/sql/providers/cloudflare) · [PlanetScale](/planetscale/data/mysql) · [Railway](/railway/data/mysql) · [All providers](/sql#find-your-provider)
 
 ## Where next
 
-- [Migrations](/sql/drizzle/migrations) — generate, review, commit, and deploy schema changes.
-- [Add Drizzle ORM (Cloudflare tutorial)](/cloudflare/data/drizzle)
-  — the same flow in the Cloudflare hub, with Postgres and MySQL
-  tabs and deploy walkthrough.
-- [Effect SQL: MySQL](/sql/effect-sql/mysql) — tagged-template SQL
-  over the same pool, no ORM.
-- [PlanetScale MySQL](/planetscale/data/mysql) — the database
-  resources behind this page.
+[Migrations](/sql/drizzle/migrations) · [Effect SQL](/sql/effect-sql/mysql) · [Examples](https://github.com/alchemy-run/alchemy/blob/main/examples/README.md)
