@@ -55,14 +55,15 @@ export interface NextjsFrameworkOptions {
   readonly nextjs?:
     | {
         /**
-         * Path of the OpenNext config, relative to the project root.
-         * @default "open-next.config.ts"
+         * Optional explicit OpenNext config for direct framework consumers.
+         * Otherwise Alchemy generates configuration from these options.
          */
         readonly configPath?: string | undefined;
+        /** Resource-selected cache adapters. Defaults to the read-only static-assets cache. */
+        readonly cache?: "static-assets" | "kv" | undefined;
         /**
          * The command the OpenNext pipeline runs to build the Next.js app.
-         * A `buildCommand` set in the project's `open-next.config.ts` takes
-         * precedence over this option.
+         * Takes precedence over an explicitly supplied OpenNext config.
          * @default "npx next build"
          */
         readonly buildCommand?: string | undefined;
@@ -139,7 +140,8 @@ export const makeRunnerConfig = (
   options?: NextjsFrameworkOptions,
 ): Runner.RunnerConfig => ({
   appDir: root,
-  configPath: options?.nextjs?.configPath ?? "open-next.config.ts",
+  configPath: options?.nextjs?.configPath,
+  cache: options?.nextjs?.cache ?? "static-assets",
   compatibilityDate:
     options?.vite?.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
   skipNextBuild: options?.nextjs?.skipNextBuild ?? false,

@@ -4,6 +4,8 @@ import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
+import type { Namespace } from "../KV/Namespace.ts";
+import { DurableObject } from "../Workers/DurableObject.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Self,
@@ -29,8 +31,7 @@ export interface NextjsProps<
   "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules" | "dev"
 > {
   /**
-   * The Next.js project root (the directory containing `next.config.*` and
-   * `open-next.config.ts`). Defaults to the process working directory.
+   * The Next.js project root. Defaults to the process working directory.
    */
   rootDir?: string;
   /**
@@ -41,9 +42,27 @@ export interface NextjsProps<
    * `include`/`exclude` globs when the default is too broad.
    */
   memo?: MemoOptions;
-  // The OpenNext build pipeline (buildCommand, minify, debug, ...) is
-  // configured in YOUR `open-next.config.ts`, which OpenNext loads
-  // natively — this resource only deploys the result.
+  /**
+   * Writable incremental static regeneration. Alchemy selects the KV cache
+   * adapters and binds the same-worker Durable Object revalidation queue.
+   * When omitted, prerendered pages use the read-only static-assets cache.
+   * KV fills on demand; build-time cache entries are not uploaded to KV.
+   */
+  isr?: {
+    /** KV namespace storing rendered pages and fetch results. */
+    incrementalCache: Namespace;
+    /** KV namespace storing cache-tag invalidations. */
+    tagCache: Namespace;
+  };
+  /** OpenNext build options. No application-owned OpenNext config is required. */
+  openNext?: {
+    /** Command used to build the Next.js app. Defaults to `npx next build`. */
+    buildCommand?: string;
+    /** Minify the generated Worker. Defaults to false. */
+    minify?: boolean;
+    /** Enable OpenNext build diagnostics. Defaults to false. */
+    debug?: boolean;
+  };
   /**
    * Local dev (`alchemy dev`) behavior.
    */
@@ -90,16 +109,14 @@ export interface NextjsProps<
  * `import()`.
  *
  * Local dev (`alchemy dev`) defaults to preview parity — the built worker
- * served under workerd. Set `devMode: "hmr"` for the real `next dev`
+ * served under workerd. Set `dev: { mode: "hmr" }` for the real `next dev`
  * (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
  *
- * ISR comes in two flavors, chosen by the project's `open-next.config.ts`:
- * the zero-infra static-assets incremental cache (prerendered pages serve
- * as built; revalidation writes are a no-op), or the fully writable
- * KV-backed setup (`revalidatePath`/`revalidateTag` and time-based
- * regeneration all work) — see the Writable ISR section below. OpenNext's
- * `WORKER_SELF_REFERENCE` self service binding is always wired on deploy.
+ * Alchemy generates the OpenNext configuration. The default static-assets
+ * cache serves prerendered pages as built; revalidation writes are a no-op.
+ * Configure `isr` for writable KV caching and background regeneration.
+ * The self service binding and revalidation queue are wired automatically.
  *
  * Known limitations (upstream `@opennextjs/cloudflare`):
  * - Edge-runtime routes/pages (`export const runtime = "edge"`) are not
@@ -113,19 +130,8 @@ export interface NextjsProps<
  *
  *
  * ### Deploying a Next.js App
- * A single call builds the app with OpenNext and deploys the worker plus
- * its static assets. The project needs an `open-next.config.ts` — the
- * read-only static-assets incremental cache is a good default:
- *
- * ```typescript
- * // open-next.config.ts
- * import { defineCloudflareConfig } from "@opennextjs/cloudflare";
- * import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
- *
- * export default defineCloudflareConfig({
- *   incrementalCache: staticAssetsIncrementalCache,
- * });
- * ```
+ * A single call builds the app and deploys the Worker plus static assets.
+ * No `open-next.config.ts`, Wrangler config, or Alchemy plugin is required.
  *
  * **Example:** Basic Next.js site
  * ```typescript
@@ -166,25 +172,8 @@ export interface NextjsProps<
  * ```
  *
  * ### Writable ISR
- * With the KV incremental cache, ISR revalidation actually writes:
- * `revalidatePath` / `revalidateTag` purge entries, and time-based
- * `revalidate` windows regenerate pages in the background through the
- * same-worker Durable Object queue. Configure OpenNext for it and bind
- * the pieces — `WORKER_SELF_REFERENCE` is wired automatically:
- *
- * ```typescript
- * // open-next.config.ts
- * import { defineCloudflareConfig } from "@opennextjs/cloudflare";
- * import kvIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/kv-incremental-cache";
- * import doQueue from "@opennextjs/cloudflare/overrides/queue/do-queue";
- * import kvNextTagCache from "@opennextjs/cloudflare/overrides/tag-cache/kv-next-tag-cache";
- *
- * export default defineCloudflareConfig({
- *   incrementalCache: kvIncrementalCache,
- *   queue: doQueue,
- *   tagCache: kvNextTagCache,
- * });
- * ```
+ * Supply the cache namespaces on the resource. Alchemy selects the KV
+ * adapters and adds the Durable Object queue for background regeneration.
  *
  * **Example:** Binding the writable-ISR resources
  * ```typescript
@@ -192,15 +181,7 @@ export interface NextjsProps<
  * const tagCache = yield* Cloudflare.KV.Namespace("NextTagCache");
  *
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
- *   env: {
- *     NEXT_INC_CACHE_KV: incCache,
- *     NEXT_TAG_CACHE_KV: tagCache,
- *     // The revalidation queue: a Durable Object class shipped in the
- *     // OpenNext worker bundle itself.
- *     NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject("NEXT_CACHE_DO_QUEUE", {
- *       className: "DOQueueHandler",
- *     }),
- *   },
+ *   isr: { incrementalCache: incCache, tagCache },
  * });
  * ```
  *
@@ -213,15 +194,18 @@ export interface NextjsProps<
  * ```typescript
  * const site = yield* Cloudflare.Website.Nextjs("Site", {
  *   memo: {
- *     include: ["app/**", "public/**", "package.json", "next.config.mjs", "open-next.config.ts"],
+ *     include: ["app/**", "public/**", "package.json", "next.config.mjs"],
  *   },
  * });
  * ```
  *
  * ### Build Configuration
- * The OpenNext build pipeline (build command, minification, ...) is
- * configured in your project's `open-next.config.ts`, which loads
- * natively — the resource only deploys the result.
+ * **Example:** Customize the build
+ * ```typescript
+ * const site = yield* Cloudflare.Website.Nextjs("Site", {
+ *   openNext: { buildCommand: "pnpm exec next build", minify: true },
+ * });
+ * ```
  *
  * ### Class Form
  * Calling `Nextjs` with no arguments returns a constructor you can
@@ -295,6 +279,15 @@ export const Nextjs: {
             env: {
               WORKER_SELF_REFERENCE: Self,
               ...props?.env,
+              ...(props?.isr
+                ? {
+                    NEXT_INC_CACHE_KV: props.isr.incrementalCache,
+                    NEXT_TAG_CACHE_KV: props.isr.tagCache,
+                    NEXT_CACHE_DO_QUEUE: DurableObject("NEXT_CACHE_DO_QUEUE", {
+                      className: "DOQueueHandler",
+                    }),
+                  }
+                : {}),
             },
             // OpenNext requires Node.js APIs. The 2026-08-31 default date
             // enables both nodejs_compat modes, so no redundant flag is sent.
@@ -320,6 +313,8 @@ export const Nextjs: {
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,
+                cache: props?.isr ? "kv" : "static-assets",
+                ...props?.openNext,
                 ...(props?.dev?.mode !== undefined
                   ? { dev: { mode: props.dev.mode } }
                   : {}),

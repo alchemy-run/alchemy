@@ -39,7 +39,6 @@ const nextjsProps = (rootDir: string) => ({
       "tsconfig.json",
       "middleware.ts",
       "next.config.mjs",
-      "open-next.config.ts",
     ],
   },
 });
@@ -89,7 +88,6 @@ describe.concurrent("Nextjs", () => {
             "package.json",
             "tsconfig.json",
             "next.config.mjs",
-            "open-next.config.ts",
             "middleware.ts",
             "app",
             "pages",
@@ -97,6 +95,11 @@ describe.concurrent("Nextjs", () => {
           ],
         });
         yield* prepareNextjsFixture(rootDir);
+        const nextConfigPath = path.join(rootDir, "next.config.mjs");
+        const nextConfig = yield* fs.readFileString(nextConfigPath);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
 
         const bindingMarker = "nextjs-binding-marker";
 
@@ -115,6 +118,10 @@ describe.concurrent("Nextjs", () => {
           );
 
         const site1 = yield* deploy();
+        expect(yield* fs.readFileString(nextConfigPath)).toBe(nextConfig);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
 
         expect(site1.url).toBeDefined();
         expect(site1.hash?.input).toBeDefined();

@@ -3,6 +3,8 @@ import * as Test from "@/Test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
@@ -50,6 +52,13 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Octane", () => {
           entries: fixtureEntries,
         });
 
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const configPath = path.join(rootDir, "octane.config.ts");
+        const config = yield* fs.readFileString(configPath);
+        expect(config).not.toContain("adapter:");
+        expect(config).not.toContain("@alchemy.run/frontend-frameworks");
+
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* AWS.Website.Octane("OctaneSite", {
@@ -61,6 +70,7 @@ describe.skipIf(!runLive || runEmulated)("AWS.Website.Octane", () => {
           }),
         );
 
+        expect(yield* fs.readFileString(configPath)).toBe(config);
         const url = deployed.site.url! as string;
         expect(url).toMatch(/^https:\/\//);
         expect(deployed.site.serverUrl).toBeDefined();

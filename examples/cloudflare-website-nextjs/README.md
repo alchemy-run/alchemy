@@ -12,9 +12,10 @@ prerendered pages) alongside it.
   OpenNext's `getCloudflareContext()`.
 - `app/api/hello/route.js` is an app-router API route handler.
 - Everything under `public/` deploys as static assets.
-- `open-next.config.ts` selects the read-only static-assets incremental
-  cache: ISR pages serve their prerendered payloads; revalidation writes
-  are a no-op (v1 limitation — no KV/R2/D1-backed cache yet).
+- Alchemy generates the OpenNext configuration with a read-only static-assets
+  cache by default. For writable incremental static regeneration, pass KV
+  namespaces through the resource's `isr` property; Alchemy wires the caches
+  and revalidation queue automatically.
 
 The integration packages must be installed in the project (the source
 provider is loaded dynamically at deploy time):
@@ -38,8 +39,9 @@ deploys — the input files are content-hashed (scoped by `memo.include`).
 bun run dev
 ```
 
-Local dev is v1 preview parity: the built worker served under workerd
-via `@alchemy.run/cloudflare-runtime/core`. No HMR yet.
+Local development defaults to the production build served under workerd.
+Set `dev: { mode: "hmr" }` on the resource to run `next dev` with hot module
+replacement and Worker bindings proxied into `getCloudflareContext()`.
 
 ## Destroy
 

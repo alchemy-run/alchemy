@@ -18,10 +18,12 @@ export class RunnerError extends Data.TaggedError<"RunnerError">(
  * Mirrors the shape the runner script parses.
  */
 export interface RunnerConfig {
-  /** The Next.js app root (the directory containing `open-next.config.ts`). */
+  /** The Next.js application root. */
   readonly appDir: string;
-  /** Path of the OpenNext config, relative to `appDir`. @default "open-next.config.ts" */
+  /** Optional explicit OpenNext config, relative to `appDir`. */
   readonly configPath?: string | undefined;
+  /** Resource-selected cache configuration when no explicit configPath is supplied. */
+  readonly cache?: "static-assets" | "kv" | undefined;
   /** `compatibility_date` of the in-memory wrangler-config stand-in. */
   readonly compatibilityDate: string;
   /** Skip the internal `next build` (reuse an existing `.next`). @default false */
