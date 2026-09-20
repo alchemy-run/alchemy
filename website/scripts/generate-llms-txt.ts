@@ -510,7 +510,6 @@ const SECTIONS: Section[] = [
         "sql/providers/aws",
         "sql/providers/cloudflare",
         "sql/providers/fly",
-        "sql/providers/hetzner",
         "sql/providers/neon",
         "sql/providers/planetscale",
         "sql/providers/prisma",
