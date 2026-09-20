@@ -1,0 +1,68 @@
+diff --git a/effect-sqlite-do/session.cjs b/effect-sqlite-do/session.cjs
+index d3662fae3..188e1d3eb 100644
+--- a/effect-sqlite-do/session.cjs
++++ b/effect-sqlite-do/session.cjs
+@@ -34,25 +34,10 @@ var EffectSQLiteDOSession = class extends __sqlite_core_effect_session_ts.SQLite
+ 		}, query, mapper, mode, this.options.logger, this.options.cache, queryMetadata, cacheConfig);
+ 	}
+ 	transaction(transaction) {
+-		const { dialect, relations, options: { storage } } = this;
+-		return effect_Effect.gen({ self: this }, function* () {
+-			const context = yield* effect_Effect.context();
+-			let cause;
+-			try {
+-				return storage.transactionSync(() => {
+-					const tx = new EffectSQLiteDOTransaction(dialect, this, relations);
+-					const exit = effect_Effect.runSyncExit(effect_Effect.provideContext(transaction(tx), context));
+-					if (effect_Exit.isFailure(exit)) {
+-						cause = exit.cause;
+-						throw new __errors_ts.TransactionRollbackError();
+-					}
+-					return exit.value;
+-				});
+-			} catch (e) {
+-				if (cause) return yield* effect_Effect.failCause(cause);
+-				throw e;
+-			}
+-		});
++		return this.client.withTransaction(effect_Effect.gen({ self: this }, function* () {
++			const tx = new EffectSQLiteDOTransaction(this.dialect, this, this.relations);
++			return yield* transaction(tx);
++		}));
+ 	}
+ };
+ var EffectSQLiteDOTransaction = class extends __sqlite_core_effect_session_ts.SQLiteEffectTransaction {
+diff --git a/effect-sqlite-do/session.js b/effect-sqlite-do/session.js
+index 3e3fa365f..a04c7e3e7 100644
+--- a/effect-sqlite-do/session.js
++++ b/effect-sqlite-do/session.js
+@@ -30,25 +30,10 @@ var EffectSQLiteDOSession = class extends SQLiteEffectSession {
+ 		}, query, mapper, mode, this.options.logger, this.options.cache, queryMetadata, cacheConfig);
+ 	}
+ 	transaction(transaction) {
+-		const { dialect, relations, options: { storage } } = this;
+-		return Effect.gen({ self: this }, function* () {
+-			const context = yield* Effect.context();
+-			let cause;
+-			try {
+-				return storage.transactionSync(() => {
+-					const tx = new EffectSQLiteDOTransaction(dialect, this, relations);
+-					const exit = Effect.runSyncExit(Effect.provideContext(transaction(tx), context));
+-					if (Exit.isFailure(exit)) {
+-						cause = exit.cause;
+-						throw new TransactionRollbackError();
+-					}
+-					return exit.value;
+-				});
+-			} catch (e) {
+-				if (cause) return yield* Effect.failCause(cause);
+-				throw e;
+-			}
+-		});
++		return this.client.withTransaction(Effect.gen({ self: this }, function* () {
++			const tx = new EffectSQLiteDOTransaction(this.dialect, this, this.relations);
++			return yield* transaction(tx);
++		}));
+ 	}
+ };
+ var EffectSQLiteDOTransaction = class extends SQLiteEffectTransaction {

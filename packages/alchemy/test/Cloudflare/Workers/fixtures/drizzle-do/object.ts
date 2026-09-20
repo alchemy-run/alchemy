@@ -4,6 +4,7 @@ import type { RuntimeContext } from "@/RuntimeContext.ts";
 import * as Cause from "effect/Cause";
 import { sql } from "drizzle-orm";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -16,6 +17,10 @@ import * as Scheduler from "effect/Scheduler";
 // way Wrangler's `Text` rules handle them.
 import migrations from "./drizzle/migrations.js";
 import { posts, relations, users } from "./schema.ts";
+
+class TransactionRejected extends Data.TaggedError("TransactionRejected")<{
+  readonly message: string;
+}> {}
 
 class TransactionMarker extends Context.Service<TransactionMarker, string>()(
   "DrizzleTransactionMarker",
@@ -41,7 +46,7 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
         clockName: () => Effect.sync(() => state.id.toString()),
         sqliteClock: () =>
           clocks.getByName(state.id.toString()).wait().pipe(Effect.as("ready")),
-        sqliteGate: (view: boolean) =>
+        sqliteGate: (view: boolean, publicApi = false) =>
           Effect.gen(function* () {
             const context = yield* Effect.context<RuntimeContext>();
             const clock = clocks.getByName(state.id.toString());
@@ -62,7 +67,11 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
                       ? original.withoutTransforms()
                       : original;
                     const callerScheduler = yield* Scheduler.Scheduler;
-                    const enteredAfterOuter = yield* client.withTransaction(
+                    const withTransaction = publicApi
+                      ? <A, E, R>(body: Effect.Effect<A, E, R>) =>
+                          db.transaction(() => body)
+                      : client.withTransaction;
+                    const enteredAfterOuter = yield* withTransaction(
                       Effect.gen(function* () {
                         const enteredAfterOuter = outerRan;
                         // The independent DO completion can clear a blocked parent timer.
@@ -185,6 +194,168 @@ export class DrizzleUsersObject extends Cloudflare.DurableObject<DrizzleUsersObj
               rowsAfterRollback,
               finalRows,
               finalized,
+              callerScopePreserved:
+                (yield* Effect.scope) === callerScope &&
+                callerScope.state._tag !== "Closed",
+            };
+          }).pipe(Effect.provideService(TransactionMarker, "caller")),
+        drizzleInterrupt: (nested: boolean) =>
+          Effect.gen(function* () {
+            const entered = yield* Deferred.make<void>();
+            const finalized: string[] = [];
+            let continued = false;
+            const callerScope = yield* Effect.scope;
+            const writer = yield* Effect.forkChild(
+              db.transaction(
+                Effect.fn(function* (tx) {
+                  yield* Effect.addFinalizer(() =>
+                    Effect.sync(() => {
+                      finalized.push("outer");
+                    }),
+                  );
+                  yield* tx.insert(users).values({ name: "outer" });
+                  const pause = Effect.gen(function* () {
+                    yield* Deferred.succeed(entered, undefined);
+                    yield* Effect.never;
+                    continued = true;
+                  });
+                  if (nested) {
+                    yield* tx.transaction(
+                      Effect.fn(function* (inner) {
+                        yield* Effect.addFinalizer(() =>
+                          Effect.sync(() => {
+                            finalized.push("inner");
+                          }),
+                        );
+                        yield* inner.insert(users).values({ name: "inner" });
+                        yield* pause;
+                      }, Effect.scoped),
+                    );
+                  } else {
+                    yield* pause;
+                  }
+                }, Effect.scoped),
+              ),
+            );
+            yield* Deferred.await(entered);
+            const reader = yield* Effect.forkChild(
+              db.select({ name: users.name }).from(users),
+              { startImmediately: true },
+            );
+            const waitingForPermit = yield* Effect.sync(
+              () => reader.pollUnsafe() === undefined,
+            );
+            yield* Fiber.interrupt(writer);
+            const result = yield* Fiber.await(writer);
+            const rows = yield* Fiber.join(reader);
+            yield* db.transaction(
+              Effect.fn(function* (tx) {
+                yield* tx.insert(users).values({ name: "committed" });
+              }),
+            );
+            return {
+              interrupted:
+                Exit.isFailure(result) && Cause.hasInterruptsOnly(result.cause),
+              rows,
+              finalRows: yield* db.select({ name: users.name }).from(users),
+              finalized,
+              continued,
+              waitingForPermit,
+              callerScopePreserved:
+                (yield* Effect.scope) === callerScope &&
+                callerScope.state._tag !== "Closed",
+            };
+          }),
+        drizzleTransaction: (scenario: string) =>
+          Effect.gen(function* () {
+            const rejected = new TransactionRejected({ message: "rollback" });
+            const defect = new Error("transaction defect");
+            const callerScope = yield* Effect.scope;
+            const finalizers: string[] = [];
+            let continued = false;
+            let distinctTransaction = false;
+            const result = yield* db
+              .transaction(
+                Effect.fn(function* (tx) {
+                  distinctTransaction = !Object.is(tx, db);
+                  const marker = yield* TransactionMarker;
+                  yield* Effect.addFinalizer(() =>
+                    Effect.sync(() => finalizers.push(marker)).pipe(
+                      Effect.asVoid,
+                    ),
+                  );
+                  yield* tx.insert(users).values({ name: "before" });
+                  if (scenario.startsWith("async-")) {
+                    yield* Effect.sleep("10 millis");
+                    continued = true;
+                  }
+                  if (scenario === "failure" || scenario === "async-failure")
+                    return yield* Effect.fail(rejected);
+                  if (scenario === "defect" || scenario === "async-defect")
+                    return yield* Effect.die(defect);
+                  if (scenario === "rollback" || scenario === "async-rollback")
+                    return yield* tx.rollback();
+                  if (scenario.startsWith("nested")) {
+                    yield* tx
+                      .transaction(
+                        Effect.fn(function* (inner) {
+                          yield* inner.insert(users).values({ name: "inner" });
+                          if (scenario.includes("async"))
+                            yield* Effect.sleep("10 millis");
+                          if (
+                            scenario === "nested-failure" ||
+                            scenario === "nested-async-failure"
+                          )
+                            return yield* Effect.fail(rejected);
+                          if (scenario === "nested-async-rollback")
+                            return yield* inner.rollback();
+                        }),
+                      )
+                      .pipe(
+                        Effect.catchTag(
+                          [
+                            "TransactionRejected",
+                            "EffectTransactionRollbackError",
+                          ],
+                          () => Effect.void,
+                        ),
+                      );
+                    if (
+                      scenario === "nested-outer-failure" ||
+                      scenario === "nested-async-outer-failure"
+                    )
+                      return yield* Effect.fail(rejected);
+                  }
+                  yield* tx.insert(users).values({ name: "after" });
+                  return "committed";
+                }, Effect.scoped),
+              )
+              .pipe(Effect.exit);
+            // Observe writes from callbacks that incorrectly outlive a failed transaction.
+            if (scenario.includes("async")) yield* Effect.sleep("50 millis");
+            const rows = yield* db.select({ name: users.name }).from(users);
+            return {
+              success: Exit.isSuccess(result),
+              value: Exit.isSuccess(result) ? result.value : undefined,
+              typedFailure:
+                Exit.isFailure(result) &&
+                result.cause.reasons.some(
+                  (reason) =>
+                    Cause.isFailReason(reason) && reason.error === rejected,
+                ),
+              defect:
+                Exit.isFailure(result) &&
+                result.cause.reasons.some(
+                  (reason) =>
+                    Cause.isDieReason(reason) && reason.defect === defect,
+                ),
+              error: Exit.isFailure(result)
+                ? Cause.pretty(result.cause)
+                : undefined,
+              rows,
+              continued,
+              finalizers,
+              distinctTransaction,
               callerScopePreserved:
                 (yield* Effect.scope) === callerScope &&
                 callerScope.state._tag !== "Closed",
