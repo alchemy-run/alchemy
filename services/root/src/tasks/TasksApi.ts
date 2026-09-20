@@ -35,6 +35,9 @@ const parseTags = (raw: unknown): ReadonlyArray<string> | undefined =>
  *   lands in inbox, untagged)
  * - `POST /api/tasks/:queue/:id/route`   — human override `{state, desk?}`
  * - `POST /api/tasks/:queue/:id/retag`   — replace the tags `{tags}`
+ * - `POST /api/tasks/:queue/:id/reorder` — the human's drag among
+ *   READY siblings `{before?|after?|position?}` — a soft hint the
+ *   scheduler weighs, not a hard order
  * - `POST /api/tasks/:queue/:id/comment` — a comment into the task thread
  * - `POST /api/tasks/:queue/desks/:desk/width` — the desk's
  *   parallelism dial `{width}` (clamped 1..4; Desks.ts's fork-and-merge)
@@ -64,6 +67,18 @@ export const TasksApi = Effect.gen(function* () {
   const rearm = (queue: string) =>
     Effect.gen(function* () {
       yield* exec.waitUntil(desks.pump(queue));
+      yield* exec.waitUntil(
+        Effect.andThen(Effect.sleep("15 seconds"), desks.pump(queue)),
+      );
+    });
+
+  /** Re-rank THEN pump — arrival/reorder/retag are re-rank triggers
+   *  (Scheduler.ts); the pump's claims should pop the fresh order. */
+  const rerankAndRearm = (queue: string) =>
+    Effect.gen(function* () {
+      yield* exec.waitUntil(
+        Effect.andThen(desks.rerank(queue), desks.pump(queue)),
+      );
       yield* exec.waitUntil(
         Effect.andThen(Effect.sleep("15 seconds"), desks.pump(queue)),
       );
@@ -189,7 +204,7 @@ export const TasksApi = Effect.gen(function* () {
         { status: 409 },
       );
     }
-    yield* rearm(task.queue);
+    yield* rerankAndRearm(task.queue);
     return yield* HttpServerResponse.json({ task }, { status: 201 });
   });
 
@@ -228,7 +243,7 @@ export const TasksApi = Effect.gen(function* () {
         { status: 409 },
       );
     }
-    yield* rearm(queue.slug);
+    yield* rerankAndRearm(queue.slug);
     return yield* HttpServerResponse.json({ task });
   });
 
@@ -260,7 +275,52 @@ export const TasksApi = Effect.gen(function* () {
         { status: 404 },
       );
     }
-    yield* rearm(queue.slug);
+    yield* rerankAndRearm(queue.slug);
+    return yield* HttpServerResponse.json({ task });
+  });
+
+  /** The human's DRAG — one hint row among READY siblings, then a
+   *  re-rank: the judge weighs the new order as a suggestion and may
+   *  still deviate (recorded on the card's why line). */
+  const reorder = Effect.gen(function* () {
+    const queue = yield* knownQueue;
+    if (queue === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such queue" },
+        { status: 404 },
+      );
+    }
+    const params = yield* HttpRouter.params;
+    const id = String(params.id ?? "");
+    const request = yield* HttpServerRequest;
+    const body = (yield* request.json.pipe(
+      Effect.catch(() => Effect.succeed({})),
+    )) as { before?: string; after?: string; position?: number };
+    if (
+      typeof body.before !== "string" &&
+      typeof body.after !== "string" &&
+      typeof body.position !== "number"
+    ) {
+      return yield* HttpServerResponse.json(
+        { error: "before, after, or position required" },
+        { status: 400 },
+      );
+    }
+    const task = yield* tasks.reorder(queue.slug, id, {
+      ...(typeof body.before === "string" ? { before: body.before } : {}),
+      ...(typeof body.after === "string" ? { after: body.after } : {}),
+      ...(typeof body.position === "number"
+        ? { position: body.position }
+        : {}),
+      actor: HUMAN,
+    });
+    if (task === undefined) {
+      return yield* HttpServerResponse.json(
+        { error: "no such ready task (or anchor)" },
+        { status: 409 },
+      );
+    }
+    yield* rerankAndRearm(queue.slug);
     return yield* HttpServerResponse.json({ task });
   });
 
@@ -350,6 +410,7 @@ export const TasksApi = Effect.gen(function* () {
     HttpRouter.add("POST", "/api/tasks", file),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/route", route),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/retag", retag),
+    HttpRouter.add("POST", "/api/tasks/:queue/:id/reorder", reorder),
     HttpRouter.add("POST", "/api/tasks/:queue/:id/comment", comment),
     HttpRouter.add("POST", "/api/tasks/:queue/desks/:desk/width", width),
   );

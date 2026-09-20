@@ -3,23 +3,23 @@
  * (eval/world.ts, the same fixture desk-loop.test.ts asserts): desks
  * answer from the scenario's scripts, while the CONTROL PLANE is
  * judged by the REAL TypeSafe System One when the key is present —
- * the router's tag Choice per arrival, the scheduler's wide Choice
- * per claim, the forgotten-line disposition Choice, and the review
- * Noul. Without the key everything degrades to the scripted/FIFO
- * fallbacks and the judged metrics are skipped with a notice.
+ * the router's tag Choice per arrival, the staged ranker's map
+ * Scores + pairwise Choices per re-rank, the forgotten-line
+ * disposition Choice, and the review Noul. Without the key
+ * everything degrades to the scripted/hint-then-FIFO fallbacks and
+ * the judged metrics are skipped with a notice.
  */
 import { RuntimeContext } from "alchemy";
 import * as Effect from "effect/Effect";
 import { pump } from "../src/tasks/Desks.ts";
 import { DEMANDS_CHANGES } from "../src/tasks/Review.ts";
 import { routeTask } from "../src/tasks/Router.ts";
-import { SURE } from "../src/tasks/Scheduler.ts";
+import { rerank } from "../src/tasks/Scheduler.ts";
 import {
   confidenceOf,
   hasTypeSafeKey,
   noulOf,
   recordingQuery,
-  type Exchange,
 } from "./judge.ts";
 import {
   confusionOf,
@@ -44,18 +44,6 @@ const DISPOSITION_SURE = 0.6;
 
 const run = <A>(effect: Effect.Effect<A, never, RuntimeContext>) =>
   Effect.runPromise(effect.pipe(Effect.provide(RuntimeContext.phantom)));
-
-/** The choice criteria of one recorded wide-Choice ask, in card
- *  order — `none` first, then the board's ready order (FIFO). */
-const candidatesOf = (exchange: Exchange): string[] => {
-  const question = exchange.questions[exchange.kind];
-  return question !== undefined &&
-      question.type === "choice" &&
-      question.criteria !== null &&
-      typeof question.criteria === "object"
-    ? Object.keys(question.criteria).filter((key) => key !== "none")
-    : [];
-};
 
 export interface RunOptions {
   /** Cap the arrivals (the live smoke's small-batch dial). */
@@ -138,6 +126,19 @@ export const runScripted = async (
     }
   }
 
+  // ── replay the human's drags: hinted arrivals dragged into place
+  //    bottom-up (each drag writes one hint row, like the board) ───
+  const hinted = arrivals
+    .filter((arrival) => arrival.humanRank !== undefined)
+    .sort((a, b) => b.humanRank! - a.humanRank!);
+  for (const arrival of hinted) {
+    world.reorder(ids.get(arrival)!, { position: 0 });
+  }
+
+  // ── ARRIVAL is a re-rank trigger; settles re-rank themselves ─────
+  const board = world.deps.board(QUEUE.slug);
+  await run(rerank(world.deps.query, board, QUEUE.worker.slug));
+
   // ── the loop: pump until every task settles or nothing moves ─────
   const signature = () =>
     world
@@ -151,80 +152,131 @@ export const runScripted = async (
     if (settled || signature() === before) break;
   }
 
-  // ── the scheduler's asks, scored for affinity ────────────────────
-  const schedulerAsks = (recorded?.exchanges ?? []).filter(
-    (exchange) => exchange.kind === "next",
+  // ── the staged ranker, scored ────────────────────────────────────
+  // The single wide Choice is gone; ranking is judged by its OUTPUT:
+  // the engineer desk's actual CLAIM ORDER (the materialized rank's
+  // top pops on each claim). Affinity is scored per claim: when a
+  // not-yet-claimed task shared a tag with already-worked tasks and
+  // another didn't, claiming a sharing one is affinity-optimal.
+  const pairAsks = (recorded?.exchanges ?? []).filter(
+    (exchange) => exchange.kind === "pair",
+  );
+  const engineerClaims = world.dispatches.filter(
+    (entry) =>
+      entry.member === QUEUE.worker.slug && entry.ask.startsWith("[task"),
   );
   let applicable = 0;
   let affinityOptimal = 0;
-  let signalStarved = 0;
-  let askIndex = -1;
-  for (const exchange of schedulerAsks) {
-    askIndex += 1;
-    const candidates = candidatesOf(exchange);
-    // a `none` over actionable cards is its own miss — the loop
-    // claims nothing and the board stalls with real work sitting ready
-    {
-      const confidence = confidenceOf(exchange, "next") ?? 0;
-      if (
-        candidates.length > 0 &&
-        confidence >= SURE &&
-        exchange.value.next === "none"
-      ) {
+  if (judged) {
+    engineerClaims.forEach((claim, index) => {
+      if (index === 0) return;
+      const workedTags = new Set(
+        engineerClaims
+          .slice(0, index)
+          .flatMap((prev) => world.task(prev.task).tags),
+      );
+      const remaining = [
+        ...new Set(engineerClaims.slice(index).map((entry) => entry.task)),
+      ].map((id) => world.task(id));
+      const sharing = remaining.filter((task) =>
+        task.tags.some((tag) => workedTags.has(tag)),
+      );
+      if (sharing.length === 0 || sharing.length === remaining.length) return;
+      applicable += 1;
+      if (world.task(claim.task).tags.some((tag) => workedTags.has(tag))) {
+        affinityOptimal += 1;
+      } else if (scenario.affinity === true) {
+        // only an affinity-subject scenario turns a non-adjacent
+        // claim into a MISS; elsewhere the ratio stays informational
+        // (a heterogeneous board may rightly rank urgency over tags)
         misses.push({
           edge: "scheduler",
-          expected: `an actionable card (one of [${candidates.join(", ")}])`,
-          got: "none",
-          confidence,
-          exchange,
+          task: claim.task,
+          expected: `one of [${sharing.map((task) => task.id).join(", ")}] (same-tag adjacency)`,
+          got: claim.task,
         });
       }
+    });
+  }
+
+  // starvation probe (code-level, judged or not): a deskState read
+  // whose `recent` carried NONE of the tags of tasks the engineer
+  // had already worked-and-settled means the affinity signal died
+  // upstream of any prompt — the worked-by regression
+  const settledBefore = (at: number): Set<string> => {
+    const tags = new Set<string>();
+    for (const task of world.all()) {
+      const events = world.eventsOf(task.id);
+      const started = events.find(
+        (event) =>
+          event.kind === "started" && event.actor === QUEUE.worker.slug,
+      );
+      if (started === undefined || started.at >= at) continue;
+      const settled = events.some(
+        (event) =>
+          event.at < at &&
+          event.at > started.at &&
+          ["review_requested", "parked", "done", "routed"].includes(
+            event.kind,
+          ),
+      );
+      if (settled) for (const tag of task.tags) tags.add(tag);
     }
-    if (candidates.length < 2) continue; // one card: no affinity choice
-    const state = exchange.state as {
-      desk?: { recent?: ReadonlyArray<{ tags?: ReadonlyArray<string> }> };
-    };
-    const recentTags = new Set(
-      (state.desk?.recent ?? []).flatMap((entry) => entry.tags ?? []),
+    return tags;
+  };
+  const signalStarved = world.snapshots.filter((snapshot) => {
+    if (snapshot.desk !== QUEUE.worker.slug) return false;
+    const workedTags = settledBefore(snapshot.at);
+    return (
+      workedTags.size > 0 &&
+      !snapshot.recent.some((entry) =>
+        entry.tags.some((tag) => workedTags.has(tag)),
+      )
     );
-    // starvation check: the desk HAD worked same-tag tasks before
-    // this ask (the n-th ask follows n engineer claims), but the
-    // state's `recent` carries none of their tags — the affinity
-    // signal died upstream of the prompt
-    const workedTags = new Set(
-      world.dispatches
-        .filter((entry) => entry.member === QUEUE.worker.slug)
-        .slice(0, askIndex)
-        .flatMap((entry) => world.task(entry.task).tags),
-    );
-    if (
-      candidates.some((id) =>
-        world.task(id).tags.some((tag) => workedTags.has(tag)),
-      ) &&
-      ![...workedTags].some((tag) => recentTags.has(tag))
-    ) {
-      signalStarved += 1;
-    }
-    const optimal = candidates.filter((id) =>
-      world.task(id).tags.some((tag) => recentTags.has(tag)),
-    );
-    if (optimal.length === 0 || optimal.length === candidates.length) continue;
-    applicable += 1;
-    // the EFFECTIVE pick: below the bar the loop falls back to FIFO
-    const confidence = confidenceOf(exchange, "next") ?? 0;
-    const value = String(exchange.value.next ?? "");
-    const effective = confidence >= SURE ? value : candidates[0]!;
-    if (optimal.includes(effective)) {
-      affinityOptimal += 1;
-    } else {
-      misses.push({
-        edge: "scheduler",
-        expected: `one of [${optimal.join(", ")}] (same-tag adjacency)`,
-        got: effective === value ? value : `${value} → FIFO ${effective}`,
-        confidence,
-        exchange,
-      });
-    }
+  }).length;
+  if (signalStarved > 0) {
+    misses.push({
+      edge: "scheduler",
+      expected: "desk.recent carries the tags of its worked-and-settled tasks",
+      got: `signal starved ×${signalStarved} (the worked-by memory regressed)`,
+    });
+  }
+
+  // ── ranking: deviations + the scenario's truth order ─────────────
+  const deviationWhys = [
+    ...new Set(
+      world.rankWrites.flatMap((write) =>
+        write
+          .filter((entry) => entry.rankWhy.startsWith("judge:"))
+          .map((entry) => `${entry.id} ${entry.rankWhy}`),
+      ),
+    ),
+  ];
+  const claimedOrder = [
+    ...new Set(engineerClaims.map((entry) => entry.task)),
+  ];
+  const truthOrder =
+    scenario.truthOrder === undefined
+      ? undefined
+      : scenario.truthOrder.map((index) => `t-${index}`);
+  const orderMatched =
+    truthOrder !== undefined &&
+    truthOrder.length === claimedOrder.length &&
+    truthOrder.every((id, index) => claimedOrder[index] === id);
+  if (judged && truthOrder !== undefined && !orderMatched) {
+    misses.push({
+      edge: "ranking",
+      expected: `claim order [${truthOrder.join(" ")}]`,
+      got: `[${claimedOrder.join(" ")}]`,
+      ...(pairAsks.length > 0 ? { exchange: pairAsks.at(-1)! } : {}),
+    });
+  }
+  if (judged && scenario.expectsDeviation === true && deviationWhys.length === 0) {
+    misses.push({
+      edge: "ranking",
+      expected: "a recorded judge deviation from the human's dragged order",
+      got: "none — the judge followed the drag",
+    });
   }
 
   // ── judged replies: forgotten-line dispositions + review nouls ───
@@ -353,10 +405,24 @@ export const runScripted = async (
         confusion: confusionOf(routingPairs),
       },
       scheduler: {
-        asks: schedulerAsks.length,
+        asks: pairAsks.length,
         applicable,
         affinityOptimal,
         signalStarved,
+      },
+      ranking: {
+        pairs: pairAsks.length,
+        deviations: deviationWhys.length,
+        deviationWhys,
+        ...(truthOrder === undefined
+          ? {}
+          : {
+              order: {
+                truth: truthOrder,
+                claimed: claimedOrder,
+                matched: orderMatched,
+              },
+            }),
       },
       disposition: { total: dispositionTotal, hits: dispositionHits },
       review: { total: reviewTotal, hits: reviewHits },

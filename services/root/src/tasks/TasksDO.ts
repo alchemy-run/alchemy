@@ -88,6 +88,25 @@ export interface TaskRow {
   readonly tags: ReadonlyArray<string>;
   /** The member slug working/last working it (`engineer`). */
   readonly desk?: string;
+  /** Every desk that ever WORKED the task — stamped on claim, never
+   *  cleared. The affinity signal reads THIS, not `desk`: a completed
+   *  task's `desk` flips to the reviewer, which starved the
+   *  engineer's `recent` of its own finished work. */
+  readonly workedBy: ReadonlyArray<string>;
+  /** The human's drag position among READY siblings — a sparse
+   *  fractional key sharing one axis with age ({@link HINT_NULL_OFFSET}),
+   *  so ONE drag writes ONE row. Null = never dragged (sorts last,
+   *  by age). A SUGGESTION to the scheduler, never a hard order. */
+  readonly hint?: number;
+  /** The scheduler's materialized rank among ready siblings (1 =
+   *  claim next). Written by re-ranks (arrival/settle/reorder/retag),
+   *  consumed by claims — ZERO judging on the claim path. */
+  readonly rank?: number;
+  /** One line of why the rank is what it is — `sam's order`,
+   *  `follows t-4f2 (same cloudflare)`, `urgent (82%)`; a `judge:`
+   *  prefix marks a rank that went AGAINST the human's dragged
+   *  order (the transparency is the feature). */
+  readonly rankWhy?: string;
   /** The SESSION key the working round dispatched into — the trunk
    *  desk key, or a clone (`<deskKey>#<n>`) when the desk's width
    *  forked one. Recovery reads THIS session's log. */
@@ -106,7 +125,7 @@ export interface TaskEventRow {
   readonly id: number;
   readonly task: string;
   /** routed|assigned|started|posted|parked|review_requested|
-   *  changes_requested|approved|done|dropped|filed|tagged */
+   *  changes_requested|approved|done|dropped|filed|tagged|reordered */
   readonly kind: string;
   readonly actor: string;
   /** JSON payload (post id, session key, verdict, reason…). */
@@ -145,6 +164,21 @@ export const DISPATCHES_PER_HOUR = 20;
  *  exception to the linear desk (`setWidth` clamps into 1..this). */
 export const MAX_DESK_WIDTH = 4;
 
+/** An undragged task's key on the hint axis is its age pushed past
+ *  any explicit hint — hints and ages share ONE numeric axis, so a
+ *  drag between two undragged cards still writes ONE fractional key
+ *  (nulls last, by age; `at` is epoch millis ≈ 1.8e12 ≪ 1e15). */
+export const HINT_NULL_OFFSET = 1_000_000_000_000_000;
+
+/** The spacing a drag past the edge of the list leaves for the next
+ *  drag — sparse fractional indexing's gap. */
+export const HINT_GAP = 1_024;
+
+/** Ready order: judged rank first (nulls last), then the human's
+ *  hint axis (nulls last by age) — the claim path and the board's
+ *  ready column read the SAME order. */
+const READY_ORDER = `(rank IS NULL), rank, COALESCE(hint, at + ${HINT_NULL_OFFSET}), at`;
+
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -159,10 +193,21 @@ const TABLES = [
     origin TEXT,
     priority INTEGER NOT NULL DEFAULT 2,
     parked_reason TEXT,
+    worked_by TEXT NOT NULL DEFAULT '[]',
+    hint REAL,
+    rank INTEGER,
+    rank_why TEXT,
     at INTEGER NOT NULL,
     updated INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS tasks_state ON tasks (state)`,
+  `CREATE TABLE IF NOT EXISTS task_scores (
+    id TEXT PRIMARY KEY,
+    hash TEXT NOT NULL,
+    urgency REAL NOT NULL,
+    fit_json TEXT NOT NULL,
+    at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS task_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task TEXT NOT NULL,
@@ -195,8 +240,20 @@ interface TaskDbRow extends Record<string, Cloudflare.SqlStorageValue> {
   origin: string | null;
   priority: number;
   parked_reason: string | null;
+  worked_by: string;
+  hint: number | null;
+  rank: number | null;
+  rank_why: string | null;
   at: number;
   updated: number;
+}
+
+interface ScoreDbRow extends Record<string, Cloudflare.SqlStorageValue> {
+  id: string;
+  hash: string;
+  urgency: number;
+  fit_json: string;
+  at: number;
 }
 
 interface EventDbRow extends Record<string, Cloudflare.SqlStorageValue> {
@@ -231,9 +288,29 @@ const toTask = (row: TaskDbRow): TaskRow => ({
   ...(row.origin === null ? {} : { origin: row.origin }),
   priority: row.priority,
   ...(row.parked_reason === null ? {} : { parkedReason: row.parked_reason }),
+  workedBy: tagsOf(row.worked_by ?? "[]"),
+  ...(row.hint === null ? {} : { hint: row.hint }),
+  ...(row.rank === null ? {} : { rank: row.rank }),
+  ...(row.rank_why === null ? {} : { rankWhy: row.rank_why }),
   at: row.at,
   updated: row.updated,
 });
+
+/** A `fit_json` column parsed defensively — a bad row reads empty. */
+const fitOf = (raw: string): Record<string, number> => {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === "object" && parsed !== null
+      ? Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>).filter(
+            (entry): entry is [string, number] => typeof entry[1] === "number",
+          ),
+        )
+      : {};
+  } catch {
+    return {};
+  }
+};
 
 const toEvent = (row: EventDbRow): TaskEventRow => ({
   id: row.id,
@@ -270,6 +347,33 @@ export interface RouteInput {
   readonly data?: string;
 }
 
+/** One drag on the board: place the task before/after a READY
+ *  sibling, or at an absolute index. Exactly one anchor applies —
+ *  `before` wins over `after` wins over `position`. */
+export interface ReorderInput {
+  readonly before?: string;
+  readonly after?: string;
+  readonly position?: number;
+  readonly actor: string;
+}
+
+/** One task's cached MAP scores (Scheduler.ts): keyed by a content
+ *  hash so unchanged tasks are never re-judged; `fit` is per desk. */
+export interface TaskScoreRow {
+  readonly id: string;
+  readonly hash: string;
+  readonly urgency: number;
+  readonly fit: Record<string, number>;
+  readonly at: number;
+}
+
+/** One materialized rank row a re-rank writes back to the board. */
+export interface RankWrite {
+  readonly id: string;
+  readonly rank: number;
+  readonly rankWhy: string;
+}
+
 interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
   readonly file: (
     input: FileInput,
@@ -283,6 +387,24 @@ interface TasksRpc extends MainRpc<Cloudflare.DurableObjectState> {
     tags: ReadonlyArray<string>,
     actor: string,
   ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
+  readonly reorder: (
+    id: string,
+    input: ReorderInput,
+  ) => Effect.Effect<TaskRow | undefined, never, RuntimeContext>;
+  readonly scores: () => Effect.Effect<
+    ReadonlyArray<TaskScoreRow>,
+    never,
+    RuntimeContext
+  >;
+  readonly writeScore: (
+    id: string,
+    hash: string,
+    urgency: number,
+    fit: Record<string, number>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly writeRanks: (
+    entries: ReadonlyArray<RankWrite>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
   readonly list: (
     state?: TaskState,
   ) => Effect.Effect<ReadonlyArray<TaskRow>, never, RuntimeContext>;
@@ -341,6 +463,45 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
       >("SELECT name FROM pragma_table_info('tasks')")).toArray();
       if (!columns.some((column) => column.name === "session")) {
         yield* sql.exec("ALTER TABLE tasks ADD COLUMN session TEXT");
+      }
+      if (!columns.some((column) => column.name === "worked_by")) {
+        yield* sql.exec(
+          "ALTER TABLE tasks ADD COLUMN worked_by TEXT NOT NULL DEFAULT '[]'",
+        );
+        yield* sql.exec("ALTER TABLE tasks ADD COLUMN hint REAL");
+        yield* sql.exec("ALTER TABLE tasks ADD COLUMN rank INTEGER");
+        yield* sql.exec("ALTER TABLE tasks ADD COLUMN rank_why TEXT");
+        // seed the worked-by memory from history: any desk a task's
+        // `assigned` events name has worked it (the claim events ARE
+        // the memory for rows written under earlier schemas)
+        const assigned = yield* (yield* sql.exec<EventDbRow>(
+          "SELECT * FROM task_events WHERE kind = 'assigned'",
+        )).toArray();
+        const workedBy = new Map<string, Set<string>>();
+        for (const row of assigned) {
+          try {
+            const desk = (JSON.parse(row.data ?? "{}") as { desk?: string })
+              .desk;
+            if (typeof desk === "string" && desk.length > 0) {
+              (workedBy.get(row.task) ??
+                workedBy.set(row.task, new Set()).get(row.task)!).add(desk);
+            }
+          } catch {
+            // an unparsable assigned payload seeds nothing
+          }
+        }
+        yield* Effect.forEach(
+          workedBy,
+          ([task, desks]) =>
+            sql
+              .exec(
+                "UPDATE tasks SET worked_by = ? WHERE id = ?",
+                JSON.stringify([...desks]),
+                task,
+              )
+              .pipe(Effect.asVoid),
+          { discard: true },
+        );
       }
 
       /** The desk's width (1 unless dialed up — `setWidth`). */
@@ -447,13 +608,138 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
           return yield* taskOf(id);
         }),
 
+        // the human's DRAG — one row written: a fractional key on
+        // the shared hint/age axis between the anchor's neighbors.
+        // A drag also invalidates the judged order (ranks cleared):
+        // the hint axis rules until the next re-rank lands, so the
+        // board never snaps back to a stale judgment.
+        reorder: Effect.fn(function* (id, input) {
+          const task = yield* taskOf(id);
+          if (task === undefined || task.state !== "ready") return undefined;
+          const siblings = yield* (yield* sql.exec<TaskDbRow>(
+            `SELECT * FROM tasks WHERE state = 'ready' AND id != ? ORDER BY COALESCE(hint, at + ${HINT_NULL_OFFSET}), at`,
+            id,
+          )).toArray();
+          const keys = siblings.map(
+            (row) => row.hint ?? row.at + HINT_NULL_OFFSET,
+          );
+          let index: number;
+          if (input.before !== undefined) {
+            index = siblings.findIndex((row) => row.id === input.before);
+            if (index < 0) return undefined;
+          } else if (input.after !== undefined) {
+            const anchor = siblings.findIndex((row) => row.id === input.after);
+            if (anchor < 0) return undefined;
+            index = anchor + 1;
+          } else {
+            index = Math.min(
+              siblings.length,
+              Math.max(0, Math.round(input.position ?? siblings.length)),
+            );
+          }
+          const prev = keys[index - 1];
+          const next = keys[index];
+          const hint =
+            prev !== undefined && next !== undefined
+              ? (prev + next) / 2
+              : prev !== undefined
+                ? prev + HINT_GAP
+                : next !== undefined
+                  ? next - HINT_GAP
+                  : 0;
+          const at = yield* Clock.currentTimeMillis;
+          yield* sql.exec(
+            "UPDATE tasks SET hint = ?, updated = ? WHERE id = ?",
+            hint,
+            at,
+            id,
+          );
+          yield* sql.exec(
+            "UPDATE tasks SET rank = NULL, rank_why = NULL WHERE state = 'ready'",
+          );
+          yield* event(
+            id,
+            "reordered",
+            input.actor,
+            JSON.stringify({
+              hint,
+              ...(input.before === undefined ? {} : { before: input.before }),
+              ...(input.after === undefined ? {} : { after: input.after }),
+              ...(input.position === undefined
+                ? {}
+                : { position: input.position }),
+            }),
+          );
+          return yield* taskOf(id);
+        }),
+
+        // the MAP cache — one row per task, keyed by content hash so
+        // an unchanged task never burns a judge call
+        scores: Effect.fn(function* () {
+          const rows = yield* (yield* sql.exec<ScoreDbRow>(
+            "SELECT * FROM task_scores",
+          )).toArray();
+          return rows.map((row) => ({
+            id: row.id,
+            hash: row.hash,
+            urgency: row.urgency,
+            fit: fitOf(row.fit_json),
+            at: row.at,
+          }));
+        }),
+
+        writeScore: Effect.fn(function* (id, hash, urgency, fit) {
+          const at = yield* Clock.currentTimeMillis;
+          yield* sql.exec(
+            "INSERT INTO task_scores (id, hash, urgency, fit_json, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET hash = ?, urgency = ?, fit_json = ?, at = ?",
+            id,
+            hash,
+            urgency,
+            JSON.stringify(fit),
+            at,
+            hash,
+            urgency,
+            JSON.stringify(fit),
+            at,
+          );
+        }),
+
+        // materialize one re-rank: every ready row's rank is rewritten
+        // (stale ranks cleared), the score cache pruned to ready ids.
+        // `updated` is deliberately untouched — a re-rank is not work.
+        writeRanks: Effect.fn(function* (entries) {
+          yield* sql.exec(
+            "UPDATE tasks SET rank = NULL, rank_why = NULL WHERE state = 'ready'",
+          );
+          yield* Effect.forEach(
+            entries,
+            (entry) =>
+              sql
+                .exec(
+                  "UPDATE tasks SET rank = ?, rank_why = ? WHERE id = ? AND state = 'ready'",
+                  entry.rank,
+                  entry.rankWhy,
+                  entry.id,
+                )
+                .pipe(Effect.asVoid),
+            { discard: true },
+          );
+          yield* sql.exec(
+            "DELETE FROM task_scores WHERE id NOT IN (SELECT id FROM tasks WHERE state = 'ready')",
+          );
+        }),
+
         list: Effect.fn(function* (state?: TaskState) {
           const rows = yield* (yield* (state === undefined
             ? sql.exec<TaskDbRow>("SELECT * FROM tasks ORDER BY at")
-            : sql.exec<TaskDbRow>(
-                "SELECT * FROM tasks WHERE state = ? ORDER BY priority, at",
-                state,
-              ))).toArray();
+            : state === "ready"
+              ? sql.exec<TaskDbRow>(
+                  `SELECT * FROM tasks WHERE state = 'ready' ORDER BY ${READY_ORDER}`,
+                )
+              : sql.exec<TaskDbRow>(
+                  "SELECT * FROM tasks WHERE state = ? ORDER BY priority, at",
+                  state,
+                ))).toArray();
           return rows.map(toTask);
         }),
 
@@ -502,18 +788,29 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             }
           }
           if (chosen === undefined) {
-            const rows = yield* (yield* sql.exec<TaskDbRow>(
-              "SELECT * FROM tasks WHERE state = ? ORDER BY priority, at LIMIT 1",
-              from,
-            )).toArray();
+            // ready claims pop the MATERIALIZED rank's top (hint-then-
+            // FIFO when no rank landed yet) — zero judging here; the
+            // re-rank triggers (arrival/settle/reorder/retag) did it
+            const rows = yield* (yield* (from === "ready"
+              ? sql.exec<TaskDbRow>(
+                  `SELECT * FROM tasks WHERE state = 'ready' ORDER BY ${READY_ORDER} LIMIT 1`,
+                )
+              : sql.exec<TaskDbRow>(
+                  "SELECT * FROM tasks WHERE state = ? ORDER BY priority, at LIMIT 1",
+                  from,
+                ))).toArray();
             chosen = rows[0] === undefined ? undefined : toTask(rows[0]);
           }
           if (chosen === undefined) return undefined;
           // always rewritten — a stale session from a past round must
-          // never point recovery at the wrong log
+          // never point recovery at the wrong log. The worked-by
+          // stamp is the desk's PERMANENT memory of having worked the
+          // task (deskState.recent reads it even after review flips
+          // the desk column to the reviewer).
           yield* sql.exec(
-            "UPDATE tasks SET session = ? WHERE id = ?",
+            "UPDATE tasks SET session = ?, worked_by = ? WHERE id = ?",
             options?.session ?? null,
+            JSON.stringify([...new Set([...chosen.workedBy, desk])]),
             chosen.id,
           );
           yield* event(
@@ -540,9 +837,14 @@ const TasksDOLive = Cloudflare.DurableObject<TasksRpc>()(
             "SELECT * FROM tasks WHERE state = 'working' AND desk = ? ORDER BY updated",
             desk,
           )).toArray();
+          // recent = tasks this desk WORKED, regardless of who holds
+          // the desk column now — a completed task's desk flips to
+          // the reviewer, which used to starve the engineer's
+          // affinity signal of its own finished work
           const recent = yield* (yield* sql.exec<TaskDbRow>(
-            "SELECT * FROM tasks WHERE desk = ? AND state != 'working' ORDER BY updated DESC LIMIT 5",
+            "SELECT * FROM tasks WHERE state != 'working' AND (desk = ? OR worked_by LIKE ?) ORDER BY updated DESC LIMIT 5",
             desk,
+            `%"${desk}"%`,
           )).toArray();
           return {
             working: working.map(toTask),
@@ -614,6 +916,28 @@ export class Tasks extends Context.Service<
       tags: ReadonlyArray<string>,
       actor: string,
     ) => Effect.Effect<TaskRow | undefined>;
+    /** The human's drag — set the task's hint among READY siblings. */
+    readonly reorder: (
+      queue: string,
+      id: string,
+      input: ReorderInput,
+    ) => Effect.Effect<TaskRow | undefined>;
+    /** The scheduler's MAP cache (Scheduler.ts). */
+    readonly scores: (
+      queue: string,
+    ) => Effect.Effect<ReadonlyArray<TaskScoreRow>>;
+    readonly writeScore: (
+      queue: string,
+      id: string,
+      hash: string,
+      urgency: number,
+      fit: Record<string, number>,
+    ) => Effect.Effect<void>;
+    /** Materialize one re-rank onto the board's ready rows. */
+    readonly writeRanks: (
+      queue: string,
+      entries: ReadonlyArray<RankWrite>,
+    ) => Effect.Effect<void>;
     readonly list: (
       queue: string,
       state?: TaskState,
@@ -668,6 +992,13 @@ export const TasksLive: Layer.Layer<Tasks, never, Cloudflare.Worker> =
         route: (queue, id, input) => inWorker(stub(queue).route(id, input)),
         retag: (queue, id, tags, actor) =>
           inWorker(stub(queue).retag(id, tags, actor)),
+        reorder: (queue, id, input) =>
+          inWorker(stub(queue).reorder(id, input)),
+        scores: (queue) => inWorker(stub(queue).scores()),
+        writeScore: (queue, id, hash, urgency, fit) =>
+          inWorker(stub(queue).writeScore(id, hash, urgency, fit)),
+        writeRanks: (queue, entries) =>
+          inWorker(stub(queue).writeRanks(entries)),
         list: (queue, state) => inWorker(stub(queue).list(state)),
         get: (queue, id) => inWorker(stub(queue).get(id)),
         events: (queue, id) => inWorker(stub(queue).events(id)),

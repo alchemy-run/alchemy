@@ -18,10 +18,13 @@ import type {
   QueueSpec,
 } from "../src/tasks/Desks.ts";
 import {
+  HINT_GAP,
+  HINT_NULL_OFFSET,
   transition,
   type RouteInput,
   type TaskEventRow,
   type TaskRow,
+  type TaskScoreRow,
   type TaskState,
 } from "../src/tasks/TasksDO.ts";
 
@@ -63,6 +66,10 @@ export const deskWorld = (options?: {
     origin?: string;
     priority: number;
     parkedReason?: string;
+    workedBy: string[];
+    hint?: number;
+    rank?: number;
+    rankWhy?: string;
     at: number;
     updated: number;
   }
@@ -72,8 +79,19 @@ export const deskWorld = (options?: {
   const scripts: Record<string, string[]> = {};
   const taskScripts: Record<string, Record<string, string[]>> = {};
   const dispatches: Array<
-    { member: string; task: string; key: string; ask: string }
+    { member: string; task: string; key: string; ask: string; at: number }
   > = [];
+  const scoreRows: Array<TaskScoreRow & { fit: Record<string, number> }> = [];
+  const rankWrites: Array<
+    ReadonlyArray<{ id: string; rank: number; rankWhy: string }>
+  > = [];
+  /** Every deskState read, with the recent the caller saw — the
+   *  eval's starvation probe (scripted.ts). */
+  const snapshots: Array<{
+    desk: string;
+    at: number;
+    recent: ReadonlyArray<{ title: string; tags: ReadonlyArray<string> }>;
+  }> = [];
   const digests: Array<{ term: string; key: string }> = [];
   const digestSends: Array<{ term: string; key: string }> = [];
   const widths: Record<string, number> = {};
@@ -95,10 +113,20 @@ export const deskWorld = (options?: {
       at: tick(),
     });
   };
+  // ready mirrors TasksDO's READY_ORDER (rank, then hint-then-age);
+  // every other state keeps priority-then-age
   const ordered = (state: TaskState) =>
     [...rows.values()]
       .filter((row) => row.state === state)
-      .sort((a, b) => a.priority - b.priority || a.at - b.at);
+      .sort((a, b) =>
+        state === "ready"
+          ? (a.rank ?? Number.MAX_SAFE_INTEGER) -
+              (b.rank ?? Number.MAX_SAFE_INTEGER) ||
+            (a.hint ?? a.at + HINT_NULL_OFFSET) -
+              (b.hint ?? b.at + HINT_NULL_OFFSET) ||
+            a.at - b.at
+          : a.priority - b.priority || a.at - b.at,
+      );
   const move = (row: Row, input: RouteInput) => {
     row.state = input.state;
     row.desk =
@@ -153,6 +181,8 @@ export const deskWorld = (options?: {
             : ordered(from)[0];
         if (chosen === undefined) return undefined;
         chosen.session = options?.session;
+        // the worked-by stamp — the desk's permanent memory (TasksDO)
+        if (!chosen.workedBy.includes(desk)) chosen.workedBy.push(desk);
         event(
           chosen.id,
           "assigned",
@@ -180,18 +210,29 @@ export const deskWorld = (options?: {
         return move(row, input);
       }),
     deskState: (desk) =>
-      Effect.sync(() => ({
-        working: [...rows.values()]
-          .filter((row) => row.state === "working" && row.desk === desk)
-          .sort((a, b) => a.updated - b.updated)
-          .map(toTask),
-        width: widths[desk] ?? 1,
-        recent: [...rows.values()]
-          .filter((row) => row.desk === desk && row.state !== "working")
+      Effect.sync(() => {
+        // recent = tasks this desk WORKED (worked-by stamp), not
+        // tasks whose desk column happens to still name it — the
+        // starvation fix (TasksDO mirrors this)
+        const recent = [...rows.values()]
+          .filter(
+            (row) =>
+              row.state !== "working" &&
+              (row.desk === desk || row.workedBy.includes(desk)),
+          )
           .sort((a, b) => b.updated - a.updated)
           .slice(0, 5)
-          .map((row) => ({ title: row.title, tags: row.tags })),
-      })),
+          .map((row) => ({ title: row.title, tags: row.tags }));
+        snapshots.push({ desk, at: now, recent });
+        return {
+          working: [...rows.values()]
+            .filter((row) => row.state === "working" && row.desk === desk)
+            .sort((a, b) => a.updated - b.updated)
+            .map(toTask),
+          width: widths[desk] ?? 1,
+          recent,
+        };
+      }),
     events: (id) =>
       Effect.sync(() => events.filter((row) => row.task === id)),
     comment: (id, actor, post) =>
@@ -204,12 +245,39 @@ export const deskWorld = (options?: {
         spent += 1;
         return true;
       }),
+    // the scheduler's MAP cache + rank materialization, in memory
+    scores: () => Effect.sync(() => scoreRows.map((row) => ({ ...row }))),
+    writeScore: (id, hash, urgency, fit) =>
+      Effect.sync(() => {
+        const index = scoreRows.findIndex((row) => row.id === id);
+        const next = { id, hash, urgency, fit, at: tick() };
+        if (index >= 0) scoreRows[index] = next;
+        else scoreRows.push(next);
+      }),
+    writeRanks: (entries) =>
+      Effect.sync(() => {
+        rankWrites.push(entries.map((entry) => ({ ...entry })));
+        for (const row of rows.values()) {
+          if (row.state === "ready") {
+            delete row.rank;
+            delete row.rankWhy;
+          }
+        }
+        for (const entry of entries) {
+          const row = rows.get(entry.id);
+          if (row !== undefined && row.state === "ready") {
+            row.rank = entry.rank;
+            row.rankWhy = entry.rankWhy;
+          }
+        }
+      }),
   };
 
   // the scripted System One: review verdicts and forgotten-line
-  // dispositions answer from code; everything else (the scheduler's
-  // wide Choice) is unscripted — a defect tryQuery turns into the
-  // FIFO fallback, which is exactly what a deterministic test wants
+  // dispositions answer from code; everything else (the staged
+  // ranker's urgency/fit Scores and pairwise Choices) is unscripted —
+  // a defect tryQuery turns into the hint-then-FIFO fallback, which
+  // is exactly what a deterministic test wants
   const scriptedQuery = ((questions: Record<string, unknown>, opts: {
     state: Record<string, unknown>;
   }) =>
@@ -266,6 +334,7 @@ export const deskWorld = (options?: {
           task,
           key: input.key,
           ask: input.ask,
+          at: tick(),
         });
         // per-task scripts first (the evals' claim order is judged,
         // not scripted), then the FIFO queue, then a shrug
@@ -384,6 +453,7 @@ export const deskWorld = (options?: {
         ...(session === undefined ? {} : { session }),
         rootPost: `p-${id}`,
         priority: 2,
+        workedBy: [desk],
         at: updated - 10,
         updated,
       });
@@ -403,11 +473,70 @@ export const deskWorld = (options?: {
         tags,
         rootPost: `p-${id}`,
         priority: 2,
+        workedBy: [],
         at: tick(),
         updated: now,
       });
       event(id, "filed", "sam", JSON.stringify({ state: "ready", tags }));
     },
+    /** The human's DRAG, mirrored from TasksDO's reorder verb: one
+     *  fractional hint on the shared hint/age axis, ready ranks
+     *  invalidated until the next re-rank. */
+    reorder: (
+      id: string,
+      anchor: { before?: string; after?: string; position?: number },
+    ) => {
+      const task = rows.get(id);
+      if (task === undefined || task.state !== "ready") return undefined;
+      const siblings = [...rows.values()]
+        .filter((row) => row.state === "ready" && row.id !== id)
+        .sort(
+          (a, b) =>
+            (a.hint ?? a.at + HINT_NULL_OFFSET) -
+              (b.hint ?? b.at + HINT_NULL_OFFSET) || a.at - b.at,
+        );
+      const keys = siblings.map((row) => row.hint ?? row.at + HINT_NULL_OFFSET);
+      let index: number;
+      if (anchor.before !== undefined) {
+        index = siblings.findIndex((row) => row.id === anchor.before);
+        if (index < 0) return undefined;
+      } else if (anchor.after !== undefined) {
+        const at = siblings.findIndex((row) => row.id === anchor.after);
+        if (at < 0) return undefined;
+        index = at + 1;
+      } else {
+        index = Math.min(
+          siblings.length,
+          Math.max(0, Math.round(anchor.position ?? siblings.length)),
+        );
+      }
+      const prev = keys[index - 1];
+      const next = keys[index];
+      task.hint =
+        prev !== undefined && next !== undefined
+          ? (prev + next) / 2
+          : prev !== undefined
+            ? prev + HINT_GAP
+            : next !== undefined
+              ? next - HINT_GAP
+              : 0;
+      task.updated = tick();
+      for (const row of rows.values()) {
+        if (row.state === "ready") {
+          delete row.rank;
+          delete row.rankWhy;
+        }
+      }
+      event(id, "reordered", "sam", JSON.stringify({ hint: task.hint, ...anchor }));
+      return toTask(task);
+    },
+    /** The ready column in board order — ranks first, hints next. */
+    ready: () => ordered("ready").map(toTask),
+    /** Every writeRanks call, in order — the eval's deviation read. */
+    rankWrites,
+    /** Every deskState read (desk + the recent it saw) — the eval's
+     *  starvation probe. */
+    snapshots,
     answer: (member: string, reply: string) => {
       (scripts[member] ??= []).push(reply);
     },

@@ -22,6 +22,7 @@ export const affinity: Scenario = {
   name: "affinity",
   description:
     "Interleaved cloudflare/aws arrivals — same-tag adjacency should beat FIFO",
+  affinity: true,
   arrivals: [
     {
       afterMs: 0,

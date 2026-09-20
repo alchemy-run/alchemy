@@ -22,6 +22,8 @@ import {
   fetchQueues,
   KNOWN_TAGS,
   parseOrigin,
+  readyOrder,
+  reorderTask,
   routeTask,
   setDeskWidth,
   tagColor,
@@ -203,15 +205,26 @@ const MoveMenu = ({
 };
 
 /** One CARD of a column — title, id, origin, priority, the live
- *  spinner while its desk works it, the parked reason line. */
+ *  spinner while its desk works it, the parked reason line. READY
+ *  cards drag up/down (the code-browser tab pattern) to write a soft
+ *  hint, and wear the scheduler's why line: plain muted prose for a
+ *  rank that follows your order, a `judge:` badge when it deviates —
+ *  the transparency is the feature. */
 const TaskCard = ({
   task,
   now,
   onMoved,
+  drag,
 }: {
   task: TaskRow;
   now: number;
   onMoved: () => void;
+  /** READY-column drag wiring (HTML5, like the code-browser tabs). */
+  drag?: {
+    onDragStart: () => void;
+    onDragOver: () => void;
+    onDragEnd: () => void;
+  };
 }) => (
   <div
     role="button"
@@ -220,12 +233,32 @@ const TaskCard = ({
     onKeyDown={(event) => {
       if (event.key === "Enter") showTasks(task.queue, task.id);
     }}
+    {...(drag === undefined
+      ? {}
+      : {
+          draggable: true,
+          onDragStart: drag.onDragStart,
+          onDragEnd: drag.onDragEnd,
+          onDragOver: (event: React.DragEvent) => {
+            event.preventDefault();
+            drag.onDragOver();
+          },
+        })}
     className="group flex w-full cursor-pointer flex-col gap-1.5 rounded-md border border-border/70 bg-background px-2.5 py-2 text-left hover:border-border hover:bg-accent/40"
   >
     <div className="flex items-start gap-1.5">
       <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug">
         {task.title}
       </span>
+      {drag !== undefined && (
+        <span
+          aria-hidden
+          title="drag to reorder — your order is a suggestion the scheduler weighs"
+          className="shrink-0 cursor-grab font-mono text-[11px] text-muted-foreground opacity-0 group-hover:opacity-60"
+        >
+          ↕
+        </span>
+      )}
       <MoveMenu task={task} onMoved={onMoved} />
     </div>
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -249,6 +282,25 @@ const TaskCard = ({
         </span>
       )}
     </div>
+    {task.state === "ready" && task.rankWhy !== undefined && (
+      <span className="flex min-w-0 items-center">
+        {task.rankWhy.startsWith("judge:") ? (
+          <span
+            title="the judge ranked this against your dragged order — the why is the badge"
+            className="min-w-0 truncate rounded bg-purple-500/15 px-1 py-px font-mono text-[10px] text-purple-700 dark:text-purple-400"
+          >
+            {task.rankWhy}
+          </span>
+        ) : (
+          <span
+            className="min-w-0 truncate text-[10px] leading-tight text-muted-foreground/70"
+            title={task.rankWhy}
+          >
+            {task.rankWhy}
+          </span>
+        )}
+      </span>
+    )}
     {task.state === "working" && (
       <span className="flex items-center gap-1.5 text-[11px] text-primary/80">
         <Loader2 className="size-3 shrink-0 animate-spin" />
@@ -442,6 +494,61 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
     }
   };
 
+  // ── READY drag reorder (the code-browser tab pattern) ──────────
+  // While a drag is live (and until its reorder lands) `dragOrder`
+  // owns the ready column's order — the poll can keep painting
+  // without snapping the card back mid-drag.
+  const [dragging, setDragging] = useState<string | undefined>();
+  const [dragOrder, setDragOrder] = useState<
+    ReadonlyArray<string> | undefined
+  >();
+  const readyRows = (rows: ReadonlyArray<TaskRow>): ReadonlyArray<TaskRow> => {
+    const sorted = [...rows].sort(readyOrder);
+    if (dragOrder === undefined) return sorted;
+    const indexOf = (id: string) => {
+      const index = dragOrder.indexOf(id);
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    return [...sorted].sort((a, b) => indexOf(a.id) - indexOf(b.id));
+  };
+  const moveCard = (from: string, to: string) =>
+    setDragOrder((current) => {
+      if (current === undefined) return current;
+      const next = [...current];
+      const fromIndex = next.indexOf(from);
+      const toIndex = next.indexOf(to);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return current;
+      }
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, from);
+      return next;
+    });
+  const commitDrag = (order: ReadonlyArray<string> | undefined) => {
+    const id = dragging;
+    setDragging(undefined);
+    if (id === undefined || order === undefined || selected === undefined) {
+      setDragOrder(undefined);
+      return;
+    }
+    const index = order.indexOf(id);
+    // anchor on the neighbor the card landed against — one drag, one row
+    const anchor =
+      index + 1 < order.length
+        ? { before: order[index + 1]! }
+        : index > 0
+          ? { after: order[index - 1]! }
+          : undefined;
+    if (anchor === undefined) {
+      setDragOrder(undefined);
+      return;
+    }
+    reorderTask(selected.slug, id, anchor)
+      .then(() => refresh())
+      .catch(() => {})
+      .finally(() => setDragOrder(undefined));
+  };
+
   if (queues === undefined || selected === undefined) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -560,13 +667,16 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
             const rows = (board[state] ?? []).filter(
               (task) => tag === undefined || task.tags.includes(tag),
             );
-            // done keeps its count; the column shows the last 5
+            // done keeps its count; the column shows the last 5.
+            // ready renders in RANK order (hint-then-age below it)
             const shown =
               state === "done"
                 ? [...rows]
                     .sort((left, right) => right.updated - left.updated)
                     .slice(0, 5)
-                : rows;
+                : state === "ready"
+                  ? readyRows(rows)
+                  : rows;
             return (
               <div
                 key={state}
@@ -583,6 +693,27 @@ export const TaskBoard = ({ queue }: { queue?: string }) => {
                       task={task}
                       now={now}
                       onMoved={refresh}
+                      {...(state === "ready" && tag === undefined
+                        ? {
+                            drag: {
+                              onDragStart: () => {
+                                setDragging(task.id);
+                                setDragOrder(
+                                  readyRows(rows).map((row) => row.id),
+                                );
+                              },
+                              onDragOver: () => {
+                                if (
+                                  dragging !== undefined &&
+                                  dragging !== task.id
+                                ) {
+                                  moveCard(dragging, task.id);
+                                }
+                              },
+                              onDragEnd: () => commitDrag(dragOrder),
+                            },
+                          }
+                        : {})}
                     />
                   ))}
                 </div>

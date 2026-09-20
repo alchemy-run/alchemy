@@ -14,21 +14,24 @@ import { Haiku } from "../platform/Model.ts";
 import { lineage } from "../Lineage.ts";
 import { EngineeringTasks } from "./Engineering.ts";
 import { reviewVerdict } from "./Review.ts";
-import { nextTask } from "./Scheduler.ts";
+import { rerank } from "./Scheduler.ts";
 import {
   Tasks,
   type DeskView,
+  type RankWrite,
   type RouteInput,
   type TaskEventRow,
   type TaskRow,
+  type TaskScoreRow,
   type TaskState,
 } from "./TasksDO.ts";
 
 /**
  * THE DESK LOOP — the pump that keeps a queue's desks fed. For each
- * queue × member: when the desk is idle, the scheduler picks a ready
- * task (context affinity beats FIFO), the board claims it atomically,
- * the identity's self digest is delivered to the desk, and the task
+ * queue × member: when the desk is idle, the board's MATERIALIZED
+ * rank (Scheduler.ts's staged ranker — human hints + judged order)
+ * names the ready task, the board claims it atomically, the
+ * identity's self digest is delivered to the desk, and the task
  * card is dispatched INTO the standing desk session. The DISPOSITION
  * rides the REPLY — tools are charter-owned, so the desk is told to
  * end with a fenced disposition line, and code (not vibes) parses it:
@@ -151,6 +154,22 @@ export interface DeskBoard {
     never,
     RuntimeContext
   >;
+  /** The scheduler's MAP cache + rank materialization (Scheduler.ts's
+   *  RankBoard — the board IS the rank store). */
+  readonly scores: () => Effect.Effect<
+    ReadonlyArray<TaskScoreRow>,
+    never,
+    RuntimeContext
+  >;
+  readonly writeScore: (
+    id: string,
+    hash: string,
+    urgency: number,
+    fit: Record<string, number>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
+  readonly writeRanks: (
+    entries: ReadonlyArray<RankWrite>,
+  ) => Effect.Effect<void, never, RuntimeContext>;
 }
 
 /** What the loop needs from the world — narrow, test-stubbable
@@ -440,6 +459,10 @@ const settleRound = Effect.fn("root/tasks/Desks.settleRound")(function* (
   if (key !== undefined && key !== deps.deskKey(queue.slug, member)) {
     yield* mergeHome(deps, queue, member, task, key, slot?.cold ?? false);
   }
+  // SETTLE is a re-rank trigger: the desk's worked-recent just grew
+  // (and a bounce may have re-queued work), so the materialized rank
+  // is stale — refresh it here, off the claim path
+  yield* rerank(deps.query, board, queue.worker.slug);
 });
 
 /**
@@ -631,24 +654,11 @@ const runDesk = Effect.fn("root/tasks/Desks.runDesk")(function* (
     if (deps.active.size >= deps.budget.maxWorkingDesks) break;
     const candidates = yield* board.list(from);
     if (candidates.length === 0) break;
-    // the scheduler advises on `ready`; reviews are worked in arrival
-    // order — a review queue needs no affinity
-    const preferred =
-      from === "ready"
-        ? yield* nextTask(
-            deps.query,
-            { desk: member.slug, recent: desk.recent },
-            candidates.map((task) => ({
-              id: task.id,
-              title: task.title,
-              body: task.body,
-              priority: task.priority,
-              tags: task.tags,
-              ...(task.origin === undefined ? {} : { origin: task.origin }),
-            })),
-          )
-        : candidates[0]!.id;
-    if (preferred === undefined) break;
+    // the board's ready list arrives in MATERIALIZED rank order
+    // (hint-then-FIFO where no rank landed) — the claim pops its top
+    // with ZERO judging; re-ranks happened at arrival/settle/reorder/
+    // retag, never here. Reviews are worked in arrival order.
+    const preferred = candidates[0]!.id;
     if (!(yield* board.spendDispatch())) break;
     const slot = inUse.has(trunk)
       ? yield* forkClone(deps, member, trunk)
@@ -723,6 +733,9 @@ export class Desks extends Context.Service<
     readonly deskKey: (queue: string, member: string) => string;
     /** Run the loop for one queue — called after every mutation. */
     readonly pump: (queue: string) => Effect.Effect<void>;
+    /** Re-rank one queue's ready column (Scheduler.ts) — called on
+     *  arrival, reorder, and retag; settles re-rank themselves. */
+    readonly rerank: (queue: string) => Effect.Effect<void>;
   }
 >()("root/Desks") {}
 
@@ -781,6 +794,10 @@ export const DesksLive: Layer.Layer<
         events: (id) => tasks.events(queue, id),
         comment: (id, actor, post) => tasks.comment(queue, id, actor, post),
         spendDispatch: () => tasks.spendDispatch(queue),
+        scores: () => tasks.scores(queue),
+        writeScore: (id, hash, urgency, fit) =>
+          tasks.writeScore(queue, id, hash, urgency, fit),
+        writeRanks: (entries) => tasks.writeRanks(queue, entries),
       }),
       post: (input) =>
         Effect.gen(function* () {
@@ -850,6 +867,18 @@ export const DesksLive: Layer.Layer<
           inWorker,
           Effect.catchCause((cause) =>
             Effect.logWarning("desk pump failed", cause),
+          ),
+        ),
+      rerank: (queue) =>
+        Effect.gen(function* () {
+          const spec = specs.find((candidate) => candidate.slug === queue);
+          if (spec === undefined) return;
+          yield* rerank(deps.query, deps.board(queue), spec.worker.slug);
+        }).pipe(
+          inWorker,
+          Effect.asVoid,
+          Effect.catchCause((cause) =>
+            Effect.logWarning("re-rank failed", cause),
           ),
         ),
     });

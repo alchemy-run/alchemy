@@ -37,6 +37,10 @@ export interface Arrival {
   readonly afterMs: number;
   readonly title: string;
   readonly body: string;
+  /** The HUMAN's dragged position among ready siblings (1 = top).
+   *  The scripted runner replays the drags (one reorder per hinted
+   *  arrival) after filing — the soft ranking signal under test. */
+  readonly humanRank?: number;
   /** Ground truth AREA tags — tags[0] is what the router should
    *  choose (Tags.ts rubrics). Omit when no area clearly owns it. */
   readonly tags?: ReadonlyArray<string>;
@@ -59,6 +63,18 @@ export interface Scenario {
   /** The engineer desk's width for this scenario (default 1). */
   readonly width?: number;
   readonly arrivals: ReadonlyArray<Arrival>;
+  /** Ground-truth OPTIMAL claim order, as 1-based arrival indices —
+   *  scored against the engineer desk's actual claim order (judged
+   *  runs only; the unjudged fallback is hint-then-FIFO by design). */
+  readonly truthOrder?: ReadonlyArray<number>;
+  /** True when reaching the truth order REQUIRES the judge to
+   *  deviate from the human's dragged order (the prerequisite case)
+   *  — scored as a miss if no deviation was recorded. */
+  readonly expectsDeviation?: boolean;
+  /** True when same-tag CHAINING is this scenario's subject: a
+   *  non-adjacent claim becomes a judged miss. Other scenarios still
+   *  report the affinity ratio, informationally. */
+  readonly affinity?: boolean;
   /** Notes for the human watching/steering a live run (`--ui`). */
   readonly interactions?: ReadonlyArray<string>;
   /** Live-mode observation deadline (default 10 minutes). */

@@ -79,9 +79,29 @@ export interface TaskRow {
   readonly origin?: string;
   readonly priority: number;
   readonly parkedReason?: string;
+  /** Every desk that ever worked it — the affinity memory. */
+  readonly workedBy?: ReadonlyArray<string>;
+  /** The human's drag key among READY siblings (null = undragged). */
+  readonly hint?: number;
+  /** The scheduler's materialized rank (1 = claim next). */
+  readonly rank?: number;
+  /** One line of why — `judge:`-prefixed when the judged rank went
+   *  against the human's dragged order. */
+  readonly rankWhy?: string;
   readonly at: number;
   readonly updated: number;
 }
+
+/** The hint axis's null band (mirrors src/tasks/TasksDO.ts): an
+ *  undragged card's key is its age pushed past any explicit hint. */
+export const HINT_NULL_OFFSET = 1_000_000_000_000_000;
+
+/** Ready-column order: judged rank first, then the human's drag
+ *  axis (nulls last by age) — the server's READY_ORDER, client-side. */
+export const readyOrder = (a: TaskRow, b: TaskRow): number =>
+  (a.rank ?? Number.MAX_SAFE_INTEGER) - (b.rank ?? Number.MAX_SAFE_INTEGER) ||
+  (a.hint ?? a.at + HINT_NULL_OFFSET) - (b.hint ?? b.at + HINT_NULL_OFFSET) ||
+  a.at - b.at;
 
 export interface TaskEventRow {
   readonly id: number;
@@ -179,6 +199,22 @@ export const routeTask = (
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ state, ...options }),
+    },
+  );
+
+/** The human's DRAG among ready siblings — a soft hint the staged
+ *  scheduler weighs (it may deviate; the card's why line says so). */
+export const reorderTask = (
+  queue: string,
+  id: string,
+  anchor: { readonly before?: string; readonly after?: string },
+): Promise<Response> =>
+  fetch(
+    `/api/tasks/${encodeURIComponent(queue)}/${encodeURIComponent(id)}/reorder`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(anchor),
     },
   );
 

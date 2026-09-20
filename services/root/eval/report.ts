@@ -27,14 +27,15 @@ export interface TaskReport {
 
 /** One judged miss with everything needed to tune the prompt. */
 export interface JudgedMiss {
-  /** `routing` | `scheduler` | `disposition` | `review` */
+  /** `routing` | `scheduler` | `ranking` | `disposition` | `review` */
   readonly edge: string;
   readonly task?: string;
   readonly expected: string;
   readonly got: string;
   readonly confidence?: number;
-  /** The FULL exchange: rubric cards + state + answer + calibration. */
-  readonly exchange: Exchange;
+  /** The FULL exchange: rubric cards + state + answer + calibration.
+   *  Absent for code-level misses (claim-order, starvation). */
+  readonly exchange?: Exchange;
 }
 
 export interface Confusion {
@@ -62,6 +63,20 @@ export interface Metrics {
   };
   readonly disposition: Ratio;
   readonly review: Ratio;
+  /** The staged ranker (Scheduler.ts): pairwise reduce Choices, the
+   *  deviations it took against the human's dragged order (with
+   *  their why lines), and — when the scenario declares a
+   *  `truthOrder` — the engineer's claim order vs the truth. */
+  readonly ranking?: {
+    readonly pairs: number;
+    readonly deviations: number;
+    readonly deviationWhys: ReadonlyArray<string>;
+    readonly order?: {
+      readonly truth: ReadonlyArray<string>;
+      readonly claimed: ReadonlyArray<string>;
+      readonly matched: boolean;
+    };
+  };
   readonly outcomes: {
     readonly expected: number;
     readonly matched: number;
@@ -135,6 +150,17 @@ export const printReport = (report: ScenarioReport, file?: string): void => {
   );
   console.log(`   disposition  ${pct(m.disposition)} judge agreement`);
   console.log(`   review       ${pct(m.review)} noul agreement`);
+  if (m.ranking !== undefined) {
+    console.log(
+      `   ranking      ${m.ranking.pairs} pairwise · ${m.ranking.deviations} deviation(s)` +
+        (m.ranking.order === undefined
+          ? ""
+          : ` · order ${m.ranking.order.matched ? "✓" : "✗"} claimed [${m.ranking.order.claimed.join(" ")}] truth [${m.ranking.order.truth.join(" ")}]`),
+    );
+    for (const why of m.ranking.deviationWhys) {
+      console.log(`   deviation    ${why}`);
+    }
+  }
   console.log(
     `   outcomes     ${m.outcomes.matched}/${m.outcomes.expected} expected · done ${m.outcomes.done} · parked ${m.outcomes.parked} · handoff ${m.outcomes.handedOff} · unresolved ${m.outcomes.unresolved}`,
   );

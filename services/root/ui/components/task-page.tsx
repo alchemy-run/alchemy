@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   ArrowRightLeft,
+  ArrowUpDown,
   CheckCircle2,
   ChevronRight,
   CircleSlash,
@@ -196,6 +197,24 @@ const TaskEvent = ({ event }: { event: TaskEventRow }) => {
               </span>
             </>
           )}
+        </EventRow>
+      );
+    }
+    case "reordered": {
+      // the human's drag — a soft hint the scheduler weighs
+      const data = dataOf(event);
+      const anchor =
+        typeof data === "object"
+          ? typeof data.before === "string"
+            ? `above ${data.before}`
+            : typeof data.after === "string"
+              ? `below ${data.after}`
+              : undefined
+          : undefined;
+      return (
+        <EventRow icon={ArrowUpDown} when={event.at}>
+          {b(event.actor)} reordered this
+          {anchor !== undefined && <> — moved {anchor}</>}
         </EventRow>
       );
     }
