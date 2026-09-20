@@ -69,19 +69,146 @@ export default class Caller extends Cloudflare.Worker<Caller>()(
 
 ## Data and streams
 
-Value methods preserve native RPC data types, including `bigint`, `Date`, `Map`, `Set`, buffers, typed arrays, and cyclic data. Non-byte streams transfer native values in batches, without JSON conversion. Byte streams use the native readable-stream transport and must emit `Uint8Array` chunks throughout.
+### Native values
 
-Typed stream failures remain catchable after already-emitted values. Finishing or cancelling a stream releases its resources without closing the parent object.
+```typescript
+const data = yield* counter.echo({
+  count: 42n,
+  createdAt: new Date(),
+  labels: new Map([["name", "counter"]]),
+  selected: new Set([1, 2]),
+  buffer: new ArrayBuffer(8),
+  bytes: new Uint8Array([1, 2, 3]),
+});
 
-RPC objects contain only methods. Return child RPC objects directly from methods rather than embedding callable objects inside data records or collections.
+const cycle: { self?: unknown } = {};
+cycle.self = cycle;
+const copy = yield* counter.echo(cycle);
+copy.self === copy; // true
+```
+
+Values keep their native types, including cyclic references.
+
+### Value streams
+
+Add a stream method to the returned object:
+
+```typescript
+snapshots: () => Stream.make(
+  { value: 1n, at: new Date() },
+  { value: 2n, at: new Date() },
+),
+```
+
+```typescript
+const snapshots = yield* counter.snapshots().pipe(Stream.runCollect);
+snapshots[0].value; // 1n
+snapshots[0].at instanceof Date; // true
+```
+
+Streamed values travel in native RPC batches, without JSON conversion.
+
+### Byte streams
+
+```typescript
+bytes: () => Stream.make(
+  new Uint8Array([1, 2]),
+  new Uint8Array([3, 4]),
+),
+```
+
+Byte streams use native readable-stream transport. Every chunk must be a `Uint8Array`.
+
+### Stream failures
+
+```typescript
+updates: () => Stream.make(1, 2).pipe(
+  Stream.concat(Stream.fail({ _tag: "CounterClosed" as const })),
+),
+```
+
+```typescript
+const values = yield* counter.updates().pipe(
+  Stream.catchTag("CounterClosed", () => Stream.empty),
+  Stream.runCollect,
+);
+// [1, 2]
+```
+
+Catch typed failures without losing values already emitted.
+
+### Child objects
+
+```typescript
+child: () => Effect.succeed({
+  echo: <A>(input: A) => Effect.succeed(input),
+} satisfies RpcObject),
+```
+
+```typescript
+const child = yield* counter.child();
+const greeting = yield* child.echo("hello");
+```
+
+Return child objects directly. RPC objects contain only methods, not `{ child: { echo: ... } }` data records.
 
 ## Lifetime
 
-`Effect.scoped` releases the counter, its child objects, and factory-acquired resources when the block ends. Keep method calls and stream consumption inside that scope.
+```typescript
+yield* Effect.gen(function* () {
+  const counter = yield* service.openCounter();
 
-Workers and Durable Objects already provide an event scope. Add an explicit scope when you want earlier release. Finishing one method or stream does not release its parent object.
+  yield* counter.increments(10).pipe(
+    Stream.take(2),
+    Stream.runDrain,
+  );
 
-Returned methods may require `Scope`, but no other services. Resolve dependencies in the factory and close over them.
+  yield* counter.increment(); // Still usable after the stream stops.
+}).pipe(Effect.scoped);
+// The counter, its child objects, and factory resources are released.
+```
+
+Workers and Durable Objects already provide an event scope. Use `Effect.scoped` for earlier release, keeping calls and stream consumption inside it.
+
+### Factory cleanup
+
+```typescript
+import * as Console from "effect/Console";
+
+openCounter: Effect.fn(function* () {
+  const value = yield* Ref.make(0);
+  yield* Effect.addFinalizer(() => Console.log("Counter released"));
+
+  return {
+    increment: () => Ref.updateAndGet(value, (n) => n + 1),
+  } satisfies RpcObject;
+}),
+```
+
+The factory's finalizers run when the caller's scope closes, not when `openCounter()` returns.
+
+### Capture services in the factory
+
+```typescript
+import * as Context from "effect/Context";
+
+class CounterLabel extends Context.Service<
+  CounterLabel,
+  { readonly text: string }
+>()("CounterLabel") {}
+```
+
+```typescript
+openCounter: Effect.fn(function* () {
+  const label = yield* CounterLabel;
+
+  return {
+    label: () => Effect.succeed(label.text),
+  } satisfies RpcObject;
+}, Effect.provideService(CounterLabel, { text: "Visits" })),
+```
+
+The factory resolves `CounterLabel`; the returned method closes over its value. Returned `Effect` and `Stream` methods may require `Scope`, but no other services.
 
 :::note
 RPC objects are temporary: they do not survive an isolate restart or Durable Object eviction. They work through native Worker and Durable Object bindings, not Container HTTP RPC, schema-based Effect RPC, or browser WebSocket clients.
