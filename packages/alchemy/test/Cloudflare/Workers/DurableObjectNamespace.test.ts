@@ -543,33 +543,6 @@ export default { async fetch() { return new Response("v4"); } };
         // deployed into its live environment.
         const body = yield* fetchJsonReady<{ namespaceId: string }>(
           deployed.consumer.url!,
-        ).pipe(
-          Effect.onError(() =>
-            Effect.gen(function* () {
-              const { accountId } = yield* yield* CloudflareEnvironment;
-              const subdomain = yield* workers.getScriptSubdomain({
-                accountId,
-                scriptName: deployed.consumer.workerName,
-              });
-              const settings = yield* workers.getScriptScriptAndVersionSetting({
-                accountId,
-                scriptName: deployed.consumer.workerName,
-              });
-              yield* Effect.logInfo("Consumer route readiness failure", {
-                workerName: deployed.consumer.workerName,
-                url: deployed.consumer.url,
-                subdomain,
-                expectedNamespaceId: finalNamespaceId,
-                binding: settings.bindings?.find(
-                  (binding) => binding.name === "COUNTER_NS",
-                ),
-              });
-            }).pipe(
-              Effect.timeout("5 seconds"),
-              Effect.ignoreCause,
-              Effect.interruptible,
-            ),
-          ),
         );
 
         expect(body.namespaceId).toBe(finalNamespaceId);
