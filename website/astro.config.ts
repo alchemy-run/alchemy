@@ -1342,7 +1342,26 @@ export default defineConfig({
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
-            providerResourcesEntry("SQL", "Drizzle"),
+            {
+              label: "API Reference",
+              collapsed: false,
+              items: [
+                { label: "SQL.D1", link: "/providers/sql/d1" },
+                { label: "SQL.MySQL", link: "/providers/sql/mysql" },
+                { label: "SQL.Postgres", link: "/providers/sql/postgres" },
+                { label: "Drizzle.D1", link: "/providers/drizzle/d1" },
+                {
+                  label: "Drizzle.DurableObject",
+                  link: "/providers/drizzle/durableobject",
+                },
+                { label: "Drizzle.MySQL", link: "/providers/drizzle/mysql" },
+                {
+                  label: "Drizzle.Postgres",
+                  link: "/providers/drizzle/postgres",
+                },
+                { label: "Drizzle.Schema", link: "/providers/drizzle/schema" },
+              ],
+            },
           ],
         },
         {
