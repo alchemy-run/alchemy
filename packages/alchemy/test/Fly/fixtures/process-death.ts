@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type { TransportEvent } from "./transport.ts";
 
-export const processDeathFile = "test/Fly/BlueGreenProcessDeath.test.ts";
+export const processDeathFile = "test/Fly/BlueGreen.test.ts";
 export const phases = ["create", "promotion", "retirement"] as const;
 export type Phase = (typeof phases)[number];
 
@@ -144,6 +144,8 @@ export const assertSingleRunner = Effect.gen(function* () {
       : args;
   expect(focused).toEqual([
     processDeathFile,
+    "-t",
+    " > process death > ",
     "--profile",
     "testing",
     "--retry",

@@ -18,7 +18,7 @@ import {
 } from "./process-death.ts";
 import type { TransportEvent } from "./transport.ts";
 
-export const signalOverlapFile = "test/Fly/BlueGreenSignalOverlap.test.ts";
+export const signalOverlapFile = "test/Fly/BlueGreen.test.ts";
 export const cases = [
   { name: "sigint-create", signal: "SIGINT", phase: "create" },
   { name: "sigint-promotion", signal: "SIGINT", phase: "promotion" },
@@ -108,6 +108,8 @@ export const assertSingleRunner = Effect.gen(function* () {
       : args;
   expect(focused).toEqual([
     signalOverlapFile,
+    "-t",
+    " > process signals and overlap > ",
     "--profile",
     "testing",
     "--retry",
