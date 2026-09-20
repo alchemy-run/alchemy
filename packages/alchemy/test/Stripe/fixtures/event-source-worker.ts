@@ -23,14 +23,21 @@ export default class StripeEventSourceWorker extends Cloudflare.Worker<StripeEve
       }),
     ).pipe(Effect.orDie);
 
+    yield* Stripe.consumeEvents(
+      "Events",
+      { events: [Stripe.CustomerCreated] },
+      (event) => kv.put(`audit:${event.object.id}`, "1").pipe(Effect.orDie),
+    );
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         if (request.url.startsWith("/last/")) {
           const id = request.url.slice("/last/".length).split("?")[0];
           const seen = yield* kv.get(id).pipe(Effect.orDie);
+          const audited = yield* kv.get(`audit:${id}`).pipe(Effect.orDie);
           return yield* HttpServerResponse.json({
-            id: seen === "1" ? id : null,
+            id: seen === "1" && audited === "1" ? id : null,
           });
         }
         if (request.url.startsWith("/last")) {
