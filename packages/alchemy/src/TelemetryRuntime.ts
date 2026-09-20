@@ -242,6 +242,7 @@ const fanoutClient = (
 
 const makeExporterLayer = (options?: {
   exportInterval?: Duration.Input;
+  shutdownTimeout?: Duration.Input;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -288,6 +289,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -298,6 +300,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -308,6 +311,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.metrics,
             resource,
             exportInterval: options?.exportInterval,
+            shutdownTimeout: options?.shutdownTimeout,
           }),
         );
       }
@@ -338,12 +342,15 @@ const makeExporterLayer = (options?: {
  * interrupts the exporter's in-flight batch (already spliced out of the
  * buffer), silently dropping it. Lambda invocations regularly outlive the
  * 1-second logger interval, which is exactly how this was discovered.
+ * Final exports get the OTLP ten-second batch budget rather than the
+ * exporter's three-second shutdown default, which can cancel slow delivery.
  *
  * A malformed configuration degrades to `Layer.empty` with a warning
  * instead of failing the event.
  */
 export const fromBoundConfig: TelemetryLayer = makeExporterLayer({
   exportInterval: "1 hour",
+  shutdownTimeout: "10 seconds",
 });
 
 /**

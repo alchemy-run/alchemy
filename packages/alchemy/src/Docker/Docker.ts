@@ -126,7 +126,8 @@ export class Docker extends Context.Service<
       readonly build: (
         options: {
           context: string;
-          tag: string;
+          /** Image tags to build and publish together. */
+          tag: string | [string, ...string[]];
           file?: string;
           platform?: string;
           target?: string;
@@ -836,11 +837,21 @@ export const DockerLive = Layer.effect(
             undefined,
             tap,
           );
+          const [tag, ...tags] =
+            typeof options.tag === "string"
+              ? ([options.tag] as const)
+              : options.tag;
           return yield* push(
-            options.tag,
+            tag,
             registry,
             options.platform,
             engineContext,
+          ).pipe(
+            Effect.tap(() =>
+              Effect.forEach(tags, (tag) =>
+                push(tag, registry, options.platform, engineContext),
+              ),
+            ),
           );
         }),
         pull: (ref, platform, context) =>

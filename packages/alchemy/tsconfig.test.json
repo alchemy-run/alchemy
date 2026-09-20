@@ -7,7 +7,8 @@
     // sweeps .ts files).
     "test/Cloudflare/Workers/fixtures/prisma-orm/generated/contract.json",
     "test/Prisma/ORM/fixtures/client/generated/contract.json",
-    "test/Prisma/ORM/fixtures/psl/generated/contract.json"
+    "test/Prisma/ORM/fixtures/psl/generated/contract.json",
+    "test/Prisma/ORM/fixtures/variants/generated/contract.json"
   ],
   "exclude": [
     // Prisma migration packages are self-emitting Node scripts whose
@@ -21,6 +22,8 @@
     "test/Prisma/ORM/fixtures/client/prisma.config.ts",
     "test/Prisma/ORM/fixtures/psl/prisma.config.ts",
     "test/Prisma/ORM/fixtures/psl/migrations",
+    "test/Prisma/ORM/fixtures/variants/prisma.config.ts",
+    "test/Prisma/ORM/fixtures/variants/migrations",
     "test/Cli/fixtures/shutdown-feedback-fixture.ts",
     "test/Local/fixtures/rpc-server-entry.ts",
     "test/Local/fixtures/rpc-server-entry-b.ts",
@@ -72,9 +75,6 @@
     },
     {
       "path": "../alchemy-test/tsconfig.json"
-    },
-    {
-      "path": "./tsconfig.bin.json"
     }
   ]
 }

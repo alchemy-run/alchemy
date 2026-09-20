@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import type { HttpClientError } from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import BindingsApi from "./fixtures/bindings-api.ts";
@@ -71,14 +72,14 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
 });
 
 const retryTransient = {
-  while: (e: { _tag?: string; status?: number }) =>
+  while: (e: NotReady | HttpClientError) =>
     e._tag === "NotReady" &&
     (e.status === 0 ||
       e.status === 404 ||
       e.status === 502 ||
       e.status === 503),
-  schedule: Schedule.exponential("500 millis"),
-  times: 20,
+  schedule: Schedule.spaced("2 seconds"),
+  times: 8,
 } as const;
 
 /** Decode the body, turning any non-200 (or undecodable body) into `NotReady`. */
@@ -105,6 +106,7 @@ const getJson = (path: string) =>
       }),
       Effect.flatMap(readJson),
       Effect.retry(retryTransient),
+      Effect.timeout("45 seconds"),
     );
   });
 
@@ -122,6 +124,7 @@ const postJson = (path: string, body: unknown) =>
       }),
       Effect.flatMap(readJson),
       Effect.retry(retryTransient),
+      Effect.timeout("45 seconds"),
     );
   });
 
@@ -134,17 +137,34 @@ describe("Fly Bindings", () => {
       expect(out.ip).toEqual(expect.any(String));
       const body = (yield* getJson("/health")) as {
         ok: boolean;
+        appName?: string;
+        secretName?: string;
+        hasFlySecretMarkerEnv?: boolean;
         hasToken?: boolean;
-        hasAppName?: boolean;
-        hasSecretName?: boolean;
       };
       expect(body.ok).toEqual(true);
+      expect(body.appName).toEqual(out.appName);
+      expect(body.secretName).toEqual(out.secretName);
       expect(body.hasToken).toEqual(true);
-      expect(body.hasAppName).toEqual(true);
-      expect(body.hasSecretName).toEqual(true);
+      expect(body.hasFlySecretMarkerEnv).toEqual(false);
     }).pipe(logLevel),
     { timeout: 120_000 },
   );
+
+  describe("Exec", () => {
+    test(
+      "executes on a Sprite from the Service",
+      Effect.gen(function* () {
+        const body = (yield* getJson("/sprite")) as {
+          stdout: string;
+          exitCode: number;
+        };
+        expect(body.stdout.trim()).toEqual("sprite-runtime-binding");
+        expect(body.exitCode).toEqual(0);
+      }).pipe(logLevel),
+      { timeout: 60_000 },
+    );
+  });
 
   describe("GetSecret", () => {
     test(
