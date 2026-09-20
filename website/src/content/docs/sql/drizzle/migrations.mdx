@@ -1,64 +1,56 @@
 ---
 title: Migrations
-description: Generate SQL with Drizzle.Schema or drizzle-kit, then apply it through a database resource or on Durable Object activation.
+description: Generate migrations when your schema changes, review and commit the SQL and snapshots, then deploy from Git.
 ---
 
-Generate migration SQL with `Drizzle.Schema`, then pass its output to the database:
+Migration files belong in Git alongside your schema. Generate and review them
+when the schema changes, commit them, then deploy.
 
-```typescript
-const schema = yield* Drizzle.Schema("app-schema", {
-  schema: "./src/schema.ts",
-  out: "./migrations",
-  dialect: "sqlite",
-});
-
-const db = yield* Cloudflare.D1.Database("app-db", {
-  migrations: schema,
-});
-```
-
-The database waits for generation before applying pending SQL.
-
-## What a deploy actually does
-
-| Schema change | `alchemy deploy` |
-| --- | --- |
-| None | No generation or migration |
-| New table or column | Generate and apply SQL |
-| Ambiguous rename or drop | Ask in a terminal; fail in CI rather than guess |
-
-Resolve ambiguous changes before deploying from CI:
+## Generate migrations when the schema changes
 
 ```sh
 pnpm exec drizzle-kit generate
-# Answer the prompts and review the generated SQL.
-git add migrations
-git commit -m "Add schema migration"
-pnpm alchemy deploy
 ```
 
-Commit the SQL and snapshots so every environment uses the same history:
+Answer any rename prompts and review the generated SQL before applying it.
+`generate` writes migration files; `migrate` applies them to a database.
+
+## Commit the schema and migrations
+
+```sh
+git add src/schema.ts drizzle
+git commit -m "Add schema migration"
+```
+
+Include both the SQL and snapshots:
 
 ```text
-migrations/
+drizzle/
 └── 20260919000000_create_users/
     ├── migration.sql
     └── snapshot.json
 ```
 
-## Or: run drizzle-kit yourself
+## Deploy the committed migrations
 
-Skip `Drizzle.Schema` and use an already-generated directory:
-
-```sh
-pnpm exec drizzle-kit generate
-```
+Point the database resource at the checked-in directory:
 
 ```typescript
 const db = yield* Cloudflare.D1.Database("app-db", {
   migrations: "./drizzle",
 });
 ```
+
+```sh
+pnpm alchemy deploy
+```
+
+This resource applies pending SQL from `./drizzle`. CI should deploy the
+committed files, not generate a new migration history.
+
+For optional schema-generation automation, see the
+[`Drizzle.Schema` reference](/providers/drizzle/schema). The workflow above
+keeps generation and review separate from deployment.
 
 ## Durable Object migrations
 
@@ -99,13 +91,15 @@ export const users = sqliteTable("users", {
 export const relations = defineRelations({ users });
 ```
 
-Generate and commit before running Alchemy, including in CI:
+Generate locally, review the SQL, and commit the schema and migrations together:
 
 ```sh
 pnpm exec drizzle-kit generate
-git add drizzle
+git add src/schema.ts drizzle
 git commit -m "Create users table"
 ```
+
+CI uses these committed files when deploying.
 
 `SqlMigrations` reads existing files. It does not run drizzle-kit or wait for `Drizzle.Schema`.
 
@@ -214,24 +208,12 @@ git commit -m "Upgrade Drizzle migration layout"
 
 See the [complete Worker example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql) for named-object POST and GET routes.
 
-## Migrating from drizzle-kit
+## Existing migration history
 
-For an existing database resource, pass the original migration directory:
-
-```typescript
-const db = yield* Cloudflare.D1.Database("app-db", {
-  migrations: "./drizzle",
-});
-```
-
-Alchemy copies matching `__drizzle_migrations` history into `__alchemy_migrations`, preserves hashes, and applies only pending SQL. The old table stays frozen.
-
-```diff lang="sh"
--pnpm exec drizzle-kit migrate
-+pnpm alchemy deploy
-```
-
-This is one-way: Alchemy owns migration application afterward. Keep generating with drizzle-kit, or use `Drizzle.Schema`. See [adopting an existing database](/sql/effect-sql/migrations#adopting-an-existing-database) for matching rules and Postgres history locations.
+If you explicitly choose Alchemy to manage migrations for an existing database,
+see [adopting an existing database](/sql/effect-sql/migrations#adopting-an-existing-database)
+for the one-way history conversion and compatibility checks. Adoption is a
+separate decision from generating and committing migration files.
 
 ## Destroy never deletes migrations
 
