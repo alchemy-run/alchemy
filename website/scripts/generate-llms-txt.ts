@@ -484,6 +484,7 @@ const SECTIONS: Section[] = [
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
         "sql/prisma/postgres",
+        "sql/prisma/contracts",
         "sql/prisma/migrations",
       ],
     },

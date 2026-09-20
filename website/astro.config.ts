@@ -1347,6 +1347,7 @@ export default defineConfig({
               label: "Prisma ORM",
               items: [
                 { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Contracts", link: "/sql/prisma/contracts" },
                 { label: "Migrations", link: "/sql/prisma/migrations" },
               ],
             },

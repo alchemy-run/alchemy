@@ -18,6 +18,10 @@ yield* Prisma.Migrate("migrate", {
 });
 ```
 
+Both [PSL-first and TypeScript-first contracts](/sql/prisma/contracts) use this
+migration flow. Choose and configure your source in the Contracts guide before
+planning changes.
+
 ## What a deploy actually does
 
 On every `alchemy deploy`, `Prisma.Contract`:
@@ -53,9 +57,10 @@ migrations/
 ```
 
 Commit all of it — `migrations/`, `contract.json`, and
-`contract.d.ts`. Other environments (and the Worker bundle, which
-imports `contract.json`) consume the checked-in artifacts; the deploy
-only plans a new package when the contract actually changed.
+`contract.d.ts`. Other environments consume the checked-in migration artifacts;
+PSL-first applications also use the emitted contract in their generated client.
+TypeScript-first applications can import the authored contract directly. The
+deploy only plans a new package when the contract actually changed.
 
 ## Placeholders need your decision
 

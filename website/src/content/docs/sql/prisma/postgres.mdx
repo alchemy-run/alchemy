@@ -1,6 +1,6 @@
 ---
 title: Postgres
-description: Prisma ORM v8 on Postgres — declare the contract, plan and apply migrations on deploy, and query from a Worker over Hyperdrive.
+description: Connect Prisma ORM v8 to Postgres, deploy migrations, and run Effect-native queries, streams, and transactions from a Worker over Hyperdrive.
 ---
 
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
@@ -18,14 +18,6 @@ Prisma v8 is a release candidate. It is a ground-up rewrite of Prisma
 ORM (contract-first, a shared runtime client, a new migration system) and
 this Alchemy integration targets **PostgreSQL 17+ only** — no MySQL, no D1.
 Alchemy pins the exact RC version; expect breaking changes between release candidates.
-
-In rc.11, Prisma's published declarations lose authoring metadata. Import
-`defineContract` from `alchemy/Prisma/ORM` to use Alchemy's
-compatibility types for scalar fields, relations, prepared parameters, and
-Postgres aggregates. This exports Prisma's original runtime function and
-builders; it does not introduce a separate schema language or require
-application code generation. The underlying declaration gaps are tracked in
-[Prisma #30341](https://github.com/prisma/orm/issues/30341).
 :::
 
 Prisma ORM and its CLI are optional Alchemy peers. This Worker example also
@@ -46,22 +38,16 @@ installs Arktype to configure Prisma's internal validator for workerd:
   </TabItem>
 </Tabs>
 
-## Choose an authoring form
+## Start with a contract
 
-Both forms use the same Effect-native query runtime and migration resources.
-Choose one authoritative source for each project:
+Follow [Contracts](/sql/prisma/contracts) to define the `User` and `Post` models
+in PSL or TypeScript and configure `prisma.config.ts`. For PSL-first projects,
+generate the client before compiling or bundling the Worker. Both authoring
+forms use the same deployment resources and query APIs shown below.
 
-| | TypeScript-first | PSL-first |
-| --- | --- | --- |
-| Author | `contract.ts` with native Prisma builders | `contract.psl` with Prisma Schema Language |
-| Application import | The authored `contract` | Generated `makeDatabase` |
-| Generate before compiling queries | Not required | `alchemy prisma generate` |
-| Optional row schemas | `makeSchemas(contract)` or standalone generation | Standalone generation |
-
-The examples below show both choices. The complete projects are
-[TypeScript-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma)
-and [PSL-first](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-neon-prisma-psl).
-Generated files are outputs, not a second schema to maintain.
+This walkthrough uses the TypeScript contract directly and shows the
+PSL-first connection alternative. Contract definitions, generated outputs,
+watch mode, and row schemas are covered in the Contracts guide.
 
 ## Configure validation for Workers
 
@@ -75,229 +61,11 @@ import { configure } from "arktype/config";
 configure({ jitless: true });
 ```
 
-Keep this in a separate module, imported first by the contract below. If your
-application declares `"sideEffects": false` in `package.json`, preserve this
+Import this module first in `src/prisma/contract.ts`, before `defineContract`.
+If your application declares `"sideEffects": false` in `package.json`, preserve this
 bootstrap with `"sideEffects": ["./src/prisma/validation.ts"]` instead. Otherwise
 a bundler can remove the configuration call. Ordinary Node and Bun applications
 do not need this Worker-specific setup.
-
-## Define the contract
-
-In the TypeScript-first form, models use Prisma's native `defineContract`
-builders. Query types and migration artifacts derive from this contract:
-
-```typescript
-// src/prisma/contract.ts
-import "./validation.ts";
-import { defineContract } from "alchemy/Prisma/ORM";
-
-export const contract = defineContract({}, ({ field, model, rel }) => ({
-  models: {
-    User: model("User", {
-      fields: {
-        id: field.id.uuidv7Native(),
-        email: field.text().unique(),
-        name: field.text(),
-        createdAt: field.temporal.createdAtString(),
-      },
-      relations: {
-        posts: rel.hasMany("Post", { by: "authorId" }),
-      },
-    }),
-
-    Post: model("Post", {
-      fields: {
-        id: field.id.uuidv7Native(),
-        title: field.text(),
-        authorId: field.uuidNative(),
-      },
-      relations: {
-        author: rel.belongsTo("User", { from: "authorId", to: "id" }),
-      },
-    }),
-  },
-}));
-```
-
-This form passes the authored contract directly to the runtime. The PSL-first
-alternative below generates a thin binding to that same runtime.
-
-The compatibility adapter supports explicit storage names with
-`.sql({ table: "users" })` and `.column("created_at")`. Global `snake_case`
-naming is rejected rather than inferred incorrectly. Defaults on
-`field.namedType(...)` retain Prisma's declarations and can still require an
-explicit value in create inputs.
-
-## Point the config at it
-
-`prisma.config.ts` is the single source of truth for the
-toolchain — the CLI and alchemy's resources both read it:
-
-```typescript
-// prisma.config.ts
-import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
-import { definePrismaConfig } from "prisma/config";
-
-export default definePrismaConfig({
-  orm: ormConfig({
-    contract: "./src/prisma/contract.ts",
-    // contract.json + contract.d.ts land here
-    output: "./src/prisma/generated",
-  }),
-});
-```
-
-## Author with PSL instead
-
-Use a `.psl` or `.prisma` source instead of `contract.ts`:
-
-```prisma
-// src/prisma/contract.psl
-model User {
-  id id.uuidv7Native()
-  email String @unique
-  name String
-  createdAt temporal.createdAtString()
-  posts Post[]
-}
-
-model Post {
-  id id.uuidv7Native()
-  title String
-  authorId Uuid
-  author User @relation(fields: [authorId], references: [id])
-}
-```
-
-Register generation in the ORM section of `prisma.config.ts`:
-
-```typescript
-import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
-import { definePrismaConfig } from "prisma/config";
-import { withEffect } from "alchemy/Prisma/ORM/generator";
-
-export default definePrismaConfig({
-  orm: withEffect(ormConfig({
-    contract: "./src/prisma/contract.psl",
-    output: "./src/prisma/generated",
-  }), { client: true, schemas: true }),
-});
-```
-
-Paths are relative to the configuration file. Generation runs offline:
-
-```sh
-pnpm exec alchemy prisma generate
-# Or choose another configuration:
-pnpm exec alchemy prisma generate --config ./prisma.config.ts
-```
-
-The output contains Prisma's `contract.json` and `contract.d.ts`, plus
-`runtime.ts`, `client.ts`, `schemas.ts`, and `index.ts`. The generated client
-is a contract-bound factory, not another implementation of the ORM:
-
-```typescript
-import { makeDatabase } from "./prisma/generated/client.ts";
-
-const connection = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
-const db = yield* makeDatabase(connection.connectionString);
-const users = yield* db.orm.public.User.select("id", "email").all();
-```
-
-This replaces the TypeScript-first `Postgres(connectionString, { contract })`
-call. Transactions, errors, streaming, and request-scoped cleanup are identical.
-PSL-first Workers do not import the native contract builder, so they do not
-need the authoring-specific Arktype bootstrap above.
-
-`withEffect` is an Alchemy contract consumer. Run **`alchemy prisma generate`**;
-Prisma's native emission and migration commands do not invoke it. The installed
-Prisma 8 release does not provide a verified legacy `generator effect` hook,
-so registration belongs in this configuration, not a generator block in PSL.
-
-## Validate rows without a database
-
-TypeScript-first projects can derive schemas directly:
-
-```typescript
-import { makeSchemas } from "alchemy/Prisma/ORM/Schema";
-import * as Schema from "effect/Schema";
-import { contract } from "./prisma/contract.ts";
-
-const schemas = makeSchemas(contract);
-const user = yield* Schema.decodeUnknownEffect(schemas.public.User)(input);
-```
-
-PSL-first projects import the standalone generated module:
-
-```typescript
-import * as Schema from "effect/Schema";
-import { schemas } from "./prisma/generated/schemas.ts";
-
-const user = yield* Schema.decodeUnknownEffect(schemas.public.User)(input);
-```
-
-The generated schema module imports Effect, not Alchemy, Prisma, a connection
-URL, or the generated client. Use `{ client: false, schemas: true }` for
-schema-only generation. This also works with a TypeScript source when a
-frontend needs validators without importing the contract builder.
-Use `{ client: true, schemas: false }` for client-only generation.
-
-These validate **scalar database rows**, not create/update inputs, relation
-includes, or public API responses. Nullable fields accept `null` but remain
-required. Defaults do not make row fields optional. Define separate public
-response schemas when database rows contain private fields.
-
-Built-in mappings preserve enums, scalar lists, nullable fields, numbers,
-lossless `bigint`, decimal strings, bytes, and recursive JSON. Prisma's
-`*-string` temporal codecs remain strings; generation does not convert them
-to JavaScript `Date`. Unsupported codecs, including Temporal-object codecs,
-fail with the field path and codec ID rather than accepting unknown values.
-Value objects, unions, and inherited or variant model schemas are outside this
-scalar-row generator; define those application schemas explicitly.
-Provide an explicit codec mapping for additional scalar types:
-
-```typescript
-const options = {
-  codecs: {
-    "custom/date@1": {
-      schema: Schema.Date,
-      expression: "Schema.Date",
-    },
-  },
-};
-
-const schemas = makeSchemas(contract, options);
-```
-
-The same mapping belongs in the second argument to `withEffect` for standalone
-generation. An expression can reference `Schema` or names introduced through
-its `imports` array. Custom import paths resolve from the generated module.
-Mappings must describe the codec's actual row representation.
-
-## Regenerate during development and CI
-
-```sh
-pnpm exec alchemy prisma generate --watch
-```
-
-Watch mode observes source changes under the configuration directory, excluding
-generated output and dependency directories. Each generation runs in a fresh
-process so changes to imported TypeScript modules are picked up. Keep shared
-contract modules under that directory, and restart the watcher if its root
-changes. Invalid source reports an error while the watcher remains available
-for the next edit.
-
-Run generation before TypeScript checking or bundling in a PSL-first project:
-
-```sh
-pnpm exec alchemy prisma generate
-pnpm exec tsc --noEmit
-```
-
-Generation does not connect to the database or run migrations. Migration
-planning and deployment remain explicit and separate. Repeated generation
-preserves unchanged file contents, removes outputs disabled by configuration,
-and refuses to overwrite handwritten Effect modules.
 
 ## Declare the contract resource and database
 
@@ -378,10 +146,24 @@ export default class Api extends Cloudflare.Worker<Api>()(
 ) {}
 ```
 
-Nothing connects at init — the client is built per event, its pool
+For a PSL-first contract, import the [generated factory](/sql/prisma/contracts#query-a-psl-contract)
+instead of the authored contract and replace the database construction:
+
+```typescript
+import { makeDatabase } from "./prisma/generated/client.ts";
+
+const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+const db = yield* makeDatabase(conn.connectionString);
+```
+
+The handler and binding layer stay the same. PSL-first Workers do not need
+the native-authoring Arktype bootstrap.
+
+Neither factory connects at init — the client is built per event, its pool
 opens on the first query, and `close()` runs when the event settles
-(see [Connection lifecycle](/sql/effect-sql/lifecycle)). Plan and
-deploy never open a connection.
+(see [Connection lifecycle](/sql/effect-sql/lifecycle)). Constructing the
+runtime client during plan or deploy does not open a connection; the separate
+migration resource connects when it applies migrations.
 
 ## Queries are Effects
 
@@ -440,10 +222,8 @@ can load relations declared by that variant. `select` removes unselected scalar
 fields while preserving included relations. Scalar reducers such as `count`
 and `combine` are only available when refining a to-many relation.
 
-Use client-only generation (`{ client: true, schemas: false }`) for these
-contracts: automatic row-schema generation intentionally rejects inherited and
-variant models. Define an application Effect Schema when you need to validate
-a polymorphic response.
+For generation and validation constraints on polymorphic contracts, see
+[Contracts: Validate rows without a database](/sql/prisma/contracts#validate-rows-without-a-database).
 
 ## The sql lane and raw SQL
 
@@ -501,6 +281,8 @@ so failures and execution remain in the Effect runtime.
 
 ## Where next
 
+- [Contracts](/sql/prisma/contracts) — PSL and TypeScript authoring, generation,
+  and standalone Effect row schemas.
 - [Migrations](/sql/prisma/migrations) — what deploy-time contract
   emission and migration planning actually do, and when a plan needs
   your decision.
