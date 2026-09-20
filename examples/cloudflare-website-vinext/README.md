@@ -51,8 +51,8 @@ bun alchemy deploy --profile testing
   use webpack.
 - Do not bind `VINEXT_KV_CACHE` or `CF_VERSION_METADATA`. `Website.Vinext`
   provisions the KV namespace, enables Workers Cache, and binds version
-  metadata. Spread `alchemy()` into `vinext({ prerender: true, ...alchemy() })`
-  so Alchemy's KV data-cache adapter is baked. Deploy seeds prerender
+  metadata. The resource injects the KV data-cache adapter automatically;
+  no Alchemy plugin is needed in `vite.config.ts`. Deploy seeds prerender
   pairs into KV.
 - Do not register `@cloudflare/vite-plugin`. Alchemy injects
   `vite-plugin-cloudflare:alchemy` (vinext matches the prefix) and

@@ -4,9 +4,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { pathToFileURL } from "node:url";
 import {
+  loadProjectModule,
   resolveProjectPackageDirectory,
   type ModuleLoadError,
 } from "../core/Loader.ts";
+import {
+  loadVinextBuildConfig,
+  type VinextBuildConfig,
+} from "./BuildConfig.ts";
 
 export type VinextPrerenderResult = {
   readonly ran: boolean;
@@ -79,6 +84,8 @@ const withLocalPrerenderLogs = <A, E, R>(
  */
 export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   rootDir: string,
+  cache: "kv" | "redis" | "s3" = "kv",
+  buildConfig?: VinextBuildConfig,
 ) {
   const path = yield* Path.Path;
   const root = path.resolve(rootDir);
@@ -89,45 +96,56 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
       () => import(pathToFileURL(path.join(vinextRoot, rel)).href),
     );
 
-  const [
-    {
-      loadVinextPrerenderConfigFromViteConfig,
-      resolveVinextPrerenderDecision,
-      formatVinextPrerenderLabel,
-    },
-    vite,
-  ] = yield* Effect.all(
-    [
-      importVinextDist("dist/config/prerender.js"),
-      Effect.promise(() => import("vite")),
-    ],
-    { concurrency: "unbounded" },
-  );
-
-  const prerenderConfig = yield* Effect.promise(() =>
-    loadVinextPrerenderConfigFromViteConfig(vite, root),
-  );
+  const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } =
+    yield* importVinextDist("dist/config/prerender.js");
+  const config =
+    buildConfig ??
+    (yield* Effect.gen(function* () {
+      const vite = yield* loadProjectModule<typeof import("vite")>(
+        root,
+        "vite",
+      );
+      const loaded = yield* Effect.tryPromise(() =>
+        vite.loadConfigFromFile(
+          { command: "build", mode: "production" },
+          undefined,
+          root,
+        ),
+      );
+      return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
+    }));
   const decision = resolveVinextPrerenderDecision({
-    vinextPrerenderConfig: prerenderConfig,
+    vinextPrerenderConfig: config.prerenderConfig,
+    nextOutput: config.nextConfig.output,
   });
   if (!decision) {
     return { ran: false } satisfies VinextPrerenderResult;
   }
 
   yield* Console.log(`  ${formatVinextPrerenderLabel(decision)}`);
-  yield* Console.log(
-    "  Local prerender has no Worker bindings. VINEXT_KV_CACHE is provisioned and seeded on deploy; do not add wrangler.jsonc.",
-  );
+  if (cache === "kv") {
+    yield* Console.log(
+      "  Local prerender has no Worker bindings. VINEXT_KV_CACHE is provisioned and seeded on deploy; do not add wrangler.jsonc.",
+    );
+  }
 
   const { runPrerender, assertNoFatalPrerenderRoutes } =
     (yield* importVinextDist("dist/build/run-prerender.js")) as {
       runPrerender: (options: {
         root: string;
+        nextConfig: unknown;
+        routeRootConfig: unknown;
       }) => Promise<{ routes?: readonly unknown[] } | null>;
       assertNoFatalPrerenderRoutes: (routes: readonly unknown[]) => void;
     };
   const prerenderResult = yield* withLocalPrerenderLogs(
-    Effect.promise(() => runPrerender({ root })),
+    Effect.promise(() =>
+      runPrerender({
+        root,
+        nextConfig: config.nextConfig,
+        routeRootConfig: config.routeRootConfig,
+      }),
+    ),
   );
   if (prerenderResult?.routes) {
     assertNoFatalPrerenderRoutes(prerenderResult.routes);
@@ -136,7 +154,17 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   const { emitPrerenderPathManifest } = yield* importVinextDist(
     "dist/build/prerender-paths.js",
   );
-  yield* Effect.promise(() => emitPrerenderPathManifest({ root }));
+  yield* Effect.promise(() =>
+    emitPrerenderPathManifest({
+      root,
+      nextConfig: config.nextConfig,
+      routeRootConfig: config.routeRootConfig,
+      buildIdentity: config.buildIdentity,
+      responseVary: config.responseVary,
+      requestRouting: config.requestRouting,
+      isResponsePolicyHeader: config.isResponsePolicyHeader,
+    }),
+  );
   yield* injectPregeneratedConcretePaths(root);
 
   const fs = yield* FileSystem.FileSystem;

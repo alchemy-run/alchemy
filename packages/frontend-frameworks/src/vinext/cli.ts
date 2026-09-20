@@ -1,23 +1,27 @@
 /**
- * Shared vinext CLI helpers for the Node and AWS framework modules.
- *
- * Cloudflare uses `./source` (Vite + the Alchemy Cloudflare plugin).
- * Node/AWS run the project's own `vinext` CLI: `vinext build` in a
- * disposable child, `vinext dev` scoped under `alchemy dev`.
+ * Shared programmatic Vinext builds and native development CLI helpers.
+ * Production builds run in the target's isolated Node child so Alchemy can
+ * inject deployment adapters without modifying application configuration.
  */
 import * as FrameworkCore from "../core/index.ts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import type { Plugin, PluginOption } from "vite";
 import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
+import { loadVinextBuildConfig } from "./BuildConfig.ts";
 import type * as NodeChildProcessModule from "node:child_process";
 import type * as NodeNet from "node:net";
 import { findEphemeralPort } from "../core/DevPort.ts";
-import { resolveProjectPackageDirectory } from "../core/Loader.ts";
+import {
+  loadProjectModule,
+  resolveProjectPackageDirectory,
+} from "../core/Loader.ts";
+import { makeVinextCachePlugin, type VinextCacheKind } from "./cache/plugin.ts";
+import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
+import { loadVinextModule } from "./Modules.ts";
 import { toOutputFile, type BuildOutput } from "../core/index.ts";
 
 export const failFramework = (message: string) => (cause: unknown) =>
@@ -41,58 +45,155 @@ export const resolveVinextCli = (root: string) =>
 
 export const runVinextBuild = (options: {
   readonly root: string;
-  readonly cli: string;
-  /** Sets `ALCHEMY_VINEXT_CACHE` so `alchemy()` bakes this adapter. */
-  readonly cache?: "redis" | "s3" | undefined;
+  readonly cache: VinextCacheKind;
 }) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const env = yield* Effect.sync(() => ({
-        ...process.env,
-        NODE_ENV: "production",
-        ...(options.cache !== undefined
-          ? { ALCHEMY_VINEXT_CACHE: options.cache }
-          : {}),
-      }));
-      const child = yield* ChildProcess.make("node", [options.cli, "build"], {
-        cwd: options.root,
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        env,
-      }).pipe(
-        Effect.mapError(
-          failFramework(
-            "Failed to spawn the vinext build CLI (is `node` on PATH?)",
-          ),
-        ),
-      );
-      const forward = (
-        stream: Stream.Stream<Uint8Array, PlatformError>,
-        dest: NodeJS.WriteStream,
-      ) =>
-        Stream.runForEach(stream, (chunk) =>
-          Effect.sync(() => dest.write(chunk)),
+  Effect.gen(function* () {
+    const { root } = options;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* Effect.sync(() => {
+      process.env.NODE_ENV = "production";
+    });
+    const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
+    const { default: vinext } = yield* loadVinextModule<{
+      default(options?: { disableAppRouter?: boolean }): PluginOption;
+    }>(root, "index.js");
+    const cache = yield* makeVinextCachePlugin(root, options.cache);
+    const { loadDotenv } = yield* loadVinextModule<{
+      loadDotenv(options: { root: string; mode: string }): void;
+    }>(root, "config/dotenv.js");
+    yield* Effect.sync(() => loadDotenv({ root, mode: "production" }));
+    const loaded = yield* Effect.tryPromise(() =>
+      vite.loadConfigFromFile(
+        { command: "build", mode: "production" },
+        undefined,
+        root,
+      ),
+    );
+    const plugins = loaded?.config.plugins ?? [vinext()];
+    const config = yield* loadVinextBuildConfig(root, plugins);
+    const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
+      runWithPreviewBuildCredentials<T>(callback: () => T): T;
+    }>(root, "build/preview-credentials.js");
+    const { clearPagesClientAssetsBuildMetadata } = yield* loadVinextModule<{
+      clearPagesClientAssetsBuildMetadata(session: string): void;
+    }>(root, "build/pages-client-assets-module.js");
+    const hasDirectory = (name: string) =>
+      Effect.gen(function* () {
+        return (
+          (yield* fs.exists(path.join(root, name))) ||
+          (yield* fs.exists(path.join(root, "src", name)))
         );
-      const { exitCode } = yield* Effect.all(
-        {
-          exitCode: child.exitCode,
-          stdout: forward(child.stdout, process.stdout),
-          stderr: forward(child.stderr, process.stderr),
-        },
-        { concurrency: "unbounded" },
-      ).pipe(
-        Effect.mapError(failFramework("Failed reading vinext build output")),
-      );
-      if (exitCode !== 0) {
-        return yield* Effect.fail(
-          failFramework(`The vinext build exited with code ${exitCode}`)(
-            undefined,
-          ),
+      });
+    const hybrid =
+      (yield* hasDirectory("app")) && (yield* hasDirectory("pages"));
+    if (loaded?.config.build?.emptyOutDir !== false) {
+      yield* fs.remove(path.join(root, "dist"), {
+        recursive: true,
+        force: true,
+      });
+    }
+    yield* Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const shared = {
+          __VINEXT_SHARED_BUILD_ID: config.nextConfig.buildId,
+          __VINEXT_SHARED_RSC_COMPATIBILITY_ID: config.rscCompatibilityId,
+          __VINEXT_SHARED_RSC_BUILD_IDENTITY: randomBytes(16).toString("hex"),
+          __VINEXT_SHARED_REVALIDATE_SECRET: randomBytes(32).toString("hex"),
+          __VINEXT_SHARED_PRERENDER_SECRET: randomBytes(32).toString("hex"),
+          ...(hybrid
+            ? {
+                __VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION:
+                  randomBytes(16).toString("hex"),
+              }
+            : {}),
+        };
+        const previous = Object.fromEntries(
+          Object.keys(shared).map((key) => [key, process.env[key]]),
         );
-      }
-    }),
-  );
+        Object.assign(process.env, shared);
+        return {
+          previous,
+          session: shared.__VINEXT_PAGES_CLIENT_ASSETS_BUILD_SESSION,
+        };
+      }),
+      () =>
+        Effect.gen(function* () {
+          yield* Effect.tryPromise(() =>
+            runWithPreviewBuildCredentials(async () => {
+              const buildConfig = await vite.loadConfigFromFile(
+                { command: "build", mode: "production" },
+                undefined,
+                root,
+              );
+              const builder = await vite.createBuilder({
+                ...buildConfig?.config,
+                root,
+                configFile: false,
+                plugins: [buildConfig?.config.plugins ?? [vinext()], cache],
+                logLevel: "warn",
+              });
+              await builder.buildApp();
+              if (!hybrid) return;
+              // The native App Router builder leaves the hybrid Pages server to its caller.
+              const flattened: Plugin[] = [];
+              const flatten = async (value: PluginOption): Promise<void> => {
+                const plugin = await value;
+                if (Array.isArray(plugin)) {
+                  for (const child of plugin) await flatten(child);
+                } else if (plugin) flattened.push(plugin);
+              };
+              const pagesConfig = await vite.loadConfigFromFile(
+                { command: "build", mode: "production", isSsrBuild: true },
+                undefined,
+                root,
+              );
+              await flatten(pagesConfig?.config.plugins ?? []);
+              const transforms = flattened.filter(
+                (plugin) =>
+                  !plugin.name.startsWith("vinext:") &&
+                  !plugin.name.startsWith("vite:react") &&
+                  !plugin.name.startsWith("rsc:") &&
+                  plugin.name !== "vite-rsc-load-module-dev-proxy" &&
+                  !plugin.name.startsWith("vite-plugin-cloudflare"),
+              );
+              await vite.build({
+                root,
+                configFile: false,
+                plugins: [
+                  transforms,
+                  vinext({ disableAppRouter: true }),
+                  cache,
+                ],
+                resolve: {
+                  dedupe: [
+                    "react",
+                    "react-dom",
+                    "react/jsx-runtime",
+                    "react/jsx-dev-runtime",
+                  ],
+                },
+                build: {
+                  outDir: "dist/server",
+                  emptyOutDir: false,
+                  ssr: "virtual:vinext-server-entry",
+                  rolldownOptions: { output: { entryFileNames: "entry.js" } },
+                },
+              });
+            }),
+          );
+          yield* runVinextPrerenderIfConfigured(root, options.cache, config);
+        }),
+      ({ previous, session }) =>
+        Effect.sync(() => {
+          if (session) clearPagesClientAssetsBuildMetadata(session);
+          for (const [key, value] of Object.entries(previous)) {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          }
+        }),
+    );
+  }).pipe(Effect.mapError(failFramework("Failed to build vinext")));
 
 export const collectVinextDist = (root: string) =>
   Effect.gen(function* () {

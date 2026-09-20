@@ -1,13 +1,13 @@
 /**
  * `@alchemy.run/frontend-frameworks/vinext/aws` — vinext on AWS Lambda.
  *
- * vinext's AWS story is a plain-Node `vinext build` (no Cloudflare Vite
+ * AWS uses Vinext's Vite build in Node (no Cloudflare Vite
  * plugin) plus a finishing pass that wraps the App Router RSC entry
  * (`dist/server/index.js`) as a streaming Lambda handler via
  * `@alchemy.run/frontend-frameworks/aws-lambda`. Static assets in
  * `dist/client` are uploaded to S3 by `AWS.Website.Vinext`.
  *
- * - **`build`** runs `vinext build` in a disposable child, then writes
+ * - **`build`** runs vinext's Vite build in a disposable child, then writes
  *   `dist/server/serve-aws-lambda.mjs` exporting `handler`.
  * - **`dev`** runs the real `vinext dev` CLI (plain Node), scoped.
  *
@@ -18,10 +18,8 @@
  * the deploy target (same shape as `nextjs/aws`).
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { fileURLToPath } from "node:url";
@@ -124,18 +122,7 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = config.rootDir;
-    const cli = yield* resolveVinextCli(root);
-    const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
-      Layer.provide(
-        Layer.merge(
-          Layer.succeed(FileSystem.FileSystem)(fs),
-          Layer.succeed(Path.Path)(path),
-        ),
-      ),
-    );
-    yield* runVinextBuild({ root, cli, cache: "s3" }).pipe(
-      Effect.provide(spawnerLayer),
-    );
+    yield* runVinextBuild({ root, cache: "s3" });
     const dist = yield* collectVinextDist(root);
     if (!dist.hasRsc) {
       return yield* Effect.fail(
@@ -170,7 +157,10 @@ export const buildInChild = (config: VinextAwsBuildChildConfig) =>
       makeLambdaEntrySource(config.config.streaming !== false),
     );
     // Preserve vinext's separate RSC/SSR module graphs and package its externals.
-    const vinextRoot = yield* resolveProjectPackageDirectory(root, "vinext");
+    const vinextRoot = yield* resolveProjectPackageDirectory(
+      root,
+      "vinext",
+    ).pipe(Effect.flatMap((directory) => fs.realPath(directory)));
     const standaloneUrl = yield* path.toFileUrl(
       path.join(vinextRoot, "dist/build/standalone.js"),
     );
@@ -231,6 +221,7 @@ export const makeAwsTarget = (
   ...makeAwsChildTarget(config),
   build: (context) =>
     runBuildChild({
+      runtime: "node",
       module: import.meta.url,
       rootDir: context.root,
       env: context.env,

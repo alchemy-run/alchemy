@@ -29,10 +29,21 @@ describe("makeAwsTarget", () => {
                 import.meta.url,
               ),
             );
+            const configPath = path.join(root, "vite.config.ts");
+            const configBefore = yield* fs.readFileString(configPath);
+            expect(configBefore).not.toContain(
+              "@alchemy.run/frontend-frameworks",
+            );
             const built = yield* makeAwsTarget({ streaming: false }).build!({
               root,
               framework: "vinext",
             });
+            expect(yield* fs.readFileString(configPath)).toBe(configBefore);
+            expect(
+              yield* fs.readFileString(
+                path.join(built.distDirectory!, "server/index.js"),
+              ),
+            ).toContain("CACHE_BUCKET_NAME");
             const directory = yield* fs.makeTempDirectoryScoped({
               prefix: "vinext-lambda-",
             });

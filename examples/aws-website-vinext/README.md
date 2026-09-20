@@ -12,8 +12,8 @@ const site = yield* AWS.Website.Vinext("Web", {
 The example includes client hydration, Home/ISR navigation, an environment-aware
 `/api/hello?name=Alchemy` endpoint, ISR, and public assets.
 The Website provisions its S3 data-cache bucket automatically.
-The Vite configuration spreads `alchemy()` into `vinext()` to select the
-platform's cache adapter. This is a vinext build, not an OpenNext build.
+Alchemy injects the cache adapter automatically. Keep ordinary `vinext()`
+configuration in Vite; configure deployment on `Website.Vinext`.
 
 ## Run locally
 

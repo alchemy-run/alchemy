@@ -113,9 +113,9 @@ export interface VinextProps<
  * `import { env } from "cloudflare:workers"` in server components,
  * route handlers, and server actions.
  *
- * Spread `alchemy()` into `vinext({ prerender: true, ...alchemy() })`.
- * The Worker build sets `ALCHEMY_VINEXT_CACHE=kv` so the data-cache
- * adapter is Alchemy's KV runtime (same ISR codec as Redis / S3).
+ * The resource injects Alchemy's KV data-cache adapter into the Vite build
+ * and local server. No Alchemy plugin or cache configuration is needed in
+ * `vite.config.ts` (the same ISR codec is used by Redis / S3).
  * `Website.Vinext` provisions `VINEXT_KV_CACHE` (do not bind it in
  * `env`) and `alchemy deploy` seeds prerender pairs into it. Workers
  * Cache is enabled (`cache.enabled`) and `CF_VERSION_METADATA` is

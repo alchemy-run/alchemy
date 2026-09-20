@@ -18,8 +18,7 @@ export const VINEXT_NODE_TARGET_SPECIFIER =
 export interface VinextProps extends FrameworkSiteProps {
   /**
    * Optional Redis for ISR / `"use cache"`. Alchemy writes `REDIS_URL`
-   * onto the Service from this resource. Spread `alchemy()` into
-   * `vinext({ ...alchemy() })` — the Node build bakes the Redis adapter.
+   * onto the Service and injects the Redis data-cache adapter automatically.
    * Missing `REDIS_URL` (`alchemy dev`) falls back to memory.
    */
   redis?: Redis;
@@ -27,7 +26,7 @@ export interface VinextProps extends FrameworkSiteProps {
 
 /**
  * Deploy a [vinext](https://vinext.dev) application to Railway as a
- * long-running Node process: `vinext build`, then vinext's production
+ * long-running Node process: vinext's Vite build, then vinext's production
  * server (`startProdServer`) on `PORT` (default 3000). **Not** the
  * Cloudflare Worker path — those wrappers are workerd.
  *

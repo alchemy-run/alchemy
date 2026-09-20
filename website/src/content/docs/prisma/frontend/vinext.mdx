@@ -9,7 +9,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const devDeps = "@alchemy.run/frontend-frameworks @vercel/nft";
 
-`Prisma.Website.Vinext` runs `vinext build`, then hosts vinext's production
+`Prisma.Website.Vinext` builds with the Vinext Vite API, then hosts vinext's production
 Node server on **Bun in Prisma Compute**. Alchemy packages `dist/`, public
 assets, and locally installed runtime dependencies into a `tar.gz` artifact.
 There is no Dockerfile, registry, Wrangler configuration, or OpenNext build.
@@ -31,17 +31,17 @@ building. Add the Alchemy integration and dependency tracer:
 
 ```typescript
 // vite.config.ts
-import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ prerender: true, ...alchemy() })],
+  plugins: [vinext({ prerender: true })],
 });
 ```
 
-The same configuration selects the cache adapter for each deployment target.
-Prisma uses the Node target. Leave Cloudflare plugins out of this configuration.
+Alchemy injects the Node data-cache adapter during deployment. No Alchemy plugin
+is required in `vite.config.ts`. Configure deployment settings on
+`Prisma.Website.Vinext` and leave Cloudflare plugins out of the Vite config.
 
 ## Declare the Website
 
@@ -105,7 +105,7 @@ export const Website = Prisma.Website.Vinext("Website", {
 });
 ```
 
-The `alchemy()` cache adapter uses Redis when `REDIS_URL` is set and memory
+The injected cache adapter uses Redis when `REDIS_URL` is set and memory
 otherwise. Prisma.Website does not provision Redis. The same Node adapter is
 used by Fly, Hetzner, and Railway.
 

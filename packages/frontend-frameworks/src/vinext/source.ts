@@ -50,7 +50,7 @@ import {
   runVinextPrerenderIfConfigured,
 } from "./Prerender.ts";
 import { kvHttpNamespaceFromEnv, kvHttpSink } from "./cache/kv-http.ts";
-import { ALCHEMY_VINEXT_CACHE_ENV } from "./cache/plugin.ts";
+import { makeVinextCachePlugin } from "./cache/plugin.ts";
 import { seedPrerenderTo } from "./cache/seed.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vinext/source";
@@ -731,7 +731,7 @@ export const buildInChild = (config: VinextBuildChildConfig) =>
     const path = yield* Path.Path;
     const root = path.resolve(config.rootDir);
     process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
-    process.env[ALCHEMY_VINEXT_CACHE_ENV] = "kv";
+    const cachePlugin = yield* makeVinextCachePlugin(root, "kv");
     const pluginOptions = makeVinextPluginOptions({
       root,
       main: config.main,
@@ -747,7 +747,11 @@ export const buildInChild = (config: VinextBuildChildConfig) =>
       const builder = await vite.createBuilder(
         {
           root,
-          plugins: [cloudflare(pluginOptions), collector.plugin as never],
+          plugins: [
+            cachePlugin,
+            cloudflare(pluginOptions),
+            collector.plugin as never,
+          ],
           logLevel: "warn",
         },
         null,
@@ -929,7 +933,7 @@ export const makeVinextSourceProvider = (
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
-      process.env[ALCHEMY_VINEXT_CACHE_ENV] = "kv";
+      const cachePlugin = yield* makeVinextCachePlugin(rootDir, "kv");
       const vite = yield* Effect.promise(() => loadVite(rootDir));
       const port = yield* resolveViteDevPort(vite.version).pipe(
         Effect.mapError(
@@ -962,7 +966,7 @@ export const makeVinextSourceProvider = (
           const devServer = await vite.createServer({
             root: rootDir,
             define: getDefine(ctx.env ?? {}),
-            plugins: [cloudflare(pluginOptions)],
+            plugins: [cachePlugin, cloudflare(pluginOptions)],
             server: { port, strictPort: false },
           });
           await devServer.listen();

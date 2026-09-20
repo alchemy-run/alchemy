@@ -5,7 +5,7 @@ import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 export interface VinextProps extends FrameworkSiteProps {}
 
 /**
- * Deploy a vinext application to Prisma Compute using `vinext build` and
+ * Deploy a vinext application to Prisma Compute using vinext's Vite build and
  * vinext's production Node server on Compute's Bun runtime. Alchemy packages
  * the build output and traced, locally installed runtime dependencies; no
  * Dockerfile, registry, Wrangler, or OpenNext is required.
@@ -35,9 +35,8 @@ export interface VinextProps extends FrameworkSiteProps {}
  *
  * ### Persistent Data Cache
  * **Example:** Shared Redis cache
- * Spread `alchemy()` from `@alchemy.run/frontend-frameworks/vinext/cache`
- * into `vinext({ ...alchemy() })` in vite.config.ts. The Node build uses
- * Redis when `REDIS_URL` is present; otherwise the cache is process-local
+ * The resource injects the data-cache adapter automatically. Set `env.REDIS_URL`
+ * to use Redis; otherwise the cache is process-local
  * and is lost on restart. Prisma Compute does not provision a Redis store.
  * ```typescript
  * const site = yield* Prisma.Website.Vinext("Web", {

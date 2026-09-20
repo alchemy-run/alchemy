@@ -2,7 +2,7 @@ import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**
- * The framework-integration module that drives `vinext build` plus
+ * The framework-integration module that drives vinext's Vite build plus
  * vinext's Node `startProdServer` serve entry.
  */
 export const VINEXT_NODE_FRAMEWORK_SPECIFIER =
@@ -12,7 +12,7 @@ export interface VinextProps extends FrameworkSiteProps {}
 
 /**
  * Deploy a [vinext](https://vinext.dev) application to a Hetzner Cloud
- * Server: `vinext build` then a long-running `startProdServer` systemd
+ * Server: vinext's Vite build then a long-running `startProdServer` systemd
  * unit on port 3000. Does **not** use the Cloudflare Worker entry
  * (`vinext/server/fetch-handler`).
  *
@@ -41,8 +41,8 @@ export interface VinextProps extends FrameworkSiteProps {}
  * ```
  *
  * **Example:** Redis data cache
- * ISR / `"use cache"` default to in-process memory. Set `REDIS_URL` and
- * `vinext({ ...alchemy() })` for a durable Redis store.
+ * ISR / `"use cache"` default to in-process memory. Set `env.REDIS_URL` on
+ * this resource for a durable Redis store; the adapter is injected automatically.
  * ```typescript
  * const site = yield* Hetzner.Website.Vinext("Web", {
  *   env: {

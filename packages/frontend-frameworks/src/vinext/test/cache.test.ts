@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { makeDataCacheHandler, type DataCacheStore } from "../cache/handler.ts";
-import { alchemy } from "../cache/plugin.ts";
+import { makeVinextCachePlugin } from "../cache/plugin.ts";
+import { fileURLToPath } from "node:url";
+import { loadProjectModule } from "../../core/Loader.ts";
 import { kvAdapter } from "../cache/kv.ts";
 import createKvDataCacheAdapter from "../cache/kv-runtime.ts";
 import { redisAdapter } from "../cache/redis.ts";
@@ -34,19 +36,41 @@ const memoryStore = (): DataCacheStore & { data: Map<string, string> } => {
 };
 
 describe("vinext cache adapters", () => {
-  it("alchemy() is empty without ALCHEMY_VINEXT_CACHE", () => {
-    const previous = process.env.ALCHEMY_VINEXT_CACHE;
-    delete process.env.ALCHEMY_VINEXT_CACHE;
-    expect(alchemy()).toEqual({});
-    if (previous === undefined) delete process.env.ALCHEMY_VINEXT_CACHE;
-    else process.env.ALCHEMY_VINEXT_CACHE = previous;
-  });
-
-  it("alchemy() selects redis, s3, or kv from the platform kind", () => {
-    expect(alchemy("redis").cache?.data?.adapter).toMatch(/redis-runtime\.js$/);
-    expect(alchemy("s3").cache?.data?.adapter).toMatch(/s3-runtime\.js$/);
-    expect(alchemy("kv").cache?.data?.adapter).toMatch(/kv-runtime\.js$/);
-  });
+  it.each(["redis", "s3", "kv"] as const)(
+    "injects the %s cache without application configuration",
+    async (kind) => {
+      const root = fileURLToPath(
+        new URL(
+          "../../../../../examples/prisma-website-vinext/",
+          import.meta.url,
+        ),
+      );
+      const plugin = await Effect.runPromise(makeVinextCachePlugin(root, kind));
+      const vite = await Effect.runPromise(
+        loadProjectModule<typeof import("vite")>(root, "vite"),
+      );
+      const server = await vite.createServer({
+        root,
+        configFile: false,
+        plugins: [plugin],
+        server: { watch: null },
+        optimizeDeps: { noDiscovery: true },
+      });
+      try {
+        const container = server.environments.ssr.pluginContainer;
+        const id = await container.resolveId("virtual:vinext-cache-adapters");
+        expect(await container.load(id!.id)).toContain(`${kind}-runtime.js`);
+        const cdnId = await container.resolveId(
+          "virtual:vinext-cdn-cache-adapter",
+        );
+        const cdn = await container.load(cdnId!.id);
+        expect(cdn).toContain("hasConfiguredDataCache = true");
+        expect(cdn).not.toContain(`${kind}-runtime.js`);
+      } finally {
+        await server.close();
+      }
+    },
+  );
 
   it("redisAdapter points at alchemy/Redis connect runtime", () => {
     const descriptor = redisAdapter({

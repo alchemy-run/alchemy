@@ -1,13 +1,13 @@
 /**
  * `@alchemy.run/frontend-frameworks/vinext/node` — vinext on a Node
- * container (`vinext build` + vinext's production server).
+ * container (vinext's Vite build + vinext's production server).
  *
  * Unlike the Cloudflare integration (`./source`, Vite + the Alchemy
  * Cloudflare plugin + `vinext/server/fetch-handler`), this module does
  * **not** inject a Workers plugin. The container-optimal path is a
  * long-running Node process:
  *
- * - **`build`** runs the project's `vinext build` in a disposable child
+ * - **`build`** runs Vinext's Vite build in a disposable child
  *   (cwd = project root), then writes a serve entry that calls
  *   `startProdServer` from `vinext/server/prod-server`, answers
  *   `GET /health`, and listens on `PORT` (default 3000).
@@ -17,10 +17,8 @@
  * the deploy target (same shape as `nextjs/node`).
  */
 import * as FrameworkCore from "../core/index.ts";
-import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import { runBuildChild } from "../core/BuildChild.ts";
@@ -123,21 +121,8 @@ export interface VinextNodeBuildChildConfig {
 
 export const buildInChild = (config: VinextNodeBuildChildConfig) =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
     const root = config.rootDir;
-    const cli = yield* resolveVinextCli(root);
-    const spawnerLayer = NodeChildProcessSpawner.layer.pipe(
-      Layer.provide(
-        Layer.merge(
-          Layer.succeed(FileSystem.FileSystem)(fs),
-          Layer.succeed(Path.Path)(path),
-        ),
-      ),
-    );
-    yield* runVinextBuild({ root, cli, cache: "redis" }).pipe(
-      Effect.provide(spawnerLayer),
-    );
+    yield* runVinextBuild({ root, cache: "redis" });
     const dist = yield* collectVinextDist(root);
     return yield* pinServeModule(
       dist,
@@ -158,7 +143,7 @@ const makeNodeChildTarget = (
   });
 
 /**
- * Create the Node {@link VinextNodeTarget}: wholesale `vinext build` in a
+ * Create the Node {@link VinextNodeTarget}: run Vinext's Vite build in a
  * child process, then vinext's production serve entry.
  */
 export const makeNodeTarget = (
@@ -167,6 +152,7 @@ export const makeNodeTarget = (
   ...makeNodeChildTarget(config),
   build: (context) =>
     runBuildChild({
+      runtime: "node",
       module: import.meta.url,
       rootDir: context.root,
       env: context.env,

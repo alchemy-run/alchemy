@@ -1,9 +1,9 @@
 # vinext on Prisma
 
 Deploy a vinext App Router application with `Prisma.Website.Vinext`.
-Production uses `vinext build` and vinext's Node server on Prisma Compute's
-Bun runtime. Alchemy packages the output and traced dependencies; no Dockerfile,
-registry, Wrangler, or OpenNext is needed.
+Alchemy builds Vinext programmatically, injects its cache adapter, and runs
+vinext's Node server on Prisma Compute's Bun runtime. Deployment configuration
+stays on `Website.Vinext`; no Alchemy Vite plugin, Dockerfile, or registry is needed.
 
 ```typescript
 const site = yield* Prisma.Website.Vinext("Web", {

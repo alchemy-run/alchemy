@@ -31,18 +31,17 @@ building. Add the Alchemy integration:
 
 ```typescript
 // vite.config.ts
-import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ prerender: true, ...alchemy() })],
+  plugins: [vinext({ prerender: true })],
 });
 ```
 
-Alchemy injects `vite-plugin-cloudflare:alchemy`. Leave the official
-`@cloudflare/vite-plugin` out of this configuration. The same `alchemy()`
-configuration selects KV on Cloudflare, S3 on AWS, and Redis on Node targets.
+Alchemy injects its Cloudflare runtime and KV cache plugins. No Alchemy plugin
+is required in `vite.config.ts`; leave `@cloudflare/vite-plugin` out as well.
+Deployment settings belong on `Cloudflare.Website.Vinext`.
 
 ## Declare the Website
 
@@ -109,8 +108,7 @@ compiled into browser assets; keep secrets out of public keys.
 Alchemy provisions `VINEXT_KV_CACHE`, enables Workers Cache, and binds
 `CF_VERSION_METADATA`. Keep these managed bindings out of `env`.
 
-The build sets `ALCHEMY_VINEXT_CACHE=kv`, and `alchemy()` includes the KV adapter
-for ISR and `"use cache"`. Deployment uploads prerendered HTML and React Server
+The resource automatically injects the KV adapter for ISR and `"use cache"`. Deployment uploads prerendered HTML and React Server
 Components payloads into KV. During prerendering, where the binding is absent,
 the adapter falls back to memory. Redis and S3 adapters are for other platforms.
 

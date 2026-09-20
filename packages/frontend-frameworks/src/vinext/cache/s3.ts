@@ -1,7 +1,7 @@
 /**
  * vinext data-cache adapter builder for S3.
  *
- * Prefer `vinext({ ...alchemy() })` — the AWS build bakes this adapter.
+ * AWS.Website.Vinext injects this adapter automatically.
  * The runtime factory reads `CACHE_BUCKET_NAME` from the Lambda
  * environment (Alchemy's `AWS.Website.Vinext` sets it). The runtime
  * talks distilled `@distilled.cloud/aws/s3`, the same client

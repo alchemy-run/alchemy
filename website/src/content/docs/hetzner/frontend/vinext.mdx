@@ -9,7 +9,7 @@ import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
-`Hetzner.Website.Vinext` runs `vinext build` for production and native
+`Hetzner.Website.Vinext` builds with the Vinext Vite API for production and runs native
 `vinext dev` locally. The built app runs on a Hetzner Cloud Server using vinext's production Node
 server as a systemd service. Alchemy creates a server when `server` is omitted
 and uploads `dist/` with the runtime dependency installation.
@@ -31,17 +31,17 @@ Add the Alchemy integration:
 
 ```typescript
 // vite.config.ts
-import { alchemy } from "@alchemy.run/frontend-frameworks/vinext/cache";
 import { defineConfig } from "vite";
 import vinext from "vinext";
 
 export default defineConfig({
-  plugins: [vinext({ prerender: true, ...alchemy() })],
+  plugins: [vinext({ prerender: true })],
 });
 ```
 
-The same configuration selects the appropriate cache adapter for each target.
-Leave Cloudflare plugins and Worker entrypoints out of this application.
+Alchemy injects the target-specific data-cache adapter during deployment.
+No Alchemy plugin is required in `vite.config.ts`; deployment settings belong on
+`Website.Vinext`. Leave Cloudflare plugins and Worker entrypoints out of this application.
 
 ## Declare the Website
 

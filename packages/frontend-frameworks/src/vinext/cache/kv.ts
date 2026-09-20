@@ -1,8 +1,7 @@
 /**
  * vinext data-cache adapter builder for Cloudflare KV.
  *
- * Prefer `vinext({ ...alchemy() })` — the Cloudflare build bakes this
- * adapter. The runtime factory reads `env.VINEXT_KV_CACHE` (Worker
+ * Cloudflare.Website.Vinext injects this adapter automatically. The runtime factory reads `env.VINEXT_KV_CACHE` (Worker
  * binding) and uses the same ISR codec as Redis / S3.
  *
  * `Website.Vinext` provisions the namespace and seeds prerender pairs
