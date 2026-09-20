@@ -27,6 +27,13 @@ export const alchemyMetadataKeys = {
   count: "alchemy.count",
   image: "alchemy.image",
   phase: "alchemy.phase",
+  protocol: "alchemy.deployment-protocol",
+  roles: "alchemy.readiness-roles",
+  role: "alchemy.readiness-role",
+  predecessors: "alchemy.predecessors",
+  restored: "alchemy.idle-policy-restored",
+  checkedInstance: "alchemy.checked-instance",
+  secretsVersion: "alchemy.min-secrets-version",
 } as const;
 
 export type FlyAlchemyType = "Fly.Machine" | "Fly.Service";

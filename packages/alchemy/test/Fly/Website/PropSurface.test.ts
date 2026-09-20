@@ -53,6 +53,17 @@ describe("Fly.Website prop surfaces", () => {
     () =>
       Fly.Website.SvelteKit("S", {
         kit: { paths: { base: "/docs" } },
+        deploy: { strategy: "bluegreen", healthTimeout: "90 seconds" },
+        shutdown: { signal: "SIGINT", timeout: "60 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/ready" } },
+        services: [],
+      }),
+    () =>
+      Fly.Website.Nextjs("N", {
+        deploy: { strategy: "rolling" },
+        shutdown: { signal: "SIGTERM", timeout: "10 seconds" },
+        checks: { ready: { type: "http", port: 3000, path: "/ready" } },
+        services: [],
       }),
     () =>
       Fly.Website.SolidStart("So", {

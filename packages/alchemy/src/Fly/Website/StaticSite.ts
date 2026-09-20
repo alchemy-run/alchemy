@@ -268,7 +268,10 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
       env: props.env,
       extraFiles: [
         {
-          source: outdir,
+          // Keep the build dependency so planning cannot hash the previous artifact.
+          source: Output.map(build.outdir, (dir) =>
+            path.resolve(initialCwd, dir),
+          ),
           dest: path.basename(outdir),
         },
       ],

@@ -7,15 +7,15 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { MachineServiceCheck } from "./Machine.ts";
 
-/** Deployment policy shared by Fly Machines, Services, and websites. */
+/** Replacement/readiness policy shared by Machines, Services, and websites; not an App-wide deployment lock. */
 export interface MachineDeploy {
   /** Sequential in-place updates, or a checked replacement set. @default "rolling" */
   strategy: "rolling" | "bluegreen";
-  /** Readiness deadline after startup. @default "60 seconds" */
+  /** Readiness deadline after startup, positive and at most 300 seconds. A deadline-only change does not replace Machines. @default "60 seconds" */
   healthTimeout?: Duration.Input;
 }
 
-/** Process shutdown policy. Raw images must handle the signal themselves. */
+/** Process shutdown policy. Retirement uses the predecessor's own policy; raw images and external website servers own signal handling and drain. */
 export interface MachineShutdown {
   /** Signal sent before termination. Managed Services support SIGTERM and SIGINT. @default "SIGTERM" */
   signal?: Exclude<FlyStopConfigSignal, "SIGKILL">;
@@ -126,13 +126,6 @@ export const validateDeployment = (
       "Blue/green deployments cannot attach volumes, including MountVolume bindings.";
   else if (skipLaunch || config.auto_destroy || config.restart?.policy === "no")
     message = "Blue/green deployments require a persistent, launched Machine.";
-  else if (
-    (config.services ?? []).some(
-      (service) => service.autostop && service.autostop !== "off",
-    )
-  )
-    message =
-      "Blue/green deployments require autostop to be disabled during readiness and promotion.";
   else if (
     (config.services ?? []).some(
       (service) => (service.ports?.length ?? 0) > 0 && !service.checks?.length,

@@ -59,6 +59,7 @@ import {
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
+  sameServices,
   toFlyService,
   volumeIdsOf,
   type Replica,
@@ -103,9 +104,11 @@ export interface ServiceProps extends PlatformProps {
    */
   region?: string;
   /**
-   * Number of Machines to keep running. Fly's proxy load-balances
-   * `{app}.fly.dev` across them. Each replica gets its own Volume
-   * from every `MountVolume` binding.
+   * Number of Machines to provision, including stopped/suspended idle capacity.
+   * Fly's proxy load-balances `{app}.fly.dev` across available replicas.
+   * Blue/green checks a representative and the required running floor while
+   * preserving idle nonrepresentatives. Each replica gets its own Volume
+   * from every `MountVolume` binding; attached volumes require rolling updates.
    *
    * @default 1
    */
@@ -382,12 +385,13 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ### Configure routing health checks
  * The generated service includes a TCP check on `port`. To customize
  * it, provide `services` and configure each service's `checks` property.
- * After each replica is `started`, reconcile waits until those checks
- * are passing before updating the next replica. Missing or non-passing
- * results are polled for up to 60 seconds, then fail deployment with
- * `Fly.ReplicaChecksNotPassing` and the last observed check results.
- * Later replicas remain unchanged; earlier updates are not rolled back.
- * A single replica still updates in place and can be unavailable.
+ * With rolling updates, reconcile waits for each started replica's checks
+ * before updating the next replica. Missing or non-passing results are
+ * polled within `deploy.healthTimeout` (60 seconds by default), then fail
+ * deployment with `Fly.ReplicaChecksNotPassing`. Later replicas remain
+ * unchanged; earlier updates are not rolled back. A single rolling replica
+ * can be unavailable. Blue/green checks replacements before retiring the
+ * old set, with representative/floor readiness for idle capacity.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -450,10 +454,11 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ```
  *
  * ### Scale with count
- * `count` is how many Machines to keep running. Default is `1`. They
- * all publish the same proxy service, so they all sit behind
- * `{app}.fly.dev`. Fly's proxy picks one Machine per request. Each
- * replica gets its own Volume from every {@link MountVolume} binding.
+ * `count` is how many Machines to provision, including idle capacity.
+ * Default is `1`. Replicas publish the same proxy service behind
+ * `{app}.fly.dev`; Fly's proxy picks an available Machine per request.
+ * Each replica gets its own Volume from every {@link MountVolume} binding;
+ * attached volumes require rolling updates.
  *
  * **Example:** Three replicas
  * ```typescript
@@ -742,12 +747,26 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * Managed HTTP Services drain responses on SIGTERM/SIGINT before closing
- * scopes, within the configured deadline. External servers and background
- * workers handle their own shutdown. The first migration cannot retrofit
- * signal handling into an already-running old bootstrap. Volumes are not
- * supported with blue/green. Physical IDs and names change on replacement.
- * See the [deployment guide](/fly/compute/deployments) for recovery and limits.
+ * Keep one Service declaration. The old process retains its own shutdown
+ * signal and deadline when the replacement's policy changes. Managed
+ * SIGTERM/SIGINT shutdown drains HTTP while runtime resource finalizers run;
+ * shared dependencies remain alive until both settle or the deadline expires.
+ * Applications own stop-acquisition barriers, separately scoped jobs, and
+ * bounded drain or checkpoint logic using ordinary finalizers, not a new
+ * shutdown hook. External servers own their signal handling. An old bootstrap
+ * cannot gain handlers retroactively. Volumes are incompatible with blue/green;
+ * physical IDs and names change. Service-bound secret versions are floors,
+ * not vault snapshots, and native Machine leases are not deployment-wide locks.
+ * Leases do not serialize vault writers or every simultaneous first deployment;
+ * serialize CI invocations for the same resource.
+ *
+ * Stop and suspend autostop policies preserve idle nonrepresentatives while
+ * a representative and the required running floor pass readiness. Requested
+ * idle policy is restored before old retirement; a new instance needs fresh
+ * checks. Suspension is not SIGTERM shutdown and does not run ordinary
+ * shutdown finalizers. Replacements do not inherit suspended process memory.
+ * See the [deployment guide](/fly/compute/deployments) for recovery,
+ * idle capacity, application responsibilities, and verification limits.
  *
  * @resource
  */
@@ -908,11 +927,6 @@ const sameEnv = (
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
 
-const sameServices = (
-  observed: FlyMachineService[] | undefined,
-  desired: FlyMachineService[],
-) => deepEqual(observed ?? [], desired, { stripNullish: true });
-
 const sameMounts = (
   observed: FlyMachineMount[] | undefined,
   desired: FlyMachineMount[],
@@ -942,7 +956,18 @@ const metadataChanged = (
 const sameStatics = (
   observed: FlyStatic[] | undefined,
   desired: FlyStatic[] | undefined,
-) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
+) => {
+  const normalize = (statics: FlyStatic[] | undefined) =>
+    (statics ?? []).map((entry) => ({
+      ...entry,
+      // Empty and omitted index documents both disable directory indexes.
+      index_document:
+        entry.index_document === "" ? undefined : entry.index_document,
+    }));
+  return deepEqual(normalize(observed), normalize(desired), {
+    stripNullish: true,
+  });
+};
 
 const configDrifted = (
   machine: FlyMachine,
@@ -1170,22 +1195,28 @@ export const ServiceProvider = () =>
           const count = resolveCount(props.count);
           const port = props.port ?? DEFAULT_PORT;
           const bound = collectBindingState(bindings ?? []);
-          yield* attachRedisSecrets(appName, bound.redis);
-          yield* attachBucketSecrets(appName, bound.buckets, {
-            ...bound.env,
-            ...toEnv(props.env),
-          });
-          let minSecretsVersion: number | undefined;
+          const secretVersions: number[] = [];
+          const redisVersion = yield* attachRedisSecrets(appName, bound.redis);
+          if (redisVersion !== undefined) secretVersions.push(redisVersion);
+          const bucketVersion = yield* attachBucketSecrets(
+            appName,
+            bound.buckets,
+            {
+              ...bound.env,
+              ...toEnv(props.env),
+            },
+          );
+          if (bucketVersion !== undefined) secretVersions.push(bucketVersion);
           for (const pg of bound.postgres) {
             const version = yield* attachPostgresSecrets(
               appName,
               pg.clusterId,
               pg.variableName,
             );
-            if (version !== undefined) {
-              minSecretsVersion = Math.max(minSecretsVersion ?? 0, version);
-            }
+            if (version !== undefined) secretVersions.push(version);
           }
+          const minSecretsVersion =
+            secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
           const env = desiredEnv(props, bound.env, hosted.alchemyEnv, port);
           if (policy.shutdown && !props.isExternal) {
             env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(
@@ -1267,7 +1298,6 @@ export const ServiceProvider = () =>
         }) {
           const appName = output.appName ?? appNameOf(olds.app);
           if (appName === undefined) return;
-          const policy = yield* deploymentPolicy(olds.deploy, olds.shutdown);
           yield* deleteReplicaSet({
             appName,
             id,
@@ -1276,7 +1306,6 @@ export const ServiceProvider = () =>
             resourceInstanceId: instanceId,
             machineIds: machineIdsOf(output),
             volumeIds: volumeIdsOf(output),
-            shutdown: policy.shutdown,
             force,
           });
         }),

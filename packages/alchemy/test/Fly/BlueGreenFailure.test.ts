@@ -4,11 +4,12 @@ import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import { assertAppGone } from "./fixtures/bluegreen.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
 test.provider(
-  "a rejected candidate create preserves the active generation",
+  "F01 a rejected candidate create preserves the active generation",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -48,6 +49,7 @@ test.provider(
       expect(live[0]?.cordoned).toBe(false);
       expect(live[0]?.config?.metadata?.["alchemy.phase"]).toBe("active");
       yield* stack.destroy();
+      yield* assertAppGone(initial.appName);
     }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

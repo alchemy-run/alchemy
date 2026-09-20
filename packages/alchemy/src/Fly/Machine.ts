@@ -35,6 +35,7 @@ import {
   observeReplicaSet,
   reconcileReplicas,
   resolveCount,
+  sameServices,
   toFlyService,
   volumeIdsOf,
   type Replica,
@@ -120,7 +121,10 @@ export interface MachineServiceCheck {
   type: "http" | "tcp";
   /** Port to check. Usually the service's {@link MachineService.internalPort}. */
   port?: number;
-  /** Time between checks, such as `"15s"`. */
+  /**
+   * Time between checks, such as `"15s"`.
+   * Fly caps service checks at `"60s"`; this cap does not apply to named Machine checks.
+   */
   interval?: string;
   /** Maximum time for a check, such as `"2s"`. */
   timeout?: string;
@@ -193,9 +197,11 @@ export interface MachineProps {
    */
   region?: string;
   /**
-   * Number of Machines to keep running. Fly's proxy load-balances
-   * published `services` across them. Each replica gets its own
-   * Volume from every {@link mounts} group.
+   * Number of Machines to provision, including stopped/suspended idle capacity.
+   * Fly's proxy load-balances published `services` across available replicas.
+   * Blue/green checks a representative and the required running floor while
+   * preserving idle nonrepresentatives. Each replica gets its own Volume
+   * from every {@link mounts} group; attached volumes require rolling updates.
    *
    * @default 1
    */
@@ -250,7 +256,10 @@ export interface MachineProps {
    */
   skipLaunch?: boolean;
   /**
-   * Minimum app-secrets version the Machine must see.
+   * Minimum App-secrets version required by this Machine, not an immutable
+   * snapshot. Other writers can advance the shared vault. Secret changes are
+   * not automatically watched; change an explicit deployment input or floor
+   * when an out-of-band rotation requires reconciliation.
    */
   minSecretsVersion?: number;
 }
@@ -334,7 +343,8 @@ export type Machine = Resource<
  *
  * ### Launch a Machine
  * The parent is an {@link App}. Pin a region and an image. Guest
- * defaults to shared-cpu 1× / 256 MB. `image` updates in place.
+ * defaults to shared-cpu 1× / 256 MB. Rolling updates `image` in place;
+ * blue/green prepares replacement Machines.
  *
  * **Example:** Nginx
  * ```typescript
@@ -387,7 +397,8 @@ export type Machine = Resource<
  *
  * ### Guest size
  * `guest` is CPU kind, CPU count, and memory. Default is shared-cpu,
- * 1 CPU, 256 MB. Guest updates in place.
+ * 1 CPU, 256 MB. Rolling updates guest sizing in place; blue/green replaces
+ * the Machines.
  *
  * **Example:** Shared CPU
  * ```typescript
@@ -466,14 +477,14 @@ export type Machine = Resource<
  *
  * ### Service health checks
  * Add HTTP or TCP `checks` to a service. Fly uses their results to
- * determine whether the service is ready to receive traffic. After a
- * Machine is `started`, reconcile waits until those checks are passing
- * before updating the next replica. Missing or non-passing results are
- * polled for up to 60 seconds, then fail deployment with
- * `Fly.ReplicaChecksNotPassing` and the last observed check results.
- * Later replicas remain unchanged; earlier updates are not rolled back.
- * With the default rolling policy, a single replica updates in place and
- * can be unavailable. Opt into `deploy.strategy: "bluegreen"` for replacements.
+ * determine whether the service is ready to receive traffic. With rolling
+ * updates, reconcile waits for each started replica's checks before updating
+ * the next replica. Missing or non-passing results are polled within
+ * `deploy.healthTimeout` (60 seconds by default), then fail deployment with
+ * `Fly.ReplicaChecksNotPassing`. Later replicas remain unchanged; earlier
+ * updates are not rolled back. A single rolling replica can be unavailable.
+ * Blue/green checks replacements before retiring the old set, with
+ * representative/floor readiness for idle capacity.
  *
  * **Example:** HTTP readiness check
  * ```typescript
@@ -509,8 +520,16 @@ export type Machine = Resource<
  * `"off"`, `"stop"`, `"suspend"`, or a boolean. `minMachinesRunning`
  * keeps that many Machines up for the service.
  *
- * Autostop only stops Machines that already exist. It does not mint
- * new ones. Yield more Machine resources to size the pool.
+ * Autostop only affects Machines that already exist. Set `count` or declare
+ * more resources to size the pool. Stop boots a new process on autostart;
+ * suspend may resume memory or fall back to a cold start. Suspension is not
+ * SIGTERM shutdown and does not run ordinary shutdown finalizers.
+ *
+ * Blue/green supports both policies: it checks a representative and the
+ * required running floor while preserving idle nonrepresentatives. It
+ * restores the requested idle policy before retiring predecessors and
+ * checks any new instance created by restoration. A replacement does not
+ * inherit its suspended predecessor's process memory.
  *
  * **Example:** Stop when idle
  * ```typescript
@@ -537,9 +556,9 @@ export type Machine = Resource<
  * with different configuration. Fly's proxy load-balances published
  * `services` across them.
  *
- * Both Machine and {@link Service} support `count`. Replicas within one
- * resource update sequentially; separate resources do not share that
- * update ordering.
+ * Both Machine and {@link Service} support `count`. Default rolling updates
+ * replicas sequentially; blue/green prepares replacements before retirement.
+ * Separate resources do not share an update order or App-wide lease lock.
  *
  * **Example:** Two Machines
  * ```typescript
@@ -685,9 +704,10 @@ export type Machine = Resource<
  * ```
  *
  * ### Secrets version
- * `minSecretsVersion` waits until the Machine has seen at least that
- * App secrets version. Use it after rotating a {@link Secret} if the
- * process must start with the new value.
+ * `minSecretsVersion` requires at least that App-secrets version, not an
+ * immutable snapshot. Machine leases do not serialize vault writers.
+ * After rotating a {@link Secret}, declare the required floor or another
+ * explicit rollout input; an out-of-band change alone does not watch/redeploy.
  *
  * **Example:** Wait for secrets
  * ```typescript
@@ -702,8 +722,15 @@ export type Machine = Resource<
  * ### Blue/green deployments
  * Prepare a healthy replacement set before retiring the current Machines.
  * Physical IDs and names change; the App URL remains stable. Volumes,
- * auto-destroy, skipLaunch, and autostop are incompatible. Raw images must
+ * auto-destroy, and skipLaunch are incompatible. Autostop preserves idle
+ * nonrepresentatives while a representative passes checks. Raw images must
  * handle their own shutdown signal and stop accepting background work.
+ *
+ * Retirement honors each predecessor's own signal and timeout. Native
+ * target leases do not exclude every simultaneous first deployment or
+ * snapshot; serialize CI for the same resource. See the
+ * [deployment guide](/fly/compute/deployments) for idle capacity, secret
+ * floors, recovery, and the limits of live-tested parity.
  *
  * **Example:** Private worker readiness
  * ```typescript
@@ -718,9 +745,11 @@ export type Machine = Resource<
  * });
  * ```
  *
- * Every published service needs its own service check. A failed candidate
- * leaves the old generation serving. Retry an interrupted deploy to finish
- * promotion or retirement; destroy discovers unfinished owned generations.
+ * Every published service needs its own service check. Before promotion, a
+ * failed candidate leaves the old generation serving. After possible promotion,
+ * potentially serving replacements are preserved rather than blindly deleted.
+ * Retry an interrupted deploy to finish promotion or retirement; destroy
+ * discovers unfinished owned generations.
  * See the [deployment guide](/fly/compute/deployments) for recovery and limits.
  *
  * @resource
@@ -886,11 +915,6 @@ const sameEnv = (
   observed: Record<string, string | undefined> | undefined,
   desired: Record<string, string>,
 ) => deepEqual(compactRecord(observed), desired);
-
-const sameServices = (
-  observed: FlyMachineService[] | undefined,
-  desired: FlyMachineService[] | undefined,
-) => deepEqual(observed ?? [], desired ?? [], { stripNullish: true });
 
 const sameMounts = (
   observed: FlyMachineMount[] | undefined,
@@ -1190,7 +1214,6 @@ export const MachineProvider = () =>
     delete: Effect.fn(function* ({ id, fqn, instanceId, olds, output, force }) {
       const appName = output.appName ?? appNameOf(olds.app);
       if (appName === undefined) return;
-      const policy = yield* deploymentPolicy(olds.deploy, olds.shutdown);
       yield* deleteReplicaSet({
         appName,
         id,
@@ -1199,7 +1222,6 @@ export const MachineProvider = () =>
         resourceInstanceId: instanceId,
         machineIds: machineIdsOf(output),
         volumeIds: volumeIdsOf(output),
-        shutdown: policy.shutdown,
         force,
       });
     }),

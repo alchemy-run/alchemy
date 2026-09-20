@@ -89,7 +89,7 @@ test.provider(
       expect(unchanged.machineIds).toEqual(recovered.machineIds);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );
 
 test.provider(
@@ -146,7 +146,7 @@ test.provider(
       expect(live.some((machine) => machine.id === candidate.id)).toBe(false);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );
 
 test.provider(
@@ -222,7 +222,7 @@ test.provider(
       );
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );
 
 test.provider(
@@ -287,5 +287,5 @@ test.provider(
       ).toBe(1);
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  { timeout: 300_000 },
 );

@@ -1,14 +1,21 @@
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Fly from "@/Fly";
+import { waitHealthy } from "@/Fly/replicas";
 import * as Test from "@/Test/Alchemy";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
+import {
+  assertAppGone,
+  census,
+  checks,
+  deployWorker,
+} from "./fixtures/bluegreen.ts";
 
 const { test } = Test.make({ providers: Fly.providers() });
 
 test.provider(
-  "bluegreen worker checks, promotion, replacement, and graceful teardown",
+  "S01 bluegreen worker checks, promotion, replacement, and graceful teardown",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -36,12 +43,15 @@ test.provider(
           }),
         );
       const first = yield* deploy("one");
-      const machine = yield* machines.getMachine({
+      const committed = yield* machines.getMachine({
         app_name: first.appName,
         machine_id: first.machineId,
       });
+      // Active commit metadata can reset reports after the provider's readiness validation.
+      const machine = yield* waitHealthy(first.appName, committed, 30_000);
+      expect(machine.instance_id).toBe(committed.instance_id);
       yield* Effect.logInfo("Observed promoted worker", {
-        checks: machine.checks,
+        checks: machine.checks?.map(({ name, status }) => ({ name, status })),
         configured: machine.config?.checks,
         metadata: machine.config?.metadata,
       });
@@ -62,24 +72,33 @@ test.provider(
           .filter((machine) => machine.state !== "destroyed")
           .map((machine) => machine.id),
       ).toEqual([second.machineId]);
-      const failed = yield* deploy("broken", "/missing").pipe(Effect.result);
+      yield* stack.destroy();
+      yield* assertAppGone(first.appName);
+    }),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "S04 unhealthy replacement preserves the old routed ID and cleans unpromoted candidates",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const initial = yield* deployWorker(stack, "one");
+      const failed = yield* deployWorker(stack, "broken", {
+        checks: { ready: { ...checks.ready, path: "/missing" } },
+        deploy: { strategy: "bluegreen", healthTimeout: "8 seconds" },
+      }).pipe(Effect.result);
       expect(Result.isFailure(failed)).toBe(true);
       if (Result.isFailure(failed))
         expect(failed.failure).toMatchObject({
           _tag: "Fly.ReplicaChecksNotPassing",
         });
-      const survivor = yield* machines.getMachine({
-        app_name: second.appName,
-        machine_id: second.machineId,
-      });
-      expect(survivor.state).toBe("started");
-      expect(survivor.cordoned).toBe(false);
-      expect(
-        (yield* machines.listMachines({ app_name: first.appName })).filter(
-          (machine) => machine.state !== "destroyed",
-        ),
-      ).toHaveLength(1);
+      const live = yield* census(initial.appName);
+      expect(live.map((machine) => machine.id)).toEqual(initial.machineIds);
+      expect(live[0]!.state).toBe("started");
+      expect(live[0]!.cordoned).toBe(false);
       yield* stack.destroy();
+      yield* assertAppGone(initial.appName);
     }),
-  { timeout: 120_000 },
+  { timeout: 180_000 },
 );

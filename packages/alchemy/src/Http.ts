@@ -211,12 +211,17 @@ export const NodeHttpServer = (serverOptions?: NodeHttpServerOptions) =>
               );
               // The Node bridge masks interruption, including streaming writes.
               yield* managed
-                ? server.serve(safeHttpEffect(handler), Effect.interruptible)
+                ? server.serve(safeHttpEffect(handler), (handled) =>
+                    Effect.withFiber((fiber) => {
+                      // Observe outside the adapter's request-scope finalization.
+                      managed.observeRequest(fiber);
+                      return Effect.interruptible(handled);
+                    }),
+                  )
                 : server.serve(safeHttpEffect(handler));
             });
             if (managed) {
               const scope = yield* Scope.fork(managed.scope);
-              yield* Effect.addFinalizer((exit) => Scope.close(scope, exit));
               yield* serve.pipe(Scope.provide(scope));
             } else {
               yield* serve;

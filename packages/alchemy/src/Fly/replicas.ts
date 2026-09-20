@@ -13,6 +13,7 @@ import * as Retry from "@distilled.cloud/fly-io/Retry";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Result from "effect/Result";
 import { deepEqual } from "../Diff.ts";
 import {
   validateDeployment,
@@ -20,6 +21,7 @@ import {
   type MachineCheck,
 } from "./Deployment.ts";
 import { reconcileBlueGreen, setRouting } from "./bluegreen.ts";
+import { usingMachineLeases, type MachineLeases } from "./leases.ts";
 import { listOwnedApps } from "./App.ts";
 import type {
   MachineGuest,
@@ -126,7 +128,7 @@ export const getMachineById = (appName: string, machineId: string) =>
 export const listMachinesByApp = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
     Effect.map((machines) => machines.filter((machine) => !gone(machine))),
-    Effect.catchTag(["NotFound", "Forbidden"], () => Effect.succeed([])),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
   );
 
 export const resolveCount = (count: number | undefined) =>
@@ -241,8 +243,70 @@ export const toFlyService = (service: MachineService): FlyMachineService => ({
     start_port: port.startPort,
     end_port: port.endPort,
   })),
-  checks: service.checks?.map(toFlyServiceCheck),
+  checks: service.checks?.map((check) => ({
+    ...toFlyServiceCheck(check),
+    // Fly clamps service-check intervals; named Machine checks retain longer intervals.
+    interval:
+      (durationNanoseconds(check.interval) ?? 0n) > 60_000_000_000n
+        ? "60s"
+        : check.interval,
+  })),
 });
+
+export const autostopMode = (value: string | boolean | undefined) =>
+  value === true
+    ? "stop"
+    : value === false || value === undefined
+      ? "off"
+      : value;
+
+const normalizedCheckDuration = (value: string | undefined) => {
+  const nanos = durationNanoseconds(value);
+  return nanos === undefined ? value : `${nanos}ns`;
+};
+
+const normalizedCheck = (
+  check: machines.FlyMachineCheck | FlyMachineServiceCheck | undefined,
+) =>
+  check === undefined
+    ? undefined
+    : {
+        ...check,
+        grace_period: normalizedCheckDuration(check.grace_period),
+        interval: normalizedCheckDuration(check.interval),
+        timeout: normalizedCheckDuration(check.timeout),
+      };
+
+export const sameChecks = (
+  observed: FlyMachineConfig["checks"],
+  desired: FlyMachineConfig["checks"],
+) => {
+  const normalize = (checks: FlyMachineConfig["checks"]) =>
+    Object.fromEntries(
+      Object.entries(checks ?? {}).map(([name, check]) => [
+        name,
+        normalizedCheck(check),
+      ]),
+    );
+  return deepEqual(normalize(observed), normalize(desired), {
+    stripNullish: true,
+  });
+};
+
+export const normalizedServices = (services: FlyMachineService[] | undefined) =>
+  (services ?? []).map((service) => ({
+    ...service,
+    autostop: autostopMode(service.autostop),
+    checks: service.checks?.map(normalizedCheck),
+  }));
+
+export const sameServices = (
+  observed: FlyMachineService[] | undefined,
+  desired: FlyMachineService[] | undefined,
+) =>
+  deepEqual(normalizedServices(observed), normalizedServices(desired), {
+    stripNullish: true,
+  });
 
 export const hasPublishedService = (
   services: FlyMachineService[] | undefined,
@@ -262,6 +326,7 @@ export const waitStarted = (appName: string, machineId: string) =>
       timeout: WAIT_TIMEOUT_SECONDS,
     })
     .pipe(
+      Retry.none,
       Effect.retry({
         times: 6,
         schedule: waitBackoff,
@@ -271,16 +336,46 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.timeout("50 seconds"),
     );
 
-const liveServiceChecks = (machine: FlyMachine) =>
-  (machine.checks ?? []).filter((check) =>
-    (check.name ?? "").startsWith(SERVICE_CHECK_NAME_PREFIX),
-  );
+export const configuredCheckNames = (config: FlyMachineConfig | undefined) => [
+  ...Object.keys(config?.checks ?? {}),
+  ...(config?.services ?? []).flatMap((service) =>
+    (service.checks ?? []).map(
+      (check, checkIndex) =>
+        `${SERVICE_CHECK_NAME_PREFIX}${String(checkIndex).padStart(2, "0")}-${check.type ?? "tcp"}-${service.internal_port}`,
+    ),
+  ),
+];
 
-const allServiceChecksPassing = (machine: FlyMachine, expected: number) => {
-  const checks = liveServiceChecks(machine);
+export const checksPassing = (
+  machine: FlyMachine,
+  config: FlyMachineConfig | undefined,
+) => {
+  const expected = configuredCheckNames(config);
+  const checks = machine.checks ?? [];
+  // Fly may also report compatibility mirrors; they do not replace service reports.
   return (
-    checks.length >= expected &&
-    checks.every((check) => check.status === "passing")
+    machine.state === "started" &&
+    new Set(expected).size === expected.length &&
+    checks.every(
+      (check) =>
+        check.name !== undefined &&
+        check.status === "passing" &&
+        (expected.includes(check.name) ||
+          expected.some(
+            (name) =>
+              name.startsWith(SERVICE_CHECK_NAME_PREFIX) &&
+              check.name ===
+                name.replace(
+                  SERVICE_CHECK_NAME_PREFIX,
+                  "bg_deployments_compat-",
+                ),
+          )),
+    ) &&
+    new Set(checks.map((check) => check.name)).size === checks.length &&
+    expected.every((name) => {
+      const reports = checks.filter((check) => check.name === name);
+      return reports.length === 1 && reports[0]?.status === "passing";
+    })
   );
 };
 
@@ -320,7 +415,7 @@ export const waitHealthy = Effect.fn(function* (
       checks: (observed.checks ?? []).map((check) => ({
         name: check.name,
         status: check.status,
-        output: check.output,
+        output: undefined,
       })),
     });
   const passing = yield* getMachineById(appName, machineId).pipe(
@@ -329,15 +424,17 @@ export const waitHealthy = Effect.fn(function* (
       if (current === undefined) return false;
       observed = current;
       return (
-        allServiceChecksPassing(current, expected) &&
-        named.every((name) =>
-          (current.checks ?? []).some(
-            (check) => check.name === name && check.status === "passing",
-          ),
-        )
+        current.instance_id !== undefined &&
+        current.instance_id === machine.instance_id &&
+        checksPassing(current, config)
       );
     }),
     Effect.catchTag(TRANSIENT_GET_TAGS, () => Effect.succeed(false)),
+    Effect.catchTag("HttpClientError", (error) =>
+      error.reason._tag === "TransportError"
+        ? Effect.succeed(false)
+        : Effect.fail(error),
+    ),
     Effect.repeat({
       schedule: Schedule.spaced(healthTimeoutMs / 10),
       until: (passing) => passing,
@@ -361,6 +458,7 @@ export const waitDestroyed = (appName: string, machineId: string) =>
       timeout: WAIT_TIMEOUT_SECONDS,
     })
     .pipe(
+      Retry.none,
       Effect.as(undefined),
       Effect.catchTag("NotFound", () => Effect.void),
       Effect.retry({
@@ -369,23 +467,48 @@ export const waitDestroyed = (appName: string, machineId: string) =>
         while: (e) =>
           e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
       }),
+      Effect.timeout("50 seconds"),
     );
 
-export const ensureStarted = Effect.fn(function* (
+export const ensureStarted = (
   appName: string,
   machine: FlyMachine,
   skipLaunch: boolean,
   healthTimeoutMs = 60_000,
   expectedConfig?: FlyMachineConfig,
+  existingLeases?: MachineLeases,
+) =>
+  usingMachineLeases(appName, existingLeases, (leases) =>
+    ensureLeasedStarted(
+      appName,
+      machine,
+      skipLaunch,
+      healthTimeoutMs,
+      expectedConfig,
+      leases,
+    ),
+  );
+
+const ensureLeasedStarted = Effect.fn(function* (
+  appName: string,
+  machine: FlyMachine,
+  skipLaunch: boolean,
+  healthTimeoutMs: number,
+  expectedConfig: FlyMachineConfig | undefined,
+  leases: MachineLeases,
 ) {
   const machineId = machine.id;
   if (machineId === undefined || skipLaunch) return machine;
+  yield* leases.acquire([machineId]);
   const started = yield* Effect.gen(function* () {
     // Create/update responses can lag Fly's automatic launch.
     const current = yield* machines.getMachine({
       app_name: appName,
       machine_id: machineId,
     });
+    if (!sameOwnership(current, machine)) {
+      return yield* new ReplicaOwnershipChanged({ appName, machineId });
+    }
     yield* Effect.logDebug("Fly machine startup", {
       appName,
       machineId,
@@ -396,10 +519,13 @@ export const ensureStarted = Effect.fn(function* (
       current.state === "suspended" ||
       current.state === "failed"
     ) {
-      yield* machines.startMachine({
-        app_name: appName,
-        machine_id: machineId,
-      });
+      yield* leases.mutate(machineId, (lease_nonce) =>
+        machines.startMachine({
+          app_name: appName,
+          machine_id: machineId,
+          lease_nonce,
+        }),
+      );
     }
     // Re-observe state between waits instead of retrying the wait in the SDK.
     yield* machines
@@ -407,6 +533,7 @@ export const ensureStarted = Effect.fn(function* (
         app_name: appName,
         machine_id: machineId,
         state: "started",
+        instance_id: current.instance_id,
         timeout: WAIT_TIMEOUT_SECONDS,
       })
       .pipe(Retry.none);
@@ -420,11 +547,12 @@ export const ensureStarted = Effect.fn(function* (
       schedule: waitBackoff,
       while: (error) =>
         error._tag === "MachineStartFromCreatedState" ||
+        error._tag === "MachineReplacing" ||
         error._tag === "MachineWaitTimeout" ||
         error._tag === "Conflict" ||
         error._tag === "GatewayTimeout",
     }),
-    Effect.timeout("50 seconds"),
+    Effect.timeout("180 seconds"),
   );
   return yield* waitHealthy(
     appName,
@@ -434,43 +562,79 @@ export const ensureStarted = Effect.fn(function* (
   );
 });
 
-export const deleteMachine = Effect.fn(function* (
+export const deleteMachine = (
   appName: string,
   machineId: string,
-) {
-  if (appName.length === 0 || machineId.length === 0) return;
-  yield* machines
-    .deleteMachine({
-      app_name: appName,
-      machine_id: machineId,
-      force: true,
-    })
-    .pipe(
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.retry({
-        while: (e) => e._tag === "Conflict",
-        times: 6,
-        schedule: waitBackoff,
-      }),
-    );
-  yield* waitDestroyed(appName, machineId);
-});
+  existingLeases?: MachineLeases,
+) =>
+  usingMachineLeases(appName, existingLeases, (leases) =>
+    Effect.gen(function* () {
+      if (appName.length === 0 || machineId.length === 0) return;
+      yield* leases.acquire([machineId]);
+      yield* leases.remove(machineId, (lease_nonce) =>
+        machines
+          .deleteMachine({
+            app_name: appName,
+            machine_id: machineId,
+            force: true,
+            lease_nonce,
+          })
+          .pipe(Effect.timeout("30 seconds")),
+      );
+      yield* waitDestroyed(appName, machineId);
+    }).pipe(Effect.catchTag("NotFound", () => leases.forget(machineId))),
+  );
+
+const durationNanoseconds = (value: string | undefined) => {
+  if (value === undefined || value === "") return undefined;
+  const negative = value.startsWith("-");
+  const duration = /^[+-]/.test(value) ? value.slice(1) : value;
+  if (duration === "0") return 0n;
+  const limit = negative ? 1n << 63n : (1n << 63n) - 1n;
+  const units: Record<string, bigint> = {
+    ns: 1n,
+    us: 1_000n,
+    µs: 1_000n,
+    μs: 1_000n,
+    ms: 1_000_000n,
+    s: 1_000_000_000n,
+    m: 60_000_000_000n,
+    h: 3_600_000_000_000n,
+  };
+  let total = 0n;
+  let consumed = 0;
+  for (const part of duration.matchAll(
+    /(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/gy,
+  )) {
+    const [integer = "", fraction = ""] = part[1]!.split(".");
+    const whole = integer.replace(/^0+/, "") || "0";
+    if (whole.length > 19) return undefined;
+    const unit = units[part[2]!]!;
+    let fractionalNanos = 0n;
+    // Truncate each component to nanoseconds without unbounded BigInt operands.
+    for (let index = fraction.length - 1; index >= 0; index--) {
+      fractionalNanos =
+        (BigInt(fraction[index]!) * unit + fractionalNanos) / 10n;
+    }
+    total += BigInt(whole) * unit + fractionalNanos;
+    if (total > limit) return undefined;
+    consumed += part[0].length;
+  }
+  if (consumed === 0 || consumed !== duration.length) return undefined;
+  return negative ? -total : total;
+};
 
 const stopTimeoutMillis = (timeout: string | undefined) => {
-  if (timeout === undefined) return undefined;
-  const units: Record<string, number> = {
-    ms: 1,
-    s: 1000,
-    m: 60_000,
-    h: 3_600_000,
-  };
-  const parts = [...timeout.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)];
-  return parts.map((part) => part[0]).join("") === timeout
-    ? parts.reduce(
-        (total, part) => total + Number(part[1]) * units[part[2]!]!,
-        0,
-      )
-    : undefined;
+  if (timeout === "") return 0;
+  // Shutdown policies retain their unsigned millisecond-or-larger syntax.
+  if (
+    timeout === undefined ||
+    !/^(?:\d+(?:\.\d+)?(?:ms|s|m|h))+$/.test(timeout)
+  ) {
+    return undefined;
+  }
+  const nanos = durationNanoseconds(timeout);
+  return nanos === undefined ? undefined : Number(nanos) / 1_000_000;
 };
 
 export const sameStopConfig = (
@@ -480,48 +644,288 @@ export const sameStopConfig = (
   observed?.signal === desired?.signal &&
   stopTimeoutMillis(observed?.timeout) === stopTimeoutMillis(desired?.timeout);
 
-export const retireMachine = Effect.fn(
+export class ShutdownPolicyMismatch extends Data.TaggedError(
+  "Fly.ShutdownPolicyMismatch",
+)<{ machineId: string; message: string }> {}
+
+export const predecessorShutdown = Effect.fn(function* (machine: FlyMachine) {
+  const persisted = machine.config?.stop_config;
+  const injected = machine.config?.env?.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS;
+  const timeoutMs = stopTimeoutMillis(persisted?.timeout);
+  if (injected !== undefined) {
+    const managedTimeout = Number(injected);
+    const signal = persisted?.signal ?? "SIGTERM";
+    if (
+      !/^\d+$/.test(injected) ||
+      !Number.isSafeInteger(managedTimeout) ||
+      managedTimeout <= 0 ||
+      managedTimeout > 300_000 ||
+      (signal !== "SIGTERM" && signal !== "SIGINT") ||
+      (persisted?.timeout !== undefined && timeoutMs !== managedTimeout)
+    ) {
+      return yield* new ShutdownPolicyMismatch({
+        machineId: machine.id ?? "",
+        message:
+          "The predecessor's managed shutdown environment and stop_config disagree; reconcile its shutdown policy before migration.",
+      });
+    }
+    return {
+      signal,
+      timeout: persisted?.timeout ?? `${managedTimeout}ms`,
+      timeoutMs: managedTimeout,
+    };
+  }
+  if (persisted?.timeout !== undefined && (!timeoutMs || timeoutMs > 300_000)) {
+    return yield* new ShutdownPolicyMismatch({
+      machineId: machine.id ?? "",
+      message:
+        "The predecessor has an invalid stop_config timeout; refusing to shorten its shutdown window.",
+    });
+  }
+  // Unspecified raw-image overrides must remain unspecified for Fly's defaults.
+  return {
+    signal: persisted?.signal,
+    timeout: persisted?.timeout,
+    timeoutMs: timeoutMs ?? 300_000,
+  };
+});
+
+export class ReplicaOwnershipChanged extends Data.TaggedError(
+  "Fly.ReplicaOwnershipChanged",
+)<{
+  appName: string;
+  machineId: string;
+}> {}
+
+export class ReplicaRetirementIncomplete extends Data.TaggedError(
+  "Fly.ReplicaRetirementIncomplete",
+)<{
+  appName: string;
+  residuals: Array<{ machineId: string; stage: string }>;
+}> {}
+
+const retirementStep =
+  (appName: string, machineId: string, stage: string) =>
+  <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.mapError((error) =>
+        error._tag === "NotFound"
+          ? error
+          : new ReplicaRetirementIncomplete({
+              appName,
+              residuals: [{ machineId, stage: `${stage}: ${error._tag}` }],
+            }),
+      ),
+    );
+
+const sameOwnership = (observed: FlyMachine, snapshot: FlyMachine) =>
+  observed.id === snapshot.id &&
+  [
+    alchemyMetadataKeys.stack,
+    alchemyMetadataKeys.stage,
+    alchemyMetadataKeys.id,
+    alchemyMetadataKeys.type,
+    alchemyMetadataKeys.instance,
+    alchemyMetadataKeys.fqn,
+    alchemyMetadataKeys.generation,
+  ].every(
+    (key) =>
+      observed.config?.metadata?.[key] === snapshot.config?.metadata?.[key],
+  );
+
+export const leaseSnapshot = Effect.fn(function* (
+  appName: string,
+  snapshot: FlyMachine[],
+  leases: MachineLeases,
+) {
+  const ordered = [...snapshot].sort((a, b) =>
+    (a.id ?? "").localeCompare(b.id ?? ""),
+  );
+  yield* Effect.forEach(
+    ordered,
+    (machine) =>
+      Effect.gen(function* () {
+        if (!machine.id || machine.host_status === "unreachable") return;
+        yield* leases
+          .acquire([machine.id])
+          .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      }),
+    { concurrency: 1 },
+  ).pipe(Effect.timeout("30 seconds"));
+  const observed: FlyMachine[] = [];
+  for (const machine of ordered) {
+    if (!machine.id) continue;
+    if (machine.host_status === "unreachable") {
+      observed.push(machine);
+      continue;
+    }
+    const current = yield* getMachineById(appName, machine.id);
+    if (!current) {
+      yield* leases.forget(machine.id);
+      continue;
+    }
+    if (!sameOwnership(current, machine))
+      return yield* new ReplicaOwnershipChanged({
+        appName,
+        machineId: machine.id,
+      });
+    yield* leases.checkTarget(machine.id);
+    observed.push(current);
+  }
+  yield* leases.check;
+  return observed;
+});
+
+export const retireMachines = (
+  appName: string,
+  snapshot: FlyMachine[],
+  replacementReady = false,
+  existingLeases?: MachineLeases,
+) =>
+  usingMachineLeases(appName, existingLeases, (leases) =>
+    retireLeasedMachines(appName, snapshot, replacementReady, leases),
+  );
+
+const retireLeasedMachines = Effect.fn(function* (
+  appName: string,
+  snapshot: FlyMachine[],
+  replacementReady: boolean,
+  leases: MachineLeases,
+) {
+  const targets = yield* leaseSnapshot(appName, snapshot, leases);
+  const results = yield* Effect.forEach(
+    targets,
+    (machine) =>
+      Effect.gen(function* () {
+        yield* leases.check;
+        const result = yield* Effect.gen(function* () {
+          if (!machine.id) return;
+          if (replacementReady && machine.host_status === "unreachable") {
+            const metadata = machine.config?.metadata;
+            if (
+              !machine.config ||
+              machine.incomplete_config ||
+              (machine.config.mounts?.length ?? 0) > 0 ||
+              !metadata?.[alchemyMetadataKeys.instance] ||
+              !metadata[alchemyMetadataKeys.fqn]
+            ) {
+              return yield* new ReplicaOwnershipChanged({
+                appName,
+                machineId: machine.id,
+              });
+            }
+            yield* Effect.logWarning(
+              "Force-retiring owned stateless Fly Machine on unreachable host; work was not proven drained",
+              { appName, machineId: machine.id },
+            );
+            const machineId = machine.id;
+            const heldNonce = yield* leases.nonceIfHeld(machineId);
+            yield* Effect.gen(function* () {
+              const remove = (lease_nonce?: string) =>
+                machines
+                  .deleteMachine({
+                    app_name: appName,
+                    machine_id: machineId,
+                    force: true,
+                    lease_nonce,
+                  })
+                  .pipe(Retry.none, Effect.timeout("30 seconds"));
+              if (heldNonce !== undefined)
+                yield* leases.remove(machineId, remove);
+              else yield* leases.guard(remove());
+            }).pipe(
+              Effect.catchTag("NotFound", () => Effect.void),
+              retirementStep(appName, machineId, "unreachable force-delete"),
+            );
+            yield* leases.forget(machine.id);
+            return yield* waitDestroyed(appName, machine.id);
+          }
+          yield* retireMachine(appName, machine.id, machine, leases);
+        }).pipe(Effect.result);
+        yield* leases.check;
+        return Result.isFailure(result)
+          ? result.failure._tag === "Fly.ReplicaRetirementIncomplete"
+            ? result.failure.residuals
+            : [{ machineId: machine.id ?? "", stage: result.failure._tag }]
+          : [];
+      }),
+    { concurrency: 4 },
+  );
+  const residuals = results.flat();
+  if (residuals.length)
+    return yield* new ReplicaRetirementIncomplete({ appName, residuals });
+});
+
+export const retireMachine = (
+  appName: string,
+  machineId: string,
+  snapshot?: FlyMachine,
+  existingLeases?: MachineLeases,
+) =>
+  usingMachineLeases(appName, existingLeases, (leases) =>
+    retireLeasedMachine(appName, machineId, snapshot, leases).pipe(
+      Effect.tap(() => leases.forget(machineId)),
+    ),
+  );
+
+const retireLeasedMachine = Effect.fn(
   function* (
     appName: string,
     machineId: string,
-    shutdown?: DeploymentPolicy["shutdown"],
+    snapshot: FlyMachine | undefined,
+    leases: MachineLeases,
   ) {
+    yield* leases.acquire([machineId]);
     const current = yield* getMachineById(appName, machineId);
     if (current === undefined) return;
-    const stop =
-      shutdown ??
-      (current.config?.stop_config
-        ? {
-            signal: current.config.stop_config.signal ?? "SIGTERM",
-            timeout: current.config.stop_config.timeout ?? "30s",
-            timeoutMs:
-              stopTimeoutMillis(current.config.stop_config.timeout) ?? 300_000,
-          }
-        : undefined);
+    if (snapshot && !sameOwnership(current, snapshot)) {
+      return yield* new ReplicaOwnershipChanged({ appName, machineId });
+    }
+    const stop = yield* predecessorShutdown(current);
     if (
-      stop === undefined ||
-      (current.cordoned === true &&
-        current.config?.metadata?.[alchemyMetadataKeys.phase] === "candidate")
+      current.cordoned === true &&
+      current.config?.metadata?.[alchemyMetadataKeys.phase] === "candidate"
     )
-      return yield* deleteMachine(appName, machineId);
+      return yield* deleteMachine(appName, machineId, leases);
     if (current.state !== "stopped" && current.state !== "created") {
-      yield* machines.cordonMachine({
-        app_name: appName,
-        machine_id: machineId,
-      });
+      yield* leases
+        .mutate(
+          machineId,
+          (lease_nonce) =>
+            machines
+              .cordonMachine({
+                app_name: appName,
+                machine_id: machineId,
+                lease_nonce,
+              })
+              .pipe(Effect.timeout("30 seconds")),
+          { idempotent: true },
+        )
+        .pipe(retirementStep(appName, machineId, "cordon"));
       if (hasPublishedService(current.config?.services))
         yield* Effect.sleep("10 seconds");
-      yield* machines.stopMachine({
-        app_name: appName,
-        machine_id: machineId,
-        signal: stop.signal,
-        timeout: stop.timeout,
-      });
+      yield* leases
+        .mutate(
+          machineId,
+          (lease_nonce) =>
+            machines
+              .stopMachine({
+                app_name: appName,
+                machine_id: machineId,
+                lease_nonce,
+                signal: stop.signal,
+                timeout: stop.timeout,
+              })
+              .pipe(Effect.timeout(stop.timeoutMs + 15_000)),
+          { timeoutMs: stop.timeoutMs + 120_000 },
+        )
+        .pipe(retirementStep(appName, machineId, "stop"));
       yield* machines
         .waitMachine({
           app_name: appName,
           machine_id: machineId,
           state: "stopped",
+          instance_id: current.instance_id,
           timeout: WAIT_TIMEOUT_SECONDS,
         })
         .pipe(
@@ -534,12 +938,27 @@ export const retireMachine = Effect.fn(
               error._tag === "GatewayTimeout",
           }),
           Effect.timeout(stop.timeoutMs + 15_000),
+          retirementStep(appName, machineId, "wait-stopped"),
         );
     }
-    yield* machines
-      .deleteMachine({ app_name: appName, machine_id: machineId, force: false })
-      .pipe(Effect.catchTag("NotFound", () => Effect.void));
-    yield* waitDestroyed(appName, machineId);
+    yield* leases
+      .remove(machineId, (lease_nonce) =>
+        machines
+          .deleteMachine({
+            app_name: appName,
+            machine_id: machineId,
+            force: false,
+            lease_nonce,
+          })
+          .pipe(Effect.timeout("30 seconds")),
+      )
+      .pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+        retirementStep(appName, machineId, "delete"),
+      );
+    yield* waitDestroyed(appName, machineId).pipe(
+      retirementStep(appName, machineId, "verify-absent"),
+    );
   },
   Effect.catchTag("NotFound", () => Effect.void),
 );
@@ -744,8 +1163,14 @@ export interface ReconcileReplicasInput {
   }) => FlyMachineConfig;
 }
 
-export const reconcileReplicas = Effect.fn(function* (
+export const reconcileReplicas = (input: ReconcileReplicasInput) =>
+  usingMachineLeases(input.appName, undefined, (leases) =>
+    reconcileLeasedReplicas(input, leases),
+  );
+
+const reconcileLeasedReplicas = Effect.fn(function* (
   input: ReconcileReplicasInput,
+  leases: MachineLeases,
 ) {
   const ownership = yield* createMachineMetadata(input.id, input.type);
   const alchemy = {
@@ -785,6 +1210,7 @@ export const reconcileReplicas = Effect.fn(function* (
       { ...input, buildConfig },
       ownership,
       alchemy,
+      leases,
     );
   const desiredNames = new Set(
     Array.from({ length: input.count }, (_, index) =>
@@ -792,11 +1218,15 @@ export const reconcileReplicas = Effect.fn(function* (
     ),
   );
   const listed = yield* listMachinesByApp(input.appName);
-  const owned = ownedReplicas(listed, {
-    ...input,
-    metadata: ownership,
-    machineIds: input.outputMachineIds,
-  });
+  const owned = yield* leaseSnapshot(
+    input.appName,
+    ownedReplicas(listed, {
+      ...input,
+      metadata: ownership,
+      machineIds: input.outputMachineIds,
+    }),
+    leases,
+  );
   const byIndex = new Map<number, FlyMachine>();
   const preferIds = new Set(
     (input.outputMachineIds ?? []).filter((id) => id.length > 0),
@@ -820,12 +1250,14 @@ export const reconcileReplicas = Effect.fn(function* (
     if (!byIndex.has(index)) byIndex.set(index, machine);
   }
 
-  for (const [index, machine] of byIndex) {
-    if (index >= input.count && machine.id !== undefined) {
-      yield* retireMachine(input.appName, machine.id, input.policy.shutdown);
-      byIndex.delete(index);
-    }
-  }
+  const scaleDown = [...byIndex].filter(([index]) => index >= input.count);
+  yield* retireMachines(
+    input.appName,
+    scaleDown.map(([, machine]) => machine),
+    false,
+    leases,
+  );
+  for (const [index] of scaleDown) byIndex.delete(index);
 
   const groups: Array<{
     disk: DiskSpec;
@@ -856,6 +1288,13 @@ export const reconcileReplicas = Effect.fn(function* (
     const metadata = {
       ...alchemy,
       [alchemyMetadataKeys.replica]: String(index),
+      ...(input.minSecretsVersion === undefined
+        ? {}
+        : {
+            [alchemyMetadataKeys.secretsVersion]: String(
+              input.minSecretsVersion,
+            ),
+          }),
     };
     const prefer = input.preferVolumeIds?.[index] ?? [];
     const mounts: FlyMachineMount[] = [];
@@ -892,7 +1331,11 @@ export const reconcileReplicas = Effect.fn(function* (
         created ??
         (yield* listMachinesByApp(input.appName).pipe(
           Effect.map((machines) =>
-            machines.find((machine) => machine.name === name),
+            ownedReplicas(machines, {
+              ...input,
+              metadata: ownership,
+              machineIds: input.outputMachineIds,
+            }).find((machine) => machine.name === name),
           ),
         ));
       if (current === undefined || current.id === undefined) {
@@ -901,26 +1344,79 @@ export const reconcileReplicas = Effect.fn(function* (
           appName: input.appName,
         });
       }
+      const observed = (yield* leaseSnapshot(
+        input.appName,
+        [current],
+        leases,
+      ))[0];
+      if (!observed || input.configDrifted(observed, { mounts, metadata })) {
+        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+      }
+      current = observed;
     } else if (
-      !deepEqual(current.config?.checks ?? {}, config.checks ?? {}, {
-        stripNullish: true,
-      }) ||
+      !sameChecks(current.config?.checks, config.checks) ||
       !sameStopConfig(current.config?.stop_config, config.stop_config) ||
       input.configDrifted(current, {
         mounts,
         metadata,
       })
     ) {
-      const updated = yield* machines
-        .updateMachine({
-          app_name: input.appName,
-          machine_id: current.id ?? "",
-          config,
-          skip_launch: input.skipLaunch === true ? true : undefined,
-          min_secrets_version: input.minSecretsVersion,
-        })
-        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
-      if (updated !== undefined) current = updated;
+      const machineId = current.id!;
+      const currentVersion = current.instance_id;
+      const previous = current;
+      const expected = { ...previous, config };
+      yield* leases.mutate(machineId, (lease_nonce) =>
+        machines
+          .updateMachine({
+            app_name: input.appName,
+            machine_id: machineId,
+            current_version: currentVersion,
+            config,
+            skip_launch: input.skipLaunch === true ? true : undefined,
+            min_secrets_version: input.minSecretsVersion,
+            lease_nonce,
+          })
+          .pipe(Effect.timeout("30 seconds")),
+      );
+      // Rolling opt-out removes generation metadata; observe that transition before startup.
+      current = yield* leases.guard(
+        Effect.gen(function* () {
+          const observed = yield* machines
+            .getMachine({
+              app_name: input.appName,
+              machine_id: machineId,
+            })
+            .pipe(Retry.none);
+          if (
+            !sameOwnership(observed, expected) &&
+            !sameOwnership(observed, previous)
+          )
+            return yield* new ReplicaOwnershipChanged({
+              appName: input.appName,
+              machineId,
+            });
+          if (
+            !sameOwnership(observed, expected) ||
+            input.configDrifted(observed, { mounts, metadata }) ||
+            !sameChecks(observed.config?.checks, config.checks) ||
+            !sameStopConfig(observed.config?.stop_config, config.stop_config)
+          )
+            return yield* new ReplicaNotCreated({
+              appName: input.appName,
+              name,
+            });
+          return observed;
+        }).pipe(
+          Effect.retry({
+            times: 8,
+            schedule: waitBackoff,
+            while: (error) =>
+              error._tag === "Fly.ReplicaNotCreated" ||
+              TRANSIENT_GET_TAGS.some((tag) => tag === error._tag),
+          }),
+          Effect.timeout("60 seconds"),
+        ),
+      );
     }
 
     current = yield* ensureStarted(
@@ -929,9 +1425,10 @@ export const reconcileReplicas = Effect.fn(function* (
       input.skipLaunch === true,
       input.policy.healthTimeoutMs,
       config,
+      leases,
     );
     if (current.cordoned === true && !input.skipLaunch) {
-      yield* setRouting(input.appName, current.id!, false);
+      yield* setRouting(input.appName, current.id!, false, leases);
       if (hasPublishedService(config.services))
         yield* Effect.sleep("10 seconds");
       current = yield* waitHealthy(
@@ -945,11 +1442,11 @@ export const reconcileReplicas = Effect.fn(function* (
   }
 
   const liveIds = new Set(live.map((machine) => machine.id));
-  yield* Effect.forEach(
+  yield* retireMachines(
+    input.appName,
     owned.filter((machine) => !liveIds.has(machine.id)),
-    (machine) =>
-      retireMachine(input.appName, machine.id!, input.policy.shutdown),
-    { concurrency: 4 },
+    false,
+    leases,
   );
 
   for (const group of groups) {
@@ -991,32 +1488,44 @@ export const deleteReplicaSet = Effect.fn(function* (input: {
   type: FlyAlchemyType;
   fqn: string;
   resourceInstanceId: string;
-  shutdown?: DeploymentPolicy["shutdown"];
   force?: boolean;
   machineIds: readonly string[];
   volumeIds: readonly string[];
 }) {
-  const owned = input.force
-    ? []
-    : ownedReplicas(yield* listMachinesByApp(input.appName), {
-        ...input,
-        metadata: yield* createMachineMetadata(input.id, input.type),
-      });
-  const ids = input.force
-    ? input.machineIds
-    : owned.flatMap((machine) => (machine.id ? [machine.id] : []));
-  yield* Effect.forEach(
-    ids.filter((id) => id.length > 0),
-    (machineId) =>
-      input.force
-        ? deleteMachine(input.appName, machineId)
-        : retireMachine(input.appName, machineId, input.shutdown),
-    { concurrency: 4 },
-  );
-  yield* Effect.forEach(
-    [...new Set(input.volumeIds)].filter((id) => id.length > 0),
-    (volumeId) => deleteVolume(input.appName, volumeId),
-    { concurrency: 4 },
+  return yield* usingMachineLeases(input.appName, undefined, (leases) =>
+    Effect.gen(function* () {
+      const owned = yield* leaseSnapshot(
+        input.appName,
+        ownedReplicas(yield* listMachinesByApp(input.appName), {
+          ...input,
+          metadata: yield* createMachineMetadata(input.id, input.type),
+        }),
+        leases,
+      );
+      if (input.force) {
+        yield* Effect.forEach(
+          owned,
+          (machine) =>
+            Effect.gen(function* () {
+              if (!machine.id) return;
+              const current = yield* getMachineById(input.appName, machine.id);
+              if (!current) return;
+              if (!sameOwnership(current, machine))
+                return yield* new ReplicaOwnershipChanged({
+                  appName: input.appName,
+                  machineId: machine.id,
+                });
+              yield* deleteMachine(input.appName, machine.id, leases);
+            }),
+          { concurrency: 4 },
+        );
+      } else yield* retireMachines(input.appName, owned, false, leases);
+      yield* Effect.forEach(
+        [...new Set(input.volumeIds)].filter((id) => id.length > 0),
+        (volumeId) => deleteVolume(input.appName, volumeId),
+        { concurrency: 4 },
+      );
+    }),
   );
 });
 
@@ -1066,13 +1575,28 @@ export const observeReplicaSet = Effect.fn(function* (input: {
         group[0]?.config?.metadata?.[alchemyMetadataKeys.count],
       );
       return (
+        Number.isSafeInteger(count) &&
+        count > 0 &&
         group.length === count &&
         new Set(group.map(replicaIndexOf)).size === count &&
-        group.every(
-          (machine) =>
-            machine.config?.metadata?.[alchemyMetadataKeys.phase] ===
-              "active" && machine.cordoned === false,
-        )
+        group.every((machine) => {
+          const metadata = machine.config?.metadata;
+          const index = replicaIndexOf(machine);
+          return (
+            index >= 0 &&
+            index < count &&
+            Number(metadata?.[alchemyMetadataKeys.count]) === count &&
+            metadata?.[alchemyMetadataKeys.phase] === "active" &&
+            machine.cordoned === false &&
+            (metadata[alchemyMetadataKeys.protocol] === undefined ||
+              (metadata[alchemyMetadataKeys.protocol] === "1" &&
+                metadata[alchemyMetadataKeys.restored] === "true" &&
+                (metadata[alchemyMetadataKeys.role] === "idle" ||
+                  (machine.instance_id !== undefined &&
+                    metadata[alchemyMetadataKeys.checkedInstance] ===
+                      machine.instance_id))))
+          );
+        })
       );
     })
     .sort(
