@@ -111,16 +111,21 @@ export const applyMigrations = (options: {
 > =>
   Effect.gen(function* () {
     const { resolved, executor } = options;
-    const layout = yield* detectLayout(resolved.dir);
-    const records =
-      layout === "flat"
-        ? yield* readFlatRecords(resolved.dir)
-        : yield* readDrizzleDirRecords(resolved.dir);
+    const records = yield* readMigrationRecords(resolved.dir);
     yield* applyAlchemyFormat({
       executor,
       table: resolved.table,
       records,
     });
+  });
+
+/** Read any supported migration directory into the shared record format. */
+export const readMigrationRecords = (dir: string) =>
+  Effect.gen(function* () {
+    const layout = yield* detectLayout(dir);
+    return yield* layout === "flat"
+      ? readFlatRecords(dir)
+      : readDrizzleDirRecords(dir);
   });
 
 const hashMigrationsDir = (dir: string) =>

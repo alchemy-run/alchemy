@@ -357,3 +357,45 @@ test.provider(
       expect(yield* readMigrationDirs(ws.out)).toEqual(initialDirs);
     }),
 );
+
+test.provider(
+  "generates DSQL-compatible PostgreSQL SQL without a new dialect",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { prepareDsqlStatements } = yield* Effect.promise(
+        () => import("@/AWS/DSQL/MigrationSql.ts"),
+      );
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(`
+      import { pgTable, uuid, text, index } from "drizzle-orm/pg-core";
+      export const users = pgTable("users", {
+        id: uuid("id").primaryKey(), email: text("email").notNull(),
+      }, (table) => [index("users_email_idx").on(table.email)]);
+    `);
+      yield* Effect.gen(function* () {
+        yield* stack.deploy(
+          Drizzle.Schema("Schema", {
+            schema: ws.schemaPath,
+            out: ws.out,
+            dialect: "postgres",
+          }),
+        );
+        const dirs = yield* readMigrationDirs(ws.out);
+        expect(dirs).toHaveLength(1);
+        const sql = yield* fs.readFileString(
+          path.join(ws.out, dirs[0], "migration.sql"),
+        );
+        expect(sql).toContain('"id" uuid PRIMARY KEY');
+        const statements = yield* prepareDsqlStatements(sql, dirs[0]);
+        expect(statements).toHaveLength(2);
+        expect(statements[1]).toContain("INDEX ASYNC");
+      }).pipe(
+        Effect.ensuring(stack.destroy().pipe(Effect.orDie)),
+        Effect.ensuring(
+          fs.remove(ws.root, { recursive: true }).pipe(Effect.orDie),
+        ),
+      );
+    }),
+);
