@@ -9,6 +9,12 @@ export const command = AI.Thing("command", S.String)`
   A shell command run with 'sh -c' at the root of your tree. Chain steps
   with '&&'; quote paths containing spaces.`;
 
+const cwd = AI.Thing("cwd", S.optionalKey(S.String))`
+  The workspace the command runs in, addressed as "@<name>" or
+  "@<name>/<sub>" (list_workspaces shows the active ones). Sessions
+  have NO default workspace — in a team thread every bash call sets
+  this, or it fails before the command runs.`;
+
 const timeout = AI.Thing(
   "timeout",
   S.optionalKey(
@@ -33,8 +39,8 @@ const stderr = AI.Thing("stderr", S.String)`
   The command's stderr, truncated and retained exactly like stdout.`;
 
 export class Bash extends (AI.Tool<Bash>(import.meta)("bash")`
-  Run ${command} — answers ${AI.out(exitCode, stdout, stderr)}. Set
-  ${timeout} for long test runs. Do NOT use bash for file operations —
+  Run ${command} in ${cwd} — answers ${AI.out(exitCode, stdout, stderr)}.
+  Set ${timeout} for long test runs. Do NOT use bash for file operations —
   use grep instead of grep/rg/find, readFile instead of cat/head/tail,
   and editFile/writeFile instead of sed/awk/echo-redirection; the
   dedicated tools are cheaper, safer, and truncate for you. Prefer a
@@ -75,9 +81,14 @@ export const BashLive = Layer.effect(
       };
     });
 
-    return Effect.fn(function* (input: { command: string; timeout?: number }) {
+    return Effect.fn(function* (input: {
+      command: string;
+      cwd?: string;
+      timeout?: number;
+    }) {
       const result = yield* sandbox.exec(input.command, undefined, {
         timeout: (input.timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
+        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
       });
       const stdout = yield* channel(
         "stdout",

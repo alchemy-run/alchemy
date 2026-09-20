@@ -68,8 +68,9 @@ export const GeneralEngineer = Engineer.make`
   write; prefer the smallest change that works well; never leave
   the tree broken — typecheck and test what you touched.
 
-  Publish when the work is ready: commit it (bash: git add / git
-  commit with a conventional-commit message), push it with
+  Publish when the work is ready: commit it (bash with cwd
+  "@<workspace>": git add / git commit with a
+  conventional-commit message), push it with
   ${PushBranch} (a topic branch — or the pull request's own head
   branch when the session is about one), then OPEN the pull
   request with ${OpenPullRequest} — it lands on GitHub

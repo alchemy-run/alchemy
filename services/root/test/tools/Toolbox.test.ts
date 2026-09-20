@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ArtifactsLocal } from "../../src/artifacts/ArtifactsLocal.ts";
 import { Bash, BashLive } from "../../src/coding/Bash.ts";
+import { atName } from "../../src/coding/Origin.ts";
 import { Glob, GlobLive } from "../../src/coding/Glob.ts";
 import { Grep, GrepLive } from "../../src/coding/Grep.ts";
 import {
@@ -66,6 +67,13 @@ const withWorkspace = <A, E>(program: Effect.Effect<A, E, any>): Promise<A> =>
       E
     >,
   );
+
+test("atName normalizes a workspace input to the router's address", () => {
+  expect(atName("kv-docs-fix")).toBe("@kv-docs-fix");
+  expect(atName("@kv-docs-fix")).toBe("@kv-docs-fix");
+  expect(atName(undefined)).toBeUndefined();
+  expect(atName("")).toBeUndefined();
+});
 
 test("Workspace contains lexical and symlink escapes", () =>
   withWorkspace(
@@ -172,6 +180,16 @@ test("Bash truncates to a readable opaque full-output artifact", () =>
       });
       expect(beginning.content).toContain("line-1");
       expect(beginning.content).toContain("line-2");
+    }),
+  ));
+
+test("Bash forwards cwd to the sandbox — the workspace address reaches exec", () =>
+  withWorkspace(
+    Effect.gen(function* () {
+      const bash = yield* Bash;
+      const result = yield* (bash as any)({ command: "pwd", cwd: "src" });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim().endsWith("/src")).toBe(true);
     }),
   ));
 

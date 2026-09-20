@@ -1,14 +1,29 @@
 import type * as AI from "alchemy/AI";
 import * as Effect from "effect/Effect";
 
-/** Run one git command in the sandbox tree; failures are model-visible. */
-export const gitIn = (sandbox: AI.Sandbox["Service"]) =>
+/** A workspace input as the router's address: "name" → "@name",
+ *  "@name" passes through, absent stays absent. */
+export const atName = (name: string | undefined): string | undefined =>
+  name === undefined || name === "" || name.startsWith("@")
+    ? name === ""
+      ? undefined
+      : name
+    : `@${name}`;
+
+/** Run one git command in the sandbox tree; failures are model-visible.
+ *  `cwd` addresses the workspace the tree lives in (`@<name>`) — absent,
+ *  the call runs in the session's implicit tree, which thread-family
+ *  sessions do not have (they fail closed with the addressing hint). */
+export const gitIn = (sandbox: AI.Sandbox["Service"], cwd?: string) =>
   Effect.fn(function* (
     args: ReadonlyArray<string>,
     options?: { timeout?: number },
   ) {
     const result = yield* sandbox
-      .exec("git", args, { timeout: options?.timeout ?? 120_000 })
+      .exec("git", args, {
+        timeout: options?.timeout ?? 120_000,
+        ...(cwd !== undefined ? { cwd } : {}),
+      })
       .pipe(Effect.mapError((error) => `git ${args[0]}: ${String(error)}`));
     if (!result.success) {
       return yield* Effect.fail(

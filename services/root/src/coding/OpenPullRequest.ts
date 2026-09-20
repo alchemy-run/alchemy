@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 import { publishTargets } from "../github/Repos.ts";
 import { makeGate, StagedForApproval } from "./Gate.ts";
-import { gitIn, originOf } from "./Origin.ts";
+import { atName, gitIn, originOf } from "./Origin.ts";
 
 const title = AI.Thing("title", S.String)`
   Pull request title — conventional-commit style, under 70 characters.`;
@@ -16,6 +16,11 @@ const body = AI.Thing("body", S.String)`
 
 const head = AI.Thing("head", S.String)`
   The branch holding your work — the one you pushed with pushBranch.`;
+
+const workspace = AI.Thing("workspace", S.optionalKey(S.String))`
+  The workspace whose tree names the origin repository — its name or
+  "@<name>". Sessions have NO default workspace: in a team thread
+  this is required.`;
 
 const base = AI.Thing("base", S.optionalKey(S.String))`
   The branch to merge into (default: the checkout's own branch).`;
@@ -29,8 +34,9 @@ const number = AI.Thing("number", S.Int)`
 export class OpenPullRequest extends (AI.Tool<OpenPullRequest>(import.meta)(
   "openPullRequest",
 )`
-  OPEN a pull request on the origin repository: ${head} into ${base},
-  titled ${title}, described by ${body} — answers ${AI.out(url, number)}.
+  OPEN a pull request on ${workspace}'s origin repository: ${head} into
+  ${base}, titled ${title}, described by ${body} — answers
+  ${AI.out(url, number)}.
   Push the branch first with pushBranch. When the org gates pull
   requests, the call fails with ${StagedForApproval} instead of
   acting: it is staged as an approval card for the operator — park;
@@ -49,7 +55,6 @@ export const OpenPullRequestLive = Layer.effect(
   Effect.gen(function* () {
     const sandbox = yield* AI.Sandbox;
     const gate = yield* makeGate;
-    const git = gitIn(sandbox);
 
     const writers = yield* Effect.forEach(
       publishTargets,
@@ -67,7 +72,9 @@ export const OpenPullRequestLive = Layer.effect(
       base?: string;
       title: string;
       body: string;
+      workspace?: string;
     }) {
+      const git = gitIn(sandbox, atName(input.workspace));
       const origin = yield* originOf(git);
       const repo = `${origin.owner}/${origin.repository}`;
       const writer = writers.find((w) => w.repo === repo);

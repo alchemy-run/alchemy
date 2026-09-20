@@ -5,12 +5,18 @@ import * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
 import { PublishToken } from "../github/PublishToken.ts";
 import { makeGate, StagedForApproval } from "./Gate.ts";
-import { gitIn, originOf } from "./Origin.ts";
+import { atName, gitIn, originOf } from "./Origin.ts";
 
 const branch = AI.Thing("branch", S.String)`
   Branch name to publish the tree's current HEAD as (e.g.
   "agent/fix-runner-timeout"). Never a protected branch — publish a
   topic branch and open a pull request.`;
+
+const workspace = AI.Thing("workspace", S.optionalKey(S.String))`
+  The workspace whose HEAD is pushed — its name or "@<name>"
+  (list_workspaces shows the active ones). Sessions have NO default
+  workspace: in a team thread this is required, or the push fails
+  before it reaches git.`;
 
 const remote = AI.Thing("remote", S.String)`
   The repository the branch landed on — "owner/repo".`;
@@ -19,10 +25,10 @@ const pushed = AI.Thing("pushed", S.String)`
   The branch name the push created or updated.`;
 
 export class PushBranch extends (AI.Tool<PushBranch>(import.meta)("pushBranch")`
-  Publish your work: push the tree's current HEAD to the origin
+  Publish your work: push ${workspace}'s current HEAD to the origin
   repository as ${branch} — answers ${AI.out(remote, pushed)}. Commit
-  first (bash: git add / git commit) — this pushes exactly what HEAD
-  points at. Authentication is handled for you. When the org gates
+  first (bash: git add / git commit, cwd "@<workspace>") — this pushes
+  exactly what HEAD points at. Authentication is handled for you. When the org gates
   pushes, the call fails with ${StagedForApproval} instead of acting:
   your push is staged as an approval card for the operator — park;
   when their decision arrives, run the SAME call again (approved goes
@@ -40,11 +46,10 @@ export const PushBranchLive = Layer.effect(
     const sandbox = yield* AI.Sandbox;
     const token = yield* PublishToken;
     const gate = yield* makeGate;
-    const git = gitIn(sandbox);
 
-    return Effect.fn(function* (input: { branch: string }) {
+    return Effect.fn(function* (input: { branch: string; workspace?: string }) {
+      const git = gitIn(sandbox, atName(input.workspace));
       const origin = yield* originOf(git);
-      const session = yield* AI.Thread;
       const grant = yield* gate.check({
         payload: { kind: "push", branch: input.branch },
         summary: `push ${input.branch} to ${origin.owner}/${origin.repository}`,
