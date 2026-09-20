@@ -7,6 +7,8 @@ import * as Stream from "effect/Stream";
 export const INCOMING_PREFIX = "incoming/";
 export const INCOMING_SUFFIX = ".txt";
 export const PROCESSED_PREFIX = "processed/";
+export const RECEIVED_PREFIX = "deliveries/received/";
+export const ACKNOWLEDGED_PREFIX = "deliveries/acknowledged/";
 
 export const ServerEventBucket = AWS.S3.Bucket("ServerEventBucket", {
   versioning: "Enabled",
@@ -20,9 +22,59 @@ export const artifactKey = (
 ) =>
   `${PROCESSED_PREFIX}${[key, eventName, versionId].map(encodeURIComponent).join("/")}.txt`;
 
+// Preserve the wire body for replay without competing with the ECS consumer.
+const observedReceiveMessage = Layer.effect(
+  AWS.SQS.ReceiveMessage,
+  Effect.gen(function* () {
+    const receiveMessage = yield* AWS.SQS.ReceiveMessage;
+    const bucket = yield* ServerEventBucket;
+    const putObject = yield* AWS.S3.PutObject(bucket);
+    return Effect.fn(function* (queue: AWS.SQS.Queue) {
+      const receive = yield* receiveMessage(queue);
+      return Effect.fn(function* (request: AWS.SQS.ReceiveMessageRequest) {
+        const result = yield* receive(request);
+        yield* Effect.forEach(result.Messages ?? [], (message) =>
+          putObject({
+            Key: `${RECEIVED_PREFIX}${message.MessageId!}.json`,
+            Body: message.Body!,
+            ContentType: "application/json",
+          }).pipe(Effect.orDie),
+        );
+        return result;
+      });
+    });
+  }),
+).pipe(Layer.provide(AWS.SQS.ReceiveMessageHttp));
+
+// The server acknowledges a batch only after the S3 handler completes.
+const observedDeleteMessageBatch = Layer.effect(
+  AWS.SQS.DeleteMessageBatch,
+  Effect.gen(function* () {
+    const deleteMessageBatch = yield* AWS.SQS.DeleteMessageBatch;
+    const bucket = yield* ServerEventBucket;
+    const putObject = yield* AWS.S3.PutObject(bucket);
+    return Effect.fn(function* (queue: AWS.SQS.Queue) {
+      const remove = yield* deleteMessageBatch(queue);
+      return Effect.fn(function* (request: AWS.SQS.DeleteMessageBatchRequest) {
+        const result = yield* remove(request);
+        yield* Effect.forEach(result.Successful ?? [], (entry) =>
+          putObject({
+            Key: `${ACKNOWLEDGED_PREFIX}${entry.Id}.json`,
+            Body: "{}",
+            ContentType: "application/json",
+          }).pipe(Effect.orDie),
+        );
+        return result;
+      });
+    });
+  }),
+).pipe(Layer.provide(AWS.SQS.DeleteMessageBatchHttp));
+
 const serverEvents = S3BucketEventSource.pipe(
   Layer.provide(
-    Layer.mergeAll(AWS.SQS.ReceiveMessageHttp, AWS.SQS.DeleteMessageBatchHttp),
+    Layer.mergeAll(observedReceiveMessage, observedDeleteMessageBatch).pipe(
+      Layer.provide(AWS.S3.PutObjectHttp),
+    ),
   ),
 );
 
@@ -33,6 +85,10 @@ export default class ServerEventTask extends AWS.ECS.Task<ServerEventTask>()(
     image: "oven/bun:1",
     cpu: 256,
     memory: 512,
+    container: {
+      linuxParameters: { initProcessEnabled: true },
+      stopTimeout: 2,
+    },
     runtimePlatform: {
       cpuArchitecture: "ARM64",
       operatingSystemFamily: "LINUX",

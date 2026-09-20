@@ -32,6 +32,7 @@ let roleName: string;
 class NotReady extends Data.TaggedError("NotReady")<{
   status: number;
   body: string;
+  message: string;
 }> {}
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
 
@@ -60,14 +61,20 @@ const request = (
         response.status >= 500
           ? response.text.pipe(
               Effect.flatMap((body) =>
-                Effect.fail(new NotReady({ status: response.status, body })),
+                Effect.fail(
+                  new NotReady({
+                    status: response.status,
+                    body,
+                    message: `Lambda returned ${response.status}: ${body}`,
+                  }),
+                ),
               ),
             )
           : Effect.succeed(response),
       ),
       Effect.retry({
         while: (error) => error._tag === "NotReady",
-        schedule: Schedule.spaced("2 seconds"),
+        schedule: Schedule.spaced("4 seconds"),
         times: 9,
       }),
     );
