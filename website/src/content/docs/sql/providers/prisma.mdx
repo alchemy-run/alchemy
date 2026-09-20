@@ -3,9 +3,11 @@ title: Prisma
 description: Provision Prisma Postgres and query it with Drizzle from Prisma Compute or another runtime.
 ---
 
-This is the Prisma cloud provider and Prisma Postgres, not a requirement to use Prisma ORM. Drizzle and Effect SQL can query the database.
+Prisma Postgres works with Drizzle and Effect SQL; using Prisma ORM is optional.
 
 ## Prisma Postgres
+
+**Resources**
 
 ```typescript
 import * as Prisma from "alchemy/Prisma";
@@ -14,12 +16,60 @@ const project = yield* Prisma.Project("App", {
   createDatabase: false,
   region: "us-east-1",
 });
-
 const database = yield* Prisma.Postgres("Database", { project });
+const connection = yield* Prisma.Connection("Connection", { database });
 ```
 
-See [Prisma Postgres](/prisma/data/postgres) for local development and [branches](/prisma/data/branches) for preview databases.
+**Binding — the runtime argument of `Prisma.Compute`**
 
-[Prisma Compute + Drizzle](/prisma/data/drizzle-postgres) shows application deployment and queries. [Connections](/prisma/data/connections) covers URLs and connecting from other runtimes.
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { sql } from "drizzle-orm";
 
-See [Prisma setup](/prisma/setup), the portable [Postgres client](/sql/drizzle/postgres), and [migration-file generation](/sql/drizzle/migrations).
+const runtime = Effect.gen(function* () {
+  const client = yield* Prisma.Connect(connection);
+  const db = yield* Drizzle.Postgres(client.databaseUrl);
+  return {
+    fetch: Effect.gen(function* () {
+      const rows = yield* db.execute(sql`select 1 as ok`);
+      return yield* HttpServerResponse.json(rows);
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Prisma.ConnectBinding));
+```
+
+Use a connection with a PostgreSQL URL, not an Accelerate-only URL; the [Prisma Compute + Drizzle guide](/prisma/data/drizzle-postgres) supplies the host configuration.
+
+**Migrations — `drizzle.config.ts`**
+
+```typescript
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL! },
+});
+```
+
+**Generate after a schema change, review, and commit**
+
+```sh
+pnpm exec drizzle-kit generate
+git add src/schema.ts drizzle.config.ts drizzle
+git diff --cached
+git commit -m "Add schema migration"
+```
+
+**Apply committed migrations**
+
+```sh
+pnpm exec drizzle-kit migrate
+```
+
+Provision the database first and supply the connection's `directConnectionString` as the runner's secret `DATABASE_URL`. `Prisma.Postgres` has no production `migrations` prop; apply the committed SQL before deploying application code that depends on it.
+
+See [Prisma setup](/prisma/setup), [Postgres](/prisma/data/postgres), [connections](/prisma/data/connections), and [Effect SQL on Postgres](/sql/effect-sql/postgres).

@@ -1,47 +1,193 @@
 ---
 title: Cloudflare
-description: Choose D1, per-object SQLite, or external Postgres/MySQL through Hyperdrive for a Worker.
+description: Provision D1, per-object SQLite, or external Postgres/MySQL, bind Worker clients, and apply committed SQL migrations.
 ---
 
-A Worker can bind D1, use each Durable Object's SQLite database, or connect to Postgres/MySQL through Hyperdrive.
+These excerpts omit stack/provider registration and host setup; start with [Cloudflare setup](/cloudflare/setup) and the linked guides for complete deployments. Generate migrations explicitly when the schema changes, review and commit the schema, SQL, and snapshots to Git, then apply those committed files—never generate SQL during deployment.
 
 ## D1
+
+**Resource — `src/database.ts`**
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
 
-const database = yield* Cloudflare.D1.Database("Database", {
+export const Database = Cloudflare.D1.Database("Database", {
   migrations: "./drizzle",
 });
 ```
 
-Use [Drizzle on D1](/cloudflare/data/d1-drizzle) for the complete Worker, or [Effect SQL on D1](/sql/effect-sql/d1) for raw queries.
+**Binding — yield `DatabaseClient` during Worker initialization**
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle";
+import * as Effect from "effect/Effect";
+import { Database } from "./database.ts";
+
+export const DatabaseClient = Effect.gen(function* () {
+  const database = yield* Database;
+  const binding = yield* Cloudflare.D1.QueryDatabase(database);
+  return yield* Drizzle.D1(binding);
+}).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding));
+```
+
+**Migrations — [SQLite schema/config](/cloudflare/data/d1-drizzle#configure-generation), with `out: "./drizzle"`**
+
+```sh
+# On a schema change:
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts drizzle/
+git diff --cached -- src/schema.ts drizzle.config.ts drizzle/
+git commit -m "Add D1 migration"
+
+# Apply pending committed files through the Database resource:
+pnpm exec alchemy deploy
+```
+
+D1's `migrations` prop opts into Alchemy-managed application during deployment; adopting an existing history is a [one-way ownership change](/sql/effect-sql/migrations#adopting-an-existing-database), not permission to alternate migrators. [Drizzle on D1](/cloudflare/data/d1-drizzle) supplies the full Worker, while [Effect SQL on D1](/sql/effect-sql/d1) covers raw queries and D1's transaction limitations.
 
 ## Durable Objects
 
+**Resource and SQL client — `src/Users.ts`; `users` is a [SQLite table](/sql/drizzle/migrations#generate-and-commit-the-sql)**
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Cloudflare";
+import * as Effect from "effect/Effect";
+import { users } from "./schema.ts";
+
+export class Users extends Cloudflare.DurableObject<Users>()(
+  "Users",
+  Effect.gen(function* () {
+    const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
+    return Effect.gen(function* () {
+      const db = yield* Drizzle.DurableObject({ migrations });
+      return { list: () => db.select().from(users) };
+    });
+  }),
+) {}
+```
+
+**Binding — Worker initialization excerpt; the namespace binding and instance services are supplied automatically**
+
 ```typescript
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Users } from "./Users.ts";
 
-Effect.gen(function* () {
-  const migrations = yield* Cloudflare.SqlMigrations("./drizzle");
-  return Effect.gen(function* () {
-    yield* migrations.apply().pipe(Effect.orDie);
-    return {};
+export const handlers = Effect.gen(function* () {
+  const objects = yield* Users;
+  return {
+    fetch: Effect.gen(function* () {
+      const rows = yield* objects.getByName("team-a").list();
+      return yield* HttpServerResponse.json(rows);
+    }),
+  };
+});
+```
+
+**Migrations — SQLite generation into `./drizzle`, captured in the bundle and applied per object**
+
+```sh
+# On a schema change, using the SQLite config linked above:
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts drizzle/
+git diff --cached -- src/schema.ts drizzle.config.ts drizzle/
+git commit -m "Add per-object SQLite migration"
+
+# Bundle committed SQL; each object's next activation applies pending files:
+pnpm exec alchemy deploy
+```
+
+`SqlMigrations` reads committed files during construction; `Drizzle.DurableObject({ migrations })` applies them before exposing that instance's methods, not eagerly across the namespace during deployment. See [Durable Object migrations](/sql/drizzle/migrations#durable-object-migrations) for path resolution, restarting local dev after SQL changes, atomic history, and one-way adoption; [Durable Objects](/cloudflare/compute/durable-objects) covers the host and namespace.
+
+## Postgres and MySQL
+
+**Resources — Postgres through Neon in `src/database.ts`; register both Neon and Cloudflare providers**
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
+
+export const Hyperdrive = Effect.gen(function* () {
+  const project = yield* Neon.Project("Database", { region: "aws-us-east-1" });
+  const branch = yield* Neon.Branch("Branch", {
+    project,
+    migrations: "./migrations",
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
+    origin: branch.origin,
+    dev: branch.pooledOrigin,
   });
 });
 ```
 
-See [Durable Objects](/cloudflare/compute/durable-objects#sql-migrations) and [Drizzle migrations](/sql/drizzle/migrations#durable-object-migrations) for per-instance activation.
-
-## Postgres and MySQL
+**Resources — MySQL alternative in `src/database.ts`; register PlanetScale and Cloudflare providers**
 
 ```typescript
-const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("Database", {
-  origin: branch.origin,
-  dev: branch.pooledOrigin,
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Planetscale from "alchemy/Planetscale";
+import * as Effect from "effect/Effect";
+
+export const Hyperdrive = Effect.gen(function* () {
+  const database = yield* Planetscale.MySQLDatabase("Database", {
+    region: { slug: "us-east" },
+    clusterSize: "PS_10",
+  });
+  const branch = yield* Planetscale.MySQLBranch("Branch", {
+    database,
+    isProduction: false,
+    migrations: "./migrations",
+  });
+  const password = yield* Planetscale.MySQLPassword("Password", {
+    database,
+    branch,
+    role: "readwriter",
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("Hyperdrive", {
+    origin: password.origin,
+    caching: { disabled: true },
+  });
 });
 ```
 
-Here `branch` is a [Neon branch](/neon/data/branching); [PlanetScale roles](/planetscale/data/postgres#origin-vs-pooledorigin) also expose connection origins. Follow [Hyperdrive](/cloudflare/data/hyperdrive) and [Worker + Drizzle](/cloudflare/data/drizzle) for the full setup.
+**Binding — yield `DatabaseClient` during Worker initialization; enable `nodejs_compat` on the host**
 
-Start with [Cloudflare setup](/cloudflare/setup), then [generate and commit migrations](/sql/drizzle/migrations).
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import { Hyperdrive } from "./database.ts";
+
+export const DatabaseClient = Effect.gen(function* () {
+  const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+  return yield* Drizzle.Postgres(hd.connectionString);
+}).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding));
+```
+
+**MySQL binding variant — replace the import and client call above; retain `ConnectBinding`**
+
+```diff lang="typescript"
+-import * as Drizzle from "alchemy/Drizzle/Postgres";
++import * as Drizzle from "alchemy/Drizzle/MySQL";
+
+-  return yield* Drizzle.Postgres(hd.connectionString);
++  return yield* Drizzle.MySQL(hd.connectionString);
+```
+
+**Migrations — [Postgres config](/neon/guides/drizzle#configure-migration-generation) or [MySQL config](/sql/drizzle/mysql#generate-and-review-migrations), with `out: "./migrations"`**
+
+```sh
+# On a schema change; choose the dialect matching the database:
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "Add database migration"
+
+# The configured branch—not Hyperdrive—applies pending committed SQL:
+pnpm exec alchemy deploy
+```
+
+These examples explicitly opt into branch-owned migration application ([Neon](/neon/data/migrations), [PlanetScale](/planetscale/data/migrations)); keep an existing `drizzle-kit migrate` workflow unless you deliberately adopt Alchemy's [migration ownership](/sql/effect-sql/migrations#adopting-an-existing-database). [Worker + Drizzle](/cloudflare/data/drizzle) covers drivers and host setup, while [Hyperdrive](/cloudflare/data/hyperdrive) explains direct versus pooled origins and why a MySQL password has no pooled variant.

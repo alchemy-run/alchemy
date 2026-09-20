@@ -548,8 +548,8 @@ SQL provider discovery, database comparison, portable Effect SQL and Drizzle cli
 
 - [SQL](https://alchemy.run/sql) — Choose a database provider, connect with Effect SQL or Drizzle, and deploy committed migration files.
 - [Databases](https://alchemy.run/sql/databases) — Compare database engines, connection paths, and deployment guides across Alchemy's SQL providers.
-- [AWS](https://alchemy.run/sql/providers/aws) — SQL on AWS with RDS, Aurora PostgreSQL, or Aurora DSQL, connected from Lambda.
-- [Cloudflare](https://alchemy.run/sql/providers/cloudflare) — Choose D1, per-object SQLite, or external Postgres/MySQL through Hyperdrive for a Worker.
+- [AWS](https://alchemy.run/sql/providers/aws) — Provision AWS SQL databases, bind Lambda clients, and apply reviewed, committed migrations separately from infrastructure deployment.
+- [Cloudflare](https://alchemy.run/sql/providers/cloudflare) — Provision D1, per-object SQLite, or external Postgres/MySQL, bind Worker clients, and apply committed SQL migrations.
 - [Fly](https://alchemy.run/sql/providers/fly) — Connect a Fly Service to Managed Postgres with Drizzle or Effect SQL.
 - [Neon](https://alchemy.run/sql/providers/neon) — Provision Postgres projects and branches, then connect them to your application runtime.
 - [PlanetScale](https://alchemy.run/sql/providers/planetscale) — Choose PlanetScale Postgres or MySQL/Vitess and connect it to your application runtime.
@@ -577,4 +577,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~967 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~969 KB) — only fetch it when you need to locate a specific resource's reference page.

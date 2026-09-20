@@ -3,24 +3,64 @@ title: Neon
 description: Provision Postgres projects and branches, then connect them to your application runtime.
 ---
 
-Neon provides managed Postgres; your application runs on a separate provider.
+Neon hosts Postgres; this example uses a Cloudflare Worker for the application, with `Neon.providers()` and `Cloudflare.providers()` registered in the [Stack](/neon/setup). The `migrations` prop explicitly opts into Alchemy-managed application: keep an existing `drizzle-kit migrate` workflow and omit that prop unless deliberately switching owners ([one-way adoption caveats](/sql/effect-sql/migrations#adopting-an-existing-database)).
 
 ## Postgres
 
+**Resources — `src/Db.ts`, including the Hyperdrive origin.**
+
 ```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
 
-const project = yield* Neon.Project("Database", {
-  region: "aws-us-east-1",
-});
-
-const branch = yield* Neon.Branch("App", {
-  project,
+export const Hyperdrive = Effect.gen(function* () {
+  const project = yield* Neon.Project("Database", {
+    region: "aws-us-east-1",
+  });
+  const branch = yield* Neon.Branch("App", {
+    project,
+    migrations: "./migrations",
+  });
+  return yield* Cloudflare.Hyperdrive.Connection("DatabaseConnection", {
+    origin: branch.origin,
+    dev: branch.pooledOrigin,
+  });
 });
 ```
 
-Commit the migration directory before deployment. See [branching](/neon/data/branching) and [migrations](/neon/data/migrations) for database-specific behavior.
+**Binding — Cloudflare Worker runtime (`nodejs_compat`).**
 
-[Neon connections](/neon/data/connections) documents direct and pooled URLs. Use [Worker + Drizzle](/cloudflare/data/drizzle) for Cloudflare or [Hetzner + Drizzle](/hetzner/data/drizzle-postgres) for a hosted server.
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Hyperdrive } from "./Db.ts";
+import { Users } from "./schema.ts";
 
-See [Neon setup](/neon/setup), [Neon with Drizzle](/neon/guides/drizzle), and the portable [Postgres client](/sql/drizzle/postgres).
+Effect.gen(function* () {
+  const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
+  const db = yield* Drizzle.Postgres(hd.connectionString);
+  return {
+    fetch: Effect.gen(function* () {
+      const users = yield* db.select().from(Users);
+      return yield* HttpServerResponse.json(users);
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Cloudflare.Hyperdrive.ConnectBinding));
+```
+
+This `src/Api.ts` excerpt shows module imports and the Effect passed to [`Cloudflare.Worker`](/cloudflare/data/drizzle#open-the-connection-with-drizzlepostgres), configured with `compatibility.flags: ["nodejs_compat"]`.
+
+**Migrations — on schema changes, using the [schema and generator configuration](/neon/guides/drizzle#configure-migration-generation): `dialect: "postgresql"`, `out: "./migrations"`.**
+
+```sh
+pnpm exec drizzle-kit generate
+git add src/schema.ts drizzle.config.ts migrations
+git diff --cached
+git commit -m "Add Postgres migration"
+pnpm alchemy deploy
+```
+
+Review and commit the schema, SQL, and snapshots before deploying; the configured branch applies those files without generating SQL. Hyperdrive uses the direct origin while local development uses the pooled origin; see [connections](/neon/data/connections) and [transactional migrations and inherited branch history](/neon/data/migrations).

@@ -1,32 +1,241 @@
 ---
 title: AWS
-description: SQL on AWS with RDS, Aurora PostgreSQL, or Aurora DSQL, connected from Lambda.
+description: Provision AWS SQL databases, bind Lambda clients, and apply reviewed, committed migrations separately from infrastructure deployment.
 ---
 
-Use RDS/Aurora for managed Postgres or MySQL, or Aurora DSQL for distributed SQL. Aurora PostgreSQL and Aurora DSQL have separate connection and schema-management workflows.
+These are construction excerpts, not complete stacks; start with [AWS setup](/aws/setup) and the linked guides for host, provider, networking, and driver configuration. None of these AWS database resources has a `migrations` prop: generate on schema changes, review and commit SQL plus snapshots, then apply the committed files separately from `alchemy deploy`.
 
 ## Aurora DSQL
+
+**Resource — `src/database.ts`**
 
 ```typescript
 import * as AWS from "alchemy/AWS";
 
-const database = yield* AWS.DSQL.Cluster("Database", {});
+export const Database = AWS.DSQL.Cluster("Database", {});
 ```
 
-Follow [Lambda + Aurora DSQL + Drizzle](/aws/data/drizzle-dsql) for IAM authentication and queries.
+**Binding — yield `DatabaseClient` during Lambda initialization; install `pg` with `build.install`**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import { Database } from "./database.ts";
+
+export const DatabaseClient = Effect.gen(function* () {
+  const cluster = yield* Database;
+  const connect = yield* AWS.DSQL.Connect(cluster, { admin: true });
+  return yield* Drizzle.Postgres(connect.pipe(Effect.map((info) => info.url)));
+}).pipe(Effect.provide(AWS.DSQL.ConnectHttp));
+```
+
+**Migrations — [PostgreSQL generation config](/aws/data/drizzle-dsql#configure-sql-generation), then the initial single-DDL migration only**
+
+```sh
+# On a schema change; review DSQL compatibility before committing.
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "Add DSQL migration"
+
+# After provisioning and authenticating the migration operator as in the guide:
+: "${MIGRATION_SQL:?Set to the committed initial migration.sql}"
+psql -X --set=ON_ERROR_STOP=1 --set=AUTOCOMMIT=on --file="$MIGRATION_SQL"
+unset PGPASSWORD
+```
+
+The [DSQL guide](/aws/data/drizzle-dsql) covers IAM authentication, this privileged `admin` connection, and DSQL's DDL restrictions. Its initial autocommit application has **no migration history or safe replay**; later migrations need a validated DSQL-compatible process, not ordinary PostgreSQL `drizzle-kit migrate` or `alchemy deploy`.
 
 ## Aurora PostgreSQL
 
-Follow [Lambda + Aurora PostgreSQL + Drizzle](/aws/data/drizzle-aurora) for the VPC, database, and Lambda connection. [RDS & Aurora](/aws/data/rds) covers provisioning and the Data API.
+**Resources — `src/database.ts`; `Network` is the [private network and security groups](/aws/data/drizzle-aurora#create-the-private-network)**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import { Network } from "./network.ts";
+
+export const Database = Effect.gen(function* () {
+  const { network, functionSecurityGroup, databaseSecurityGroup } = yield* Network;
+  const aurora = yield* AWS.RDS.Aurora("Database", {
+    engine: "aurora-postgresql",
+    databaseName: "app",
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [databaseSecurityGroup.groupId],
+    dataApi: false,
+  });
+  return { aurora, network, functionSecurityGroup };
+});
+```
+
+**Binding — yield `DatabaseClient` during Lambda initialization; install `pg` with `build.install`**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import { Database } from "./database.ts";
+
+export const DatabaseClient = Effect.gen(function* () {
+  const { aurora, network, functionSecurityGroup } = yield* Database;
+  const connect = yield* AWS.RDS.Connect(aurora.cluster, {
+    secret: aurora.secret,
+    database: "app",
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [functionSecurityGroup.groupId],
+  });
+  return yield* Drizzle.Postgres(connect.pipe(Effect.map((info) => info.url)));
+}).pipe(Effect.provide(AWS.RDS.ConnectHttp));
+```
+
+**Migrations — [generation config](/aws/data/drizzle-aurora#configure-sql-generation) and separate [migration connection config](/aws/data/drizzle-aurora#configure-the-migration-connection)**
+
+```sh
+# On a schema change; generation is not a deployment hook.
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "Add Aurora PostgreSQL migration"
+
+# Authorized runner with its own VPC route, credentials, and TLS trust:
+pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts
+```
+
+`Aurora` creates the cluster, writer, subnet group, and secret; the binding attaches Lambda to the VPC and resolves credentials per request. Follow [Lambda + Aurora PostgreSQL](/aws/data/drizzle-aurora) for the runtime binding's TLS verification limitation and migration-runner access: `drizzle-kit migrate`, not `alchemy deploy`, applies this integration's committed SQL.
 
 ## Aurora MySQL
 
-Use an [RDS DBCluster](/providers/aws/rds/dbcluster) with the `aurora-mysql` engine and the [Drizzle MySQL client](/sql/drizzle/mysql) or [Effect SQL](/sql/effect-sql/mysql) for queries.
+**Resources — `src/database.ts`; adapt the [network example](/aws/data/rds#network-prerequisite) to permit MySQL on port 3306**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import { Network } from "./network.ts";
+
+export const Database = Effect.gen(function* () {
+  const { network, functionSecurityGroup, databaseSecurityGroup } = yield* Network;
+  const aurora = yield* AWS.RDS.Aurora("Database", {
+    engine: "aurora-mysql",
+    databaseName: "app",
+    port: 3306,
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [databaseSecurityGroup.groupId],
+    dataApi: false,
+  });
+  return { aurora, network, functionSecurityGroup };
+});
+```
+
+**Binding — yield `DatabaseClient` during Lambda initialization; install the [MySQL driver peers](/sql/drizzle/mysql)**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Drizzle from "alchemy/Drizzle/MySQL";
+import * as Effect from "effect/Effect";
+import { Database } from "./database.ts";
+
+export const DatabaseClient = Effect.gen(function* () {
+  const { aurora, network, functionSecurityGroup } = yield* Database;
+  const connect = yield* AWS.RDS.Connect(aurora.cluster, {
+    secret: aurora.secret,
+    database: "app",
+    port: 3306,
+    subnetIds: network.privateSubnetIds,
+    securityGroupIds: [functionSecurityGroup.groupId],
+  });
+  return yield* Drizzle.MySQL(connect.pipe(Effect.map((info) => info.url)), {
+    client: { poolConfig: { ssl: { rejectUnauthorized: true } } },
+  });
+}).pipe(Effect.provide(AWS.RDS.ConnectHttp));
+```
+
+**Migrations — [MySQL schema/config](/sql/drizzle/mysql#generate-and-review-migrations), with a separate credential-bearing config for application**
+
+```typescript
+// drizzle.migrate.config.ts; drizzle.config.ts uses dialect: "mysql".
+import { defineConfig } from "drizzle-kit";
+import config from "./drizzle.config.ts";
+
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is required for migrations");
+
+export default defineConfig({ ...config, dbCredentials: { url } });
+```
+
+```sh
+# On a schema change:
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "Add Aurora MySQL migration"
+
+# Authorized runner with private-network access and MySQL TLS credentials:
+pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts
+```
+
+The [Aurora helper](/providers/aws/rds/aurora) provisions an `aurora-mysql` cluster and writer, while [RDS & Aurora](/aws/data/rds) covers networking and credentials. Configure the driver's trusted RDS CA in `poolConfig.ssl` as needed, and retain a separate MySQL migration runner rather than treating deployment as migration application.
 
 ## RDS
 
-Use [RDS DBInstance](/providers/aws/rds/dbinstance) for managed database instances, including PostgreSQL and MySQL. See [RDS & Aurora](/aws/data/rds) for networking and database resources.
+**Resources — PostgreSQL instance and matching credential secret in `src/database.ts`; networking follows [RDS & Aurora](/aws/data/rds#network-prerequisite)**
 
-[Postgres with Drizzle](/sql/drizzle/postgres) and [Effect SQL](/sql/effect-sql/postgres) cover shared client usage. Generate and commit migration files before deployment; use the AWS guide for the target database's application step.
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { Network } from "./network.ts";
 
-See [AWS setup](/aws/setup) and the [full-stack DSQL example](/aws/frontend/full-stack-tanstack-rpc-drizzle).
+export const Database = Effect.gen(function* () {
+  const { network, databaseSecurityGroup } = yield* Network;
+  const password = yield* Config.Redacted("DB_PASSWORD");
+  const secret = yield* AWS.SecretsManager.Secret("Credentials", {
+    secretString: Redacted.make(
+      JSON.stringify({ username: "app", password: Redacted.value(password) }),
+    ),
+  });
+  const subnets = yield* AWS.RDS.DBSubnetGroup("DatabaseSubnets", {
+    subnetIds: network.privateSubnetIds,
+  });
+  const instance = yield* AWS.RDS.DBInstance("Database", {
+    engine: "postgres",
+    dbInstanceClass: "db.t3.micro",
+    dbName: "app",
+    masterUsername: "app",
+    masterUserPassword: password,
+    dbSubnetGroupName: subnets.dbSubnetGroupName,
+    vpcSecurityGroupIds: [databaseSecurityGroup.groupId],
+    publiclyAccessible: false,
+  });
+  return { instance, secret };
+});
+```
+
+**Binding — Lambda initialization excerpt; set the host's `vpc` to the private subnets and client security group**
+
+```typescript
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import { Database } from "./database.ts";
+
+export const ReadDatabaseCredentials = Effect.gen(function* () {
+  const { secret } = yield* Database;
+  return yield* AWS.SecretsManager.GetSecretValue(secret);
+}).pipe(Effect.provide(AWS.SecretsManager.GetSecretValueHttp));
+```
+
+**Migrations — PostgreSQL [generation](/aws/data/drizzle-aurora#configure-sql-generation) and [runner configuration](/aws/data/drizzle-aurora#configure-the-migration-connection), targeting the instance endpoint**
+
+```sh
+# On a schema change:
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "Add RDS migration"
+
+# Separate runner with database network access, credentials, and TLS trust:
+pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts
+```
+
+`RDS.Connect` accepts clusters and proxies, **not `DBInstance`**: call the bound secret reader at request time and configure your driver with those credentials plus `instance.endpointAddress`/`endpointPort`, or use an [RDS Proxy](/providers/aws/rds/dbproxy). For MySQL, select `engine: "mysql"`, port 3306 networking, and the [MySQL client/schema](/sql/drizzle/mysql); both engines require a separate committed-file migration step, not `alchemy deploy`.

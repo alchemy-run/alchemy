@@ -7,6 +7,8 @@ Fly provides Managed Postgres for applications running on its private network.
 
 ## Managed Postgres
 
+**Resource**
+
 ```typescript
 import * as Fly from "alchemy/Fly";
 
@@ -15,8 +17,56 @@ const database = yield* Fly.Postgres("Database", {
 });
 ```
 
-The cluster is billed; deployment-time migrations require access to Fly's private network.
+**Binding — the runtime argument of `Fly.Service`**
 
-The [Fly + Drizzle guide](/fly/data/drizzle-postgres) includes the Service and binding layer. [Managed Postgres](/fly/data/postgres) covers cluster settings and connection URLs.
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { sql } from "drizzle-orm";
 
-See [Fly setup](/fly/setup), [Effect SQL on Postgres](/sql/effect-sql/postgres), and [committed migrations](/sql/drizzle/migrations).
+const runtime = Effect.gen(function* () {
+  const connection = yield* Fly.ConnectPostgres(database);
+  const db = yield* Drizzle.Postgres(connection.connectionString);
+  return {
+    fetch: Effect.gen(function* () {
+      const rows = yield* db.execute(sql`select 1 as ok`);
+      return yield* HttpServerResponse.json(rows);
+    }).pipe(Effect.orDie),
+  };
+}).pipe(Effect.provide(Fly.ConnectPostgresHttp));
+```
+
+Use `build: { install: ["pg"] }` on the Service; the [Fly + Drizzle guide](/fly/data/drizzle-postgres) supplies the host and private-network setup.
+
+**Migrations — `drizzle.config.ts`**
+
+```typescript
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL! },
+});
+```
+
+**Generate after a schema change, review, and commit**
+
+```sh
+pnpm exec drizzle-kit generate
+git add src/schema.ts drizzle.config.ts drizzle
+git diff --cached
+git commit -m "Add schema migration"
+```
+
+**Apply committed migrations**
+
+```sh
+pnpm exec drizzle-kit migrate
+```
+
+Set the runner's secret `DATABASE_URL` to the cluster's direct `connectionUri` and run on Fly's private network; provision the database before its first migration. This keeps Drizzle as the migration owner and leaves `Fly.Postgres.migrations` unset—see [migration ownership](/fly/data/drizzle-postgres#choose-one-migration-owner).
+
+See [Fly setup](/fly/setup), [Managed Postgres](/fly/data/postgres), and [Effect SQL on Postgres](/sql/effect-sql/postgres).
