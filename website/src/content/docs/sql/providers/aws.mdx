@@ -36,12 +36,14 @@ Aurora DSQL is a separate database with its own connection binding and SQL
 restrictions. `AWS.DSQL.Connect` produces an IAM-authenticated connection URL.
 It is not the same deployment as an Aurora PostgreSQL cluster in a VPC.
 
-The [AWS full-stack Drizzle guide](/aws/frontend/full-stack-tanstack-rpc-drizzle)
-shows Lambda + Drizzle + DSQL within a TanStack Start/RPC application. The
-[DSQL connection suite](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/test/AWS/DSQL/Connect.test.ts)
-also contains deployment fixtures. These are distinct from a standalone
-minimal example. The guide explains schema restrictions and its demonstration
-bootstrap; do not assume a `migrations` property or general Prisma support.
+Start with [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql) and the
+[standalone aws-dsql-drizzle example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-dsql-drizzle).
+They cover a non-admin Lambda database role, verified TLS, controlled schema
+setup, and signed HTTP CRUD. The [full-stack guide](/aws/frontend/full-stack-tanstack-rpc-drizzle)
+adds TanStack Start and Effect RPC to that integration.
+
+DSQL has no `migrations` property. Follow its SQL and DDL restrictions rather
+than assuming general PostgreSQL migration compatibility or Prisma ORM support.
 
 ## RDS Data API
 

@@ -757,6 +757,10 @@ export default defineConfig({
                   label: "Drizzle + Aurora PostgreSQL",
                   link: "/aws/data/drizzle-aurora",
                 },
+                {
+                  label: "Drizzle + Aurora DSQL",
+                  link: "/aws/data/drizzle-dsql",
+                },
               ],
             },
             {

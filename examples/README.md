@@ -10,6 +10,7 @@ Use the [SQL documentation](https://alchemy.run/sql) to choose a client or
 | Runtime | Database | Client | Runnable project |
 | --- | --- | --- | --- |
 | AWS Lambda | Aurora PostgreSQL | Drizzle | [aws-aurora-drizzle](./aws-aurora-drizzle) |
+| AWS Lambda | Aurora DSQL | Drizzle | [aws-dsql-drizzle](./aws-dsql-drizzle) |
 | AWS Lambda | Aurora PostgreSQL | `pg` | [aws-rds](./aws-rds) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Drizzle | [cloudflare-neon-drizzle](./cloudflare-neon-drizzle) |
 | Cloudflare Workers | PlanetScale Postgres through Hyperdrive | Drizzle | [cloudflare-planetscale-postgres-drizzle](./cloudflare-planetscale-postgres-drizzle) |
@@ -27,10 +28,11 @@ and deployment-time schema setup. Its [integration guide](https://alchemy.run/aw
 explains the connection and migration placement. The separate `aws-rds`
 application uses **plain `pg`**, not Drizzle.
 
-The [AWS full-stack Drizzle guide](https://alchemy.run/aws/frontend/full-stack-tanstack-rpc-drizzle)
-uses **Aurora DSQL**, a different database and deployment from Aurora
-PostgreSQL. See [SQL on AWS](https://alchemy.run/sql/providers/aws) for the
-connection choices and guide/example availability.
+For **Aurora DSQL**, use [aws-dsql-drizzle](./aws-dsql-drizzle) and its
+[integration guide](https://alchemy.run/aws/data/drizzle-dsql). It is a different
+database and deployment from Aurora PostgreSQL. The
+[full-stack guide](https://alchemy.run/aws/frontend/full-stack-tanstack-rpc-drizzle)
+adds TanStack Start and Effect RPC to the DSQL integration.
 
 ## Guides and lifecycle
 
