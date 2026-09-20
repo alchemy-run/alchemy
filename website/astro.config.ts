@@ -1159,6 +1159,7 @@ export default defineConfig({
             { label: "Overview", link: "/better-auth" },
             { label: "Database layers", link: "/better-auth/database-layers" },
             { label: "Migrations", link: "/better-auth/migrations" },
+            { label: "Upgrading to 1.7.5", link: "/better-auth/upgrading" },
             providerResourcesEntry("BetterAuth"),
           ],
         },
