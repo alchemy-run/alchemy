@@ -480,11 +480,12 @@ const validateSourceAccount = (accountId: string, sourceAccountId?: string) =>
  * Event delivery can lag subscription creation or replacement even after the
  * destination Queue accepts messages. Deployment confirms configuration, not
  * delivery readiness; verify delivery before emitting events that must be observed.
- * During Vectorize subscription replacement, Cloudflare can still route new events
- * to the previous Queue with the deleted subscription's ID. A single early event
- * does not prove that routing has fully propagated. Keep the previous destination
- * available during the transition and check `metadata.eventSubscriptionId`
- * as well as the event's resource identity when verifying the new destination.
+ * During Vectorize subscription replacement or a destination Queue update,
+ * Cloudflare can still route new events to the previous Queue. Replacement events
+ * can carry the deleted subscription's ID; updates retain the same subscription ID.
+ * A single early event does not prove that routing has fully propagated. Keep the
+ * previous destination available during the transition and verify the receiving
+ * Queue, `metadata.eventSubscriptionId`, and the event's resource identity.
  *
  * ### Pausing delivery
  * **Example:** Disable a subscription without deleting it

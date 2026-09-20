@@ -129,6 +129,46 @@ describe("subscription event identity", () => {
     ).toBe(false);
   });
 
+  test("matches an Images upload by exact payload id and subscription", () => {
+    const image = {
+      ...event,
+      type: "cf.images.image.uploaded",
+      source: { type: "images" },
+      payload: { id: "subscription-final" },
+    };
+    const target = {
+      ...expected,
+      source: "images" as const,
+      type: "image.uploaded",
+      identity: "subscription-final",
+    };
+    expect(matchesSubscriptionEvent(image, target)).toBe(true);
+    expect(
+      matchesSubscriptionEvent(
+        { ...image, payload: { id: "subscription-probe-0" } },
+        target,
+      ),
+    ).toBe(false);
+    expect(
+      matchesSubscriptionEvent(
+        {
+          ...image,
+          metadata: {
+            ...image.metadata,
+            eventSubscriptionId: "old-subscription",
+          },
+        },
+        target,
+      ),
+    ).toBe(false);
+    expect(
+      matchesSubscriptionEvent(
+        { ...image, payload: { name: target.identity } },
+        target,
+      ),
+    ).toBe(false);
+  });
+
   test("matches KV ids and R2 names in their documented payload fields", () => {
     expect(
       matchesSubscriptionEvent(

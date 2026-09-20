@@ -19,7 +19,7 @@ export const SubscriptionEvent = Schema.fromJsonString(
 export type SubscriptionEvent = typeof SubscriptionEvent.Type;
 
 interface SubscriptionEventTarget {
-  source: "kv" | "r2" | "vectorize";
+  source: "images" | "kv" | "r2" | "vectorize";
   type: string;
   accountId: string;
   subscriptionId: string;
@@ -52,4 +52,6 @@ export const matchesSubscriptionEvent = (
   event.source.type === expected.source &&
   event.metadata.accountId === expected.accountId &&
   event.metadata.eventSubscriptionId === expected.subscriptionId &&
-  event.payload[expected.source === "kv" ? "id" : "name"] === expected.identity;
+  event.payload[
+    expected.source === "kv" || expected.source === "images" ? "id" : "name"
+  ] === expected.identity;

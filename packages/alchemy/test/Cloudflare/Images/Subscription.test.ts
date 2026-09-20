@@ -6,15 +6,23 @@ import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import { makeSubscriptionCleanup } from "../Queue/SubscriptionCleanup.ts";
+import {
+  matchesSubscriptionEvent,
+  SubscriptionEvent,
+} from "../Queue/SubscriptionEvent.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+const canUpload = process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD === "1";
 
-test.provider.skipIf(!!process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD)(
+test.provider.skipIf(canUpload)(
   "image uploads expose the typed entitlement rejection",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
+      const cleanup = makeSubscriptionCleanup();
       const error = yield* Effect.acquireRelease(
         images.createV1({
           accountId,
@@ -23,23 +31,35 @@ test.provider.skipIf(!!process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD)(
         }),
         (image) =>
           image.id
-            ? images
-                .deleteV1({ accountId, imageId: image.id })
-                .pipe(Effect.orDie)
+            ? images.deleteV1({ accountId, imageId: image.id }).pipe(cleanup)
             : Effect.void,
       ).pipe(Effect.scoped, Effect.flip);
-      expect(error._tag).toBe("ImagesAccessNotEnabled");
+      expect(error).toMatchObject({
+        _tag: "ImagesAccessNotEnabled",
+        code: 5403,
+      });
       yield* stack.destroy();
-    }),
+    }).pipe(
+      Effect.ensuring(
+        stack
+          .destroy()
+          .pipe(
+            Effect.timeout("15 seconds"),
+            Effect.orDie,
+            Effect.interruptible,
+          ),
+      ),
+    ),
 );
 
 // Uploads require Images entitlement; the testing account returns ImagesAccessNotEnabled (5403).
-test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD)(
+test.provider.skipIf(!canUpload)(
   "an Images variant reference receives an account-wide upload event",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const { accountId } = yield* yield* CloudflareEnvironment;
+      const cleanup = makeSubscriptionCleanup();
       const variant = Cloudflare.Images.Variant("Variant", {
         name: "alchemySubscriptionUpload",
         fit: "contain",
@@ -67,76 +87,117 @@ test.provider.skipIf(!process.env.CLOUDFLARE_TEST_IMAGES_UPLOAD)(
         queueId: deployed.queue.queueId,
         type: "http_pull",
       });
-      const image = yield* Effect.acquireRelease(
-        images
-          .createV1({
-            accountId,
-            id: deployed.subscription.subscriptionId,
-            url: "https://developers.cloudflare.com/og-docs.png",
-          })
-          .pipe(
+      yield* Effect.gen(function* () {
+        const upload = (suffix: string) =>
+          Effect.acquireRelease(
+            images.createV1({
+              accountId,
+              id: `${deployed.subscription.subscriptionId}-${suffix}`,
+              url: "https://developers.cloudflare.com/og-docs.png",
+            }),
+            (image) =>
+              image.id
+                ? images.deleteV1({ accountId, imageId: image.id }).pipe(
+                    Effect.catchTag("ImageNotFound", () => Effect.void),
+                    cleanup,
+                  )
+                : Effect.void,
+          ).pipe(
             Effect.flatMap((image) =>
               image.id
-                ? Effect.succeed({ id: image.id })
+                ? Effect.succeed(image.id)
                 : Effect.fail(new Error("Image upload returned no identity")),
             ),
-          ),
-        (image) =>
-          images.deleteV1({ accountId, imageId: image.id }).pipe(
-            Effect.catchTag("ImageNotFound", () => Effect.void),
-            Effect.orDie,
-          ),
-      );
-      const bodies: string[] = [];
-      const delivered = () =>
-        bodies.some(
-          (body) =>
-            body.includes("cf.images.image.uploaded") &&
-            body.includes(image.id) &&
-            body.includes(deployed.subscription.subscriptionId) &&
-            body.includes(accountId),
-        );
-      yield* Effect.gen(function* () {
-        const pulled = yield* queues
-          .pullMessage({
-            accountId,
-            queueId: deployed.queue.queueId,
-            batchSize: 100,
-            visibilityTimeoutMs: 1000,
-          })
-          .pipe(
-            Effect.retry({
-              while: (error) => error._tag === "QueueHttpPullNotEnabled",
-              schedule: Schedule.spaced("2 seconds"),
-              times: 8,
+          );
+        const events: SubscriptionEvent[] = [];
+        const delivered = (imageId: string) =>
+          events.some((event) =>
+            matchesSubscriptionEvent(event, {
+              source: "images",
+              type: "image.uploaded",
+              accountId,
+              subscriptionId: deployed.subscription.subscriptionId,
+              identity: imageId,
             }),
           );
-        for (const message of pulled.messages ?? [])
-          if (message.body) bodies.push(message.body);
-        const acks = (pulled.messages ?? []).flatMap((message) =>
-          message.leaseId ? [{ leaseId: message.leaseId }] : [],
+        const pull = Effect.gen(function* () {
+          const pulled = yield* queues
+            .pullMessage({
+              accountId,
+              queueId: deployed.queue.queueId,
+              batchSize: 100,
+              visibilityTimeoutMs: 30_000,
+            })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "QueueHttpPullNotEnabled",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 8,
+              }),
+            );
+          const decoded = yield* Effect.forEach(
+            pulled.messages ?? [],
+            ({ body }) => Schema.decodeUnknownEffect(SubscriptionEvent)(body),
+          );
+          events.push(...decoded);
+          if (decoded.length)
+            yield* Effect.logInfo("Image subscription receipts", decoded);
+          const acks = (pulled.messages ?? []).flatMap(({ leaseId }) =>
+            leaseId ? [{ leaseId }] : [],
+          );
+          if (acks.length) {
+            const result = yield* queues.ackMessage({
+              accountId,
+              queueId: deployed.queue.queueId,
+              acks,
+            });
+            expect(result.ackCount).toBe(acks.length);
+            expect(Object.keys(result.warnings ?? {})).toHaveLength(0);
+          }
+        });
+        yield* pull;
+        const probes: string[] = [];
+        const ready = () => probes.some(delivered);
+        yield* Effect.gen(function* () {
+          probes.push(yield* upload(`probe-${probes.length}`));
+          yield* pull;
+        }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            times: 8,
+            until: ready,
+          }),
         );
-        if (acks.length)
-          yield* queues.ackMessage({
-            accountId,
-            queueId: deployed.queue.queueId,
-            acks,
-          });
-      }).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("5 seconds"),
-          times: 10,
-          until: delivered,
-        }),
-        Effect.timeout("60 seconds"),
-      );
-      expect(delivered()).toBe(true);
+        expect(ready()).toBe(true);
+        // A readiness probe must not satisfy the final upload assertion.
+        const imageId = yield* upload("final");
+        expect(probes).not.toContain(imageId);
+        yield* pull.pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            times: 8,
+            until: () => delivered(imageId),
+          }),
+        );
+        expect(delivered(imageId)).toBe(true);
+      }).pipe(Effect.timeout("60 seconds"), Effect.scoped);
       yield* stack.deploy(variant);
       yield* images.getV1Variant({
         accountId,
         variantId: deployed.source.variantName,
       });
       yield* stack.destroy();
-    }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.orDie))),
+    }).pipe(
+      Effect.scoped,
+      Effect.ensuring(
+        stack
+          .destroy()
+          .pipe(
+            Effect.timeout("15 seconds"),
+            Effect.orDie,
+            Effect.interruptible,
+          ),
+      ),
+    ),
   { timeout: 120_000, exclusive: true },
 );
