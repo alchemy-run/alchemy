@@ -1321,18 +1321,6 @@ export default defineConfig({
             { label: "Overview", link: "/sql" },
             { label: "Databases", link: "/sql/databases" },
             {
-              label: "Providers",
-              items: [
-                { label: "AWS", link: "/sql/providers/aws" },
-                { label: "Cloudflare", link: "/sql/providers/cloudflare" },
-                { label: "Fly", link: "/sql/providers/fly" },
-                { label: "Neon", link: "/sql/providers/neon" },
-                { label: "PlanetScale", link: "/sql/providers/planetscale" },
-                { label: "Prisma", link: "/sql/providers/prisma" },
-                { label: "Railway", link: "/sql/providers/railway" },
-              ],
-            },
-            {
               label: "Effect SQL",
               items: [
                 { label: "Postgres", link: "/sql/effect-sql/postgres" },

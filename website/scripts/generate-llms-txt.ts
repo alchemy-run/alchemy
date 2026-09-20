@@ -502,18 +502,11 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "SQL provider discovery, database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
+      "Database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
     pages: {
       slugs: [
         "sql/index",
         "sql/databases",
-        "sql/providers/aws",
-        "sql/providers/cloudflare",
-        "sql/providers/fly",
-        "sql/providers/neon",
-        "sql/providers/planetscale",
-        "sql/providers/prisma",
-        "sql/providers/railway",
         "sql/effect-sql/postgres",
         "sql/effect-sql/mysql",
         "sql/effect-sql/d1",

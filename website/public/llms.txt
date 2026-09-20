@@ -544,17 +544,10 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 
 ## SQL
 
-SQL provider discovery, database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
+Database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
 
 - [SQL](https://alchemy.run/sql) — Choose a database provider, connect with Effect SQL or Drizzle, and deploy committed migration files.
 - [Databases](https://alchemy.run/sql/databases) — Compare database engines, connection paths, and deployment guides across Alchemy's SQL providers.
-- [AWS](https://alchemy.run/sql/providers/aws) — Provision AWS SQL databases, bind Lambda clients, and apply reviewed, committed migrations separately from infrastructure deployment.
-- [Cloudflare](https://alchemy.run/sql/providers/cloudflare) — Provision D1, per-object SQLite, or external Postgres/MySQL, bind Worker clients, and apply committed SQL migrations.
-- [Fly](https://alchemy.run/sql/providers/fly) — Connect a Fly Service to Managed Postgres with Drizzle or Effect SQL.
-- [Neon](https://alchemy.run/sql/providers/neon) — Provision Postgres projects and branches, then connect them to your application runtime.
-- [PlanetScale](https://alchemy.run/sql/providers/planetscale) — Choose PlanetScale Postgres or MySQL/Vitess and connect it to your application runtime.
-- [Prisma](https://alchemy.run/sql/providers/prisma) — Provision Prisma Postgres and query it with Drizzle from Prisma Compute or another runtime.
-- [Railway](https://alchemy.run/sql/providers/railway) — Run Postgres or MySQL alongside a Railway Service and query it with Drizzle or Effect SQL.
 - [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 - [MySQL](https://alchemy.run/sql/effect-sql/mysql) — SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — portable tagged-template queries with typed errors and one pool per execution.
 - [D1](https://alchemy.run/sql/effect-sql/d1) — SQL.D1 wraps a bound D1 database in an @effect/sql-d1 client — tagged-template queries with typed errors over the native binding.
@@ -577,4 +570,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~969 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~968 KB) — only fetch it when you need to locate a specific resource's reference page.

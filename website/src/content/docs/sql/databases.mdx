@@ -9,17 +9,17 @@ Choose the database independently from the application runtime where supported. 
 
 | Database | Engine | Connection path | Setup |
 | --- | --- | --- | --- |
-| AWS RDS / Aurora | Postgres or MySQL | VPC connection; Data API on supported configurations | [AWS](/sql/providers/aws) |
+| AWS RDS / Aurora | Postgres or MySQL | VPC connection; Data API on supported configurations | [RDS & Aurora](/aws/data/rds) |
 | Aurora DSQL | Distributed SQL with Postgres wire compatibility | IAM-authenticated connection | [DSQL + Drizzle](/aws/data/drizzle-dsql) |
 | Cloudflare D1 | SQLite | Native Worker binding | [D1 + Drizzle](/cloudflare/data/d1-drizzle) |
 | Durable Object storage | SQLite per named object | Instance storage | [Durable Objects](/cloudflare/compute/durable-objects#sql-migrations) |
-| Fly Managed Postgres | Postgres | Private connection from a Fly Service | [Fly](/sql/providers/fly) |
-| Neon | Postgres | Direct or pooled URL; Hyperdrive from Workers | [Neon](/sql/providers/neon) |
-| PlanetScale Postgres | Postgres | Role connection URL; Hyperdrive from Workers | [PlanetScale](/sql/providers/planetscale) |
-| PlanetScale Vitess | MySQL | Password connection URL; Hyperdrive from Workers | [PlanetScale](/sql/providers/planetscale) |
-| Prisma Postgres | Postgres | Database connection URL | [Prisma](/sql/providers/prisma) |
-| Railway Postgres | Postgres | Private service URL or public TCP proxy | [Railway](/sql/providers/railway) |
-| Railway MySQL | MySQL | Private service URL or public TCP proxy | [Railway](/sql/providers/railway) |
+| Fly Managed Postgres | Postgres | Private connection from a Fly Service | [Managed Postgres](/fly/data/postgres) |
+| Neon | Postgres | Direct or pooled URL; Hyperdrive from Workers | [Neon branches](/neon/data/branching) |
+| PlanetScale Postgres | Postgres | Role connection URL; Hyperdrive from Workers | [PlanetScale Postgres](/planetscale/data/postgres) |
+| PlanetScale Vitess | MySQL | Password connection URL; Hyperdrive from Workers | [PlanetScale MySQL](/planetscale/data/mysql) |
+| Prisma Postgres | Postgres | Database connection URL | [Prisma Postgres](/prisma/data/postgres) |
+| Railway Postgres | Postgres | Private service URL or public TCP proxy | [Railway Postgres](/railway/data/postgres) |
+| Railway MySQL | MySQL | Private service URL or public TCP proxy | [Railway MySQL](/railway/data/mysql) |
 
 [Hyperdrive](/cloudflare/data/hyperdrive) pools connections to a database; it is not a database itself. The [Hetzner guide](/hetzner/data/drizzle-postgres) hosts the application on Hetzner and the database on Neon.
 

@@ -61,7 +61,7 @@ const workersDefaults = {
 };
 ```
 
-These defaults avoid Hyperdrive's unsupported prepared-statement protocol and Workers' prohibition on eval-based row parsers. Outside workerd they stay off; [Cloudflare setup](/sql/providers/cloudflare) owns Worker deployment.
+These defaults avoid Hyperdrive's unsupported prepared-statement protocol and Workers' prohibition on eval-based row parsers. Outside workerd they stay off; [Cloudflare setup](/cloudflare/setup) owns Worker deployment.
 
 ## Override driver options
 
@@ -151,7 +151,7 @@ The layer provides `SqlClient.SqlClient` and `@effect/sql-mysql2`'s `MysqlClient
 
 ## Provider setup
 
-Choose a MySQL-compatible database in [SQL databases](/sql/databases); [AWS](/sql/providers/aws), [Cloudflare](/sql/providers/cloudflare), [PlanetScale](/sql/providers/planetscale), and [Railway](/sql/providers/railway) cover provider setup. Those pages own provisioning and deployment; the client above only needs a connection URL.
+Choose a MySQL-compatible database and deployment guide in [SQL databases](/sql/databases); the client above only needs a connection URL.
 
 ## Where next
 
