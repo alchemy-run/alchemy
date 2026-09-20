@@ -82,7 +82,7 @@ export interface WorkflowRollbackContext<Output = unknown> {
 export interface WorkflowRollbackOptions<Output = unknown, R = never> {
   rollback: (
     context: WorkflowRollbackContext<Output>,
-  ) => Effect.Effect<void, never, R>;
+  ) => Effect.Effect<void, unknown, R>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -96,7 +96,7 @@ export interface WorkflowTaskConfig<
 > extends WorkflowStepConfig {
   rollback?: (
     context: WorkflowRollbackContext<Output>,
-  ) => Effect.Effect<void, never, RollbackReq>;
+  ) => Effect.Effect<void, unknown, RollbackReq>;
   rollbackConfig?: WorkflowStepConfig;
 }
 
@@ -108,9 +108,10 @@ export interface WorkflowTaskOptions<
   Output = unknown,
   R = never,
   RollbackReq = never,
+  E = never,
 > extends WorkflowTaskConfig<Output, RollbackReq> {
   name: string;
-  effect: Effect.Effect<Output, never, R>;
+  effect: Effect.Effect<Output, E, R>;
 }
 
 export interface WorkflowWaitForEventOptions {
@@ -153,14 +154,26 @@ type ExcludeWorkflowStepContext<R> = R extends {
  * Each attempt and rollback handler has a fresh Scope; its resources close
  * before that callback completes. Interrupting a task waits for the active
  * attempt's cleanup without waiting for Cloudflare's native retry delays.
+ *
+ * `Effect.fail` uses the native retry policy. On exhaustion, application failure
+ * data is returned in the error channel, including on cached rejection replay.
+ * The active invocation retains its original Cause; replay restores serialized
+ * tags and fields, not custom prototypes, methods, or object identity.
+ * Failure data supports primitives, dense arrays, records, errors, Date, bigint,
+ * Uint8Array, ArrayBuffer, Map, and Set, within a 16 KiB encoded / 64-level limit.
+ * Functions, symbols, cycles, shared object references, accessors, and unsupported
+ * class instances fail explicitly as terminal serialization defects. Error data
+ * must form a tree, including objects used as Map keys or Set members.
+ * `Effect.die` and `Effect.orDie`
+ * stop retries. Native timeout, validation, pause, and abort errors stay defects.
  */
-export function task<T, R = never, RollbackReq = never>(
+export function task<T, R = never, RollbackReq = never, E = never>(
   name: string,
-  effect: Effect.Effect<T, never, R>,
+  effect: Effect.Effect<T, E, R>,
   options?: WorkflowTaskConfig<T, RollbackReq>,
 ): Effect.Effect<
   T,
-  never,
+  E,
   WorkflowStep | ExcludeWorkflowStepContext<Exclude<R | RollbackReq, Scope>>
 > {
   return Effect.gen(function* () {
@@ -177,7 +190,7 @@ export function task<T, R = never, RollbackReq = never>(
         ? (rollbackContext: WorkflowRollbackContext<T>) =>
             rollbackEffect(rollbackContext).pipe(Effect.provide(context))
         : undefined,
-    } as WorkflowTaskOptions<T, any, any>);
+    } as WorkflowTaskOptions<T, any, any, E>);
   });
 }
 
@@ -252,7 +265,9 @@ export type WorkflowServices =
  */
 export interface WorkflowExport {
   readonly kind: "workflow";
-  readonly make: (env: unknown) => Effect.Effect<WorkflowImpl<any, any>>;
+  readonly make: (
+    env: unknown,
+  ) => Effect.Effect<WorkflowImpl<any, any, unknown>>;
 }
 
 /**
@@ -260,9 +275,9 @@ export interface WorkflowExport {
  * an Effect that produces the workflow's `Result`. The Effect requires
  * `WorkflowRunServices` (event + step + env) to execute.
  */
-export type WorkflowImpl<Input = unknown, Result = unknown> = (
+export type WorkflowImpl<Input = unknown, Result = unknown, E = never> = (
   input: Input,
-) => Effect.Effect<Result, never, WorkflowServices>;
+) => Effect.Effect<Result, E, WorkflowServices>;
 
 export const isWorkflowExport = (value: unknown): value is WorkflowExport =>
   typeof value === "object" &&
@@ -528,44 +543,44 @@ export interface WorkflowClass extends Effect.Effect<
   /** Reference a deployed Workflow by logical ID, optionally in another stack or stage. */
   ref: typeof WorkflowResource.ref;
   <_Self>(): {
-    <Input = unknown, Result = unknown, InitReq = never>(
+    <Input = unknown, Result = unknown, InitReq = never, E = never>(
       name: string,
-      impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+      impl: Effect.Effect<WorkflowImpl<Input, Result, E>, ConfigError, InitReq>,
     ): Effect.Effect<
       WorkflowHandle<Input, Result>,
       never,
       Worker | Exclude<InitReq, WorkflowServices>
     > & {
-      new (_: never): WorkflowImpl<Input, Result>;
+      new (_: never): WorkflowImpl<Input, Result, E>;
     };
-    <Input = unknown, Result = unknown, InitReq = never>(
+    <Input = unknown, Result = unknown, InitReq = never, E = never>(
       name: string,
       props: WorkflowProps,
-      impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+      impl: Effect.Effect<WorkflowImpl<Input, Result, E>, ConfigError, InitReq>,
     ): Effect.Effect<
       WorkflowHandle<Input, Result>,
       never,
       Worker | Exclude<InitReq, WorkflowServices>
     > & {
-      new (_: never): WorkflowImpl<Input, Result>;
+      new (_: never): WorkflowImpl<Input, Result, E>;
     };
   };
   <Params = unknown>(
     name: string,
     props?: WorkflowRefProps,
   ): WorkflowLike<Params>;
-  <Input = unknown, Result = unknown, InitReq = never>(
+  <Input = unknown, Result = unknown, InitReq = never, E = never>(
     name: string,
-    impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+    impl: Effect.Effect<WorkflowImpl<Input, Result, E>, ConfigError, InitReq>,
   ): Effect.Effect<
     WorkflowHandle<Input, Result>,
     never,
     Worker | Exclude<InitReq, WorkflowServices>
   >;
-  <Input = unknown, Result = unknown, InitReq = never>(
+  <Input = unknown, Result = unknown, InitReq = never, E = never>(
     name: string,
     props: WorkflowProps,
-    impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
+    impl: Effect.Effect<WorkflowImpl<Input, Result, E>, ConfigError, InitReq>,
   ): Effect.Effect<
     WorkflowHandle<Input, Result>,
     never,
@@ -992,11 +1007,11 @@ export class WorkflowScope extends Context.Service<
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
   ...args:
     | []
-    | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
+    | [name: string, impl: Effect.Effect<WorkflowImpl<any, any, unknown>>]
     | [
         name: string,
         props: WorkflowProps,
-        impl: Effect.Effect<WorkflowImpl<any, any>>,
+        impl: Effect.Effect<WorkflowImpl<any, any, unknown>>,
       ]
     | [name: string, props?: WorkflowRefProps]
 ) => {
@@ -1114,7 +1129,9 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
                 WorkerEnvironment,
                 env as Record<string, any>,
               ),
-            )) as WorkflowImpl<any, any>).pipe(Effect.provideContext(services)),
+            )) as WorkflowImpl<any, any, unknown>).pipe(
+            Effect.provideContext(services),
+          ),
       } satisfies WorkflowExport);
 
       return self;
