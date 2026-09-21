@@ -3,6 +3,8 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -83,12 +85,18 @@ describe.concurrent("Nextjs ISR", () => {
             "package.json",
             "tsconfig.json",
             "next.config.mjs",
-            "open-next.config.ts",
             "app",
             "public",
           ],
         });
         yield* prepareNextjsFixture(rootDir);
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const nextConfigPath = path.join(rootDir, "next.config.mjs");
+        const nextConfig = yield* fs.readFileString(nextConfigPath);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
 
         const deploy = () =>
           stack.deploy(
@@ -105,23 +113,19 @@ describe.concurrent("Nextjs ISR", () => {
                     "package.json",
                     "tsconfig.json",
                     "next.config.mjs",
-                    "open-next.config.ts",
                   ],
                 },
-                env: {
-                  NEXT_INC_CACHE_KV: incCache,
-                  NEXT_TAG_CACHE_KV: tagCache,
-                  NEXT_CACHE_DO_QUEUE: Cloudflare.DurableObject(
-                    "NEXT_CACHE_DO_QUEUE",
-                    { className: "DOQueueHandler" },
-                  ),
-                },
+                isr: { incrementalCache: incCache, tagCache },
               });
               return { site };
             }),
           );
 
         const { site } = yield* deploy();
+        expect(yield* fs.readFileString(nextConfigPath)).toBe(nextConfig);
+        expect(
+          yield* fs.exists(path.join(rootDir, "open-next.config.ts")),
+        ).toBe(false);
         expect(site.url).toBeDefined();
 
         // 1. The ISR page caches in KV: the stamp stabilizes across hits.

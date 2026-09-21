@@ -38,6 +38,8 @@ catalog:
   "@aws-crypto/util": "^5.2.0"
   "@aws-sdk/types": "^3.974.3"
   "@aws/durable-execution-sdk-js": "^2.1.0"
+  "@better-auth/api-key": "^1.7.5"
+  "@better-auth/drizzle-adapter": "^1.7.5"
   "@cloudflare/containers": "^0.3.7"
   "@cloudflare/puppeteer": "^1.1.0"
   "@cloudflare/unenv-preset": "^2.16.1"
@@ -121,7 +123,7 @@ catalog:
   "@vue/tsconfig": "^0.9.1"
   astro: "7.3.1"
   aws4fetch: "^1.0.20"
-  better-auth: "^1.6.2"
+  better-auth: "^1.7.5"
   capnp-es: "^0.0.16"
   capnweb: "^0.12.0"
   changelogithub: "^13.16.1"
@@ -239,7 +241,7 @@ overrides:
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.2
-  zod: 4.4.3
+  zod: 4.5.4
   rolldown: 1.2.5
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch

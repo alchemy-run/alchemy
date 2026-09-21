@@ -120,12 +120,18 @@ quirks:
 
 ## Generated migrations target the same contract
 
-[`Drizzle.Schema`](/sql/drizzle/migrations) emits into the same
-shape: its `out` output is a migrations directory, so
-`migrations: schema` orders generation before application in one
-deploy. Any tool that writes ordered `.sql` files into a directory
-already works — drizzle-kit's `<timestamp>_<name>/migration.sql`
-layout is recognized and keyed by directory name.
+Generate and commit files with drizzle-kit before deployment:
+
+```sh
+pnpm exec drizzle-kit generate
+git add src/schema.ts drizzle
+git commit -m "Add schema migration"
+```
+
+The same directory input accepts handwritten SQL or drizzle-kit's
+`<timestamp>_<name>/migration.sql` layout; see [Drizzle migrations](/sql/drizzle/migrations).
+Optional generation automation is documented separately in the
+[`Drizzle.Schema` reference](/providers/drizzle/schema).
 
 ## Durable Object migrations
 
