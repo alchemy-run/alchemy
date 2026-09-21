@@ -253,20 +253,16 @@ export const Foldkit: {
             : Effect.succeed(propsEff),
           (props) => ({
             ...props,
-            // No `assets` default of its own: the routing is derived from
-            // the build (below), which is what tells a client-only app —
-            // single-page-application fallback — apart from a
-            // server-rendered one, where that fallback served the unrendered
-            // template for every deep link at 200. See `FoldkitProps.assets`.
             main: undefined!,
-            vite: {
-              main: props?.main,
+            source: {
+              provider: "alchemy/Cloudflare/Website/FoldkitSource",
+              devMode: "server",
               rootDir: props?.rootDir,
-              memo: props?.memo,
-              // The build's own `foldkit.build.json` settles the routing a
-              // server-rendered or prerendered app needs; see
-              // `FoldkitProps.assets` and `FoldkitBuild.ts`.
-              framework: "foldkit",
+              options: {
+                main: props?.main,
+                rootDir: props?.rootDir,
+                memo: props?.memo,
+              },
             },
           }),
         ),

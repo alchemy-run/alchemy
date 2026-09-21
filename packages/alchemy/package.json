@@ -63,6 +63,7 @@
     "./Cloudflare/Bridge": "./src/Cloudflare/Bridge.ts",
     "./Cloudflare/Live": "./src/Cloudflare/Live.ts",
     "./Cloudflare/RpcWebSocketClient": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
+    "./Cloudflare/Website/FoldkitSource": "./src/Cloudflare/Website/FoldkitSource.ts",
     "./Cloudflare/*": "./src/Cloudflare/*/index.ts",
     "./Drizzle": "./src/Drizzle/index.ts",
     "./Axiom": "./src/Axiom/index.ts",
@@ -226,6 +227,11 @@
         "types": "./lib/Cloudflare/Workers/RpcWebSocketClient.d.ts",
         "bun": "./src/Cloudflare/Workers/RpcWebSocketClient.ts",
         "default": "./lib/Cloudflare/Workers/RpcWebSocketClient.js"
+      },
+      "./Cloudflare/Website/FoldkitSource": {
+        "types": "./lib/Cloudflare/Website/FoldkitSource.d.ts",
+        "bun": "./src/Cloudflare/Website/FoldkitSource.ts",
+        "default": "./lib/Cloudflare/Website/FoldkitSource.js"
       },
       "./Cloudflare/*": {
         "types": "./lib/Cloudflare/*/index.d.ts",

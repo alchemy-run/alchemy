@@ -3,7 +3,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type { AssetsConfig } from "../Workers/Assets.ts";
-import type { ViteAssetsDeriver } from "../Workers/Worker.ts";
+import { Assets } from "@alchemy.run/cloudflare-runtime/core/bindings";
+import { BundleError } from "../../Bundle/Bundle.ts";
+import type { WorkerSourceModule } from "../Workers/Source.ts";
+import { makeViteSource } from "../Workers/Sources/Vite.ts";
+import type { ViteOptions } from "../Workers/Worker.ts";
 
 /**
  * What a Foldkit build wrote beside its server bundle, as
@@ -92,8 +96,39 @@ export const foldkitAssetsFromManifest = (
     ? { notFoundHandling: "single-page-application" }
     : undefined;
 
-/** The {@link ViteAssetsDeriver} for `framework: "foldkit"`. */
-export const deriveFoldkitAssets: ViteAssetsDeriver = (build) =>
-  readFoldkitBuildManifest(build.serverDirectory).pipe(
-    Effect.map(foldkitAssetsFromManifest),
+/** Foldkit's deployment policy around the ordinary Vite source. */
+export const makeFoldkitSource = (options: ViteOptions = {}) => {
+  const source = makeViteSource(options, ({ serverDirectory }) =>
+    Effect.gen(function* () {
+      const manifest = yield* readFoldkitBuildManifest(serverDirectory);
+      if (manifest !== undefined && options.main !== undefined) {
+        return yield* Effect.fail(
+          new BundleError({
+            message:
+              "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
+          }),
+        );
+      }
+      return foldkitAssetsFromManifest(manifest);
+    }),
   );
+  return {
+    ...source,
+    // A source descriptor owns its dev bindings. The shared Vite source
+    // starts workerd with the client assets; expose those to custom entries.
+    dev: (ctx: Parameters<typeof source.dev>[0]) =>
+      // Server-mode source children already run at the project root.
+      makeViteSource({ ...options, rootDir: "." }).dev({
+        ...ctx,
+        worker: {
+          ...ctx.worker,
+          bindings: [...ctx.worker.bindings, Assets.local("ASSETS")],
+        },
+      }),
+  };
+};
+
+export default {
+  make: (options) =>
+    Effect.succeed(makeFoldkitSource(options as ViteOptions | undefined)),
+} satisfies WorkerSourceModule;

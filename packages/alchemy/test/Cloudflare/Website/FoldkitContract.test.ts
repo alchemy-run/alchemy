@@ -1,8 +1,9 @@
 import { pathToFileURL } from "node:url";
 import {
-  deriveFoldkitAssets,
+  foldkitAssetsFromManifest,
+  makeFoldkitSource,
   readFoldkitBuildManifest,
-} from "@/Cloudflare/Website/FoldkitBuild.ts";
+} from "@/Cloudflare/Website/FoldkitSource.ts";
 import {
   Artifacts,
   createArtifactStore,
@@ -105,10 +106,9 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         expect(response.missingStatus).toBe(404);
 
         expect(
-          yield* deriveFoldkitAssets({
-            clientDirectory: output.clientDirectory!,
-            serverDirectory: output.serverDirectory,
-          }),
+          foldkitAssetsFromManifest(
+            yield* readFoldkitBuildManifest(output.serverDirectory),
+          ),
         ).toBeUndefined();
       }).pipe(Effect.scoped),
     { timeout: 120_000 },
@@ -127,11 +127,44 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             main,
             'export default { fetch() { return new Response("wrong entry") } };',
           );
-          const result = yield* Effect.result(build(root, main));
+          // Turn off prerendering so even a custom entry named "fetch" can
+          // finish building: the source must reject it from the manifest.
+          const config = path.join(root, "vite.config.ts");
+          yield* fs.writeFileString(
+            config,
+            (yield* fs.readFileString(config)).replace(
+              "prerender: true",
+              "prerender: false",
+            ),
+          );
+          const result = yield* Effect.result(
+            makeFoldkitSource({ rootDir: root, main })
+              .build(
+                makeSourceContext({
+                  id: "Conflict",
+                  fqn: "Conflict",
+                  workerName: "conflict",
+                  props: {},
+                  compatibility: {
+                    date: "2024-09-23",
+                    flags: ["nodejs_compat"],
+                  },
+                  stack: { name: "contract", stage: "test" },
+                }),
+              )
+              .pipe(
+                Effect.provideService(
+                  Artifacts,
+                  makeScopedArtifacts(createArtifactStore(), "conflict"),
+                ),
+              ),
+          );
           expect(result._tag).toBe("Failure");
           if (result._tag === "Failure") {
             expect(String(result.failure)).toContain(
-              "cannot be combined with main",
+              entryName === "fetch"
+                ? "cannot be combined with main"
+                : 'no entry chunk named "fetch"',
             );
           }
         }).pipe(Effect.scoped),
@@ -197,7 +230,6 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
           const vite = {
             rootDir,
             main: "src/worker.ts",
-            framework,
             memo: {
               include: [
                 "src/**",
@@ -207,7 +239,9 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
               ],
             },
           };
-          const source = makeViteSource(vite);
+          const source = framework
+            ? makeFoldkitSource(vite)
+            : makeViteSource(vite);
           const output = yield* source
             .build(
               makeSourceContext({
@@ -249,6 +283,41 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
     );
   }
 
+  for (const mode of ["ssr", "custom"] as const) {
+    it.effect(
+      `serves ${mode} through the source module in an isolated dev child`,
+      () =>
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const root = yield* fixture(
+            mode === "ssr" ? "foldkit-ssr-fixture" : "foldkit-worker-fixture",
+          );
+          const probe = yield* ChildProcess.make(
+            process.execPath,
+            [
+              path.join(import.meta.dirname, "fixtures/foldkit-dev-probe.ts"),
+              mode,
+            ],
+            { cwd: root, stdout: "pipe", stderr: "pipe" },
+          );
+          const [stdout, stderr, exitCode] = yield* Effect.all(
+            [
+              probe.stdout.pipe(Stream.decodeText, Stream.mkString),
+              probe.stderr.pipe(Stream.decodeText, Stream.mkString),
+              probe.exitCode,
+            ],
+            { concurrency: 3 },
+          );
+          expect({
+            exitCode,
+            failure: exitCode === 0 ? "" : stderr + stdout,
+          }).toEqual({ exitCode: 0, failure: "" });
+          expect(stdout).toContain("foldkit-dev-ok");
+        }).pipe(Effect.scoped),
+      { timeout: 120_000 },
+    );
+  }
+
   it.effect(
     "keeps a client-only build assets-only with SPA routing",
     () =>
@@ -258,10 +327,9 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         expect(yield* output.serverBundle).toBeUndefined();
         expect(output.serverDirectory).toBeUndefined();
         expect(
-          yield* deriveFoldkitAssets({
-            clientDirectory: output.clientDirectory!,
-            serverDirectory: output.serverDirectory,
-          }),
+          foldkitAssetsFromManifest(
+            yield* readFoldkitBuildManifest(output.serverDirectory),
+          ),
         ).toEqual({ notFoundHandling: "single-page-application" });
       }).pipe(Effect.scoped),
     { timeout: 120_000 },

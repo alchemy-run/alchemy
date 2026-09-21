@@ -21,16 +21,15 @@ import {
 import { hashDirectory, type MemoOptions } from "../../../Command/Memo.ts";
 import { findAvailablePort, initialCwd } from "../../../Util/Node.ts";
 import { sha256Object } from "../../../Util/sha256.ts";
-import { deriveFoldkitAssets } from "../../Website/FoldkitBuild.ts";
-import { readAssets } from "../Assets.ts";
-import type { SourceDevHandle, SourceProvider } from "../Source.ts";
+import { type AssetsConfig, readAssets } from "../Assets.ts";
+import type {
+  SourceDevHandle,
+  SourceError,
+  SourceProvider,
+  SourceServices,
+} from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
-import {
-  isSelfUrl,
-  type ViteAssetsDeriver,
-  type ViteFramework,
-  type ViteOptions,
-} from "../Worker.ts";
+import { isSelfUrl, type ViteOptions } from "../Worker.ts";
 import { isContainerDecl } from "../WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "../WorkerLoader.ts";
 
@@ -242,17 +241,6 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
-      // Foldkit's server build owns its fetch entry. Checking before the
-      // build also rejects a custom entry named "fetch", which would pass
-      // the framework's output-name check while deploying the wrong handler.
-      if (
-        pluginOptions.main !== undefined &&
-        builder.config.plugins.some((plugin) => plugin.name === "foldkit:build")
-      ) {
-        throw new Error(
-          "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
-        );
-      }
       await builder.buildApp();
     });
     return yield* outputPlugin.output;
@@ -402,14 +390,6 @@ export const hashViteInput = Effect.fn(function* <E, R>(
 });
 
 /**
- * The {@link ViteAssetsDeriver} behind each {@link ViteFramework}: what
- * reads the framework's build description once the build has run.
- */
-const frameworkAssets: Record<ViteFramework, ViteAssetsDeriver> = {
-  foldkit: deriveFoldkitAssets,
-};
-
-/**
  * Source provider for vite-based workers (`props.vite`, set by
  * `Website.Vite`): the vite builder produces the client assets and the
  * server bundle in one pass; diff never builds — the `input` hash over
@@ -420,7 +400,14 @@ const frameworkAssets: Record<ViteFramework, ViteAssetsDeriver> = {
  * imports it, so its ~0.5s module cost is only paid for vite-based
  * workers.
  */
-export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
+export const makeViteSource = (
+  vite: ViteOptions,
+  // Source integrations can supply defaults from the completed build before
+  // assets are read and hashed. User-declared asset settings always win.
+  assetDefaults?: (
+    build: Pick<ViteBuildOutput, "clientDirectory" | "serverDirectory">,
+  ) => Effect.Effect<AssetsConfig | undefined, SourceError, SourceServices>,
+): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
@@ -456,8 +443,8 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
     // prerendered knows the routing better than a default would, and the
     // resource's own `assets` still has the last word.
     const derivedAssets =
-      clientDirectory && vite.framework
-        ? yield* frameworkAssets[vite.framework]({
+      clientDirectory && assetDefaults
+        ? yield* assetDefaults({
             clientDirectory,
             serverDirectory,
           })

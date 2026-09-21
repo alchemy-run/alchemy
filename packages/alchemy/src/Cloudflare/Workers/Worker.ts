@@ -2,9 +2,6 @@ import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type { ConfigError } from "effect/Config";
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
-import type { PlatformError } from "effect/PlatformError";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { type MemoOptions } from "../../Command/Memo.ts";
@@ -38,7 +35,7 @@ import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
-import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import { type Assets, type AssetsProps } from "./Assets.ts";
 import type {
   WorkerAccessConfig,
   WorkerAccessIdentity,
@@ -1032,41 +1029,6 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
-/** The output directories a Vite build resolved, handed to a {@link ViteAssetsDeriver}. */
-export interface ViteBuildDirectories {
-  /** Absolute path of the client environment's output. */
-  readonly clientDirectory: string;
-  /**
-   * Absolute path of the entry environment's output, or `undefined` when
-   * the build emitted no server bundle.
-   */
-  readonly serverDirectory: string | undefined;
-}
-
-/**
- * Reads what a framework's build left beside its server bundle and turns
- * it into asset routing. Receives the resolved output directories and
- * returns the asset config to fill in under what the resource's own
- * `assets` declared, which wins over anything returned.
- *
- * One deriver exists per {@link ViteFramework}; `Sources/Vite.ts` selects
- * it from {@link ViteOptions.framework}.
- */
-export type ViteAssetsDeriver = (
-  build: ViteBuildDirectories,
-) => Effect.Effect<
-  AssetsConfig | undefined,
-  PlatformError,
-  FileSystem.FileSystem | Path.Path
->;
-
-/**
- * A framework whose build leaves a description of itself beside the
- * server bundle that Alchemy knows how to read. See
- * {@link ViteOptions.framework}.
- */
-export type ViteFramework = "foldkit";
-
 export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
@@ -1115,18 +1077,6 @@ export interface ViteOptions {
           }
         >;
   };
-  /**
-   * Names the framework whose build this is, when its build leaves a
-   * description of itself beside the server bundle — which paths it
-   * prerendered, say — from which the right asset routing follows rather
-   * than from configuration. Once the build has run, the framework's
-   * {@link ViteAssetsDeriver} reads that description and fills in asset
-   * config under what the resource's own `assets` declared.
-   *
-   * `Website.Foldkit` sets `"foldkit"`, which reads `foldkit.build.json`.
-   * A plain Vite project has nothing to derive and leaves it unset.
-   */
-  framework?: ViteFramework;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
