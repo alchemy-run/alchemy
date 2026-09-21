@@ -3,13 +3,13 @@ import {
   foldkitAssetsFromManifest,
   makeFoldkitSource,
   readFoldkitBuildManifest,
-} from "@/Cloudflare/Website/FoldkitSource.ts";
+} from "@alchemy.run/frontend-frameworks/foldkit/source";
 import {
   Artifacts,
   createArtifactStore,
   makeScopedArtifacts,
 } from "@/Artifacts.ts";
-import { makeSourceContext } from "@/Cloudflare/Workers/Source.ts";
+import { makeSourceContext, sourceHost } from "@/Cloudflare/Workers/Source.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import {
   makeViteSource,
@@ -138,7 +138,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             ),
           );
           const result = yield* Effect.result(
-            makeFoldkitSource({ rootDir: root, main })
+            makeFoldkitSource({ rootDir: root, main }, sourceHost)
               .build(
                 makeSourceContext({
                   id: "Conflict",
@@ -240,7 +240,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             },
           };
           const source = framework
-            ? makeFoldkitSource(vite)
+            ? makeFoldkitSource(vite, sourceHost)
             : makeViteSource(vite);
           const output = yield* source
             .build(

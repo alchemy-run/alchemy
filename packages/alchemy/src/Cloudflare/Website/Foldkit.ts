@@ -255,7 +255,7 @@ export const Foldkit: {
             ...props,
             main: undefined!,
             source: {
-              provider: "alchemy/Cloudflare/Website/FoldkitSource",
+              provider: "@alchemy.run/frontend-frameworks/foldkit/source",
               devMode: "server",
               rootDir: props?.rootDir,
               options: {

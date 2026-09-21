@@ -1,3 +1,5 @@
+import type { SourceHost } from "@alchemy.run/frontend-frameworks/core";
+import { Assets } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import type {
   BindingHook,
   BindingServices,
@@ -270,13 +272,14 @@ export interface SourceProvider {
 export interface WorkerSourceModule {
   readonly make: (
     options: unknown,
+    host: SourceHost<SourceProvider>,
   ) => Effect.Effect<SourceProvider, SourceProviderError, SourceServices>;
 }
 
 /**
  * Validated provider modules memoized per specifier for the process
  * lifetime — a Worker resolves its source at least twice per deploy
- * (diff, then reconcile). `make(options)` still runs per resolution: a
+ * (diff, then reconcile). `make(options, host)` still runs per resolution: a
  * stack can host several Workers of the same provider with different
  * options.
  */
@@ -319,16 +322,57 @@ const importSourceModule = (
     );
   });
 
+/** Shared host capabilities; Vite remains lazy for other source providers. */
+export const sourceHost: SourceHost<SourceProvider> = {
+  vite: (options, policy) => {
+    const load = () => Effect.promise(() => import("./Sources/Vite.ts"));
+    return {
+      ownsAssets: true,
+      build: (ctx) =>
+        load().pipe(
+          Effect.flatMap(({ makeViteSource }) =>
+            makeViteSource(options, policy.assetDefaults).build(ctx),
+          ),
+        ),
+      hash: (ctx, previous) =>
+        load().pipe(
+          Effect.flatMap(({ makeViteSource }) =>
+            makeViteSource(options, policy.assetDefaults).hash(ctx, previous),
+          ),
+        ),
+      dev: (ctx) =>
+        load().pipe(
+          Effect.flatMap(({ makeViteSource }) =>
+            // Server-mode source children already run at the project's root.
+            makeViteSource({ ...options, rootDir: "." }).dev({
+              ...ctx,
+              worker: {
+                ...ctx.worker,
+                bindings:
+                  policy.devAssetsBinding === undefined
+                    ? ctx.worker.bindings
+                    : [
+                        ...ctx.worker.bindings,
+                        Assets.local(policy.devAssetsBinding),
+                      ],
+              },
+            }),
+          ),
+        ),
+    };
+  },
+};
+
 /**
  * Load an external source provider from its serializable descriptor:
  * dynamically import the module, validate the shape, and call
- * `make(options)`.
+ * `make(options, host)`.
  */
 export const loadSource = (
   descriptor: WorkerSourceDescriptor,
 ): Effect.Effect<SourceProvider, SourceProviderError, SourceServices> =>
   importSourceModule(descriptor.provider).pipe(
-    Effect.flatMap((mod) => mod.make(descriptor.options)),
+    Effect.flatMap((mod) => mod.make(descriptor.options, sourceHost)),
   );
 
 /**

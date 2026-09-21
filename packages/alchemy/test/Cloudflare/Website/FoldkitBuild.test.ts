@@ -3,7 +3,7 @@ import {
   foldkitAssetsFromManifest,
   readFoldkitBuildManifest,
   type FoldkitBuildManifest,
-} from "@/Cloudflare/Website/FoldkitSource";
+} from "@alchemy.run/frontend-frameworks/foldkit/source";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";

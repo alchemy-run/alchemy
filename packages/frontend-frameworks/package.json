@@ -373,6 +373,12 @@
       "worker": "./dist/sveltekit/cloudflare.js",
       "import": "./dist/sveltekit/cloudflare.js"
     },
+    "./foldkit/source": {
+      "types": "./dist/foldkit/source.d.ts",
+      "bun": "./dist/foldkit/source.js",
+      "worker": "./dist/foldkit/source.js",
+      "import": "./dist/foldkit/source.js"
+    },
     "./sveltekit/source": {
       "types": "./dist/sveltekit/source.d.ts",
       "bun": "./dist/sveltekit/source.js",

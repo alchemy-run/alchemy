@@ -1,7 +1,7 @@
+import { loadSource } from "../../../../src/Cloudflare/Workers/Source.ts";
 import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import sourceModule from "alchemy/Cloudflare/Website/FoldkitSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -22,9 +22,13 @@ const program = Effect.gen(function* () {
   );
   // The host already chdir'd to the app: the original relative root must
   // not be resolved a second time inside this source's dev implementation.
-  const source = yield* sourceModule.make({
-    rootDir: "relative/app",
-    main: mode === "custom" ? "src/worker.ts" : undefined,
+  const source = yield* loadSource({
+    provider: "@alchemy.run/frontend-frameworks/foldkit/source",
+    devMode: "server",
+    options: {
+      rootDir: "relative/app",
+      main: mode === "custom" ? "src/worker.ts" : undefined,
+    },
   });
   const handle = yield* source.dev({
     id: "DevProbe",
