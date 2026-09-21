@@ -56,7 +56,7 @@ export interface NextjsFrameworkOptions {
     | {
         /**
          * Optional explicit OpenNext config for direct framework consumers.
-         * Otherwise Alchemy generates configuration from these options.
+         * Otherwise load `open-next.config.ts` when present, or generate defaults.
          */
         readonly configPath?: string | undefined;
         /** Resource-selected cache adapters. Defaults to the read-only static-assets cache. */
@@ -314,10 +314,10 @@ export const make = (
           path.resolve(override ?? options?.root ?? process.cwd()),
         );
 
-      const paths = (root: string) => ({
-        openNextDirectory: path.resolve(root, ".open-next"),
-        clientDirectory: path.resolve(root, ".open-next", "assets"),
-        cacheDirectory: path.resolve(root, ".open-next", "cache"),
+      const paths = (root: string, openNextDirectory: string) => ({
+        openNextDirectory,
+        clientDirectory: path.join(openNextDirectory, "assets"),
+        cacheDirectory: path.join(openNextDirectory, "cache"),
         distDirectory: path.resolve(root, "dist"),
         workerDirectory: path.resolve(root, "dist", "worker"),
       });
@@ -326,13 +326,16 @@ export const make = (
         buildOptions?: FrameworkCore.FrameworkBuildOptions,
       ) {
         const root = yield* resolveRoot(buildOptions?.root);
-        const p = paths(root);
-
         // 1. The OpenNext build pipeline (spawns `next build` internally).
-        yield* Runner.runOpenNextBuild(makeRunnerConfig(root, options)).pipe(
+        const buildPaths = yield* Runner.runOpenNextBuild(
+          makeRunnerConfig(root, options),
+        ).pipe(
           Effect.mapError((error) => fail(error.message)(error.cause)),
           Effect.provide(spawnerLayer),
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
         );
+        const p = paths(root, buildPaths.openNextDirectory);
 
         // 1.5. Edge-runtime routes/pages are not supported by
         // @opennextjs/cloudflare (it shims `next/dist/compiled/edge-runtime`
@@ -340,7 +343,7 @@ export const make = (
         // the exact route list instead of shipping a mystery 500 — the same
         // code runs fine on Workers under the node runtime.
         const manifestPath = path.join(
-          root,
+          buildPaths.appBuildOutputPath,
           ".next",
           "server",
           "middleware-manifest.json",

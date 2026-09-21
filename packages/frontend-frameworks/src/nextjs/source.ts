@@ -39,6 +39,7 @@ import * as NodeCrypto from "node:crypto";
 import { createRequire } from "node:module";
 import { runBuildChild } from "../core/BuildChild.ts";
 import * as Nextjs from "./Nextjs.ts";
+import * as Runner from "./Runner.ts";
 
 const packageVersion: string = createRequire(import.meta.url)(
   "../../package.json",
@@ -193,7 +194,7 @@ export interface NextjsSourceOptions {
   readonly root?: string | undefined;
   /** Rebuild-scope configuration (which files bust the build memo). */
   readonly memo?: NextjsMemoOptions | undefined;
-  /** Optional explicit OpenNext config; otherwise configuration is generated. */
+  /** Optional explicit config; otherwise discover `open-next.config.ts`, falling back to generated defaults. */
   readonly configPath?: string | undefined;
   /** Resource-selected cache adapters. Defaults to the read-only static-assets cache. */
   readonly cache?: "static-assets" | "kv" | undefined;
@@ -422,9 +423,24 @@ const hashInputTree = Effect.fn(function* (
         .pipe(Effect.flatMap(sha256Hex));
     }
   }
+  const configPath = yield* Runner.resolveConfigPath({
+    appDir: root,
+    configPath: options.configPath,
+  }).pipe(Effect.mapError(frameworkError));
+  const configHash =
+    configPath === undefined
+      ? undefined
+      : yield* fs.readFile(configPath).pipe(Effect.flatMap(sha256Hex));
   return yield* sha256Hex(
     stableStringify({
       version: packageVersion,
+      config: {
+        path:
+          configPath === undefined
+            ? undefined
+            : path.relative(root, configPath).replaceAll("\\", "/"),
+        hash: configHash,
+      },
       options: {
         configPath: options.configPath,
         cache: options.cache,
@@ -543,9 +559,9 @@ const assetsConfigOf = (
     ? (ctx.assets as Record<string, unknown>)
     : undefined;
 
-const frameworkError = (
-  cause: FrameworkCore.FrameworkError,
-): SourceProviderError =>
+const frameworkError = (cause: {
+  readonly message: string;
+}): SourceProviderError =>
   new SourceProviderError({
     provider: PROVIDER,
     message: cause.message,

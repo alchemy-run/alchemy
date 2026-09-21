@@ -18,7 +18,6 @@
 //     buildCommand }
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -48,58 +47,53 @@ const { ensureCloudflareConfig } = await importCf(
 );
 const { build } = await importCf("dist/cli/build/build.js");
 
-const generatedDirectory = runnerConfig.configPath
-  ? undefined
-  : fs.mkdtempSync(path.join(os.tmpdir(), "alchemy-nextjs-config-"));
-try {
-  const configPath = generatedDirectory
-    ? path.join(generatedDirectory, "open-next.config.mjs")
-    : path.resolve(appDir, runnerConfig.configPath);
-  if (generatedDirectory) {
-    const resolveOverride = (name) =>
-      JSON.stringify(
-        require.resolve(`@opennextjs/cloudflare/overrides/${name}`),
-      );
-    const writable = runnerConfig.cache === "kv";
-    fs.writeFileSync(
-      configPath,
-      `
+const configPath = runnerConfig.configPath ?? runnerConfig.generatedConfigPath;
+if (runnerConfig.generatedConfigPath) {
+  const resolveOverride = (name) =>
+    JSON.stringify(require.resolve(`@opennextjs/cloudflare/overrides/${name}`));
+  const writable = runnerConfig.cache === "kv";
+  fs.writeFileSync(
+    configPath,
+    `
 import { defineCloudflareConfig } from ${JSON.stringify(cfApiIndex)};
 import incrementalCache from ${resolveOverride(writable ? "incremental-cache/kv-incremental-cache" : "incremental-cache/static-assets-incremental-cache")};
 ${writable ? `import queue from ${resolveOverride("queue/do-queue")};\nimport tagCache from ${resolveOverride("tag-cache/kv-next-tag-cache")};` : ""}
 export default defineCloudflareConfig({ incrementalCache${writable ? ", queue, tagCache" : ""} });
 `,
-    );
-  }
-  const { config, buildDir } = await compileOpenNextConfig(configPath, {
-    compileEdge: true,
-  });
-  ensureCloudflareConfig(config);
-  config.buildCommand =
-    runnerConfig.buildCommand ?? config.buildCommand ?? "npx next build";
-
-  const openNextDistDir = path.dirname(
-    cfRequire.resolve("@opennextjs/aws/index.js"),
   );
-  const options = normalizeOptions(config, openNextDistDir, buildDir);
-  logger.setLevel(runnerConfig.debug ? "debug" : "info");
-
-  // Only these two Wrangler fields are read by the OpenNext build pipeline.
-  const wranglerConfig = {
-    compatibility_date: runnerConfig.compatibilityDate,
-    assets: { run_worker_first: true },
-  };
-  const projectOptions = {
-    sourceDir: appDir,
-    skipNextBuild: !!runnerConfig.skipNextBuild,
-    skipWranglerConfigCheck: true,
-    minify: !!runnerConfig.minify,
-  };
-  await build(options, config, projectOptions, wranglerConfig, false);
-  console.log(
-    "[@alchemy.run/frontend-frameworks/nextjs] OpenNext build finished OK",
-  );
-} finally {
-  if (generatedDirectory)
-    fs.rmSync(generatedDirectory, { recursive: true, force: true });
 }
+const { config, buildDir } = await compileOpenNextConfig(configPath, {
+  compileEdge: true,
+});
+ensureCloudflareConfig(config);
+config.buildCommand =
+  runnerConfig.buildCommand ?? config.buildCommand ?? "npx next build";
+
+const openNextDistDir = path.dirname(
+  cfRequire.resolve("@opennextjs/aws/index.js"),
+);
+const options = normalizeOptions(config, openNextDistDir, buildDir);
+logger.setLevel(runnerConfig.debug ? "debug" : "info");
+
+// Only these two Wrangler fields are read by the OpenNext build pipeline.
+const wranglerConfig = {
+  compatibility_date: runnerConfig.compatibilityDate,
+  assets: { run_worker_first: true },
+};
+const projectOptions = {
+  sourceDir: appDir,
+  skipNextBuild: !!runnerConfig.skipNextBuild,
+  skipWranglerConfigCheck: true,
+  minify: !!runnerConfig.minify,
+};
+await build(options, config, projectOptions, wranglerConfig, false);
+console.log(
+  "[@alchemy.run/frontend-frameworks/nextjs] OpenNext build finished OK",
+);
+fs.writeFileSync(
+  runnerConfig.outputPath,
+  JSON.stringify({
+    openNextDirectory: options.outputDir,
+    appBuildOutputPath: options.appBuildOutputPath,
+  }),
+);
