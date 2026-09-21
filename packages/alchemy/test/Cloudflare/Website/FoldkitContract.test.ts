@@ -19,6 +19,8 @@ import { expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { cloneFixture } from "../Utils/Fixture.ts";
 
 const fixture = (name: string) =>
@@ -73,31 +75,34 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
         ).toContain(">0<");
         const bundle = yield* output.serverBundle;
         expect(bundle?.files[0]?.path).toBe("dist/server/fetch.js");
-        const handler = yield* Effect.promise(
-          () =>
-            import(
-              pathToFileURL(
-                path.join(output.serverDirectory!, manifest!.serverEntry),
-              ).href
-            ),
+        const probe = yield* ChildProcess.make(
+          process.execPath,
+          [
+            path.join(import.meta.dirname, "fixtures/foldkit-handler-probe.ts"),
+            pathToFileURL(
+              path.join(output.serverDirectory!, manifest!.serverEntry),
+            ).href,
+          ],
+          { stdout: "pipe", stderr: "pipe" },
         );
-        const response = yield* Effect.promise(
-          () =>
-            handler.default.fetch(
-              new Request("https://example.test/?count=7"),
-            ) as Promise<Response>,
+        const [stdout, stderr, exitCode] = yield* Effect.all(
+          [
+            probe.stdout.pipe(Stream.decodeText, Stream.mkString),
+            probe.stderr.pipe(Stream.decodeText, Stream.mkString),
+            probe.exitCode,
+          ],
+          { concurrency: 3 },
         );
+        expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+        const response = JSON.parse(stdout) as {
+          status: number;
+          html: string;
+          missingStatus: number;
+        };
         expect(response.status).toBe(200);
-        const html = yield* Effect.promise(() => response.text());
-        expect(html).toContain(">7<");
-        expect(html).not.toContain('rel="canonical"');
-        const missing = yield* Effect.promise(
-          () =>
-            handler.default.fetch(
-              new Request("https://example.test/assets/missing.js"),
-            ) as Promise<Response>,
-        );
-        expect(missing.status).toBe(404);
+        expect(response.html).toContain(">7<");
+        expect(response.html).not.toContain('rel="canonical"');
+        expect(response.missingStatus).toBe(404);
 
         expect(
           yield* deriveFoldkitAssets({
