@@ -6,6 +6,7 @@ onlyBuiltDependencies:
   - workerd
 allowBuilds:
   "@parcel/watcher": true
+  core-js: false
   es5-ext: false
   esbuild: true
   msgpackr-extract: true
@@ -63,6 +64,7 @@ catalog:
   "@iconify-json/simple-icons": "^1.2.94"
   "@iconify/react": "^6.0.2"
   "@libsql/client": "^0.17.0"
+  "@neon/functions": "0.11.0"
   "@neondatabase/serverless": "^1.0.1"
   "@octanejs/adapter-cloudflare": "0.0.12"
   "@octanejs/vite-plugin": "0.1.22"
@@ -120,6 +122,7 @@ catalog:
   "@vitejs/plugin-vue": "^6.0.5"
   "@vue/tsconfig": "^0.9.1"
   astro: "7.3.1"
+  aws4fetch: "^1.0.20"
   better-auth: "^1.7.5"
   capnp-es: "^0.0.16"
   capnweb: "^0.12.0"
@@ -173,6 +176,7 @@ catalog:
   sharp: "^0.35.3"
   solid-devtools: "^0.34.3"
   solid-js: "^1.9.12"
+  srvx: "1.0.5"
   starlight-blog: "^0.29.0"
   tinyglobby: "^0.2.17"
   svelte: "^5.56.6"
@@ -264,11 +268,15 @@ minimumReleaseAgeExclude:
   - "@cloudflare/workerd-linux-arm64@1.20260918.1"
   - "@cloudflare/workerd-windows-64@1.20260918.1"
   - workerd@1.20260918.1
-  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-arm@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-linux-x64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1'
-  - '@typescript/typescript-win32-x64@7.1.0-dev.20260905.1'
+  - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-darwin-x64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-arm@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-linux-x64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-win32-arm64@7.1.0-dev.20260905.1"
+  - "@typescript/typescript-win32-x64@7.1.0-dev.20260905.1"
   - typescript@7.1.0-dev.20260905.1
+  - "@neon/config-runtime@1.6.1"
+  - "@neon/config@1.7.1"
+  - neon@4.21.1
+  - neonctl@4.21.1

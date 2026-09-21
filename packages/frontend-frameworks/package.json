@@ -56,6 +56,7 @@
     "@effect/platform-node": "catalog:",
     "esbuild": "catalog:",
     "rolldown": "catalog:",
+    "srvx": "catalog:",
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
@@ -66,6 +67,7 @@
     "@octanejs/vite-plugin": "catalog:",
     "@opennextjs/cloudflare": "catalog:",
     "@sveltejs/kit": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "astro": "catalog:",
@@ -73,6 +75,8 @@
     "hono": "catalog:",
     "nitropack": "catalog:",
     "nuxt": "catalog:",
+    "octane": "catalog:",
+    "tailwindcss": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
@@ -134,6 +138,12 @@
     }
   },
   "exports": {
+    "./*/neon": {
+      "types": "./dist/*/neon.d.ts",
+      "bun": "./dist/*/neon.js",
+      "worker": "./dist/*/neon.js",
+      "import": "./dist/*/neon.js"
+    },
     "./aws-lambda": {
       "types": "./dist/aws-lambda/index.d.ts",
       "bun": "./dist/aws-lambda/index.js",
