@@ -5,6 +5,10 @@ import { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import type { Input } from "./Input.ts";
 import * as Plan from "./Plan.ts";
+import type {
+  ResourceSelection,
+  SelectionOutput,
+} from "./ResourceSelection.ts";
 import { evalStack, type CompiledStack, type StackEffect } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 
@@ -22,29 +26,21 @@ export type DeployResult<A> = Effect.Effect<
   Effect.Services<ReturnType<typeof deployStack<A>>>
 >;
 
-type DeploymentOutput<
-  A,
-  Options extends Plan.MakePlanOptions,
-> = "targets" extends keyof Options
-  ? Options["targets"] extends ReadonlyArray<string>
-    ? undefined
-    : Options["targets"] extends undefined
-      ? A
-      : A | undefined
-  : A;
+export interface FilteredDeployOptions<A>
+  extends Omit<DeployOptions<A>, keyof ResourceSelection>, ResourceSelection {}
 
 /**
- * Reconcile a stack. Targets select nodes and their transitive dependencies,
- * not declaration evaluation: the whole stack program still runs. Targeted
+ * Reconcile a stack. Filters select nodes and their transitive dependencies,
+ * not declaration evaluation: the whole stack program still runs. Filtered
  * deployments return void and leave persisted full-stack outputs unchanged.
  */
 export function deploy<
   A,
-  Options extends DeployOptions<A> = DeployOptions<A> & { targets?: undefined },
+  Options extends FilteredDeployOptions<A> = DeployOptions<A>,
 >(
-  options: DeployOptions<A> & Options,
-): DeployResult<DeploymentOutput<A, Options>>;
-export function deploy<A>(options: DeployOptions<A>) {
+  options: FilteredDeployOptions<A> & Options,
+): DeployResult<SelectionOutput<A, Options>>;
+export function deploy<A>(options: FilteredDeployOptions<A>) {
   return deployStack(options);
 }
 
@@ -54,13 +50,14 @@ const deployStack = <A>({
   dev,
   scope,
   force,
-  targets,
-}: DeployOptions<A>) =>
+  include,
+  exclude,
+}: FilteredDeployOptions<A>) =>
   evalStack(
     stack,
     (stack) =>
       Effect.gen(function* () {
-        const plan = yield* Plan.make(stack, { force, targets });
+        const plan = yield* Plan.make(stack, { force, include, exclude });
         const output = yield* Apply.apply(plan);
         return output;
       }),

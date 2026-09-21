@@ -1,3 +1,7 @@
+import type {
+  ResourceSelection,
+  SelectionOutput,
+} from "../ResourceSelection.ts";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 import * as Floci from "@alchemy.run/floci";
@@ -469,45 +473,34 @@ export type DeployResult<A> = Effect.Effect<
   Effect.Services<ReturnType<typeof deployStack<A>>>
 >;
 
-/** Output follows the actual options argument, including optionally supplied targets. */
-type DeploymentOutput<
-  A,
-  Options extends Plan.MakePlanOptions | undefined,
-> = Options extends undefined
-  ? A
-  : "targets" extends keyof Options
-    ? Options["targets"] extends ReadonlyArray<string>
-      ? undefined
-      : Options["targets"] extends undefined
-        ? A
-        : A | undefined
-    : A;
+export interface FilteredDeployCallOptions
+  extends Omit<DeployCallOptions, keyof ResourceSelection>, ResourceSelection {}
 
-type FullDeployCall = [options?: DeployCallOptions & { targets?: undefined }];
+type FullDeployCall = [options?: DeployCallOptions];
 
 /**
- * Targeted deploys return void; the whole declaration still evaluates.
- * With an explicit output type, targeting also requires the Call tuple type.
+ * Filtered deploys return void; the whole declaration still evaluates.
+ * With an explicit output type, filtering also requires the Call tuple type.
  */
 export interface Deploy {
-  <A, Call extends [options?: DeployCallOptions] = FullDeployCall>(
+  <A, Call extends [options?: FilteredDeployCallOptions] = FullDeployCall>(
     stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
     ...call: Call
-  ): DeployResult<DeploymentOutput<A, Call[0]>>;
+  ): DeployResult<SelectionOutput<A, Call[0]>>;
 }
 
 export function deploy<
   A,
-  Call extends [options?: DeployCallOptions] = FullDeployCall,
+  Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
 >(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
   ...call: Call
-): DeployResult<DeploymentOutput<A, Call[0]>>;
+): DeployResult<SelectionOutput<A, Call[0]>>;
 export function deploy<A>(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
-  callOptions?: DeployCallOptions,
+  callOptions?: FilteredDeployCallOptions,
 ) {
   return deployStack(options, stack, callOptions);
 }
@@ -515,7 +508,7 @@ export function deploy<A>(
 const deployStack = <A>(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
-  callOptions?: DeployCallOptions,
+  callOptions?: FilteredDeployCallOptions,
 ) =>
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
@@ -523,7 +516,8 @@ const deployStack = <A>(
     dev: resolveDev(options),
     scope: callOptions?.scope,
     force: callOptions?.force,
-    targets: callOptions?.targets,
+    include: callOptions?.include,
+    exclude: callOptions?.exclude,
   }).pipe(Effect.provide(TelemetryLive));
 
 /** Bind test-file options and the shared runtime scope without erasing output types. */
@@ -531,13 +525,16 @@ export const makeDeploy = (
   options: MakeOptions,
   scope: Scope.Scope,
 ): Deploy => {
-  function run<A, Call extends [options?: DeployCallOptions] = FullDeployCall>(
+  function run<
+    A,
+    Call extends [options?: FilteredDeployCallOptions] = FullDeployCall,
+  >(
     stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
     ...call: Call
-  ): DeployResult<DeploymentOutput<A, Call[0]>>;
+  ): DeployResult<SelectionOutput<A, Call[0]>>;
   function run<A>(
     stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
-    callOptions?: DeployCallOptions,
+    callOptions?: FilteredDeployCallOptions,
   ) {
     return deployStack(options, stack, { ...callOptions, scope });
   }
@@ -547,10 +544,16 @@ export const makeDeploy = (
 export const destroy = (
   options: MakeOptions,
   stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
-  callOptions?: { stage?: string; scope?: Scope.Scope; targets?: never },
+  callOptions?: {
+    stage?: string;
+    scope?: Scope.Scope;
+    include?: never;
+    exclude?: never;
+  },
 ) =>
   _destroy({
-    targets: callOptions?.targets,
+    include: callOptions?.include,
+    exclude: callOptions?.exclude,
     stack: stack as Effect.Effect<CompiledStack, never, any>,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
@@ -582,12 +585,12 @@ export interface ScratchStack<ROut = any> {
   readonly stage: string;
   /** The shared in-memory state Layer for this scratch. @internal */
   readonly state: Layer.Layer<State.State, never, never>;
-  /** Targets leave other rows and stack outputs untouched; declaration still runs. */
-  deploy<A, E, R, Call extends [options?: Plan.MakePlanOptions] = []>(
+  /** Filters leave other rows and stack outputs untouched; declaration still runs. */
+  deploy<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(
     effect: Effect.Effect<A, E, R>,
     ...call: Call
   ): Effect.Effect<
-    DeploymentOutput<Input.Resolve<A>, Call[0]>,
+    SelectionOutput<Input.Resolve<A>, Call[0]>,
     any,
     Exclude<R, ROut | StackServices>
   >;
@@ -599,15 +602,18 @@ export interface ScratchStack<ROut = any> {
    * changes) without mutating the cloud. Plans run against whatever state
    * prior `deploy(...)` calls persisted.
    */
-  plan<A, E, R, Call extends [options?: Plan.MakePlanOptions] = []>(
+  plan<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(
     effect: Effect.Effect<A, E, R>,
     ...call: Call
   ): Effect.Effect<
-    Plan.Plan<DeploymentOutput<A, Call[0]>>,
+    Plan.Plan<SelectionOutput<A, Call[0]>>,
     any,
     Exclude<R, ROut | StackServices>
   >;
-  destroy(options?: { targets?: never }): Effect.Effect<void, any, never>;
+  destroy(options?: {
+    include?: never;
+    exclude?: never;
+  }): Effect.Effect<void, any, never>;
 }
 
 const sanitizeStackName = (name: string) =>
@@ -664,7 +670,7 @@ export const scratchStack = <ROut>(
 
   const buildAndApply = (
     effect: Effect.Effect<any, any, any>,
-    planOptions?: Plan.MakePlanOptions,
+    planOptions?: Plan.FilteredPlanOptions,
   ) =>
     (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
@@ -685,7 +691,7 @@ export const scratchStack = <ROut>(
 
   const buildPlan = (
     effect: Effect.Effect<any, any, any>,
-    planOptions?: Plan.MakePlanOptions,
+    planOptions?: Plan.FilteredPlanOptions,
   ) =>
     (pinToFloci(effect) as Effect.Effect<any, any, never>).pipe(
       makeStack({
@@ -708,17 +714,17 @@ export const scratchStack = <ROut>(
     state: stateLayer,
     deploy: ((
       effect: Effect.Effect<any, any, any>,
-      planOptions?: Plan.MakePlanOptions,
+      planOptions?: Plan.FilteredPlanOptions,
     ) => buildAndApply(effect, planOptions)) as ScratchStack<ROut>["deploy"],
     plan: ((
       effect: Effect.Effect<any, any, any>,
-      planOptions?: Plan.MakePlanOptions,
+      planOptions?: Plan.FilteredPlanOptions,
     ) => buildPlan(effect, planOptions)) as ScratchStack<ROut>["plan"],
     destroy: (callOptions) =>
-      callOptions?.targets !== undefined
+      callOptions?.include !== undefined || callOptions?.exclude !== undefined
         ? Effect.die(
-            new Plan.InvalidTargets({
-              message: "Targeted destroy is not supported.",
+            new Plan.InvalidResourceSelection({
+              message: "Filtered destroy is not supported.",
             }),
           )
         : (Plan.destroy({ name: stackName, stage }).pipe(

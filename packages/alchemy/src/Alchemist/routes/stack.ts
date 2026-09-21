@@ -2,6 +2,10 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { apply as applyPlan } from "../../Apply.ts";
 import * as Plan from "../../Plan.ts";
+import type {
+  ResourceSelection,
+  SelectionOutput,
+} from "../../ResourceSelection.ts";
 import type { PlannedAction, PlannedResource } from "../../Report.ts";
 import { applySession, Progress, withSpanEvents } from "../Progress.ts";
 import { open, type Session, type StackTarget } from "../Session.ts";
@@ -12,13 +16,17 @@ export interface PlanInput {
   readonly target: StackTarget;
   readonly operation: "deploy" | "destroy";
   readonly force?: boolean;
-  /** Select nodes and dependencies; declaration still runs, stack outputs are preserved. */
-  readonly targets?: ReadonlyArray<string>;
+  readonly include?: never;
+  readonly exclude?: never;
   readonly adopt?: boolean;
   readonly updateStateStore?: boolean;
   /** Run local (emulated) providers instead of the real cloud. */
   readonly dev?: boolean;
 }
+
+/** Select nodes and dependencies; declaration still runs, stack outputs are preserved. */
+export interface FilteredPlanInput
+  extends Omit<PlanInput, keyof ResourceSelection>, ResourceSelection {}
 
 /** Infer the deployed stack output from an `alchemy.run.ts` module type. */
 export type StackModuleOutput<Module> = Module extends {
@@ -95,29 +103,38 @@ type PlanResult<Output> = Effect.Effect<
 /**
  * Import the stack, resolve its services, and compute a deploy or destroy
  * plan. Planning phases are reported through {@link Progress}; the returned
- * snapshot is what {@link apply} executes. Targeted deploys preserve stack
+ * snapshot is what {@link apply} executes. Filtered deploys preserve stack
  * outputs and return void; the entire declaration still evaluates.
+ * With an explicit module type, filter-carrying callbacks also specify the input type.
  */
 export function plan<Module = unknown>(
-  input: PlanInput & { targets: ReadonlyArray<string> },
+  input: FilteredPlanInput &
+    ({ include: ReadonlyArray<string> } | { exclude: ReadonlyArray<string> }),
 ): PlanResult<undefined>;
 export function plan<Module = unknown>(
-  input: PlanInput & { targets?: undefined },
+  input: PlanInput,
 ): PlanResult<StackModuleOutput<Module>>;
 export function plan<Module = unknown>(
-  input: PlanInput,
+  input: FilteredPlanInput,
 ): PlanResult<StackModuleOutput<Module> | undefined>;
-export function plan<Module = unknown>(input: PlanInput) {
+export function plan<
+  Module = unknown,
+  Input extends FilteredPlanInput = PlanInput,
+>(input: Input): PlanResult<SelectionOutput<StackModuleOutput<Module>, Input>>;
+export function plan<Module = unknown>(input: FilteredPlanInput) {
   return planStack<Module>(input);
 }
 
-const planStack = <Module = unknown>(input: PlanInput) =>
+const planStack = <Module = unknown>(input: FilteredPlanInput) =>
   Effect.gen(function* () {
     type Output = StackModuleOutput<Module> | undefined;
-    if (input.operation === "destroy" && input.targets !== undefined) {
+    if (
+      input.operation === "destroy" &&
+      (input.include !== undefined || input.exclude !== undefined)
+    ) {
       return yield* Effect.die(
-        new Plan.InvalidTargets({
-          message: "Targeted destroy is not supported.",
+        new Plan.InvalidResourceSelection({
+          message: "Filtered destroy is not supported.",
         }),
       );
     }
@@ -136,7 +153,8 @@ const planStack = <Module = unknown>(input: PlanInput) =>
         ? Plan.destroy(session.stack)
         : Plan.make(session.stack, {
             force: input.force,
-            targets: input.targets,
+            include: input.include,
+            exclude: input.exclude,
           })
     ).pipe(
       Effect.provideService(Progress, report),

@@ -62,6 +62,17 @@ import {
   type ResourceBinding,
   type ResourceLike,
 } from "./Resource.ts";
+import {
+  InvalidResourceSelection,
+  UnsafeSelectionBoundary,
+  selectResources,
+  type ResourceSelection,
+  type SelectionOutput,
+} from "./ResourceSelection.ts";
+export {
+  InvalidResourceSelection,
+  UnsafeSelectionBoundary,
+} from "./ResourceSelection.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
   isActionState,
@@ -254,7 +265,7 @@ export interface ActionDelete<
 
 export type Plan<Output = any> = {
   /** Closed selection for partial apply and GC; absent for a full plan. */
-  targetFqns?: ReadonlySet<string>;
+  selectedFqns?: ReadonlySet<string>;
   resources: {
     [id in string]: Apply<any>;
   };
@@ -357,10 +368,16 @@ export const describePlan = (
 
 export interface MakePlanOptions {
   force?: boolean;
+  include?: never;
+  exclude?: never;
+}
+
+export interface FilteredPlanOptions
+  extends Omit<MakePlanOptions, keyof ResourceSelection>, ResourceSelection {
   /**
-   * Exact FQNs or unambiguous logical IDs, plus transitive input, capture,
+   * Exact FQNs, unique logical IDs, or FQN globs, plus transitive input, capture,
    * and binding dependencies. An empty selection is an error. Other rows
-   * and persisted stack outputs are untouched; targeted apply returns void.
+   * and persisted stack outputs are untouched; filtered apply returns void.
    * The entire stack declaration still evaluates before selection. Renames
    * with persisted former rows require a full deployment. Replacement/GC
    * fails when prior or declared dependents are outside the selection.
@@ -371,50 +388,33 @@ export interface MakePlanOptions {
    * complete selection, since stored payloads cannot recover binding-cycle edges.
    * Only already-persisted, continuously retained bindings count as evidence.
    * Reconciling a row with incomplete downstream history requires that selection.
-   * Dependencies hidden inside callbacks must be declared explicitly.
+   * Exclusions are hard barriers, even for unchanged dependencies. Quote globs
+   * in the CLI: `--include 'App/**' --exclude 'App/Legacy'`. Each occurrence
+   * supplies one pattern; commas are literal. Dependencies hidden inside
+   * callbacks must be declared explicitly.
    */
-  targets?: ReadonlyArray<string>;
+  include?: ReadonlyArray<string>;
 }
 
-export class InvalidTargets extends Data.TaggedError("InvalidTargets")<{
-  message: string;
-}> {}
-
-export class UnsafeTargetBoundary extends Data.TaggedError(
-  "UnsafeTargetBoundary",
-)<{
-  message: string;
-}> {}
-
-type PlannedOutput<
-  A,
-  Options extends MakePlanOptions | undefined,
-> = Options extends undefined
-  ? A
-  : "targets" extends keyof Options
-    ? Options["targets"] extends ReadonlyArray<string>
-      ? undefined
-      : Options["targets"] extends undefined
-        ? A
-        : A | undefined
-    : A;
-
-type FullPlanCall = [options?: MakePlanOptions & { targets?: undefined }];
+type FullPlanCall = [options?: MakePlanOptions];
 
 export function make<
   A,
-  Call extends [options?: MakePlanOptions] = FullPlanCall,
+  Call extends [options?: FilteredPlanOptions] = FullPlanCall,
 >(
   stack: StackSpec<A>,
   ...call: Call
-): Effect.Effect<Plan<PlannedOutput<A, Call[0]>>, never, State>;
-export function make<A>(stack: StackSpec<A>, options: MakePlanOptions = {}) {
+): Effect.Effect<Plan<SelectionOutput<A, Call[0]>>, never, State>;
+export function make<A>(
+  stack: StackSpec<A>,
+  options: FilteredPlanOptions = {},
+) {
   return makePlan(stack, options);
 }
 
 const makePlan = <A>(
   stack: StackSpec<A>,
-  options: MakePlanOptions = {},
+  options: FilteredPlanOptions = {},
 ): Effect.Effect<Plan<A | undefined>, never, State> =>
   // @ts-expect-error
   Effect.gen(function* () {
@@ -426,7 +426,6 @@ const makePlan = <A>(
     const declaredResources = Object.values(stack.resources);
     const declaredActions = Object.values(stack.actions ?? {});
     const declared = [...declaredResources, ...declaredActions];
-    const declaredByFqn = new Map(declared.map((node) => [node.FQN, node]));
     const upstream = (node: ResourceLike | ActionLike) =>
       Object.keys(
         Output.upstreamAny(
@@ -435,47 +434,7 @@ const makePlan = <A>(
             : [node.Props, stack.bindings[node.FQN] ?? []],
         ),
       );
-    let selected: Set<string> | undefined;
-    if (options.targets !== undefined) {
-      selected = new Set<string>();
-      const available = declared
-        .map((node) => `${node.LogicalId} (${node.FQN})`)
-        .sort()
-        .join(", ");
-      const invalid = (reason: string) =>
-        Effect.die(
-          new InvalidTargets({
-            message: `${reason}. Available targets: ${available || "(none)"}`,
-          }),
-        );
-      if (options.targets.length === 0)
-        return yield* invalid("Targets must not be empty");
-      for (const selector of options.targets) {
-        if (selector.trim() === "")
-          return yield* invalid("Target must not be empty");
-        const exact = declaredByFqn.get(selector);
-        const matches = exact
-          ? [exact]
-          : declared.filter((node) => node.LogicalId === selector);
-        if (matches.length !== 1) {
-          return yield* invalid(
-            `${matches.length === 0 ? "Unknown" : "Ambiguous"} target '${selector}'`,
-          );
-        }
-        selected.add(matches[0].FQN);
-      }
-      // Set iteration visits additions, closing cycles without recursion.
-      for (const fqn of selected) {
-        for (const dependency of upstream(declaredByFqn.get(fqn)!)) {
-          if (!declaredByFqn.has(dependency)) {
-            return yield* invalid(
-              `Target '${fqn}' depends on undeclared '${dependency}'`,
-            );
-          }
-          selected.add(dependency);
-        }
-      }
-    }
+    const selected = yield* selectResources(declared, upstream, options);
     const resources = declaredResources.filter(
       (node) => !selected || selected.has(node.FQN),
     );
@@ -613,8 +572,8 @@ const makePlan = <A>(
         const row = persistedRows.get(action.FQN);
         if (row && !isActionState(row)) {
           return yield* Effect.die(
-            new UnsafeTargetBoundary({
-              message: `Targeted Action '${action.FQN}' cannot overwrite persisted resource state. Finish resource cleanup before reusing its FQN for an Action.`,
+            new UnsafeSelectionBoundary({
+              message: `Filtered Action '${action.FQN}' cannot overwrite persisted resource state. Finish resource cleanup before reusing its FQN for an Action.`,
             }),
           );
         }
@@ -627,8 +586,8 @@ const makePlan = <A>(
             (!selected.has(resource.FQN) && selected.has(former))
           ) {
             return yield* Effect.die(
-              new UnsafeTargetBoundary({
-                message: `Targeted reconciliation cannot migrate '${former}' to '${resource.FQN}'. Run a full deployment for renames.`,
+              new UnsafeSelectionBoundary({
+                message: `Filtered reconciliation cannot migrate '${former}' to '${resource.FQN}'. Run a full deployment for renames.`,
               }),
             );
           }
@@ -859,7 +818,7 @@ const makePlan = <A>(
       Effect.gen(function* () {
         if (selected && !selected.has(resourceExpr.src.FQN)) {
           return yield* Effect.die(
-            new UnsafeTargetBoundary({
+            new UnsafeSelectionBoundary({
               message: `Output evaluation discovered unselected dependency '${resourceExpr.src.FQN}'. Declare the dependency explicitly or run a full deployment.`,
             }),
           );
@@ -1626,8 +1585,8 @@ const makePlan = <A>(
       const modeSwitched = hasModeSwitched(mode, oldState);
       if (selected && modeSwitched && oldState?.status === "deleting") {
         return yield* Effect.die(
-          new UnsafeTargetBoundary({
-            message: `Cannot switch provider mode for '${fqn}' during targeted recovery from deleting. Finish interrupted destruction in its recorded '${stampedMode(oldState)}' mode before deploying in '${mode}' mode; a full mode-switch deployment is not a safe recovery.`,
+          new UnsafeSelectionBoundary({
+            message: `Cannot switch provider mode for '${fqn}' during filtered recovery from deleting. Finish interrupted destruction in its recorded '${stampedMode(oldState)}' mode before deploying in '${mode}' mode; a full mode-switch deployment is not a safe recovery.`,
           }),
         );
       }
@@ -2038,7 +1997,7 @@ const makePlan = <A>(
             const outside = unselectedConsumers(consumer);
             if (outside.size > 0) {
               return yield* Effect.die(
-                new UnsafeTargetBoundary({
+                new UnsafeSelectionBoundary({
                   message: `Cannot detach '${source}' from '${consumer}' while downstream consumers are unselected: ${[...outside].sort().join(", ")}. Select them or run a full deployment.`,
                 }),
               );
@@ -2059,7 +2018,7 @@ const makePlan = <A>(
         // omitted from downstream. Evidence anywhere can involve this resource.
         if (excluded && (bindingEvidence || incompleteHistory)) {
           return yield* Effect.die(
-            new UnsafeTargetBoundary({
+            new UnsafeSelectionBoundary({
               message: `Cannot replace or collect old generations of '${fqn}' while '${excluded[0]}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
             }),
           );
@@ -2067,7 +2026,7 @@ const makePlan = <A>(
         const outside = unselectedConsumers(fqn);
         if (outside.size > 0) {
           return yield* Effect.die(
-            new UnsafeTargetBoundary({
+            new UnsafeSelectionBoundary({
               message: `Cannot replace or collect old generations of '${fqn}' while dependents are unselected: ${[...outside].sort().join(", ")}. Select them or run a full deployment.`,
             }),
           );
@@ -2081,7 +2040,7 @@ const makePlan = <A>(
             )
           ) {
             return yield* Effect.die(
-              new UnsafeTargetBoundary({
+              new UnsafeSelectionBoundary({
                 message: `Cannot reconcile '${fqn}' with incomplete historical downstream metadata while persisted nodes are unselected: ${excludedRows
                   .map(([id]) => id)
                   .sort()
@@ -2121,7 +2080,7 @@ const makePlan = <A>(
           });
         if (!survivingBindings) {
           return yield* Effect.die(
-            new UnsafeTargetBoundary({
+            new UnsafeSelectionBoundary({
               message: `Cannot discard the last historical binding evidence while persisted nodes are unselected: ${excludedRows
                 .map(([fqn]) => fqn)
                 .sort()
@@ -2448,7 +2407,7 @@ const makePlan = <A>(
       deletions,
       actionDeletions,
       output: selected ? undefined : stack.output,
-      targetFqns: selected,
+      selectedFqns: selected,
       cycleMembers,
       defaultMode: runDefaultMode,
     } satisfies Plan<A | undefined> as Plan<A | undefined>;
@@ -2481,11 +2440,14 @@ const makePlan = <A>(
 export const destroy = (stack: {
   name: string;
   stage: string;
-  targets?: never;
+  include?: never;
+  exclude?: never;
 }): Effect.Effect<Plan<undefined>, never, State> =>
-  stack.targets !== undefined
+  stack.include !== undefined || stack.exclude !== undefined
     ? Effect.die(
-        new InvalidTargets({ message: "Targeted destroy is not supported." }),
+        new InvalidResourceSelection({
+          message: "Filtered destroy is not supported.",
+        }),
       )
     : make({
         name: stack.name,

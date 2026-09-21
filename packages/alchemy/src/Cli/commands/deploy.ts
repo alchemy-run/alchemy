@@ -16,8 +16,9 @@ import {
   dryRun as dryRunFlag,
   envFile,
   force,
-  targets,
-  validateTargetOptions,
+  include,
+  exclude,
+  validateSelectionOptions,
   optionalConfig,
   profile,
   resolveStackArgs,
@@ -34,7 +35,8 @@ interface StackCommandOptions {
   readonly profile?: string;
   readonly dryRun?: boolean;
   readonly force?: boolean;
-  readonly targets?: ReadonlyArray<string>;
+  readonly include?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string>;
   readonly yes?: boolean;
   readonly destroy?: boolean;
   readonly adopt?: boolean;
@@ -157,7 +159,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
 });
 
 const runStack = Effect.fn(function* (options: StackCommandOptions) {
-  yield* validateTargetOptions(options);
+  yield* validateSelectionOptions(options);
   const cli = yield* Cli;
   const display = { detailed: options.detailed, stage: options.stage };
   const target = {
@@ -191,7 +193,8 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     target,
     operation: options.destroy ? "destroy" : "deploy",
     force: options.force,
-    targets: options.targets,
+    include: options.include,
+    exclude: options.exclude,
     adopt: options.adopt,
     updateStateStore: options.yes,
   }).pipe(withPlanningProgress);
@@ -234,7 +237,8 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
-    targets,
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,
@@ -254,7 +258,8 @@ export const deployCommand = Command.make(
 export const destroyCommand = Command.make(
   "destroy",
   {
-    targets,
+    include,
+    exclude,
     dryRun: dryRunFlag,
     config: optionalConfig,
     configPath,
@@ -282,7 +287,8 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
-    targets,
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,

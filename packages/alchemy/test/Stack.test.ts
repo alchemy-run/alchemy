@@ -1,5 +1,8 @@
 import * as Alchemy from "@/index.ts";
 import * as Deploy from "@/Deploy.ts";
+import * as Destroy from "@/Destroy.ts";
+import * as Plan from "@/Plan.ts";
+import * as Cause from "effect/Cause";
 import * as EffectExit from "effect/Exit";
 import { TestLayers, TestResource } from "./test.resources.ts";
 import { Stage } from "@/Stage.ts";
@@ -158,18 +161,18 @@ describe("Test.make configured stack", () => {
   );
 });
 
-describe("targeted deployment API", () => {
+describe("filtered deployment API", () => {
   const store = State.InMemoryService();
   const state = Layer.succeed(State.State, store);
   const providers = TestLayers();
   const api = Test.make({
     providers,
     state,
-    stage: "targeted-api",
+    stage: "filtered-api",
     sidecar: false,
   });
   const program = Alchemy.Stack(
-    "TargetedApi",
+    "FilteredApi",
     { providers, state },
     Effect.gen(function* () {
       const branch = yield* TestResource("Branch", { string: "database" });
@@ -177,6 +180,131 @@ describe("targeted deployment API", () => {
       return { branch: branch.string, worker: worker.string };
     }),
   );
+
+  it("preserves legacy annotated options and exclude output inference across adapters", () => {
+    type Equal<A, B> =
+      (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+        ? true
+        : false;
+    type Output = { branch: string; worker: string };
+    type DeclaredOutput = Effect.Success<typeof program>["output"];
+    const options: TestCore.DeployCallOptions = {
+      stage: "override",
+      force: true,
+    };
+    const full = api.deploy(program, options);
+    const bun: BunTestApi["deploy"] = api.deploy;
+    const vitest: VitestTestApi["deploy"] = api.deploy;
+    const excluded = api.deploy(program, { exclude: ["Worker"] });
+    const bunExcluded = bun(program, { exclude: ["Worker"] });
+    const vitestExcluded = vitest(program, { exclude: ["Worker"] });
+    const optional = (options?: TestCore.FilteredDeployCallOptions) =>
+      api.deploy(program, options);
+    const absent = api.deploy(program, {
+      include: undefined,
+      exclude: undefined,
+    });
+    const legacy: Deploy.DeployOptions<DeclaredOutput> = {
+      stack: program,
+      stage: "override",
+      force: true,
+    };
+    const direct = Deploy.deploy(legacy);
+    const piped = Effect.succeed(legacy).pipe(Effect.flatMap(Deploy.deploy));
+    const filter = { ...legacy, exclude: ["Worker"] };
+    const filtered = Effect.succeed(filter).pipe(Effect.flatMap(Deploy.deploy));
+    const optionalDirect = (exclude?: ReadonlyArray<string>) =>
+      Deploy.deploy({ ...legacy, exclude });
+    const scratch = TestCore.scratchStack({ providers }, "ExcludedInference");
+    const declaration = Effect.succeed({ value: "value" });
+    const scratchExcluded = scratch.deploy(declaration, { exclude: ["Other"] });
+    const scratchPlan = scratch.plan(declaration, { exclude: ["Other"] });
+    const assertions: [
+      Equal<Effect.Success<typeof full>, Output>,
+      Equal<Effect.Success<typeof excluded>, undefined>,
+      Equal<Effect.Success<typeof bunExcluded>, undefined>,
+      Equal<Effect.Success<typeof vitestExcluded>, undefined>,
+      Equal<Effect.Success<ReturnType<typeof optional>>, Output | undefined>,
+      Equal<Effect.Success<typeof absent>, Output>,
+      Equal<Effect.Success<typeof direct>, Output>,
+      Equal<Effect.Success<typeof piped>, Output>,
+      Equal<Effect.Success<typeof filtered>, undefined>,
+      Equal<
+        Effect.Success<ReturnType<typeof optionalDirect>>,
+        Output | undefined
+      >,
+      Equal<Effect.Success<typeof scratchExcluded>, undefined>,
+      Equal<Effect.Success<typeof scratchPlan>["output"], undefined>,
+    ] = [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ];
+    expect(assertions.every(Boolean)).toBe(true);
+  });
+
+  it("full deployment and adapter options cannot erase known or optional filters", () => {
+    type Assignable<A, B> = [A] extends [B] ? true : false;
+    type DeclaredOutput = Effect.Success<typeof program>["output"];
+    type Full = Deploy.DeployOptions<DeclaredOutput>;
+    type Base = Omit<Full, "include" | "exclude">;
+    type CoreFull = TestCore.DeployCallOptions;
+    type CoreBase = Omit<CoreFull, "include" | "exclude">;
+    const assignable: [
+      Assignable<Base & { include: ReadonlyArray<string> }, Full>,
+      Assignable<Base & { exclude: ReadonlyArray<string> }, Full>,
+      Assignable<Base & { include?: ReadonlyArray<string> }, Full>,
+      Assignable<Base & { exclude?: ReadonlyArray<string> }, Full>,
+      Assignable<Deploy.FilteredDeployOptions<DeclaredOutput>, Full>,
+      Assignable<CoreBase & { include: ReadonlyArray<string> }, CoreFull>,
+      Assignable<CoreBase & { exclude: ReadonlyArray<string> }, CoreFull>,
+      Assignable<CoreBase & { include?: ReadonlyArray<string> }, CoreFull>,
+      Assignable<CoreBase & { exclude?: ReadonlyArray<string> }, CoreFull>,
+      Assignable<TestCore.FilteredDeployCallOptions, CoreFull>,
+    ] = [false, false, false, false, false, false, false, false, false, false];
+    expect(assignable.some(Boolean)).toBe(false);
+  });
+
+  for (const field of ["include", "exclude"]) {
+    api.test(
+      `destroy rejects injected ${field} before declaration or state effects`,
+      Effect.gen(function* () {
+        const options: { include?: never; exclude?: never } = {};
+        yield* Effect.sync(() => Reflect.set(options, field, ["Branch"]));
+        const blocked = Alchemy.Stack(
+          "BlockedDestroy",
+          { providers, state },
+          Effect.die("declaration ran"),
+        );
+        const scratch = TestCore.scratchStack({ providers }, "BlockedScratch");
+        const effects = [
+          Plan.destroy({ name: "Blocked", stage: "test", ...options }).pipe(
+            Effect.asVoid,
+          ),
+          Destroy.destroy({ stack: blocked, stage: "test", ...options }),
+          api.destroy(blocked, options),
+          scratch.destroy(options),
+        ];
+        for (const effect of effects) {
+          const exit = yield* effect.pipe(Effect.exit);
+          expect(EffectExit.isFailure(exit)).toBe(true);
+          if (EffectExit.isFailure(exit))
+            expect(Cause.pretty(exit.cause)).toContain(
+              "Filtered destroy is not supported",
+            );
+        }
+      }),
+    );
+  }
 
   it("preserves exact direct and piped output inference", () => {
     type Equal<A, B> =
@@ -191,8 +319,8 @@ describe("targeted deployment API", () => {
     const coreStageOnly = TestCore.deploy({ providers }, program, {
       stage: "override",
     });
-    const selected = api.deploy(program, { targets: ["Branch"] });
-    const optional = (options: TestCore.DeployCallOptions) =>
+    const selected = api.deploy(program, { include: ["Branch"] });
+    const optional = (options: TestCore.FilteredDeployCallOptions) =>
       api.deploy(program, options);
     const core = TestCore.deploy({ providers }, program);
     const scratch = TestCore.scratchStack({ providers }, "OutputInference");
@@ -204,12 +332,12 @@ describe("targeted deployment API", () => {
     const scratchPiped = declaration.pipe(scratch.deploy);
     const scratchForced = scratch.deploy(declaration, { force: true });
     const scratchSelected = scratch.deploy(declaration, {
-      targets: ["Branch"],
+      include: ["Branch"],
     });
-    const scratchOptional = (options: TestCore.DeployCallOptions) =>
+    const scratchOptional = (options: TestCore.FilteredDeployCallOptions) =>
       scratch.deploy(declaration, options);
     const plan = declaration.pipe(scratch.plan);
-    const selectedPlan = scratch.plan(declaration, { targets: ["Branch"] });
+    const selectedPlan = scratch.plan(declaration, { include: ["Branch"] });
     const assertions: [
       Equal<Effect.Success<typeof full>, Output>,
       Equal<Effect.Success<typeof piped>, Output>,
@@ -259,9 +387,7 @@ describe("targeted deployment API", () => {
         : false;
     type DeclaredOutput = Effect.Success<typeof program>["output"];
     type Output = { branch: string; worker: string };
-    const options: Deploy.DeployOptions<DeclaredOutput> & {
-      targets?: undefined;
-    } = {
+    const options: Deploy.DeployOptions<DeclaredOutput> = {
       stack: program,
       stage: "override",
     };
@@ -276,26 +402,27 @@ describe("targeted deployment API", () => {
       stage: "override",
       force: true,
     });
-    const targetedOptions = {
+    const filteredOptions = {
       stack: program,
       stage: "override",
-      targets: ["Branch"],
+      include: ["Branch"],
     };
-    const targeted = Deploy.deploy(targetedOptions);
-    const targetedPiped = Effect.succeed(targetedOptions).pipe(
+    const filtered = Deploy.deploy(filteredOptions);
+    const filteredPiped = Effect.succeed(filteredOptions).pipe(
       Effect.flatMap(Deploy.deploy),
     );
-    const optional = (options: Deploy.DeployOptions<DeclaredOutput>) =>
+    const optional = (options: Deploy.FilteredDeployOptions<DeclaredOutput>) =>
       Deploy.deploy(options);
-    const optionalPiped = (options: Deploy.DeployOptions<DeclaredOutput>) =>
-      Effect.succeed(options).pipe(Effect.flatMap(Deploy.deploy));
+    const optionalPiped = (
+      options: Deploy.FilteredDeployOptions<DeclaredOutput>,
+    ) => Effect.succeed(options).pipe(Effect.flatMap(Deploy.deploy));
     const assertions: [
       Equal<Effect.Success<typeof direct>, Output>,
       Equal<Effect.Success<typeof piped>, Output>,
       Equal<Effect.Success<typeof explicit>, Output>,
       Equal<Effect.Success<typeof forced>, Output>,
-      Equal<Effect.Success<typeof targeted>, undefined>,
-      Equal<Effect.Success<typeof targetedPiped>, undefined>,
+      Equal<Effect.Success<typeof filtered>, undefined>,
+      Equal<Effect.Success<typeof filteredPiped>, undefined>,
       Equal<Effect.Success<ReturnType<typeof optional>>, Output | undefined>,
       Equal<
         Effect.Success<ReturnType<typeof optionalPiped>>,
@@ -321,31 +448,31 @@ describe("targeted deployment API", () => {
     const bun = bunDeploy<DeclaredOutput>(program, { stage: "override" });
     const vitest = vitestDeploy<DeclaredOutput>(program, { stage: "override" });
     const full = api.deploy<DeclaredOutput>(program);
-    const targeted = api.deploy<
+    const filtered = api.deploy<
       DeclaredOutput,
-      [options: { targets: ReadonlyArray<string> }]
-    >(program, { targets: ["Branch"] });
-    const optional = (options: TestCore.DeployCallOptions) =>
-      api.deploy<DeclaredOutput, [options?: TestCore.DeployCallOptions]>(
-        program,
-        options,
-      );
+      [options: { include: ReadonlyArray<string> }]
+    >(program, { include: ["Branch"] });
+    const optional = (options: TestCore.FilteredDeployCallOptions) =>
+      api.deploy<
+        DeclaredOutput,
+        [options?: TestCore.FilteredDeployCallOptions]
+      >(program, options);
     const bunPiped = program.pipe(bunDeploy);
     const vitestPiped = program.pipe(vitestDeploy);
-    const bunTargeted = bunDeploy(program, { targets: ["Branch"] });
-    const vitestTargeted = vitestDeploy(program, { targets: ["Branch"] });
+    const bunFiltered = bunDeploy(program, { include: ["Branch"] });
+    const vitestFiltered = vitestDeploy(program, { include: ["Branch"] });
     const assertions: [
       Equal<Effect.Success<typeof adapter>, Output>,
       Equal<Effect.Success<typeof core>, Output>,
       Equal<Effect.Success<typeof bun>, Output>,
       Equal<Effect.Success<typeof vitest>, Output>,
       Equal<Effect.Success<typeof full>, Output>,
-      Equal<Effect.Success<typeof targeted>, undefined>,
+      Equal<Effect.Success<typeof filtered>, undefined>,
       Equal<Effect.Success<ReturnType<typeof optional>>, Output | undefined>,
       Equal<Effect.Success<typeof bunPiped>, Output>,
       Equal<Effect.Success<typeof vitestPiped>, Output>,
-      Equal<Effect.Success<typeof bunTargeted>, undefined>,
-      Equal<Effect.Success<typeof vitestTargeted>, undefined>,
+      Equal<Effect.Success<typeof bunFiltered>, undefined>,
+      Equal<Effect.Success<typeof vitestFiltered>, undefined>,
     ] = [true, true, true, true, true, true, true, true, true, true, true];
     expect(assertions.every(Boolean)).toBe(true);
   });
@@ -355,11 +482,11 @@ describe("targeted deployment API", () => {
     Effect.gen(function* () {
       yield* api.destroy(program);
       const selected: void = yield* api.deploy(program, {
-        targets: ["Branch"],
+        include: ["Branch"],
       });
       expect(selected).toBeUndefined();
       const state = yield* store;
-      const key = { stack: program.stackName, stage: "targeted-api" };
+      const key = { stack: program.stackName, stage: "filtered-api" };
       const branch = yield* state.get({ ...key, fqn: "Branch" });
       expect(branch).toBeDefined();
       if (!branch || State.isActionState(branch)) {
@@ -381,7 +508,7 @@ describe("targeted deployment API", () => {
       const direct: void = yield* Deploy.deploy({
         stack: program,
         stage: key.stage,
-        targets: ["Branch"],
+        include: ["Branch"],
       });
       expect(direct).toBeUndefined();
       expect(yield* state.getOutput(key)).toEqual(full);
@@ -389,7 +516,7 @@ describe("targeted deployment API", () => {
         yield* Deploy.deploy({ stack: program, stage: key.stage });
       expect(directFull).toEqual(full);
       const invalid = yield* api
-        .deploy(program, { targets: [] })
+        .deploy(program, { include: [] })
         .pipe(Effect.exit);
       expect(EffectExit.isFailure(invalid)).toBe(true);
       expect(yield* state.getOutput(key)).toEqual(full);

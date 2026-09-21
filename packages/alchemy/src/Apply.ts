@@ -331,7 +331,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      if (plan.targetFqns !== undefined || !plan.output) {
+      if (plan.selectedFqns !== undefined || !plan.output) {
         return undefined;
       }
 
@@ -2483,7 +2483,8 @@ const collectGarbage = Effect.fn(function* (
     })).filter(
       (replaced) =>
         !unresolved.has(replaced.fqn) &&
-        (plan.targetFqns === undefined || plan.targetFqns.has(replaced.fqn)),
+        (plan.selectedFqns === undefined ||
+          plan.selectedFqns.has(replaced.fqn)),
     );
     const deletionGraph: Record<
       string,

@@ -37,7 +37,7 @@ export interface TestApi {
   deploy: Core.Deploy;
   destroy: (
     stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
-    options?: { stage?: string; targets?: never },
+    options?: { stage?: string; include?: never; exclude?: never },
   ) => ReturnType<typeof Core.destroy>;
 }
 

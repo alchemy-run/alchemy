@@ -29,6 +29,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
@@ -89,7 +90,7 @@ const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
-  options?: Plan.MakePlanOptions,
+  options?: Plan.FilteredPlanOptions,
 ): Effect.Effect<Plan.Plan<A | undefined>, Err, State> =>
   // @ts-expect-error - Stack.make's typing erases R unsoundly here
   Effect.gen(function* () {
@@ -5493,7 +5494,7 @@ describe("renamed resources (renamedFrom)", () => {
       }).pipe(makePlan);
 
       // The replacement wins the action; the rename rides along so apply
-      // still moves the row (and the old-generation delete targets the
+      // still moves the row (and the old-generation delete include the
       // migrated attrs under the new FQN).
       const node = plan.resources.New!;
       expect(node.action).toEqual("replace");
@@ -5626,7 +5627,7 @@ describe("renamed resources (renamedFrom)", () => {
   );
 });
 
-describe("targeted planning", () => {
+describe("filtered planning", () => {
   for (const keeper of ["new", "unbound", "bound"] as const) {
     test.provider(
       `requires durable binding evidence from a ${keeper} keeper`,
@@ -5652,7 +5653,7 @@ describe("targeted planning", () => {
             });
           yield* stack.deploy(program(false));
           const result = yield* stack
-            .plan(program(true), { targets: ["A", "Middle", "Keeper"] })
+            .plan(program(true), { include: ["A", "Middle", "Keeper"] })
             .pipe(Effect.exit);
           if (keeper === "bound") {
             if (Exit.isFailure(result))
@@ -5667,7 +5668,7 @@ describe("targeted planning", () => {
           }
           yield* stack.plan(program(true));
           yield* stack.plan(program(true), {
-            targets: ["A", "Middle", "Keeper", "B"],
+            include: ["A", "Middle", "Keeper", "B"],
           });
           yield* stack.destroy();
         }),
@@ -5680,7 +5681,7 @@ describe("targeted planning", () => {
     "updating history",
   ] as const) {
     test.provider(
-      `refuses targeted reconciliation of incomplete ${incomplete} metadata`,
+      `refuses filtered reconciliation of incomplete ${incomplete} metadata`,
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -5719,7 +5720,7 @@ describe("targeted planning", () => {
             );
           yield* state.set({ ...key, value: legacy });
           const result = yield* stack
-            .plan(program("new"), { targets: ["A"], force: true })
+            .plan(program("new"), { include: ["A"], force: true })
             .pipe(Effect.exit);
           expect(Exit.isFailure(result)).toBe(true);
           if (Exit.isFailure(result))
@@ -5727,9 +5728,9 @@ describe("targeted planning", () => {
               "incomplete historical downstream metadata",
             );
           expect(yield* state.get(key)).toEqual(legacy);
-          yield* stack.plan(program("new"), { targets: ["A", "B"] });
+          yield* stack.plan(program("new"), { include: ["A", "B"] });
           yield* stack.plan(program("new"));
-          yield* stack.plan(program("new"), { targets: ["B"], force: true });
+          yield* stack.plan(program("new"), { include: ["B"], force: true });
           yield* stack.deploy(program("new"), { force: true });
           yield* stack.destroy();
         }),
@@ -5756,17 +5757,17 @@ describe("targeted planning", () => {
       const piped = Effect.succeed(stack).pipe(Effect.flatMap(Plan.make));
       const forced = Plan.make(stack, { force: true });
       const explicit = Plan.make<Output>(stack, { force: true });
-      const targeted = Plan.make(stack, { targets: ["Selected"] });
-      const optional = (options: Plan.MakePlanOptions) =>
+      const filtered = Plan.make(stack, { include: ["Selected"] });
+      const optional = (options: Plan.FilteredPlanOptions) =>
         Plan.make(stack, options);
-      const optionalArgument = (options?: Plan.MakePlanOptions) =>
+      const optionalArgument = (options?: Plan.FilteredPlanOptions) =>
         Plan.make(stack, options);
       const assertions: [
         Equal<Effect.Success<typeof direct>["output"], Output>,
         Equal<Effect.Success<typeof piped>["output"], Output>,
         Equal<Effect.Success<typeof forced>["output"], Output>,
         Equal<Effect.Success<typeof explicit>["output"], Output>,
-        Equal<Effect.Success<typeof targeted>["output"], undefined>,
+        Equal<Effect.Success<typeof filtered>["output"], undefined>,
         Equal<
           Effect.Success<ReturnType<typeof optional>>["output"],
           Output | undefined
@@ -5780,18 +5781,106 @@ describe("targeted planning", () => {
     }),
   );
 
+  test(
+    "legacy annotated plan options stay full while optional filters stay optional",
+    Effect.sync(() => {
+      type Equal<A, B> =
+        (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+          ? true
+          : false;
+      type Output = { value: string };
+      const stack: Stack.StackSpec<Output> = {
+        name: "Types",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+        output: { value: "value" },
+      };
+      const options: Plan.MakePlanOptions = { force: true };
+      const legacy = Plan.make(stack, options);
+      const optionalLegacy = (options?: Plan.MakePlanOptions) =>
+        Plan.make(stack, options);
+      const excluded = Plan.make(stack, { exclude: ["Other"] });
+      const both = Plan.make(stack, { include: ["One"], exclude: ["Other"] });
+      const absent = Plan.make(stack, {
+        include: undefined,
+        exclude: undefined,
+      });
+      const optionalInclude = (options: { include?: ReadonlyArray<string> }) =>
+        Plan.make(stack, options);
+      const optionalExclude = (options: { exclude?: ReadonlyArray<string> }) =>
+        Plan.make(stack, options);
+      const piped = Effect.succeed(stack).pipe(
+        Effect.flatMap((stack) => Plan.make(stack, options)),
+      );
+      const filteredPiped = Effect.succeed(stack).pipe(
+        Effect.flatMap((stack) => Plan.make(stack, { exclude: ["Other"] })),
+      );
+      const assertions: [
+        Equal<Effect.Success<typeof legacy>["output"], Output>,
+        Equal<
+          Effect.Success<ReturnType<typeof optionalLegacy>>["output"],
+          Output
+        >,
+        Equal<Effect.Success<typeof excluded>["output"], undefined>,
+        Equal<Effect.Success<typeof both>["output"], undefined>,
+        Equal<Effect.Success<typeof absent>["output"], Output>,
+        Equal<
+          Effect.Success<ReturnType<typeof optionalInclude>>["output"],
+          Output | undefined
+        >,
+        Equal<
+          Effect.Success<ReturnType<typeof optionalExclude>>["output"],
+          Output | undefined
+        >,
+        Equal<Effect.Success<typeof piped>["output"], Output>,
+        Equal<Effect.Success<typeof filteredPiped>["output"], undefined>,
+      ] = [true, true, true, true, true, true, true, true, true];
+      expect(assertions.every(Boolean)).toBe(true);
+    }),
+  );
+
+  test(
+    "full plan options cannot erase known or optional filters",
+    Effect.sync(() => {
+      type Assignable<A, B> = [A] extends [B] ? true : false;
+      type Base = Omit<Plan.MakePlanOptions, "include" | "exclude">;
+      const assignable: [
+        Assignable<
+          Base & { include: ReadonlyArray<string> },
+          Plan.MakePlanOptions
+        >,
+        Assignable<
+          Base & { exclude: ReadonlyArray<string> },
+          Plan.MakePlanOptions
+        >,
+        Assignable<
+          Base & { include?: ReadonlyArray<string> },
+          Plan.MakePlanOptions
+        >,
+        Assignable<
+          Base & { exclude?: ReadonlyArray<string> },
+          Plan.MakePlanOptions
+        >,
+        Assignable<Plan.FilteredPlanOptions, Plan.MakePlanOptions>,
+      ] = [false, false, false, false, false];
+      expect(assignable.some(Boolean)).toBe(false);
+    }),
+  );
+
   const namespaced = Effect.gen(function* () {
     yield* TestResource("Branch", {}).pipe(Namespace.push("One"));
     yield* TestResource("Branch", {}).pipe(Namespace.push("Two"));
     yield* TestResource("Password", {});
   });
 
-  for (const targets of [[], [""], [" "], ["Missing"], ["Branch"]]) {
+  for (const include of [[], [""], [" "], ["Missing"], ["Branch"]]) {
     test(
-      `rejects invalid selectors ${JSON.stringify(targets)} before provider reads`,
+      `rejects invalid selectors ${JSON.stringify(include)} before provider reads`,
       Effect.gen(function* () {
         const reads: string[] = [];
-        const exit = yield* makePlan(namespaced, { targets }).pipe(
+        const exit = yield* makePlan(namespaced, { include }).pipe(
           Effect.provideService(TestResourceHooks, {
             read: (id) =>
               Effect.sync(() => {
@@ -5804,7 +5893,7 @@ describe("targeted planning", () => {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
           const message = Cause.pretty(exit.cause);
-          expect(message).toContain("InvalidTargets");
+          expect(message).toContain("InvalidResourceSelection");
           expect(message).toContain("One/Branch");
           expect(message).toContain("Two/Branch");
           expect(message).toContain("Password");
@@ -5818,7 +5907,7 @@ describe("targeted planning", () => {
     "accepts exact FQNs and deduplicates selectors",
     Effect.gen(function* () {
       const plan = yield* makePlan(namespaced, {
-        targets: ["One/Branch", "Password", "One/Branch"],
+        include: ["One/Branch", "Password", "One/Branch"],
       });
       expect(Object.keys(plan.resources).sort()).toEqual([
         "One/Branch",
@@ -5849,7 +5938,7 @@ describe("targeted planning", () => {
         },
       };
       const plan = yield* inDev(
-        makePlan(program, { targets: ["Selected"] }),
+        makePlan(program, { include: ["Selected"] }),
       ).pipe(Effect.provideService(AuthProviders, auth));
       expect(Object.keys(plan.resources)).toEqual(["Selected"]);
       const demanded = yield* inDev(
@@ -5889,7 +5978,7 @@ describe("targeted planning", () => {
         yield* TestResource("Unselected", {});
         return consumer.string;
       });
-      const plan = yield* makePlan(program, { targets: ["Consumer"] });
+      const plan = yield* makePlan(program, { include: ["Consumer"] });
       expect(Object.keys(plan.resources).sort()).toEqual([
         "Captured",
         "Consumer",
@@ -5897,7 +5986,7 @@ describe("targeted planning", () => {
         "Source",
       ]);
       expect(Object.keys(plan.actions)).toEqual(["Compute"]);
-      expect([...plan.targetFqns!].sort()).toEqual([
+      expect([...plan.selectedFqns!].sort()).toEqual([
         "Captured",
         "Compute",
         "Consumer",
@@ -5918,7 +6007,7 @@ describe("targeted planning", () => {
           yield* b.bind("A", { env: { A: a.name } });
           yield* TestResource("Other", {});
         }),
-        { targets: ["A"] },
+        { include: ["A"] },
       );
       expect(Object.keys(plan.resources).sort()).toEqual(["A", "B"]);
       expect([...plan.cycleMembers].sort()).toEqual(["A", "B"]);
@@ -5962,7 +6051,7 @@ describe("targeted planning", () => {
         yield* TestResource("BadRead", {});
         yield* TestResource("Selected", {});
       });
-      yield* makePlan(program, { targets: ["Selected"] }).pipe(
+      yield* makePlan(program, { include: ["Selected"] }).pipe(
         Effect.provideService(TestResourceHooks, {
           diff: () => Effect.die("unselected diff"),
           read: (id) =>
@@ -5975,6 +6064,354 @@ describe("targeted planning", () => {
         }),
       );
       expect(calls).toEqual(["Selected"]);
+    }),
+  );
+});
+
+describe("resource selection patterns", () => {
+  const fqns = [
+    "Branch",
+    "One/Branch",
+    "Two/Branch",
+    "One/Nested/Leaf",
+    "One/.Hidden",
+    ".Private/Node",
+    "Comma,Name",
+    "Literal[1]",
+    "Literal1",
+    "Deep/Unique",
+    "One/Twin",
+    "Two/Twin",
+  ];
+  const program = Effect.gen(function* () {
+    for (const fqn of fqns) {
+      const slash = fqn.lastIndexOf("/");
+      const resource = TestResource(fqn.slice(slash + 1), {});
+      yield* slash < 0
+        ? resource
+        : resource.pipe(Namespace.push(fqn.slice(0, slash)));
+    }
+    return { full: "output" };
+  });
+  const cases: ReadonlyArray<{
+    name: string;
+    options?: Plan.FilteredPlanOptions;
+    expected: ReadonlyArray<string>;
+  }> = [
+    { name: "full default", expected: fqns },
+    {
+      name: "undefined filters",
+      options: { include: undefined, exclude: undefined },
+      expected: fqns,
+    },
+    {
+      name: "exact FQN before ambiguous logical ID",
+      options: { include: ["Branch"] },
+      expected: ["Branch"],
+    },
+    {
+      name: "unique logical ID",
+      options: { include: ["Unique"] },
+      expected: ["Deep/Unique"],
+    },
+    {
+      name: "literal commas",
+      options: { include: ["Comma,Name"] },
+      expected: ["Comma,Name"],
+    },
+    {
+      name: "literal FQN before glob characters",
+      options: { include: ["Literal[1]"] },
+      expected: ["Literal[1]"],
+    },
+    {
+      name: "direct segment star",
+      options: { include: ["One/*"] },
+      expected: ["One/Branch", "One/.Hidden", "One/Twin"],
+    },
+    {
+      name: "recursive globstar",
+      options: { include: ["One/**"] },
+      expected: fqns.filter((fqn) => fqn.startsWith("One/")),
+    },
+    {
+      name: "all including dot namespaces is partial",
+      options: { include: ["**"] },
+      expected: fqns,
+    },
+    {
+      name: "positive braces",
+      options: { include: ["{One,Two}/Branch"] },
+      expected: ["One/Branch", "Two/Branch"],
+    },
+    {
+      name: "positive extglob",
+      options: { include: ["@(One|Two)/Branch"] },
+      expected: ["One/Branch", "Two/Branch"],
+    },
+    {
+      name: "question mark",
+      options: { include: ["On?/Branch"] },
+      expected: ["One/Branch"],
+    },
+    {
+      name: "character class",
+      options: { include: ["[OT]*/Branch"] },
+      expected: ["One/Branch", "Two/Branch"],
+    },
+    {
+      name: "duplicate union seeds",
+      options: { include: ["One/*", "Branch", "One/*", "One/Branch"] },
+      expected: ["One/Branch", "One/.Hidden", "One/Twin", "Branch"],
+    },
+    {
+      name: "exclusion only",
+      options: { exclude: ["One/**"] },
+      expected: fqns.filter((fqn) => !fqn.startsWith("One/")),
+    },
+    {
+      name: "literal exclusion FQN wins",
+      options: { exclude: ["Branch"] },
+      expected: fqns.filter((fqn) => fqn !== "Branch"),
+    },
+    {
+      name: "multiple includes and excludes",
+      options: {
+        include: ["One/**", "Two/**"],
+        exclude: ["**/Twin", "One/Nested/**"],
+      },
+      expected: ["One/Branch", "One/.Hidden", "Two/Branch"],
+    },
+    {
+      name: "exclusion wins overlap and duplicates",
+      options: {
+        include: ["One/*", "One/Branch"],
+        exclude: ["One/Branch", "One/Branch"],
+      },
+      expected: ["One/.Hidden", "One/Twin"],
+    },
+  ];
+  for (const { name, options, expected } of cases) {
+    test(
+      name,
+      Effect.gen(function* () {
+        const plan = yield* makePlan(program, options);
+        expect(Object.keys(plan.resources).sort()).toEqual(
+          [...expected].sort(),
+        );
+        if (options?.include !== undefined || options?.exclude !== undefined) {
+          expect([...plan.selectedFqns!].sort()).toEqual([...expected].sort());
+          expect(plan.output).toBeUndefined();
+          expect(plan.deletions).toEqual({});
+        } else {
+          expect(plan.selectedFqns).toBeUndefined();
+          expect(plan.output).toEqual({ full: "output" });
+        }
+      }),
+    );
+  }
+
+  for (const literal of ["!Literal", "./!Literal", "././!(Literal)"]) {
+    test(
+      `exact FQN priority precedes negation metadata ${literal}`,
+      Effect.gen(function* () {
+        const declaration = Effect.gen(function* () {
+          yield* TestResource(literal, {});
+          yield* TestResource("Other", {});
+        });
+        const included = yield* makePlan(declaration, { include: [literal] });
+        expect(Object.keys(included.resources)).toEqual([literal]);
+        const excluded = yield* makePlan(declaration, { exclude: [literal] });
+        expect(Object.keys(excluded.resources)).toEqual(["Other"]);
+      }),
+    );
+  }
+
+  for (const options of [
+    { include: [] },
+    { exclude: [] },
+    { include: ["Branch"], exclude: [] },
+    { include: [""] },
+    { exclude: [" "] },
+    { include: ["Missing"] },
+    { include: ["Missing/**"] },
+    { include: ["Uni*"] },
+    { include: ["Branch,Unique"] },
+    { include: ["Twin"] },
+    { exclude: ["Twin"] },
+    { include: ["!One/**"] },
+    { exclude: ["!One/**"] },
+    { include: ["!!One/**"] },
+    { include: ["!(One)/**"] },
+    { include: ["./!One/**"] },
+    { exclude: ["./!One/**"] },
+    { include: ["./!(One)/**"] },
+    { exclude: ["./!(One)/**"] },
+    { include: ["././!One/**"] },
+    { exclude: ["././!One/**"] },
+    { include: ["././!(One)/**"] },
+    { exclude: ["././!(One)/**"] },
+    { include: ["./././!One/**"] },
+    { exclude: ["./././!One/**"] },
+    { include: ["./././!(One)/**"] },
+    { exclude: ["./././!(One)/**"] },
+    { include: ["./!!One/**"] },
+    { exclude: ["./!!One/**"] },
+    { include: ["./!./!One/**"] },
+    { exclude: ["./!./!One/**"] },
+    { include: ["One/["] },
+    { exclude: ["One/{"] },
+    { include: ["Branch"], exclude: ["Branch"] },
+    { exclude: ["**"] },
+  ]) {
+    test(
+      `rejects ${JSON.stringify(options)} before state or providers`,
+      Effect.gen(function* () {
+        let stateAccesses = 0;
+        const calls: string[] = [];
+        const exit = yield* makePlan(program, options).pipe(
+          Effect.provideService(
+            State,
+            Effect.suspend(() => {
+              stateAccesses++;
+              return InMemoryService();
+            }),
+          ),
+          Effect.provideService(TestResourceHooks, {
+            read: (id) =>
+              Effect.sync(() => {
+                calls.push(`read:${id}`);
+                return undefined;
+              }),
+            diff: (id) =>
+              Effect.sync(() => {
+                calls.push(`diff:${id}`);
+              }),
+          }),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const message = Cause.pretty(exit.cause);
+          expect(message).toContain("InvalidResourceSelection");
+          if (
+            options.include?.some((pattern) =>
+              pattern.replace(/^(?:\.\/)+/, "").startsWith("!"),
+            ) ||
+            options.exclude?.some((pattern) =>
+              pattern.replace(/^(?:\.\/)+/, "").startsWith("!"),
+            )
+          )
+            expect(message).toContain("use --exclude");
+          if (
+            options.include?.includes("Twin") ||
+            options.exclude?.includes("Twin")
+          ) {
+            expect(message).toContain("Ambiguous");
+            expect(message).toContain("One/Twin");
+            expect(message).toContain("Two/Twin");
+          }
+        }
+        expect(stateAccesses).toBe(0);
+        expect(calls).toEqual([]);
+      }),
+    );
+  }
+
+  test(
+    "warns once per unmatched exclusion and remains partial",
+    Effect.gen(function* () {
+      const logs: Array<{ level: string; message: unknown }> = [];
+      const plan = yield* makePlan(program, {
+        exclude: ["Missing", "Absent/**", "Missing"],
+      }).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              logs.push({ level: options.logLevel, message: options.message });
+            }),
+          ]),
+        ),
+      );
+      expect(Object.keys(plan.resources).sort()).toEqual([...fqns].sort());
+      expect(plan.output).toBeUndefined();
+      expect(plan.selectedFqns?.size).toBe(fqns.length);
+      const warnings = logs.filter((entry) => entry.level === "Warn");
+      expect(warnings).toHaveLength(2);
+      expect(String(warnings[0].message)).toContain("Missing");
+      expect(String(warnings[1].message)).toContain("Absent/**");
+    }),
+  );
+
+  for (const [excluded, chain] of [
+    ["App/Source", "App/Consumer -> App/Host -> App/Compute -> App/Source"],
+    ["App/Captured", "App/Consumer -> App/Host -> App/Compute -> App/Captured"],
+    ["App/Compute", "App/Consumer -> App/Host -> App/Compute"],
+    ["App/Host", "App/Consumer -> App/Host"],
+  ]) {
+    test(
+      `blocks transitive excluded ${excluded} with its FQN chain`,
+      Effect.gen(function* () {
+        const graph = Effect.gen(function* () {
+          const source = yield* TestResource("Source", {});
+          const captured = yield* TestResource("Captured", {});
+          const Compute = Action(
+            "Compute",
+            Effect.gen(function* () {
+              const value = yield* captured.string;
+              return (input: { source: string }) =>
+                Effect.map(value, (capture) => ({
+                  value: `${input.source}:${capture}`,
+                }));
+            }),
+          );
+          const result = yield* Compute({ source: source.string });
+          const host = yield* BindingTarget("Host", {});
+          yield* host.bind("Result", { env: { RESULT: result.value } });
+          yield* TestResource("Consumer", { string: host.string });
+        }).pipe(Namespace.push("App"));
+        const exit = yield* makePlan(graph, {
+          include: ["App/Consumer"],
+          exclude: [excluded],
+        }).pipe(
+          Effect.provideService(
+            State,
+            Effect.die("state accessed before selection"),
+          ),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const message = Cause.pretty(exit.cause);
+          expect(message).toContain(chain);
+          expect(message).toContain(`exclude pattern '${excluded}'`);
+        }
+      }),
+    );
+  }
+
+  test(
+    "a binding cycle cannot cross an exclusion",
+    Effect.gen(function* () {
+      const graph = Effect.gen(function* () {
+        const a = yield* BindingTarget("A", {});
+        const b = yield* BindingTarget("B", {});
+        yield* a.bind("B", { env: { B: b.name } });
+        yield* b.bind("A", { env: { A: a.name } });
+      });
+      const exit = yield* makePlan(graph, {
+        include: ["A"],
+        exclude: ["B"],
+      }).pipe(
+        Effect.provideService(
+          State,
+          Effect.die("state accessed before selection"),
+        ),
+        Effect.exit,
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit))
+        expect(Cause.pretty(exit.cause)).toContain("A -> B");
     }),
   );
 });

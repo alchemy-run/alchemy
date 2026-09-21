@@ -104,31 +104,36 @@ export const force = Flag.Boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-/** Repeatable, comma-separated selectors; empty entries reach planner validation. */
-export const targets = Flag.String("target").pipe(
-  Flag.withDescription(
-    "Reconcile exact FQNs or unambiguous logical IDs and their dependencies (comma-separated, repeatable). Leaves other rows and stack outputs untouched; the whole stack declaration still runs.",
-  ),
-  Flag.atLeast(0),
-  Flag.map((values) =>
-    values.length === 0
-      ? undefined
-      : values.flatMap((value) =>
-          value.split(",").map((selector) => selector.trim()),
-        ),
-  ),
+/** One pattern per occurrence; commas and whitespace are preserved. */
+const selectionFlag = (name: "include" | "exclude", description: string) =>
+  Flag.String(name).pipe(
+    Flag.withDescription(description),
+    Flag.atLeast(0),
+    Flag.map((values) => (values.length === 0 ? undefined : values)),
+  );
+
+export const include = selectionFlag(
+  "include",
+  "Include exact FQNs, unique logical IDs, or FQN globs and their dependencies (repeatable, one pattern per flag). Quote globs: --include 'App/**'. Other rows and stack outputs are preserved; the whole declaration still runs.",
 );
 
-export const validateTargetOptions = (options: {
-  readonly targets?: ReadonlyArray<string>;
+export const exclude = selectionFlag(
+  "exclude",
+  "Exclude exact FQNs, unique logical IDs, or FQN globs (repeatable, one pattern per flag). Quote globs: --exclude 'App/Legacy/**'. Required excluded dependencies fail planning, even when unchanged.",
+);
+
+export const validateSelectionOptions = (options: {
+  readonly include?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string>;
   readonly destroy?: boolean;
   readonly detectDrift?: boolean;
 }) =>
-  options.targets !== undefined && (options.destroy || options.detectDrift)
+  (options.include !== undefined || options.exclude !== undefined) &&
+  (options.destroy || options.detectDrift)
     ? Effect.fail(
         new UserInputError({
           message:
-            "--target cannot be combined with destroy or --detect-drift.",
+            "--include/--exclude cannot be combined with destroy or --detect-drift.",
         }),
       )
     : Effect.void;

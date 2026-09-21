@@ -1,8 +1,9 @@
 import { UserInputError } from "@/Cli/commands/errors.ts";
 import {
   resolveConfig,
-  targets,
-  validateTargetOptions,
+  include,
+  exclude,
+  validateSelectionOptions,
 } from "@/Cli/commands/flags.ts";
 import { DevOptions } from "@/Cli/DevOptions.ts";
 import * as Stacks from "@/Alchemist/routes/stack.ts";
@@ -63,79 +64,106 @@ describe("stack command config paths", () => {
   );
 });
 
-describe("stack target options", () => {
-  for (const [values, expected] of [
-    [[], undefined],
-    [
-      ["Branch,Password", "Namespace/Worker"],
-      ["Branch", "Password", "Namespace/Worker"],
-    ],
-    [[""], [""]],
-    [["Branch,"], ["Branch", ""]],
+describe("stack selection options", () => {
+  for (const [name, flag] of [
+    ["include", include],
+    ["exclude", exclude],
   ] as const) {
-    it.effect(
-      `parses repeated comma-separated selectors ${JSON.stringify(values)}`,
-      () =>
-        Effect.gen(function* () {
-          const [, parsed] = yield* targets.parse({
-            arguments: [],
-            flags: values.length ? { target: [...values] } : {},
-          });
-          expect(parsed).toEqual(expected);
-        }).pipe(Effect.provide(PlatformServices)),
-    );
-  }
-
-  it.effect("retains targets through the dev supervisor JSON roundtrip", () =>
-    Effect.gen(function* () {
-      for (const selected of [
-        undefined,
-        [],
-        ["Branch", "Namespace/Password"],
-      ]) {
-        const options = {
-          main: "alchemy.run.ts",
-          stage: "test",
-          envFile: Option.none(),
-          force: false,
-          targets: selected,
-        };
-        const wire = yield* Schema.encodeEffect(DevOptions)(options);
-        const decoded = yield* Schema.decodeUnknownEffect(DevOptions)(
-          JSON.parse(JSON.stringify(wire)),
-        );
-        expect(decoded.targets).toEqual(selected);
-      }
-    }),
-  );
-
-  for (const combination of [{ destroy: true }, { detectDrift: true }]) {
-    it.effect(`rejects targeting with ${JSON.stringify(combination)}`, () =>
-      Effect.gen(function* () {
-        const result = yield* validateTargetOptions({
-          targets: ["Branch"],
-          ...combination,
-        }).pipe(Effect.result);
-        expect(Result.isFailure(result)).toBe(true);
-        yield* validateTargetOptions(combination);
-      }),
-    );
+    for (const [values, expected] of [
+      [[], undefined],
+      [
+        ["Branch,Password", "Namespace/**"],
+        ["Branch,Password", "Namespace/**"],
+      ],
+      [[""], [""]],
+      [["Branch,"], ["Branch,"]],
+      [
+        [" App/* ", "App/*", "App/*"],
+        [" App/* ", "App/*", "App/*"],
+      ],
+    ] as const) {
+      it.effect(
+        `parses repeated --${name} patterns ${JSON.stringify(values)}`,
+        () =>
+          Effect.gen(function* () {
+            const [, parsed] = yield* flag.parse({
+              arguments: [],
+              flags: values.length ? { [name]: [...values] } : {},
+            });
+            expect(parsed).toEqual(expected);
+          }).pipe(Effect.provide(PlatformServices)),
+      );
+    }
   }
 
   it.effect(
-    "rejects targeted Alchemist destroy before opening a stack session",
+    "retains include and exclude through dev reload JSON roundtrips",
     () =>
       Effect.gen(function* () {
-        const exit = yield* Stacks.plan({
-          target: { entrypoint: "does-not-exist.ts", stage: "test" },
-          operation: "destroy",
-          targets: ["Branch"],
-        }).pipe(Effect.exit);
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit))
-          expect(Cause.pretty(exit.cause)).toContain(
-            "Targeted destroy is not supported",
-          );
-      }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
+        for (const include of [
+          undefined,
+          [],
+          ["Branch,Password", "Namespace/**"],
+        ]) {
+          for (const exclude of [
+            undefined,
+            [],
+            ["Namespace/Legacy", "**/.Private"],
+          ]) {
+            const options = {
+              main: "alchemy.run.ts",
+              stage: "test",
+              envFile: Option.none(),
+              force: false,
+              include,
+              exclude,
+            };
+            const wire = yield* Schema.encodeEffect(DevOptions)(options);
+            const decoded = yield* Schema.decodeUnknownEffect(DevOptions)(
+              JSON.parse(JSON.stringify(wire)),
+            );
+            expect(decoded.include).toEqual(include);
+            expect(decoded.exclude).toEqual(exclude);
+          }
+        }
+      }),
   );
+
+  for (const selection of [
+    { include: ["Branch"] },
+    { exclude: ["Branch"] },
+    { include: [] },
+    { exclude: [] },
+  ]) {
+    for (const combination of [{ destroy: true }, { detectDrift: true }]) {
+      it.effect(
+        `rejects ${JSON.stringify(selection)} with ${JSON.stringify(combination)}`,
+        () =>
+          Effect.gen(function* () {
+            const result = yield* validateSelectionOptions({
+              ...selection,
+              ...combination,
+            }).pipe(Effect.result);
+            expect(Result.isFailure(result)).toBe(true);
+            yield* validateSelectionOptions(combination);
+          }),
+      );
+    }
+    it.effect(
+      `rejects Alchemist destroy ${JSON.stringify(selection)} before opening a stack session`,
+      () =>
+        Effect.gen(function* () {
+          const exit = yield* Stacks.plan({
+            target: { entrypoint: "does-not-exist.ts", stage: "test" },
+            operation: "destroy",
+            ...selection,
+          }).pipe(Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit))
+            expect(Cause.pretty(exit.cause)).toContain(
+              "Filtered destroy is not supported",
+            );
+        }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
+    );
+  }
 });

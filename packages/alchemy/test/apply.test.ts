@@ -9016,67 +9016,76 @@ describe("renamed resources (renamedFrom)", () => {
   );
 });
 
-describe("targeted reconciliation", () => {
-  test.provider(
-    "preserves unselected declared and undeclared rows and full-stack outputs",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* stack.destroy();
-        const Compute = Action("SkippedAction", (_: { value: string }) =>
-          Effect.succeed({ value: "old" }),
-        );
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            yield* TestResource("Branch", { string: "v1" });
-            yield* TestResource("Worker", { string: "old" });
-            yield* TestResource("Undeclared", {});
-            yield* Compute({ value: "old" });
-            return { full: "original" };
-          }),
-        );
-        const worker = yield* getState("Worker");
-        const undeclared = yield* getState("Undeclared");
-        const skipped = yield* getState("SkippedAction");
-        const calls: string[] = [];
-        const result = yield* stack
-          .deploy(
+describe("filtered reconciliation", () => {
+  for (const selection of [
+    { include: ["Branch"] },
+    { exclude: ["Worker", "NewUnselected", "SkippedAction", "Undeclared"] },
+    {
+      include: ["**"],
+      exclude: ["Worker", "NewUnselected", "SkippedAction", "Undeclared"],
+    },
+  ]) {
+    test.provider(
+      `preserves unselected declared and undeclared rows and full-stack outputs ${JSON.stringify(selection)}`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const Compute = Action("SkippedAction", (_: { value: string }) =>
+            Effect.succeed({ value: "old" }),
+          );
+          yield* stack.deploy(
             Effect.gen(function* () {
-              const branch = yield* TestResource("Branch", { string: "v2" });
-              yield* TestResource("Worker", { string: "changed" });
-              yield* TestResource("NewUnselected", {});
-              const Fail = Action("SkippedAction", (_: { value: string }) =>
-                Effect.die("unselected action ran"),
-              );
-              yield* Fail({ value: "changed" });
-              return Output.map(branch.string, () => {
-                throw new Error("targeted output evaluated");
-              });
-            }),
-            { targets: ["Branch"] },
-          )
-          .pipe(
-            Effect.provideService(TestResourceHooks, {
-              update: (id) =>
-                Effect.sync(() => {
-                  calls.push(id);
-                }),
-              create: () => Effect.die("unselected create"),
-              delete: () => Effect.die("unselected delete"),
+              yield* TestResource("Branch", { string: "v1" });
+              yield* TestResource("Worker", { string: "old" });
+              yield* TestResource("Undeclared", {});
+              yield* Compute({ value: "old" });
+              return { full: "original" };
             }),
           );
-        expect(result).toBeUndefined();
-        expect(calls).toEqual(["Branch"]);
-        expect(yield* getState("Worker")).toEqual(worker);
-        expect(yield* getState("Undeclared")).toEqual(undeclared);
-        expect(yield* getState("SkippedAction")).toEqual(skipped);
-        expect(yield* getState("NewUnselected")).toBeUndefined();
-        const state = yield* yield* State;
-        expect(
-          yield* state.getOutput({ stack: stack.name, stage: stack.stage }),
-        ).toEqual({ full: "original" });
-        yield* stack.destroy();
-      }),
-  );
+          const worker = yield* getState("Worker");
+          const undeclared = yield* getState("Undeclared");
+          const skipped = yield* getState("SkippedAction");
+          const calls: string[] = [];
+          const result = yield* stack
+            .deploy(
+              Effect.gen(function* () {
+                const branch = yield* TestResource("Branch", { string: "v2" });
+                yield* TestResource("Worker", { string: "changed" });
+                yield* TestResource("NewUnselected", {});
+                const Fail = Action("SkippedAction", (_: { value: string }) =>
+                  Effect.die("unselected action ran"),
+                );
+                yield* Fail({ value: "changed" });
+                return Output.map(branch.string, () => {
+                  throw new Error("filtered output evaluated");
+                });
+              }),
+              selection,
+            )
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                update: (id) =>
+                  Effect.sync(() => {
+                    calls.push(id);
+                  }),
+                create: () => Effect.die("unselected create"),
+                delete: () => Effect.die("unselected delete"),
+              }),
+            );
+          expect(result).toBeUndefined();
+          expect(calls).toEqual(["Branch"]);
+          expect(yield* getState("Worker")).toEqual(worker);
+          expect(yield* getState("Undeclared")).toEqual(undeclared);
+          expect(yield* getState("SkippedAction")).toEqual(skipped);
+          expect(yield* getState("NewUnselected")).toBeUndefined();
+          const state = yield* yield* State;
+          expect(
+            yield* state.getOutput({ stack: stack.name, stage: stack.stage }),
+          ).toEqual({ full: "original" });
+          yield* stack.destroy();
+        }),
+    );
+  }
 
   test.provider(
     "applies transitive bindings and captured Actions while retaining pure reuse",
@@ -9106,14 +9115,14 @@ describe("targeted reconciliation", () => {
           yield* TestResource("Other", {});
           return host.env.RESULT;
         });
-        yield* stack.deploy(program, { targets: ["Host"] });
+        yield* stack.deploy(program, { include: ["Host"] });
         const host = yield* getState("Host");
         assert(host.attr !== undefined);
         expect(host.attr.env).toEqual({
           RESULT: "input:capture",
         });
         expect(yield* getState("Other")).toBeUndefined();
-        yield* stack.deploy(program, { targets: ["Host"] });
+        yield* stack.deploy(program, { include: ["Host"] });
         expect(runs).toBe(1);
         expect(yield* stack.deploy(program)).toBe("input:capture");
         expect(runs).toBe(1);
@@ -9142,7 +9151,7 @@ describe("targeted reconciliation", () => {
             const a = yield* TestResource("A", {});
             yield* Compute({ value: a.string });
           }),
-          { targets: ["Compute"] },
+          { include: ["Compute"] },
         );
         expect(plan.resources.A.downstream).toEqual(["Compute"]);
         expect(plan.actions.Compute.downstream).toEqual(["B"]);
@@ -9157,7 +9166,7 @@ describe("targeted reconciliation", () => {
           }),
         );
         expect((yield* getState("A")).downstream).toEqual(["B"]);
-        yield* stack.deploy(TestResource("A", {}), { targets: ["A"] });
+        yield* stack.deploy(TestResource("A", {}), { include: ["A"] });
         expect((yield* getState("A")).downstream).toEqual(["B"]);
         const deleted: string[] = [];
         yield* stack.destroy().pipe(
@@ -9184,7 +9193,7 @@ describe("targeted reconciliation", () => {
       const before = modalCalls.filter(
         (call) => call.stack === stack.name,
       ).length;
-      yield* inDev(stack.deploy(program, { targets: ["Branch"] }));
+      yield* inDev(stack.deploy(program, { include: ["Branch"] }));
       expect(yield* getState("Worker")).toEqual(worker);
       expect(
         modalCalls.filter((call) => call.stack === stack.name).length,
@@ -9204,12 +9213,12 @@ describe("targeted reconciliation", () => {
         const old = yield* getState("Old");
         const exit = yield* stack
           .deploy(TestResource("New", {}).pipe(renamedFrom("Old")), {
-            targets: ["New"],
+            include: ["New"],
           })
           .pipe(Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit))
-          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeSelectionBoundary");
         expect(yield* getState("Old")).toEqual(old);
         expect(yield* getState("New")).toBeUndefined();
         yield* stack.destroy();
@@ -9230,14 +9239,14 @@ describe("targeted reconciliation", () => {
         const a = yield* getState("A");
         const b = yield* getState("B");
         const exit = yield* stack
-          .deploy(program("2"), { targets: ["A"] })
+          .deploy(program("2"), { include: ["A"] })
           .pipe(Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit))
-          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeSelectionBoundary");
         expect(yield* getState("A")).toEqual(a);
         expect(yield* getState("B")).toEqual(b);
-        yield* stack.deploy(program("2"), { targets: ["B"] });
+        yield* stack.deploy(program("2"), { include: ["B"] });
         expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
         yield* stack.destroy();
       }),
@@ -9266,7 +9275,7 @@ describe("targeted reconciliation", () => {
               yield* BindingTarget("A", { replaceString: "2" });
               yield* BindingTarget("B", {});
             }),
-            { targets: ["A"] },
+            { include: ["A"] },
           )
           .pipe(Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
@@ -9300,11 +9309,11 @@ describe("targeted reconciliation", () => {
         const before = yield* getState("A");
         expect(before.status).toBe("replaced");
         const exit = yield* stack
-          .deploy(TestResource("A", { replaceString: "2" }), { targets: ["A"] })
+          .deploy(TestResource("A", { replaceString: "2" }), { include: ["A"] })
           .pipe(Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit))
-          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeSelectionBoundary");
         expect(yield* getState("A")).toEqual(before);
         yield* stack.deploy(program("2"));
         expectConvergedStatus((yield* getState("A")).status);
@@ -9325,7 +9334,7 @@ describe("targeted reconciliation", () => {
               yield* TestResource("Old", { string: "reused" });
               yield* TestResource("New", {}).pipe(renamedFrom("Old"));
             }),
-            { targets: ["Old"] },
+            { include: ["Old"] },
           )
           .pipe(Effect.exit);
         expect(Exit.isFailure(exit)).toBe(true);
@@ -9356,7 +9365,7 @@ describe("targeted reconciliation", () => {
         const before = yield* getState("Old");
         expect(before.status).toBe("replaced");
         yield* stack
-          .deploy(TestResource("Branch", {}), { targets: ["Branch"] })
+          .deploy(TestResource("Branch", {}), { include: ["Branch"] })
           .pipe(
             Effect.provideService(TestResourceHooks, {
               delete: () => Effect.die("unselected GC"),
@@ -9370,7 +9379,7 @@ describe("targeted reconciliation", () => {
   );
 });
 
-describe("targeted audit safeguards", () => {
+describe("filtered audit safeguards", () => {
   test.provider(
     "rejects an unpersisted keeper before its first checkpoint can fail",
     (stack) =>
@@ -9415,7 +9424,7 @@ describe("targeted audit safeguards", () => {
           });
         const result = yield* Effect.gen(function* () {
           const plan = yield* stack.plan(program(true), {
-            targets: ["A", "Middle", "Keeper"],
+            include: ["A", "Middle", "Keeper"],
           });
           yield* apply(plan);
         }).pipe(
@@ -9457,7 +9466,7 @@ describe("targeted audit safeguards", () => {
         expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(bytes);
         expect(yield* getState("Keeper")).toBeUndefined();
         const replacement = yield* stack
-          .deploy(program(true, "2"), { targets: ["A"] })
+          .deploy(program(true, "2"), { include: ["A"] })
           .pipe(
             Effect.provideService(TestResourceHooks, {
               create: track,
@@ -9470,7 +9479,7 @@ describe("targeted audit safeguards", () => {
         expect(calls).toEqual([]);
         expect(yield* rows).toEqual(before);
         yield* stack.deploy(program(true), {
-          targets: ["A", "Middle", "Keeper", "B"],
+          include: ["A", "Middle", "Keeper", "B"],
         });
         expect((yield* getState("B")).attr?.string).toBe("detached");
         yield* stack.destroy();
@@ -9547,10 +9556,10 @@ describe("targeted audit safeguards", () => {
             "1",
             operation === "update" ? "updated" : "generation-1",
           );
-          const targets =
+          const include =
             operation === "action noop" ? ["A", "Middle", "C"] : ["A"];
           const result = yield* stack
-            .deploy(desired, { targets, force: operation === "force" })
+            .deploy(desired, { include, force: operation === "force" })
             .pipe(
               Effect.provideService(TestResourceHooks, {
                 create: track,
@@ -9570,7 +9579,7 @@ describe("targeted audit safeguards", () => {
           expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(bytes);
           expect(yield* getState("C")).toBeUndefined();
           const replacement = yield* stack
-            .deploy(program(true, "2", "generation-2"), { targets: ["A"] })
+            .deploy(program(true, "2", "generation-2"), { include: ["A"] })
             .pipe(
               Effect.provideService(TestResourceHooks, {
                 create: track,
@@ -9585,7 +9594,7 @@ describe("targeted audit safeguards", () => {
           yield* stack.deploy(desired, { force: true });
           expect((yield* getState("B")).attr?.string).toBe("detached");
           yield* stack.deploy(program(true, "2", "generation-2"), {
-            targets: ["A"],
+            include: ["A"],
           });
           expect((yield* getState("A")).attr?.string).toBe("generation-2");
           yield* stack.destroy();
@@ -9638,7 +9647,7 @@ describe("targeted audit safeguards", () => {
             calls.push(id);
           });
         const recovery = yield* stack
-          .deploy(program(false), { targets: ["A", "Middle"] })
+          .deploy(program(false), { include: ["A", "Middle"] })
           .pipe(
             Effect.provideService(TestResourceHooks, {
               create: track,
@@ -9680,7 +9689,7 @@ describe("targeted audit safeguards", () => {
         const b = yield* getState("B");
         const keeper = yield* getState("Keeper");
         const plan = yield* stack.plan(program(false), {
-          targets: ["A", "Keeper"],
+          include: ["A", "Keeper"],
         });
         expect(plan.resources.Keeper.action).toBe("noop");
         yield* apply(plan);
@@ -9744,7 +9753,7 @@ describe("targeted audit safeguards", () => {
               if (!initialCycle) {
                 expect((yield* getState("A")).downstream).toEqual(["Middle"]);
                 yield* stack.deploy(program("cycle"), {
-                  targets: ["A", "Middle"],
+                  include: ["A", "Middle"],
                 });
               }
               expect((yield* getState("A")).downstream).toEqual([]);
@@ -9769,7 +9778,7 @@ describe("targeted audit safeguards", () => {
                   calls.push(id);
                 });
               const exit = yield* stack
-                .deploy(program("clear"), { targets: ["A", "Middle"] })
+                .deploy(program("clear"), { include: ["A", "Middle"] })
                 .pipe(
                   Effect.provideService(TestResourceHooks, {
                     create: track,
@@ -9794,7 +9803,7 @@ describe("targeted audit safeguards", () => {
                 bytes,
               );
               const replacement = yield* stack
-                .deploy(program("clear", "2"), { targets: ["A"] })
+                .deploy(program("clear", "2"), { include: ["A"] })
                 .pipe(
                   Effect.provideService(TestResourceHooks, {
                     create: track,
@@ -9813,7 +9822,7 @@ describe("targeted audit safeguards", () => {
               if (consumer === "Action") {
                 const actionBoundary = yield* stack
                   .deploy(program("clear", "2"), {
-                    targets: ["A", "Middle"],
+                    include: ["A", "Middle"],
                   })
                   .pipe(
                     Effect.provideService(TestResourceHooks, {
@@ -9836,7 +9845,7 @@ describe("targeted audit safeguards", () => {
               }
               if (completion === "selected closure")
                 yield* stack.deploy(program("clear"), {
-                  targets: ["A", "Middle", "B"],
+                  include: ["A", "Middle", "B"],
                 });
               else yield* stack.deploy(program("clear"));
               expect((yield* getState("A")).bindings).toEqual([]);
@@ -9846,7 +9855,7 @@ describe("targeted audit safeguards", () => {
                 "B",
               );
               const a = yield* getState("A");
-              yield* stack.deploy(program("clear", "2"), { targets: ["A"] });
+              yield* stack.deploy(program("clear", "2"), { include: ["A"] });
               expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
               expect(yield* getState<ResourceState | ActionState>("B")).toEqual(
                 clearedB,
@@ -9935,9 +9944,9 @@ describe("targeted audit safeguards", () => {
                 Effect.sync(() => {
                   calls.push(id);
                 });
-              const targets = ids.filter((id) => id !== "B");
+              const include = ids.filter((id) => id !== "B");
               const exit = yield* stack
-                .deploy(program("1", true, historical), { targets })
+                .deploy(program("1", true, historical), { include })
                 .pipe(
                   Effect.provideService(TestResourceHooks, {
                     create: track,
@@ -9963,14 +9972,14 @@ describe("targeted audit safeguards", () => {
               );
               const complete = program("1", true, historical);
               if (completion === "selected closure")
-                yield* stack.deploy(complete, { targets: ids });
+                yield* stack.deploy(complete, { include: ids });
               else yield* stack.deploy(complete);
               expect((yield* getState("A")).downstream).toEqual([]);
               expect((yield* getState("B")).attr?.string).toBe("detached");
               const b = yield* getState("B");
               const a = yield* getState("A");
               yield* stack.deploy(program("2", true, historical), {
-                targets: ["A"],
+                include: ["A"],
               });
               expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
               expect(yield* getState("B")).toEqual(b);
@@ -9998,7 +10007,7 @@ describe("targeted audit safeguards", () => {
         yield* stack.deploy(program(false));
         expect((yield* getState("A")).downstream).toEqual(["Middle"]);
         const b = yield* getState("B");
-        yield* stack.deploy(program(true), { targets: ["A", "Middle"] });
+        yield* stack.deploy(program(true), { include: ["A", "Middle"] });
         expect((yield* getState("A")).downstream).toEqual([]);
         expect(yield* getState("B")).toEqual(b);
         yield* stack.destroy();
@@ -10036,7 +10045,7 @@ describe("targeted audit safeguards", () => {
         const started = new Set<string>();
         const updates: string[] = [];
         const ready = yield* Deferred.make<void>();
-        yield* stack.deploy(program("2", false), { targets: ["A"] }).pipe(
+        yield* stack.deploy(program("2", false), { include: ["A"] }).pipe(
           Effect.provideService(TestResourceHooks, {
             update: (id) =>
               Effect.gen(function* () {
@@ -10103,7 +10112,7 @@ describe("targeted audit safeguards", () => {
           expect(interruptedA.old).toMatchObject({ downstream: ["B"] });
           expect(b.attr?.string).toBe("original");
           const recovery = program("recovered", "1", false, declaredConsumer);
-          const plan = yield* stack.plan(recovery, { targets: ["A"] });
+          const plan = yield* stack.plan(recovery, { include: ["A"] });
           expect(plan.resources.A.action).toBe("update");
           yield* apply(plan);
           const recovered = yield* getState("A");
@@ -10111,14 +10120,14 @@ describe("targeted audit safeguards", () => {
           expect(recovered).not.toHaveProperty("old");
           expect(recovered.downstream).toEqual(["B"]);
           expect(yield* getState("B")).toEqual(b);
-          const noop = yield* stack.plan(recovery, { targets: ["A"] });
+          const noop = yield* stack.plan(recovery, { include: ["A"] });
           expect(noop.resources.A.action).toBe("noop");
           yield* apply(noop);
           expect((yield* getState("A")).downstream).toEqual(["B"]);
           expect(yield* getState("B")).toEqual(b);
           yield* stack.deploy(
             program("updated again", "1", false, declaredConsumer),
-            { targets: ["A"] },
+            { include: ["A"] },
           );
           const before = yield* getState("A");
           expect(before.downstream).toEqual(["B"]);
@@ -10130,7 +10139,7 @@ describe("targeted audit safeguards", () => {
             });
           const exit = yield* stack
             .deploy(program("updated again", "2", false, declaredConsumer), {
-              targets: ["A"],
+              include: ["A"],
             })
             .pipe(
               Effect.provideService(TestResourceHooks, {
@@ -10211,7 +10220,7 @@ describe("targeted audit safeguards", () => {
               calls.push(id);
             });
           const exit = yield* stack
-            .deploy(program("2", true), { targets: ["Middle"] })
+            .deploy(program("2", true), { include: ["Middle"] })
             .pipe(
               Effect.provideService(TestResourceHooks, {
                 create: track,
@@ -10272,7 +10281,7 @@ describe("targeted audit safeguards", () => {
             calls.push(id);
           });
         const exit = yield* stack
-          .deploy(program("2", false), { targets: ["A"] })
+          .deploy(program("2", false), { include: ["A"] })
           .pipe(
             Effect.provideService(TestResourceHooks, {
               create: track,
@@ -10343,7 +10352,7 @@ describe("targeted audit safeguards", () => {
                 });
               const exit = yield* stack
                 .deploy(program("2", declaredConsumer), {
-                  targets: ["Middle"],
+                  include: ["Middle"],
                 })
                 .pipe(
                   Effect.provideService(TestResourceHooks, {
@@ -10355,7 +10364,7 @@ describe("targeted audit safeguards", () => {
                 );
               assert(Exit.isFailure(exit));
               expect(Cause.pretty(exit.cause)).toContain(
-                "UnsafeTargetBoundary",
+                "UnsafeSelectionBoundary",
               );
               expect(Cause.pretty(exit.cause)).toContain("B");
               expect(calls).toEqual([]);
@@ -10402,7 +10411,7 @@ describe("targeted audit safeguards", () => {
             });
           yield* stack.deploy(program(true));
           if (history === "selected updating") {
-            yield* stack.deploy(program(false), { targets: ["B"] });
+            yield* stack.deploy(program(false), { include: ["B"] });
             const failed = yield* stack.deploy(program(false)).pipe(
               Effect.provideService(TestResourceHooks, {
                 update: () => Effect.fail(new ResourceFailure()),
@@ -10416,7 +10425,7 @@ describe("targeted audit safeguards", () => {
             expect(a.old.bindings.length).toBeGreaterThan(0);
             expect((yield* getState("B")).bindings).toEqual([]);
           } else if (history !== "mixed cycle") {
-            yield* stack.deploy(program(false), { targets: ["A"] });
+            yield* stack.deploy(program(false), { include: ["A"] });
             expect((yield* getState("A")).bindings).toEqual([]);
             if (history === "unselected updating") {
               const failed = yield* stack.deploy(program(false)).pipe(
@@ -10463,7 +10472,7 @@ describe("targeted audit safeguards", () => {
               calls.push(id);
             });
           const exit = yield* stack
-            .deploy(program(false, "2"), { targets: ["A"] })
+            .deploy(program(false, "2"), { include: ["A"] })
             .pipe(
               Effect.provideService(TestResourceHooks, {
                 create: track,
@@ -10517,7 +10526,7 @@ describe("targeted audit safeguards", () => {
               calls.push(id);
             });
           const exit = yield* stack
-            .deploy(Compute({}), { targets: ["X"] })
+            .deploy(Compute({}), { include: ["X"] })
             .pipe(
               Effect.provideService(TestResourceHooks, {
                 create: track,
@@ -10527,7 +10536,7 @@ describe("targeted audit safeguards", () => {
               Effect.exit,
             );
           assert(Exit.isFailure(exit));
-          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeSelectionBoundary");
           expect(Cause.pretty(exit.cause)).toContain("persisted resource");
           expect(runs).toBe(0);
           expect(calls).toEqual([]);
@@ -10538,7 +10547,7 @@ describe("targeted audit safeguards", () => {
   }
 
   test.provider(
-    "refuses targeted mode switch after interrupted live destruction",
+    "refuses filtered mode switch after interrupted live destruction",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
@@ -10558,10 +10567,10 @@ describe("targeted audit safeguards", () => {
           (call) => call.stack === stack.name,
         );
         const exit = yield* inDev(
-          stack.deploy(program, { targets: ["Worker"] }),
+          stack.deploy(program, { include: ["Worker"] }),
         ).pipe(Effect.exit);
         assert(Exit.isFailure(exit));
-        expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+        expect(Cause.pretty(exit.cause)).toContain("UnsafeSelectionBoundary");
         expect(Cause.pretty(exit.cause)).toContain("recorded 'live' mode");
         expect(yield* getState("Worker")).toEqual(before);
         expect(modalCalls.filter((call) => call.stack === stack.name)).toEqual(
@@ -10576,7 +10585,7 @@ describe("targeted audit safeguards", () => {
           { stack: stack.name, mode: "live", op: "delete", id: "Worker" },
         ]);
         expect(yield* getState("Worker")).toBeUndefined();
-        yield* inDev(stack.deploy(program, { targets: ["Worker"] }));
+        yield* inDev(stack.deploy(program, { include: ["Worker"] }));
         expect((yield* getState("Worker")).providerMode).toBe("local");
         yield* stack.destroy();
       }),
@@ -10651,4 +10660,145 @@ describe("noop stable readiness", () => {
         yield* stack.destroy();
       }),
   );
+});
+
+describe("resource selection apply barriers", () => {
+  for (const revision of ["old", "new"]) {
+    test.provider(
+      `excluded ${revision === "old" ? "noop" : "changed"} upstream rejects without reads diffs mutations or row changes`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (value: string, fresh = false) =>
+            Effect.gen(function* () {
+              const source = yield* BindingTarget("Source", { string: value });
+              const middle = yield* BindingTarget("Middle", {
+                string: source.string,
+              });
+              const consumer = yield* TestResource("Consumer", {
+                string: middle.string,
+              });
+              if (fresh) yield* TestResource("Fresh", {});
+              return { consumer: consumer.string };
+            }).pipe(Namespace.push("App"));
+          yield* stack.deploy(program("old"));
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: stack.stage };
+          const snapshot = Effect.gen(function* () {
+            const ids = [...(yield* state.list(key))].sort();
+            const rows = yield* Effect.forEach(ids, (fqn) =>
+              state.get({ ...key, fqn }),
+            );
+            const output = yield* state.getOutput(key);
+            return yield* Effect.sync(() =>
+              JSON.stringify({ ids, rows, output }),
+            );
+          });
+          const before = yield* snapshot;
+          const calls: string[] = [];
+          const record = (op: string) => (id: string) =>
+            Effect.sync(() => {
+              calls.push(`${op}:${id}`);
+            });
+          const rejected = yield* stack
+            .deploy(program(revision, true), {
+              include: ["App/Fresh", "App/Consumer"],
+              exclude: ["App/S*"],
+            })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                read: (id) => record("read")(id).pipe(Effect.as(undefined)),
+                diff: record("diff"),
+                create: record("create"),
+                update: record("update"),
+                delete: record("delete"),
+              }),
+              Effect.exit,
+            );
+          expect(Exit.isFailure(rejected)).toBe(true);
+          if (Exit.isFailure(rejected)) {
+            const message = Cause.pretty(rejected.cause);
+            expect(message).toContain(
+              "App/Consumer -> App/Middle -> App/Source",
+            );
+            expect(message).toContain("exclude pattern 'App/S*'");
+          }
+          expect(calls).toEqual([]);
+          expect(yield* snapshot).toBe(before);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test.provider(
+    "includes and updates implicit upstreams outside the include pattern",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (value: string) =>
+          Effect.gen(function* () {
+            const source = yield* TestResource("Source", { string: value });
+            const middle = yield* TestResource("Middle", {
+              string: source.string,
+            });
+            const consumer = yield* TestResource("Consumer", {
+              string: middle.string,
+            });
+            yield* TestResource("Excluded", {});
+            return { value: consumer.string };
+          });
+        yield* stack.deploy(program("old"));
+        const excluded = yield* getState("Excluded");
+        const changed: string[] = [];
+        const output = yield* stack
+          .deploy(program("new"), { include: ["Cons*"], exclude: ["Excluded"] })
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              update: (id) =>
+                Effect.sync(() => {
+                  changed.push(id);
+                }),
+            }),
+          );
+        expect(output).toBeUndefined();
+        expect(changed).toEqual(["Source", "Middle", "Consumer"]);
+        expect((yield* getState("Source")).attr?.string).toBe("new");
+        expect((yield* getState("Middle")).attr?.string).toBe("new");
+        expect((yield* getState("Consumer")).attr?.string).toBe("new");
+        expect(yield* getState("Excluded")).toEqual(excluded);
+        yield* stack.destroy();
+      }),
+  );
+
+  for (const selection of [{ include: ["**"] }, { exclude: ["Missing/**"] }]) {
+    test.provider(
+      `selecting everything still preserves stack outputs ${JSON.stringify(selection)}`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(
+            TestResource("Only", { string: "old" }).pipe(
+              Effect.as({ full: "old" }),
+            ),
+          );
+          const output = yield* stack.deploy(
+            TestResource("Only", { string: "new" }).pipe(
+              Effect.map((resource) =>
+                Output.map(resource.string, () => {
+                  throw new Error("partial output evaluated");
+                }),
+              ),
+            ),
+            selection,
+          );
+          expect(output).toBeUndefined();
+          expect((yield* getState("Only")).attr?.string).toBe("new");
+          const state = yield* yield* State;
+          expect(
+            yield* state.getOutput({ stack: stack.name, stage: stack.stage }),
+          ).toEqual({ full: "old" });
+          yield* stack.destroy();
+        }),
+    );
+  }
 });
