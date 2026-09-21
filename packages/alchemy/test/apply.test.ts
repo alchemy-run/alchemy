@@ -16,6 +16,7 @@ import * as Plan from "@/Plan";
 import { Stage } from "@/Stage";
 import { Stack, make as makeStack } from "@/Stack";
 import {
+  type ActionState,
   type CreatingResourceState,
   type ReplacedResourceState,
   type ReplacingResourceState,
@@ -9011,6 +9012,1643 @@ describe("renamed resources (renamedFrom)", () => {
 
         yield* stack.destroy();
         expect(yield* listState()).toEqual([]);
+      }),
+  );
+});
+
+describe("targeted reconciliation", () => {
+  test.provider(
+    "preserves unselected declared and undeclared rows and full-stack outputs",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const Compute = Action("SkippedAction", (_: { value: string }) =>
+          Effect.succeed({ value: "old" }),
+        );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* TestResource("Branch", { string: "v1" });
+            yield* TestResource("Worker", { string: "old" });
+            yield* TestResource("Undeclared", {});
+            yield* Compute({ value: "old" });
+            return { full: "original" };
+          }),
+        );
+        const worker = yield* getState("Worker");
+        const undeclared = yield* getState("Undeclared");
+        const skipped = yield* getState("SkippedAction");
+        const calls: string[] = [];
+        const result = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              const branch = yield* TestResource("Branch", { string: "v2" });
+              yield* TestResource("Worker", { string: "changed" });
+              yield* TestResource("NewUnselected", {});
+              const Fail = Action("SkippedAction", (_: { value: string }) =>
+                Effect.die("unselected action ran"),
+              );
+              yield* Fail({ value: "changed" });
+              return Output.map(branch.string, () => {
+                throw new Error("targeted output evaluated");
+              });
+            }),
+            { targets: ["Branch"] },
+          )
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              update: (id) =>
+                Effect.sync(() => {
+                  calls.push(id);
+                }),
+              create: () => Effect.die("unselected create"),
+              delete: () => Effect.die("unselected delete"),
+            }),
+          );
+        expect(result).toBeUndefined();
+        expect(calls).toEqual(["Branch"]);
+        expect(yield* getState("Worker")).toEqual(worker);
+        expect(yield* getState("Undeclared")).toEqual(undeclared);
+        expect(yield* getState("SkippedAction")).toEqual(skipped);
+        expect(yield* getState("NewUnselected")).toBeUndefined();
+        const state = yield* yield* State;
+        expect(
+          yield* state.getOutput({ stack: stack.name, stage: stack.stage }),
+        ).toEqual({ full: "original" });
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "applies transitive bindings and captured Actions while retaining pure reuse",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        let runs = 0;
+        const program = Effect.gen(function* () {
+          const source = yield* TestResource("Source", { string: "input" });
+          const captured = yield* TestResource("Captured", {
+            string: "capture",
+          });
+          const Compute = Action(
+            "Compute",
+            Effect.gen(function* () {
+              const value = yield* captured.string;
+              return (input: { value: string }) =>
+                Effect.gen(function* () {
+                  runs++;
+                  return { value: `${input.value}:${yield* value}` };
+                });
+            }),
+          );
+          const result = yield* Compute({ value: source.string });
+          const host = yield* BindingTarget("Host", {});
+          yield* host.bind("Compute", { env: { RESULT: result.value } });
+          yield* TestResource("Other", {});
+          return host.env.RESULT;
+        });
+        yield* stack.deploy(program, { targets: ["Host"] });
+        const host = yield* getState("Host");
+        assert(host.attr !== undefined);
+        expect(host.attr.env).toEqual({
+          RESULT: "input:capture",
+        });
+        expect(yield* getState("Other")).toBeUndefined();
+        yield* stack.deploy(program, { targets: ["Host"] });
+        expect(runs).toBe(1);
+        expect(yield* stack.deploy(program)).toBe("input:capture");
+        expect(runs).toBe(1);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "preserves prior downstream edges owned by unselected resources and Actions",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const Compute = Action("Compute", (input: { value: string }) =>
+          Effect.succeed({ value: input.value }),
+        );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const a = yield* TestResource("A", {});
+            const result = yield* Compute({ value: a.string });
+            yield* TestResource("B", { string: result.value });
+          }),
+        );
+        const b = yield* getState("B");
+        const plan = yield* stack.plan(
+          Effect.gen(function* () {
+            const a = yield* TestResource("A", {});
+            yield* Compute({ value: a.string });
+          }),
+          { targets: ["Compute"] },
+        );
+        expect(plan.resources.A.downstream).toEqual(["Compute"]);
+        expect(plan.actions.Compute.downstream).toEqual(["B"]);
+        yield* apply(plan);
+        expect((yield* getState("A")).downstream).toEqual(["Compute"]);
+        expect((yield* getState("Compute")).downstream).toEqual(["B"]);
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const a = yield* TestResource("A", {});
+            yield* TestResource("B", { string: a.string });
+          }),
+        );
+        expect((yield* getState("A")).downstream).toEqual(["B"]);
+        yield* stack.deploy(TestResource("A", {}), { targets: ["A"] });
+        expect((yield* getState("A")).downstream).toEqual(["B"]);
+        const deleted: string[] = [];
+        yield* stack.destroy().pipe(
+          Effect.provideService(TestResourceHooks, {
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+        expect(deleted).toEqual(["B", "A"]);
+      }),
+  );
+
+  test.provider("does not switch unselected provider modes", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        yield* ModalResource("Worker", { value: "same" });
+        yield* TestResource("Branch", {});
+      });
+      yield* stack.deploy(program);
+      const worker = yield* getState("Worker");
+      const before = modalCalls.filter(
+        (call) => call.stack === stack.name,
+      ).length;
+      yield* inDev(stack.deploy(program, { targets: ["Branch"] }));
+      expect(yield* getState("Worker")).toEqual(worker);
+      expect(
+        modalCalls.filter((call) => call.stack === stack.name).length,
+      ).toBe(before);
+      yield* inDev(stack.deploy(program));
+      expect((yield* getState("Worker")).providerMode).toBe("local");
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider(
+    "rejects selected renames without moving persisted identities",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(TestResource("Old", {}));
+        const old = yield* getState("Old");
+        const exit = yield* stack
+          .deploy(TestResource("New", {}).pipe(renamedFrom("Old")), {
+            targets: ["New"],
+          })
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+        expect(yield* getState("Old")).toEqual(old);
+        expect(yield* getState("New")).toBeUndefined();
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "rejects replacement across an unselected dependent boundary, then permits a closed replacement",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const a = yield* TestResource("A", { replaceString: revision });
+            yield* TestResource("B", { string: a.string });
+          });
+        yield* stack.deploy(program("1"));
+        const a = yield* getState("A");
+        const b = yield* getState("B");
+        const exit = yield* stack
+          .deploy(program("2"), { targets: ["A"] })
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+        expect(yield* getState("A")).toEqual(a);
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.deploy(program("2"), { targets: ["B"] });
+        expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "rejects replacement when removed historical binding-cycle edges cross the selection",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", { replaceString: "1" });
+            const b = yield* BindingTarget("B", {});
+            yield* a.bind("B", { env: { B: b.name } });
+            yield* b.bind("A", { env: { A: a.name } });
+          }),
+        );
+        const a = yield* getState("A");
+        const b = yield* getState("B");
+        expect(a.downstream).toEqual([]);
+        expect(b.downstream).toEqual([]);
+        const exit = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* BindingTarget("A", { replaceString: "2" });
+              yield* BindingTarget("B", {});
+            }),
+            { targets: ["A"] },
+          )
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.pretty(exit.cause)).toContain(
+            "Historical binding-cycle",
+          );
+        expect(yield* getState("A")).toEqual(a);
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "rejects resuming selected GC when an old generation still has unselected dependents",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            const a = yield* TestResource("A", { replaceString: revision });
+            yield* TestResource("B", { string: a.string });
+          });
+        yield* stack.deploy(program("1"));
+        yield* stack.deploy(program("2")).pipe(
+          Effect.provideService(TestResourceHooks, {
+            delete: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        const before = yield* getState("A");
+        expect(before.status).toBe("replaced");
+        const exit = yield* stack
+          .deploy(TestResource("A", { replaceString: "2" }), { targets: ["A"] })
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit))
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+        expect(yield* getState("A")).toEqual(before);
+        yield* stack.deploy(program("2"));
+        expectConvergedStatus((yield* getState("A")).status);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "does not let an unselected rename claim a selected identity",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        yield* stack.deploy(TestResource("Old", { string: "original" }));
+        const before = yield* getState("Old");
+        const exit = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* TestResource("Old", { string: "reused" });
+              yield* TestResource("New", {}).pipe(renamedFrom("Old"));
+            }),
+            { targets: ["Old"] },
+          )
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        expect(yield* getState("Old")).toEqual(before);
+        expect(yield* getState("New")).toBeUndefined();
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "does not collect unselected interrupted replacement generations",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (revision: string) =>
+          Effect.gen(function* () {
+            yield* TestResource("Old", { replaceString: revision });
+            yield* TestResource("Branch", {});
+          });
+        yield* stack.deploy(program("1"));
+        const interrupted = yield* stack.deploy(program("2")).pipe(
+          Effect.provideService(TestResourceHooks, {
+            delete: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(interrupted)).toBe(true);
+        const before = yield* getState("Old");
+        expect(before.status).toBe("replaced");
+        yield* stack
+          .deploy(TestResource("Branch", {}), { targets: ["Branch"] })
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              delete: () => Effect.die("unselected GC"),
+            }),
+          );
+        expect(yield* getState("Old")).toEqual(before);
+        yield* stack.deploy(program("2"));
+        expectConvergedStatus((yield* getState("Old")).status);
+        yield* stack.destroy();
+      }),
+  );
+});
+
+describe("targeted audit safeguards", () => {
+  test.provider(
+    "rejects an unpersisted keeper before its first checkpoint can fail",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (clear: boolean, revision = "1") =>
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", {
+              string: `generation-${revision}`,
+              replaceString: revision,
+            });
+            const middle = yield* BindingTarget("Middle", {});
+            if (!clear) {
+              yield* a.bind("Middle", { env: { MIDDLE: middle.name } });
+              yield* middle.bind("A", { env: { SOURCE: a.string } });
+            } else {
+              const keeper = yield* BindingTarget("Keeper", {});
+              yield* keeper.bind("constant", {
+                env: { VALUE: "new evidence" },
+              });
+            }
+            yield* TestResource("B", {
+              string: clear
+                ? "detached"
+                : middle.env.pipe(Output.map((env) => env.SOURCE)),
+            });
+          });
+        yield* stack.deploy(program(false));
+        const rows = Effect.all([
+          getState("A"),
+          getState("Middle"),
+          getState("B"),
+        ]);
+        const before = yield* rows;
+        const bytes = yield* Effect.sync(() => JSON.stringify(before));
+        const state = yield* yield* State;
+        const writes: string[] = [];
+        const calls: string[] = [];
+        const track = (id: string) =>
+          Effect.sync(() => {
+            calls.push(id);
+          });
+        const result = yield* Effect.gen(function* () {
+          const plan = yield* stack.plan(program(true), {
+            targets: ["A", "Middle", "Keeper"],
+          });
+          yield* apply(plan);
+        }).pipe(
+          Effect.provideService(
+            State,
+            Effect.succeed({
+              ...state,
+              set: (request) =>
+                Effect.sync(() => {
+                  writes.push(request.fqn);
+                }).pipe(
+                  Effect.andThen(() =>
+                    request.fqn === "Keeper"
+                      ? Effect.fail(
+                          new StateStoreError({
+                            message: "First Keeper checkpoint failed",
+                          }),
+                        )
+                      : state.set(request),
+                  ),
+                ),
+            }),
+          ),
+          Effect.provideService(TestResourceHooks, {
+            create: track,
+            update: track,
+            delete: track,
+          }),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(result));
+        expect(Cause.pretty(result.cause)).toContain(
+          "last historical binding evidence",
+        );
+        expect(writes).toEqual([]);
+        expect(calls).toEqual([]);
+        const after = yield* rows;
+        expect(after).toEqual(before);
+        expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(bytes);
+        expect(yield* getState("Keeper")).toBeUndefined();
+        const replacement = yield* stack
+          .deploy(program(true, "2"), { targets: ["A"] })
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: track,
+              update: track,
+              delete: track,
+            }),
+            Effect.exit,
+          );
+        assert(Exit.isFailure(replacement));
+        expect(calls).toEqual([]);
+        expect(yield* rows).toEqual(before);
+        yield* stack.deploy(program(true), {
+          targets: ["A", "Middle", "Keeper", "B"],
+        });
+        expect((yield* getState("B")).attr?.string).toBe("detached");
+        yield* stack.destroy();
+      }),
+  );
+
+  for (const operation of ["force", "update", "action noop"] as const) {
+    test.provider(
+      `preserves incomplete metadata before partial ${operation} and replacement`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          let runs = 0;
+          const Compute = Action("Middle", (input: { value: string }) =>
+            Effect.sync(() => {
+              runs++;
+              return { value: input.value };
+            }),
+          );
+          const program = (
+            detached: boolean,
+            revision = "1",
+            value = "generation-1",
+          ) =>
+            Effect.gen(function* () {
+              const a = yield* TestResource("A", {
+                string: value,
+                replaceString: revision,
+              });
+              if (operation === "action noop") {
+                const middle = yield* Compute({
+                  value: detached ? "generation-1" : a.string,
+                });
+                if (detached)
+                  yield* TestResource("C", { string: middle.value });
+                yield* TestResource("B", {
+                  string: detached ? "detached" : middle.value,
+                });
+              } else
+                yield* TestResource("B", {
+                  string: detached ? "detached" : a.string,
+                });
+            });
+          yield* stack.deploy(program(false));
+          const state = yield* yield* State;
+          const incomplete = operation === "action noop" ? "Middle" : "A";
+          const key = {
+            stack: stack.name,
+            stage: stack.stage,
+            fqn: incomplete,
+          };
+          const row = yield* state.get(key);
+          assert(row !== undefined);
+          const legacy = { ...row };
+          yield* Effect.sync(() =>
+            Reflect.deleteProperty(legacy, "downstream"),
+          );
+          yield* state.set({ ...key, value: legacy });
+          const ids =
+            operation === "action noop" ? ["A", "Middle", "B"] : ["A", "B"];
+          const rows = Effect.all(
+            ids.map((id) => state.get({ ...key, fqn: id })),
+          );
+          const before = yield* rows;
+          const bytes = yield* Effect.sync(() => JSON.stringify(before));
+          const runsBefore = runs;
+          const calls: string[] = [];
+          const track = (id: string) =>
+            Effect.sync(() => {
+              calls.push(id);
+            });
+          const desired = program(
+            true,
+            "1",
+            operation === "update" ? "updated" : "generation-1",
+          );
+          const targets =
+            operation === "action noop" ? ["A", "Middle", "C"] : ["A"];
+          const result = yield* stack
+            .deploy(desired, { targets, force: operation === "force" })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(result));
+          expect(Cause.pretty(result.cause)).toContain(
+            "incomplete historical downstream metadata",
+          );
+          expect(calls).toEqual([]);
+          expect(runs).toBe(runsBefore);
+          const after = yield* rows;
+          expect(after).toEqual(before);
+          expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(bytes);
+          expect(yield* getState("C")).toBeUndefined();
+          const replacement = yield* stack
+            .deploy(program(true, "2", "generation-2"), { targets: ["A"] })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(replacement));
+          expect(calls).toEqual([]);
+          expect(yield* rows).toEqual(before);
+          yield* stack.deploy(desired, { force: true });
+          expect((yield* getState("B")).attr?.string).toBe("detached");
+          yield* stack.deploy(program(true, "2", "generation-2"), {
+            targets: ["A"],
+          });
+          expect((yield* getState("A")).attr?.string).toBe("generation-2");
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test.provider(
+    "retains last binding evidence in interrupted cleanup snapshots",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (bound: boolean) =>
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", { string: "generation-1" });
+            const middle = yield* BindingTarget("Middle", {});
+            if (bound) {
+              yield* a.bind("Middle", { env: { Middle: middle.name } });
+              yield* middle.bind("A", { env: { A: a.string } });
+            }
+            yield* TestResource("B", {
+              string: bound
+                ? middle.env.pipe(Output.map((env) => env.A))
+                : "detached",
+            });
+          });
+        yield* stack.deploy(program(true));
+        const interrupted = yield* stack.deploy(program(false)).pipe(
+          Effect.provideService(TestResourceHooks, {
+            update: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(interrupted));
+        const rows = Effect.all([
+          getState("A"),
+          getState("Middle"),
+          getState("B"),
+        ]);
+        const before = yield* rows;
+        for (const id of ["A", "Middle"]) {
+          const row = yield* getState(id);
+          assert(row.status === "updating");
+          expect(row.bindings).toEqual([]);
+          expect(row.old.bindings.length).toBeGreaterThan(0);
+        }
+        const calls: string[] = [];
+        const track = (id: string) =>
+          Effect.sync(() => {
+            calls.push(id);
+          });
+        const recovery = yield* stack
+          .deploy(program(false), { targets: ["A", "Middle"] })
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: track,
+              update: track,
+              delete: track,
+            }),
+            Effect.exit,
+          );
+        assert(Exit.isFailure(recovery));
+        expect(Cause.pretty(recovery.cause)).toContain(
+          "last historical binding evidence",
+        );
+        expect(calls).toEqual([]);
+        expect(yield* rows).toEqual(before);
+        yield* stack.deploy(program(false));
+        for (const row of yield* rows) {
+          expect(row.bindings).toEqual([]);
+          expect(row).not.toHaveProperty("old");
+        }
+        expect((yield* getState("B")).attr?.string).toBe("detached");
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "allows partial binding cleanup when a selected noop retains evidence",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (bound: boolean) =>
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", {});
+            const keeper = yield* BindingTarget("Keeper", {});
+            if (bound) yield* a.bind("value", { env: { VALUE: "a" } });
+            yield* keeper.bind("value", { env: { VALUE: "keeper" } });
+            yield* TestResource("B", {});
+          });
+        yield* stack.deploy(program(true));
+        const b = yield* getState("B");
+        const keeper = yield* getState("Keeper");
+        const plan = yield* stack.plan(program(false), {
+          targets: ["A", "Keeper"],
+        });
+        expect(plan.resources.Keeper.action).toBe("noop");
+        yield* apply(plan);
+        expect((yield* getState("A")).bindings).toEqual([]);
+        expect(yield* getState("Keeper")).toEqual(keeper);
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.destroy();
+      }),
+  );
+
+  for (const initialCycle of [false, true]) {
+    for (const consumer of ["Resource", "Action"] as const) {
+      for (const completion of [
+        "selected closure",
+        "full deployment",
+      ] as const) {
+        test.provider(
+          `preserves last binding evidence for ${consumer} through ${completion} (initialCycle=${initialCycle})`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              let runs = 0;
+              const Consume = Action("B", (input: { value: string }) =>
+                Effect.sync(() => {
+                  runs++;
+                  return input.value;
+                }),
+              );
+              const program = (
+                mode: "acyclic" | "cycle" | "clear",
+                revision = "1",
+              ) =>
+                Effect.gen(function* () {
+                  const a = yield* BindingTarget("A", {
+                    string: `generation-${revision}`,
+                    replaceString: revision,
+                  });
+                  const middle = yield* BindingTarget("Middle", {});
+                  if (mode !== "clear")
+                    yield* middle.bind("A", { env: { A: a.string } });
+                  if (mode === "cycle")
+                    yield* a.bind("Middle", { env: { Middle: middle.name } });
+                  const value =
+                    mode === "clear"
+                      ? "detached"
+                      : middle.env.pipe(Output.map((env) => env.A));
+                  if (consumer === "Action") yield* Consume({ value });
+                  else yield* TestResource("B", { string: value });
+                });
+              const consumerValue = Effect.gen(function* () {
+                const row = yield* getState<ResourceState | ActionState>("B");
+                if (row.kind === "action") {
+                  assert(row.status === "ran");
+                  return row.output;
+                }
+                return row.attr?.string;
+              });
+              yield* stack.deploy(program(initialCycle ? "cycle" : "acyclic"));
+              expect(yield* consumerValue).toBe("generation-1");
+              const b = yield* getState<ResourceState | ActionState>("B");
+              if (!initialCycle) {
+                expect((yield* getState("A")).downstream).toEqual(["Middle"]);
+                yield* stack.deploy(program("cycle"), {
+                  targets: ["A", "Middle"],
+                });
+              }
+              expect((yield* getState("A")).downstream).toEqual([]);
+              expect(yield* getState<ResourceState | ActionState>("B")).toEqual(
+                b,
+              );
+              const rows = Effect.all([
+                getState("A"),
+                getState("Middle"),
+                getState<ResourceState | ActionState>("B"),
+              ]);
+              const before = yield* rows;
+              const bytes = yield* Effect.sync(() => JSON.stringify(before));
+              expect((yield* getState("A")).bindings.length).toBeGreaterThan(0);
+              expect(
+                (yield* getState("Middle")).bindings.length,
+              ).toBeGreaterThan(0);
+              const runsBefore = runs;
+              const calls: string[] = [];
+              const track = (id: string) =>
+                Effect.sync(() => {
+                  calls.push(id);
+                });
+              const exit = yield* stack
+                .deploy(program("clear"), { targets: ["A", "Middle"] })
+                .pipe(
+                  Effect.provideService(TestResourceHooks, {
+                    create: track,
+                    update: track,
+                    delete: track,
+                  }),
+                  Effect.exit,
+                );
+              assert(Exit.isFailure(exit));
+              expect(Cause.pretty(exit.cause)).toContain(
+                "last historical binding evidence",
+              );
+              expect(Cause.pretty(exit.cause)).toContain("unselected: B");
+              expect(Cause.pretty(exit.cause)).toContain(
+                "Select them or run a full deployment",
+              );
+              expect(calls).toEqual([]);
+              expect(runs).toBe(runsBefore);
+              const after = yield* rows;
+              expect(after).toEqual(before);
+              expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(
+                bytes,
+              );
+              const replacement = yield* stack
+                .deploy(program("clear", "2"), { targets: ["A"] })
+                .pipe(
+                  Effect.provideService(TestResourceHooks, {
+                    create: track,
+                    update: track,
+                    delete: track,
+                  }),
+                  Effect.exit,
+                );
+              assert(Exit.isFailure(replacement));
+              expect(Cause.pretty(replacement.cause)).toContain(
+                "Historical binding-cycle",
+              );
+              expect(calls).toEqual([]);
+              expect(runs).toBe(runsBefore);
+              expect(yield* rows).toEqual(before);
+              if (consumer === "Action") {
+                const actionBoundary = yield* stack
+                  .deploy(program("clear", "2"), {
+                    targets: ["A", "Middle"],
+                  })
+                  .pipe(
+                    Effect.provideService(TestResourceHooks, {
+                      create: track,
+                      update: track,
+                      delete: track,
+                    }),
+                    Effect.exit,
+                  );
+                assert(Exit.isFailure(actionBoundary));
+                expect(Cause.pretty(actionBoundary.cause)).toContain(
+                  "'B' is unselected",
+                );
+                expect(Cause.pretty(actionBoundary.cause)).toContain(
+                  "Historical binding-cycle",
+                );
+                expect(calls).toEqual([]);
+                expect(runs).toBe(runsBefore);
+                expect(yield* rows).toEqual(before);
+              }
+              if (completion === "selected closure")
+                yield* stack.deploy(program("clear"), {
+                  targets: ["A", "Middle", "B"],
+                });
+              else yield* stack.deploy(program("clear"));
+              expect((yield* getState("A")).bindings).toEqual([]);
+              expect((yield* getState("Middle")).bindings).toEqual([]);
+              expect(yield* consumerValue).toBe("detached");
+              const clearedB = yield* getState<ResourceState | ActionState>(
+                "B",
+              );
+              const a = yield* getState("A");
+              yield* stack.deploy(program("clear", "2"), { targets: ["A"] });
+              expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
+              expect(yield* getState<ResourceState | ActionState>("B")).toEqual(
+                clearedB,
+              );
+              yield* stack.destroy();
+            }),
+        );
+      }
+    }
+  }
+
+  for (const intermediate of ["Action", "Resource"] as const) {
+    for (const completion of ["selected closure", "full deployment"] as const) {
+      for (const historical of [false, true]) {
+        test.provider(
+          `refuses selected ${intermediate} detachment before ${completion} (historical=${historical})`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              let runs = 0;
+              const Compute = Action("Middle", (input: { value: string }) =>
+                Effect.sync(() => {
+                  runs++;
+                  return input;
+                }),
+              );
+              const program = (
+                revision: string,
+                detached: boolean,
+                updating = false,
+              ) =>
+                Effect.gen(function* () {
+                  const a = yield* TestResource("A", {
+                    string: updating ? "updated" : `generation-${revision}`,
+                    replaceString: revision,
+                  });
+                  const input = detached ? "detached" : a.string;
+                  const middle =
+                    intermediate === "Action"
+                      ? (yield* Compute({ value: input })).value
+                      : (yield* TestResource("Middle", { string: input }))
+                          .string;
+                  const value = historical
+                    ? (yield* TestResource("Bridge", {
+                        string:
+                          updating && intermediate === "Resource"
+                            ? "detached"
+                            : middle,
+                      })).string
+                    : middle;
+                  yield* TestResource("B", {
+                    string: historical && detached ? "detached" : value,
+                  });
+                });
+              yield* stack.deploy(program("1", false));
+              if (historical) {
+                const failed = yield* stack
+                  .deploy(program("1", true, true))
+                  .pipe(
+                    Effect.provideService(TestResourceHooks, {
+                      update: () => Effect.fail(new ResourceFailure()),
+                    }),
+                    Effect.exit,
+                  );
+                assert(Exit.isFailure(failed));
+                const a = yield* getState("A");
+                const bridge = yield* getState("Bridge");
+                assert(a.status === "updating");
+                assert(bridge.status === "updating");
+                expect(a.downstream).toEqual([]);
+                expect(a.old).toMatchObject({ downstream: ["Middle"] });
+                expect(bridge.downstream).toEqual([]);
+                expect(bridge.old).toMatchObject({ downstream: ["B"] });
+              }
+              const ids = historical
+                ? ["A", "Middle", "Bridge", "B"]
+                : ["A", "Middle", "B"];
+              const rows = Effect.all(ids.map((id) => getState(id)));
+              const before = yield* rows;
+              const beforeBytes = yield* Effect.sync(() =>
+                JSON.stringify(before),
+              );
+              const runsBefore = runs;
+              const calls: string[] = [];
+              const track = (id: string) =>
+                Effect.sync(() => {
+                  calls.push(id);
+                });
+              const targets = ids.filter((id) => id !== "B");
+              const exit = yield* stack
+                .deploy(program("1", true, historical), { targets })
+                .pipe(
+                  Effect.provideService(TestResourceHooks, {
+                    create: track,
+                    update: track,
+                    delete: track,
+                  }),
+                  Effect.exit,
+                );
+              assert(Exit.isFailure(exit));
+              expect(Cause.pretty(exit.cause)).toContain(
+                "Cannot detach 'A' from 'Middle'",
+              );
+              expect(Cause.pretty(exit.cause)).toContain("unselected: B");
+              expect(Cause.pretty(exit.cause)).toContain(
+                "Select them or run a full deployment",
+              );
+              expect(calls).toEqual([]);
+              expect(runs).toBe(runsBefore);
+              const after = yield* rows;
+              expect(after).toEqual(before);
+              expect(yield* Effect.sync(() => JSON.stringify(after))).toBe(
+                beforeBytes,
+              );
+              const complete = program("1", true, historical);
+              if (completion === "selected closure")
+                yield* stack.deploy(complete, { targets: ids });
+              else yield* stack.deploy(complete);
+              expect((yield* getState("A")).downstream).toEqual([]);
+              expect((yield* getState("B")).attr?.string).toBe("detached");
+              const b = yield* getState("B");
+              const a = yield* getState("A");
+              yield* stack.deploy(program("2", true, historical), {
+                targets: ["A"],
+              });
+              expect((yield* getState("A")).instanceId).not.toBe(a.instanceId);
+              expect(yield* getState("B")).toEqual(b);
+              yield* stack.destroy();
+            }),
+        );
+      }
+    }
+  }
+
+  test.provider(
+    "does not confuse binding SCC filtering with selected detachment",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (cycle: boolean) =>
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", {});
+            const middle = yield* BindingTarget("Middle", {});
+            yield* middle.bind("A", { env: { A: a.name } });
+            if (cycle)
+              yield* a.bind("Middle", { env: { Middle: middle.name } });
+            yield* TestResource("B", { string: middle.name });
+          });
+        yield* stack.deploy(program(false));
+        expect((yield* getState("A")).downstream).toEqual(["Middle"]);
+        const b = yield* getState("B");
+        yield* stack.deploy(program(true), { targets: ["A", "Middle"] });
+        expect((yield* getState("A")).downstream).toEqual([]);
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.destroy();
+      }),
+  );
+
+  test.provider(
+    "preserves historical excluded edges through partial cycle convergence",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (revision: string, attached: boolean) =>
+          Effect.gen(function* () {
+            const a = yield* BindingTarget("A", { string: `${revision}-a` });
+            const c = yield* BindingTarget("C", { string: `${revision}-c` });
+            yield* a.bind("C", { env: { C: c.string } });
+            yield* c.bind("A", { env: { A: a.string } });
+            yield* TestResource("B", {
+              string: attached ? a.string : "detached",
+            });
+          });
+        yield* stack.deploy(program("1", true));
+        const failed = yield* stack.deploy(program("2", false)).pipe(
+          Effect.provideService(TestResourceHooks, {
+            update: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(failed));
+        const interruptedA = yield* getState("A");
+        const b = yield* getState("B");
+        assert(interruptedA.status === "updating");
+        expect(interruptedA.downstream).toEqual([]);
+        expect(interruptedA.old).toMatchObject({ downstream: ["B"] });
+        const started = new Set<string>();
+        const updates: string[] = [];
+        const ready = yield* Deferred.make<void>();
+        yield* stack.deploy(program("2", false), { targets: ["A"] }).pipe(
+          Effect.provideService(TestResourceHooks, {
+            update: (id) =>
+              Effect.gen(function* () {
+                const count = yield* Effect.sync(() => {
+                  updates.push(id);
+                  started.add(id);
+                  return started.size;
+                });
+                // Both cycle members reconcile stale bindings before convergence.
+                if (count === 2) yield* Deferred.succeed(ready, undefined);
+                else yield* Deferred.await(ready);
+              }),
+          }),
+        );
+        expect(updates.filter((id) => id === "A").length).toBeGreaterThan(1);
+        const a = yield* getState("A");
+        expectConvergedStatus(a.status);
+        expect(a).not.toHaveProperty("old");
+        expect(a.downstream).toEqual(["B"]);
+        expect(a.attr?.env).toEqual({ C: "2-c" });
+        expect(yield* getState("B")).toEqual(b);
+        yield* stack.destroy();
+      }),
+    { timeout: 10_000 },
+  );
+
+  for (const declaredConsumer of [true, false]) {
+    test.provider(
+      `preserves historical excluded edges through partial update recovery (declared=${declaredConsumer})`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (
+            value: string,
+            replacement: string,
+            attached: boolean,
+            consumer = true,
+          ) =>
+            Effect.gen(function* () {
+              const a = yield* TestResource("A", {
+                string: value,
+                replaceString: replacement,
+              });
+              if (consumer)
+                yield* TestResource("B", {
+                  string: attached ? a.string : "detached",
+                });
+            });
+          yield* stack.deploy(program("original", "1", true));
+          const failed = yield* stack
+            .deploy(program("recovered", "1", false))
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                update: () => Effect.fail(new ResourceFailure()),
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(failed));
+          const interruptedA = yield* getState("A");
+          const b = yield* getState("B");
+          assert(interruptedA.status === "updating");
+          assert(b.status === "updating");
+          expect(interruptedA.downstream).toEqual([]);
+          expect(interruptedA.old).toMatchObject({ downstream: ["B"] });
+          expect(b.attr?.string).toBe("original");
+          const recovery = program("recovered", "1", false, declaredConsumer);
+          const plan = yield* stack.plan(recovery, { targets: ["A"] });
+          expect(plan.resources.A.action).toBe("update");
+          yield* apply(plan);
+          const recovered = yield* getState("A");
+          expectConvergedStatus(recovered.status);
+          expect(recovered).not.toHaveProperty("old");
+          expect(recovered.downstream).toEqual(["B"]);
+          expect(yield* getState("B")).toEqual(b);
+          const noop = yield* stack.plan(recovery, { targets: ["A"] });
+          expect(noop.resources.A.action).toBe("noop");
+          yield* apply(noop);
+          expect((yield* getState("A")).downstream).toEqual(["B"]);
+          expect(yield* getState("B")).toEqual(b);
+          yield* stack.deploy(
+            program("updated again", "1", false, declaredConsumer),
+            { targets: ["A"] },
+          );
+          const before = yield* getState("A");
+          expect(before.downstream).toEqual(["B"]);
+          expect(yield* getState("B")).toEqual(b);
+          const calls: string[] = [];
+          const track = (id: string) =>
+            Effect.sync(() => {
+              calls.push(id);
+            });
+          const exit = yield* stack
+            .deploy(program("updated again", "2", false, declaredConsumer), {
+              targets: ["A"],
+            })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(exit));
+          expect(Cause.pretty(exit.cause)).toContain(
+            "dependents are unselected: B",
+          );
+          expect(calls).toEqual([]);
+          expect(yield* getState("A")).toEqual(before);
+          expect(yield* getState("B")).toEqual(b);
+          yield* stack.deploy(program("updated again", "1", false));
+          expect((yield* getState("A")).downstream).toEqual([]);
+          expectConvergedStatus((yield* getState("B")).status);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  for (const status of ["updating", "replacing", "replaced"] as const) {
+    test.provider(
+      `traverses intermediate ${status}.old downstream edges`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (aRevision: string, changed: boolean) =>
+            Effect.gen(function* () {
+              const a = yield* TestResource("A", { replaceString: aRevision });
+              const middle = yield* TestResource("Middle", {
+                string: a.string,
+                stringArray: [changed ? "2" : "1"],
+                replaceString: changed && status !== "updating" ? "2" : "1",
+              });
+              yield* TestResource("B", {
+                string: changed ? "detached" : middle.string,
+              });
+            });
+          yield* stack.deploy(program("1", false));
+          const failed = yield* stack
+            .deploy(program("1", true))
+            .pipe(
+              Effect.provideService(
+                TestResourceHooks,
+                failOn(
+                  "Middle",
+                  status === "updating"
+                    ? "update"
+                    : status === "replacing"
+                      ? "create"
+                      : "delete",
+                ),
+              ),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(failed));
+          const before = yield* Effect.all([
+            getState("A"),
+            getState("Middle"),
+            getState("B"),
+          ]);
+          const middle = before[1];
+          assert(
+            middle.status === "updating" ||
+              middle.status === "replacing" ||
+              middle.status === "replaced",
+          );
+          expect(middle.status).toBe(status);
+          expect(middle.downstream).toEqual([]);
+          expect(middle.old).toMatchObject({ downstream: ["B"] });
+          const calls: string[] = [];
+          const track = (id: string) =>
+            Effect.sync(() => {
+              calls.push(id);
+            });
+          const exit = yield* stack
+            .deploy(program("2", true), { targets: ["Middle"] })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(exit));
+          expect(Cause.pretty(exit.cause)).toContain(
+            "dependents are unselected: B",
+          );
+          expect(calls).toEqual([]);
+          expect(
+            yield* Effect.all([
+              getState("A"),
+              getState("Middle"),
+              getState("B"),
+            ]),
+          ).toEqual(before);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test.provider(
+    "refuses ambiguous mixed binding-cycle GC resumption",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = (revision: string, bound: boolean) =>
+          Effect.gen(function* () {
+            const b = yield* BindingTarget("B", {});
+            const a = yield* BindingTarget("A", {
+              replaceString: revision,
+              string: bound ? b.name : undefined,
+            });
+            if (bound) yield* b.bind("A", { env: { A: a.name } });
+          });
+        yield* stack.deploy(program("1", true));
+        const failed = yield* stack.deploy(program("2", true)).pipe(
+          Effect.provideService(TestResourceHooks, {
+            delete: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(failed));
+        const before = yield* Effect.all([getState("A"), getState("B")]);
+        const a = before[0];
+        assert(a.status === "replaced");
+        expect(a.bindings).toEqual([]);
+        expect(a.old.bindings).toEqual([]);
+        expect(a.downstream).toEqual([]);
+        expect(a.old.downstream).toEqual([]);
+        const calls: string[] = [];
+        const track = (id: string) =>
+          Effect.sync(() => {
+            calls.push(id);
+          });
+        const exit = yield* stack
+          .deploy(program("2", false), { targets: ["A"] })
+          .pipe(
+            Effect.provideService(TestResourceHooks, {
+              create: track,
+              update: track,
+              delete: track,
+            }),
+            Effect.exit,
+          );
+        assert(Exit.isFailure(exit));
+        expect(Cause.pretty(exit.cause)).toContain("Historical binding-cycle");
+        expect(calls).toEqual([]);
+        expect(yield* Effect.all([getState("A"), getState("B")])).toEqual(
+          before,
+        );
+        yield* stack.destroy();
+      }),
+  );
+
+  for (const intermediate of ["Action", "Resource"] as const) {
+    for (const declaredConsumer of [true, false]) {
+      for (const resume of [false, true]) {
+        test.provider(
+          `refuses transitive ${intermediate} boundary (declared=${declaredConsumer}, resume=${resume})`,
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              let runs = 0;
+              const Compute = Action("Middle", (input: { value: string }) =>
+                Effect.sync(() => {
+                  runs++;
+                  return input;
+                }),
+              );
+              const program = (revision: string, consumer = true) =>
+                Effect.gen(function* () {
+                  const a = yield* TestResource("A", {
+                    string: revision,
+                    replaceString: revision,
+                  });
+                  const value =
+                    intermediate === "Action"
+                      ? (yield* Compute({ value: a.string })).value
+                      : (yield* TestResource("Middle", { string: a.string }))
+                          .string;
+                  if (consumer) yield* TestResource("B", { string: value });
+                });
+              yield* stack.deploy(program("1"));
+              if (resume) {
+                const interrupted = yield* stack.deploy(program("2")).pipe(
+                  Effect.provideService(TestResourceHooks, {
+                    delete: () => Effect.fail(new ResourceFailure()),
+                  }),
+                  Effect.exit,
+                );
+                assert(Exit.isFailure(interrupted));
+                expect((yield* getState("A")).status).toBe("replaced");
+              }
+              const before = yield* Effect.all([
+                getState("A"),
+                getState("Middle"),
+                getState("B"),
+              ]);
+              const runsBefore = runs;
+              const calls: string[] = [];
+              const track = (id: string) =>
+                Effect.sync(() => {
+                  calls.push(id);
+                });
+              const exit = yield* stack
+                .deploy(program("2", declaredConsumer), {
+                  targets: ["Middle"],
+                })
+                .pipe(
+                  Effect.provideService(TestResourceHooks, {
+                    create: track,
+                    update: track,
+                    delete: track,
+                  }),
+                  Effect.exit,
+                );
+              assert(Exit.isFailure(exit));
+              expect(Cause.pretty(exit.cause)).toContain(
+                "UnsafeTargetBoundary",
+              );
+              expect(Cause.pretty(exit.cause)).toContain("B");
+              expect(calls).toEqual([]);
+              expect(runs).toBe(runsBefore);
+              expect(
+                yield* Effect.all([
+                  getState("A"),
+                  getState("Middle"),
+                  getState("B"),
+                ]),
+              ).toEqual(before);
+              yield* stack.destroy();
+            }),
+        );
+      }
+    }
+  }
+
+  for (const history of [
+    "partial removal",
+    "selected updating",
+    "unselected updating",
+    "unselected replacing",
+    "unselected replaced",
+    "mixed cycle",
+  ] as const) {
+    test.provider(
+      `refuses ambiguous historical bindings after ${history}`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (bound: boolean, aRevision = "1", bRevision = "1") =>
+            Effect.gen(function* () {
+              const b = yield* BindingTarget("B", { replaceString: bRevision });
+              const a = yield* BindingTarget("A", {
+                replaceString: aRevision,
+                string: bound && history === "mixed cycle" ? b.name : undefined,
+              });
+              if (bound) {
+                if (history !== "mixed cycle")
+                  yield* a.bind("B", { env: { B: b.name } });
+                yield* b.bind("A", { env: { A: a.name } });
+              }
+            });
+          yield* stack.deploy(program(true));
+          if (history === "selected updating") {
+            yield* stack.deploy(program(false), { targets: ["B"] });
+            const failed = yield* stack.deploy(program(false)).pipe(
+              Effect.provideService(TestResourceHooks, {
+                update: () => Effect.fail(new ResourceFailure()),
+              }),
+              Effect.exit,
+            );
+            assert(Exit.isFailure(failed));
+            const a = yield* getState("A");
+            assert(a.status === "updating");
+            expect(a.bindings).toEqual([]);
+            expect(a.old.bindings.length).toBeGreaterThan(0);
+            expect((yield* getState("B")).bindings).toEqual([]);
+          } else if (history !== "mixed cycle") {
+            yield* stack.deploy(program(false), { targets: ["A"] });
+            expect((yield* getState("A")).bindings).toEqual([]);
+            if (history === "unselected updating") {
+              const failed = yield* stack.deploy(program(false)).pipe(
+                Effect.provideService(TestResourceHooks, {
+                  update: () => Effect.fail(new ResourceFailure()),
+                }),
+                Effect.exit,
+              );
+              assert(Exit.isFailure(failed));
+              const b = yield* getState("B");
+              assert(b.status === "updating");
+              expect(b.bindings).toEqual([]);
+              expect(b.old.bindings.length).toBeGreaterThan(0);
+            } else if (
+              history === "unselected replacing" ||
+              history === "unselected replaced"
+            ) {
+              const failed = yield* stack
+                .deploy(program(false, "1", "2"))
+                .pipe(
+                  Effect.provideService(
+                    TestResourceHooks,
+                    history === "unselected replacing"
+                      ? { create: () => Effect.fail(new ResourceFailure()) }
+                      : { delete: () => Effect.fail(new ResourceFailure()) },
+                  ),
+                  Effect.exit,
+                );
+              assert(Exit.isFailure(failed));
+              const b = yield* getState("B");
+              assert(b.status === "replacing" || b.status === "replaced");
+              expect(b.status).toBe(
+                history === "unselected replacing" ? "replacing" : "replaced",
+              );
+              expect(b.bindings).toEqual([]);
+              expect(b.old.bindings.length).toBeGreaterThan(0);
+            }
+          }
+          const before = yield* Effect.all([getState("A"), getState("B")]);
+          expect(before[0].bindings).toEqual([]);
+          const calls: string[] = [];
+          const track = (id: string) =>
+            Effect.sync(() => {
+              calls.push(id);
+            });
+          const exit = yield* stack
+            .deploy(program(false, "2"), { targets: ["A"] })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(exit));
+          expect(Cause.pretty(exit.cause)).toContain(
+            "Historical binding-cycle",
+          );
+          expect(calls).toEqual([]);
+          expect(yield* Effect.all([getState("A"), getState("B")])).toEqual(
+            before,
+          );
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  for (const replacement of [false, true]) {
+    test.provider(
+      `refuses Action collision with persisted resource (replacement=${replacement})`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(TestResource("X", { replaceString: "1" }));
+          if (replacement) {
+            const failed = yield* stack
+              .deploy(TestResource("X", { replaceString: "2" }))
+              .pipe(
+                Effect.provideService(TestResourceHooks, {
+                  delete: () => Effect.fail(new ResourceFailure()),
+                }),
+                Effect.exit,
+              );
+            assert(Exit.isFailure(failed));
+            expect((yield* getState("X")).status).toBe("replaced");
+          }
+          const before = yield* getState("X");
+          let runs = 0;
+          const Compute = Action("X", (_: {}) =>
+            Effect.sync(() => {
+              runs++;
+            }),
+          );
+          const calls: string[] = [];
+          const track = (id: string) =>
+            Effect.sync(() => {
+              calls.push(id);
+            });
+          const exit = yield* stack
+            .deploy(Compute({}), { targets: ["X"] })
+            .pipe(
+              Effect.provideService(TestResourceHooks, {
+                create: track,
+                update: track,
+                delete: track,
+              }),
+              Effect.exit,
+            );
+          assert(Exit.isFailure(exit));
+          expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+          expect(Cause.pretty(exit.cause)).toContain("persisted resource");
+          expect(runs).toBe(0);
+          expect(calls).toEqual([]);
+          expect(yield* getState("X")).toEqual(before);
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test.provider(
+    "refuses targeted mode switch after interrupted live destruction",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const program = ModalResource("Worker", { value: "live" });
+        yield* stack.deploy(program);
+        const failed = yield* stack.destroy().pipe(
+          Effect.provideService(TestResourceHooks, {
+            delete: () => Effect.fail(new ResourceFailure()),
+          }),
+          Effect.exit,
+        );
+        assert(Exit.isFailure(failed));
+        const before = yield* getState("Worker");
+        expect(before.status).toBe("deleting");
+        expect(before.providerMode).toBe("live");
+        const callsBefore = modalCalls.filter(
+          (call) => call.stack === stack.name,
+        );
+        const exit = yield* inDev(
+          stack.deploy(program, { targets: ["Worker"] }),
+        ).pipe(Effect.exit);
+        assert(Exit.isFailure(exit));
+        expect(Cause.pretty(exit.cause)).toContain("UnsafeTargetBoundary");
+        expect(Cause.pretty(exit.cause)).toContain("recorded 'live' mode");
+        expect(yield* getState("Worker")).toEqual(before);
+        expect(modalCalls.filter((call) => call.stack === stack.name)).toEqual(
+          callsBefore,
+        );
+        yield* inDev(stack.destroy());
+        expect(
+          modalCalls
+            .filter((call) => call.stack === stack.name)
+            .slice(callsBefore.length),
+        ).toEqual([
+          { stack: stack.name, mode: "live", op: "delete", id: "Worker" },
+        ]);
+        expect(yield* getState("Worker")).toBeUndefined();
+        yield* inDev(stack.deploy(program, { targets: ["Worker"] }));
+        expect((yield* getState("Worker")).providerMode).toBe("local");
+        yield* stack.destroy();
+      }),
+  );
+});
+
+describe("noop stable readiness", () => {
+  test.provider(
+    "publishes noop resource output before waking captured Action consumers",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        let runs = 0;
+        const program = (revision: number) =>
+          Effect.gen(function* () {
+            const source = yield* TestResource("Source", {
+              string: "ready",
+            }).pipe(RemovalPolicy.retain(revision > 1));
+            const Compute = Action(
+              "Compute",
+              Effect.gen(function* () {
+                const value = yield* source.string;
+                return (_: { revision: number }) =>
+                  Effect.gen(function* () {
+                    const resolved = yield* value;
+                    runs++;
+                    return { value: resolved };
+                  });
+              }),
+            );
+            const result = yield* Compute({ revision });
+            return result.value;
+          });
+        expect(yield* stack.deploy(program(1))).toBe("ready");
+        const plan = yield* stack.plan(program(2));
+        expect(plan.resources.Source.action).toBe("noop");
+        expect(plan.actions.Compute.action).toBe("run");
+        // The policy note holds the noop until the Action reports pending.
+        // One cooperative yield lets it await readyStable before publication;
+        // Deferred completion then resumes the waiting consumer synchronously.
+        const pending = yield* Deferred.make<void>();
+        expect(
+          yield* apply(plan, {
+            session: {
+              done: () => Effect.void,
+              emit: (event) => {
+                if (
+                  event._tag === "apply.resource.status" &&
+                  event.id === "Compute" &&
+                  event.status === "pending"
+                ) {
+                  return Deferred.succeed(pending, undefined).pipe(
+                    Effect.asVoid,
+                  );
+                }
+                if (
+                  event._tag === "apply.resource.note" &&
+                  event.id === "Source"
+                ) {
+                  return Deferred.await(pending).pipe(
+                    Effect.andThen(Effect.yieldNow),
+                  );
+                }
+                return Effect.void;
+              },
+            },
+          }),
+        ).toBe("ready");
+        expect(runs).toBe(2);
+        expect(yield* stack.deploy(program(2))).toBe("ready");
+        expect(runs).toBe(2);
+        yield* stack.destroy();
       }),
   );
 });

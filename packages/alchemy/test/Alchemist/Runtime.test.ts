@@ -38,4 +38,22 @@ describe("Alchemist runtime", () => {
 
     expect(Effect.isEffect(deploy)).toBe(true);
   });
+
+  test("targeted apply exposes no stack output", () => {
+    type Module = {
+      readonly default: Effect.Effect<{
+        readonly output: { readonly url: string };
+      }>;
+    };
+    const deploy = Effect.gen(function* () {
+      const snapshot = yield* Alchemist.Stack.plan<Module>({
+        operation: "deploy",
+        target: { entrypoint: "./alchemy.run.ts", stage: "prod" },
+        targets: ["Branch"],
+      });
+      const output: undefined = yield* Alchemist.Stack.apply(snapshot);
+      return output;
+    });
+    expect(Effect.isEffect(deploy)).toBe(true);
+  });
 });

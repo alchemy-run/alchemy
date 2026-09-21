@@ -104,6 +104,35 @@ export const force = Flag.Boolean("force").pipe(
   Flag.withDefault(false),
 );
 
+/** Repeatable, comma-separated selectors; empty entries reach planner validation. */
+export const targets = Flag.String("target").pipe(
+  Flag.withDescription(
+    "Reconcile exact FQNs or unambiguous logical IDs and their dependencies (comma-separated, repeatable). Leaves other rows and stack outputs untouched; the whole stack declaration still runs.",
+  ),
+  Flag.atLeast(0),
+  Flag.map((values) =>
+    values.length === 0
+      ? undefined
+      : values.flatMap((value) =>
+          value.split(",").map((selector) => selector.trim()),
+        ),
+  ),
+);
+
+export const validateTargetOptions = (options: {
+  readonly targets?: ReadonlyArray<string>;
+  readonly destroy?: boolean;
+  readonly detectDrift?: boolean;
+}) =>
+  options.targets !== undefined && (options.destroy || options.detectDrift)
+    ? Effect.fail(
+        new UserInputError({
+          message:
+            "--target cannot be combined with destroy or --detect-drift.",
+        }),
+      )
+    : Effect.void;
+
 export const config = Flag.File("config", { mustExist: true }).pipe(
   Flag.withDescription("Alchemy entrypoint file (default: alchemy.run.ts)"),
   Flag.withAlias("c"),

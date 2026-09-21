@@ -86,6 +86,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
     target,
     operation: "deploy",
     force: options.force,
+    targets: options.targets,
     updateStateStore: true,
     dev: true,
   }).pipe(renderPlanning({ operation: "Dev", stage: options.stage }));

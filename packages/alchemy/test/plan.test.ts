@@ -10,7 +10,8 @@ import { UnsatisfiedResourceCycle } from "@/Plan";
 import { remote } from "@/ProviderMode.ts";
 import { renamedFrom } from "@/Rename.ts";
 import { Progress, type ProgressEvent } from "@/Report.ts";
-import type { ResourceBinding } from "@/Resource";
+import { Resource, type ResourceBinding } from "@/Resource";
+import { AuthProviders } from "@/Auth/AuthProvider.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { hashInput } from "@/Util/sha256";
@@ -89,7 +90,7 @@ const instanceId = "852f6ec2e19b66589825efe14dca2971";
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
   options?: Plan.MakePlanOptions,
-): Effect.Effect<Plan.Plan<A>, Err, State> =>
+): Effect.Effect<Plan.Plan<A | undefined>, Err, State> =>
   // @ts-expect-error - Stack.make's typing erases R unsoundly here
   Effect.gen(function* () {
     const { name, stage } = yield* resolveStackId;
@@ -5621,6 +5622,359 @@ describe("renamed resources (renamedFrom)", () => {
         const die = exit.cause.reasons.find(Cause.isDieReason);
         expect(String(die?.defect)).toContain("both claim former FQN 'Shared'");
       }
+    }),
+  );
+});
+
+describe("targeted planning", () => {
+  for (const keeper of ["new", "unbound", "bound"] as const) {
+    test.provider(
+      `requires durable binding evidence from a ${keeper} keeper`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (clear: boolean) =>
+            Effect.gen(function* () {
+              const a = yield* BindingTarget("A", {});
+              const middle = yield* BindingTarget("Middle", {});
+              if (!clear) {
+                yield* a.bind("Middle", { env: { MIDDLE: middle.name } });
+                yield* middle.bind("A", { env: { SOURCE: a.string } });
+              }
+              if (clear || keeper !== "new") {
+                const keep = yield* BindingTarget("Keeper", {
+                  string: clear ? "new" : "old",
+                });
+                if (clear || keeper === "bound")
+                  yield* keep.bind("constant", { env: { VALUE: "kept" } });
+              }
+              yield* TestResource("B", {});
+            });
+          yield* stack.deploy(program(false));
+          const result = yield* stack
+            .plan(program(true), { targets: ["A", "Middle", "Keeper"] })
+            .pipe(Effect.exit);
+          if (keeper === "bound") {
+            if (Exit.isFailure(result))
+              return yield* Effect.failCause(result.cause);
+            expect(result.value.resources.Keeper.action).toBe("update");
+          } else {
+            expect(Exit.isFailure(result)).toBe(true);
+            if (Exit.isFailure(result))
+              expect(Cause.pretty(result.cause)).toContain(
+                "last historical binding evidence",
+              );
+          }
+          yield* stack.plan(program(true));
+          yield* stack.plan(program(true), {
+            targets: ["A", "Middle", "Keeper", "B"],
+          });
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  for (const incomplete of [
+    "resource",
+    "action",
+    "updating history",
+  ] as const) {
+    test.provider(
+      `refuses targeted reconciliation of incomplete ${incomplete} metadata`,
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const Compute = Action("A", (input: { value: string }) =>
+            Effect.succeed(input.value),
+          );
+          const program = (value: string) =>
+            Effect.gen(function* () {
+              if (incomplete === "action") yield* Compute({ value });
+              else yield* TestResource("A", { string: value });
+              yield* TestResource("B", {});
+            });
+          yield* stack.deploy(program("old"));
+          if (incomplete === "updating history") {
+            yield* stack.deploy(program("new")).pipe(
+              Effect.provideService(TestResourceHooks, {
+                update: () => Effect.die("interrupted update"),
+              }),
+              Effect.exit,
+            );
+          }
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: stack.stage, fqn: "A" };
+          const row = yield* state.get(key);
+          if (!row) return yield* Effect.die("Expected persisted A");
+          const legacy = { ...row };
+          if (incomplete === "updating history") {
+            if (legacy.kind === "action" || legacy.status !== "updating")
+              return yield* Effect.die("Expected interrupted A update");
+            const old = { ...legacy.old };
+            legacy.old = old;
+            yield* Effect.sync(() => Reflect.deleteProperty(old, "downstream"));
+          } else
+            yield* Effect.sync(() =>
+              Reflect.deleteProperty(legacy, "downstream"),
+            );
+          yield* state.set({ ...key, value: legacy });
+          const result = yield* stack
+            .plan(program("new"), { targets: ["A"], force: true })
+            .pipe(Effect.exit);
+          expect(Exit.isFailure(result)).toBe(true);
+          if (Exit.isFailure(result))
+            expect(Cause.pretty(result.cause)).toContain(
+              "incomplete historical downstream metadata",
+            );
+          expect(yield* state.get(key)).toEqual(legacy);
+          yield* stack.plan(program("new"), { targets: ["A", "B"] });
+          yield* stack.plan(program("new"));
+          yield* stack.plan(program("new"), { targets: ["B"], force: true });
+          yield* stack.deploy(program("new"), { force: true });
+          yield* stack.destroy();
+        }),
+    );
+  }
+
+  test(
+    "preserves exact direct and higher-order plan output types",
+    Effect.sync(() => {
+      type Equal<A, B> =
+        (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+          ? true
+          : false;
+      type Output = { value: string };
+      const stack: Stack.StackSpec<Output> = {
+        name: "Inference",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+        output: { value: "value" },
+      };
+      const direct = Plan.make(stack);
+      const piped = Effect.succeed(stack).pipe(Effect.flatMap(Plan.make));
+      const forced = Plan.make(stack, { force: true });
+      const explicit = Plan.make<Output>(stack, { force: true });
+      const targeted = Plan.make(stack, { targets: ["Selected"] });
+      const optional = (options: Plan.MakePlanOptions) =>
+        Plan.make(stack, options);
+      const optionalArgument = (options?: Plan.MakePlanOptions) =>
+        Plan.make(stack, options);
+      const assertions: [
+        Equal<Effect.Success<typeof direct>["output"], Output>,
+        Equal<Effect.Success<typeof piped>["output"], Output>,
+        Equal<Effect.Success<typeof forced>["output"], Output>,
+        Equal<Effect.Success<typeof explicit>["output"], Output>,
+        Equal<Effect.Success<typeof targeted>["output"], undefined>,
+        Equal<
+          Effect.Success<ReturnType<typeof optional>>["output"],
+          Output | undefined
+        >,
+        Equal<
+          Effect.Success<ReturnType<typeof optionalArgument>>["output"],
+          Output | undefined
+        >,
+      ] = [true, true, true, true, true, true, true];
+      expect(assertions.every(Boolean)).toBe(true);
+    }),
+  );
+
+  const namespaced = Effect.gen(function* () {
+    yield* TestResource("Branch", {}).pipe(Namespace.push("One"));
+    yield* TestResource("Branch", {}).pipe(Namespace.push("Two"));
+    yield* TestResource("Password", {});
+  });
+
+  for (const targets of [[], [""], [" "], ["Missing"], ["Branch"]]) {
+    test(
+      `rejects invalid selectors ${JSON.stringify(targets)} before provider reads`,
+      Effect.gen(function* () {
+        const reads: string[] = [];
+        const exit = yield* makePlan(namespaced, { targets }).pipe(
+          Effect.provideService(TestResourceHooks, {
+            read: (id) =>
+              Effect.sync(() => {
+                reads.push(id);
+                return undefined;
+              }),
+          }),
+          Effect.exit,
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const message = Cause.pretty(exit.cause);
+          expect(message).toContain("InvalidTargets");
+          expect(message).toContain("One/Branch");
+          expect(message).toContain("Two/Branch");
+          expect(message).toContain("Password");
+        }
+        expect(reads).toEqual([]);
+      }),
+    );
+  }
+
+  test(
+    "accepts exact FQNs and deduplicates selectors",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(namespaced, {
+        targets: ["One/Branch", "Password", "One/Branch"],
+      });
+      expect(Object.keys(plan.resources).sort()).toEqual([
+        "One/Branch",
+        "Password",
+      ]);
+      expect(plan.output).toBeUndefined();
+      expect(plan.deletions).toEqual({});
+    }),
+  );
+
+  test(
+    "does not resolve unselected missing providers or remote credential demands",
+    Effect.gen(function* () {
+      interface Missing extends Resource<
+        "Missing.Provider",
+        {},
+        { value: string }
+      > {}
+      const Missing = Resource<Missing>("Missing.Provider");
+      const program = Effect.gen(function* () {
+        yield* Missing("Missing", {});
+        yield* ModalResource("Remote", { value: "remote" }).pipe(remote());
+        yield* TestResource("Selected", {});
+      });
+      const auth = {
+        get Test(): never {
+          throw new Error("unselected credentials demanded");
+        },
+      };
+      const plan = yield* inDev(
+        makePlan(program, { targets: ["Selected"] }),
+      ).pipe(Effect.provideService(AuthProviders, auth));
+      expect(Object.keys(plan.resources)).toEqual(["Selected"]);
+      const demanded = yield* inDev(
+        makePlan(ModalResource("Remote", { value: "remote" }).pipe(remote())),
+      ).pipe(Effect.provideService(AuthProviders, auth), Effect.exit);
+      expect(Exit.isFailure(demanded)).toBe(true);
+      if (Exit.isFailure(demanded)) {
+        expect(Cause.pretty(demanded.cause)).toContain(
+          "unselected credentials demanded",
+        );
+      }
+    }),
+  );
+
+  test(
+    "closes resource props, binding, Action input and captured dependencies",
+    Effect.gen(function* () {
+      const program = Effect.gen(function* () {
+        const source = yield* TestResource("Source", {});
+        const captured = yield* TestResource("Captured", {});
+        const Compute = Action(
+          "Compute",
+          Effect.gen(function* () {
+            const value = yield* captured.string;
+            return (input: { source: string }) =>
+              Effect.map(value, (resolved) => ({
+                value: `${input.source}:${resolved}`,
+              }));
+          }),
+        );
+        const result = yield* Compute({ source: source.string });
+        const host = yield* BindingTarget("Host", {});
+        yield* host.bind("Result", { env: { RESULT: result.value } });
+        const consumer = yield* TestResource("Consumer", {
+          string: host.string,
+        });
+        yield* TestResource("Unselected", {});
+        return consumer.string;
+      });
+      const plan = yield* makePlan(program, { targets: ["Consumer"] });
+      expect(Object.keys(plan.resources).sort()).toEqual([
+        "Captured",
+        "Consumer",
+        "Host",
+        "Source",
+      ]);
+      expect(Object.keys(plan.actions)).toEqual(["Compute"]);
+      expect([...plan.targetFqns!].sort()).toEqual([
+        "Captured",
+        "Compute",
+        "Consumer",
+        "Host",
+        "Source",
+      ]);
+    }),
+  );
+
+  test(
+    "closes binding cycles without selecting unrelated nodes",
+    Effect.gen(function* () {
+      const plan = yield* makePlan(
+        Effect.gen(function* () {
+          const a = yield* BindingTarget("A", {});
+          const b = yield* BindingTarget("B", {});
+          yield* a.bind("B", { env: { B: b.name } });
+          yield* b.bind("A", { env: { A: a.name } });
+          yield* TestResource("Other", {});
+        }),
+        { targets: ["A"] },
+      );
+      expect(Object.keys(plan.resources).sort()).toEqual(["A", "B"]);
+      expect([...plan.cycleMembers].sort()).toEqual(["A", "B"]);
+    }),
+  );
+
+  test(
+    "does not diff or adopt an unselected resource",
+    Effect.gen(function* () {
+      yield* seed({
+        BadDiff: {
+          status: "created",
+          fqn: "BadDiff",
+          logicalId: "BadDiff",
+          namespace: undefined,
+          instanceId,
+          providerVersion: 0,
+          resourceType: "Test.BindingTarget",
+          props: {},
+          attr: { name: "BadDiff", string: "BadDiff", env: {} },
+          bindings: [],
+          downstream: [],
+        },
+        Undeclared: {
+          status: "created",
+          fqn: "Undeclared",
+          logicalId: "Undeclared",
+          namespace: undefined,
+          instanceId,
+          providerVersion: 0,
+          resourceType: "Missing.Provider",
+          props: {},
+          attr: {},
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const calls: string[] = [];
+      const program = Effect.gen(function* () {
+        yield* BindingTarget("BadDiff", {});
+        yield* TestResource("BadRead", {});
+        yield* TestResource("Selected", {});
+      });
+      yield* makePlan(program, { targets: ["Selected"] }).pipe(
+        Effect.provideService(TestResourceHooks, {
+          diff: () => Effect.die("unselected diff"),
+          read: (id) =>
+            id === "BadRead"
+              ? Effect.die("unselected adoption")
+              : Effect.sync(() => {
+                  calls.push(id);
+                  return undefined;
+                }),
+        }),
+      );
+      expect(calls).toEqual(["Selected"]);
     }),
   );
 });

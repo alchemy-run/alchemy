@@ -12,6 +12,8 @@ export interface PlanInput {
   readonly target: StackTarget;
   readonly operation: "deploy" | "destroy";
   readonly force?: boolean;
+  /** Select nodes and dependencies; declaration still runs, stack outputs are preserved. */
+  readonly targets?: ReadonlyArray<string>;
   readonly adopt?: boolean;
   readonly updateStateStore?: boolean;
   /** Run local (emulated) providers instead of the real cloud. */
@@ -84,43 +86,72 @@ export const summarize = (plan: Plan.Plan): PlanSummary => {
   return summary;
 };
 
+type PlanResult<Output> = Effect.Effect<
+  PlanSnapshot<Output>,
+  Effect.Error<ReturnType<typeof planStack>>,
+  Effect.Services<ReturnType<typeof planStack>>
+>;
+
 /**
  * Import the stack, resolve its services, and compute a deploy or destroy
  * plan. Planning phases are reported through {@link Progress}; the returned
- * snapshot is what {@link apply} executes.
+ * snapshot is what {@link apply} executes. Targeted deploys preserve stack
+ * outputs and return void; the entire declaration still evaluates.
  */
-export const plan = Effect.fn("Alchemist.stack.plan")(function* <
-  Module = unknown,
->(input: PlanInput) {
-  type Output = StackModuleOutput<Module>;
-  const report = withSpanEvents(yield* Progress);
+export function plan<Module = unknown>(
+  input: PlanInput & { targets: ReadonlyArray<string> },
+): PlanResult<undefined>;
+export function plan<Module = unknown>(
+  input: PlanInput & { targets?: undefined },
+): PlanResult<StackModuleOutput<Module>>;
+export function plan<Module = unknown>(
+  input: PlanInput,
+): PlanResult<StackModuleOutput<Module> | undefined>;
+export function plan<Module = unknown>(input: PlanInput) {
+  return planStack<Module>(input);
+}
 
-  // Everything below emits into the same flat ProgressEvent channel:
-  // `open` reports importing-module / resolving-services at the real work
-  // boundaries, the engine reports loading-state / computing-plan and the
-  // per-node diff events. Re-providing the wrapped reporter is all the
-  // route does — no translation layer.
-  const session = yield* open(input.target, input).pipe(
-    Effect.provideService(Progress, report),
-  );
-  const native = (yield* (
-    input.operation === "destroy"
-      ? Plan.destroy(session.stack)
-      : Plan.make(session.stack, { force: input.force })
-  ).pipe(
-    Effect.provideService(Progress, report),
-    Effect.provide(session.context),
-  )) as Plan.Plan<Output>;
-  yield* report({ _tag: "plan.phase", phase: "plan-ready" });
-  return {
-    stack: { name: session.stack.name, stage: session.stack.stage },
-    summary: summarize(native),
-    ...Plan.describePlan(native),
-    native,
-    createdAt: new Date(yield* Clock.currentTimeMillis),
-    session,
-  } satisfies PlanSnapshot<Output>;
-});
+const planStack = <Module = unknown>(input: PlanInput) =>
+  Effect.gen(function* () {
+    type Output = StackModuleOutput<Module> | undefined;
+    if (input.operation === "destroy" && input.targets !== undefined) {
+      return yield* Effect.die(
+        new Plan.InvalidTargets({
+          message: "Targeted destroy is not supported.",
+        }),
+      );
+    }
+    const report = withSpanEvents(yield* Progress);
+
+    // Everything below emits into the same flat ProgressEvent channel:
+    // `open` reports importing-module / resolving-services at the real work
+    // boundaries, the engine reports loading-state / computing-plan and the
+    // per-node diff events. Re-providing the wrapped reporter is all the
+    // route does — no translation layer.
+    const session = yield* open(input.target, input).pipe(
+      Effect.provideService(Progress, report),
+    );
+    const native = (yield* (
+      input.operation === "destroy"
+        ? Plan.destroy(session.stack)
+        : Plan.make(session.stack, {
+            force: input.force,
+            targets: input.targets,
+          })
+    ).pipe(
+      Effect.provideService(Progress, report),
+      Effect.provide(session.context),
+    )) as Plan.Plan<Output>;
+    yield* report({ _tag: "plan.phase", phase: "plan-ready" });
+    return {
+      stack: { name: session.stack.name, stage: session.stack.stage },
+      summary: summarize(native),
+      ...Plan.describePlan(native),
+      native,
+      createdAt: new Date(yield* Clock.currentTimeMillis),
+      session,
+    } satisfies PlanSnapshot<Output>;
+  }).pipe(Effect.withSpan("Alchemist.stack.plan"));
 
 /**
  * Apply a computed plan. Engine apply events are reported through

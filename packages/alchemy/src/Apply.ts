@@ -331,7 +331,7 @@ export const apply = <P extends Plan>(
         return undefined;
       }
 
-      if (!plan.output) {
+      if (plan.targetFqns !== undefined || !plan.output) {
         return undefined;
       }
 
@@ -749,13 +749,13 @@ const executeNode = (
           `removal policy ${node.state.removalPolicy} → ${node.resource.RemovalPolicy}`,
         );
       }
-      yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
         props: node.state.props,
         bindings: node.state.bindings ?? [],
         instanceId: node.state.instanceId,
       });
+      yield* signalReadyStable;
       return;
     }
 
@@ -1584,6 +1584,12 @@ const executeActionNode = (
 
     const skip = (state: RanActionState) =>
       Effect.gen(function* () {
+        if (!sameSet(state.downstream ?? [], node.downstream)) {
+          yield* commit<RanActionState>({
+            ...state,
+            downstream: node.downstream,
+          });
+        }
         tracker[fqn] = {
           output: state.output,
           props: { __input: state.input },
@@ -2474,7 +2480,11 @@ const collectGarbage = Effect.fn(function* (
     const remainingReplacedResources = (yield* state.getReplacedResources({
       stack: stackName,
       stage,
-    })).filter((replaced) => !unresolved.has(replaced.fqn));
+    })).filter(
+      (replaced) =>
+        !unresolved.has(replaced.fqn) &&
+        (plan.targetFqns === undefined || plan.targetFqns.has(replaced.fqn)),
+    );
     const deletionGraph: Record<
       string,
       Delete | ReplacementResourceState | undefined
