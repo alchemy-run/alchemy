@@ -38,6 +38,7 @@ import {
   rawS3GetBucket,
   regionOfArn,
 } from "./fixtures/raw.ts";
+import { liveContext } from "./fixtures/live.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -275,11 +276,12 @@ test.provider.skipIf(!dockerAvailable)(
       expect((yield* getState("MixedLocalParam"))?.providerMode).toBe("local");
       expect((yield* getState("MixedLiveParam"))?.providerMode).toBe("live");
 
-      // Out-of-band: the ambient (testing-profile) distilled client reads
-      // the real cloud — the remote() parameter must be there with its value.
+      // Out-of-band: read the REAL cloud explicitly (the ambient
+      // environment in a dev run is the emulator) — the remote() parameter
+      // must be there with its value.
       const live = yield* SSM.getParameter({
         Name: outputs.liveParam.parameterName,
-      });
+      }).pipe(Effect.provide(liveContext));
       const liveValue = live.Parameter?.Value;
       expect(
         typeof liveValue === "string" ? liveValue : Redacted.value(liveValue!),
@@ -295,6 +297,7 @@ test.provider.skipIf(!dockerAvailable)(
       }).pipe(
         Effect.as(false),
         Effect.catchTag("ParameterNotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
       );
       expect(gone).toBe(true);
     }),

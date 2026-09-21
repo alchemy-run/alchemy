@@ -8,6 +8,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { retryWorkerScriptNotFound } from "./retry.ts";
 import type { Action } from "./Rule.ts";
 
 const CatchAllTypeId = "Cloudflare.Email.CatchAll" as const;
@@ -222,17 +223,19 @@ export const CatchAllProvider = () =>
       ) {
         return toAttributes(zoneId, observed, initial);
       }
-      const result = yield* emailRouting.putRuleCatchAll({
-        zoneId,
-        matchers: [{ type: "all" }],
-        actions: news.actions.map((a) =>
-          a.type === "drop"
-            ? { type: a.type }
-            : { type: a.type, value: a.value },
-        ),
-        enabled: desiredEnabled,
-        name: desiredName,
-      });
+      const result = yield* emailRouting
+        .putRuleCatchAll({
+          zoneId,
+          matchers: [{ type: "all" }],
+          actions: news.actions.map((a) =>
+            a.type === "drop"
+              ? { type: a.type }
+              : { type: a.type, value: a.value },
+          ),
+          enabled: desiredEnabled,
+          name: desiredName,
+        })
+        .pipe(retryWorkerScriptNotFound);
       return toAttributes(zoneId, result, initial);
     }),
 
@@ -266,19 +269,24 @@ export const CatchAllProvider = () =>
         })
         .pipe(
           Effect.catchTag("Forbidden", () => Effect.void),
-          // The original forward destination may have been unverified or
-          // removed since we captured it — fall back to the Cloudflare
-          // default (disabled, drop) rather than failing the destroy.
-          Effect.catchTag("DestinationNotVerified", () =>
-            emailRouting
-              .putRuleCatchAll({
-                zoneId,
-                matchers: [{ type: "all" }],
-                actions: [{ type: "drop" }],
-                enabled: false,
-                name: initialName,
-              })
-              .pipe(Effect.catchTag("Forbidden", () => Effect.void)),
+          // The captured action may name something that no longer exists:
+          // an unverified/removed destination address, or — after the
+          // Worker it pointed at was replaced or deleted — a missing
+          // script. Neither is retryable and neither should strand the
+          // destroy, so fall back to the Cloudflare default (disabled,
+          // drop) instead of failing.
+          Effect.catchTag(
+            ["DestinationNotVerified", "WorkerScriptNotFound"],
+            () =>
+              emailRouting
+                .putRuleCatchAll({
+                  zoneId,
+                  matchers: [{ type: "all" }],
+                  actions: [{ type: "drop" }],
+                  enabled: false,
+                  name: initialName,
+                })
+                .pipe(Effect.catchTag("Forbidden", () => Effect.void)),
           ),
         );
     }),

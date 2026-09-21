@@ -34,7 +34,7 @@ test(
     // No user data: the bootstrap script is sent as-is.
     const bootstrap = Hetzner.composeUserData(undefined);
     expect(bootstrap.startsWith("#!/bin/bash")).toBe(true);
-    expect(bootstrap).toContain("/root/.bun/bin/bun");
+    expect(bootstrap).toContain("setup_26.x");
 
     // A cloud-config document becomes the second part of a multipart
     // cloud-init document, behind the bootstrap script.
@@ -47,7 +47,7 @@ test(
     expect(composed).toContain("Content-Type: text/x-shellscript");
     expect(composed).toContain("Content-Type: text/cloud-config");
     expect(composed).toContain("  - nginx");
-    expect(composed.indexOf("/root/.bun/bin/bun")).toBeLessThan(
+    expect(composed.indexOf("setup_26.x")).toBeLessThan(
       composed.indexOf("#cloud-config"),
     );
 
@@ -133,7 +133,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(created.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -182,7 +182,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -216,7 +216,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(deployed.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 180_000, exclusive: true },
 );
 
 test.provider.skipIf(!hasHetznerCreds)(
@@ -248,12 +248,12 @@ test.provider.skipIf(!hasHetznerCreds)(
           : Redacted.value(server.privateKey);
 
       // Both cloud-init parts must have run: the user script (marker file)
-      // and Alchemy's bootstrap (bun). Probed as one command — the box is
+      // and Alchemy's bootstrap (Node 26). Probed as one command — the box is
       // still booting when the create action completes.
       const probe = yield* Effect.gen(function* () {
         const ssh = yield* Hetzner.openSshClient({ host, privateKey });
         const { stdout } = yield* ssh.exec(
-          "cat /etc/alchemy-init-marker && test -x /root/.bun/bin/bun && echo bun-ok",
+          "cat /etc/alchemy-init-marker && command -v node && echo node-ok",
         );
         return stdout;
       }).pipe(
@@ -262,7 +262,7 @@ test.provider.skipIf(!hasHetznerCreds)(
       );
 
       expect(probe).toContain("alchemy-init-ok");
-      expect(probe).toContain("bun-ok");
+      expect(probe).toContain("node-ok");
 
       // Cloud-init only runs on first boot, so a changed script replaces.
       const replaced = yield* stack.deploy(
@@ -289,5 +289,5 @@ test.provider.skipIf(!hasHetznerCreds)(
       const gone = yield* waitUntilGone(replaced.id);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 300_000, exclusive: true },
 );

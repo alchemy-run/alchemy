@@ -1,5 +1,4 @@
 import * as AWS from "@/AWS/index.ts";
-import { makeFunctionHttpHandler } from "@/AWS/Lambda/HttpServer.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -25,21 +24,16 @@ export default class ShutdownProbe extends AWS.Lambda.Function<ShutdownProbe>()(
     timeout: Duration.seconds(10),
   },
   Effect.gen(function* () {
-    const host = yield* AWS.Lambda.Function;
-    yield* host.listen(
-      Effect.gen(function* () {
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => console.log("ALCHEMY_INSTANCE_FINALIZED")),
-        );
-        return makeFunctionHttpHandler(
-          Effect.gen(function* () {
-            yield* Effect.addFinalizer(() =>
-              Effect.sync(() => console.log("ALCHEMY_REQUEST_FINALIZED")),
-            );
-            return HttpServerResponse.text("ok");
-          }),
-        );
-      }),
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => console.log("ALCHEMY_INSTANCE_FINALIZED")),
     );
+    return {
+      fetch: Effect.gen(function* () {
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => console.log("ALCHEMY_REQUEST_FINALIZED")),
+        );
+        return HttpServerResponse.text("ok");
+      }),
+    };
   }),
 ) {}

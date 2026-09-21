@@ -4,7 +4,7 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
-import { resolveLocalDataPlane } from "./Provider.ts";
+import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
 import { isResource, type ResourceLike } from "./Resource.ts";
 import { Self } from "./Self.ts";
 import { taggedFunction } from "./Util/effect.ts";
@@ -191,29 +191,69 @@ const routeClientDataPlane = (
           ? [arg]
           : [],
     );
+    // Account-scoped clients (no resource among the args) need no routing:
+    // the ambient environment is already mode-aware — a dev run's ambient IS
+    // the emulator (see AWS/Providers.ts), a deploy's is the live chain.
     if (resources.length === 0) return Effect.succeed(client);
     return Effect.gen(function* () {
-      const planes: (Layer.Layer<any, any, never> | undefined)[] = [];
+      const planes: DataPlaneResolution[] = [];
       for (const resource of resources) {
-        planes.push(yield* resolveLocalDataPlane(resource));
+        planes.push(yield* describeDataPlane(resource));
       }
-      const defined = [...new Set(planes.filter((p) => p !== undefined))];
-      if (defined.length === 0) return client;
-      if (defined.length > 1 || planes.some((p) => p === undefined)) {
-        return yield* Effect.die(
-          `Binding client spans mixed data planes: [${resources
-            .map((r) => r.FQN)
-            .join(
-              ", ",
-            )}] resolve to different targets (some local, some live). ` +
-            "A single API call cannot span the local emulator and the real " +
-            "cloud — make the bound resources' modes agree (e.g. pipe them " +
-            "all through Alchemy.remote(), or none).",
-        );
+      const local = [
+        ...new Set(
+          planes.flatMap((p) => (p.kind === "local" ? [p.layer] : [])),
+        ),
+      ];
+      if (local.length > 0) {
+        if (local.length > 1 || planes.some((p) => p.kind !== "local")) {
+          // Say exactly where each resource lands: a dual provider that never
+          // registered a data plane is the usual culprit, and it would
+          // otherwise read as "live" — the report that sent a user chasing a
+          // `remote()` they never wrote.
+          const where = resources
+            .map((r, i) => `${r.FQN} → ${describeResolution(planes[i]!)}`)
+            .join("; ");
+          return yield* Effect.die(
+            `Binding client spans mixed data planes: ${where}. A single API ` +
+              "call cannot span the local emulator and the real cloud. If a " +
+              "resource above is meant to be emulated, its provider must " +
+              "declare `dataPlane` on its ProviderLayer.dual registration; " +
+              "otherwise make the bound resources' modes agree (e.g. pipe them " +
+              "all through Alchemy.remote(), or none).",
+          );
+        }
+        return wrapClientInvocations(client, local[0]!);
       }
-      return wrapClientInvocations(client, defined[0]);
+      // Live-mode / `Alchemy.remote()`: ambient in a `dev` run is the
+      // emulator, so provide the registration-captured live environment
+      // closest (the inverse of the local wrap above).
+      const live = [
+        ...new Set(
+          planes.flatMap((p) =>
+            p.kind === "live" && p.layer !== undefined ? [p.layer] : [],
+          ),
+        ),
+      ];
+      if (live.length === 1) return wrapClientInvocations(client, live[0]!);
+      return client;
     });
   });
+
+const describeResolution = (plane: DataPlaneResolution): string => {
+  switch (plane.kind) {
+    case "local":
+      return "local emulator";
+    case "live":
+      return "real cloud (live mode)";
+    case "undeclared":
+      return `real cloud (its provider ${plane.providerType} is dual-mode but registers no local data plane)`;
+    case "agnostic":
+      return "real cloud (mode-agnostic provider)";
+    case "unregistered":
+      return "real cloud (no provider registered)";
+  }
+};
 
 /**
  * Wrap every invocation surface of a binding client so its returned Effects

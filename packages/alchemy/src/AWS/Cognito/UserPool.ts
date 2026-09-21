@@ -219,6 +219,47 @@ export interface UserPoolCustomEmailSender {
 }
 
 /**
+ * How the user pool delivers its email messages (verification codes, OTPs,
+ * invitations): either Cognito's built-in, rate-limited delivery
+ * (`COGNITO_DEFAULT`) or your own verified Amazon SES identity
+ * (`DEVELOPER`). With `DEVELOPER`, the SES identity's policy must grant
+ * `cognito-idp.amazonaws.com` permission to send
+ * (`SES.EmailIdentityPolicy`).
+ */
+export interface UserPoolEmailConfiguration {
+  /**
+   * Which sending account delivers the pool's email. `COGNITO_DEFAULT`
+   * uses Cognito's built-in delivery (limited daily volume);
+   * `DEVELOPER` sends through your own SES identity (`sourceArn`
+   * required) at your SES quota.
+   * @default "COGNITO_DEFAULT"
+   */
+  emailSendingAccount?: "COGNITO_DEFAULT" | "DEVELOPER";
+  /**
+   * ARN of a verified SES email identity (address or domain) in a
+   * supported region. Required when `emailSendingAccount` is `DEVELOPER`;
+   * with `COGNITO_DEFAULT` it customizes the FROM address while Cognito
+   * still handles delivery.
+   */
+  sourceArn?: string;
+  /**
+   * The FROM address, either bare (`no-reply@example.com`) or with a
+   * friendly display name (`"My App <no-reply@example.com>"`). Must be
+   * covered by the `sourceArn` identity.
+   */
+  from?: string;
+  /**
+   * The destination for replies to the pool's messages.
+   */
+  replyToEmailAddress?: string;
+  /**
+   * Name of an SES configuration set applied to email sent by the pool
+   * (event publishing, IP pool selection). `DEVELOPER` only.
+   */
+  configurationSet?: string;
+}
+
+/**
  * An account recovery mechanism with its priority (1 is highest).
  */
 export interface UserPoolRecoveryMechanism {
@@ -323,6 +364,14 @@ export interface UserPoolProps {
    */
   customEmailSender?: UserPoolCustomEmailSender;
   /**
+   * How the pool delivers its email messages: Cognito's built-in delivery
+   * (`COGNITO_DEFAULT`, the service default) or a verified SES identity
+   * (`DEVELOPER`) — no custom sender Lambda required. When omitted, an
+   * observed email configuration is preserved rather than reset to the
+   * service default.
+   */
+  emailConfiguration?: UserPoolEmailConfiguration;
+  /**
    * ARN of the symmetric KMS key Cognito uses to encrypt the codes it
    * passes to the custom sender function(s) (`LambdaConfig.KMSKeyID`).
    * The principal running the deploy must hold `kms:CreateGrant` on the
@@ -391,6 +440,38 @@ export interface UserPool extends Resource<
  *     { name: "tenantId", mutable: false },
  *     { name: "plan", attributeDataType: "String" },
  *   ],
+ * });
+ * ```
+ *
+ * ### Sending Email Through SES
+ * **Example:** OTP and Verification Email from a Verified SES Identity
+ * ```typescript
+ * const identity = yield* SES.EmailIdentity("Sender", {
+ *   emailIdentity: "mail.example.com",
+ * });
+ * // allow Cognito to send through the identity
+ * yield* SES.EmailIdentityPolicy("CognitoSend", {
+ *   emailIdentity: identity.emailIdentity,
+ *   policyName: "cognito",
+ *   policy: {
+ *     Version: "2012-10-17",
+ *     Statement: [{
+ *       Effect: "Allow",
+ *       Principal: { Service: "cognito-idp.amazonaws.com" },
+ *       Action: ["ses:SendEmail", "ses:SendRawEmail"],
+ *       Resource: identity.identityArn,
+ *     }],
+ *   },
+ * });
+ * const pool = yield* Cognito.UserPool("Users", {
+ *   usernameAttributes: ["email"],
+ *   autoVerifiedAttributes: ["email"],
+ *   emailConfiguration: {
+ *     emailSendingAccount: "DEVELOPER",
+ *     sourceArn: identity.identityArn,
+ *     from: "My App <no-reply@mail.example.com>",
+ *     replyToEmailAddress: "support@example.com",
+ *   },
  * });
  * ```
  *
@@ -485,6 +566,32 @@ const toWireSignInPolicy = (policy: UserPoolSignInPolicy | undefined) =>
     ? undefined
     : { AllowedFirstAuthFactors: policy.allowedFirstAuthFactors };
 
+const toWireEmailConfiguration = (
+  config: UserPoolEmailConfiguration | undefined,
+): cip.EmailConfigurationType | undefined =>
+  config === undefined
+    ? undefined
+    : {
+        EmailSendingAccount: config.emailSendingAccount ?? "COGNITO_DEFAULT",
+        SourceArn: config.sourceArn,
+        From: config.from,
+        ReplyToEmailAddress: config.replyToEmailAddress,
+        ConfigurationSet: config.configurationSet,
+      };
+
+/** Observed/desired email configuration with the service default filled in,
+ * for order- and absence-insensitive comparison (`JSON.stringify` drops the
+ * `undefined` members on both sides). */
+const normalizedEmailConfiguration = (
+  config: cip.EmailConfigurationType | undefined,
+) => ({
+  emailSendingAccount: config?.EmailSendingAccount ?? "COGNITO_DEFAULT",
+  sourceArn: config?.SourceArn,
+  from: config?.From,
+  replyToEmailAddress: config?.ReplyToEmailAddress,
+  configurationSet: config?.ConfigurationSet,
+});
+
 const toWireCustomEmailSender = (
   sender: UserPoolCustomEmailSender | undefined,
 ): cip.CustomEmailLambdaVersionConfigType | undefined =>
@@ -513,17 +620,25 @@ const validateProps = (props: UserPoolProps) =>
             "customEmailSender requires kmsKeyId — Cognito encrypts the codes it passes to the custom sender with that KMS key",
         }),
       )
-    : props.tier === "LITE" &&
-        (props.signInPolicy?.allowedFirstAuthFactors ?? []).some((factor) =>
-          PASSWORDLESS_AUTH_FACTORS.includes(factor),
-        )
+    : props.emailConfiguration?.emailSendingAccount === "DEVELOPER" &&
+        props.emailConfiguration.sourceArn === undefined
       ? Effect.fail(
           new InvalidUserPoolConfiguration({
             reason:
-              "passwordless first-auth factors (EMAIL_OTP / SMS_OTP / WEB_AUTHN) require the ESSENTIALS or PLUS tier, not LITE",
+              "emailConfiguration with emailSendingAccount DEVELOPER requires sourceArn — the ARN of the verified SES identity Cognito sends from",
           }),
         )
-      : Effect.void;
+      : props.tier === "LITE" &&
+          (props.signInPolicy?.allowedFirstAuthFactors ?? []).some((factor) =>
+            PASSWORDLESS_AUTH_FACTORS.includes(factor),
+          )
+        ? Effect.fail(
+            new InvalidUserPoolConfiguration({
+              reason:
+                "passwordless first-auth factors (EMAIL_OTP / SMS_OTP / WEB_AUTHN) require the ESSENTIALS or PLUS tier, not LITE",
+            }),
+          )
+        : Effect.void;
 
 const tagRecordOf = (
   tags: { [key: string]: string | undefined } | undefined,
@@ -709,6 +824,13 @@ export const UserPoolProvider = () =>
             : toWireSignInPolicy(news.signInPolicy);
         return {
           LambdaConfig: lambdaConfig,
+          // updateUserPool resets an omitted EmailConfiguration to the
+          // service default — echo the OBSERVED configuration back when the
+          // prop is undefined so unrelated updates never clear it.
+          EmailConfiguration:
+            news.emailConfiguration === undefined
+              ? observed.EmailConfiguration
+              : toWireEmailConfiguration(news.emailConfiguration),
           Policies:
             PasswordPolicy === undefined && SignInPolicy === undefined
               ? undefined
@@ -841,6 +963,19 @@ export const UserPoolProvider = () =>
         if (
           (news.mfaConfiguration ?? "OFF") !==
           (observed.MfaConfiguration ?? "OFF")
+        ) {
+          return true;
+        }
+        if (
+          news.emailConfiguration !== undefined &&
+          JSON.stringify(
+            normalizedEmailConfiguration(
+              toWireEmailConfiguration(news.emailConfiguration),
+            ),
+          ) !==
+            JSON.stringify(
+              normalizedEmailConfiguration(observed.EmailConfiguration),
+            )
         ) {
           return true;
         }
@@ -988,6 +1123,9 @@ export const UserPoolProvider = () =>
                 DeletionProtection: news.deletionProtection
                   ? "ACTIVE"
                   : "INACTIVE",
+                EmailConfiguration: toWireEmailConfiguration(
+                  news.emailConfiguration,
+                ),
                 UsernameAttributes: news.usernameAttributes,
                 AliasAttributes: news.aliasAttributes,
                 AutoVerifiedAttributes: news.autoVerifiedAttributes,

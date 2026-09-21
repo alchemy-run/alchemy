@@ -44,7 +44,6 @@ const getBodyWhenReady = (url: string, expected: string) =>
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
-  stage: "test",
 });
 
 // The first deploy runs the full Next.js + OpenNext build, so give the hook
@@ -75,11 +74,11 @@ test(
     const res = yield* getWhenReady(url);
     expect(res.status).toBe(200);
     const html = yield* res.text;
-    expect(html).toContain("Next.js on Cloudflare Workers");
+    expect(html).toContain("Next.js on Cloudflare");
     // The `GREETING` env value from alchemy.run.ts, read via
     // `getCloudflareContext` in the force-dynamic page — proves the Worker
     // rendered it at request time.
-    expect(html).toContain("Hello from Alchemy!");
+    expect(html).toContain("Hello from Next.js on Cloudflare!");
   }),
   { timeout: 180_000 },
 );

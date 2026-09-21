@@ -1,3 +1,4 @@
+import { DEFAULT_COMPATIBILITY_DATE } from "@alchemy.run/cloudflare-runtime/core/internal/constants";
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Command/Memo.ts";
 import type { InputProps } from "../../Input.ts";
@@ -21,62 +22,11 @@ import {
  */
 const NEXTJS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
-/**
- * The default compatibility date when none is provided. Matches the
- * `@alchemy.run/frontend-frameworks/nextjs` integration's own default so deploy and local
- * dev agree.
- */
-const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
-
-/** Next.js/OpenNext-specific build knobs, forwarded to the source provider. */
-export interface NextjsBuildOptions {
-  /**
-   * Path of the OpenNext config, relative to the project root.
-   * @default "open-next.config.ts"
-   */
-  configPath?: string;
-  /**
-   * The command the OpenNext pipeline runs to build the Next.js app.
-   * A `buildCommand` set in the project's `open-next.config.ts` takes
-   * precedence over this option.
-   * @default "npx next build"
-   */
-  buildCommand?: string;
-  /**
-   * Skip the internal `next build` and reuse an existing `.next` directory.
-   * @default false
-   */
-  skipNextBuild?: boolean;
-  /**
-   * Minify the OpenNext bundling steps and the final worker bundle pass.
-   * @default false
-   */
-  minify?: boolean;
-  /**
-   * Enable OpenNext debug logging (and verbose workerd output in dev).
-   * @default false
-   */
-  debug?: boolean;
-  /**
-   * Local dev (`alchemy dev`) behavior.
-   *
-   * - `"preview"` (default): build the OpenNext worker and serve it under
-   *   workerd — production parity (workerd APIs, ISR/cache semantics),
-   *   no HMR.
-   * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
-   *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
-   *   contract. App code runs in Node, not workerd — CF-specific runtime
-   *   behavior still needs `"preview"`.
-   * @default "preview"
-   */
-  devMode?: "preview" | "hmr";
-}
-
 export interface NextjsProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
+  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules" | "dev"
 > {
   /**
    * The Next.js project root (the directory containing `next.config.*` and
@@ -91,8 +41,29 @@ export interface NextjsProps<
    * `include`/`exclude` globs when the default is too broad.
    */
   memo?: MemoOptions;
-  /** Next.js/OpenNext-specific build and dev configuration. */
-  nextjs?: NextjsBuildOptions;
+  // The OpenNext build pipeline (buildCommand, minify, debug, ...) is
+  // configured in YOUR `open-next.config.ts`, which OpenNext loads
+  // natively — this resource only deploys the result.
+  /**
+   * Local dev (`alchemy dev`) behavior.
+   */
+  dev?: {
+    /**
+     * - `"preview"` (default): build the OpenNext worker and serve it
+     *   under workerd — production parity (workerd APIs, ISR/cache
+     *   semantics), no HMR.
+     * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
+     *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
+     *   contract. App code runs in Node, not workerd — CF-specific
+     *   runtime behavior still needs `"preview"`.
+     * @default "preview"
+     */
+    mode?: "preview" | "hmr";
+    /**
+     * Port for the local dev server. `0` picks an ephemeral port.
+     */
+    port?: number;
+  };
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to `runWorkerFirst: true` with `htmlHandling`/`notFoundHandling`
@@ -119,8 +90,8 @@ export interface NextjsProps<
  * `import()`.
  *
  * Local dev (`alchemy dev`) defaults to preview parity — the built worker
- * served under workerd. Set `nextjs: { devMode: "hmr" }` for the real
- * `next dev` (Turbopack HMR) with the Worker's bindings proxied onto
+ * served under workerd. Set `devMode: "hmr"` for the real `next dev`
+ * (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
  *
  * ISR comes in two flavors, chosen by the project's `open-next.config.ts`:
@@ -248,18 +219,9 @@ export interface NextjsProps<
  * ```
  *
  * ### Build Configuration
- * The `nextjs` prop tunes the OpenNext pipeline: a custom build command,
- * minification, or reusing an existing `.next` build.
- *
- * **Example:** Minified build with a custom command
- * ```typescript
- * const site = yield* Cloudflare.Website.Nextjs("Site", {
- *   nextjs: {
- *     buildCommand: "npx next build --no-lint",
- *     minify: true,
- *   },
- * });
- * ```
+ * The OpenNext build pipeline (build command, minification, ...) is
+ * configured in your project's `open-next.config.ts`, which loads
+ * natively — the resource only deploys the result.
  *
  * ### Class Form
  * Calling `Nextjs` with no arguments returns a constructor you can
@@ -318,6 +280,13 @@ export const Nextjs: {
           Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
           (props) => ({
             ...props,
+            // `dev.mode` is the integration's dev behavior (routed through
+            // the source options below); only `port` maps onto the Worker's
+            // own local-dev config.
+            dev:
+              props?.dev?.port !== undefined
+                ? { port: props.dev.port }
+                : undefined,
             // OpenNext's revalidation queues (memory-queue, do-queue) fetch
             // the worker back through `WORKER_SELF_REFERENCE`. Always wire
             // the self service binding — it's inert when unused, and its
@@ -327,16 +296,11 @@ export const Nextjs: {
               WORKER_SELF_REFERENCE: Self,
               ...props?.env,
             },
-            // OpenNext requires nodejs_compat; the Worker here is external
-            // (no inline Effect entry), so the engine won't add it.
+            // OpenNext requires Node.js APIs. The 2026-08-31 default date
+            // enables both nodejs_compat modes, so no redundant flag is sent.
             compatibility: {
               date: props?.compatibility?.date ?? DEFAULT_COMPATIBILITY_DATE,
-              flags: Array.from(
-                new Set([
-                  "nodejs_compat",
-                  ...(props?.compatibility?.flags ?? []),
-                ]),
-              ),
+              flags: props?.compatibility?.flags,
             },
             // The OpenNext server owns routing: run the worker first and
             // leave asset-path rewriting off. Users can still override.
@@ -356,13 +320,8 @@ export const Nextjs: {
               options: {
                 root: props?.rootDir,
                 memo: props?.memo,
-                ...(props?.nextjs !== undefined
-                  ? (({ devMode, ...build }) => ({
-                      ...build,
-                      ...(devMode !== undefined
-                        ? { dev: { mode: devMode } }
-                        : {}),
-                    }))(props.nextjs)
+                ...(props?.dev?.mode !== undefined
+                  ? { dev: { mode: props.dev.mode } }
                   : {}),
               },
             },

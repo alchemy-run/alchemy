@@ -146,7 +146,7 @@ export interface ServerProps {
    * Accepts a shell script (`#!/bin/bash …`), a `#cloud-config` document,
    * or a bare shell snippet (a `#!/bin/bash` shebang is added for you).
    * Alchemy combines it with its own bootstrap script (which preinstalls
-   * `bun` for `Hetzner.Service`) into a multipart cloud-init document, so
+   * Node 26 for `Hetzner.Service`) into a multipart cloud-init document, so
    * both run — the bootstrap first. A document that already starts with a
    * `Content-Type:` / `MIME-Version:` header is passed through untouched,
    * taking over the whole payload including the bootstrap.
@@ -429,6 +429,22 @@ const backoff = Schedule.min([
   Schedule.spaced(Duration.seconds(5)),
 ]);
 
+/** Companion deploy keys are not stack resources — delete must be idempotent. */
+const deleteDeployKey = (id: number | undefined) =>
+  id === undefined
+    ? Effect.void
+    : Services.sshKeys.deleteSshKey({ id }).pipe(
+        Effect.retry({
+          while: (e) =>
+            retryable(e) ||
+            e._tag === "UnprocessableEntity" ||
+            e._tag === "Conflict",
+          times: 8,
+          schedule: backoff,
+        }),
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
+
 const createServerName = (
   id: string,
   name: string | undefined,
@@ -447,23 +463,20 @@ const createServerName = (
   });
 
 /**
- * Preinstall Bun so `Hetzner.Service`'s first deploy does not have to.
- * Mirrors the SSH-side install in `./hosted.ts` — Ubuntu images ship curl
- * but not unzip, and bun's installer needs both. Never fails the boot:
- * `hosted.ts` installs Bun over SSH if this did not manage to.
+ * Preinstall Node 26 so `Hetzner.Service`'s first deploy does not have to.
+ * Mirrors the SSH-side install in `./hosted.ts`. Never fails the boot:
+ * `hosted.ts` installs Node over SSH if this did not manage to.
  */
 const ALCHEMY_BOOTSTRAP = `#!/bin/bash
 set -uo pipefail
 export HOME=/root
-export BUN_INSTALL=/root/.bun
-export PATH="/root/.bun/bin:$PATH"
 if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
   apt-get update || true
   DEBIAN_FRONTEND=noninteractive apt-get install -y curl unzip ca-certificates || true
 fi
-if [ ! -x /root/.bun/bin/bun ]; then
+if ! command -v node >/dev/null 2>&1; then
   for attempt in 1 2 3; do
-    curl -fsSL https://bun.sh/install | bash && break
+    curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs && break
     sleep 5
   done
 fi
@@ -630,6 +643,21 @@ const unwrapPrivateKey = (
   return typeof value === "string" ? value : Redacted.value(value);
 };
 
+const deployKeyName = (name: string) => `${name.slice(0, 55)}-d`;
+
+const findDeployKeyId = Effect.fn(function* (id: string, name: string) {
+  const keyName = deployKeyName(name);
+  const { ssh_keys } = yield* Services.sshKeys.listSshKeys({
+    name: keyName,
+    per_page: 50,
+  });
+  const key = ssh_keys.find((item) => item.name === keyName);
+  return key !== undefined &&
+    (yield* hasAlchemyLabels(id, tagRecord(key.labels)))
+    ? key.id
+    : undefined;
+});
+
 const ensureDeployKey = Effect.fn(function* (input: {
   name: string;
   labels: Record<string, string>;
@@ -651,7 +679,7 @@ const ensureDeployKey = Effect.fn(function* (input: {
     };
   }
   const generated = yield* generateDeployKey;
-  const keyName = `${input.name.slice(0, 55)}-d`;
+  const keyName = deployKeyName(input.name);
   const created = yield* Services.sshKeys
     .createSshKey({
       name: keyName,
@@ -751,6 +779,11 @@ const waitUntilGone = (serverId: number) =>
       until: (gone) => gone,
       times: 10,
     }),
+    Effect.flatMap((gone) =>
+      gone
+        ? Effect.void
+        : Effect.fail(new ServerTimeout({ serverId, status: "deleting" })),
+    ),
   );
 
 const numericId = (
@@ -944,9 +977,10 @@ export const ServerProvider = () =>
       return undefined;
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
+      const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({
         id,
-        name: olds?.name ?? output?.name,
+        name,
         outputId: output?.id ?? output?.serverId,
       });
       if (found === undefined) return undefined;
@@ -955,8 +989,14 @@ export const ServerProvider = () =>
         privateKey: output?.privateKey,
         deploySshKeyId: output?.deploySshKeyId,
       };
-      const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
-      return owned ? attrs : Unowned(attrs);
+      if (!(yield* hasAlchemyLabels(id, tagRecord(found.labels)))) {
+        return Unowned(attrs);
+      }
+      return {
+        ...attrs,
+        deploySshKeyId:
+          attrs.deploySshKeyId ?? (yield* findDeployKeyId(id, found.name)),
+      };
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = yield* createServerName(id, news.name, output?.name);
@@ -1025,7 +1065,22 @@ export const ServerProvider = () =>
                   }
                 : undefined,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(
+            Effect.retry({
+              while: (e) =>
+                e._tag === "ServerLimitExceeded" ||
+                e._tag === "ServerPlacementError",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 8,
+            }),
+            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            // The deploy key is a side-effect, not a stack resource. If
+            // createServer fails after minting it (quota skip, timeout),
+            // nothing is persisted for Server.delete to clean up.
+            Effect.tapError(() =>
+              deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore),
+            ),
+          );
         if (created !== undefined) {
           if (created.action) {
             yield* waitForActions([created.action, ...created.next_actions]);
@@ -1128,6 +1183,9 @@ export const ServerProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // Keep the server discoverable if key deletion fails. Removing the project
+      // key does not revoke the public key already injected into the server.
+      yield* deleteDeployKey(output.deploySshKeyId);
       const current = yield* getById(output.id);
       if (current !== undefined) {
         if (current.protection.delete) {
@@ -1154,12 +1212,6 @@ export const ServerProvider = () =>
           yield* waitForAction(deleted.action);
         }
         yield* waitUntilGone(current.id);
-      }
-
-      if (output.deploySshKeyId !== undefined) {
-        yield* Services.sshKeys
-          .deleteSshKey({ id: output.deploySshKeyId })
-          .pipe(Effect.catchTag("NotFound", () => Effect.void));
       }
     }),
   });

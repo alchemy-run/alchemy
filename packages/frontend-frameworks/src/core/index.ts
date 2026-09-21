@@ -43,7 +43,29 @@ export type {
   DeployTargetServer,
   DeployTargetServices,
 } from "./DeployTarget.ts";
+export {
+  isInsideDevChild,
+  isJsonSerializable,
+  runDevChild,
+} from "./DevChild.ts";
+export type { DevChildOptions, DevChildPayload } from "./DevChild.ts";
 export { findEphemeralPort, resolveViteDevPort } from "./DevPort.ts";
+export {
+  NODE_BUNDLE_CONDITIONS,
+  NODE_DEFAULT_PORT,
+  NODE_SERVE_ENTRY_FILE_NAME,
+  makeNodeServeEntrySource,
+  pinNodeServeModule,
+  relativeClientDirExpression,
+  writeNodeServeEntry,
+} from "./NodeServe.ts";
+export type {
+  NodeServeEntryOptions,
+  NodeServeHandler,
+  NodeServeHtmlHandling,
+  NodeServeNotFoundHandling,
+  WriteNodeServeEntryOptions,
+} from "./NodeServe.ts";
 export { Framework, FrameworkError } from "./Framework.ts";
 export type {
   FrameworkBuildOptions,

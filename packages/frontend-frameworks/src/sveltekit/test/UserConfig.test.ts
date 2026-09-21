@@ -16,10 +16,20 @@ const makeAdapter = (name: string): Adapter => ({
 });
 
 /**
- * A stand-in for kit's `vite-plugin-sveltekit-setup`: exposes a validated
- * svelte config via `api.options` exactly like `sveltekit(config)` does.
+ * A stand-in for the current SvelteKit `vite-plugin-sveltekit-setup` shape,
+ * which exposes the validated Kit config directly through `api.options`.
  */
 const makeSetupPlugin = (kit: Record<string, unknown>) =>
+  ({
+    name: SVELTEKIT_SETUP_PLUGIN_NAME,
+    api: { options: kit },
+  }) as ViteModule.Plugin;
+
+/**
+ * A stand-in for the legacy setup-plugin shape, where the validated Kit
+ * config was nested under `api.options.kit`.
+ */
+const makeLegacySetupPlugin = (kit: Record<string, unknown>) =>
   ({
     name: SVELTEKIT_SETUP_PLUGIN_NAME,
     api: { options: { kit } },
@@ -76,8 +86,10 @@ describe("mergeKitOptions", () => {
       appDir: "custom",
       ignored: undefined,
     });
-    expect(target["alias"]).toEqual({ $lib: "src/lib", $extra: "src/extra" });
-    // nested merge preserves validated defaults the override doesn't name
+    expect(target["alias"]).toEqual({
+      $lib: "src/lib",
+      $extra: "src/extra",
+    });
     expect(target["prerender"]).toEqual({
       entries: ["/about"],
       concurrency: 1,
@@ -105,12 +117,26 @@ describe("makeSvelteKitConfigPlugin", () => {
       adapter,
       warn: (m) => warnings.push(m),
     });
+
     // sveltekit() returns Promise<Plugin[]> — mirror that shape
     await runConfigHook(plugin, {
       plugins: [Promise.resolve([makeSetupPlugin(kit)])],
     });
+
     expect(kit["adapter"]).toBe(adapter);
     expect(warnings).toEqual([]);
+  });
+
+  it("supports the legacy nested api.options.kit shape", async () => {
+    const adapter = makeAdapter("target-adapter");
+    const kit: Record<string, unknown> = {};
+    const plugin = makeSvelteKitConfigPlugin({ adapter });
+
+    await runConfigHook(plugin, {
+      plugins: [makeLegacySetupPlugin(kit)],
+    });
+
+    expect(kit["adapter"]).toBe(adapter);
   });
 
   it("replaces a user-declared adapter and warns", async () => {
@@ -123,7 +149,9 @@ describe("makeSvelteKitConfigPlugin", () => {
       adapter,
       warn: (m) => warnings.push(m),
     });
-    await runConfigHook(plugin, { plugins: [[makeSetupPlugin(kit)]] });
+    await runConfigHook(plugin, {
+      plugins: [[makeSetupPlugin(kit)]],
+    });
     expect(kit["adapter"]).toBe(adapter);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('"user-adapter"');
@@ -138,10 +166,18 @@ describe("makeSvelteKitConfigPlugin", () => {
     };
     const plugin = makeSvelteKitConfigPlugin({
       adapter,
-      kit: { alias: { $fixture: "src/fixture" }, appDir: "custom" },
+      kit: {
+        alias: { $fixture: "src/fixture" },
+        appDir: "custom",
+      },
     });
-    await runConfigHook(plugin, { plugins: [makeSetupPlugin(kit)] });
-    expect(kit["alias"]).toEqual({ $lib: "src/lib", $fixture: "src/fixture" });
+    await runConfigHook(plugin, {
+      plugins: [makeSetupPlugin(kit)],
+    });
+    expect(kit["alias"]).toEqual({
+      $lib: "src/lib",
+      $fixture: "src/fixture",
+    });
     expect(kit["appDir"]).toBe("custom");
     expect(kit["adapter"]).toBe(adapter);
   });
@@ -152,13 +188,17 @@ describe("makeSvelteKitConfigPlugin", () => {
     const warnings: Array<string> = [];
     const plugin = makeSvelteKitConfigPlugin({
       adapter,
-      kit: { preprocess: [], alias: { $x: "src/x" } },
+      kit: {
+        preprocess: [],
+        alias: { $x: "src/x" },
+      },
       warn: (m) => warnings.push(m),
     });
-    await runConfigHook(plugin, { plugins: [makeSetupPlugin(kit)] });
+    await runConfigHook(plugin, {
+      plugins: [makeSetupPlugin(kit)],
+    });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('"preprocess"');
-    // the applicable option still lands
     expect(kit["alias"]).toEqual({ $x: "src/x" });
   });
 
@@ -167,11 +207,13 @@ describe("makeSvelteKitConfigPlugin", () => {
       adapter: makeAdapter("target-adapter"),
     });
     await expect(
-      runConfigHook(plugin, { plugins: [{ name: "some-other-plugin" }] }),
+      runConfigHook(plugin, {
+        plugins: [{ name: "some-other-plugin" }],
+      }),
     ).rejects.toThrow(/does not register the SvelteKit plugin/);
   });
 
-  it("fails clearly when the setup plugin does not expose api.options.kit", async () => {
+  it("fails clearly when the setup plugin does not expose its options", async () => {
     const plugin = makeSvelteKitConfigPlugin({
       adapter: makeAdapter("target-adapter"),
     });
@@ -179,7 +221,7 @@ describe("makeSvelteKitConfigPlugin", () => {
       runConfigHook(plugin, {
         plugins: [{ name: SVELTEKIT_SETUP_PLUGIN_NAME }],
       }),
-    ).rejects.toThrow(/api\.options\.kit/);
+    ).rejects.toThrow(/api\.options/);
   });
 });
 

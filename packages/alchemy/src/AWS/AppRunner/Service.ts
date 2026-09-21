@@ -233,12 +233,10 @@ export interface ServiceProps extends PlatformProps {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for the Effect-native entrypoint: rolldown
-   * `input`/`output` overrides plus pure-annotation options (`pure`).
-   * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
-   * `@distilled.cloud/*` are annotated as pure by default so unused code
-   * from those packages is tree-shaken; list additional packages via
-   * `pure.packages`, or disable with `pure: false`.
+   * Bundler configuration for the Effect-native entrypoint. Unused
+   * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
+   * marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: Bundle.BundleConfig;
   /**
@@ -463,16 +461,13 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the service doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -482,18 +477,7 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * }
  * ```
  *
- * Listing a package annotates calls whose result is bound (variable
- * initializers, exports) — safe anywhere. If a listed package also
- * declares `"sideEffects": false` (or `[]`) in its `package.json`, that
- * combination opts it into full annotation: top-level calls whose result
- * is discarded (e.g. `router.on("/path", handler)` registrations) are
- * also marked pure and deleted under minification when unused. Only list
- * a `sideEffects: false` package if its modules really are free of
- * meaningful top-level side effects. The `effect`, `alchemy`, and
- * `@distilled.cloud` defaults declare exactly that, on purpose — their
- * modules are designed to be fully tree-shakeable.
- *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * {
  *   main: import.meta.url,
@@ -1084,7 +1068,7 @@ export const ServiceProvider = () =>
                   []),
               ],
               resolve: {
-                conditionNames: ["bun", "import", "module", "default"],
+                conditionNames: [...Bundle.BUN_CONDITION_NAMES],
                 ...props.build?.input?.resolve,
               },
               plugins: [props.build?.input?.plugins, plugins],
@@ -1106,68 +1090,10 @@ export const ServiceProvider = () =>
               realMain,
               virtualEntryPlugin(
                 (importPath) => `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Credentials from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Region from "@distilled.cloud/aws/Region";
+import { bootstrap } from "alchemy/Runtime/Bootstrap/AppRunner";
+import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
 
-import { ${handler} as handler } from ${JSON.stringify(importPath)};
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT (App Runner injects PORT
-// for the configured service port), so a returned { fetch } handler is
-// actually served and host.run loops stay alive.
-const program = handler.pipe(
-  Effect.flatMap((service) => service.RuntimeContext.exports),
-  Effect.flatMap((exports) => exports.program),
-  Effect.provide(
-    Layer.effect(
-      Stack,
-      Effect.all([
-        Config.string("ALCHEMY_STACK_NAME"),
-        Config.string("ALCHEMY_STAGE")
-      ]).pipe(
-        Effect.map(([name, stage]) => ({
-          name,
-          stage,
-          bindings: {},
-          resources: {}
-        }))
-      )
-    ).pipe(
-      Layer.provideMerge(Credentials.fromEnv()),
-      Layer.provideMerge(Region.fromEnv()),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.fromEnv()
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("App Runner service bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("App Runner service bootstrap failed:", err);
-  process.exit(1);
-});
+await bootstrap(entrypoint);
 `,
               ),
             );

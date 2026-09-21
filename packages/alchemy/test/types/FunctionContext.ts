@@ -102,9 +102,7 @@ type _DeferredRequirements = Expect<
 >;
 
 declare const lambdaContext: Serverless.FunctionContext<
-  | Scope.Scope
-  | AWS.Lambda.FunctionServices
-  | import("@/Platform.ts").PlatformServices,
+  AWS.Lambda.FunctionInitServices,
   Scope.Scope | AWS.Lambda.HandlerContext
 >;
 
@@ -175,4 +173,87 @@ type _DeferredListenerFunctionRequirements = Expect<
     DeferredListenerFunctionRequirements,
     AWS.Providers | CustomInitDependency
   >
+>;
+
+class PropsDependency extends Context.Service<PropsDependency, {}>()(
+  "FunctionContext.PropsDependency",
+) {}
+
+const props = Effect.gen(function* () {
+  yield* PropsDependency;
+  return { main: import.meta.url };
+});
+
+const implementation = Effect.gen(function* () {
+  yield* CustomInitDependency;
+  const host = yield* AWS.Lambda.Function;
+  yield* host.listen(
+    Effect.gen(function* () {
+      yield* Scope.Scope;
+      return () => Effect.asVoid(CustomInvocationDependency);
+    }),
+  );
+});
+
+type ApplicationRequirements =
+  | PropsDependency
+  | CustomInitDependency
+  | CustomInvocationDependency;
+
+const plain = AWS.Lambda.Function("PlainListener", props, implementation);
+type _PlainRequirements = Expect<
+  Equal<Requirements<typeof plain>, AWS.Providers | ApplicationRequirements>
+>;
+
+class Inline extends AWS.Lambda.Function<Inline>()(
+  "InlineListener",
+  props,
+  implementation,
+) {}
+type _InlineRequirements = Expect<
+  Equal<Requirements<typeof Inline>, AWS.Providers | ApplicationRequirements>
+>;
+
+class Split extends AWS.Lambda.Function<Split>()("SplitListener") {}
+const split = Split.make(props, implementation);
+type LayerRequirements<T extends Layer.Any> = Layer.Services<T>;
+type _SplitRequirements = Expect<
+  Equal<
+    LayerRequirements<typeof split>,
+    AWS.Providers | ApplicationRequirements
+  >
+>;
+
+class Shaped extends AWS.Lambda.Function<Shaped, { label: string }>()(
+  "ShapedListener",
+) {}
+const shaped = Shaped.make(
+  props,
+  Effect.as(implementation, { label: "listener" }),
+);
+type _ShapedRequirements = Expect<
+  Equal<
+    LayerRequirements<typeof shaped>,
+    AWS.Providers | ApplicationRequirements
+  >
+>;
+
+const wrongPhase = context.listen(
+  Effect.gen(function* () {
+    yield* InvocationDependency;
+    return () => Effect.asVoid(InitDependency);
+  }),
+);
+type _WrongPhaseRequirements = Expect<
+  Equal<Requirements<typeof wrongPhase>, InvocationDependency | InitDependency>
+>;
+
+const initHandlerContext = lambdaContext.listen(
+  Effect.gen(function* () {
+    yield* AWS.Lambda.HandlerContext;
+    return () => Effect.void;
+  }),
+);
+type _InitHandlerContextRequirements = Expect<
+  Equal<Requirements<typeof initHandlerContext>, AWS.Lambda.HandlerContext>
 >;

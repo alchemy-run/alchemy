@@ -1,5 +1,7 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Endpoint } from "@distilled.cloud/aws/Endpoint";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
@@ -25,12 +27,7 @@ import { deepEqual, havePropsChanged, isResolved } from "../../Diff.ts";
 import { isScopeEjected, type HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformProps,
-  type PlatformServices,
-} from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import type { LogLine, LogsInput } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
@@ -73,12 +70,24 @@ export type FunctionTypeId = typeof FunctionTypeId;
 
 class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
   functionName: string;
-}> {}
+  state?: string;
+  stateReason?: string;
+  lastUpdateStatus?: string;
+  lastUpdateStatusReason?: string;
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
+  }
+}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
   reason?: string;
-}> {}
+}> {
+  override get message() {
+    return `Lambda function ${this.functionName} update failed: ${this.reason ?? "unknown reason"}`;
+  }
+}
 
 export class HandlerContext extends Context.Service<
   HandlerContext,
@@ -330,13 +339,11 @@ export interface FunctionZipProps extends FunctionCommonProps {
    */
   layers?: LayerRef[];
   /**
-   * Bundler configuration for {@link main}: rolldown input options (flat),
-   * `output` overrides, `install` for native packages, plus pure-annotation
-   * options (`pure`) and the bundle analyzer. Top-level calls in `effect`,
-   * `@effect/*`, `alchemy`, `@alchemy.run/*`, and `@distilled.cloud/*` are
-   * annotated as pure by default so unused code from those packages is
-   * tree-shaken; list additional packages via `pure.packages`, or disable
-   * with `pure: false`.
+   * Bundler configuration for {@link main}: rolldown input options, `output`
+   * overrides, `install` for native packages, `pure`, and the bundle analyzer.
+   * Unused code is tree-shaken. `effect`, alchemy, and `@distilled.cloud`
+   * are marked pure so unused parts prune more aggressively. List extra
+   * packages with `pure.packages`, or disable with `pure: false`.
    */
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
@@ -560,6 +567,16 @@ export interface Function extends Resource<
 
 export type FunctionServices = Credentials | Region | AWSEnvironment;
 
+/** Services supplied by the Lambda bootstrap during deferred initialization. */
+export type FunctionInitServices =
+  | Scope.Scope
+  | NodeServices
+  | HttpClient
+  | FunctionServices
+  | Endpoint
+  | Stack
+  | Stage;
+
 export type FunctionShape = Main<FunctionServices>;
 
 export interface NormalizedFunctionUrlConfig {
@@ -602,7 +619,7 @@ export const normalizeFunctionUrl = (
  * - **Async** — plain handler export, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation with typed bindings and event sources.
  *
- * See [Effect handlers vs async handlers](/infrastructure-as-effects/functions-and-servers#effect-handlers-vs-async-handlers)
+ * See [Effect handlers vs async handlers](/infrastructure-as-effects/runtime#effect-handlers-vs-async-handlers)
  * for plain handler patterns, or the
  * [Lambda guide](/aws/compute/lambda)
  * for the full Effect-based approach with bindings, event sources, and sinks.
@@ -744,11 +761,22 @@ export const normalizeFunctionUrl = (
  *
  * ### Sandbox-Scoped Initialization
  * Returning a `fetch` shape covers the common case. When a handler needs
- * services that are expensive to construct — a database pool, a fetched
- * config, an SDK client — register a *deferred listener* instead: pass
+ * services that are expensive to construct, such as fetched configuration
+ * or an SDK client, register a *deferred listener* instead: pass
  * `host.listen` an Effect that returns the handler. The outer Effect runs
  * once per Lambda sandbox (cold start) and the handler it returns serves
  * every invocation on that sandbox.
+ *
+ * Application services provided around `host.listen` or `host.serve` remain
+ * available when the listener executes. Use `Layer.build` inside the deferred
+ * initializer for sandbox-scoped layers; acquire request-scoped resources
+ * inside the handler. Instance cleanup is best-effort within Lambda's 500 ms
+ * shutdown window.
+ *
+ * Deferred initialization provides Node platform services, HTTP, AWS
+ * credentials and region, `AWSEnvironment`, `Stack`, `Stage`, and `Scope`.
+ * `AWSEnvironment.current` resolves the account identity lazily, once per
+ * sandbox. Deployment-only providers are not runtime services.
  *
  * Wrap an `HttpEffect` in `makeFunctionHttpHandler` to keep Effect HTTP
  * semantics on a Function URL.
@@ -757,7 +785,7 @@ export const normalizeFunctionUrl = (
  * ```typescript
  * export default class ApiFunction extends AWS.Lambda.Function<ApiFunction>()(
  *   "ApiFunction",
- *   { main: import.meta.url, url: true },
+ *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
  *     const host = yield* AWS.Lambda.Function;
  *
@@ -846,20 +874,13 @@ export const normalizeFunctionUrl = (
  * ```
  *
  * ### Bundling & Tree-shaking
- * `main` is bundled with rolldown at deploy time. Top-level calls in the
- * `effect`, `@effect/*`, `alchemy`, `@alchemy.run/*`, and
- * `@distilled.cloud/*` packages receive `#__PURE__` annotations by
- * default, so anything the function doesn't use from those packages is
- * tree-shaken out of the bundle. Any other package — including your own
- * app — is left untouched unless you list it explicitly.
+ * `main` is bundled with rolldown at deploy time. Unused code is
+ * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
+ * pure so unused parts prune more aggressively. Your app is not
+ * marked pure.
  *
- * **Example:** Treat additional packages as pure
- * Pass package names (or picomatch globs) via `build.pure.packages` to
- * annotate them in addition to the defaults. Listing a package that also
- * declares `"sideEffects": false` (or `[]`) in its `package.json` opts it
- * into full annotation — top-level calls whose result is discarded are
- * deleted under minification when unused — so only list packages whose
- * modules really are free of meaningful top-level side effects.
+ * **Example:** Mark additional packages as pure
+ * Only list packages with no top-level side effects.
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -869,7 +890,7 @@ export const normalizeFunctionUrl = (
  * });
  * ```
  *
- * **Example:** Disable pure annotations
+ * **Example:** Turn it off
  * ```typescript
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
@@ -1060,7 +1081,7 @@ export const Function: Platform<
   FunctionServices,
   FunctionShape,
   Serverless.FunctionContext<
-    Scope.Scope | FunctionServices | PlatformServices,
+    FunctionInitServices,
     Scope.Scope | HandlerContext
   >,
   {},
@@ -1069,10 +1090,13 @@ export const Function: Platform<
   createRuntimeContext: (
     id: string,
   ): Serverless.FunctionContext<
-    Scope.Scope | FunctionServices | PlatformServices,
+    FunctionInitServices,
     Scope.Scope | HandlerContext
   > => {
-    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
+    const listeners: {
+      init: Effect.Effect<Serverless.FunctionListener>;
+      services: Context.Context<never>;
+    }[] = [];
     const env: Record<string, any> = {};
 
     const ctx = {
@@ -1091,7 +1115,7 @@ export const Function: Platform<
       get: <T>(key: string) =>
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
-        // must never resolve through `Config.string`.
+        // must never resolve through `Config.String`.
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         // @ts-ignore
@@ -1101,21 +1125,38 @@ export const Function: Platform<
           | Serverless.FunctionListener
           | Effect.Effect<Serverless.FunctionListener>,
       ) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
+        Effect.contextWith((context) =>
+          Effect.sync(() => {
+            // Scope, invocation metadata, and layer memoization belong to execution.
+            const services = Context.omit(
+              Scope.Scope,
+              HandlerContext,
+              Layer.CurrentMemoMap,
+            )(context);
+            listeners.push({
+              init: Effect.isEffect(handler)
+                ? handler
+                : Effect.succeed(handler),
+              services,
+            });
+          }),
         )) as any as Serverless.FunctionContext<
-        Scope.Scope | FunctionServices | PlatformServices,
+        FunctionInitServices,
         Scope.Scope | HandlerContext
       >["listen"],
       exports: Effect.sync(() => ({
         // construct an Effect that produces the Function's entrypoint
         // Effect<(event, context) => Promise<any>>
         handler: Effect.gen(function* () {
-          const handlers = yield* Effect.all(listeners, {
-            concurrency: "unbounded",
-          });
+          const handlers = yield* Effect.forEach(
+            listeners,
+            ({ init, services }) =>
+              init.pipe(
+                Effect.provideContext(services),
+                Effect.map((handler) => ({ handler, services })),
+              ),
+            { concurrency: "unbounded" },
+          );
           // Sandbox-lifetime services, captured so each invocation can
           // build its telemetry exporters and run the handler effect
           // against the same context the init phase saw (mirrors
@@ -1125,7 +1166,11 @@ export const Function: Platform<
             yield* Effect.context<never>(),
           );
           return async (event: any, context: lambda.Context): Promise<any> => {
-            for (const handler of handlers) {
+            for (const { handler, services: registeredServices } of handlers) {
+              const handlerServices = Context.merge(
+                services,
+                registeredServices,
+              );
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 // Each invocation gets a fresh request scope, matching the
@@ -1149,12 +1194,14 @@ export const Function: Platform<
                       // below.
                       Layer.effectContext(
                         buildEventTelemetry(
-                          services,
+                          handlerServices,
                           scope,
                           (ctx as Serverless.FunctionContext).telemetry,
                         ),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ).pipe(
+                      Layer.provideMerge(Layer.succeedContext(handlerServices)),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
                   Effect.runPromiseExit,
@@ -1468,6 +1515,7 @@ export const FunctionProvider = () =>
       const waitForFunctionUpdate = Effect.fn(function* (
         functionName: string,
         session: { note: (note: string) => Effect.Effect<void> },
+        vpc: boolean,
       ) {
         return yield* Effect.gen(function* () {
           const configuration = (yield* Lambda.getFunction({
@@ -1491,18 +1539,25 @@ export const FunctionProvider = () =>
           ) {
             return;
           }
-          return yield* new FunctionUpdatePending({ functionName });
+          return yield* new FunctionUpdatePending({
+            functionName,
+            state: configuration?.State,
+            stateReason: configuration?.StateReason,
+            lastUpdateStatus: configuration?.LastUpdateStatus,
+            lastUpdateStatusReason: configuration?.LastUpdateStatusReason,
+          });
         }).pipe(
           Effect.retry({
             while: (error) => error._tag === "FunctionUpdatePending",
             schedule: Schedule.spaced("2 seconds").pipe(
               Schedule.tap(({ attempt }) =>
                 session.note(
-                  `Waiting for Lambda image update before repository cleanup: ${functionName} (${attempt * 2}s)`,
+                  `Waiting for Lambda function update: ${functionName} (${attempt * 2}s)`,
                 ),
               ),
             ),
-            times: 30,
+            // New VPC attachments can spend several minutes provisioning Hyperplane ENIs.
+            times: vpc ? 150 : 30,
           }),
         );
       });
@@ -1609,12 +1664,8 @@ export const FunctionProvider = () =>
           return yield* prepareImageFunctionCode({ id, props, session });
         }
 
-        // Mock code for the pre-created stub. It responds 503 (rather than a
-        // bare 200) so that, during the brief window where the real code/config
-        // update is still `InProgress`, a Function URL hit serves an honest
-        // "not ready" signal. Downstream readiness probes already retry on
-        // non-200, so they wait for the real handler without blocking the
-        // provider.
+        // The precreated stub responds 503 until reconciliation installs the
+        // real handler and waits for its configuration to become active.
         const code = new TextEncoder().encode(
           `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
         );
@@ -1725,9 +1776,15 @@ export const FunctionProvider = () =>
             (e.message?.includes("KMS key is invalid for CreateGrant") &&
               e.message?.includes("ARN does not refer to a valid principal")));
 
-        const noteRolePropagationWait = () =>
+        const isSecurityGroupPropagationError = (
+          e: Lambda.CreateFunctionError,
+        ) =>
+          e._tag === "InvalidParameterValueException" &&
+          e.message?.includes("InvalidGroup.NotFound");
+
+        const noteCreateDependencyWait = () =>
           session.note(
-            `Waiting for Lambda execution role to become assumable: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
           );
 
         const tags = yield* createInternalTags(id);
@@ -1845,7 +1902,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1880,7 +1937,7 @@ export const FunctionProvider = () =>
               }).pipe(
                 Effect.tapError((e) =>
                   isRolePropagationError(e)
-                    ? noteRolePropagationWait()
+                    ? noteCreateDependencyWait()
                     : Effect.void,
                 ),
                 Effect.retry({
@@ -1902,9 +1959,10 @@ export const FunctionProvider = () =>
             }),
           ),
           Effect.retry({
-            while: (e) => isRolePropagationError(e),
+            while: (e) =>
+              isRolePropagationError(e) || isSecurityGroupPropagationError(e),
             schedule: Schedule.fixed(1000).pipe(
-              Schedule.tap(() => noteRolePropagationWait()),
+              Schedule.tap(() => noteCreateDependencyWait()),
             ),
           }),
           Effect.catchTags({
@@ -2538,6 +2596,12 @@ export const FunctionProvider = () =>
             session,
           });
 
+          yield* waitForFunctionUpdate(
+            functionName,
+            session,
+            vpc !== undefined,
+          );
+
           const previousImage = output?.code.image;
           const nextImage =
             "image" in prepared.attributes
@@ -2547,10 +2611,8 @@ export const FunctionProvider = () =>
             previousImage?.ownsRepository === true &&
             previousImage.repositoryUri !== nextImage?.repositoryUri
           ) {
-            // The function has moved from an Alchemy-owned local image to a
-            // different source. Wait until Lambda has adopted the new digest
-            // before deleting the now-unreferenced managed repository.
-            yield* waitForFunctionUpdate(functionName, session);
+            // Lambda has adopted the new image; the previous managed
+            // repository is no longer referenced.
             yield* functionImage.deleteRepository(previousImage.repositoryName);
           }
 

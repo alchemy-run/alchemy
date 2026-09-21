@@ -1,7 +1,7 @@
 import type * as Effect from "effect/Effect";
 import * as Binding from "../Binding.ts";
-import type { RuntimeContext } from "../RuntimeContext.ts";
-import type { Redis, RedisCommandError, RedisUrlMissing } from "./Redis.ts";
+import type { WriteClient } from "../Redis/index.ts";
+import type { Redis } from "./Redis.ts";
 
 /**
  * Bind a {@link Redis} database with write access (`set`, `del`).
@@ -27,12 +27,4 @@ export interface WriteRedis extends Binding.Service<
 
 export const WriteRedis = Binding.Service<WriteRedis>("Fly.WriteRedis");
 
-export interface WriteRedisClient {
-  set(
-    key: string,
-    value: string,
-  ): Effect.Effect<void, RedisCommandError | RedisUrlMissing, RuntimeContext>;
-  del(
-    key: string,
-  ): Effect.Effect<number, RedisCommandError | RedisUrlMissing, RuntimeContext>;
-}
+export type WriteRedisClient = WriteClient;

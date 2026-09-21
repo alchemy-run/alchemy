@@ -270,7 +270,7 @@ export interface Platform<
     never,
     | Resource["Providers"]
     | PropsReq
-    | Exclude<InitReq, Services | PlatformServices>
+    | Exclude<InitReq, Services | PlatformServices | Resource>
   > &
     Named<Id>;
 }

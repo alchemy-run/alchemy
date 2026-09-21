@@ -1,3 +1,4 @@
+import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
@@ -10,11 +11,30 @@ export const WAKU_AWS_TARGET_SPECIFIER =
 
 export interface WakuProps extends FrameworkSiteProps {
   /**
-   * Waku config overrides (`srcDir`, `distDir`, `basePath`, `vite`, ...)
-   * merged over the project's own `waku.config.ts`. `unstable_adapter` is
-   * owned by the AWS deploy target and may not be set here.
+   * Waku config overrides merged over the project's `waku.config.*`
+   * (per-key; deploy-time values win). For values that vary by stage or
+   * come from other resources — static config belongs in `waku.config.*`.
    */
-  waku?: Record<string, unknown>;
+  waku?: {
+    /**
+     * Waku `srcDir` (relative to {@link FrameworkSiteProps.rootDir}).
+     * @default "src"
+     */
+    srcDir?: string;
+    /**
+     * Waku `distDir` (relative to {@link FrameworkSiteProps.rootDir}).
+     * A custom `distDir` must be gitignored (or added to `memo.exclude`)
+     * so the build output stays excluded from the rebuild-deciding input
+     * hash.
+     * @default "dist"
+     */
+    distDir?: string;
+    /**
+     * Waku `basePath`.
+     * @default "/"
+     */
+    basePath?: string;
+  };
 }
 
 /**
@@ -52,21 +72,37 @@ export interface WakuProps extends FrameworkSiteProps {
  * ```typescript
  * const site = yield* AWS.Website.Waku("Web", {
  *   rootDir: "./app",
- *   server: {
- *     memorySize: 2048,
- *     environment: {
- *       API_BASE: api.url,
- *     },
+ *   memorySize: 2048,
+ *   env: {
+ *     API_BASE: api.url,
+ *   },
+ * });
+ * ```
+ *
+ * ### Waku Config Overrides
+ * Waku configuration lives in your `waku.config.*`. The `waku` prop
+ * overrides it per key at deploy time — for values that vary by stage
+ * or come from other resources.
+ *
+ * **Example:** Stage-dependent base path
+ * ```typescript
+ * const site = yield* AWS.Website.Waku("Web", {
+ *   waku: {
+ *     basePath: "/docs/",
  *   },
  * });
  * ```
  *
  * @resource
  */
-export const Waku = (id: string, props: WakuProps = {}) =>
-  makeFrameworkSite(id, props, {
+export const Waku = (id: string, props: InputProps<WakuProps> = {}) => {
+  const p = props as WakuProps;
+  return makeFrameworkSite(id, props, {
     name: "Waku",
     framework: WAKU_FRAMEWORK_SPECIFIER,
     target: WAKU_AWS_TARGET_SPECIFIER,
-    options: props.waku ? { waku: props.waku } : undefined,
+    // Deploy-time waku config overrides, merged over the project's
+    // `waku.config.*` by the integration (per-key; overrides win).
+    options: p.waku !== undefined ? { waku: p.waku } : undefined,
   }).pipe(Namespace.push(id));
+};

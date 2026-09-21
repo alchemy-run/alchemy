@@ -295,6 +295,28 @@ export const DataCatalogProvider = () =>
           );
       }
 
+      // Sync credential before maintenance — Cloudflare rejects maintenance
+      // updates when the warehouse has no credential registered.
+      // The API exposes only present/absent, so `olds` serves as the rotation
+      // hint: re-push when the token value changed or no credential is
+      // registered (adoption re-pushes; idempotent).
+      let credentialStatus = (observed.credentialStatus ?? "absent") as
+        | "present"
+        | "absent";
+      if (news.token !== undefined) {
+        const rotated =
+          olds?.token === undefined ||
+          Redacted.value(olds.token) !== Redacted.value(news.token);
+        if (credentialStatus !== "present" || rotated) {
+          yield* rdc.createCredential({
+            accountId: acct,
+            bucketName,
+            token: Redacted.value(news.token),
+          });
+          credentialStatus = "present";
+        }
+      }
+
       // Sync maintenance — diff observed config against the fields the user
       // actually specified; skip the API entirely on a no-op.
       let maintenance = observed.maintenanceConfig ?? undefined;
@@ -327,26 +349,6 @@ export const DataCatalogProvider = () =>
           compaction: updated.compaction,
           snapshotExpiration: updated.snapshotExpiration,
         };
-      }
-
-      // Sync credential — the API exposes only present/absent, so `olds`
-      // serves as the rotation hint: re-push when the token value changed
-      // or no credential is registered (adoption re-pushes; idempotent).
-      let credentialStatus = (observed.credentialStatus ?? "absent") as
-        | "present"
-        | "absent";
-      if (news.token !== undefined) {
-        const rotated =
-          olds?.token === undefined ||
-          Redacted.value(olds.token) !== Redacted.value(news.token);
-        if (credentialStatus !== "present" || rotated) {
-          yield* rdc.createCredential({
-            accountId: acct,
-            bucketName,
-            token: Redacted.value(news.token),
-          });
-          credentialStatus = "present";
-        }
       }
 
       return toAttributes(

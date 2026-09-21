@@ -8,6 +8,7 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type Reference } from "../Zone/index.ts";
 import { listAllZones } from "../Zone/lookup.ts";
+import { retryWorkerScriptNotFound } from "./retry.ts";
 
 export type Matcher =
   | { type: "all" }
@@ -174,16 +175,19 @@ export const RuleProvider = () =>
             ...body,
           })
           .pipe(
+            retryWorkerScriptNotFound,
             Effect.catch(() =>
               emailRouting
                 .createRule({ zoneId, ...body })
-                .pipe(Effect.map((r) => r)),
+                .pipe(retryWorkerScriptNotFound),
             ),
           );
         return normalize(result, zoneId);
       }
 
-      const result = yield* emailRouting.createRule({ zoneId, ...body });
+      const result = yield* emailRouting
+        .createRule({ zoneId, ...body })
+        .pipe(retryWorkerScriptNotFound);
       return normalize(result, zoneId);
     }),
     delete: Effect.fn(function* ({ output }) {
