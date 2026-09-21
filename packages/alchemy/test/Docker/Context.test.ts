@@ -1,3 +1,4 @@
+import type { ScopedPlanStatusSession } from "@/Report.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
@@ -9,6 +10,10 @@ const { test } = Test.make({
   providers: Docker.providers(),
   state: inMemoryState(),
 });
+
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 test.provider("diff replaces a context when name changes", () =>
   Effect.gen(function* () {
@@ -144,6 +149,64 @@ describe("Docker.Context", { concurrent: false }, () => {
       expect(extractDockerHost(second.docker)).toBe(
         "unix:///var/run/docker.sock",
       );
+    }),
+  );
+
+  test.provider("reconcile renames a context and retires the old name", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const provider = yield* Provider.findProvider(Docker.Context);
+      const oldName = "alchemy-test-context-rename-old";
+      const newName = "alchemy-test-context-rename-new";
+      yield* Effect.addFinalizer(() =>
+        Effect.all([
+          docker.context.remove(oldName, true),
+          docker.context.remove(newName, true),
+        ]).pipe(Effect.ignore),
+      );
+      yield* docker.context.create({ name: oldName, description: "renamed" });
+
+      const olds = { name: oldName, description: "renamed" };
+      const news = { name: newName, description: "renamed" };
+      const input = {
+        id: "renamed-context",
+        fqn: "renamed-context",
+        instanceId: "instance",
+        session: stubSession,
+        bindings: [],
+      };
+      const renamed = yield* provider.reconcile!({
+        ...input,
+        news,
+        olds,
+        output: {
+          id: oldName,
+          name: oldName,
+          description: "renamed",
+          docker: undefined,
+        },
+      });
+      expect(renamed.id).toBe(newName);
+      expect(renamed.name).toBe(newName);
+      expect((yield* docker.context.inspect(newName)).Name).toBe(newName);
+      const old = yield* docker.context
+        .inspect(oldName)
+        .pipe(
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.undefined,
+          ),
+        );
+      expect(old).toBeUndefined();
+
+      const again = yield* provider.reconcile!({
+        ...input,
+        news,
+        olds: news,
+        output: renamed,
+      });
+      expect(again.id).toBe(newName);
     }),
   );
 

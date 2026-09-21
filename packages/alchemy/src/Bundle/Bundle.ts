@@ -404,11 +404,15 @@ export const virtualEntryPlugin = Effect.gen(function* () {
           if (importer === undefined || !ENTRY_REGEX.test(importer)) {
             return null;
           }
-          const resolved = await this.resolve(id, importer, {
+          // The generated entry stands in for the real entry, so its bare
+          // imports resolve from the real entry's directory: a virtual
+          // importer would resolve from `cwd`, which can be a parent
+          // package that does not depend on alchemy.
+          const entry = entries.get(importer);
+          const resolved = await this.resolve(id, entry ?? importer, {
             skipSelf: true,
           });
           if (resolved === null) {
-            const entry = entries.get(importer);
             this.error(
               new Error(
                 `The generated entry for ${entry} imports "${id}", which cannot be resolved from the project. ` +

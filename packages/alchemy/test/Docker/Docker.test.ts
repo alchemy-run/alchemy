@@ -125,7 +125,12 @@ describe("Docker registry errors", (it) => {
  * plugin version (or fails it like a missing plugin when `undefined`),
  * records every other invocation (args + env), and exits 0.
  */
-const fakeDocker = (buildxVersion: string | undefined) => {
+const fakeDocker = (
+  buildxVersion: string | undefined,
+  onSpawn: (
+    env: Record<string, string | undefined>,
+  ) => Effect.Effect<void> = () => Effect.void,
+) => {
   const calls: Array<{
     args: ReadonlyArray<string>;
     env: Record<string, string | undefined>;
@@ -137,7 +142,9 @@ const fakeDocker = (buildxVersion: string | undefined) => {
       const probe =
         command.args[0] === "buildx" && command.args[1] === "version";
       if (!probe) {
-        calls.push({ args: command.args, env: command.options.env ?? {} });
+        const env = command.options.env ?? {};
+        calls.push({ args: command.args, env });
+        yield* onSpawn(env);
       }
       const missing = probe && buildxVersion === undefined;
       const stdout =
@@ -444,5 +451,199 @@ describe("Docker.image", (it) => {
       const out = yield* docker.run(["run", "--rm", tag, "cat", "/stage.txt"]);
       expect(out.stdout.trim()).toBe("secondary");
     }),
+  );
+});
+
+interface IsolatedDockerConfig {
+  config: {
+    currentContext?: string;
+    credsStore?: string;
+    auths: Record<string, { auth: string }>;
+  };
+  contexts: Array<string>;
+}
+
+/** Runs one authenticated command and returns the isolated config it ran under. */
+const captureIsolatedDockerConfig = (
+  command: (docker: Docker["Service"]) => Effect.Effect<unknown, unknown>,
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const captured: Array<IsolatedDockerConfig> = [];
+    // The isolated config is removed once the command's scope closes.
+    const fake = fakeDocker("v0.26.1", (env) =>
+      Effect.gen(function* () {
+        const configDir = env.DOCKER_CONFIG;
+        assert(configDir !== undefined);
+        const contextsDir = path.join(configDir, "contexts");
+        captured.push({
+          config: JSON.parse(
+            yield* fs.readFileString(path.join(configDir, "config.json")),
+          ),
+          contexts: (yield* fs.exists(contextsDir))
+            ? yield* fs.readDirectory(contextsDir)
+            : [],
+        });
+      }).pipe(Effect.orDie),
+    );
+    yield* Effect.gen(function* () {
+      yield* command(yield* Docker);
+    }).pipe(Effect.provide(fake.layer));
+    expect(captured).toHaveLength(1);
+    return captured[0]!;
+  });
+
+const withGlobalDockerConfig = (globalConfigDir: string) =>
+  Effect.provide(
+    ConfigProvider.layer(
+      ConfigProvider.fromUnknown({ DOCKER_CONFIG: globalConfigDir }),
+    ),
+  );
+
+const makeGlobalDockerConfigDir = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.makeTempDirectoryScoped({
+    prefix: "alchemy-docker-global-",
+  });
+});
+
+const createContextIn = (globalConfigDir: string, name: string, host: string) =>
+  Effect.gen(function* () {
+    const docker = yield* Docker;
+    yield* docker.run([
+      "--config",
+      globalConfigDir,
+      "context",
+      "create",
+      name,
+      "--docker",
+      `host=${host}`,
+    ]);
+  });
+
+const currentEngineHost = Effect.gen(function* () {
+  const docker = yield* Docker;
+  const context = yield* docker.run(["context", "show"]);
+  const host = yield* docker.run([
+    "context",
+    "inspect",
+    "--format",
+    '{{(index .Endpoints "docker").Host}}',
+    context.stdout,
+  ]);
+  return host.stdout;
+});
+
+describe("Docker isolated config", (it) => {
+  for (const [name, command] of [
+    [
+      "pull",
+      (docker: Docker["Service"]) =>
+        docker.image.pull(
+          "registry.invalid/app:1",
+          undefined,
+          undefined,
+          registry,
+        ),
+    ],
+    [
+      "push",
+      (docker: Docker["Service"]) =>
+        docker.image.push("registry.invalid/app:1", registry),
+    ],
+  ] as const) {
+    it.effect(`an authenticated ${name} inherits the global contexts`, () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const globalConfigDir = yield* makeGlobalDockerConfigDir;
+        yield* fs.writeFileString(
+          path.join(globalConfigDir, "config.json"),
+          JSON.stringify({ currentContext: "remote", credsStore: "desktop" }),
+        );
+        yield* fs.makeDirectory(
+          path.join(globalConfigDir, "contexts", "meta"),
+          {
+            recursive: true,
+          },
+        );
+
+        const isolated = yield* captureIsolatedDockerConfig(command).pipe(
+          withGlobalDockerConfig(globalConfigDir),
+        );
+
+        expect(isolated.config.currentContext).toBe("remote");
+        expect(isolated.contexts).toEqual(["meta"]);
+        expect(isolated.config.credsStore).toBeUndefined();
+        expect(isolated.config.auths["registry.invalid"]!.auth).toBe(
+          Buffer.from("publisher:DESTINATION_SECRET_SENTINEL").toString(
+            "base64",
+          ),
+        );
+      }),
+    );
+
+    it.effect(
+      `an authenticated ${name} uses the default context without a global config`,
+      () =>
+        Effect.gen(function* () {
+          const globalConfigDir = yield* makeGlobalDockerConfigDir;
+
+          const isolated = yield* captureIsolatedDockerConfig(command).pipe(
+            withGlobalDockerConfig(globalConfigDir),
+          );
+
+          expect(isolated.config.currentContext).toBeUndefined();
+          expect(isolated.contexts).toEqual([]);
+        }),
+    );
+  }
+
+  it.effect("an authenticated pull resolves a named global context", () =>
+    Effect.gen(function* () {
+      const docker = yield* Docker;
+      const globalConfigDir = yield* makeGlobalDockerConfigDir;
+      const contextName = "alchemy-test-named-context";
+      yield* createContextIn(
+        globalConfigDir,
+        contextName,
+        yield* currentEngineHost,
+      );
+
+      const result = yield* docker.image
+        .pull("hello-world:latest", undefined, contextName, registry)
+        .pipe(withGlobalDockerConfig(globalConfigDir));
+
+      expect(result.exitCode).toBe(0);
+    }),
+  );
+
+  // DOCKER_HOST and DOCKER_CONTEXT take precedence over `currentContext`.
+  it.effect.skipIf(process.env.DOCKER_HOST || process.env.DOCKER_CONTEXT)(
+    "an authenticated pull runs against the global currentContext",
+    () =>
+      Effect.gen(function* () {
+        const docker = yield* Docker;
+        const globalConfigDir = yield* makeGlobalDockerConfigDir;
+        const contextName = "alchemy-test-current-context";
+        const closedPort = "tcp://127.0.0.1:1";
+        yield* createContextIn(globalConfigDir, contextName, closedPort);
+        yield* docker.run([
+          "--config",
+          globalConfigDir,
+          "context",
+          "use",
+          contextName,
+        ]);
+
+        const error = yield* Effect.flip(
+          docker.image
+            .pull("hello-world:latest", undefined, undefined, registry)
+            .pipe(withGlobalDockerConfig(globalConfigDir)),
+        );
+
+        expect(error.reason.description).toContain("127.0.0.1:1");
+      }),
   );
 });

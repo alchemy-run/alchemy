@@ -2,10 +2,13 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
+import * as Argument from "effect/unstable/cli/Argument";
 
 import * as Cloudflare from "../../Alchemist/routes/cloudflare.ts";
 import * as CloudflareToken from "../../Alchemist/routes/cloudflareToken.ts";
@@ -15,6 +18,7 @@ import * as CliKit from "../../Cli/CliKit/index.ts";
 import { formatLocalTimestamp } from "../Format.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { confirmOrDecline } from "./confirm.ts";
+import { UserInputError } from "./errors.ts";
 import { envFile, parseSince, profile, yes } from "./flags.ts";
 import { instrumentCommand } from "./instrument.ts";
 
@@ -389,9 +393,165 @@ const stateLogsCommand = Command.make(
   Command.withDescription("Stream or fetch logs from the state-store worker"),
 );
 
+const secretsBackupFile = Argument.File("file").pipe(
+  Argument.withDescription(
+    "File to write the bearer token and encryption key to (mode 0600). " +
+      "Store the file in a password manager. If the encryption key is lost, no stack state can be read.",
+  ),
+);
+
+const secretsBackupForce = Flag.Boolean("force").pipe(
+  Flag.withDescription("Overwrite the file if it exists."),
+  Flag.withDefault(false),
+);
+
+const secretsRestoreFile = Argument.File("file", { mustExist: true }).pipe(
+  Argument.withDescription("Backup file written by 'secrets backup'."),
+);
+
+const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
+
+const StateStoreSecretsBackup = Schema.fromJsonString(
+  Schema.Struct({
+    accountId: Schema.String,
+    storeId: Schema.String,
+    url: Schema.String,
+    authToken: Schema.String,
+    encryptionKey: Schema.String,
+  }),
+);
+
+/**
+ * `alchemy provider cloudflare state secrets backup <file>` — write the
+ * state store's live bearer token and encryption key to a file. Every
+ * stack's state is ciphertext under that key; without a backup a lost
+ * key makes all of it unreadable.
+ */
+const secretsBackupCommand = Command.make(
+  "backup",
+  {
+    envFile,
+    profile,
+    workerName: cloudflareWorkerName,
+    file: secretsBackupFile,
+    force: secretsBackupForce,
+  },
+  instrumentCommand(
+    "cloudflare.state.secrets.backup",
+    (a: { profile: string | undefined; force: boolean }) => ({
+      "alchemy.profile": a.profile ?? "",
+      "alchemy.force": a.force,
+    }),
+  )(
+    Effect.fn(function* ({ envFile, profile, workerName, file, force }) {
+      const fs = yield* FileSystem.FileSystem;
+      if (!force && (yield* fs.exists(file))) {
+        return yield* Effect.fail(
+          new UserInputError({
+            message: `${file} already exists. Pass --force to overwrite it.`,
+          }),
+        );
+      }
+      const secrets = yield* Cloudflare.readStateSecrets({
+        profile,
+        workerName,
+        envFile: Option.getOrUndefined(envFile),
+      });
+      yield* fs.writeFileString(file, JSON.stringify(secrets, null, 2) + "\n", {
+        mode: 0o600,
+      });
+      // `mode` applies only when the file is created.
+      yield* fs.chmod(file, 0o600);
+      yield* CliKit.accessors.output.success(
+        `State store secrets written to ${file}. Move the file to a password manager.`,
+      );
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Write the state store's bearer token and encryption key to a file.",
+  ),
+);
+
+/**
+ * `alchemy provider cloudflare state secrets restore <file>` — write a
+ * backup's bearer token and encryption key back into the Secrets Store.
+ * Destructive: a key that did not encrypt the current state makes every
+ * stack's state unreadable, so it confirms unless `--yes` (or CI) is set.
+ */
+const secretsRestoreCommand = Command.make(
+  "restore",
+  {
+    envFile,
+    profile,
+    workerName: cloudflareWorkerName,
+    file: secretsRestoreFile,
+    yes,
+  },
+  instrumentCommand(
+    "cloudflare.state.secrets.restore",
+    (a: { profile: string | undefined; yes: boolean }) => ({
+      "alchemy.profile": a.profile ?? "",
+      "alchemy.yes": a.yes,
+    }),
+  )(
+    Effect.fn(function* ({
+      envFile,
+      profile,
+      workerName,
+      file,
+      yes: approved,
+    }) {
+      const fs = yield* FileSystem.FileSystem;
+      const isCI = yield* CI;
+      const backupJson = yield* fs.readFileString(file);
+      // The schema error would print the secrets. Use a fixed message.
+      const backup = yield* Schema.decodeEffect(StateStoreSecretsBackup)(
+        backupJson,
+      ).pipe(
+        Effect.mapError(
+          () =>
+            new UserInputError({
+              message: `${file} is not a state store secrets backup.`,
+            }),
+        ),
+      );
+      yield* confirmOrDecline({
+        yes: approved || isCI,
+        message:
+          `Overwrite the live bearer token and encryption key of Secrets ` +
+          `Store '${backup.storeId}' (${backup.url}) with the backup? ` +
+          "If the backup key is not the key that encrypted the current " +
+          "state, every stack's state becomes unreadable.",
+        confirmLabel: "Restore",
+        cancelLabel: "Cancel",
+        abortMessage: "Cancelled.",
+      });
+      yield* Cloudflare.restoreStateSecrets({
+        profile,
+        workerName,
+        envFile: Option.getOrUndefined(envFile),
+        backup,
+      });
+      yield* CliKit.accessors.output.success("State store secrets restored.");
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Write the bearer token and encryption key from a backup file back into the Secrets Store.",
+  ),
+);
+
+const stateSecretsCommand = Command.make("secrets", {}).pipe(
+  Command.withDescription(
+    "Back up or restore the state store's bearer token and encryption key.",
+  ),
+  Command.withSubcommands([secretsBackupCommand, secretsRestoreCommand]),
+);
+
 const stateCommand = Command.make("state", {}).pipe(
   Command.withDescription("Manage the Cloudflare-hosted state store"),
-  Command.withSubcommands([stateLogsCommand]),
+  Command.withSubcommands([stateLogsCommand, stateSecretsCommand]),
 );
 
 export const cloudflareCommand = Command.make("cloudflare", {}).pipe(

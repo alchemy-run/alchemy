@@ -111,8 +111,13 @@ full re-run matrix:
 - Unchanged inputs — the run is skipped.
 - A changed memoized file, an env-only change, or a command-only
   change — each re-runs the command.
-- Destroy — delete is a no-op; the command's side effects are never
-  reversed.
+- A `destroyCommand`-only change — the props are persisted but
+  `command` does not re-run (the memoized inputs are unchanged).
+- Destroy — delete is a no-op by default; the command's side effects
+  are never reversed.
+- Destroy with `destroyCommand` set — that command runs instead,
+  with the last-deployed `cwd`, `env`, `shell`, and `timeout`; a
+  non-zero exit fails the destroy.
 - After a destroy, an unchanged redeploy runs the command again —
   destroy forgets the run key.
 

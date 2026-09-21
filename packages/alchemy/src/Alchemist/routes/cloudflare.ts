@@ -15,7 +15,10 @@ import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
 import {
   bootstrap as bootstrapStateStore,
+  readStateStoreSecrets,
+  restoreStateStoreSecrets,
   teardownStateStore,
+  type StateStoreSecrets,
 } from "../../Cloudflare/StateStore/State.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -186,3 +189,31 @@ export const tailStateLogs = (input: StateTarget) =>
       );
     }),
   );
+
+/**
+ * Read the state store's live bearer token and encryption key out of the
+ * account Secrets Store. Every stack's state is ciphertext under that key,
+ * so the pair is what `state secrets backup` writes to disk.
+ */
+export const readStateSecrets = Effect.fn(
+  "Alchemist.provider.cloudflare.readStateSecrets",
+)(function* (input: StateTarget) {
+  const { layer } = yield* resolveStateStoreScope(input);
+  return yield* Effect.provide(readStateStoreSecrets(), layer);
+});
+
+export interface RestoreStateSecretsInput extends StateTarget {
+  readonly backup: StateStoreSecrets;
+}
+
+/**
+ * Write a backup's bearer token and encryption key back into the account
+ * Secrets Store. Refuses a backup taken from a different account or store.
+ */
+export const restoreStateSecrets = Effect.fn(
+  "Alchemist.provider.cloudflare.restoreStateSecrets",
+)(function* (input: RestoreStateSecretsInput) {
+  const { layer, accountId } = yield* resolveStateStoreScope(input);
+  yield* Effect.provide(restoreStateStoreSecrets(input.backup), layer);
+  return { accountId, storeId: input.backup.storeId, url: input.backup.url };
+});

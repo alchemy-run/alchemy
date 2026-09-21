@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as DigitalOcean from "alchemy/DigitalOcean";
 import * as Fly from "alchemy/Fly";
 import * as Hetzner from "alchemy/Hetzner";
 import * as Railway from "alchemy/Railway";
@@ -17,6 +18,9 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       Cloudflare.providers(),
       AWS.providers(),
+      // DigitalOcean firewalls and SSH keys have no ownership tag. The nuke
+      // deletes all of them. Point the testing token at a dedicated team.
+      DigitalOcean.providers(),
       Hetzner.providers(),
       Fly.providers(),
       Railway.providers(),

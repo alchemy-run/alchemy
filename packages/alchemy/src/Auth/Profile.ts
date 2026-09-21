@@ -130,6 +130,7 @@ const LEGACY_CREDENTIAL_KEYS: Record<string, string | Record<string, string>> =
     AWS: "aws-stored",
     Axiom: "axiom-stored",
     Cloudflare: "cloudflare-stored",
+    DigitalOcean: "digitalocean-stored",
     Fly: "fly-stored",
     GitHub: "github-stored",
     Hetzner: "hetzner-stored",

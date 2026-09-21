@@ -1,3 +1,4 @@
+import type { ScopedPlanStatusSession } from "@/Report.ts";
 import * as Docker from "@/Docker";
 import * as Provider from "@/Provider";
 import {
@@ -17,6 +18,10 @@ const { test } = Test.make({
   state: inMemoryState(),
   adopt: true,
 });
+
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 test.provider("diff replaces a container when its image changes", () =>
   Effect.gen(function* () {
@@ -179,6 +184,55 @@ describe("Docker.Container", { concurrent: false }, () => {
   );
 
   test.provider(
+    "applies memory limit, no-new-privileges, and read-only rootfs",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // nginx cannot start on a read-only root filesystem without writable
+        // mounts. This test checks the create arguments only.
+        const container = yield* stack.deploy(
+          Docker.Container("hardened-container", {
+            image: "nginx:alpine",
+            memory: "64m",
+            memorySwap: "64m",
+            noNewPrivileges: true,
+            readOnly: true,
+            start: false,
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        expect(info.HostConfig.Memory).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.MemorySwap).toBe(64 * 1024 * 1024);
+        expect(info.HostConfig.SecurityOpt).toContain("no-new-privileges");
+        expect(info.HostConfig.ReadonlyRootfs).toBe(true);
+      }),
+  );
+
+  test.provider(
+    "applies the user and keeps the container when it is unchanged",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const deploy = () =>
+          stack.deploy(
+            Docker.Container("user-container", {
+              image: "nginx:alpine",
+              user: "1234:1234",
+              start: false,
+            }),
+          );
+        const first = yield* deploy();
+        const info = yield* docker.container.inspect(first.name);
+        expect(info.Config.User).toBe("1234:1234");
+        // The image user is not a drift when the prop is unset, and the
+        // set prop matches what the engine reports.
+        const second = yield* deploy();
+        expect(second.id).toBe(first.id);
+      }),
+  );
+
+  test.provider(
     "updates network aliases without replacing the container",
     (stack) =>
       Effect.gen(function* () {
@@ -206,6 +260,201 @@ describe("Docker.Container", { concurrent: false }, () => {
           info?.NetworkSettings.Networks?.[second.network.name]?.Aliases ?? [];
         expect(aliases).toContain("new-alias");
         expect(aliases).not.toContain("old-alias");
+      }),
+  );
+
+  test.provider(
+    "is created on the first declared network, not the default bridge",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const { container, first, second } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const first = yield* Docker.Network("first-network");
+            const second = yield* Docker.Network("second-network");
+            const container = yield* Docker.Container("two-net-container", {
+              image: "nginx:alpine",
+              networks: [
+                { name: first.name, aliases: ["web"] },
+                { name: second.name },
+              ],
+              start: true,
+            });
+            return { container, first, second };
+          }),
+        );
+
+        const info = yield* docker.container.inspect(container.name);
+        const networks = info.NetworkSettings.Networks ?? {};
+        expect(Object.keys(networks).sort()).toEqual(
+          [first.name, second.name].sort(),
+        );
+        expect(networks[first.name]?.Aliases).toContain("web");
+      }),
+  );
+
+  test.provider("update keeps the default bridge", (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const deployWithStart = (start: boolean) =>
+        stack.deploy(
+          Docker.Container("bridge-container", {
+            image: "nginx:alpine",
+            start,
+          }),
+        );
+
+      const stopped = yield* deployWithStart(false);
+      const started = yield* deployWithStart(true);
+      expect(started.id).toBe(stopped.id);
+      expect(started.status).toBe("running");
+
+      const info = yield* docker.container.inspect(started.name);
+      expect(Object.keys(info.NetworkSettings.Networks ?? {})).toEqual([
+        "bridge",
+      ]);
+    }),
+  );
+
+  test.provider(
+    "returns to the default bridge when the last network is removed",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        // The network stays deployed in both steps. Only the container's
+        // `networks` prop changes.
+        const deployOnNetwork = (joinNetwork: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("last-network");
+              const container = yield* Docker.Container("last-net-container", {
+                image: "nginx:alpine",
+                networks: joinNetwork ? [{ name: network.name }] : undefined,
+                start: true,
+              });
+              return { container, network };
+            }),
+          );
+
+        const joined = yield* deployOnNetwork(true);
+        const left = yield* deployOnNetwork(false);
+        expect(left.container.id).toBe(joined.container.id);
+
+        const info = yield* docker.container.inspect(left.container.name);
+        expect(Object.keys(info.NetworkSettings.Networks ?? {})).toEqual([
+          "bridge",
+        ]);
+      }),
+  );
+
+  test.provider(
+    "recreate on drift stops the old container gracefully",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const provider = yield* Provider.findProvider(Docker.Container);
+        const name = "alchemy-test-graceful-container";
+        const volume = "alchemy-test-graceful-volume";
+        yield* Effect.addFinalizer(() =>
+          docker.container
+            .remove(name, true)
+            .pipe(Effect.andThen(docker.volume.remove(volume)), Effect.ignore),
+        );
+        yield* docker.volume.create({ name: volume });
+
+        // The process writes a marker on SIGTERM. A bare SIGKILL leaves none.
+        const props: Docker.ContainerProps = {
+          name,
+          image: "alpine:3.19",
+          command: [
+            "sh",
+            "-c",
+            "trap 'echo stopped > /out/stopped; exit 0' TERM; while :; do sleep 1; done",
+          ],
+          volumes: [{ hostPath: volume, containerPath: "/out" }],
+          stopTimeout: "10 seconds",
+          start: true,
+        };
+        const first = yield* stack.deploy(
+          Docker.Container("graceful-container", props),
+        );
+        expect(first.status).toBe("running");
+
+        // A changed env reaches reconcile without a replace plan.
+        const second = yield* provider.reconcile!({
+          id: "graceful-container",
+          fqn: "graceful-container",
+          instanceId: "instance",
+          news: { ...props, environment: { DRIFT: "1" } },
+          olds: props,
+          output: first,
+          session: stubSession,
+          bindings: [],
+        });
+        expect(second.id).not.toBe(first.id);
+        expect(second.status).toBe("running");
+
+        const marker = yield* docker.run([
+          "run",
+          "--rm",
+          "-v",
+          `${volume}:/out:ro`,
+          "alpine:3.19",
+          "cat",
+          "/out/stopped",
+        ]);
+        expect(marker.stdout).toBe("stopped");
+      }),
+  );
+
+  test.provider(
+    "adoption keeps a matching container and recreates drift",
+    (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = "alchemy-test-adopted-container";
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(name, true).pipe(Effect.ignore),
+        );
+        const { stdout: foreignId } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          "--env",
+          "FOO=bar",
+          "nginx:alpine",
+        ]);
+
+        const adopted = yield* stack.deploy(
+          Docker.Container("adopted-container", {
+            name,
+            image: "nginx:alpine",
+            environment: { FOO: "bar" },
+          }),
+        );
+        expect(adopted.id).toBe(foreignId);
+
+        yield* stack.destroy();
+        const { stdout: driftedId } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          "--env",
+          "FOO=bar",
+          "nginx:alpine",
+        ]);
+        const recreated = yield* stack.deploy(
+          Docker.Container("adopted-container", {
+            name,
+            image: "nginx:alpine",
+            environment: { FOO: "baz" },
+          }),
+        );
+        expect(recreated.id).not.toBe(driftedId);
+        const info = yield* docker.container.inspect(recreated.id);
+        expect(info.Config.Env).toContain("FOO=baz");
       }),
   );
 

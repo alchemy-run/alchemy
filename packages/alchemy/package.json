@@ -68,6 +68,7 @@
     "./Axiom": "./src/Axiom/index.ts",
     "./GitHub": "./src/GitHub/index.ts",
     "./Endpoint": "./src/Endpoint/index.ts",
+    "./DigitalOcean": "./src/DigitalOcean/index.ts",
     "./Neon": "./src/Neon/index.ts",
     "./Neon/*": "./src/Neon/*/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
@@ -252,6 +253,11 @@
         "bun": "./src/Endpoint/index.ts",
         "default": "./lib/Endpoint/index.js"
       },
+      "./DigitalOcean": {
+        "types": "./lib/DigitalOcean/index.d.ts",
+        "bun": "./src/DigitalOcean/index.ts",
+        "default": "./lib/DigitalOcean/index.js"
+      },
       "./Neon": {
         "types": "./lib/Neon/index.d.ts",
         "bun": "./src/Neon/index.ts",
@@ -371,6 +377,7 @@
     "@distilled.cloud/axiom": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/digitalocean": "workspace:*",
     "@distilled.cloud/fly-io": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",

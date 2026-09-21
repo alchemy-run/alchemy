@@ -39,6 +39,23 @@ export const arrayEqualsUnordered = <T extends string | number>(
 };
 
 /**
+ * Set equality for primitive elements: order and repeats do not matter,
+ * and an omitted list equals an empty list.
+ */
+export const setEquals = <T extends string | number>(
+  a: ReadonlyArray<T> | undefined,
+  b: ReadonlyArray<T> | undefined,
+): boolean => {
+  const setA = new Set(a ?? []);
+  const setB = new Set(b ?? []);
+  if (setA.size !== setB.size) return false;
+  for (const element of setA) {
+    if (!setB.has(element)) return false;
+  }
+  return true;
+};
+
+/**
  * Shallow equality of two string records (same keys, same values).
  */
 export const recordsEqual = (

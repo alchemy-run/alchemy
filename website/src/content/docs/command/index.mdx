@@ -52,7 +52,20 @@ There is no output contract: the resource succeeds iff the command
 exits with code `0`, is skipped when its inputs are unchanged, and
 re-runs when the `command`, `env`, or memoized files change — e.g. a
 recreated database's connection URL with identical files. Deleting
-an `Exec` never reverses its side effects.
+an `Exec` never reverses its side effects on its own — set
+`destroyCommand` to run a teardown step instead:
+
+```typescript
+yield* Command.Exec("migrate", {
+  command: "npm run db:migrate",
+  destroyCommand: "npm run db:backup",
+});
+```
+
+It runs on delete with the last-deployed `cwd`, `env`, `shell`, and
+`timeout`, before the resources this `Exec` depends on are
+destroyed. A non-zero exit fails the destroy. If the target can
+already be gone, make the command succeed in that case.
 
 `Dev` runs a long-lived process scoped to the stack instance:
 
@@ -70,7 +83,8 @@ lifecycle, restarts, and URL extraction.
 :::caution
 Command strings are whitespace-split into a binary and arguments —
 there is no quoting support unless you set `shell`. `Build`'s delete
-removes the output directory (`Exec`'s delete does nothing).
+removes the output directory (`Exec`'s delete does nothing unless
+`destroyCommand` is set).
 `Redacted` env values are unwrapped at spawn time and kept out of
 logs and state.
 :::

@@ -1,0 +1,148 @@
+---
+title: DigitalOcean
+description: Droplets, SSH keys, and Cloud Firewalls as Stack resources — Linux VMs declared, keyed, and firewalled in the same Stack as the rest of your infrastructure.
+---
+
+DigitalOcean provides Linux virtual machines. In alchemy the Droplet,
+its SSH key, and its firewall are resources in one Stack. Every
+change shows as a diff before deploy.
+
+New here? [Set up credentials](/digitalocean/setup) first.
+
+## Resources
+
+A `Droplet` is the VM, an `SshKey` is a public key registered on the
+team, and a `Firewall` is a free network-level allowlist applied to
+droplets by id or tag:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as DigitalOcean from "alchemy/DigitalOcean";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyStack",
+  {
+    providers: DigitalOcean.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const key = yield* DigitalOcean.SshKey("deploy-key", {
+      publicKey: process.env.SSH_PUBLIC_KEY!,
+    });
+
+    const host = yield* DigitalOcean.Droplet("app", {
+      region: "sfo3",
+      size: "s-2vcpu-4gb",
+      image: "ubuntu-24-04-x64",
+      sshKeys: [key.fingerprint],
+      monitoring: true,
+    });
+
+    yield* DigitalOcean.Firewall("edge", {
+      dropletIds: [host.dropletId],
+      inboundRules: [
+        { protocol: "tcp", ports: "22", addresses: ["0.0.0.0/0", "::/0"] },
+        { protocol: "tcp", ports: "443", addresses: ["0.0.0.0/0", "::/0"] },
+      ],
+      // outboundRules omitted — allow all outbound.
+    });
+
+    return { ip: host.ipv4 };
+  }),
+);
+```
+
+Names are optional everywhere — omit them and alchemy generates
+unique physical names from the Stack, logical ID, and stage.
+
+`region`, `size`, and `image` take DigitalOcean slugs. List them
+with `doctl compute region list`, `doctl compute size list`, and
+`doctl compute image list-distribution` (or `list-application` for
+Marketplace 1-Click images).
+
+## Droplets
+
+Only two droplet props update in place: `name` (a rename) and `tags`
+(assign/unassign). Changing anything else — `region`, `size`,
+`image`, `sshKeys`, `userData` — **replaces** the host with a fresh
+VM. Put all setup in `userData` (cloud-init). Then a replacement
+droplet configures itself.
+
+A replacement gets a new public IP. Pass `host.ipv4` around as an
+`Output` instead of copying the literal address, and downstream
+resources — like the DNS record below — update automatically.
+
+Set `replaceAfter: "30 days"` (a duration string, or a number of
+milliseconds) and the first deploy after the droplet crosses that
+age rebuilds it on a fresh image — kernel and base-image updates
+arrive by replacement instead of in-place mutation.
+
+## SSH keys
+
+An `SshKey` is identified by its key material: DigitalOcean derives
+`fingerprint` from `publicKey`, so changing the key replaces the
+resource, while renaming it updates in place. Pass
+`key.fingerprint` to the droplet's `sshKeys` to embed the key in
+the root account.
+
+## Firewalls
+
+A `Firewall` updates entirely in place — the API accepts the full
+desired rule set on every change, so nothing forces a replacement.
+
+Traffic not matched by an inbound rule is dropped. Omitting
+`outboundRules` allows all outbound traffic; pass `[]` to block all
+outbound traffic.
+
+`dropletIds` selects fixed droplets. `tags` selects every droplet
+with the tag, including droplets created later.
+
+## Ownership and adoption
+
+Droplet names are not unique, so alchemy adds an `alchemy:<hash>`
+tag to every droplet it creates. The hash is built from the stack,
+stage, and logical id. If the state store is ever lost, alchemy
+finds the droplet again through that tag. The tag is deleted with
+the droplet.
+
+When a resource already exists but alchemy didn't create it, the
+deploy fails instead of silently taking it over:
+
+- A same-named **droplet** without the ownership tag.
+- An **SSH key** whose key material is already uploaded — the same
+  key can be registered by someone else.
+- An explicitly named **firewall** that already exists — firewalls
+  carry no ownership tag, so a name match proves nothing.
+
+Re-run with `--adopt` to take ownership; see
+[Adopting resources](/cli/adopting-resources). For keys and
+firewalls, omitting `name` avoids the collision entirely — generated
+names are unique.
+
+## Compose with your cloud
+
+`providers()` merges like any other layer, so a droplet's public
+address can be the content of a Cloudflare DNS record in the same
+deploy:
+
+```typescript
+providers: Layer.mergeAll(Cloudflare.providers(), DigitalOcean.providers()),
+```
+
+```typescript
+// `zone` is your Cloudflare.Zone resource (or lookup) for example.com
+yield* Cloudflare.DNS.Record("AppA", {
+  zoneId: zone.zoneId,
+  name: "app.example.com",
+  type: "A",
+  content: host.ipv4.as<string>(),
+  proxied: true,
+});
+```
+
+## Reference
+
+[Droplet](/providers/digitalocean/droplets/droplet) ·
+[SshKey](/providers/digitalocean/sshkeys/sshkey) ·
+[Firewall](/providers/digitalocean/firewalls/firewall)
