@@ -74,6 +74,38 @@ function providerResourcesEntry(...providers: string[]) {
   return { label: "Resources", collapsed: false, items };
 }
 
+type ReferenceItem =
+  | { label: string; link: string }
+  | { label: string; items: readonly ReferenceItem[] };
+
+function providerApiReferenceEntry(...providers: string[]) {
+  const flatten = (
+    items: readonly ReferenceItem[],
+    prefix: readonly string[],
+  ): { label: string; link: string }[] =>
+    items.flatMap((item) => {
+      if ("items" in item) {
+        // Generated category and service groups can share a name.
+        return flatten(
+          item.items,
+          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
+        );
+      }
+      return [{ label: [...prefix, item.label].join("."), link: item.link }];
+    });
+
+  return {
+    label: "API Reference",
+    collapsed: false,
+    items: providers.flatMap((provider) =>
+      flatten(
+        providersSidebar.find((group) => group.label === provider)?.items ?? [],
+        providers.length > 1 ? [provider] : [],
+      ),
+    ),
+  };
+}
+
 /**
  * Copies `src/content/docs/**\/*.{md,mdx}` into the build output dir, preserving
  * the directory layout but normalizing extensions to `.md`. This lets the worker
@@ -914,6 +946,10 @@ export default defineConfig({
                 { label: "Apps", link: "/fly/compute/apps" },
                 { label: "Machines", link: "/fly/compute/machines" },
                 { label: "Services", link: "/fly/compute/services" },
+                {
+                  label: "Blue/green deployments",
+                  link: "/fly/compute/deployments",
+                },
                 { label: "Sprites", link: "/fly/compute/sprites" },
                 { label: "Regions", link: "/fly/compute/regions" },
               ],
@@ -1155,7 +1191,7 @@ export default defineConfig({
                 },
               ],
             },
-            providerResourcesEntry("Prisma"),
+            providerApiReferenceEntry("Prisma"),
           ],
         },
         {
@@ -1343,25 +1379,14 @@ export default defineConfig({
               ],
             },
             {
-              label: "API Reference",
-              collapsed: false,
+              label: "Prisma ORM",
               items: [
-                { label: "SQL.D1", link: "/providers/sql/d1" },
-                { label: "SQL.MySQL", link: "/providers/sql/mysql" },
-                { label: "SQL.Postgres", link: "/providers/sql/postgres" },
-                { label: "Drizzle.D1", link: "/providers/drizzle/d1" },
-                {
-                  label: "Drizzle.DurableObject",
-                  link: "/providers/drizzle/durableobject",
-                },
-                { label: "Drizzle.MySQL", link: "/providers/drizzle/mysql" },
-                {
-                  label: "Drizzle.Postgres",
-                  link: "/providers/drizzle/postgres",
-                },
-                { label: "Drizzle.Schema", link: "/providers/drizzle/schema" },
+                { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Contracts", link: "/sql/prisma/contracts" },
+                { label: "Migrations", link: "/sql/prisma/migrations" },
               ],
             },
+            providerApiReferenceEntry("SQL", "Drizzle"),
           ],
         },
         {

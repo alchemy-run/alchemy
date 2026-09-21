@@ -544,9 +544,9 @@ Local and CI Docker as Stack resources — images, containers, networks, and vol
 
 ## SQL
 
-Database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
+Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.
 
-- [SQL](https://alchemy.run/sql) — Choose a database provider, connect with Effect SQL or Drizzle, and deploy committed migration files.
+- [SQL](https://alchemy.run/sql) — Choose a database, connect with Effect SQL, Drizzle, or Prisma ORM, and deploy committed migrations.
 - [Databases](https://alchemy.run/sql/databases) — Compare database engines, connection paths, and deployment guides across Alchemy's SQL providers.
 - [Postgres](https://alchemy.run/sql/effect-sql/postgres) — SQL.Postgres turns a connection string into an @effect/sql-pg client — tagged-template queries with typed errors, one pool per execution.
 - [MySQL](https://alchemy.run/sql/effect-sql/mysql) — SQL.MySQL turns a connection string into an @effect/sql-mysql2 client — portable tagged-template queries with typed errors and one pool per execution.
@@ -557,6 +557,9 @@ Database comparison, portable Effect SQL and Drizzle clients, committed migratio
 - [MySQL](https://alchemy.run/sql/drizzle/mysql) — Provider-neutral MySQL schemas, Effect-native Drizzle queries, and connection configuration.
 - [D1](https://alchemy.run/sql/drizzle/d1) — SQLite schemas and Effect-native Drizzle queries over a Cloudflare D1 binding.
 - [Migrations](https://alchemy.run/sql/drizzle/migrations) — Generate migrations when your schema changes, review and commit the SQL and snapshots, then deploy from Git.
+- [Postgres](https://alchemy.run/sql/prisma/postgres) — Connect Prisma ORM v8 to Postgres, deploy migrations, and run Effect-native queries, streams, and transactions from a Worker over Hyperdrive.
+- [Contracts](https://alchemy.run/sql/prisma/contracts) — Author Prisma ORM v8 contracts in Prisma Schema Language or TypeScript, generate optional Effect bindings and row schemas, and connect them to migrations.
+- [Migrations](https://alchemy.run/sql/prisma/migrations) — How Prisma.Contract and Prisma.Migrate run Prisma's contract emission, migration planning, and graph-ordered apply inside alchemy deploy.
 
 ## Command
 
@@ -570,4 +573,4 @@ Cloud-agnostic local process primitives — memoized builds, one-off commands, a
 
 Per-resource API reference, generated from JSDoc on the source `.ts` files via `bun generate:api-reference`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from `@section` / `@example` JSDoc tags.
 
-The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~968 KB) — only fetch it when you need to locate a specific resource's reference page.
+The per-resource pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per resource. Warning: it is large (~969 KB) — only fetch it when you need to locate a specific resource's reference page.

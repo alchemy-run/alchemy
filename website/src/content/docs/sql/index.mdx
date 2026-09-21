@@ -1,13 +1,18 @@
 ---
 title: SQL
-description: Choose a database provider, connect with Effect SQL or Drizzle, and deploy committed migration files.
+description: Choose a database, connect with Effect SQL, Drizzle, or Prisma ORM, and deploy committed migrations.
 ---
 
-Use Effect SQL for SQL queries or Drizzle for typed schema queries. Start with your provider, then follow the shared client guide.
+Use Effect SQL for SQL queries, Drizzle for typed schema queries, or Prisma ORM for contract-based queries. Start with your provider, then follow the shared client guide.
+
+<span id="databases" />
 
 ## Choose a database
 
 See [Databases](/sql/databases) to compare engines and connection paths, with links directly to each database's setup guide.
+
+<span id="clients" />
+<span id="what-are-you-building" />
 
 ## Effect SQL
 
@@ -36,6 +41,12 @@ const rows = yield* db.select().from(users);
 
 See [Postgres](/sql/drizzle/postgres), [MySQL](/sql/drizzle/mysql), or [D1](/sql/drizzle/d1).
 
+## Prisma ORM
+
+Prisma ORM v8 supports TypeScript or PSL contracts and requires PostgreSQL 17+. It is separate from the [Prisma hosting provider](/prisma).
+
+[Contracts](/sql/prisma/contracts) · [Postgres queries](/sql/prisma/postgres) · [Migrations](/sql/prisma/migrations)
+
 ## Commit migrations before deployment
 
 Generate and review SQL when the schema changes, then commit it with the schema:
@@ -47,7 +58,9 @@ git add src/schema.ts drizzle
 git commit -m "Add schema migration"
 ```
 
-Follow the provider's guide to apply the committed SQL and deploy the application. Use the [Drizzle migration guide](/sql/drizzle/migrations) for generated SQL or [Effect SQL migrations](/sql/effect-sql/migrations) for handwritten files.
+Follow the provider's guide to apply the committed SQL and deploy the application. Use the [Drizzle migration guide](/sql/drizzle/migrations) for generated SQL, [Effect SQL migrations](/sql/effect-sql/migrations) for handwritten files, or the [Prisma migration workflow](/sql/prisma/migrations) for contracts.
+
+<span id="where-next" />
 
 ## Connection lifecycle
 

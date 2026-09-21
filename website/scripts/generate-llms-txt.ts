@@ -502,7 +502,7 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "Database comparison, portable Effect SQL and Drizzle clients, committed migration files, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
+      "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
     pages: {
       slugs: [
         "sql/index",
@@ -516,6 +516,9 @@ const SECTIONS: Section[] = [
         "sql/drizzle/mysql",
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
+        "sql/prisma/postgres",
+        "sql/prisma/contracts",
+        "sql/prisma/migrations",
       ],
     },
   },
