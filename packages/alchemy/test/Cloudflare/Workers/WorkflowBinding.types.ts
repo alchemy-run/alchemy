@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Output from "@/Output.ts";
 import type { ResourceClass } from "@/Resource.ts";
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -12,6 +13,43 @@ type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
     ? true
     : false;
+
+class ApplicationError extends Data.TaggedError("ApplicationError")<{
+  reason: string;
+}> {}
+
+const fallibleTask = Cloudflare.Workflows.task(
+  "fallible",
+  Effect.fail(new ApplicationError({ reason: "retry" })),
+  { rollback: () => Effect.fail(new ApplicationError({ reason: "rollback" })) },
+);
+type _TaskRetainsApplicationError = Assert<
+  Equals<Effect.Error<typeof fallibleTask>, ApplicationError>
+>;
+const recoveredTask = fallibleTask.pipe(
+  Effect.catchTag("ApplicationError", (error) => Effect.succeed(error.reason)),
+);
+type _RecoveryRemovesApplicationError = Assert<
+  Equals<Effect.Error<typeof recoveredTask>, never>
+>;
+const fallibleBody = Effect.fn(function* (_input: { id: string }) {
+  return yield* fallibleTask;
+});
+class FallibleWorkflow extends Cloudflare.Workflow<FallibleWorkflow>()(
+  "FallibleWorkflow",
+  Effect.succeed(fallibleBody),
+) {}
+const fallibleWorkflow = Cloudflare.Workflow(
+  "FallibleWorkflowFunction",
+  { workflowName: "fallible-workflow-function" },
+  Effect.succeed(fallibleBody),
+);
+type _WorkflowHandlerRetainsApplicationError = Assert<
+  Equals<Effect.Error<ReturnType<FallibleWorkflow>>, ApplicationError>
+>;
+type _WorkflowDeclarationDoesNotFailWithBodyError = Assert<
+  Equals<Effect.Error<typeof fallibleWorkflow>, never>
+>;
 
 const container = Cloudflare.Container("Sandbox", { image: "alpine:latest" });
 const program = Effect.gen(function* () {

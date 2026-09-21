@@ -81,7 +81,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 ) {}
 ```
 
-`socket.serializeAttachment({ id })` persists a JSON-safe value
+`socket.serializeAttachment({ id })` persists a structured-cloneable value
 **alongside the socket itself**. Cloudflare keeps it across
 hibernation, so when the DO wakes back up the socket still
 remembers which session it belongs to. We'll need that in the next
@@ -205,6 +205,93 @@ so it can only run in the inner (runtime) Effect — which is exactly
 where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.
 :::
+
+## Define the session data
+
+You can save session data on a WebSocket and validate it when reading it
+back—even after the Durable Object wakes from hibernation. First, define
+what a valid session contains:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+const Session = Schema.Struct({
+  id: Schema.String,
+  joinedAt: Schema.DateFromString,
+});
+```
+
+`id` is a string. `joinedAt` is a `Date` in your code; this schema converts
+it to a string for storage and back to a `Date` when you read it.
+
+## Save session data on a socket
+
+Replace the `serializeAttachment` call in `fetch` with:
+
+```typescript
+const joinedAt = yield* Effect.sync(() => new Date());
+yield* socket.setAttachment(Session, { id, joinedAt });
+```
+
+This saves the session on this connection, so it survives hibernation.
+Cloudflare must be able to serialize the stored value, and the serialized
+attachment must fit within 16,384 bytes, including serialization overhead.
+
+## Read the session back
+
+```typescript
+const session = yield* socket.getAttachment(Session);
+
+session.id;       // string
+session.joinedAt; // Date
+```
+
+`getAttachment` checks the saved data against `Session`. Missing or invalid
+data fails with `WebSocketAttachmentError` instead of returning an invalid
+session. The existing `serializeAttachment` and `deserializeAttachment`
+methods remain available if you do not want schema validation.
+
+## Validate attachments after hibernation
+
+Use `getAttachment` in the restoration loop to validate surviving sockets:
+
+```typescript
+for (const socket of yield* state.getWebSockets()) {
+  yield* socket.getAttachment(Session).pipe(
+    Effect.tap((session) =>
+      Effect.sync(() => sessions.set(session.id, socket)),
+    ),
+    Effect.catchTag("WebSocketAttachmentError", () =>
+      socket.close(1008, "Invalid session"),
+    ),
+  );
+}
+```
+
+This example closes connections whose sessions are missing or invalid,
+including older sessions without `joinedAt`. Your code chooses this behavior;
+`getAttachment` does not close the connection for you.
+
+For diagnostics, `WebSocketAttachmentError.reason` identifies `encode`,
+`decode`, `missing`, `read`, or `write`; `cause` contains the original error.
+A stored `null` or `undefined` counts as missing.
+
+## Choose an attachment error policy
+
+A handler can instead ignore an invalid attachment:
+
+```typescript
+const session = yield* socket.getAttachment(Session).pipe(
+  Effect.catchTag("WebSocketAttachmentError", () =>
+    Effect.succeed(undefined),
+  ),
+);
+if (session === undefined) return;
+```
+
+Omit `catchTag` to propagate the typed failure, or handle it at your normal
+Effect boundary. These helpers are for application-owned attachments, not
+the internal serializer metadata of WebSocket RPC connections.
 
 ## Extract a broadcast helper
 
