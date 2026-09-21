@@ -1,3 +1,5 @@
+import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stdio from "effect/Stdio";
@@ -63,6 +65,14 @@ const program = Effect.gen(function* () {
 // The parent streams this child's output and turns its exit code into the
 // resource-scoped build error. Do not print a second Effect failure report
 // (the extra `✖` block) from the child itself.
-runMain(program.pipe(Effect.provide(PlatformServices)), {
-  disableErrorReporting: true,
-});
+runMain(
+  program.pipe(
+    // Vite can reject without logging the underlying plugin error. Preserve
+    // it in the stderr tail that the parent includes in BundleError.
+    Effect.tapCause((cause) => Console.error(Cause.pretty(cause))),
+    Effect.provide(PlatformServices),
+  ),
+  {
+    disableErrorReporting: true,
+  },
+);

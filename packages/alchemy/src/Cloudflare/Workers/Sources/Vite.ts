@@ -242,6 +242,17 @@ export const viteBuildInProcess = (
         // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
         null,
       );
+      // Foldkit's server build owns its fetch entry. Checking before the
+      // build also rejects a custom entry named "fetch", which would pass
+      // the framework's output-name check while deploying the wrong handler.
+      if (
+        pluginOptions.main !== undefined &&
+        builder.config.plugins.some((plugin) => plugin.name === "foldkit:build")
+      ) {
+        throw new Error(
+          "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
+        );
+      }
       await builder.buildApp();
     });
     return yield* outputPlugin.output;
