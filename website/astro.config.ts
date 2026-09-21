@@ -357,6 +357,12 @@ export default defineConfig({
                 },
                 { label: "Secrets & Config", link: "/environments/secrets" },
                 {
+                  label: "Secret providers",
+                  link: "/environments/secret-providers",
+                },
+                { label: "Doppler", link: "/environments/doppler" },
+                { label: "Infisical", link: "/environments/infisical" },
+                {
                   label: "Local development",
                   link: "/environments/local-development",
                 },

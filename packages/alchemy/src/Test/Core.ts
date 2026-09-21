@@ -43,7 +43,10 @@ import {
 import { Stage } from "../Stage.ts";
 import * as State from "../State/index.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
-import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import {
+  loadConfigProvider,
+  StackConfigOverrides,
+} from "../Util/ConfigProvider.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 
 /**
@@ -386,6 +389,9 @@ export const toEffect = <A, ROut = any>(
     return yield* locally.pipe(
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
+      Effect.provideService(StackConfigOverrides, {
+        profile: options.profile,
+      }),
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
