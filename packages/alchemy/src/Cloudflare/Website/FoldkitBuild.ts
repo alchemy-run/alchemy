@@ -2,13 +2,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import {
-  makeViteSource,
-  SourceProviderError,
-  type ViteSourceOptions,
-} from "../vite/source.ts";
-
-const PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
+import type { AssetsConfig } from "../Workers/Assets.ts";
+import { BundleError } from "../../Bundle/Bundle.ts";
 
 /**
  * What a Foldkit build wrote beside its server bundle, as
@@ -92,32 +87,24 @@ export const readFoldkitBuildManifest = Effect.fn(function* (
  */
 export const foldkitAssetsFromManifest = (
   manifest: FoldkitBuildManifest | undefined,
-): { notFoundHandling: "single-page-application" } | undefined =>
+): AssetsConfig | undefined =>
   manifest === undefined
     ? { notFoundHandling: "single-page-application" }
     : undefined;
 
-/** Foldkit deployment policy composed with the shared Vite pipeline. */
-export const makeFoldkitSource = (options: ViteSourceOptions = {}) =>
-  makeViteSource(options, {
-    provider: PROVIDER,
-    assetDefaults: ({ serverDirectory }) =>
-      Effect.gen(function* () {
-        const manifest = yield* readFoldkitBuildManifest(serverDirectory);
-        if (manifest !== undefined && options.main !== undefined) {
-          return yield* Effect.fail(
-            new SourceProviderError({
-              provider: PROVIDER,
-              message:
-                "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
-            }),
-          );
-        }
-        return foldkitAssetsFromManifest(manifest);
+/** Read Foldkit's build contract before the shared Vite source hashes assets. */
+export const deriveFoldkitAssets = Effect.fn(function* (
+  serverDirectory: string | undefined,
+  main: string | undefined,
+) {
+  const manifest = yield* readFoldkitBuildManifest(serverDirectory);
+  if (manifest !== undefined && main !== undefined) {
+    return yield* Effect.fail(
+      new BundleError({
+        message:
+          "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
       }),
-  });
-
-export default {
-  make: (options: unknown) =>
-    Effect.succeed(makeFoldkitSource((options ?? {}) as ViteSourceOptions)),
-};
+    );
+  }
+  return foldkitAssetsFromManifest(manifest);
+});

@@ -33,35 +33,10 @@
     "test": "bun test ./test"
   },
   "exports": {
-    "./cached-function": {
-      "types": "./lib/cached-function.d.ts",
-      "bun": "./src/cached-function.ts",
-      "import": "./lib/cached-function.js"
-    },
-    "./hash": {
-      "types": "./lib/hash.d.ts",
-      "bun": "./src/hash.ts",
-      "import": "./lib/hash.js"
-    },
     "./ignore": {
       "types": "./lib/ignore.d.ts",
       "bun": "./src/ignore.ts",
       "import": "./lib/ignore.js"
-    },
-    "./ignore-rules": {
-      "types": "./lib/ignore-rules.d.ts",
-      "bun": "./src/ignore-rules.ts",
-      "import": "./lib/ignore-rules.js"
-    },
-    "./memo": {
-      "types": "./lib/memo.d.ts",
-      "bun": "./src/memo.ts",
-      "import": "./lib/memo.js"
-    },
-    "./port": {
-      "types": "./lib/port.d.ts",
-      "bun": "./src/port.ts",
-      "import": "./lib/port.js"
     },
     "./register-oxc": {
       "types": "./lib/register-oxc.d.ts",
@@ -81,23 +56,13 @@
   },
   "dependencies": {
     "chokidar": "catalog:",
-    "rolldown": "catalog:",
-    "tinyglobby": "catalog:"
+    "rolldown": "catalog:"
   },
   "publishConfig": {
     "access": "public"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
-    "effect": "catalog:",
     "typescript": "catalog:"
-  },
-  "peerDependencies": {
-    "effect": "catalog:"
-  },
-  "peerDependenciesMeta": {
-    "effect": {
-      "optional": true
-    }
   }
 }

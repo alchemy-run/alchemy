@@ -1,18 +1,14 @@
 import { pathToFileURL } from "node:url";
-import foldkitSourceModule, {
+import {
   foldkitAssetsFromManifest,
-  makeFoldkitSource,
   readFoldkitBuildManifest,
-} from "@alchemy.run/frontend-frameworks/foldkit/source";
+} from "@/Cloudflare/Website/FoldkitBuild.ts";
 import {
   Artifacts,
   createArtifactStore,
   makeScopedArtifacts,
 } from "@/Artifacts.ts";
-import {
-  makeSourceContext,
-  type WorkerSourceModule,
-} from "@/Cloudflare/Workers/Source.ts";
+import { makeSourceContext } from "@/Cloudflare/Workers/Source.ts";
 import { Worker } from "@/Cloudflare/Workers/Worker.ts";
 import {
   makeViteSource,
@@ -26,9 +22,6 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { cloneFixture } from "../Utils/Fixture.ts";
-
-// Checked by the normal PR typecheck: no host extension is required.
-const sourceModule = foldkitSourceModule satisfies WorkerSourceModule;
 
 const fixture = (name: string) =>
   Effect.gen(function* () {
@@ -143,9 +136,8 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
               "prerender: false",
             ),
           );
-          const source = yield* sourceModule.make({ rootDir: root, main });
           const result = yield* Effect.result(
-            source
+            makeViteSource({ rootDir: root, main, framework: "foldkit" })
               .build(
                 makeSourceContext({
                   id: "Conflict",
@@ -247,7 +239,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
             },
           };
           const source = framework
-            ? makeFoldkitSource(vite)
+            ? makeViteSource({ ...vite, framework: "foldkit" })
             : makeViteSource(vite);
           const output = yield* source
             .build(
@@ -292,7 +284,7 @@ layer(NodeServices.layer)("Foldkit published build contract", (it) => {
 
   for (const mode of ["ssr", "custom"] as const) {
     it.effect(
-      `serves ${mode} through the source module in an isolated dev child`,
+      `serves ${mode} through the built-in Vite source in an isolated dev child`,
       () =>
         Effect.gen(function* () {
           const path = yield* Path.Path;

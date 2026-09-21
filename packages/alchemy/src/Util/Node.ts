@@ -1,3 +1,6 @@
+import * as Effect from "effect/Effect";
+import * as NodeNet from "node:net";
+
 /**
  * The process's working directory, captured ONCE at module load.
  *
@@ -99,4 +102,27 @@ export const isRegisterHooksSupported = (
  * before the caller binds. Callers should keep the gap short and still handle
  * `EADDRINUSE`.
  */
-export { findAvailablePort } from "@alchemy.run/node-utils/port";
+export const findAvailablePort = (host = "127.0.0.1") =>
+  Effect.callback<number, Error>((resume) => {
+    const server = NodeNet.createServer();
+    server.unref();
+    server.once("error", (error) => resume(Effect.fail(error)));
+    server.listen(0, host, () => {
+      const address = server.address();
+      const port =
+        typeof address === "object" && address !== null
+          ? address.port
+          : undefined;
+      server.close((error) => {
+        if (error) {
+          resume(Effect.fail(error));
+        } else if (port !== undefined) {
+          resume(Effect.succeed(port));
+        } else {
+          resume(
+            Effect.fail(new Error("Failed to allocate an available port")),
+          );
+        }
+      });
+    });
+  });

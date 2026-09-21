@@ -32,7 +32,6 @@ export default defineConfig([
         "src/astro/runtime/entrypoints/server.ts",
       "astro/runtime/entrypoints/image-passthrough-endpoint":
         "src/astro/runtime/entrypoints/image-passthrough-endpoint.ts",
-      "foldkit/source": "src/foldkit/source.ts",
       "nextjs/index": "src/nextjs/index.ts",
       "nextjs/aws": "src/nextjs/aws.ts",
       "nextjs/node": "src/nextjs/node.ts",
@@ -73,7 +72,6 @@ export default defineConfig([
       "vinext/cache/s3": "src/vinext/cache/s3.ts",
       "vinext/cache/s3-runtime": "src/vinext/cache/s3-runtime.ts",
       "vite/index": "src/vite/index.ts",
-      "vite/source": "src/vite/source.ts",
       "vite/aws": "src/vite/aws.ts",
       "vite/node": "src/vite/node.ts",
       "sveltekit/aws": "src/sveltekit/aws.ts",

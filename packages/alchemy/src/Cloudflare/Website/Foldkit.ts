@@ -254,15 +254,11 @@ export const Foldkit: {
           (props) => ({
             ...props,
             main: undefined!,
-            source: {
-              provider: "@alchemy.run/frontend-frameworks/foldkit/source",
-              devMode: "server",
+            vite: {
+              framework: "foldkit",
+              main: props?.main,
               rootDir: props?.rootDir,
-              options: {
-                main: props?.main,
-                rootDir: props?.rootDir,
-                memo: props?.memo,
-              },
+              memo: props?.memo,
             },
           }),
         ),
