@@ -1188,16 +1188,6 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "better-auth/databases" } }],
             },
             {
-              label: "Deployment",
-              items: [
-                {
-                  label: "Cloudflare",
-                  link: "/better-auth/deployment/cloudflare",
-                },
-                { label: "AWS", link: "/better-auth/deployment/aws" },
-              ],
-            },
-            {
               label: "Guides",
               items: [
                 {

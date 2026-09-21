@@ -41,14 +41,12 @@ Alchemy creates the database when you deploy. During local development, D1 runs 
 
 ```typescript
 // src/auth.ts
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 
-export const authOptions = {
+const makeAuth = BetterAuth({
   basePath: "/api/auth",
   emailAndPassword: { enabled: true },
-} satisfies BetterAuthProps;
-
-const makeAuth = BetterAuth(authOptions);
+});
 ```
 
 Alchemy provisions a stable signing secret and applies D1 schema migrations. You do not need to create auth tables or supply a signing secret.
@@ -57,12 +55,15 @@ Alchemy provisions a stable signing secret and applies D1 schema migrations. You
 
 ```diff lang="typescript"
  // src/auth.ts
- import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+ import { BetterAuth } from "@alchemy.run/better-auth";
 +import * as Context from "effect/Context";
 +import * as Effect from "effect/Effect";
 +import * as Layer from "effect/Layer";
 
- const makeAuth = BetterAuth(authOptions);
+ const makeAuth = BetterAuth({
+   basePath: "/api/auth",
+   emailAndPassword: { enabled: true },
+ });
 +
 +export class Auth extends Context.Service<
 +  Auth,

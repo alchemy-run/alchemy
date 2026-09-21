@@ -7,11 +7,7 @@ description: Add a Better Auth server plugin, pair its browser client, and prese
 
 ```typescript
 // worker.ts
-import {
-  BetterAuth,
-  type BetterAuthProps,
-  type Session,
-} from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { username } from "better-auth/plugins";
@@ -19,21 +15,17 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-  plugins: [username()],
-} satisfies BetterAuthProps;
-
-export type AuthSession = Session<typeof authOptions>;
-
 const AuthDb = Cloudflare.D1.Database("AuthDb");
 
 export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
   "AuthApi",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
-    const auth = yield* BetterAuth(authOptions);
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      plugins: [username()],
+    });
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -48,9 +40,9 @@ export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
 ) {}
 ```
 
-The username plugin adds endpoints and user fields while preserving email/password sign-in. `satisfies BetterAuthProps` retains the specific plugin type; a broad `authOptions: BetterAuthProps` annotation would erase that inference.
+The username plugin adds endpoints and user fields while preserving email/password sign-in. `BetterAuth` infers those types directly from the inline plugin list.
 
-`AuthSession` derives the server session shape from these options. The wrapper's `auth.Infer` member is type-only metadata, not a runtime value to read.
+`auth.api` and `auth.getSession()` retain the plugin's inferred types. The wrapper's `auth.Infer` member is type-only metadata, not a runtime value to read.
 
 ## Deploy the plugin schema
 

@@ -107,7 +107,7 @@ A layer without automatic migration support needs application-owned tooling or a
 
 ## Resolve plugin and account errors
 
-Use `satisfies BetterAuthProps` to preserve plugin inference, and pair server plugins with their browser plugins where required. A missing database field means checking whether the schema change reached the database actually bound to this host, not adding a type cast.
+Pass plugin configuration inline to `BetterAuth` to preserve inference, and pair server plugins with their browser plugins where required. A missing database field means checking whether the schema change reached the database actually bound to this host, not adding a type cast.
 
 `SESSION_NOT_FRESH` requires signing in again; `FAILED_TO_UNLINK_LAST_ACCOUNT` protects the remaining sign-in method. For `LINKING_DIFFERENT_EMAILS_NOT_ALLOWED` or `email_does_not_match`, verify the identities rather than weakening verification or merging users by email.
 

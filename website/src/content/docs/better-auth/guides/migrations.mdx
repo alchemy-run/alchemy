@@ -7,20 +7,10 @@ description: Apply Better Auth schema changes at deploy, or manage the schema yo
 
 ```typescript
 // worker.ts
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-  user: {
-    additionalFields: {
-      timezone: { type: "string", required: false },
-    },
-  },
-} satisfies BetterAuthProps;
 
 const AuthDb = Cloudflare.D1.Database("AuthDb");
 
@@ -28,7 +18,15 @@ export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
   "AuthApi",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
-    const auth = yield* BetterAuth(authOptions);
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      user: {
+        additionalFields: {
+          timezone: { type: "string", required: false },
+        },
+      },
+    });
     return { fetch: auth.fetch };
   }).pipe(Effect.provide(CloudflareD1(AuthDb))),
 ) {}
@@ -98,11 +96,10 @@ Runtime connectivity does not prove deploy-time connectivity. In particular, Hyp
 
 ## Opt out only when another process owns the schema
 
-```typescript
-// auth-options.ts — alternative configuration for externally managed schema
-import type { BetterAuthProps } from "@alchemy.run/better-auth";
+In `worker.ts` above, replace the `BetterAuth` call with:
 
-export const authOptions = {
+```typescript
+const auth = yield* BetterAuth({
   basePath: "/api/auth",
   migrate: false,
   emailAndPassword: { enabled: true },
@@ -111,10 +108,8 @@ export const authOptions = {
       timezone: { type: "string", required: false },
     },
   },
-} satisfies BetterAuthProps;
+});
 ```
-
-This is a complete alternative options module, not an additional auth instance. To use it in the Worker above, import its `authOptions` instead of declaring that object in `worker.ts`.
 
 With `migrate: false`, your schema pipeline must create the matching tables, columns, and indexes before deployment. Do not use it to hide a failed migration; requesting `migrate: true` with Memory or Drizzle fails because those layers do not support automatic migrations.
 

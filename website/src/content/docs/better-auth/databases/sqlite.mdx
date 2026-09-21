@@ -29,11 +29,6 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 
-const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-} as const;
-
 const program = Effect.gen(function* () {
   const secret = yield* Config.Redacted("AUTH_SECRET");
   const database = yield* Database;
@@ -42,7 +37,8 @@ const program = Effect.gen(function* () {
     const connect = yield* database.migrate!.connect;
     const raw = yield* connect;
     const migrations = yield* Effect.tryPromise(() => getMigrations({
-      ...authOptions,
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
       database: raw,
       secret: Redacted.value(secret),
     }));
@@ -50,7 +46,8 @@ const program = Effect.gen(function* () {
   }).pipe(Effect.scoped);
 
   const auth = yield* BetterAuth({
-    ...authOptions,
+    basePath: "/api/auth",
+    emailAndPassword: { enabled: true },
     secret,
     migrate: false,
   });
@@ -71,7 +68,9 @@ const program = Effect.gen(function* () {
 BunRuntime.runMain(program);
 ```
 
-The standalone Bun process has no Alchemy migration Action, so it applies the schema once at startup before listening. `SQLite` supplies migration support, and the scoped migration connection closes before requests begin.
+The standalone Bun process has no Alchemy migration Action, so it applies the schema once at startup before listening. Keep schema-related options aligned between `getMigrations` and `BetterAuth` when adding plugins or fields.
+
+`SQLite` supplies migration support, and the scoped migration connection closes before requests begin.
 
 The Effect HTTP server provides a fresh scope per request; Better Auth opens and closes its SQLite connection within that scope. `RuntimeContext.phantom` satisfies the runtime-only methods here because this process has no resource Output accessors to resolve.
 

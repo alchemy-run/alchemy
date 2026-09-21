@@ -7,7 +7,7 @@ description: Read sessions, control their lifetime, and understand refresh and r
 
 ```typescript
 // worker.ts
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Data from "effect/Data";
@@ -15,17 +15,6 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
-    freshAge: 60 * 10,
-    cookieCache: { enabled: false },
-  },
-} satisfies BetterAuthProps;
 
 class AuthenticationUnavailable extends Data.TaggedError("AuthenticationUnavailable") {}
 
@@ -35,7 +24,16 @@ export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
   "AuthApi",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
-    const auth = yield* BetterAuth(authOptions);
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      session: {
+        expiresIn: 60 * 60 * 24 * 7,
+        updateAge: 60 * 60 * 24,
+        freshAge: 60 * 10,
+        cookieCache: { enabled: false },
+      },
+    });
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -165,11 +163,10 @@ The mounted `auth.fetch` returns Better Auth's response cookies, including refre
 
 ## Understand cookie-cache staleness
 
-```typescript
-// cached-options.ts — optional alternative to authOptions in worker.ts
-import type { BetterAuthProps } from "@alchemy.run/better-auth";
+To opt in, replace the `BetterAuth` call in `worker.ts` above with:
 
-export const authOptions = {
+```typescript
+const auth = yield* BetterAuth({
   basePath: "/api/auth",
   emailAndPassword: { enabled: true },
   session: {
@@ -182,10 +179,10 @@ export const authOptions = {
       refreshCache: false,
     },
   },
-} satisfies BetterAuthProps;
+});
 ```
 
-To opt in, use this module's `authOptions` instead of the local declaration in `worker.ts`. With `refreshCache: false`, a valid cache can still show revoked sessions or stale user data for up to 60 seconds without reading the store.
+With `refreshCache: false`, a valid cache can still show revoked sessions or stale user data for up to 60 seconds without reading the store.
 
 `refreshCache: true` can renew cached data without consulting the store, so `maxAge` alone does not bound staleness in that mode. The example's `/api/sensitive-me` route continues bypassing the cache regardless of this option; a browser-only bypass would not protect another server route.
 

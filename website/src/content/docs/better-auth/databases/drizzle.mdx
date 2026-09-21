@@ -14,19 +14,6 @@ bun add -d drizzle-kit@1.0.0-rc.5-ab785fc @types/pg
 
 Keep ORM and Kit versions compatible when upgrading. Configure an [AWS profile](/environments/profiles) and set `DATABASE_URL` to a Postgres database reachable by both your deployer and Lambda.
 
-## Share the auth options
-
-```typescript title="src/auth-options.ts"
-import type { BetterAuthOptions } from "better-auth";
-
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthOptions;
-```
-
-Both the CLI and runtime import this complete options file so plugins, additional fields, and model names stay aligned. Keep Alchemy-only `id` and `migrate` options out of the upstream CLI configuration.
-
 ## Export an upstream instance for the CLI
 
 ```typescript title="auth.cli.ts"
@@ -34,7 +21,6 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { betterAuth } from "better-auth";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { authOptions } from "./src/auth-options.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
@@ -44,12 +30,15 @@ const database = drizzle({
 });
 
 export const auth = betterAuth({
-  ...authOptions,
+  basePath: "/api/auth",
+  emailAndPassword: { enabled: true },
   database: drizzleAdapter(database, { provider: "pg" }),
 });
 ```
 
 The CLI needs upstream `betterAuth`, not an Effect or a Context service. This CLI-only pool is never imported by the Lambda; the CLI instance is for schema generation, not serving requests.
+
+Keep plugins, additional fields, and model names aligned between this call and the Lambda's `BetterAuth` call below. Alchemy-only `id` and `migrate` options belong only in the runtime call.
 
 ## Generate the auth schema
 
@@ -134,7 +123,6 @@ import * as AWS from "alchemy/AWS";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AuthDatabase } from "./auth-database.ts";
-import { authOptions } from "./auth-options.ts";
 
 export default class AuthApi extends AWS.Lambda.Function<AuthApi>()(
   "AuthApi",
@@ -146,7 +134,11 @@ export default class AuthApi extends AWS.Lambda.Function<AuthApi>()(
     build: { install: ["pg"] },
   },
   Effect.gen(function* () {
-    const auth = yield* BetterAuth({ ...authOptions, migrate: false });
+    const auth = yield* BetterAuth({
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      migrate: false,
+    });
     return { fetch: auth.fetch };
   }).pipe(Effect.provide(AuthDatabase)),
 ) {}

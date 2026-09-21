@@ -44,8 +44,10 @@ Leave the local application's callback unchanged.
    const clientId = yield* Config.String("GITHUB_CLIENT_ID");
    const clientSecret = yield* Config.Redacted("GITHUB_CLIENT_SECRET");
    return yield* BetterAuth({
-     ...authOptions,
+     basePath: "/api/auth",
+     emailAndPassword: { enabled: true },
 +    baseURL: Option.getOrUndefined(baseURL),
+     socialProviders: {
 ```
 
 An explicit origin makes production callback construction predictable. This is application URL configuration, not a replacement for Alchemy's generated signing secret.

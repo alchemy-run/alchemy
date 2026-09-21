@@ -7,7 +7,7 @@ description: Link and unlink sign-in methods without merging identities by email
 
 ```typescript
 // worker.ts
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Config from "effect/Config";
@@ -18,19 +18,6 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const AuthDb = Cloudflare.D1.Database("AuthDb");
 
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-  account: {
-    accountLinking: {
-      enabled: true,
-      disableImplicitLinking: true,
-      allowDifferentEmails: false,
-      allowUnlinkingAll: false,
-    },
-  },
-} satisfies BetterAuthProps;
-
 export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
   "AuthApi",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
@@ -38,7 +25,16 @@ export default class AuthApi extends Cloudflare.Worker<AuthApi>()(
     const clientId = yield* Config.String("GITHUB_CLIENT_ID");
     const clientSecret = yield* Config.Redacted("GITHUB_CLIENT_SECRET");
     const auth = yield* BetterAuth({
-      ...authOptions,
+      basePath: "/api/auth",
+      emailAndPassword: { enabled: true },
+      account: {
+        accountLinking: {
+          enabled: true,
+          disableImplicitLinking: true,
+          allowDifferentEmails: false,
+          allowUnlinkingAll: false,
+        },
+      },
       socialProviders: {
         github: { clientId, clientSecret: Redacted.value(clientSecret) },
       },

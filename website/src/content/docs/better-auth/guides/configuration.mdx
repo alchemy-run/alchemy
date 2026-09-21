@@ -7,22 +7,18 @@ description: Configure Better Auth URLs, database layers, and deployment environ
 
 ```typescript
 // auth.ts
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthProps;
-
 const makeAuth = Effect.gen(function* () {
   const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
   return yield* BetterAuth({
-    ...authOptions,
+    basePath: "/api/auth",
+    emailAndPassword: { enabled: true },
     baseURL: Option.getOrUndefined(baseURL),
   });
 });
@@ -35,7 +31,7 @@ export class Auth extends Context.Service<
 }
 ```
 
-`satisfies BetterAuthProps` checks the options without discarding plugin inference. The wrapper owns `database` and `secondaryStorage`; supply those through layers rather than this object.
+`BetterAuth` checks the inline options and infers plugin types. The wrapper owns `database` and `secondaryStorage`; supply those through layers rather than options.
 
 `AUTH_BASE_URL` is optional and contains an origin without a trailing slash when supplied. Resolving Config during service construction lets Alchemy discover and bind it before requests arrive.
 

@@ -1,15 +1,10 @@
-import { BetterAuth, type BetterAuthProps } from "@alchemy.run/better-auth";
+import { BetterAuth } from "@alchemy.run/better-auth";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-
-export const authOptions = {
-  basePath: "/api/auth",
-  emailAndPassword: { enabled: true },
-} satisfies BetterAuthProps;
 
 export const makeAuth = Effect.gen(function* () {
   const baseURL = yield* Config.String("AUTH_BASE_URL").pipe(Config.option);
@@ -26,7 +21,8 @@ export const makeAuth = Effect.gen(function* () {
     : undefined;
 
   return yield* BetterAuth({
-    ...authOptions,
+    basePath: "/api/auth",
+    emailAndPassword: { enabled: true },
     baseURL: Option.getOrUndefined(baseURL),
     socialProviders: github ? { github } : {},
   });
