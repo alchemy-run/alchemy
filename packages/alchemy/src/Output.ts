@@ -620,7 +620,7 @@ export const evaluate: <A, Req = never>(
     if (isResource(expr)) {
       const srcId = expr.FQN;
       const src = upstream[srcId as keyof typeof upstream];
-      if (!src) {
+      if (!Object.hasOwn(upstream, srcId)) {
         // type-safety should prevent this but let the caller decide how to handle it
         return yield* new MissingSourceError({
           message: `Source ${srcId} not found`,
@@ -632,7 +632,7 @@ export const evaluate: <A, Req = never>(
       if (isResourceExpr(expr)) {
         const srcId = expr.src.FQN;
         const src = upstream[srcId as keyof typeof upstream];
-        if (!src) {
+        if (!Object.hasOwn(upstream, srcId)) {
           // type-safety should prevent this but let the caller decide how to handle it
           return yield* new MissingSourceError({
             message: `Source ${srcId} not found`,

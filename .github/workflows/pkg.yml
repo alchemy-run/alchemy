@@ -83,7 +83,7 @@ jobs:
           --rebuild-all-path 'scripts/copy-package-files.ts'
           --group 'alchemy=./packages/alchemy'
           --group '@alchemy.run[Collapsed]=./packages/{better-auth,cloudflare-runtime,frontend-frameworks,node-utils,floci,pkg}'
-          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,cloudflare,fly-io,github,hetzner,neon,prisma,planetscale,railway,stripe,zerossl}'
+          --group '@distilled.cloud[Collapsed]=./submodules/distilled/packages/{core,acme,aws,axiom,celld,cloudflare,fly-io,github,hetzner,neon,prisma,planetscale,railway,stripe,zerossl}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'
