@@ -201,6 +201,14 @@ const collectNextOutput = (root: string) =>
       clientDirectory: hasPublic ? root : nextDir,
       serverModules: [serveModule],
       externalWorkspaces: new Set<string>(),
+      nodeServe: {
+        handler: {
+          kind: "node",
+          imports:
+            'import next from "next";\nconst app = next({ dev: false, dir: path.dirname(fileURLToPath(import.meta.url)) });\nawait app.prepare();',
+          expr: "app.getRequestHandler()",
+        },
+      },
     } satisfies BuildOutput;
   });
 
