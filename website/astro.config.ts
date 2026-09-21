@@ -74,6 +74,38 @@ function providerResourcesEntry(...providers: string[]) {
   return { label: "Resources", collapsed: false, items };
 }
 
+type ReferenceItem =
+  | { label: string; link: string }
+  | { label: string; items: readonly ReferenceItem[] };
+
+function providerApiReferenceEntry(...providers: string[]) {
+  const flatten = (
+    items: readonly ReferenceItem[],
+    prefix: readonly string[],
+  ): { label: string; link: string }[] =>
+    items.flatMap((item) => {
+      if ("items" in item) {
+        // Generated category and service groups can share a name.
+        return flatten(
+          item.items,
+          prefix.at(-1) === item.label ? prefix : [...prefix, item.label],
+        );
+      }
+      return [{ label: [...prefix, item.label].join("."), link: item.link }];
+    });
+
+  return {
+    label: "API Reference",
+    collapsed: false,
+    items: providers.flatMap((provider) =>
+      flatten(
+        providersSidebar.find((group) => group.label === provider)?.items ?? [],
+        providers.length > 1 ? [provider] : [],
+      ),
+    ),
+  };
+}
+
 /**
  * Copies `src/content/docs/**\/*.{md,mdx}` into the build output dir, preserving
  * the directory layout but normalizing extensions to `.md`. This lets the worker
@@ -1184,7 +1216,7 @@ export default defineConfig({
                 },
               ],
             },
-            providerResourcesEntry("Prisma"),
+            providerApiReferenceEntry("Prisma"),
           ],
         },
         {
@@ -1370,7 +1402,15 @@ export default defineConfig({
                 { label: "Migrations", link: "/sql/drizzle/migrations" },
               ],
             },
-            providerResourcesEntry("SQL", "Drizzle"),
+            {
+              label: "Prisma ORM",
+              items: [
+                { label: "Postgres", link: "/sql/prisma/postgres" },
+                { label: "Contracts", link: "/sql/prisma/contracts" },
+                { label: "Migrations", link: "/sql/prisma/migrations" },
+              ],
+            },
+            providerApiReferenceEntry("SQL", "Drizzle"),
           ],
         },
         {
