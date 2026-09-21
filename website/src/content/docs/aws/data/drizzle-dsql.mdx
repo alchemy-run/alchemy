@@ -1,0 +1,247 @@
+---
+title: Drizzle + Aurora DSQL
+description: Connect a Lambda to Aurora DSQL with IAM authentication and Effect-native Drizzle, with an explicit boundary between PostgreSQL SQL generation and DSQL migration execution.
+---
+
+## Install the runtime driver
+
+```sh
+pnpm add effect@4.0.0-rc.115 @effect/sql-pg@4.0.0-rc.115 \
+  drizzle-orm@1.0.0-rc.5-ab785fc pg
+pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+```
+
+Start from an Alchemy AWS project; this integration uses Effect-native Drizzle over `pg` and DSQL IAM tokens, not Aurora's RDS Data API driver. [Aurora PostgreSQL](/aws/data/drizzle-aurora) is a separate integration with different provisioning and migration behavior; compare them in [SQL databases](/sql/databases).
+
+## Define the table
+
+```typescript
+// src/schema.ts
+import { pgTable, text, uuid } from "drizzle-orm/pg-core";
+
+export const Notes = pgTable("notes", {
+  id: uuid("id").primaryKey(),
+  title: text("title").notNull(),
+});
+```
+
+Use application-generated UUIDs for this table rather than relying on PostgreSQL sequence defaults. DSQL supports sequences and foreign keys with platform-specific restrictions; check the current [PostgreSQL compatibility guidance](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-migration-guide.html) when extending the schema.
+
+## Configure SQL generation
+
+```typescript
+// drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/schema.ts",
+  out: "./migrations",
+});
+```
+
+This is PostgreSQL SQL generation, not a DSQL-specific dialect or migration runner.
+
+## Generate after a schema change
+
+```sh
+pnpm exec drizzle-kit generate --config=drizzle.config.ts
+```
+
+Generate locally whenever the schema changes, before deployment; generation does not connect to DSQL.
+
+## Check DSQL compatibility
+
+```sql
+CREATE TABLE "notes" (
+  "id" uuid PRIMARY KEY NOT NULL,
+  "title" text NOT NULL
+);
+```
+
+The initial migration should contain this single statement: [DSQL allows one DDL statement per transaction and separates DDL from DML](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-migration-guide.html#working-with-postgresql-compatibility-unsupported-limitations), unlike the ordinary PostgreSQL `drizzle-kit migrate` transaction that also writes migration history. Review later SQL for platform-specific syntax, including [`CREATE INDEX ASYNC`](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/create-index-syntax-support.html) and its completion checks; PostgreSQL wire compatibility does not make its migrator DSQL-compatible.
+
+## Review and commit the migration
+
+```sh
+git add src/schema.ts drizzle.config.ts migrations/
+git diff --cached -- src/schema.ts drizzle.config.ts migrations/
+git commit -m "feat(db): add DSQL notes schema and migration"
+```
+
+Review before committing, and keep any DSQL-specific SQL adjustments, generated snapshots, and the schema in the same change. Do not generate or silently rewrite migration SQL during deployment.
+
+## Declare the DSQL cluster
+
+```typescript
+// src/database.ts
+import * as AWS from "alchemy/AWS";
+
+export const Database = AWS.DSQL.Cluster("Database", {});
+```
+
+DSQL provides the `postgres` database and a public PostgreSQL-wire endpoint authenticated through IAM; this path needs neither a VPC attachment nor a password secret. It is not the Aurora cluster-and-writer topology in [RDS & Aurora](/aws/data/rds).
+
+## Create the Lambda
+
+```typescript
+// src/api.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    runtime: "nodejs24.x",
+    functionUrl: { authType: "AWS_IAM" },
+    build: { install: ["pg"] },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ready")),
+    };
+  }),
+) {}
+```
+
+The URL requires SigV4-signed requests, and `pg` is installed intact in the Lambda artifact for CommonJS compatibility.
+
+## Bind the DSQL connection
+
+```diff lang="typescript"
+ // src/api.ts
++import { Database } from "./database.ts";
+
+   Effect.gen(function* () {
++    const cluster = yield* Database;
++    const connect = yield* AWS.DSQL.Connect(cluster, { admin: true });
++
+     return {
+       fetch: Effect.succeed(HttpServerResponse.text("ready")),
+     };
+-  }),
++  }).pipe(Effect.provide(AWS.DSQL.ConnectHttp)),
+```
+
+`admin: true` grants the Lambda `dsql:DbConnectAdmin` on this cluster and selects the built-in `admin` database role, so this is a privileged getting-started connection. The runtime connection effect signs a fresh token locally with the execution-role credentials; it does not fetch a password from Secrets Manager.
+
+## Open Drizzle lazily
+
+```diff lang="typescript"
+ // src/api.ts
++import * as Drizzle from "alchemy/Drizzle/Postgres";
+
++    const db = yield* Drizzle.Postgres(
++      connect.pipe(Effect.map((info) => info.url)),
++    );
+```
+
+Insert `db` after `DSQL.Connect`; the connection URL stays redacted and is resolved only when a query runs. The pool is scoped to a Lambda invocation, not retained across warm invocations with an old IAM token.
+
+## Add a schema-independent health query
+
+```diff lang="typescript"
+ // src/api.ts
++import { sql } from "drizzle-orm";
+
+     return {
+-      fetch: Effect.succeed(HttpServerResponse.text("ready")),
++      fetch: Effect.gen(function* () {
++        const rows = yield* db.execute(sql`select 1 as one`);
++        return yield* HttpServerResponse.json({ rows });
++      }).pipe(Effect.orDie),
+     };
+```
+
+The first deployment can verify connectivity without creating application tables or exposing an HTTP migration endpoint.
+
+## Declare the stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+import { Database } from "./src/database.ts";
+
+export default Alchemy.Stack(
+  "DsqlDrizzle",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const cluster = yield* Database;
+    const api = yield* Api;
+    return { endpoint: cluster.endpoint, url: api.functionUrl };
+  }),
+);
+```
+
+`AWS.DSQL.Cluster` has no `migrations` prop, and `Drizzle.Postgres` is a runtime query wrapper, not a migration resource.
+
+## Provision the first cluster
+
+```sh
+pnpm exec alchemy deploy
+```
+
+This creates the infrastructure after migration review and commit; it does not generate or apply SQL. Use the returned endpoint as `PGHOST` for the separate migration connection below.
+
+## Authenticate the migration operator
+
+```sh
+: "${PGHOST:?Set PGHOST to the deployed DSQL endpoint}"
+: "${AWS_REGION:?Set AWS_REGION to the cluster region}"
+export PGHOST
+export PGPORT=5432 PGDATABASE=postgres PGUSER=admin
+export PGSSLMODE=verify-full PGSSLROOTCERT=system
+export PGPASSWORD="$(aws dsql generate-db-connect-admin-auth-token \
+  --hostname "$PGHOST" --region "$AWS_REGION")"
+```
+
+Run with AWS CLI credentials authorized for `dsql:DbConnectAdmin` and a `psql` client using libpq 16 or newer for system certificate trust. This operator identity is separate from the Lambda role; keep the token out of source control and logs, and mint a fresh one before reconnecting.
+
+## Apply the initial migration explicitly
+
+```sh
+: "${MIGRATION_SQL:?Set MIGRATION_SQL to the reviewed initial migration.sql}"
+psql -X --set=ON_ERROR_STOP=1 --set=AUTOCOMMIT=on --file="$MIGRATION_SQL"
+unset PGPASSWORD
+```
+
+For this first migration only, run the checked-in SQL once in autocommit mode, without `BEGIN` or `psql --single-transaction`; this command has no migration history or safe replay. Later migrations need a validated DSQL-compatible process that records applied versions and handles partial failures, not `alchemy deploy` or the ordinary PostgreSQL migrator.
+
+## Query the table
+
+```diff lang="typescript"
+ // src/api.ts
+-import { sql } from "drizzle-orm";
++import { Notes } from "./schema.ts";
+
+       fetch: Effect.gen(function* () {
+-        const rows = yield* db.execute(sql`select 1 as one`);
++        const rows = yield* db.select().from(Notes).limit(20);
+         return yield* HttpServerResponse.json({ rows });
+       }).pipe(Effect.orDie),
+```
+
+Use the shared [Drizzle Postgres query API](/sql/drizzle/postgres), but retain this guide's DSQL-specific migration boundary.
+
+## Deploy the application change
+
+```sh
+pnpm exec alchemy deploy
+```
+
+For future schema changes, generate and review SQL, commit it with the schema and snapshots, then use your validated DSQL migration process before deploying dependent application code. The [full-stack TanStack + RPC walkthrough](/aws/frontend/full-stack-tanstack-rpc-drizzle) adds a frontend; its `/setup` route is a demo bootstrap, not a production migration system.
+
+## Use an application database role
+
+```diff lang="typescript"
+ // src/api.ts, after separately provisioning the app database role
+-    const connect = yield* AWS.DSQL.Connect(cluster, { admin: true });
++    const connect = yield* AWS.DSQL.Connect(cluster, { username: "app" });
+```
+
+Before applying this production change, create the role, grant only the required SQL privileges, and associate it with the Lambda IAM role using [`AWS IAM GRANT`](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/using-database-and-iam-roles.html). The binding grants `dsql:DbConnect` instead of `dsql:DbConnectAdmin`, but it does not create the SQL role or its grants.

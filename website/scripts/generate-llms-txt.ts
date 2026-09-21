@@ -321,6 +321,10 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Fly — SQL",
+    pages: { slugs: ["fly/data/postgres", "fly/data/drizzle-postgres"] },
+  },
+  {
     heading: "Fly — Frontend",
     pages: { directory: "fly/frontend" },
   },
@@ -333,6 +337,10 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Hetzner — SQL",
+    pages: { slugs: ["hetzner/data/drizzle-postgres"] },
+  },
+  {
     heading: "Hetzner — Frontend",
     pages: { directory: "hetzner/frontend" },
   },
@@ -342,6 +350,28 @@ const SECTIONS: Section[] = [
       "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
     pages: {
       slugs: ["railway/index", "railway/setup"],
+    },
+  },
+  {
+    heading: "Railway — SQL",
+    pages: {
+      slugs: [
+        "railway/data/postgres",
+        "railway/data/mysql",
+        "railway/data/drizzle-postgres",
+        "railway/data/drizzle-mysql",
+      ],
+    },
+  },
+  {
+    heading: "Prisma — SQL",
+    pages: {
+      slugs: [
+        "prisma/data/postgres",
+        "prisma/data/branches",
+        "prisma/data/connections",
+        "prisma/data/drizzle-postgres",
+      ],
     },
   },
   {
@@ -472,15 +502,18 @@ const SECTIONS: Section[] = [
   {
     heading: "SQL",
     intro:
-      "One home for SQL in alchemy — low-level effect-sql clients (alchemy/SQL), Drizzle ORM, Prisma ORM v8 (Postgres-only), the migrationsDir contract, and the per-execution connection lifecycle; Worker runtime wiring lives under Cloudflare → Data.",
+      "Database comparison, Effect SQL, Drizzle, Prisma ORM v8 (Postgres-only), committed migrations, and connection lifecycle. Deployment walkthroughs live with their runtime providers.",
     pages: {
       slugs: [
         "sql/index",
+        "sql/databases",
         "sql/effect-sql/postgres",
+        "sql/effect-sql/mysql",
         "sql/effect-sql/d1",
         "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
         "sql/drizzle/postgres",
+        "sql/drizzle/mysql",
         "sql/drizzle/d1",
         "sql/drizzle/migrations",
         "sql/prisma/postgres",

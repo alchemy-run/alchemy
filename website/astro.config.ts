@@ -74,6 +74,17 @@ function providerResourcesEntry(...providers: string[]) {
   return { label: "Resources", collapsed: false, items };
 }
 
+function sortFrontendItems(items: readonly { label: string; link: string }[]) {
+  return items.toSorted((a, b) => {
+    const overviewOrder =
+      Number(b.label === "Overview") - Number(a.label === "Overview");
+    return (
+      overviewOrder ||
+      a.label.localeCompare(b.label, "en", { sensitivity: "base" })
+    );
+  });
+}
+
 type ReferenceItem =
   | { label: string; link: string }
   | { label: string; items: readonly ReferenceItem[] };
@@ -504,7 +515,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/cloudflare/frontend/frontends",
@@ -540,10 +551,10 @@ export default defineConfig({
                   link: "/cloudflare/frontend/tanstack-start",
                 },
                 { label: "Vite", link: "/cloudflare/frontend/vite" },
-                { label: "vinext", link: "/cloudflare/frontend/vinext" },
+                { label: "Vinext", link: "/cloudflare/frontend/vinext" },
                 { label: "Vue", link: "/cloudflare/frontend/vue" },
                 { label: "Waku", link: "/cloudflare/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -692,7 +703,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/aws/frontend/websites",
@@ -704,7 +715,7 @@ export default defineConfig({
                   link: "/aws/frontend/full-stack-tanstack-rpc-drizzle",
                 },
                 { label: "Next.js", link: "/aws/frontend/nextjs" },
-                { label: "vinext", link: "/aws/frontend/vinext" },
+                { label: "Vinext", link: "/aws/frontend/vinext" },
                 { label: "Nuxt", link: "/aws/frontend/nuxt" },
                 { label: "Octane", link: "/aws/frontend/octane" },
                 {
@@ -731,7 +742,7 @@ export default defineConfig({
                 { label: "Vite", link: "/aws/frontend/vite" },
                 { label: "Vue", link: "/aws/frontend/vue" },
                 { label: "Waku", link: "/aws/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "APIs",
@@ -754,6 +765,8 @@ export default defineConfig({
                 { label: "DynamoDB", link: "/aws/data/dynamodb" },
                 { label: "S3", link: "/aws/data/s3" },
                 { label: "RDS & Aurora", link: "/aws/data/rds" },
+                { label: "Drizzle + Aurora", link: "/aws/data/drizzle-aurora" },
+                { label: "Drizzle + DSQL", link: "/aws/data/drizzle-dsql" },
               ],
             },
             {
@@ -828,7 +841,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/hetzner/frontend/websites",
@@ -836,7 +849,7 @@ export default defineConfig({
                 { label: "Astro", link: "/hetzner/frontend/astro" },
                 { label: "Foldkit", link: "/hetzner/frontend/foldkit" },
                 { label: "Next.js", link: "/hetzner/frontend/nextjs" },
-                { label: "vinext", link: "/hetzner/frontend/vinext" },
+                { label: "Vinext", link: "/hetzner/frontend/vinext" },
                 { label: "Nuxt", link: "/hetzner/frontend/nuxt" },
                 { label: "Octane", link: "/hetzner/frontend/octane" },
                 {
@@ -862,7 +875,7 @@ export default defineConfig({
                 { label: "Vite", link: "/hetzner/frontend/vite" },
                 { label: "Vocs", link: "/hetzner/frontend/vocs" },
                 { label: "Waku", link: "/hetzner/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -873,7 +886,13 @@ export default defineConfig({
             },
             {
               label: "Data",
-              items: [{ label: "Volumes", link: "/hetzner/data/volumes" }],
+              items: [
+                { label: "Volumes", link: "/hetzner/data/volumes" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/hetzner/data/drizzle-postgres",
+                },
+              ],
             },
             {
               label: "Networking",
@@ -896,7 +915,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/fly/frontend/websites",
@@ -904,7 +923,7 @@ export default defineConfig({
                 { label: "Astro", link: "/fly/frontend/astro" },
                 { label: "Foldkit", link: "/fly/frontend/foldkit" },
                 { label: "Next.js", link: "/fly/frontend/nextjs" },
-                { label: "vinext", link: "/fly/frontend/vinext" },
+                { label: "Vinext", link: "/fly/frontend/vinext" },
                 { label: "Nuxt", link: "/fly/frontend/nuxt" },
                 { label: "Octane", link: "/fly/frontend/octane" },
                 {
@@ -930,7 +949,7 @@ export default defineConfig({
                 { label: "Vite", link: "/fly/frontend/vite" },
                 { label: "Vocs", link: "/fly/frontend/vocs" },
                 { label: "Waku", link: "/fly/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -951,6 +970,10 @@ export default defineConfig({
               items: [
                 { label: "Volumes", link: "/fly/data/volumes" },
                 { label: "Postgres", link: "/fly/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/fly/data/drizzle-postgres",
+                },
                 { label: "Redis", link: "/fly/data/redis" },
                 { label: "Tigris", link: "/fly/data/tigris" },
                 { label: "Secrets", link: "/fly/data/secrets" },
@@ -974,7 +997,7 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 {
                   label: "Overview",
                   link: "/railway/frontend/websites",
@@ -982,7 +1005,7 @@ export default defineConfig({
                 { label: "Astro", link: "/railway/frontend/astro" },
                 { label: "Foldkit", link: "/railway/frontend/foldkit" },
                 { label: "Next.js", link: "/railway/frontend/nextjs" },
-                { label: "vinext", link: "/railway/frontend/vinext" },
+                { label: "Vinext", link: "/railway/frontend/vinext" },
                 { label: "Nuxt", link: "/railway/frontend/nuxt" },
                 { label: "Octane", link: "/railway/frontend/octane" },
                 {
@@ -1008,7 +1031,7 @@ export default defineConfig({
                 { label: "Vite", link: "/railway/frontend/vite" },
                 { label: "Vocs", link: "/railway/frontend/vocs" },
                 { label: "Waku", link: "/railway/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Compute",
@@ -1032,6 +1055,14 @@ export default defineConfig({
                 { label: "Volumes", link: "/railway/data/volumes" },
                 { label: "Postgres", link: "/railway/data/postgres" },
                 { label: "MySQL", link: "/railway/data/mysql" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/railway/data/drizzle-postgres",
+                },
+                {
+                  label: "Drizzle + MySQL",
+                  link: "/railway/data/drizzle-mysql",
+                },
                 { label: "Mongo", link: "/railway/data/mongo" },
                 { label: "Redis", link: "/railway/data/redis" },
                 { label: "Variables", link: "/railway/data/variables" },
@@ -1127,6 +1158,10 @@ export default defineConfig({
               label: "Data",
               items: [
                 { label: "Postgres", link: "/prisma/data/postgres" },
+                {
+                  label: "Drizzle + Postgres",
+                  link: "/prisma/data/drizzle-postgres",
+                },
                 { label: "Branches", link: "/prisma/data/branches" },
                 { label: "Connections", link: "/prisma/data/connections" },
                 { label: "Buckets", link: "/prisma/data/buckets" },
@@ -1134,12 +1169,12 @@ export default defineConfig({
             },
             {
               label: "Frontend",
-              items: [
+              items: sortFrontendItems([
                 { label: "Overview", link: "/prisma/frontend/websites" },
                 { label: "Astro", link: "/prisma/frontend/astro" },
                 { label: "Foldkit", link: "/prisma/frontend/foldkit" },
                 { label: "Next.js", link: "/prisma/frontend/nextjs" },
-                { label: "vinext", link: "/prisma/frontend/vinext" },
+                { label: "Vinext", link: "/prisma/frontend/vinext" },
                 { label: "Nuxt", link: "/prisma/frontend/nuxt" },
                 { label: "Octane", link: "/prisma/frontend/octane" },
                 {
@@ -1156,7 +1191,7 @@ export default defineConfig({
                 { label: "Vite", link: "/prisma/frontend/vite" },
                 { label: "Vocs", link: "/prisma/frontend/vocs" },
                 { label: "Waku", link: "/prisma/frontend/waku" },
-              ],
+              ]),
             },
             {
               label: "Guides",
@@ -1331,6 +1366,7 @@ export default defineConfig({
           label: "SQL",
           items: [
             { label: "Overview", link: "/sql" },
+            { label: "Databases", link: "/sql/databases" },
             {
               label: "Effect SQL",
               items: [
