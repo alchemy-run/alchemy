@@ -47,7 +47,21 @@ export type {
   DurableObjectListOptions,
   SqlStorage,
 } from "./DurableObjectStorage.ts";
-export type { WebSocket, RawWebSocket } from "./WebSocket.ts";
+export {
+  WebSocketAttachmentError,
+  type WebSocket,
+  type RawWebSocket,
+} from "./WebSocket.ts";
+export {
+  RpcDurableObject,
+  type RpcDurableObjectClass,
+  type RpcDurableObjectProps,
+} from "./RpcDurableObject.ts";
+export {
+  SqlMigrations,
+  type SqlMigrationsInput,
+  type SqlMigrationSnapshot,
+} from "./SqlMigrations.ts";
 export { providers, Providers } from "./Providers.ts";
 export {
   RivetWorkerExposureRefused,

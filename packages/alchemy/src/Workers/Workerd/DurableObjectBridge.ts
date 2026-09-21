@@ -1,7 +1,15 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-import type * as Context from "effect/Context";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
+import { RpcActivationScope } from "../RpcDurableObject.ts";
+import type { CallbackFactory } from "../../Callback.ts";
+import {
+  dispatchAlarmCallbacks,
+  initializeAlarmCallbacks,
+} from "./AlarmCallback.ts";
 import { makeRequestEffect } from "../../Cloudflare/Workers/HttpServer.ts";
 import type { DurableObjectExport } from "../DurableObject.ts";
 import {
@@ -16,6 +24,7 @@ export interface DurableObjectBridgeOptions {
 }
 
 export interface WorkerdDurableObjectBridgeOptions {
+  readonly makeCallback: (state: cf.DurableObjectState) => CallbackFactory;
   readonly getExport: (className: string) => {
     readonly build: (pin: Pin) => Promise<WorkerBuild<DurableObjectExport>>;
   };
@@ -36,17 +45,36 @@ export const makeDurableObjectBridge =
 
     return class DurableObjectBridge extends DurableObject {
       readonly #core: DurableObjectInstance;
+      readonly #state: cf.DurableObjectState;
 
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
+        this.#state = state;
+        const makeCallback = adapter.makeCallback(state);
+        // Native eviction has no JavaScript teardown hook; requests own I/O cleanup.
+        const activationScope = Scope.makeUnsafe();
         this.#core = makeDurableObjectInstance({
           build,
-          services: adapter.services(state, env),
+          runtimeContext: (runtime) => ({ ...runtime, makeCallback }),
+          initialize: () => initializeAlarmCallbacks(state),
+          services: Context.add(
+            adapter.services(state, env),
+            RpcActivationScope,
+            activationScope,
+          ),
           waitUntil: (promise) => state.waitUntil(promise),
           dispatch,
           target: this,
           // Init I/O requires the native constructor's concurrency gate.
-          gate: (run) => state.blockConcurrencyWhile(run),
+          gate: (run) =>
+            state.blockConcurrencyWhile(() =>
+              run().catch(async (error) => {
+                await Effect.runPromise(
+                  Scope.close(activationScope, Exit.fail(error)),
+                );
+                throw error;
+              }),
+            ),
         });
         void this.#core.instance.catch(() => {});
         if (dispatch === "static") return this;
@@ -72,7 +100,13 @@ export const makeDurableObjectBridge =
       }
 
       async alarm(info?: cf.AlarmInvocationInfo): Promise<void> {
-        await this.#core.execute((instance) => instance.alarm!(info));
+        await this.#core.execute((instance) => {
+          const state = this.#state;
+          return Effect.gen(function* () {
+            yield* dispatchAlarmCallbacks(state, instance.alarm !== undefined);
+            yield* instance.alarm?.(info) ?? Effect.void;
+          });
+        });
       }
 
       async webSocketMessage(

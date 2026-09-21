@@ -7,28 +7,33 @@ import { fromWebSocket } from "../../Workers/Workerd/WebSocket.ts";
 
 export {
   fromWebSocket,
+  WebSocketAttachmentError,
   type RawWebSocket,
   type WebSocket,
 } from "../../Workers/Workerd/WebSocket.ts";
 
-// declare global {
-//   const WebSocketPair: new () => [cf.WebSocket, cf.WebSocket];
-// }
-
+/** Accept a hibernatable WebSocket on the current Durable Object. */
 export const upgrade = Effect.fn(function* () {
-  const _Response = Response as any as typeof cf.Response;
   const ctx = yield* DurableObjectState;
-  // @ts-expect-error
-  const [client, server] = new WebSocketPair();
-  const serverSocket = fromWebSocket(server);
+  const native = globalThis as unknown as {
+    WebSocketPair: typeof cf.WebSocketPair;
+    Response: typeof cf.Response;
+  };
+  const pair = yield* Effect.sync(() => new native.WebSocketPair());
+  const serverSocket = fromWebSocket(pair[1]);
   yield* ctx.acceptWebSocket(serverSocket);
-  const rawResponse = new _Response(null, {
-    status: 101,
-    webSocket: client,
-  });
-  const effectResponse = HttpServerResponse.setBody(
-    HttpServerResponse.empty({ status: 101 }),
-    HttpBody.raw(rawResponse),
+  const rawResponse = yield* Effect.sync(
+    () =>
+      new native.Response(null, {
+        status: 101,
+        webSocket: pair[0],
+      }),
   );
-  return [effectResponse, serverSocket] as const;
+  return [
+    HttpServerResponse.setBody(
+      HttpServerResponse.empty({ status: 101 }),
+      HttpBody.raw(rawResponse),
+    ),
+    serverSocket,
+  ] as const;
 });

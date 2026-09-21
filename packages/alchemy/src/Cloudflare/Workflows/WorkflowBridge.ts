@@ -2,9 +2,17 @@ import * as Cause from "effect/Cause";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import {
+  runWorkflowTask,
+  withWorkflowScope,
+} from "../../Workers/WorkflowCallback.ts";
+import {
+  callbackFailure,
+  terminalFailureMessage,
+  type WorkflowIdentity,
+} from "../../Workers/WorkflowFailure.ts";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
 import { isScopeEjected } from "../Workers/HttpServer.ts";
 import { getWorkerExport } from "../Workers/WorkerBridge.ts";
@@ -56,7 +64,7 @@ export const makeWorkflowBridge =
     return class WorkflowBridge extends WorkflowEntrypoint {
       readonly build: Promise<{
         readonly context: Context.Context<never>;
-        readonly fn: WorkflowImpl<unknown, unknown>;
+        readonly fn: WorkflowImpl<unknown, unknown, unknown>;
         readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
       }>;
 
@@ -69,7 +77,7 @@ export const makeWorkflowBridge =
               Effect.provideContext(context),
               Effect.map((fn) => ({
                 context,
-                fn: fn as WorkflowImpl<unknown, unknown>,
+                fn: fn as WorkflowImpl<unknown, unknown, unknown>,
                 telemetry,
               })),
               Effect.runPromise,
@@ -79,41 +87,40 @@ export const makeWorkflowBridge =
 
       async run(event: any, step: any): Promise<unknown> {
         const { context, fn, telemetry } = await this.build;
-        // The run scope owns telemetry and resources outside tasks.
-        // Step attempts and rollback handlers use separate scopes.
-        const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
-          fn(event.payload).pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                Layer.succeed(WorkflowEventService, wrapWorkflowEvent(event)),
-                Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
-                Layer.succeed(Scope.Scope, scope),
-                // The configured telemetry exporters, attached to the run's
-                // scope by `buildEventTelemetry` so buffered telemetry
-                // flushes when the scope closes at the end of the
-                // run-invocation.
-                Layer.effectContext(
-                  buildEventTelemetry(context, scope, telemetry()),
+          withWorkflowScope(
+            Effect.gen(function* () {
+              const scope = yield* Scope.Scope;
+              return yield* fn(event.payload).pipe(
+                Effect.provide(
+                  Layer.mergeAll(
+                    Layer.succeed(
+                      WorkflowEventService,
+                      wrapWorkflowEvent(event),
+                    ),
+                    Layer.succeed(
+                      WorkflowStep,
+                      wrapWorkflowStep(step, {
+                        workflow: JSON.stringify([
+                          stack.name,
+                          stack.stage,
+                          className,
+                          event.workflowName ?? "",
+                        ]),
+                        instanceId: event.instanceId,
+                      }),
+                    ),
+                    Layer.succeed(Scope.Scope, scope),
+                    Layer.effectContext(
+                      buildEventTelemetry(context, scope, telemetry()),
+                    ),
+                  ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
                 ),
-              ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
-            ),
-          ) as Effect.Effect<unknown>,
-        );
-        // Settle the run's resources with its real exit, unless a binding
-        // ejected the scope to outlive the invocation. The workflow runtime has
-        // no `waitUntil` to detach cleanup to, so close inline — a failing
-        // finalizer (e.g. a pg pool `end()` on a dropped connection) is logged
-        // and ignored so it can't mask the run's outcome.
-        if (!isScopeEjected(scope)) {
-          await Scope.close(scope, exit).pipe(
-            Effect.ignoreCause({
-              log: "Warn",
-              message: "Workflow run scope close failed",
+              ) as Effect.Effect<unknown, unknown>;
             }),
-            Effect.runPromise,
-          );
-        }
+            isScopeEjected,
+          ),
+        );
         if (Exit.isSuccess(exit)) {
           return exit.value;
         }
@@ -133,13 +140,23 @@ const wrapWorkflowEvent = (event: any): WorkflowEventService["Service"] => ({
   schedule: event.schedule ?? undefined,
 });
 
-export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
-  do: <T>(options: WorkflowTaskOptions<T, any, any>): Effect.Effect<T> => {
+const terminalFailure = async (message: string): Promise<Error> => {
+  const { NonRetryableError } = await import("cloudflare:workflows");
+  return new NonRetryableError(terminalFailureMessage(message));
+};
+
+export const wrapWorkflowStep = (
+  step: any,
+  identity?: WorkflowIdentity,
+): WorkflowStep["Service"] => ({
+  do: <T, E>(
+    options: WorkflowTaskOptions<T, any, any, E>,
+  ): Effect.Effect<T, E> => {
     const { name } = options;
     // `task` provides application services; the bridge supplies attempt-local services.
     const effect = options.effect as Effect.Effect<
       T,
-      never,
+      E,
       WorkflowStepContext | Scope.Scope
     >;
     const config = definedStepConfig(options);
@@ -147,42 +164,46 @@ export const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
     const rollback = rollbackEffect
       ? {
           // Native compensation may run after this step and the run scope have closed.
-          rollback: (context: any) =>
-            Effect.runPromise(
+          rollback: async (context: any) => {
+            const exit = await Effect.runPromiseExit(
               Effect.scoped(
                 rollbackEffect({
                   error: context.error,
                   output: context.output,
-                }) as Effect.Effect<void, never, Scope.Scope>,
+                }) as Effect.Effect<void, unknown, Scope.Scope>,
               ),
-            ),
+            );
+            if (Exit.isFailure(exit))
+              throw await callbackFailure(
+                exit.cause,
+                terminalFailure,
+                name,
+                identity,
+              );
+          },
           rollbackConfig: definedStepConfig(options.rollbackConfig),
         }
       : undefined;
-    return Effect.scoped(
-      Effect.gen(function* () {
-        // Join active callbacks on interruption, without waiting through native retry delays.
-        const runPromise = yield* FiberSet.makeRuntimePromise<never, T>();
-        const callback = (context: any) =>
-          runPromise(
-            effect.pipe(
-              Effect.provideService(WorkflowStepContext, {
-                step: context.step,
-                attempt: context.attempt,
-                config: context.config,
-              }),
-              Effect.scoped,
-            ),
-          );
-        return yield* Effect.promise<T>(() => {
-          if (config && rollback)
-            return step.do(name, config, callback, rollback);
-          if (config) return step.do(name, config, callback);
-          if (rollback) return step.do(name, callback, rollback);
-          return step.do(name, callback);
-        });
-      }),
-    );
+    return runWorkflowTask({
+      name,
+      identity,
+      terminalFailure,
+      effect: (context: any) =>
+        effect.pipe(
+          Effect.provideService(WorkflowStepContext, {
+            step: context.step,
+            attempt: context.attempt,
+            config: context.config,
+          }),
+        ),
+      native: (callback) => {
+        if (config && rollback)
+          return step.do(name, config, callback, rollback);
+        if (config) return step.do(name, config, callback);
+        if (rollback) return step.do(name, callback, rollback);
+        return step.do(name, callback);
+      },
+    });
   },
   sleep: (name: string, duration: string | number): Effect.Effect<void> =>
     Effect.promise(() => step.sleep(name, duration)),

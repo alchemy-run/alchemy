@@ -71,7 +71,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
         fetch: Effect.gen(function* () {
           const [response, socket] = yield* Cloudflare.upgrade();
 +          const id = crypto.randomUUID();
-+          socket.serializeAttachment({ id });
++          socket.serializeAttachment({ userId: id });
 +          sessions.set(id, socket);
           return response;
         }),
@@ -81,7 +81,7 @@ export default class Room extends Cloudflare.DurableObject<Room>()(
 ) {}
 ```
 
-`socket.serializeAttachment({ id })` persists a JSON-safe value
+`socket.serializeAttachment({ userId: id })` persists a structured-cloneable value
 **alongside the socket itself**. Cloudflare keeps it across
 hibernation, so when the DO wakes back up the socket still
 remembers which session it belongs to. We'll need that in the next
@@ -99,7 +99,7 @@ return {
   fetch: Effect.gen(function* () {
     const [response, socket] = yield* Cloudflare.upgrade();
     const id = crypto.randomUUID();
-    socket.serializeAttachment({ id });
+    socket.serializeAttachment({ userId: id });
     sessions.set(id, socket);
     return response;
   }),
@@ -107,13 +107,13 @@ return {
 +    socket: Cloudflare.WebSocket,
 +    message: string | ArrayBuffer,
 +  ) {
-+    const attachment = socket.deserializeAttachment<{ id: string }>();
++    const attachment = socket.deserializeAttachment<{ userId: string }>();
 +    if (!attachment) return;
 +    const text =
 +      typeof message === "string"
 +        ? message
 +        : new TextDecoder().decode(message);
-+    const label = attachment.id.slice(0, 8);
++    const label = attachment.userId.slice(0, 8);
 +    for (const peer of sessions.values()) {
 +      yield* peer.send(`[${label}] ${text}`);
 +    }
@@ -140,8 +140,8 @@ return {
 +    code: number,
 +    reason: string,
 +  ) {
-+    const attachment = ws.deserializeAttachment<{ id: string }>();
-+    if (attachment) sessions.delete(attachment.id);
++    const attachment = ws.deserializeAttachment<{ userId: string }>();
++    if (attachment) sessions.delete(attachment.userId);
 +    yield* ws.close(code, reason);
 +  }),
 +  webSocketError: Effect.fn(function* (
@@ -150,8 +150,8 @@ return {
 +  ) {
 +    // Cloudflare closes an errored socket after this handler runs; only
 +    // the session bookkeeping is ours to clean up.
-+    const attachment = ws.deserializeAttachment<{ id: string }>();
-+    if (attachment) sessions.delete(attachment.id);
++    const attachment = ws.deserializeAttachment<{ userId: string }>();
++    if (attachment) sessions.delete(attachment.userId);
 +  }),
 };
 ```
@@ -179,8 +179,8 @@ Effect.gen(function* () {
     const sessions = new Map<string, Cloudflare.WebSocket>();
 
 +    for (const socket of yield* state.getWebSockets()) {
-+      const data = socket.deserializeAttachment<{ id: string }>();
-+      if (data) sessions.set(data.id, socket);
++      const data = socket.deserializeAttachment<{ userId: string }>();
++      if (data) sessions.set(data.userId, socket);
 +    }
 
     return {
@@ -194,7 +194,7 @@ Effect.gen(function* () {
 
 `state.getWebSockets()` returns every still-attached socket on the
 current instance, and `deserializeAttachment` recovers the
-`{ id }` we stashed in the upgrade step. Without this loop the
+`{ userId }` we stashed in the upgrade step. Without this loop the
 first message after hibernation would broadcast to nobody.
 
 :::note
@@ -205,6 +205,101 @@ so it can only run in the inner (runtime) Effect — which is exactly
 where it needs to be, since it must re-run every time Cloudflare
 reconstructs the instance after hibernation.
 :::
+
+## Define the session data
+
+You can save session data on a WebSocket and validate it when reading it
+back—even after the Durable Object wakes from hibernation. First, define
+what a valid session contains:
+
+```typescript
+import * as Schema from "effect/Schema";
+
+const Session = Schema.Struct({
+  version: Schema.Literal(1),
+  userId: Schema.String,
+  connectedAt: Schema.DateFromString,
+});
+```
+
+This versioned Session matches the [Celld](/celld/compute/hibernatable-websockets)
+and [Rivet](/rivet/compute/hibernatable-websockets) examples. `userId` is a string;
+`connectedAt` is a Date encoded as a string. The version detects incompatible
+attachments; it does not migrate them automatically.
+
+## Save session data on a socket
+
+Replace the `serializeAttachment` call in `fetch` with:
+
+```typescript
+const connectedAt = yield* Effect.sync(() => new Date());
+yield* socket.setAttachment(Session, {
+  version: 1,
+  userId: id,
+  connectedAt,
+});
+```
+
+This saves the session on this connection, so it survives hibernation.
+Cloudflare must be able to serialize the stored value, and the serialized
+attachment must fit within 16,384 bytes, including serialization overhead.
+
+## Read the session back
+
+```typescript
+const session = yield* socket.getAttachment(Session);
+
+session.version;     // 1
+session.userId;      // string
+session.connectedAt; // Date
+```
+
+`getAttachment` checks the saved data against `Session`. Missing or invalid
+data fails with `WebSocketAttachmentError` instead of returning an invalid
+session. The existing `serializeAttachment` and `deserializeAttachment`
+methods remain available if you do not want schema validation.
+
+## Validate attachments after hibernation
+
+Use `getAttachment` in the restoration loop to validate surviving sockets:
+
+```typescript
+for (const socket of yield* state.getWebSockets()) {
+  yield* socket.getAttachment(Session).pipe(
+    Effect.tap((session) =>
+      Effect.sync(() => sessions.set(session.userId, socket)),
+    ),
+    Effect.catchTag("WebSocketAttachmentError", () =>
+      socket.close(1008, "Invalid session"),
+    ),
+  );
+}
+```
+
+This example closes connections whose sessions are missing or invalid,
+including older sessions without a version or `connectedAt`. Your code chooses this behavior;
+`getAttachment` does not close the connection for you.
+
+For diagnostics, `WebSocketAttachmentError.reason` identifies `encode`,
+`decode`, `missing`, `read`, or `write`; `cause` contains the original error.
+A stored `null` or `undefined` counts as missing.
+
+## Choose an attachment error policy
+
+A handler can instead ignore an invalid attachment:
+
+```typescript
+const session = yield* socket.getAttachment(Session).pipe(
+  Effect.catchTag("WebSocketAttachmentError", () =>
+    Effect.succeed(undefined),
+  ),
+);
+if (session === undefined) return;
+```
+
+Omit `catchTag` to propagate the typed failure, or handle it at your normal
+Effect boundary. These helpers are for application-owned attachments, not
+the internal serializer metadata of WebSocket RPC connections.
 
 ## Extract a broadcast helper
 
@@ -219,8 +314,8 @@ Effect.gen(function* () {
     const sessions = new Map<string, Cloudflare.WebSocket>();
 
     for (const socket of yield* state.getWebSockets()) {
-      const data = socket.deserializeAttachment<{ id: string }>();
-      if (data) sessions.set(data.id, socket);
+      const data = socket.deserializeAttachment<{ userId: string }>();
+      if (data) sessions.set(data.userId, socket);
     }
 
 +    const broadcast = (text: string) =>
@@ -233,15 +328,15 @@ Effect.gen(function* () {
     return {
       fetch: /* ... */,
       webSocketMessage: Effect.fn(function* (socket, message) {
-        const attachment = socket.deserializeAttachment<{ id: string }>();
+        const attachment = socket.deserializeAttachment<{ userId: string }>();
         if (!attachment) return;
         const text = typeof message === "string"
           ? message
           : new TextDecoder().decode(message);
 -        for (const peer of sessions.values()) {
--          yield* peer.send(`[${attachment.id.slice(0, 8)}] ${text}`);
+-          yield* peer.send(`[${attachment.userId.slice(0, 8)}] ${text}`);
 -        }
-+        yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
++        yield* broadcast(`[${attachment.userId.slice(0, 8)}] ${text}`);
       }),
       webSocketClose: /* ... */,
 +      broadcast,
@@ -519,7 +614,7 @@ and schedule a job using the callback handle:
 
 ```diff lang="typescript"
 webSocketMessage: Effect.fn(function* (socket, message) {
-  const attachment = socket.deserializeAttachment<{ id: string }>();
+  const attachment = socket.deserializeAttachment<{ userId: string }>();
   if (!attachment) return;
   const text = typeof message === "string"
     ? message
@@ -538,7 +633,7 @@ webSocketMessage: Effect.fn(function* (socket, message) {
 +    return;
 +  }
 
-  yield* broadcast(`[${attachment.id.slice(0, 8)}] ${text}`);
+  yield* broadcast(`[${attachment.userId.slice(0, 8)}] ${text}`);
 }),
 ```
 
@@ -593,3 +688,26 @@ You now have an interesting backend. Next you'll
 [add a React SPA](/cloudflare/frontend/vite-spa) so users have a UI
 to talk to it — frontend and backend deploying together from the
 same `alchemy.run.ts`.
+
+
+## Runtime behavior
+
+Native sockets and their attachments can outlive an idle activation. Rebuild
+application indexes after wake and validate versioned data before using it.
+Cloudflare's native auto-response can answer configured heartbeat pairs without
+waking the object; Effect RPC owns its protocol heartbeat handling separately.
+
+## Limitations
+
+An attachment is not an authentication mechanism. In the example, the generated
+ID is a session label; derive real user identity from an authenticated upgrade.
+Cloudflare's native attachment limit is 16,384 bytes including serialization
+overhead. Rivet instead requires JSON connection state, while Celld uses its own
+native attachment backend. Do not overwrite reserved RPC recovery metadata.
+Idle socket retention does not make unfinished calls replayable.
+
+## Related guides
+
+- [Effect RPC](/cloudflare/apis/effect-rpc#build-the-roomrpcs-example)
+- [Celld hibernatable WebSockets](/celld/compute/hibernatable-websockets) · [Rivet hibernatable WebSockets](/rivet/compute/hibernatable-websockets)
+- [DurableObject reference](/providers/cloudflare/workers/durableobject)

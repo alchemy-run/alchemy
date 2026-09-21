@@ -11,6 +11,7 @@ import { Stack, type StackSpec } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy";
+import { inMemoryState } from "@/State";
 import { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as KMS from "@distilled.cloud/aws/kms";
@@ -240,13 +241,8 @@ for (const aspect of ["tagging", "encryption"] as const) {
                 encryption.ServerSideEncryptionConfiguration!,
             });
           }
-          if (aspect === "tagging") {
-            const plan = yield* stack.plan(desired);
-            expect(plan.resources.ReadFailureBucket?.action).toBe("update");
-          } else {
-            const failure = yield* stack.plan(desired).pipe(Effect.flip);
-            expect(failure._tag).toBe("AccessDeniedException");
-          }
+          const planningFailure = yield* stack.plan(desired).pipe(Effect.flip);
+          expect(planningFailure._tag).toBe("AccessDeniedException");
           const failure = yield* stack.deploy(desired).pipe(Effect.flip);
           expect(failure._tag).toBe("AccessDeniedException");
         }).pipe(Effect.ensuring(restorePolicy.pipe(Effect.orDie)));
@@ -1883,6 +1879,7 @@ const stubbedEnv = (transport: Layer.Layer<HttpClient.HttpClient>) =>
       adopt: false,
     }),
     Layer.sync(ArtifactStore, createArtifactStore),
+    inMemoryState(),
     NodeServices.layer,
   ).pipe(Layer.provideMerge(transport));
 

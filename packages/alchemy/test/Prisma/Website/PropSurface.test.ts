@@ -12,6 +12,7 @@ const constructors = [
   "StaticSite",
   "SvelteKit",
   "TanStackStart",
+  "Vinext",
   "Vite",
   "Vocs",
   "Waku",
@@ -33,6 +34,15 @@ const contracts = [
       assets: { notFoundHandling: "404-page" },
     }),
   () => Prisma.Website.Nextjs("Web", { rootDir: "./app" }),
+  () =>
+    Prisma.Website.Vinext("Web", {
+      rootDir: "./app",
+      env: { GREETING: "hello" },
+      domain: "app.example.com",
+      memo: false,
+      dev: { port: 5173 },
+      compute: { destroyOldDeployment: true },
+    }),
   () => Prisma.Website.Nuxt("Web", { nuxt: { app: { baseURL: "/docs/" } } }),
   () => Prisma.Website.SvelteKit("Web", { kit: { paths: { base: "/docs" } } }),
   () => Prisma.Website.Waku("Web", { waku: { srcDir: "src" } }),

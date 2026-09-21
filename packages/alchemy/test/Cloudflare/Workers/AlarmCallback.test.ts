@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Alchemy";
 import { describe, expect } from "alchemy-test";
 import * as Cause from "effect/Cause";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -22,7 +23,11 @@ import type {
 } from "./fixtures/alarm-callback/object.ts";
 import Stack from "./fixtures/alarm-callback/stack.ts";
 
-const requestJson = <T>(url: string, method: "GET" | "POST") =>
+const requestJson = <T>(
+  url: string,
+  method: "GET" | "POST",
+  retryDelay: Duration.Input = "2 seconds",
+) =>
   Effect.gen(function* () {
     const client = HttpClient.mapRequest(
       yield* HttpClient.HttpClient,
@@ -63,7 +68,7 @@ const requestJson = <T>(url: string, method: "GET" | "POST") =>
     Effect.timeout("5 seconds"),
     Effect.retry({
       while: (error) => error instanceof Test.WorkerNotReady,
-      schedule: Schedule.spaced("2 seconds"),
+      schedule: Schedule.spaced(retryDelay),
       times: 8,
     }),
   );
@@ -134,8 +139,12 @@ describe.concurrent.each([
       yield* destroy(Stack);
       const output = yield* deploy(Stack);
       yield* Effect.all([
-        json<Snapshot>(`${output.url}/readiness/snapshot`),
-        json(`${output.url}/readiness/legacy`),
+        requestJson<Snapshot>(
+          `${output.url}/readiness/snapshot`,
+          "GET",
+          "4 seconds",
+        ),
+        requestJson(`${output.url}/readiness/legacy`, "GET", "4 seconds"),
       ]).pipe(
         Effect.retry({
           while: Cause.isTimeoutError,
@@ -530,6 +539,8 @@ describe.concurrent.each([
         { concurrency: "unbounded" },
       );
       expect(first.id).not.toBe(second.id);
+      // Pending jobs must survive a delayed abort.
+      yield* Effect.sleep("5 seconds");
       const aborted = yield* json<{ aborted: boolean }>(
         `${url}/reset-first/abort`,
         "POST",
@@ -539,12 +550,15 @@ describe.concurrent.each([
         `${url}/reset-first/snapshot`,
       );
       expect(reconstructed.boots).toBeGreaterThan(first.boots);
-      expect(reconstructed.deliveries).toEqual([]);
       expect(reconstructed.pendingJobs).toEqual(first.pendingJobs);
-      yield* Effect.all([
-        json(`${url}/reset-first/release-reset`, "POST"),
-        json(`${url}/reset-second/release-reset`, "POST"),
-      ]);
+      expect(reconstructed.deliveries).toEqual([]);
+      yield* Effect.all(
+        [
+          json<Snapshot>(`${url}/reset-first/release-pending`, "POST"),
+          json<Snapshot>(`${url}/reset-second/release-pending`, "POST"),
+        ],
+        { concurrency: "unbounded" },
+      );
       const [afterFirst, afterSecond] = yield* Effect.all(
         [
           poll<Snapshot>(`${url}/reset-first/snapshot`, drained(1)),
@@ -623,18 +637,33 @@ describe.concurrent.each([
       const { url } = yield* stack;
       const initial = yield* json<Snapshot>(`${url}/unknown/optional`, "POST");
       expect(initial.alarm).not.toBeNull();
+      yield* Effect.sleep("5 seconds");
       expect(
         (yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST"))
           .aborted,
       ).toBe(true);
+      const reconstructed = yield* json<Snapshot>(`${url}/unknown/snapshot`);
+      expect(reconstructed.boots).toBeGreaterThan(initial.boots);
+      expect(reconstructed.pendingJobs).toEqual(initial.pendingJobs);
+      expect(reconstructed.deliveries).toEqual([]);
+      const released = yield* json<Snapshot>(
+        `${url}/unknown/release-pending`,
+        "POST",
+      );
       const pending = yield* poll<Snapshot>(
         `${url}/unknown/snapshot`,
-        (value) => value.alarm !== null && value.alarm > initial.alarm!,
+        (value) => value.alarm !== null && value.alarm > released.alarm!,
       );
       expect(pending.boots).toBeGreaterThan(initial.boots);
       expect(pending.deliveries).toEqual([]);
       expect(pending.alarm).not.toBeNull();
-      expect(pending.alarm!).toBeGreaterThan(initial.alarm!);
+      expect(pending.alarm!).toBeGreaterThan(released.alarm!);
+      expect(pending.pendingJobs).toEqual(
+        released.pendingJobs.map((job) => ({
+          ...job,
+          run_at: pending.alarm,
+        })),
+      );
       yield* json(`${url}/unknown/enable-optional`, "POST");
       expect(
         (yield* json<{ aborted: boolean }>(`${url}/unknown/abort`, "POST"))

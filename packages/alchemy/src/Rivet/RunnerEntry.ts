@@ -10,6 +10,7 @@
  * @internal not exported from the Rivet barrel.
  */
 import { isDurableObjectExport } from "../Workers/DurableObject.ts";
+import { isSqlMigrationsExport } from "../Workers/SqlMigrationsRuntime.ts";
 
 export const makeRivetRunnerEntry = (
   exports: Record<string, unknown>,
@@ -19,9 +20,17 @@ export const makeRivetRunnerEntry = (
     .filter((className) => isDurableObjectExport(exports[className]))
     .map((className) => ({ className }));
 
+  const snapshots = Object.fromEntries(
+    Object.entries(exports ?? {}).flatMap(([name, value]) =>
+      isSqlMigrationsExport(value) ? [[name, value.snapshot]] : [],
+    ),
+  );
+
   return (importPath: string) => `
 import { bootstrap } from "alchemy/Runtime/Bootstrap/RivetRunner";
-import entrypoint from ${JSON.stringify(importPath)};
+import { withSqlMigrations } from "alchemy/Rivet/SqlMigrationsRuntime";
+import userEntrypoint from ${JSON.stringify(importPath)};
+const entrypoint = withSqlMigrations(userEntrypoint, ${JSON.stringify(snapshots)});
 
 await bootstrap(entrypoint, {
   stack: {

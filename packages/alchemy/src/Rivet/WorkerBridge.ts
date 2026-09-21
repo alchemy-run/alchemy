@@ -43,7 +43,6 @@ import {
   type SharedBuildOptions,
 } from "../Workers/Worker.ts";
 import {
-  discoverDurableObjectMethods,
   makeRivetActor,
   type RivetActorFactory,
 } from "./DurableObjectBridge.ts";
@@ -187,17 +186,11 @@ export const bootstrap = async (
         { entrypoint, stack: options.stack, exportName: className },
         buildOptions,
       );
-      // Rivet reads an actor's `actions` map once at registration, so the
-      // RPC surface must be complete up front: a startup probe of the
-      // built shape.
-      const methods = await discoverDurableObjectMethods(build);
       use[className] = makeRivetActor(actor as unknown as RivetActorFactory, {
         build,
-        methods,
+        methods: [],
         // Declared for every class so `storage.sql` is always available.
-        db: (db as (config: unknown) => unknown)({
-          onMigrate: async () => {},
-        }),
+        db: db(),
       });
     }
 

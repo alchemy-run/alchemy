@@ -47,6 +47,38 @@ describe("Celld provider-owned DurableObjectState", () => {
   );
 
   it.effect(
+    "forwards native abort and auto-response without Cloudflare-only options",
+    () =>
+      Effect.gen(function* () {
+        const raw = yield* Effect.sync(() => nativeState([]));
+        const calls: unknown[][] = [];
+        let pair: Parameters<typeof raw.setWebSocketAutoResponse>[0];
+        raw.abort = (...args) => {
+          calls.push(args);
+        };
+        raw.setWebSocketAutoResponse = (value) => {
+          pair = value;
+        };
+        raw.getWebSocketAutoResponse = () => pair ?? null;
+        const state = fromDurableObjectState(raw);
+        expect(yield* state.getWebSocketAutoResponse()).toBeNull();
+        yield* state.setWebSocketAutoResponse({
+          request: "ping",
+          response: "pong",
+        });
+        expect(yield* state.getWebSocketAutoResponse()).toEqual({
+          request: "ping",
+          response: "pong",
+        });
+        yield* state.setWebSocketAutoResponse();
+        expect(yield* state.getWebSocketAutoResponse()).toBeNull();
+        yield* state.abort("reset");
+        expect(calls).toEqual([["reset"]]);
+        expect("setHibernatableWebSocketEventTimeout" in state).toBe(false);
+      }).pipe(Effect.provide(services)),
+  );
+
+  it.effect(
     "facets preserve lazy startup context and expose schedule-only abort/delete",
     () =>
       Effect.gen(function* () {

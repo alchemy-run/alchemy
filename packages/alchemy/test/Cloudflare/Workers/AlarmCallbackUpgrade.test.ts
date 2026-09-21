@@ -4,10 +4,14 @@ import { describe, expect, it } from "alchemy-test";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { isScriptNotFound } from "./WorkerDeploymentResponse.ts";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
+import {
+  isScriptNotFound,
+  isWorkersDevNotFound,
+} from "./WorkerDeploymentResponse.ts";
 import type {
   MigrationProbe,
   Snapshot,
@@ -24,41 +28,47 @@ class UpgradeRequestNotExecuted extends Data.TaggedError(
 }> {}
 
 const requestJson = Effect.fn(
-  function* (url: string, action = "snapshot") {
-    // A fresh connection avoids polling an edge still pinned to the old deployment.
-    const client = HttpClient.mapRequest(
-      yield* HttpClient.HttpClient,
-      HttpClientRequest.setHeaders({
-        connection: "close",
-        "cache-control": "no-cache",
-      }),
-    );
+  function* (
+    url: string,
+    action = "snapshot",
+    workerVersion: Snapshot["version"] = "v2",
+  ) {
+    const client = yield* HttpClient.HttpClient;
     const fresh = yield* Effect.sync(() => {
       const fresh = new URL(`${url}/${action}`);
       fresh.searchParams.set("cb", String(Date.now()));
-      return fresh.href;
+      return fresh;
     });
-    const response = yield* (
-      action === "snapshot" ? client.get(fresh) : client.post(fresh)
-    ).pipe(Effect.timeout("5 seconds"));
+    const response = yield* client
+      .execute(
+        (fresh.pathname === "/snapshot"
+          ? HttpClientRequest.get(fresh.href)
+          : HttpClientRequest.post(fresh.href)
+        ).pipe(
+          HttpClientRequest.setHeaders({
+            connection: "close",
+            "cache-control": "no-cache",
+            "x-alarm-worker-version": workerVersion,
+          }),
+        ),
+      )
+      .pipe(Effect.timeout("15 seconds"));
     if (response.status !== 200) {
       const body = yield* response.text;
+      const actualVersion = response.headers["x-alarm-worker-version"];
       if (
+        (response.status === 409 &&
+          actualVersion === (workerVersion === "v1" ? "v2" : "v1") &&
+          body === "Alarm worker version mismatch") ||
         (response.status === 404 &&
           response.headers["x-alchemy-upgrade-version"] === "v1") ||
-        isScriptNotFound(response, body, fresh)
+        isScriptNotFound(response, body, fresh.href) ||
+        isWorkersDevNotFound(response, body, fresh.href)
       ) {
-        // Neither the stale route nor the missing script executed the mutation.
-        yield* Effect.logInfo("Upgrade request did not execute", {
-          url: fresh,
-          status: response.status,
-          server: response.headers.server,
-          contentType: response.headers["content-type"],
-          ray: response.headers["cf-ray"],
-        });
+        // Only a pre-invocation rejection is safe to retry for a mutation.
         return yield* Effect.fail(
           new UpgradeRequestNotExecuted({
-            url: fresh,
+            url: fresh.href,
             status: response.status,
             body,
             ray: response.headers["cf-ray"],
@@ -67,7 +77,7 @@ const requestJson = Effect.fn(
       }
       return yield* Effect.fail(
         new Error(
-          `Upgrade fixture ${fresh}: HTTP ${response.status}; server=${response.headers.server}; content-type=${response.headers["content-type"]}; cf-ray=${response.headers["cf-ray"]}: ${body}`,
+          `Upgrade fixture ${fresh.href}: HTTP ${response.status}; server=${response.headers.server}; content-type=${response.headers["content-type"]}; cf-ray=${response.headers["cf-ray"]}: ${body}`,
         ),
       );
     }
@@ -81,11 +91,23 @@ const requestJson = Effect.fn(
   }),
 );
 
-const request = (url: string, action = "snapshot") =>
-  requestJson(url, action).pipe(Effect.map((body) => body as Snapshot));
+const request = (
+  url: string,
+  action = "snapshot",
+  workerVersion: Snapshot["version"] = "v2",
+) =>
+  requestJson(url, action, workerVersion).pipe(
+    Effect.map((body) => body as Snapshot),
+  );
 
-const ready = (url: string, version: Snapshot["version"]) =>
-  request(url).pipe(
+const ready = (url: string, version: Snapshot["version"], name?: string) =>
+  request(
+    url,
+    name === undefined
+      ? "snapshot"
+      : `snapshot?name=${encodeURIComponent(name)}`,
+    version,
+  ).pipe(
     Effect.flatMap((snapshot) =>
       snapshot.version === version
         ? Effect.succeed(snapshot)
@@ -96,8 +118,12 @@ const ready = (url: string, version: Snapshot["version"]) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
   );
 
-const delivered = (url: string, until: (snapshot: Snapshot) => boolean) =>
-  request(url).pipe(
+const delivered = (
+  url: string,
+  until: (snapshot: Snapshot) => boolean,
+  workerVersion: Snapshot["version"] = "v2",
+) =>
+  request(url, "snapshot", workerVersion).pipe(
     Effect.repeat({ schedule: Schedule.spaced("1 second"), times: 10, until }),
     Effect.tap((snapshot) =>
       Effect.sync(() => expect(until(snapshot)).toBe(true)),
@@ -132,6 +158,12 @@ describe("upgrade response classification", () => {
     body: string;
   }> = [
     { name: "native missing script", status: 500, headers, body },
+    {
+      name: "explicit stale worker version",
+      status: 409,
+      headers: { "x-alarm-worker-version": "v1" },
+      body: "Alarm worker version mismatch",
+    },
     {
       name: "explicit stale V1 route",
       status: 404,
@@ -182,6 +214,18 @@ describe("upgrade response classification", () => {
     { name: "other edge error", body: body.replace("1104", "1101") },
     { name: "wrong status", status: 502 },
     { name: "unmarked HTTP404", status: 404, body: "Not Found" },
+    {
+      name: "application conflict",
+      status: 409,
+      headers: { "x-alarm-worker-version": "v1" },
+      body: "Application conflict",
+    },
+    {
+      name: "current worker version conflict",
+      status: 409,
+      headers: { "x-alarm-worker-version": "v2" },
+      body: "Alarm worker version mismatch",
+    },
     {
       name: "JSON error",
       headers: { ...headers, "content-type": "application/json" },
@@ -266,16 +310,28 @@ for (const dev of [true, false]) {
               new URL("./fixtures/alarm-upgrade/v1.ts", import.meta.url)
                 .pathname,
           );
-          const original = yield* stack.deploy(
+          const originalDeployment = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Worker("AlarmUpgradeWorker", {
+              const host = yield* Cloudflare.Worker("AlarmUpgradeWorker", {
                 main,
                 env: {
                   UpgradeObject: Cloudflare.DurableObject("UpgradeObject"),
                 },
               });
+              const reader = dev
+                ? undefined
+                : yield* Cloudflare.Worker("AlarmUpgradeV1Reader", {
+                    main,
+                    env: {
+                      UpgradeObject: Cloudflare.DurableObject("UpgradeObject", {
+                        scriptName: host.workerName,
+                      }),
+                    },
+                  });
+              return { host, reader };
             }),
           );
+          const original = originalDeployment.host;
           expect(original.url).toBeDefined();
           expect(original.durableObjectNamespaces.UpgradeObject).toBeDefined();
           if (dev) {
@@ -285,14 +341,18 @@ for (const dev of [true, false]) {
           }
           const initial = yield* ready(original.url!, "v1");
           expect(initial.marker).toBeNull();
-          yield* request(original.url!, "seed");
+          yield* request(original.url!, "seed", "v1");
+          yield* ready(original.url!, "v1", "future-version");
           const futureOriginal = yield* request(
             original.url!,
             "seed?name=future-version",
+            "v1",
           );
+          yield* ready(original.url!, "v1", "atomic-migration");
           const rollbackOriginal = yield* request(
             original.url!,
             "seed?name=atomic-migration",
+            "v1",
           );
           for (const seeded of [futureOriginal, rollbackOriginal]) {
             expect(seeded.tables).toEqual(["alchemy_scheduled_events"]);
@@ -307,6 +367,7 @@ for (const dev of [true, false]) {
               snapshot.legacyRows.length === 3 &&
               snapshot.alarm ===
                 Math.min(...snapshot.legacyRows.map((row) => row.run_at)),
+            "v1",
           );
           expect(before.version).toBe("v1");
           expect(before.marker).toBe("written-by-v1");
@@ -337,11 +398,23 @@ for (const dev of [true, false]) {
           ]);
 
           // This is an update of the existing resource, not a fresh namespace or a schema-only fixture.
-          const upgraded = yield* stack.deploy(
+          const upgradedDeployment = yield* stack.deploy(
             Effect.gen(function* () {
-              return yield* AlarmUpgradeWorker;
+              const host = yield* AlarmUpgradeWorker;
+              const reader = dev
+                ? undefined
+                : yield* Cloudflare.Worker("AlarmUpgradeV1Reader", {
+                    main,
+                    env: {
+                      UpgradeObject: Cloudflare.DurableObject("UpgradeObject", {
+                        scriptName: host.workerName,
+                      }),
+                    },
+                  });
+              return { host, reader };
             }),
           );
+          const upgraded = upgradedDeployment.host;
           expect(upgraded.workerName).toBe(original.workerName);
           expect(upgraded.workerId).toBe(original.workerId);
           expect(upgraded.durableObjectNamespaces.UpgradeObject).toBe(
@@ -362,6 +435,26 @@ for (const dev of [true, false]) {
           expect(after.schemaVersion).toBe(1);
           expect(after.schemaRows).toEqual([{ id: 1, version: 1 }]);
           expect(after.callbacks).toEqual([]);
+          if (upgradedDeployment.reader) {
+            // Local restarts are atomic; live edges can still run V1 against the V2 object.
+            const viaV1 = yield* request(
+              upgradedDeployment.reader.url!,
+              "snapshot",
+              "v1",
+            );
+            expect(viaV1).toEqual(after);
+            const rejected = yield* requestWorker(
+              HttpClientRequest.post(
+                `${upgradedDeployment.reader.url!}/callback-first`,
+              ).pipe(
+                HttpClientRequest.setHeader("x-alarm-worker-version", "v2"),
+              ),
+            );
+            expect(rejected.status).toBe(409);
+            expect(rejected.headers["x-alarm-worker-version"]).toBe("v1");
+            expect(yield* rejected.text).toBe("Alarm worker version mismatch");
+            expect(yield* request(upgraded.url!)).toEqual(after);
+          }
 
           const callbackFirst = yield* request(upgraded.url!, "callback-first");
           expect(callbackFirst.callbacks).toHaveLength(1);

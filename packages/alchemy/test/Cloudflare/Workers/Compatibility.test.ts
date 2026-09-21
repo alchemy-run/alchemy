@@ -7,6 +7,58 @@ import * as Output from "@/Output";
 import { describe, expect, test } from "alchemy-test";
 
 describe("getCompatibility", () => {
+  for (const date of ["2024-09-23", "2026-08-31"]) {
+    for (const flags of [[], ["nodejs_als", "legacy_module_registry"]]) {
+      test(`preserves explicit prebuilt flags ${JSON.stringify(flags)} on ${date}`, () => {
+        expect(
+          getCompatibility({
+            isExternal: true,
+            bundle: false,
+            main: "./dist/worker.js",
+            compatibility: { date, flags },
+          } as WorkerProps),
+        ).toEqual({ date, flags });
+      });
+    }
+
+    test(`retains defaults for prebuilt Workers with omitted flags on ${date}`, () => {
+      const { flags } = getCompatibility({
+        isExternal: true,
+        bundle: false,
+        compatibility: { date },
+      } as WorkerProps);
+      expect(flags).toEqual(
+        date === "2024-09-23"
+          ? ["new_module_registry", "nodejs_compat"]
+          : ["new_module_registry"],
+      );
+    });
+  }
+
+  test("retains defaults for bundled external Workers with explicit empty flags", () => {
+    for (const bundle of [undefined, true]) {
+      const { flags } = getCompatibility({
+        isExternal: true,
+        bundle,
+        compatibility: { date: "2024-09-23", flags: [] },
+      } as WorkerProps);
+      expect(flags).toEqual(["new_module_registry", "nodejs_compat"]);
+    }
+  });
+
+  test("retains Effect runtime requirements with explicit empty flags", () => {
+    const { flags } = getCompatibility({
+      isExternal: false,
+      bundle: false,
+      compatibility: { date: "2024-09-23", flags: [] },
+    } as WorkerProps);
+    expect(flags).toEqual([
+      "new_module_registry",
+      "nodejs_compat",
+      "handle_cross_request_promise_resolution",
+    ]);
+  });
+
   test("defaults both Effect and external workers to the new module registry", () => {
     for (const isExternal of [false, true]) {
       const { flags } = getCompatibility({ isExternal } as WorkerProps);

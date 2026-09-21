@@ -3,6 +3,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "alchemy-test";
 import * as Data from "effect/Data";
@@ -228,7 +229,7 @@ const fetchJsonReady = <T>(url: string) =>
           ? Effect.flatMap(r.text, (body) =>
               Effect.fail(
                 new Error(
-                  `Worker not ready: ${r.status} ${body.slice(0, 500)}`,
+                  `Worker not ready at ${url}: ${r.status} ${body.slice(0, 500)}`,
                 ),
               ),
             )
@@ -543,6 +544,7 @@ export default { async fetch() { return new Response("v4"); } };
         const body = yield* fetchJsonReady<{ namespaceId: string }>(
           deployed.consumer.url!,
         );
+
         expect(body.namespaceId).toBe(finalNamespaceId);
 
         yield* scratch.destroy();
@@ -673,6 +675,9 @@ export default { async fetch() { return new Response("v4"); } };
           }),
         );
 
+        const originalNamespaceId = v1.b.durableObjectNamespaces.Counter;
+        expect(originalNamespaceId).toBeDefined();
+
         // Write data while worker-b hosts the namespace.
         yield* fetchJsonReady<{ ok: boolean }>(`${v1.b.url}/reset`);
         const written = yield* fetchJsonReady<{ value: number }>(
@@ -703,6 +708,8 @@ export default { async fetch() { return new Response("v4"); } };
         });
 
         const v2 = yield* scratch.deploy(moved);
+        expect(v2.a.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
+        expect(v2.b.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
 
         // The namespace moved to worker-a with its data intact...
         const viaA = yield* fetchJsonReady<{ value: number }>(
@@ -892,10 +899,132 @@ export default { async fetch() { return new Response("v4"); } };
           .pipe(Effect.flip);
 
         expect(error._tag).toEqual("DurableObjectTransferRequired");
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v1.b.url}/get`)).value,
+        ).toBe(1);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
     { timeout: 240_000 },
+  );
+
+  test.provider(
+    "a transferred namespace cannot be rebound to a different namespace",
+    (scratch) =>
+      Effect.gen(function* () {
+        yield* scratch.destroy();
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        const v1 = yield* scratch.deploy(
+          Effect.gen(function* () {
+            return {
+              a: yield* Cloudflare.Worker("worker-a", {
+                script: hostWorkerScript,
+                env: { Counter: Cloudflare.DurableObject("Counter") },
+              }),
+            };
+          }),
+        );
+        const originalNamespaceId = v1.a.durableObjectNamespaces.Counter;
+        expect(originalNamespaceId).toBeDefined();
+        yield* fetchJsonReady<{ ok: boolean }>(`${v1.a.url}/reset`);
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v1.a.url}/increment`))
+            .value,
+        ).toBe(1);
+
+        const transferredStack = (scriptName?: string) =>
+          Effect.gen(function* () {
+            const a = yield* Cloudflare.Worker("worker-a", {
+              script:
+                scriptName === undefined
+                  ? hostWorkerScript
+                  : consumerWorkerScript,
+              env: {
+                Counter:
+                  scriptName === undefined
+                    ? Cloudflare.DurableObject("Counter")
+                    : Cloudflare.DurableObject("Counter", { scriptName }),
+              },
+            });
+            const b = yield* Cloudflare.Worker("worker-b", {
+              script: hostWorkerScript,
+              env: {
+                Counter: Cloudflare.DurableObject("Counter", {
+                  transferredFrom: a,
+                }),
+              },
+            });
+            const c = yield* Cloudflare.Worker("worker-c", {
+              script: hostWorkerScript,
+              env: { Counter: Cloudflare.DurableObject("Counter") },
+            });
+            return { a, b, c };
+          });
+
+        // A stays unchanged while B receives its namespace; C owns a fresh one.
+        const v2 = yield* scratch.deploy(transferredStack());
+        expect(v2.b.durableObjectNamespaces.Counter).toBe(originalNamespaceId);
+        const unrelatedNamespaceId = v2.c.durableObjectNamespaces.Counter;
+        expect(unrelatedNamespaceId).toBeDefined();
+        expect(unrelatedNamespaceId).not.toBe(originalNamespaceId);
+
+        const namespaces = yield* durableObjects.listNamespaces
+          .items({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+              until: (namespaces) =>
+                namespaces.some(
+                  (ns) =>
+                    ns.id === originalNamespaceId &&
+                    ns.script === v2.b.workerName,
+                ) &&
+                namespaces.some(
+                  (ns) =>
+                    ns.id === unrelatedNamespaceId &&
+                    ns.script === v2.c.workerName,
+                ) &&
+                !namespaces.some(
+                  (ns) =>
+                    ns.script === v2.a.workerName && ns.class === "Counter",
+                ),
+            }),
+          );
+        expect(
+          namespaces.find((ns) => ns.id === originalNamespaceId),
+        ).toMatchObject({ script: v2.b.workerName, class: "Counter" });
+        expect(
+          namespaces.find((ns) => ns.id === unrelatedNamespaceId),
+        ).toMatchObject({ script: v2.c.workerName, class: "Counter" });
+        expect(
+          namespaces.some(
+            (ns) => ns.script === v2.a.workerName && ns.class === "Counter",
+          ),
+        ).toBe(false);
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value,
+        ).toBe(1);
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value,
+        ).toBe(0);
+
+        const error = yield* scratch
+          .deploy(transferredStack(v2.c.workerName))
+          .pipe(Effect.flip);
+        expect(error._tag).toBe("DurableObjectTransferRequired");
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v2.b.url}/get`)).value,
+        ).toBe(1);
+        expect(
+          (yield* fetchJsonReady<{ value: number }>(`${v2.c.url}/get`)).value,
+        ).toBe(0);
+
+        yield* scratch.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
   );
 
   // #799: the documented *pure move* — the former host drops the DO entirely,
@@ -998,6 +1127,7 @@ export default { async fetch() { return new Response("v4"); } };
     "worker with 20 durable objects deploys within the 10-tag limit",
     (scratch) =>
       Effect.gen(function* () {
+        yield* scratch.destroy();
         const { accountId } = yield* yield* CloudflareEnvironment;
         const ids = Array.from({ length: 20 }, (_, i) => `DO_${i}`);
         const makeScript = (classes: string[], version: string) =>
@@ -1033,6 +1163,10 @@ export default { async fetch() { return new Response("${version}"); } };
         );
         expect(tags.filter((t) => t.startsWith("alchemy:do:"))).toHaveLength(0);
 
+        expect(Object.keys(v1.worker.durableObjectNamespaces).sort()).toEqual(
+          ids.map((_, i) => `Class${i}`).sort(),
+        );
+
         // Rename Class0 → Class0V2 (same binding id) and delete DO_19 — both
         // migrations resolve their previous class through the packed tag.
         const v2 = yield* scratch.deploy(
@@ -1059,10 +1193,56 @@ export default { async fetch() { return new Response("${version}"); } };
           }),
         );
         expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+        expect(Object.keys(v2.worker.durableObjectNamespaces).sort()).toEqual(
+          [
+            "Class0V2",
+            ...ids.slice(1, 19).map((_, i) => `Class${i + 1}`),
+          ].sort(),
+        );
+        expect(v2.worker.durableObjectNamespaces.Class0V2).toBe(
+          v1.worker.durableObjectNamespaces.Class0,
+        );
+        expect(v2.worker.durableObjectNamespaces.Class19).toBeUndefined();
+        for (let i = 1; i < 19; i++) {
+          expect(v2.worker.durableObjectNamespaces[`Class${i}`]).toBe(
+            v1.worker.durableObjectNamespaces[`Class${i}`],
+          );
+        }
+
+        const namespaces = yield* durableObjects.listNamespaces
+          .items({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              namespaces.filter((ns) => ns.script === v2.worker.workerName),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (namespaces) =>
+                namespaces.length === 19 &&
+                new Set(namespaces.map((ns) => ns.id)).size === 19 &&
+                namespaces.every(
+                  (ns) =>
+                    ns.class !== undefined &&
+                    ns.class !== null &&
+                    v2.worker.durableObjectNamespaces[ns.class] === ns.id,
+                ),
+              times: 8,
+            }),
+          );
+        expect(namespaces).toHaveLength(19);
+        expect(namespaces.map((ns) => ns.id).sort()).toEqual(
+          Object.values(v2.worker.durableObjectNamespaces).sort(),
+        );
+        expect(
+          namespaces.some(
+            (ns) => ns.id === v1.worker.durableObjectNamespaces.Class19,
+          ),
+        ).toBe(false);
 
         yield* scratch.destroy();
       }).pipe(logLevel),
-    { timeout: 180_000 },
+    { timeout: 120_000 },
   );
 
   // Roll-forward from the legacy tag format: a worker last deployed by an

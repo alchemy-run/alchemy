@@ -22,6 +22,12 @@ export interface ScheduledController {
  * Register a root Worker's schedule and listener. Application validates root-only
  * scheduling. Handler failures reach Celld; noRetry disables native retries.
  *
+ * Celld v0.5.0 cannot safely retire a previous root's persisted cron cell.
+ * Once a root has cron triggers, Application refuses changing its script identity
+ * or removing all triggers. Keep the same root script and a nonempty schedule;
+ * changing expressions within that schedule remains supported. Root replacement
+ * or complete schedule removal requires verified native cron retirement support.
+ *
  * ### Schedule a Worker
  * **Example:** Record each scheduled fire
  * ```typescript

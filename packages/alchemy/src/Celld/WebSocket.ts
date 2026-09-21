@@ -5,11 +5,13 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import { fromWebSocket as fromNativeWebSocket } from "../Workers/Workerd/WebSocket.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
+import type { AttachmentMethods } from "../Workers/WebSocketAttachment.ts";
+export { WebSocketAttachmentError } from "../Workers/WebSocketAttachment.ts";
 
 export type RawWebSocket = cf.WebSocket;
 
 /** A Celld hibernatable WebSocket. */
-export interface WebSocket {
+export interface WebSocket extends AttachmentMethods {
   readonly ws: RawWebSocket;
   send(data: string | Uint8Array): Effect.Effect<void, never, RuntimeContext>;
   close(

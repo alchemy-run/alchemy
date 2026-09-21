@@ -18,9 +18,8 @@ import type * as Stream from "effect/Stream";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { Artifacts } from "../../Artifacts.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import type { WorkflowExport } from "../Workflows/Workflow.ts";
 import type { AssetReadResult, ValidationError } from "./Assets.ts";
-import type { DurableObjectExport } from "../../Workers/DurableObject.ts";
+import type { WorkerExport } from "./WorkerRuntimeContext.ts";
 import { getToolingCompatibility } from "./Compatibility.ts";
 import { makeInlineScriptSource } from "./Sources/InlineScript.ts";
 import { makePrebuiltSource } from "./Sources/Prebuilt.ts";
@@ -77,6 +76,8 @@ export interface SourceBuildOutput {
  * once per stack.
  */
 export interface SourceContext {
+  /** Resolved runtime storage directory, excluded from source inputs. */
+  readonly dotAlchemy?: string;
   /** Logical id of the Worker resource. */
   readonly id: string;
   /** Namespace-qualified id (`ns/Worker`) — the display prefix for log lines. */
@@ -92,7 +93,12 @@ export interface SourceContext {
     | { readonly kind: "external" }
     | {
         readonly kind: "effect";
-        readonly exports: Record<string, DurableObjectExport | WorkflowExport>;
+        readonly exports: Record<string, WorkerExport>;
+        /** Override the entry generator for another native Worker runtime. */
+        readonly makeVirtualEntry?: (
+          exports: Record<string, WorkerExport>,
+          stack: { name: string; stage: string },
+        ) => (importPath: string) => string;
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
@@ -387,6 +393,7 @@ export const resolveSource = (
  * persisted output state rather than the name generator).
  */
 export const makeSourceContext = (params: {
+  dotAlchemy?: string;
   id: string;
   fqn: string;
   workerName: string;
@@ -394,6 +401,7 @@ export const makeSourceContext = (params: {
   compatibility: { date: string; flags: string[] };
   stack: { name: string; stage: string };
 }): SourceContext => ({
+  dotAlchemy: params.dotAlchemy,
   id: params.id,
   fqn: params.fqn,
   workerName: params.workerName,

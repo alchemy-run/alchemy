@@ -592,6 +592,176 @@ describe("Celld Application publication", () => {
       }),
   );
 
+  for (const transition of [
+    { name: "removing all root crons", scriptName: "app", crons: [] },
+    {
+      name: "changing the root script with crons",
+      scriptName: "next-app",
+      crons: ["*/5 * * * *"],
+    },
+    {
+      name: "changing the root script without crons",
+      scriptName: "next-app",
+      crons: [],
+    },
+  ])
+    test.effect(
+      `refuses ${transition.name} before native publication writes`,
+      () =>
+        Effect.gen(function* () {
+          const fake = yield* makeStore;
+          const initial = yield* prepareDeployment({
+            ...input,
+            crons: ["0 * * * *"],
+            queueConsumers: [consumer],
+          });
+          const first = yield* publishApplication(fake.store, {
+            rootPreparedDeployment: initial,
+            workers: [],
+            owner,
+            transactionId: "cron-initial",
+          });
+          const changed = yield* prepareDeployment({
+            ...input,
+            scriptName: transition.scriptName,
+            crons: transition.crons,
+          });
+          const before = [...fake.objects];
+          const writes = fake.writes.length;
+          const result = yield* Effect.result(
+            publishApplication(fake.store, {
+              rootPreparedDeployment: changed,
+              workers: [],
+              owner,
+              transactionId: "cron-retirement",
+              priorRevision: first.revision,
+            }),
+          );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("Celld.DeploymentError");
+            expect(result.failure.reason).toBe("unsupported");
+            expect(result.failure.message).toBe(
+              "Celld v0.5.0 cannot safely retire the previous root's persisted cron cell .cron:app when changing its script identity or removing all cron triggers. Keep root script app and at least one cron trigger; this transition requires verified native cron retirement support.",
+            );
+          }
+          expect(fake.writes.slice(writes)).toEqual([]);
+          expect([...fake.objects]).toEqual(before);
+          expect(fake.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+        }),
+    );
+
+  for (const transition of [
+    { name: "removing all crons", scriptName: "app", crons: [] },
+    {
+      name: "changing the script with crons",
+      scriptName: "next-app",
+      crons: ["*/5 * * * *"],
+    },
+    {
+      name: "changing the script without crons",
+      scriptName: "next-app",
+      crons: [],
+    },
+  ])
+    test.effect(
+      `refuses adopting an unclaimed cron root by ${transition.name} without writes`,
+      () =>
+        Effect.gen(function* () {
+          const fake = yield* makeStore;
+          const initial = yield* prepareDeployment({
+            ...input,
+            crons: ["0 * * * *"],
+          });
+          yield* stageDeployment(fake.store, initial);
+          yield* fake.store.put(
+            "deploy/current.json",
+            yield* encode(initial.pointer),
+          );
+          yield* fake.store.put(
+            "deploy/app/current.json",
+            yield* encode(initial.pointer),
+          );
+          const changed = yield* prepareDeployment({
+            ...input,
+            scriptName: transition.scriptName,
+            crons: transition.crons,
+            queueConsumers: [consumer],
+          });
+          const before = [...fake.objects];
+          const writes = fake.writes.length;
+          const result = yield* Effect.result(
+            publishApplication(fake.store, {
+              rootPreparedDeployment: changed,
+              workers: [],
+              owner,
+              transactionId: "adopt-cron",
+              adopt: true,
+            }),
+          );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("Celld.DeploymentError");
+            expect(result.failure.reason).toBe("unsupported");
+            expect(result.failure.message).toContain(".cron:app");
+          }
+          expect(fake.writes.slice(writes)).toEqual([]);
+          expect([...fake.objects]).toEqual(before);
+          expect(fake.objects.has(APPLICATION_CLAIM_KEY)).toBe(false);
+          expect(fake.objects.has(APPLICATION_LOCK_KEY)).toBe(false);
+          expect(fake.objects.has(APPLICATION_RECEIPT_KEY)).toBe(false);
+        }),
+    );
+
+  test.effect(
+    "requires explicit adoption but permits a same-script nonempty cron change",
+    () =>
+      Effect.gen(function* () {
+        const fake = yield* makeStore;
+        const initial = yield* prepareDeployment({
+          ...input,
+          crons: ["0 * * * *"],
+        });
+        yield* stageDeployment(fake.store, initial);
+        yield* fake.store.put(
+          "deploy/current.json",
+          yield* encode(initial.pointer),
+        );
+        yield* fake.store.put(
+          "deploy/app/current.json",
+          yield* encode(initial.pointer),
+        );
+        const changed = yield* prepareDeployment({
+          ...input,
+          crons: ["*/5 * * * *"],
+        });
+        const options = {
+          rootPreparedDeployment: changed,
+          workers: [],
+          owner,
+          transactionId: "adopt-schedule",
+        };
+        const refused = yield* Effect.result(
+          publishApplication(fake.store, options),
+        );
+        expect(Result.isFailure(refused)).toBe(true);
+        if (Result.isFailure(refused))
+          expect(refused.failure.reason).toBe("ownership");
+        const adopted = yield* publishApplication(fake.store, {
+          ...options,
+          adopt: true,
+        });
+        expect(adopted.previous).toEqual([initial.pointer]);
+        expect(adopted.receipt.root).toEqual(changed.pointer);
+        expect(
+          (yield* decode(
+            Node.Manifest,
+            fake.objects.get(`${changed.prefix}/manifest.json`)!.body,
+          )).crons,
+        ).toEqual(["*/5 * * * *"]);
+      }),
+  );
+
   test.effect(
     "stages cron-only candidates without mutating the selected manifest, then publishes under ownership",
     () =>
@@ -631,6 +801,25 @@ describe("Celld Application publication", () => {
           )).crons,
         ).toEqual(["*/5 * * * *"]);
         expect(second.previous).toEqual([initial.pointer]);
+        const rescheduled = yield* prepareDeployment({
+          ...input,
+          crons: ["*/10 * * * *"],
+        });
+        const third = yield* publishApplication(fake.store, {
+          rootPreparedDeployment: rescheduled,
+          workers: [],
+          owner,
+          transactionId: "three",
+          priorRevision: second.revision,
+        });
+        expect(third.revision).not.toBe(second.revision);
+        expect(
+          (yield* decode(
+            Node.Manifest,
+            fake.objects.get(`${initial.prefix}/manifest.json`)!.body,
+          )).crons,
+        ).toEqual(["*/10 * * * *"]);
+        expect(third.previous).toEqual([changed.pointer]);
       }),
   );
 

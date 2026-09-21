@@ -21,6 +21,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { HttpEffect } from "../Http.ts";
 import { isScopeEjected } from "../Http.ts";
 import { rpcMethodOf, serveRpc } from "../Rpc.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
 import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type {
   DurableObjectExport,
@@ -35,6 +36,7 @@ import { toRpcEffect } from "./WorkerBridge.ts";
 export const RESERVED_DURABLE_OBJECT_HANDLERS: ReadonlySet<string> = new Set([
   "fetch",
   "alarm",
+  "webSocketOpen",
   "webSocketMessage",
   "webSocketClose",
   "webSocketError",
@@ -57,6 +59,12 @@ export interface DurableObjectInstanceOptions {
   readonly build: (pin: Pin) => Promise<WorkerBuild<DurableObjectExport>>;
   /** Provider services available during construction and every call. */
   readonly services: Context.Context<never>;
+  /** Decorate only instance initialization and invocation runtime services. */
+  readonly runtimeContext?: (
+    runtime: RuntimeContext["Service"],
+  ) => RuntimeContext["Service"];
+  /** Open callback registration for inner initialization; return its seal hook. */
+  readonly initialize?: () => () => void;
   /** Keep the instance alive until `promise` settles (`state.waitUntil`). */
   readonly waitUntil: Pin;
   /**
@@ -138,22 +146,35 @@ export const makeDurableObjectInstance = ({
   dispatch: mode,
   target,
   gate,
+  runtimeContext,
+  initialize,
 }: DurableObjectInstanceOptions): DurableObjectInstance => {
+  const instanceServices = (context: Context.Context<any>) =>
+    runtimeContext
+      ? Context.add(
+          context,
+          RuntimeContext,
+          runtimeContext(Context.get(context, RuntimeContext)),
+        )
+      : context;
+
   const instance: Promise<BuiltDurableObject> = (gate ?? ((run) => run()))(() =>
     build(waitUntil).then(({ context, export: exported, telemetry }) => {
       const { constructor, services } = exported;
       const doContext = Context.mergeAll(context, services, providerServices);
-      return constructor.pipe(
-        Effect.provide(doContext),
-        Effect.flatMap((instance) => instance.pipe(Effect.provide(doContext))),
-        Effect.map((instance): BuiltDurableObject => ({
-          instance: instance as DurableObjectInstanceShape,
+      return Effect.gen(function* () {
+        const inner = yield* constructor.pipe(Effect.provide(doContext));
+        const initialized = yield* Effect.suspend(() => {
+          const seal = initialize?.();
+          return inner.pipe(Effect.ensuring(Effect.sync(() => seal?.())));
+        }).pipe(Effect.provide(instanceServices(doContext)));
+        return {
+          instance: initialized as DurableObjectInstanceShape,
           services,
           context,
           telemetry,
-        })),
-        Effect.runPromise,
-      );
+        } satisfies BuiltDurableObject;
+      }).pipe(Effect.runPromise);
     }),
   );
 
@@ -170,10 +191,14 @@ export const makeDurableObjectInstance = ({
           Effect.provide(
             Layer.mergeAll(
               Layer.succeedContext(
-                Context.mergeAll(
-                  providerServices,
-                  invocation?.services ?? Context.empty(),
-                  Context.make(Scope.Scope, scope),
+                instanceServices(
+                  Context.mergeAll(
+                    context,
+                    services,
+                    providerServices,
+                    invocation?.services ?? Context.empty(),
+                    Context.make(Scope.Scope, scope),
+                  ),
                 ),
               ),
               // The configured telemetry exporters, attached to the *call*

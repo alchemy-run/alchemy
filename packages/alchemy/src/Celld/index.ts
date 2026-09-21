@@ -16,15 +16,28 @@ export {
   type DurableObjectId,
   type AlarmInvocationInfo,
 } from "./DurableObjectState.ts";
-export type {
-  DurableObjectStorage,
-  DurableObjectTransaction,
-  SqlCursor,
-  SqlStorage,
-  SqlStorageValue,
+export {
+  DurableObjectStorageError,
+  type DurableObjectStorage,
+  type DurableObjectTransaction,
+  type SqlCursor,
+  type SqlStorage,
+  type SqlStorageValue,
 } from "./DurableObjectStorage.ts";
-export { upgrade, type WebSocket, type RawWebSocket } from "./WebSocket.ts";
+export {
+  upgrade,
+  WebSocketAttachmentError,
+  type WebSocket,
+  type RawWebSocket,
+} from "./WebSocket.ts";
+export {
+  RpcDurableObject,
+  type RpcDurableObjectClass,
+  type RpcDurableObjectProps,
+} from "./RpcDurableObject.ts";
+export * as RpcWebSocketClient from "./RpcWebSocketClient.ts";
 export { EcsFleet } from "./EcsFleet.ts";
+export * from "./SqlMigrations.ts";
 export {
   Fleet,
   FleetNotComposed,

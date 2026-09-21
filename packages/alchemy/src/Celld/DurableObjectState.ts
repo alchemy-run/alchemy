@@ -98,7 +98,11 @@ export interface DurableObjectStateService {
     | "acceptWebSocket"
     | "getWebSockets"
     | "getTags"
+    | "setWebSocketAutoResponse"
+    | "getWebSocketAutoResponse"
+    | "getWebSocketAutoResponseTimestamp"
   > & {
+    abort(reason?: string): void;
     readonly storage: Omit<
       cf.DurableObjectStorage,
       | "getCurrentBookmark"
@@ -122,6 +126,22 @@ export interface DurableObjectStateService {
     tag?: string,
   ): Effect.Effect<WebSocket[], never, RuntimeContext>;
   getTags(ws: WebSocket["ws"]): Effect.Effect<string[], never, RuntimeContext>;
+  /** Persist a native heartbeat pair, or remove it when omitted. */
+  setWebSocketAutoResponse(
+    pair?: cf.WebSocketRequestResponsePair,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  /** Read the native heartbeat pair without waking retained sockets. */
+  getWebSocketAutoResponse(): Effect.Effect<
+    cf.WebSocketRequestResponsePair | null,
+    never,
+    RuntimeContext
+  >;
+  /** Last native auto-response timestamp for this socket. */
+  getWebSocketAutoResponseTimestamp(
+    ws: WebSocket["ws"],
+  ): Effect.Effect<Date | null, never, RuntimeContext>;
+  /** Reset the native cell. Celld does not support Cloudflare's retryAlarm option. */
+  abort(reason?: string): Effect.Effect<void, never, RuntimeContext>;
 }
 
 export class DurableObjectState extends Context.Service<
@@ -153,6 +173,10 @@ export const fromDurableObjectState = (
       native.acceptWebSocket(fromNativeWebSocket(socket.ws), tags),
     getWebSockets: native.getWebSockets,
     getTags: native.getTags,
+    setWebSocketAutoResponse: native.setWebSocketAutoResponse,
+    getWebSocketAutoResponse: native.getWebSocketAutoResponse,
+    getWebSocketAutoResponseTimestamp: native.getWebSocketAutoResponseTimestamp,
+    abort: (reason) => Effect.sync(() => state.abort(reason)),
   };
 };
 

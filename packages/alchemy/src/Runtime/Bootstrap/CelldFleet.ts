@@ -7,6 +7,7 @@
  */
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import { makeCelldDurableObjectBridge } from "../../Celld/DurableObjectBridge.ts";
 import { makeCelldWorkerBridge } from "../../Celld/WorkerBridge.ts";
 import {
@@ -23,7 +24,7 @@ export const makeFleetBootstrap = (
     /** Present when the generated bundle exports native Workflow classes. */
     readonly WorkflowEntrypoint?: WorkflowEntrypointClass;
   },
-  entrypoint: Effect.Effect<Record<string, any>>,
+  entrypoint: Effect.Effect<Record<string, any>> | Layer.Layer<any, any, any>,
   options: {
     readonly stack: { readonly name: string; readonly stage: string };
   },

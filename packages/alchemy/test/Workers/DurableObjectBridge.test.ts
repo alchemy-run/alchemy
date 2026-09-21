@@ -1,4 +1,5 @@
 import { Telemetry } from "@/TelemetryRuntime.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
 import type { DurableObjectExport } from "@/Workers/DurableObject.ts";
 import { makeDurableObjectInstance } from "@/Workers/DurableObjectBridge.ts";
 import type { WorkerBuild } from "@/Workers/Worker.ts";
@@ -197,4 +198,88 @@ describe("shared Durable Object instance bridge", () => {
       expect(closed).toBe(true);
     }),
   );
+
+  for (const fail of [false, true]) {
+    it.effect(
+      `limits callback registration to inner initialization (${fail ? "failure" : "success"})`,
+      () =>
+        Effect.gen(function* () {
+          let open = false;
+          let seals = 0;
+          const activationScope = yield* Scope.make();
+          const pending: Promise<unknown>[] = [];
+          const runtime: RuntimeContext["Service"] = {
+            Type: "test",
+            id: "worker",
+            env: {},
+            get: () => Effect.succeed(undefined),
+            set: (key) => Effect.succeed(key),
+          };
+          const built = makeBuild(
+            Effect.gen(function* () {
+              expect((yield* RuntimeContext).id).toBe("worker");
+              expect(open).toBe(false);
+              return Effect.gen(function* () {
+                expect((yield* RuntimeContext).id).toBe("worker:instance");
+                expect(yield* Effect.scope).toBe(activationScope);
+                expect(open).toBe(true);
+                if (fail) return yield* Effect.die("initialization failed");
+                return {};
+              });
+            }),
+          );
+          const core = yield* Effect.sync(() =>
+            makeDurableObjectInstance({
+              build: () => Promise.resolve(built),
+              services: Context.make(RuntimeContext, runtime).pipe(
+                Context.add(Scope.Scope, activationScope),
+              ),
+              runtimeContext: (context) => ({
+                ...context,
+                id: `${context.id}:instance`,
+              }),
+              initialize: () => {
+                open = true;
+                return () => {
+                  open = false;
+                  seals++;
+                };
+              },
+              waitUntil: (promise) => {
+                pending.push(promise);
+              },
+              dispatch: "proxy",
+            }),
+          );
+          const exit = yield* Effect.tryPromise(() => core.instance).pipe(
+            Effect.exit,
+          );
+          expect(Exit.isFailure(exit)).toBe(fail);
+          expect(open).toBe(false);
+          expect(seals).toBe(1);
+          if (!fail) {
+            const id = yield* Effect.promise(() =>
+              core.execute(
+                () =>
+                  Effect.gen(function* () {
+                    expect(open).toBe(false);
+                    expect(yield* Effect.scope).not.toBe(activationScope);
+                    return (yield* RuntimeContext).id;
+                  }),
+                undefined,
+                {
+                  services: Context.make(RuntimeContext, {
+                    ...runtime,
+                    id: "request",
+                  }),
+                },
+              ),
+            );
+            expect(id).toBe("request:instance");
+            yield* drain(pending);
+          }
+          yield* Scope.close(activationScope, Exit.void);
+        }),
+    );
+  }
 });

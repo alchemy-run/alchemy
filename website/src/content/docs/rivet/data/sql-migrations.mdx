@@ -1,0 +1,140 @@
+---
+title: SQL migrations
+description: Capture SQL files in the bundle and apply them once per Rivet durable instance.
+---
+
+`Rivet.SqlMigrations` separates deployment-time file capture from per-instance
+SQL application. This guide builds a `Users` object and uses the same migration
+files as the Cloudflare and Celld guides.
+
+## Create the first migration
+
+```sql
+-- migrations/0001_users.sql
+CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+```
+
+Commit the SQL file alongside the code. The migration directory is relative to
+the directory where Alchemy runs, not to the deployed runtime's filesystem.
+
+## Create the Users object
+
+```typescript
+// src/users.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+
+export default class Users extends Rivet.DurableObject<Users>()(
+  "Users",
+  Effect.gen(function* () {
+    const state = yield* Rivet.DurableObjectState;
+    return Effect.gen(function* () {
+      return {};
+    });
+  }),
+) {}
+```
+
+Host `Users` by yielding it in the [Worker](/rivet/compute/workers), then deploy
+the runner through the existing Cluster and Stack. Every named instance gets its own
+SQLite database and migration history.
+
+## Capture migration files
+
+```diff lang="typescript"
+   Effect.gen(function* () {
++    const migrations = yield* Rivet.SqlMigrations({
++      dir: "./migrations",
++      table: "app_migrations",
++    });
+     const state = yield* Rivet.DurableObjectState;
+```
+
+Call the factory in the outer Effect. Alchemy captures records during construction
+and embeds them in the generated bundle. The runtime does not open SQL files.
+The optional history table defaults to `__alchemy_migrations`.
+
+## Apply before serving methods
+
+```diff lang="typescript"
+     return Effect.gen(function* () {
++      yield* migrations.apply().pipe(Effect.orDie);
+       return {};
+     });
+```
+
+Run `apply` in the inner activation Effect before returning the API. Turning a
+migration failure into a defect here prevents this activation from serving
+methods against a partially upgraded schema; it is not a request to discard
+migration history.
+
+## Read the migrated table
+
+```diff lang="typescript"
+-      return {};
++      return {
++        count: () => Effect.gen(function* () {
++          const rows = yield* state.storage.sql.exec<{ count: number }>(
++            "SELECT count(*) AS count FROM users",
++          );
++          return rows[0]!.count;
++        }),
++      };
+```
+
+Rivet's SQL wrapper returns row arrays, not Cloudflare/Celld cursors. The
+aggregate always returns one row; access `rows[0]` inside the runtime method.
+
+## Add a second migration
+
+```sql
+-- migrations/0002_users_email.sql
+ALTER TABLE users ADD COLUMN email TEXT;
+```
+
+Append a new file rather than editing an already-applied migration. Keep old
+files so existing histories can still be matched during adoption or upgrades.
+
+## Deploy the SQL-only change
+
+```sh
+bun alchemy deploy
+```
+
+Changing captured SQL changes the bundle even if TypeScript is unchanged. Keep
+the Cluster, Worker, actor type, and instance names stable; a new migration is a code
+update, not a request for a fresh object identity. Each instance applies pending
+files on its next activation rather than a deployment eagerly visiting every
+possible name.
+
+## Runtime behavior
+
+Each migration file and its history insert commit atomically in one native
+SQLite transaction lease. The executor uses native `db.transaction`, not
+separate `BEGIN` and `COMMIT` calls over unrelated connections. If a later file fails, earlier successful files remain
+applied; the failing file remains pending. Avoid manual `BEGIN`/`COMMIT` in the
+migration files because the executor owns the transaction.
+
+Applied detection is **name-keyed**, including compatibility between Drizzle
+directory names and legacy `directory/migration.sql` names. Hashes are recorded,
+but normal application does not promise to reject edits to an applied file by
+checksum. Supported legacy or foreign histories are matched and adopted; an
+unrecognized table layout or conflicting history fails instead of silently
+resetting the database. Conversion is one-way: do not alternate migration tools
+against the same history.
+
+## Limitations
+
+Actor-state KV and native scheduled actions do not join the SQL transaction.
+Migrations cannot make external calls or another instance's data atomic. They do
+not migrate actor identities or provide automatic down migrations. Test updates
+against existing data, including a failing-file rollback, before deployment.
+An old activation may still serve old code during a rolling update; use
+backwards-compatible schema changes when versions overlap.
+
+## Related guides
+
+- [Durable Objects](/rivet/compute/durable-objects)
+- [Cloudflare SQL migrations](/cloudflare/data/sql-migrations) · [Celld SQL migrations](/celld/data/sql-migrations)
+- [Migration history and formats](/sql/effect-sql/migrations)
+- [DurableObject reference](/providers/rivet/durableobject)

@@ -1,0 +1,152 @@
+---
+title: Durable schedules
+description: Register an archive callback, schedule and cancel jobs, and coordinate them with cell storage.
+---
+
+Use `Alchemy.makeCallback` for work that must outlive the request. A timer or
+forked fiber is not a durable schedule. This example builds a `Notes` object;
+host it by yielding `Notes` in the [Worker](/cloudflare/compute/workers).
+
+## Create the Notes object
+
+```typescript
+// src/notes.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class Notes extends Cloudflare.DurableObject<Notes>()(
+  "Notes",
+  Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+    return Effect.gen(function* () {
+      return {};
+    });
+  }),
+) {}
+```
+
+Resolve the state handle during construction, but register callbacks in the
+inner, per-instance Effect. The same registration must be available on every
+activation that can deliver a stored job.
+
+## Register the archive callback
+
+```diff lang="typescript"
+     return Effect.gen(function* () {
++      const onArchive = yield* Alchemy.makeCallback(
++        "archive",
++        Effect.fn(function* (payload: { id: string; body: string }) {
++          yield* state.storage.put(`archive:${payload.id}`, payload.body);
++        }),
++      );
+       return {};
+     });
+```
+
+The callback name is a persisted contract. The handler writes the same key and
+body on repeated delivery, so retrying this operation is idempotent. Registering
+inside a later RPC method or an ordinary Worker is not supported.
+
+## Schedule an archive
+
+```diff lang="typescript"
+-      return {};
++      return {
++        scheduleArchive: (id: string, body: string) => onArchive.schedule(id, {
++          after: "1 minute",
++          payload: { id, body },
++        }),
++      };
+```
+
+The job ID is scoped to this callback and durable instance. Payloads must be
+JSON values: encode dates as strings, and do not pass `undefined`, `BigInt`, or
+non-finite numbers. The TypeScript payload type is not a versioned data decoder.
+
+## Cancel an archive
+
+```diff lang="typescript"
+       return {
++        cancelArchive: (id: string) => onArchive.cancel(id),
+         scheduleArchive: (id: string, body: string) => onArchive.schedule(id, {
+```
+
+Cancellation succeeds for an absent ID. It removes pending work, not an already
+running invocation. Scheduling and cancellation failures use `Alchemy.CallbackError`.
+
+## Replace a pending archive
+
+```diff lang="typescript"
+-          after: "1 minute",
++          at: 1796115600000,
+           payload: { id, body },
+```
+
+Supply exactly one of `at` or `after`. Scheduling the same callback name and job
+ID replaces its pending payload and due time. A completion from the older
+invocation must not acknowledge a newer replacement.
+
+## Configure retries
+
+```diff lang="typescript"
+         Effect.fn(function* (payload: { id: string; body: string }) {
+           yield* state.storage.put(`archive:${payload.id}`, payload.body);
+         }),
++        { retry: { delay: "30 seconds" } },
+       );
+```
+
+The retry delay must be finite and positive. A failed or interrupted delivery
+leaves the job pending; handlers must tolerate duplicates even when an external
+operation succeeded before the invocation was lost.
+
+## Save and schedule atomically
+
+Add this method beside `scheduleArchive` and `cancelArchive`:
+
+```typescript
+save: (id: string, body: string) => state.storage.transaction(
+  Effect.gen(function* () {
+    yield* state.storage.put(id, body);
+    yield* onArchive.schedule(id, {
+      after: "1 minute",
+      payload: { id, body },
+    });
+  }),
+),
+```
+
+Application storage and schedule bookkeeping join the same native cell
+transaction. Keep operations on its owning fiber; an external request, another
+cell, or an in-memory assignment is not rolled back with it.
+
+## Runtime behavior
+
+Delivery is **at least once**, and the due time is the earliest eligible time,
+not a deadline. Alchemy persists job state and arranges a native wake; a handler
+is acknowledged only after success. Each invocation has a fresh Effect scope.
+Use the job ID as an idempotency key for external work. An activation-local timer
+cannot replace the native wake needed by a dormant cell.
+
+## Limitations
+
+Keep native alarm retries enabled. Calling `state.abort` with
+`retryAlarm: false` can suppress recovery even while jobs remain stored. Existing
+legacy `scheduleEvent` jobs still require their application alarm handler; see
+[Upgrade existing schedules](/cloudflare/compute/durable-objects#upgrade-existing-schedules).
+
+
+Callback names and payloads must remain compatible with pending jobs across code
+updates. Renaming `archive` does not migrate stored jobs. Do not manually change
+the native alarm while durable scheduling owns it. Native termination and alarm
+retry behavior is provider-specific; disabling recovery wakes defeats durable
+delivery. Scheduling is not a multi-step Workflow or an exactly-once side-effect
+transaction.
+
+## Related guides
+
+- [Durable Objects](/cloudflare/compute/durable-objects)
+- [Workflows](/cloudflare/compute/workflows)
+- [Celld durable schedules](/celld/compute/durable-schedules) · [Rivet durable schedules](/rivet/compute/durable-schedules)
+- [DurableObject reference](/providers/cloudflare/workers/durableobject)

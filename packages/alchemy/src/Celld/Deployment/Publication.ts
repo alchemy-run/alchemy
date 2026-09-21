@@ -322,6 +322,62 @@ const checkGraph = (options: PublishApplicationOptions) =>
     return all;
   });
 
+const checkCronTransition = (
+  store: Store,
+  previous: PublicationReceipt | undefined,
+  root: StoredObject | undefined,
+  options: PublishApplicationOptions,
+) =>
+  Effect.gen(function* () {
+    let manifest: Node.Manifest;
+    if (previous) {
+      if (!(yield* same(previous.owner, options.owner)))
+        return yield* refuse(
+          "ownership",
+          "Publication receipt belongs to a different Application instance.",
+        );
+      const record = previous.objects.find(
+        (object) => object.key === `${previous.root.prefix}/manifest.json`,
+      );
+      if (!record)
+        return yield* refuse(
+          "invalid-record",
+          "Previous publication lacks its manifest evidence.",
+        );
+      manifest = yield* decode(Node.Manifest, yield* bytes(record.body));
+    } else {
+      // Unclaimed non-bootstrap roots require explicit adoption during planning.
+      if (!root || !options.adopt) return;
+      const pointer = yield* decode(Node.DeployPointer, root.body);
+      const record = yield* store.get(`${pointer.prefix}/manifest.json`);
+      if (!record)
+        return yield* refuse(
+          "invalid-record",
+          "Unclaimed root is missing its native manifest.",
+        );
+      manifest = yield* decode(Node.Manifest, record.body);
+      if (
+        manifest.version !== pointer.version ||
+        (pointer.script_name !== undefined &&
+          manifest.script_name !== pointer.script_name)
+      )
+        return yield* refuse(
+          "invalid-record",
+          "Unclaimed root pointer disagrees with its native manifest.",
+        );
+    }
+    const scriptName = previous?.root.script_name ?? manifest.script_name;
+    const next = options.rootPreparedDeployment;
+    if (
+      manifest.crons?.length &&
+      (scriptName !== next.scriptName || !next.manifest.crons?.length)
+    )
+      return yield* refuse(
+        "unsupported",
+        `Celld v0.5.0 cannot safely retire the previous root's persisted cron cell .cron:${scriptName} when changing its script identity or removing all cron triggers. Keep root script ${scriptName} and at least one cron trigger; this transition requires verified native cron retirement support.`,
+      );
+  });
+
 const planPublication = (
   store: Store,
   options: PublishApplicationOptions,
@@ -342,6 +398,7 @@ const planPublication = (
         "Publication revision changed or the prior revision was not supplied.",
       );
     const root = yield* store.get(ROOT_POINTER_KEY);
+    yield* checkCronTransition(store, previous?.receipt, root, options);
     const known = new Map(
       previous?.receipt.objects.map((object) => [object.key, object]) ?? [],
     );
@@ -642,7 +699,6 @@ export const publishApplication = <E = never, R = never>(
         "ownership",
         "This fleet is permanently claimed by another Application FQN or instance.",
       );
-    yield* ensureImmutable(store, APPLICATION_CLAIM_KEY, claimBody);
     const lockBody = yield* encode({
       owner: options.owner,
       transactionId: options.transactionId,
@@ -666,6 +722,13 @@ export const publishApplication = <E = never, R = never>(
           "A publisher lock is active. It has no expiry; only its transaction may resume, or an operator may recover it.",
         );
     }
+    yield* checkCronTransition(
+      store,
+      yield* readPublicationReceipt(store),
+      yield* store.get(ROOT_POINTER_KEY),
+      options,
+    );
+    yield* ensureImmutable(store, APPLICATION_CLAIM_KEY, claimBody);
     for (const prepared of all) yield* stageDeployment(store, prepared);
     // New transactions preflight before locking; recovery uses its journal baseline.
     if (!observedLock && !(yield* store.get(journalKey)))

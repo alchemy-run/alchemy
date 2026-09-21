@@ -3,19 +3,22 @@
  * `webSocketMessage` / `webSocketClose` handlers and returned by
  * `DurableObjectState.getWebSockets`.
  *
- * Part of the engine-invariant Worker/Durable Object runtime core shared by
- * the Cloudflare, Celld and Rivet bridges. The raw socket type is the
- * hibernatable-WebSocket API surface every engine presents (workerd's
- * natively; Rivet adapts its own sockets to it).
+ * Native attachment operations shared by Cloudflare and Celld. Rivet uses
+ * the shared codec directly over its persistent connection state.
  *
  * @internal
  */
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import {
+  makeAttachmentMethods,
+  type AttachmentMethods,
+} from "../WebSocketAttachment.ts";
+export { WebSocketAttachmentError } from "../WebSocketAttachment.ts";
 
 export type RawWebSocket = cf.WebSocket;
 
-export interface WebSocket {
+export interface WebSocket extends AttachmentMethods {
   readonly ws: RawWebSocket;
   send(data: string | Uint8Array): Effect.Effect<void>;
   close(code: number, reason: string): Effect.Effect<void>;
@@ -27,6 +30,8 @@ export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
   ws,
   send: (data) => Effect.sync(() => ws.send(data as any)),
   close: (code, reason) => Effect.sync(() => ws.close(code, reason)),
-  serializeAttachment: (value) => ws.serializeAttachment(value),
-  deserializeAttachment: () => ws.deserializeAttachment() as any,
+  ...makeAttachmentMethods({
+    read: () => ws.deserializeAttachment(),
+    write: (value) => ws.serializeAttachment(value),
+  }),
 });

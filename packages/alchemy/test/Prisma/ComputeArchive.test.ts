@@ -8,6 +8,8 @@ import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { gunzipSync } from "node:zlib";
 
 interface TarEntry {
@@ -126,6 +128,51 @@ describe("createComputeArchive", () => {
         entrypoint: "bundle/src/main.ts",
       });
     }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "round-trips long framework chunk names and symlink targets through tar",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const root = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-prisma-long-path-",
+        });
+        const output = yield* fs.makeTempDirectoryScoped({
+          prefix: "alchemy-prisma-extract-",
+        });
+        const name = `${"framework-".repeat(12)}é.js`;
+        yield* fs.writeFileString(
+          path.join(root, name),
+          "export const greeting = 'vinext';",
+        );
+        yield* fs.symlink(name, path.join(root, "server.js"));
+        const archive = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.js",
+        });
+        const again = yield* createComputeArchive({
+          directory: root,
+          entrypoint: "server.js",
+        });
+        expect(again).toEqual(archive);
+        const archivePath = path.join(output, "site.tar.gz");
+        yield* fs.writeFile(archivePath, archive);
+        const extracted = yield* spawner.exitCode(
+          ChildProcess.make("tar", ["-xzf", archivePath, "-C", output]),
+        );
+        expect(Number(extracted)).toBe(0);
+        expect(
+          yield* fs.readFileString(path.join(output, "bundle", name)),
+        ).toBe("export const greeting = 'vinext';");
+        expect(
+          (yield* fs.readLink(
+            path.join(output, "bundle", "server.js"),
+          )).normalize("NFC"),
+        ).toBe(name);
+      }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
   );
 
   it.effect("produces deterministic bytes for unchanged input", () =>
@@ -541,7 +588,7 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("rejects symlink targets that cannot fit the tar format", () =>
+  it.effect("encodes long nested symlink targets with PAX records", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -560,13 +607,17 @@ describe("createComputeArchive", () => {
       yield* fs.writeFileString(path.join(root, target), "target");
       yield* fs.symlink(target, path.join(root, "long-link.ts"));
 
-      const error = yield* createComputeArchive({
+      const archive = yield* createComputeArchive({
         directory: root,
         entrypoint: "server.ts",
-      }).pipe(Effect.flip);
-
-      expect(error).toBeInstanceOf(Error);
-      expect(error.message).toContain("symlink target is too long");
+      });
+      const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
+      expect(
+        entries.some(
+          (entry) =>
+            entry.type === "x" && entry.body.includes(`linkpath=${target}\n`),
+        ),
+      ).toBe(true);
     }).pipe(Effect.provide(PlatformServices)),
   );
 });

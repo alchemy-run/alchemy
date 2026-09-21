@@ -58,10 +58,10 @@ export default class ConformanceApi extends AWS.Lambda.Function<ConformanceApi>(
         const response = yield* client
           .execute(
             HttpClientRequest.post(
-              `${endpoint.replace(/\/+$/, "")}/gateway/Counter/action/get?${params.toString()}`,
+              `${endpoint.replace(/\/+$/, "")}/gateway/Counter/action/__alchemyCall?${params.toString()}`,
             ).pipe(
               HttpClientRequest.bodyText(
-                JSON.stringify({ args: [] }),
+                JSON.stringify({ args: ["get", []] }),
                 "application/json",
               ),
             ),

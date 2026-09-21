@@ -648,3 +648,22 @@ Related:
 Reference:
 
 - [Worker API reference](/providers/cloudflare/workers/worker)
+
+
+## Runtime behavior
+
+Worker construction assembles services and bindings; request handlers own
+request-scoped I/O and cleanup. The Worker hosts named Durable Object classes,
+while the object inner Effect initializes each activation.
+
+## Limitations
+
+This host shape is Cloudflare-specific. Celld stages Workers and requires a
+Fleet-scoped Application to publish them. Rivet Workers register actors and
+return an empty API rather than serving `fetch`.
+
+## Related guides
+
+- [Durable Objects](/cloudflare/compute/durable-objects)
+- [Celld Workers](/celld/compute/workers) · [Rivet Workers](/rivet/compute/workers)
+- [Worker reference](/providers/cloudflare/workers/worker)

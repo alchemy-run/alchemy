@@ -15,7 +15,9 @@ export interface SqlStorage extends Native.SqlStorage {}
 export interface DurableObjectTransaction
   extends Native.DurableObjectTransaction {}
 
-/** Celld's workerd-backed KV, SQLite, transactions, and alarms. */
+export { DurableObjectStorageError } from "../Workers/Workerd/DurableObjectStorage.ts";
+
+/** Celld's native KV, SQLite, transactions, and alarms. */
 export interface DurableObjectStorage extends Omit<
   Native.DurableObjectStorage,
   "getCurrentBookmark" | "getBookmarkForTime" | "onNextSessionRestoreBookmark"

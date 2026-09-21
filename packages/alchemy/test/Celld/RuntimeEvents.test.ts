@@ -1,5 +1,7 @@
 import { describe, expect, test } from "alchemy-test";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -410,6 +412,101 @@ describe("Celld native runtime adapters", () => {
   );
 
   test.live(
+    "workflow typed failure survives exhaustion and persisted replay",
+    () =>
+      Effect.gen(function* () {
+        class Busy extends Data.TaggedError("Busy")<{ attempt: number }> {}
+        const scopes: Scope.Scope[] = [];
+        const closed: number[] = [];
+        let original: Busy | undefined;
+        let persisted: Error | undefined;
+        const step: NativeWorkflowStep = {
+          ...nativeStep,
+          do: (_name, _config, callback) =>
+            callback({ ...attempt, attempt: 1 }).catch(() =>
+              callback({ ...attempt, attempt: 2 }).catch((error) => {
+                if (!(error instanceof Error)) throw error;
+                persisted = new Error(error.message);
+                throw persisted;
+              }),
+            ),
+        };
+        const workflow: WorkflowExport = {
+          kind: "Celld.WorkflowExport",
+          run: () =>
+            task(
+              "failure",
+              Effect.gen(function* () {
+                const scope = yield* Scope.Scope;
+                expect(scopes.includes(scope)).toBe(false);
+                scopes.push(scope);
+                const { attempt } = yield* WorkflowStepContext;
+                expect(closed).toHaveLength(attempt - 1);
+                yield* Effect.addFinalizer(() =>
+                  Effect.sync(() => {
+                    closed.push(attempt);
+                  }),
+                );
+                original = new Busy({ attempt });
+                return yield* Effect.fail(original);
+              }),
+            ).pipe(Effect.catchTag("Busy", Effect.succeed)),
+        };
+        expect(yield* runWorkflow(workflow, event, step, {}, context)).toBe(
+          original,
+        );
+        expect(closed).toEqual([1, 2]);
+        const replay = yield* runWorkflow(
+          workflow,
+          event,
+          {
+            ...nativeStep,
+            do: () => Effect.runPromise(Effect.die(persisted)),
+          },
+          {},
+          context,
+        );
+        expect(replay).toMatchObject({ _tag: "Busy", attempt: 2 });
+        expect(replay).not.toBe(original);
+        expect(closed).toEqual([1, 2]);
+      }),
+  );
+
+  test.live("workflow native step controls remain defects", () =>
+    Effect.gen(function* () {
+      const error = new Error("Aborting engine: User called pause");
+      const reject = () => Effect.runPromise(Effect.die(error));
+      for (const effect of [
+        task("task", Effect.succeed(1)),
+        sleep("sleep", 1),
+        sleepUntil("until", 1),
+        waitForEvent("event", { type: "event" }),
+      ]) {
+        const exit = yield* runWorkflow(
+          {
+            kind: "Celld.WorkflowExport",
+            run: () => effect,
+          },
+          event,
+          {
+            do: reject,
+            sleep: reject,
+            sleepUntil: reject,
+            waitForEvent: reject,
+          },
+          {},
+          context,
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasDies(exit.cause)).toBe(true);
+          expect(Cause.squash(exit.cause)).toBe(error);
+        }
+      }
+    }),
+  );
+
+  test.live(
     "workflow clients forward all v0.5 controls and preserve batch results",
     () =>
       Effect.gen(function* () {
@@ -659,9 +756,14 @@ describe("Celld native runtime adapters", () => {
           kind: "Celld.WorkflowExport",
           run: () => task("fail", Effect.fail(error)),
         };
-        yield* runWorkflow(workflow, event, step, {}, context).pipe(
-          Effect.result,
-        );
+        const exit = yield* runWorkflow(
+          workflow,
+          event,
+          step,
+          {},
+          context,
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
         expect(observed).toBe(error);
       }),
   );

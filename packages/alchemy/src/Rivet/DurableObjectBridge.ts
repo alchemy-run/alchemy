@@ -7,6 +7,8 @@
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { RivetCloseEvent, RivetMessageEvent } from "rivetkit";
 import type { DurableObjectExport } from "../Workers/DurableObject.ts";
@@ -21,6 +23,9 @@ import {
   type WorkerBuild,
 } from "../Workers/Worker.ts";
 import { toRpcEffect } from "../Workers/WorkerBridge.ts";
+import { CALLBACK_ACTION, makeRivetCallbacks } from "./AlarmCallback.ts";
+import { registerConnection } from "./RpcWebSocket.ts";
+import { RpcActivationScope } from "../Workers/RpcDurableObject.ts";
 import {
   ALARM_ACTION,
   consumeAlarm,
@@ -33,6 +38,8 @@ import {
 import {
   fromWebSocket,
   type RawWebSocket,
+  type ConnectedSocket,
+  type RivetConnectionState,
   type WebSocket,
 } from "./WebSocket.ts";
 
@@ -41,21 +48,30 @@ export type RivetActorFactory = (config: {
   db?: unknown;
   createState: () => { kv: Record<string, unknown> };
   createVars: (c: RivetActorContext) => Promise<unknown>;
+  createConnState: () => RivetConnectionState;
+  onSleep: (c: RivetActorContext) => Promise<void>;
+  onDestroy: (c: RivetActorContext) => Promise<void>;
   actions: Record<
     string,
     (c: RivetActorContext, ...args: any[]) => Promise<unknown> | undefined
   >;
-  onWebSocket: (c: RivetActorContext, websocket: RawWebSocket) => void;
+  onWebSocket: (
+    c: RivetActorContext,
+    websocket: RawWebSocket,
+  ) => Promise<void> | void;
   options: { canHibernateWebSocket: boolean };
 }) => unknown;
 
 interface RivetActorVars {
   readonly core: DurableObjectInstance;
-  readonly sockets: Map<RawWebSocket, readonly string[]>;
+  readonly sockets: Map<string, ConnectedSocket>;
+  readonly close: () => Promise<void>;
+  readonly callbacks: ReturnType<typeof makeRivetCallbacks>;
 }
 
 /** Only the heterogeneous shared export boundary erases provider handlers. */
 interface RivetInstanceShape {
+  webSocketOpen?: (socket: WebSocket) => Effect.Effect<unknown, unknown, any>;
   alarm?: () => Effect.Effect<unknown, unknown, any>;
   webSocketMessage?: (
     socket: WebSocket,
@@ -78,6 +94,23 @@ const invocation = (native: RivetActorContext) => ({
   waitUntil: (promise: Promise<unknown>) => native.waitUntil(promise),
 });
 
+const interruptOnRetirement = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  native: RivetActorContext,
+) =>
+  Effect.raceFirst(
+    effect,
+    Effect.callback<never>((resume) => {
+      const interrupt = () => resume(Effect.interrupt);
+      if (native.abortSignal.aborted) interrupt();
+      else
+        native.abortSignal.addEventListener("abort", interrupt, { once: true });
+      return Effect.sync(() =>
+        native.abortSignal.removeEventListener("abort", interrupt),
+      );
+    }),
+  );
+
 const collectingStreams = (result: unknown) =>
   toRpcEffect(result).pipe(
     Effect.flatMap((value) =>
@@ -89,48 +122,26 @@ const collectingStreams = (result: unknown) =>
     ),
   );
 
-/**
- * Discover RPC names with an explicit actor-state-only probe. SQL or scheduler
- * access during discovery fails startup rather than registering an empty actor.
- */
-export const discoverDurableObjectMethods = async (
-  build: (pin: Pin) => Promise<WorkerBuild<DurableObjectExport>>,
-): Promise<string[]> => {
-  const pending: Promise<unknown>[] = [];
-  const unavailable = () => {
-    throw new Error(
-      "Rivet method discovery cannot execute native SQL or scheduling during initialization",
-    );
-  };
-  const probe: RivetActorContext = {
-    actorId: "__alchemy_method_probe",
-    state: { kv: {} },
-    key: ["__alchemy_method_probe"],
-    name: "__alchemy_method_probe",
-    db: { execute: unavailable, transaction: unavailable, close: unavailable },
-    schedule: {
-      at: unavailable,
-      after: unavailable,
-      cancel: unavailable,
-      get: unavailable,
-      list: unavailable,
-    },
-    waitUntil: (promise) => {
-      pending.push(promise);
-    },
-  };
-  const { instance } = await makeDurableObjectInstance({
-    build,
-    services: Context.make(
-      DurableObjectState,
-      fromRivetActor(probe, new Map()),
-    ).pipe(Context.add(NativeContext, probe)),
-    waitUntil: probe.waitUntil,
-    dispatch: "proxy",
-  }).instance;
-  await Promise.all(pending);
-  return Object.keys(instance).filter(
-    (name) => !RESERVED_DURABLE_OBJECT_HANDLERS.has(name),
+/** Native registration is fixed; user methods are resolved only after activation. */
+export const CALL_ACTION = "__alchemyCall";
+
+const callMember = (
+  instance: Record<string, unknown>,
+  method: string,
+  args: unknown[],
+) => {
+  if (
+    typeof method !== "string" ||
+    method.startsWith("__alchemy") ||
+    method === "webSocketOpen" ||
+    RESERVED_DURABLE_OBJECT_HANDLERS.has(method) ||
+    !Object.hasOwn(instance, method)
+  ) {
+    return Effect.die(new Error(`Unknown Rivet method: ${method}`));
+  }
+  const member = instance[method];
+  return collectingStreams(
+    typeof member === "function" ? member(...args) : member,
   );
 };
 
@@ -157,55 +168,110 @@ export const makeRivetActor = (
     return vars;
   };
 
+  const execute = <T = unknown>(
+    native: RivetActorContext,
+    fn: Parameters<DurableObjectInstance["execute"]>[0],
+    onExit?: (exit: Exit.Exit<any, any>, scope: Scope.Closeable) => Promise<T>,
+  ) =>
+    varsOf(native).core.execute<T>(
+      (instance) => interruptOnRetirement(fn(instance), native),
+      onExit,
+      invocation(native),
+    );
+
   return actor({
     ...(db !== undefined ? { db } : {}),
     createState: () => ({ kv: {} }),
     options: { canHibernateWebSocket: true },
+    createConnState: () => ({ version: 1, tags: [] }),
+    onSleep: (native) => varsOf(native).close(),
+    onDestroy: (native) => varsOf(native).close(),
     createVars: async (native) => {
-      const sockets = new Map<RawWebSocket, readonly string[]>();
+      const sockets = new Map<string, ConnectedSocket>();
+      const scope = Scope.makeUnsafe();
+      const callbacks = makeRivetCallbacks();
+      let closing: Promise<void> | undefined;
+      const close = () =>
+        (closing ??= Effect.runPromise(Scope.close(scope, Exit.void)));
+      const onAbort = () => {
+        native.waitUntil(close());
+      };
+      native.abortSignal.addEventListener("abort", onAbort, { once: true });
+      await Effect.runPromise(
+        Scope.addFinalizer(
+          scope,
+          Effect.sync(() => {
+            native.abortSignal.removeEventListener("abort", onAbort);
+            sockets.clear();
+          }),
+        ),
+      );
       const vars: RivetActorVars = {
         sockets,
+        close,
+        callbacks,
         core: makeDurableObjectInstance({
           build,
+          runtimeContext: (runtime) => ({
+            ...runtime,
+            makeCallback: callbacks.factory,
+          }),
+          initialize: callbacks.initialize,
           services: Context.make(
             DurableObjectState,
             fromRivetActor(native, sockets),
-          ).pipe(Context.add(NativeContext, native)),
+          ).pipe(
+            Context.add(NativeContext, native),
+            Context.add(Scope.Scope, scope),
+            Context.add(RpcActivationScope, scope),
+          ),
           waitUntil: invocation(native).waitUntil,
           dispatch: "proxy",
         }),
       };
-      await vars.core.instance;
-      return vars;
+      try {
+        await vars.core.instance;
+        return vars;
+      } catch (error) {
+        await close();
+        throw error;
+      }
     },
     onWebSocket: (native, websocket) => {
-      const { core, sockets } = varsOf(native);
-      sockets.set(websocket, []);
-      const socket = fromWebSocket(websocket);
+      const { sockets } = varsOf(native);
+      const connection = native.conn;
+      if (connection === undefined)
+        throw new Error("Rivet socket delivery requires conn");
+      if (connection.state?.version !== 1) {
+        websocket.close(1012, "Unsupported connection state; reconnect");
+        return;
+      }
+      sockets.set(connection.id, { socket: websocket, connection });
+      const socket = fromWebSocket(websocket, connection);
+      registerConnection(socket, connection, native);
       // Rivet tracks the returned callback promise and opens its native region.
       websocket.addEventListener("message", (event: RivetMessageEvent) =>
-        core.execute<void>(
+        execute<void>(
+          native,
           (instance) =>
             (instance as RivetInstanceShape).webSocketMessage?.(
               socket,
               event.data,
             ) ?? Effect.void,
-          undefined,
-          invocation(native),
         ),
       );
       websocket.addEventListener("error", (event: unknown) =>
-        core.execute<void>(
+        execute<void>(
+          native,
           (instance) =>
             (instance as RivetInstanceShape).webSocketError?.(socket, event) ??
             Effect.void,
-          undefined,
-          invocation(native),
         ),
       );
       websocket.addEventListener("close", (event: RivetCloseEvent) => {
-        sockets.delete(websocket);
-        return core.execute<void>(
+        sockets.delete(connection.id);
+        return execute<void>(
+          native,
           (instance) =>
             (instance as RivetInstanceShape).webSocketClose?.(
               socket,
@@ -213,37 +279,53 @@ export const makeRivetActor = (
               event.reason,
               event.wasClean,
             ) ?? Effect.void,
-          undefined,
-          invocation(native),
         );
       });
+      return execute<void>(
+        native,
+        (instance) =>
+          (instance as RivetInstanceShape).webSocketOpen?.(socket) ??
+          Effect.void,
+      );
     },
     actions: {
+      [CALLBACK_ACTION]: (native: RivetActorContext) => {
+        const vars = varsOf(native);
+        return execute(native, () => vars.callbacks.dispatch());
+      },
+      [CALL_ACTION]: (
+        native: RivetActorContext,
+        method: string,
+        args: unknown[],
+      ) =>
+        execute(
+          native,
+          (instance) =>
+            Array.isArray(args)
+              ? callMember(instance, method, args)
+              : Effect.die(
+                  new Error("Rivet method arguments must be an array"),
+                ),
+          handleRpcExit,
+        ),
       ...Object.fromEntries(
         methods.map((method) => [
           method,
           (native: RivetActorContext, ...args: unknown[]) =>
-            varsOf(native).core.execute(
-              (instance) => {
-                const member = instance[method];
-                return collectingStreams(
-                  typeof member === "function" ? member(...args) : member,
-                );
-              },
+            execute(
+              native,
+              (instance) => callMember(instance, method, args),
               handleRpcExit,
-              invocation(native),
             ),
         ]),
       ),
       [ALARM_ACTION]: (native: RivetActorContext, generation: number) => {
-        const { core } = varsOf(native);
         if (!isAlarmCurrent(native.state, generation)) return;
         consumeAlarm(native.state);
-        return core.execute(
+        return execute(
+          native,
           (instance) =>
             (instance as RivetInstanceShape).alarm?.() ?? Effect.void,
-          undefined,
-          invocation(native),
         );
       },
     },

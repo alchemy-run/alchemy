@@ -29,6 +29,14 @@ export type DurableObjectStub<Shape> = Shape;
 /** Rivet actor lifecycle handlers; HTTP fetch belongs to the Worker. */
 export interface DurableObjectShape {
   fetch?: never;
+  /** Called with the already accepted native connection on connect and wake. */
+  webSocketOpen?: (
+    socket: WebSocket,
+  ) => Effect.Effect<
+    unknown,
+    never,
+    RuntimeContext | DurableObjectState | Scope
+  >;
   alarm?: () => Effect.Effect<
     void,
     never,

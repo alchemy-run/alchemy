@@ -10,7 +10,21 @@ import { FleetStorage } from "@/Celld/FleetStorage.ts";
 import { Namespace, NamespaceProvider } from "@/Celld/KV/Namespace.ts";
 import { Queue, QueueProvider } from "@/Celld/Queues/Queue.ts";
 import { readStagedDeployment } from "@/Celld/StagedDeployment.ts";
-import { CelldWorkerProvider, Worker } from "@/Celld/Worker.ts";
+import {
+  CelldWorkerProvider,
+  Worker,
+  type CelldWorker,
+} from "@/Celld/Worker.ts";
+import { SqlMigrations } from "@/Celld/SqlMigrations.ts";
+import { Resource } from "@/Resource.ts";
+import {
+  makeWorkerRuntimeContext,
+  type WorkerRuntimeContext,
+} from "@/Cloudflare/Workers/WorkerRuntimeContext.ts";
+import { sqlObjectExport } from "./fixtures/native-features/sql-object.ts";
+import * as Context from "effect/Context";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { InstanceId } from "@/InstanceId.ts";
 import { noopSession } from "@/Report.ts";
 import { sanitizeKey } from "@/RuntimeContext.ts";
@@ -67,6 +81,15 @@ const Status = Schema.Struct({
       id: Schema.String,
       attempt: Schema.Number,
       approved: Schema.Boolean,
+      lifecycle: Schema.optional(
+        Schema.Struct({
+          entries: Schema.Array(Schema.String),
+          executed: Schema.Boolean,
+          caught: Schema.Boolean,
+          sameError: Schema.Boolean,
+          terminal: Schema.Boolean,
+        }),
+      ),
     }),
   ),
 });
@@ -117,6 +140,29 @@ const waitStatus = (id: string, expected: string) =>
       times: 10,
     }),
   );
+const SqlState = Schema.Struct({
+  id: Schema.String,
+  tag: Schema.Literal("Cloudflare.SqlMigrations"),
+  table: Schema.Literal("native_sql_history"),
+  captured: Schema.Array(
+    Schema.Struct({ name: Schema.String, hash: Schema.String }),
+  ),
+  applicationError: Schema.NullOr(Schema.String),
+  history: Schema.Array(
+    Schema.Struct({ name: Schema.String, hash: Schema.String }),
+  ),
+  rows: Schema.Array(Schema.Struct({ value: Schema.String })),
+  tables: Schema.Array(Schema.Struct({ name: Schema.String })),
+});
+interface SqlPublication {
+  readonly version: string;
+  readonly workerName: string;
+  readonly durableObjectClasses: Readonly<Record<string, string>>;
+  readonly captured: ReadonlyArray<{ name: string; hash: string }>;
+}
+let publishSql:
+  | ((dir: string) => Effect.Effect<SqlPublication, unknown>)
+  | undefined;
 let runId = "";
 let publishedAt = 0;
 let publishedVersion = "";
@@ -234,78 +280,79 @@ describe.skipIf(!enabled)(
               const rootArtifacts = yield* Effect.sync(() =>
                 makeScopedArtifacts(new Map(), "NativeFeatures"),
               );
-              const root = yield* provider
-                .reconcile({
-                  ...input,
-                  id: "NativeFeatures",
-                  fqn: "NativeFeatures",
+              const rootInput: Parameters<typeof provider.reconcile>[0] = {
+                ...input,
+                id: "NativeFeatures",
+                fqn: "NativeFeatures",
+                bindings: [
+                  {
+                    sid: "native-events",
+                    data: {
+                      crons: ["* * * * *"],
+                      queueConsumers: [
+                        {
+                          queue: jobs.queueName,
+                          maxBatchSize: 1,
+                          maxBatchTimeout: 0,
+                          maxRetries: 1,
+                          retryDelay: 1,
+                          deadLetterQueue: dead.queueName,
+                        },
+                        {
+                          queue: dead.queueName,
+                          maxBatchSize: 1,
+                          maxBatchTimeout: 0,
+                          maxRetries: 1,
+                        },
+                      ],
+                    },
+                  },
+                ],
+                news: {
+                  ...common,
+                  main: entries.root,
+                  exports: { NativeReports: reportExport },
+                  env: queueEnv,
+                  assets: {
+                    directory: "public",
+                    binding: "ASSETS",
+                    runWorkerFirst: true,
+                  },
                   bindings: [
                     {
-                      sid: "native-events",
-                      data: {
-                        crons: ["* * * * *"],
-                        queueConsumers: [
-                          {
-                            queue: jobs.queueName,
-                            maxBatchSize: 1,
-                            maxBatchTimeout: 0,
-                            maxRetries: 1,
-                            retryDelay: 1,
-                            deadLetterQueue: dead.queueName,
-                          },
-                          {
-                            queue: dead.queueName,
-                            maxBatchSize: 1,
-                            maxBatchTimeout: 0,
-                            maxRetries: 1,
-                          },
-                        ],
-                      },
+                      type: "kv_namespace",
+                      name: "OBSERVATIONS",
+                      namespaceId: kv.namespaceId,
                     },
+                    {
+                      type: "queue",
+                      name: "JOBS",
+                      queueName: jobs.queueName,
+                    },
+                    {
+                      type: "queue",
+                      name: "DEAD",
+                      queueName: dead.queueName,
+                    },
+                    {
+                      type: "workflow",
+                      name: "NativeReports",
+                      workflowName: "NativeReports",
+                      className: "NativeReports",
+                    },
+                    {
+                      type: "service",
+                      name: "SERVICE",
+                      service: service.workerName,
+                    },
+                    { type: "worker_loader", name: "LOADER" },
                   ],
-                  news: {
-                    ...common,
-                    main: entries.root,
-                    exports: { NativeReports: reportExport },
-                    env: queueEnv,
-                    assets: {
-                      directory: "public",
-                      binding: "ASSETS",
-                      runWorkerFirst: true,
-                    },
-                    bindings: [
-                      {
-                        type: "kv_namespace",
-                        name: "OBSERVATIONS",
-                        namespaceId: kv.namespaceId,
-                      },
-                      {
-                        type: "queue",
-                        name: "JOBS",
-                        queueName: jobs.queueName,
-                      },
-                      {
-                        type: "queue",
-                        name: "DEAD",
-                        queueName: dead.queueName,
-                      },
-                      {
-                        type: "workflow",
-                        name: "NativeReports",
-                        workflowName: "NativeReports",
-                        className: "NativeReports",
-                      },
-                      {
-                        type: "service",
-                        name: "SERVICE",
-                        service: service.workerName,
-                      },
-                      { type: "worker_loader", name: "LOADER" },
-                    ],
-                  },
-                })
+                },
+              };
+              const root = yield* provider
+                .reconcile(rootInput)
                 .pipe(Effect.provide(Layer.succeed(Artifacts, rootArtifacts)));
-              return { root, service };
+              return { root, service, rootInput };
             }).pipe(Effect.provide(providers));
             const root = yield* readStagedDeployment(
               store,
@@ -334,6 +381,98 @@ describe.skipIf(!enabled)(
               }),
             );
             expect(state.deployment?.version).toBe(root.version);
+            let currentProps = staged.rootInput.news;
+            let currentOutput = staged.root;
+            publishSql = (dir) =>
+              Effect.gen(function* () {
+                const host = makeWorkerRuntimeContext("native-sql-capture");
+                const Host = Context.Service<CelldWorker, WorkerRuntimeContext>(
+                  Resource<CelldWorker>("Celld.Worker").Self.key,
+                );
+                const captured = yield* SqlMigrations({
+                  dir,
+                  table: "native_sql_history",
+                }).pipe(Effect.provideService(Host, host));
+                const { default: _default, ...migrationExports } =
+                  yield* host.exports;
+                const news = {
+                  ...staged.rootInput.news,
+                  env: {
+                    ...staged.rootInput.news.env,
+                    NATIVE_SQL_DIRECTORY: dir,
+                  },
+                  exports: {
+                    ...staged.rootInput.news.exports,
+                    NativeSqlObject: sqlObjectExport,
+                    ...migrationExports,
+                  },
+                };
+                const artifacts = yield* Effect.sync(() =>
+                  makeScopedArtifacts(new Map(), "NativeSqlUpdate"),
+                );
+                const updated = yield* (yield* Worker.Provider)
+                  .reconcile({
+                    ...staged.rootInput,
+                    news,
+                    olds: currentProps,
+                    output: currentOutput,
+                    bindings: [
+                      ...staged.rootInput.bindings,
+                      {
+                        sid: "native-sql",
+                        data: {
+                          durableObjects: [
+                            {
+                              name: "NativeSqlObject",
+                              className: "NativeSqlObject",
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  })
+                  .pipe(Effect.provide(Layer.succeed(Artifacts, artifacts)));
+                const prepared = yield* readStagedDeployment(
+                  store,
+                  updated.stagedManifestKey,
+                );
+                const previous = yield* readPublicationReceipt(store);
+                const publication = yield* publishApplication(store, {
+                  rootPreparedDeployment: prepared,
+                  workers: [service],
+                  owner,
+                  transactionId: `native-sql-${prepared.version}-${previous?.revision.slice(0, 16) ?? "initial"}`,
+                  priorRevision: previous?.revision,
+                });
+                expect((yield* Node.reloadDeployment({})).ok).toBe(true);
+                const active = yield* Node.getNodeState({}).pipe(
+                  Effect.repeat({
+                    until: (value) =>
+                      value.deployment?.version === prepared.version,
+                    schedule: Schedule.spaced("500 millis"),
+                    times: 8,
+                  }),
+                );
+                expect(active.deployment?.version).toBe(prepared.version);
+                currentProps = news;
+                currentOutput = updated;
+                yield* Effect.log({
+                  sqlVersion: prepared.version,
+                  revision: publication.revision,
+                });
+                return {
+                  version: prepared.version,
+                  workerName: updated.workerName,
+                  durableObjectClasses: updated.durableObjectClasses,
+                  captured: captured.records.map(({ name, hash }) => ({
+                    name,
+                    hash,
+                  })),
+                };
+              }).pipe(
+                Effect.scoped,
+                Effect.provide(Layer.mergeAll(providers, services)),
+              );
             yield* Effect.log({
               bucketName,
               workerUrl,
@@ -429,6 +568,67 @@ describe.skipIf(!enabled)(
         }).pipe(Effect.provide(services)),
       { timeout: 90_000 },
     );
+
+    for (const scenario of [
+      "retry",
+      "exhaustion",
+      "die",
+      "interrupt",
+      "replay",
+    ] as const) {
+      test.live(
+        `workflow ${scenario} owns attempt resources and preserves native failures`,
+        () =>
+          Effect.gen(function* () {
+            const id = `workflow-${scenario}-${runId}`;
+            yield* post("/workflow/create", { id, lifecycle: scenario });
+            const completed = yield* waitStatus(id, "complete");
+            expect(completed.status).toBe("complete");
+            const lifecycle = completed.output?.lifecycle;
+            const retry = ["retry", "exhaustion", "replay"].includes(scenario);
+            expect(lifecycle).toMatchObject({
+              executed: true,
+              caught: scenario === "exhaustion" || scenario === "replay",
+              sameError: scenario === "exhaustion" || scenario === "replay",
+              terminal: scenario === "die",
+            });
+            expect(lifecycle?.entries).toEqual([
+              "open:1",
+              "close:1",
+              ...(retry
+                ? ["delay:1", "delay-close:1", "open:2", "close:2"]
+                : []),
+              ...(scenario === "interrupt" ? ["joined"] : []),
+            ]);
+            if (scenario === "replay") {
+              yield* post(`/workflow/restart/${id}?checkpoint`);
+              const replayed = yield* status(id).pipe(
+                Effect.repeat({
+                  until: (value) =>
+                    value.output?.lifecycle?.executed === false ||
+                    value.status === "errored",
+                  schedule: Schedule.spaced("500 millis"),
+                  times: 10,
+                }),
+              );
+              expect(replayed).toMatchObject({
+                status: "complete",
+                output: {
+                  lifecycle: {
+                    entries: lifecycle?.entries,
+                    executed: false,
+                    caught: true,
+                    sameError: false,
+                    terminal: false,
+                  },
+                },
+              });
+            }
+            yield* post(`/workflow/delete/${id}`);
+          }).pipe(Effect.provide(services)),
+        { timeout: 60_000 },
+      );
+    }
 
     test.live(
       "workflow batch creation, termination and explicit history deletion run natively",
@@ -529,6 +729,131 @@ describe.skipIf(!enabled)(
               sum: 9,
             });
         }).pipe(Effect.provide(services)),
+    );
+
+    test.live(
+      "captured SQL migrates native cells atomically and SQL-only publications retain identity and user data",
+      () =>
+        Effect.gen(function* () {
+          if (!publishSql)
+            return yield* Effect.die(
+              "Native SQL publisher was not initialized",
+            );
+          const publish = publishSql;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const dir = yield* fs.makeTempDirectoryScoped({
+            prefix: "celld-native-sql-",
+          });
+          const firstName = "0001_items.sql";
+          const secondName = "0002_committed.sql";
+          const thirdName = "0003_repaired.sql";
+          yield* fs.writeFileString(
+            path.join(dir, firstName),
+            "CREATE TABLE items (value TEXT NOT NULL);\n--> statement-breakpoint\nINSERT INTO items VALUES ('seed');",
+          );
+          const initialPublication = yield* publish(dir);
+          const name = `migrations-${runId}`;
+          const read = (name: string) =>
+            json(`/sql/${name}`).pipe(
+              Effect.flatMap(Schema.decodeUnknownEffect(SqlState)),
+            );
+          const initial = yield* read(name);
+          expect(initial.id).toBeTruthy();
+          expect(initial.applicationError).toBeNull();
+          expect(initial.captured).toEqual(initialPublication.captured);
+          expect(initial.history).toEqual(initialPublication.captured);
+          expect(initial.history[0]?.hash).toMatch(/^[a-f0-9]{64}$/);
+          expect(initial.rows).toEqual([{ value: "seed" }]);
+          expect(initial.tables).toEqual([]);
+          yield* post(`/sql/${name}`);
+
+          yield* fs.writeFileString(
+            path.join(dir, secondName),
+            "INSERT INTO items VALUES ('migration-two');",
+          );
+          yield* fs.writeFileString(
+            path.join(dir, thirdName),
+            "CREATE TABLE rolled_back (value TEXT);\n--> statement-breakpoint\nINSERT INTO items VALUES ('must-rollback');\n--> statement-breakpoint\nINSERT INTO missing_table VALUES (1);",
+          );
+          const brokenPublication = yield* publish(dir);
+          expect(brokenPublication.version).not.toBe(
+            initialPublication.version,
+          );
+          expect(brokenPublication.workerName).toBe(
+            initialPublication.workerName,
+          );
+          expect(brokenPublication.durableObjectClasses).toEqual(
+            initialPublication.durableObjectClasses,
+          );
+          const broken = yield* read(name);
+          expect(broken.id).toBe(initial.id);
+          expect(broken.captured).toEqual(brokenPublication.captured);
+          expect(broken.applicationError).toBe("MigrationError");
+          expect(broken.history).toEqual(
+            brokenPublication.captured.slice(0, 2),
+          );
+          expect(broken.rows).toEqual([
+            { value: "seed" },
+            { value: "user-data" },
+            { value: "migration-two" },
+          ]);
+          expect(broken.tables).toEqual([]);
+
+          yield* fs.writeFileString(
+            path.join(dir, thirdName),
+            "INSERT INTO items VALUES ('migration-three');",
+          );
+          const repairedPublication = yield* publish(dir);
+          expect(repairedPublication.version).not.toBe(
+            brokenPublication.version,
+          );
+          expect(repairedPublication.workerName).toBe(
+            initialPublication.workerName,
+          );
+          expect(repairedPublication.durableObjectClasses).toEqual(
+            initialPublication.durableObjectClasses,
+          );
+          expect(repairedPublication.captured[2]?.hash).not.toBe(
+            brokenPublication.captured[2]?.hash,
+          );
+          const repaired = yield* read(name);
+          expect(repaired.id).toBe(initial.id);
+          expect(repaired.applicationError).toBeNull();
+          expect(repaired.captured).toEqual(repairedPublication.captured);
+          expect(repaired.history).toEqual(repairedPublication.captured);
+          expect(repaired.rows).toEqual([
+            { value: "seed" },
+            { value: "user-data" },
+            { value: "migration-two" },
+            { value: "migration-three" },
+          ]);
+          expect(repaired.tables).toEqual([]);
+          expect(yield* json(`/sql/${name}?reapply`)).toEqual(repaired);
+          const isolated = yield* read(`${name}-isolated`);
+          expect(isolated.id).not.toBe(initial.id);
+          expect(isolated.history).toEqual(repaired.history);
+          expect(isolated.rows).toEqual([
+            { value: "seed" },
+            { value: "migration-two" },
+            { value: "migration-three" },
+          ]);
+          yield* Effect.log({
+            nativeSqlProof: {
+              id: initial.id,
+              workerName: initialPublication.workerName,
+              versions: [
+                initialPublication.version,
+                brokenPublication.version,
+                repairedPublication.version,
+              ],
+              history: repaired.history,
+              rows: repaired.rows,
+              rollbackTables: broken.tables,
+            },
+          });
+        }).pipe(Effect.scoped, Effect.provide(services)),
+      { timeout: 90_000 },
     );
   },
 );

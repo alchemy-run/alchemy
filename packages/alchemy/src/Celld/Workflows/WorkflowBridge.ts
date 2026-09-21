@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { buildEventTelemetry } from "../../TelemetryRuntime.ts";
+import { withWorkflowScope } from "../../Workers/WorkflowCallback.ts";
+import { isScopeEjected } from "../../Cloudflare/Workers/HttpServer.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { WorkerEnvironment } from "../../Workers/Worker.ts";
 import { getCelldWorkerExport } from "../WorkerBridge.ts";
@@ -51,14 +53,16 @@ export const runWorkflow = (
           ).pipe(Layer.provideMerge(Layer.succeedContext(context))),
         ),
       );
-  }).pipe(Effect.scoped);
+  }).pipe((effect) => withWorkflowScope(effect, isScopeEjected));
 
 /** Build one statically exported workflow class, sharing only initialized services. @internal */
 export const makeWorkflowBridge =
   (
     Base: WorkflowEntrypointClass,
     options: {
-      entrypoint: Effect.Effect<Record<string, any>>;
+      entrypoint:
+        | Effect.Effect<Record<string, any>>
+        | Layer.Layer<any, any, any>;
       stack: { name: string; stage: string };
     },
   ) =>

@@ -23,6 +23,15 @@ New here? [Set up your account](/cloudflare/setup), then start the
 - [Workflows](/cloudflare/compute/workflows) — durable multi-step jobs with
   checkpointed, replayable steps.
 
+- [Durable schedules](/cloudflare/compute/durable-schedules) — archive callbacks with stable job IDs.
+- [Hibernatable WebSockets](/cloudflare/compute/hibernatable-websockets) — retained sockets and versioned Session attachments.
+
+## APIs
+
+[Effect RPC](/cloudflare/apis/effect-rpc#build-the-roomrpcs-example) builds the
+schema-backed Room API also used in the [Celld](/celld) and [Rivet](/rivet) guides.
+Matching topics do not imply identical deployment or persistence boundaries.
+
 ## Frontend
 
 - [Vite](/cloudflare/frontend/vite) — deploy any pure-Vite app
@@ -34,6 +43,7 @@ New here? [Set up your account](/cloudflare/setup), then start the
 
 ## Data
 
+- [SQL migrations](/cloudflare/data/sql-migrations) — captured SQL applied per Durable Object instance.
 - [D1](/cloudflare/data/d1) — serverless SQLite with migrations managed as
   part of the deploy.
 - [KV](/cloudflare/data/kv) — edge key-value storage for config, sessions,
@@ -104,3 +114,22 @@ The blocks above are what most apps are built from, but coverage goes
 much further: the zero-trust and zone-security long tail — roughly 60
 more services, produced by the resource factory — ships as
 reference-only documentation in the [API reference](/providers).
+
+
+## Runtime behavior
+
+Cloudflare owns the Worker, Durable Object, and Workflow lifecycles. Native
+storage, alarms, and retained sockets support durable per-entity applications;
+request-scoped Effects own disposable I/O.
+
+## Limitations
+
+Matching Celld and Rivet topics describe shared application patterns, not blanket
+native parity. In particular, Rivet SQL, actor KV, and scheduling are separate
+boundaries, and Rivet has no Alchemy Workflow API.
+
+## Related guides
+
+- [Setup](/cloudflare/setup)
+- [Celld overview](/celld) · [Rivet overview](/rivet)
+- [Worker reference](/providers/cloudflare/workers/worker)

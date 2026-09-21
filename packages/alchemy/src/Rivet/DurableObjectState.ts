@@ -3,13 +3,15 @@ import * as Effect from "effect/Effect";
 import type { ActorContext } from "rivetkit";
 import type { DatabaseProvider, RawAccess } from "rivetkit/db";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import type { CallbackJob } from "../Workers/CallbackRegistry.ts";
 import {
   fromRivetStorage,
   type DurableObjectStorage,
 } from "./DurableObjectStorage.ts";
 import {
   fromWebSocket,
-  type RawWebSocket,
+  type ConnectedSocket,
+  type RivetConnection,
   type WebSocket,
 } from "./WebSocket.ts";
 
@@ -20,10 +22,16 @@ export const ALARM_ACTION = "__alchemyAlarm";
 export interface RivetActorState {
   /** Values persisted through Rivet's actor-state write-through proxy. */
   kv: Record<string, unknown>;
+  /** Next RPC connection identifier, including sockets dormant outside this activation. */
+  rpcNextClientId?: number;
   /** The current native scheduled event and its generation. */
   alarm?: { time: number; generation: number; scheduleId?: string };
   /** Monotonic generation that rejects stale alarm deliveries. */
   alarmGeneration?: number;
+  /** Versioned callback jobs; independent of user KV and SQLite. */
+  callbacks?: Record<string, CallbackJob>;
+  /** Optional precise wake; the recurring native watchdog is authoritative recovery. */
+  callbackWake?: { id: string; at: number };
 }
 
 type NativeActor = ActorContext<
@@ -38,10 +46,24 @@ type NativeActor = ActorContext<
 /** The native actor context members used by this adapter. */
 export interface RivetActorContext extends Pick<
   NativeActor,
-  "actorId" | "key" | "name" | "state" | "db" | "schedule" | "waitUntil"
+  | "actorId"
+  | "key"
+  | "name"
+  | "state"
+  | "db"
+  | "schedule"
+  | "waitUntil"
+  | "saveState"
+  | "cron"
+  | "abortSignal"
+  | "keepAwake"
+  | "sleep"
+  | "destroy"
 > {
   /** Activation-local vars are absent while createVars is running. */
   readonly vars?: unknown;
+  /** Present on native socket and action invocations, absent during activation. */
+  readonly conn?: RivetConnection;
 }
 
 /** @internal Runtime-colored lookup of the originating native invocation. */
@@ -67,7 +89,7 @@ export class DurableObjectState extends Context.Service<
     waitUntil<A, E, R>(
       effect: Effect.Effect<A, E, R>,
     ): Effect.Effect<void, never, R | RuntimeContext>;
-    /** Set activation-local tags on an already accepted Rivet socket. */
+    /** Set persistent connection tags on an already accepted Rivet socket. */
     setWebSocketTags(
       socket: WebSocket,
       tags: readonly string[],
@@ -95,7 +117,7 @@ export const consumeAlarm = (state: RivetActorState): void => {
 /** @internal Construct once; native operations resolve their invocation lazily. */
 export const fromRivetActor = (
   actor: Pick<RivetActorContext, "actorId" | "key" | "name">,
-  sockets: Map<RawWebSocket, readonly string[]>,
+  sockets: Map<string, ConnectedSocket>,
 ): DurableObjectState["Service"] => ({
   actorId: actor.actorId,
   key: actor.key,
@@ -114,16 +136,23 @@ export const fromRivetActor = (
     }),
   setWebSocketTags: (socket, tags) =>
     Effect.sync(() => {
-      if (!sockets.has(socket.ws)) {
+      const connected = sockets.get(socket.id);
+      if (connected?.socket !== socket.ws) {
         throw new Error("The socket is not connected to this Rivet actor");
       }
-      sockets.set(socket.ws, [...tags]);
+      connected.connection.state.tags = [...tags];
     }),
   getWebSockets: (tag) =>
     Effect.sync(() =>
-      [...sockets.entries()]
-        .filter(([, tags]) => tag === undefined || tags.includes(tag))
-        .map(([socket]) => fromWebSocket(socket)),
+      [...sockets.values()]
+        .filter(
+          ({ connection }) =>
+            tag === undefined || connection.state.tags.includes(tag),
+        )
+        .map(({ socket, connection }) => fromWebSocket(socket, connection)),
     ),
-  getTags: (socket) => Effect.sync(() => [...(sockets.get(socket.ws) ?? [])]),
+  getTags: (socket) =>
+    Effect.sync(() => [
+      ...(sockets.get(socket.id)?.connection.state.tags ?? []),
+    ]),
 });

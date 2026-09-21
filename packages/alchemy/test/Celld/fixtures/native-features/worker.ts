@@ -2,7 +2,12 @@ import { Assets, AssetsBinding } from "@/Celld/AssetsBinding.ts";
 import { cron, CronEventSourceLive } from "@/Celld/CronEventSource.ts";
 import { Namespace } from "@/Celld/KV/Namespace.ts";
 import { ReadWriteNamespace } from "@/Celld/KV/ReadWriteNamespace.ts";
-import { ReadWriteNamespaceBinding } from "@/Celld/KV/ReadWriteNamespaceBinding.ts";
+import { makeKVNamespaceHelpers } from "@/Celld/KV/NamespaceBinding.ts";
+import {
+  makeReadWriteKVClient,
+  ReadWriteNamespaceBinding,
+} from "@/Celld/KV/ReadWriteNamespaceBinding.ts";
+import { WorkerEnvironment } from "@/Workers/Worker.ts";
 import {
   consumeQueueMessages,
   EventSourceLive,
@@ -22,18 +27,165 @@ import {
   WorkflowStepContext,
 } from "@/Celld/Workflows/WorkflowRuntime.ts";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Scope from "effect/Scope";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
+import { NativeSqlObject } from "./sql-object.ts";
+
 type Job = { id: string; mode?: "retry" | "dead" };
-type Report = { id: string; wait?: boolean };
+type LifecycleScenario =
+  | "retry"
+  | "exhaustion"
+  | "replay"
+  | "die"
+  | "interrupt";
+type Report = { id: string; wait?: boolean; lifecycle?: LifecycleScenario };
+
+class Busy extends Data.TaggedError("Busy")<{
+  attempt: number;
+  detail: { when: Date; bytes: Uint8Array; count: bigint };
+}> {}
+
+const lifecycleRun = (scenario: LifecycleScenario, id: string) =>
+  Effect.gen(function* () {
+    const observations = makeReadWriteKVClient(
+      makeKVNamespaceHelpers(yield* WorkerEnvironment, {
+        LogicalId: "OBSERVATIONS",
+      }),
+    );
+    const journalKey = `workflow:journal:${id}`;
+    const entries: string[] = [];
+    const readJournal = observations
+      .get<string[]>(journalKey, "json")
+      .pipe(Effect.map((entries) => entries ?? []));
+    const record = (entry: string) =>
+      Effect.gen(function* () {
+        entries.push(entry);
+        if (scenario !== "interrupt") {
+          const previous = yield* readJournal;
+          yield* observations.put(
+            journalKey,
+            JSON.stringify([...previous, entry]),
+          );
+        }
+      });
+    const runScope = yield* Scope.Scope;
+    const scopes: Scope.Scope[] = [];
+    const started = yield* Deferred.make<void>();
+    let original: Busy | undefined;
+    let executed = false;
+    let sameError = false;
+    let caught = false;
+    let terminal = false;
+    const attempt = task(
+      "lifecycle",
+      Effect.gen(function* () {
+        executed = true;
+        const context = yield* WorkflowStepContext;
+        const scope = yield* Scope.Scope;
+        if (scope === runScope || scopes.includes(scope))
+          return yield* Effect.die("reused attempt scope");
+        scopes.push(scope);
+        yield* record(`open:${context.attempt}`);
+        yield* Effect.addFinalizer(() =>
+          record(`close:${context.attempt}`).pipe(Effect.orDie),
+        );
+        yield* Deferred.succeed(started, undefined);
+        if (scenario === "interrupt") return yield* Effect.never;
+        original = yield* Effect.sync(
+          () =>
+            new Busy({
+              attempt: context.attempt,
+              detail: {
+                when: new Date(123),
+                bytes: new Uint8Array([1, 2]),
+                count: 42n,
+              },
+            }),
+        );
+        if (scenario === "die") return yield* Effect.die(original);
+        if (scenario !== "retry" || context.attempt === 1)
+          return yield* Effect.fail(original);
+        return context.attempt;
+      }),
+      {
+        retries: {
+          limit: 1,
+          delay: ({ ctx }) =>
+            Effect.gen(function* () {
+              const scope = yield* Scope.Scope;
+              if (scope === runScope || scopes.includes(scope))
+                return yield* Effect.die("reused delay scope");
+              scopes.push(scope);
+              yield* record(`delay:${ctx.attempt}`).pipe(Effect.orDie);
+              yield* Effect.addFinalizer(() =>
+                record(`delay-close:${ctx.attempt}`).pipe(Effect.orDie),
+              );
+              return 10;
+            }),
+        },
+        timeout: "5 seconds",
+      },
+    );
+    if (scenario === "interrupt") {
+      const fiber = yield* attempt.pipe(Effect.forkChild);
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(fiber);
+      entries.push("joined");
+    } else {
+      yield* attempt.pipe(
+        Effect.catchTag("Busy", (error) =>
+          Effect.sync(() => {
+            if (
+              error.attempt !== 2 ||
+              error.detail.when.getTime() !== 123 ||
+              error.detail.bytes[1] !== 2 ||
+              error.detail.count !== 42n
+            )
+              throw new Error("lost typed failure data");
+            caught = true;
+            sameError = error === original;
+            return error.attempt;
+          }),
+        ),
+        Effect.catchDefect((error) =>
+          Effect.sync(() => {
+            if (!(error instanceof Error) || error.name !== "NonRetryableError")
+              throw error;
+            terminal = true;
+            return 0;
+          }),
+        ),
+      );
+    }
+    if (scenario === "replay")
+      yield* task("lifecycle-checkpoint", Effect.succeed("saved"));
+    return {
+      entries: scenario === "interrupt" ? entries : yield* readJournal,
+      executed,
+      caught,
+      sameError,
+      terminal,
+    };
+  });
 
 export const reportRun = (input: Report) =>
   Effect.gen(function* () {
+    if (input.lifecycle)
+      return {
+        id: input.id,
+        attempt: 0,
+        approved: true,
+        lifecycle: yield* lifecycleRun(input.lifecycle, input.id),
+      };
     const attempt = yield* task(
       "record",
       WorkflowStepContext.pipe(Effect.map((context) => context.attempt)),
@@ -71,6 +223,10 @@ export default class NativeFeatures extends Worker<NativeFeatures>()(
       },
     );
     const loader = yield* WorkerLoader();
+    const sqlObjects =
+      typeof (yield* WorkerEnvironment).NATIVE_SQL_DIRECTORY === "string"
+        ? yield* NativeSqlObject
+        : undefined;
     const observe = (key: string, value: unknown) =>
       Effect.sync(() => JSON.stringify(value)).pipe(
         Effect.flatMap((json) => observations.put(key, json)),
@@ -127,6 +283,12 @@ export default class NativeFeatures extends Worker<NativeFeatures>()(
           () => new URL(request.url, "http://native"),
         );
         const [, route, action, id = ""] = url.pathname.split("/");
+        if (route === "sql" && sqlObjects) {
+          const object = sqlObjects.getByName(action);
+          if (request.method === "POST") yield* object.insert();
+          if (url.searchParams.has("reapply")) yield* object.reapply();
+          return yield* HttpServerResponse.json(yield* object.inspect());
+        }
         if (route === "observe")
           return yield* HttpServerResponse.json(
             yield* observations.get(decodeURIComponent(action), "json"),
@@ -165,7 +327,12 @@ export default class NativeFeatures extends Worker<NativeFeatures>()(
             return yield* HttpServerResponse.json(yield* instance.status());
           if (action === "pause") yield* instance.pause();
           else if (action === "resume") yield* instance.resume();
-          else if (action === "restart") yield* instance.restart();
+          else if (action === "restart")
+            yield* instance.restart(
+              url.searchParams.has("checkpoint")
+                ? { from: { name: "lifecycle-checkpoint", type: "do" } }
+                : undefined,
+            );
           else if (action === "terminate") yield* instance.terminate();
           else if (action === "delete") yield* instance.delete();
           else if (action === "event")

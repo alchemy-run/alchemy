@@ -18,6 +18,7 @@ import { WorkerEnvironment } from "./Worker.ts";
 export interface DurableObjectShape {
   fetch?: Effect.Effect<any, any, any>;
   alarm?: (...args: any[]) => Effect.Effect<any, any, any>;
+  webSocketOpen?: (...args: any[]) => Effect.Effect<any, any, any>;
   webSocketMessage?: (...args: any[]) => Effect.Effect<any, any, any>;
   webSocketClose?: (...args: any[]) => Effect.Effect<any, any, any>;
   webSocketError?: (...args: any[]) => Effect.Effect<any, any, any>;

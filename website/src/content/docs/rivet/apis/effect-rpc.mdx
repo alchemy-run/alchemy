@@ -1,0 +1,262 @@
+---
+title: Effect RPC
+description: Serve a schema-backed Room API with incremental streams and a scoped WebSocket client.
+---
+
+`Rivet.RpcDurableObject` serves an Effect `RpcGroup` from a named durable object.
+It is distinct from class-method RPC: client and server share an explicit schema,
+and browser connections cross an application authorization boundary.
+
+## Define RoomRpcs
+
+```typescript
+// src/rpcs.ts
+import * as Schema from "effect/Schema";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+
+export class RoomRpcs extends RpcGroup.make(
+  Rpc.make("greet", {
+    payload: { name: Schema.String },
+    success: Schema.String,
+  }),
+) {}
+```
+
+Keep the schema module free of host resources so browsers can import it without
+bundling deployment code. `greet` accepts a validated payload and returns a string.
+
+## Add a streaming procedure
+
+```diff lang="typescript"
+     success: Schema.String,
+   }),
++  Rpc.make("numbers", {
++    payload: { count: Schema.Number },
++    success: Schema.Number,
++    stream: true,
++  }),
+ ) {}
+```
+
+`stream: true` changes the handler and client method to an Effect Stream rather
+than an array-valued response.
+
+## Declare the Room
+
+```typescript
+// src/room.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { RoomRpcs } from "./rpcs.ts";
+
+export class Room extends Rivet.RpcDurableObject<Room>()(
+  "Room",
+  { schema: RoomRpcs },
+) {}
+```
+
+This declaration carries the schema; its implementation is a separate Layer
+provided by the hosting Worker.
+
+## Implement the handlers
+
+Append to `src/room.ts`:
+
+```typescript
+export const RoomLive = Room.make(
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return RoomRpcs.toLayer({
+        greet: ({ name }) => Effect.succeed(`Hello, ${name}`),
+        numbers: ({ count }) => Stream.range(1, count).pipe(
+          Stream.schedule(Schedule.spaced("100 millis")),
+        ),
+      });
+    });
+  }),
+);
+```
+
+Return the handler Layer, not a running server acquisition. Each number is
+produced separately, making incremental delivery visible instead of hiding
+buffering behind an immediately available array.
+
+## Host the Room
+
+```typescript
+// src/worker.ts
+import * as Rivet from "alchemy/Rivet";
+import * as Effect from "effect/Effect";
+import { Actors } from "./cluster.ts";
+import { Room, RoomLive } from "./room.ts";
+
+export default class ActorWorker extends Rivet.Worker<ActorWorker>()(
+  "ActorWorker",
+  { cluster: Actors, main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Room;
+    return {};
+  }).pipe(Effect.provide(RoomLive)),
+) {}
+```
+
+Use the Cluster and Stack from [Setup](/rivet/setup). The Worker registers actors;
+it has no `fetch`. Native WebSockets, not buffered action responses, carry the
+incremental stream.
+
+## Choose the connection boundary
+
+Keep the Engine and gateway private. A network-attached caller can use the native
+gateway; a browser needs a separately deployed, authenticated, WebSocket-capable
+application ingress. That ingress must authorize the selected actor name before
+forwarding the upgrade and subsequent frames. It is not created by `Room.make`.
+
+The client below accepts the approved connection URL as an argument, so it works
+with that application-owned route rather than inventing a public Engine URL.
+Do not put the Engine's admin token in a browser bundle. A Lambda Function URL
+cannot carry WebSocket upgrades, even when the Lambda can call actor actions.
+
+## Call from a private network host
+
+```typescript
+// src/api.ts
+import * as AWS from "alchemy/AWS";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Socket from "effect/unstable/socket/Socket";
+import { Room } from "./room.ts";
+import ActorWorker from "./worker.ts";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room.from(ActorWorker);
+    return {
+      fetch: Effect.gen(function* () {
+        const room = yield* rooms.getByName("lobby");
+        const greeting = yield* room.greet({ name: "Sam" }).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({ greeting });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(Socket.layerWebSocketConstructorGlobal),
+      ),
+    };
+  }),
+) {}
+```
+
+`Room.from(ActorWorker)` binds the deployed caller to the runner's private
+network. `getByName` acquires a scoped WebSocket and returns the schema client.
+Yield `Api` in the Setup stack and return `api.functionUrl` to call this example.
+The Function URL carries an ordinary HTTP request and response; the Lambda opens
+a **separate private WebSocket** to the actor. It is not a WebSocket proxy.
+Add authentication before exposing application data through this demonstration.
+
+## Define a client service
+
+```typescript
+// src/client.ts
+import * as RpcWebSocketClient from "alchemy/Rivet/RpcWebSocketClient";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
+import * as Socket from "effect/unstable/socket/Socket";
+import { RoomRpcs } from "./rpcs.ts";
+
+export class RoomClient extends Context.Service<
+  RoomClient,
+  RpcClient.FromGroup<typeof RoomRpcs, RpcClientError>
+>()("RoomClient") {}
+```
+
+The dedicated client entrypoint is browser-safe. Import it directly rather than
+pulling the provider's deploy-time namespace into browser code.
+
+## Scope the connection
+
+Append to `src/client.ts`:
+
+```typescript
+export const roomClientLayer = (url: string) => RpcWebSocketClient.layer(
+  RoomClient,
+  RoomRpcs,
+  url,
+).pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal));
+```
+
+Pass your authorized WebSocket ingress URL selecting the `lobby` actor. The Layer
+owns the connection; provide it around the whole application or component
+program that shares the socket, not separately around every call.
+
+A direct native gateway connection from a private-network caller also requires
+`{ socket: { protocols: ["rivet", "rivet_encoding.bare"] } }` as the fourth
+argument to `layer`. An application-owned proxy must negotiate those protocols
+on its native connection. `Room.from(ActorWorker)` supplies them automatically.
+
+## Call a procedure
+
+```typescript
+export const greet = (url: string) => Effect.gen(function* () {
+  const room = yield* RoomClient;
+  return yield* room.greet({ name: "Sam" });
+}).pipe(Effect.provide(roomClientLayer(url)));
+```
+
+Running this Effect opens the connection and closes it when the program finishes,
+fails, or is interrupted. A UI with callback-based entrypoints can instead own
+one `ManagedRuntime` and must dispose it on application teardown.
+
+## Consume incremental results
+
+```typescript
+export const printNumbers = (url: string) => Effect.gen(function* () {
+  const room = yield* RoomClient;
+  yield* room.numbers({ count: 5 }).pipe(
+    Stream.runForEach((number) => Effect.log(number)),
+  );
+}).pipe(Effect.provide(roomClientLayer(url)));
+```
+
+`runForEach` observes arrivals without collecting the entire stream. Interrupting
+one stream releases its server-side work without requiring the shared socket to
+close. Queue-mode subscriptions still need their own consumer Scope.
+
+## Runtime behavior
+
+Returning a handler Layer attaches the RPC server to the native actor connection
+lifecycle. Incremental RPC uses WebSocket JSON framing; ordinary Rivet actions
+remain buffered. Idle native connections use persistent connection state across
+hibernation. The RPC bridge owns protocol metadata; application handlers do not
+implement acknowledgements or call a Cloudflare-style `upgrade()`.
+
+In-flight calls are **not replayed** after activation reset. Recovery with
+unfinished work resets the connection rather than rerunning mutations. Clients
+must handle transport errors and reconnect explicitly; use application-level
+idempotency and resume tokens where needed. A changed recorded serializer can
+reset a socket, but this is not schema compatibility validation.
+
+## Limitations
+
+RivetKit 2.3.10 prevents automatic idle sleep while a raw WebSocket remains
+connected. Connection recovery works after explicit native sleep; it does not
+imply automatic idle hibernation on this version. See the
+[WebSocket lifecycle limitation](/rivet/compute/hibernatable-websockets#limitations).
+
+Shared schemas do not provide authentication or authorization. Do not infer
+resumable streams or exactly-once mutations from connection recovery. Keep
+client/server serialization compatible and coordinate schema changes. Do not
+store application data by overwriting reserved RPC attachment metadata.
+
+## Related guides
+
+- [Durable Objects](/rivet/compute/durable-objects)
+- [Hibernatable WebSockets](/rivet/compute/hibernatable-websockets)
+- [Cloudflare Effect RPC](/cloudflare/apis/effect-rpc#build-the-roomrpcs-example) · [Celld Effect RPC](/celld/apis/effect-rpc)
+- [Worker reference](/providers/rivet/worker)
+- [DurableObject reference](/providers/rivet/durableobject)

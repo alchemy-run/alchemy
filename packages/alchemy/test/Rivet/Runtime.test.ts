@@ -1,5 +1,5 @@
 import {
-  discoverDurableObjectMethods,
+  CALL_ACTION,
   makeRivetActor,
   type RivetActorFactory,
 } from "@/Rivet/DurableObjectBridge.ts";
@@ -14,6 +14,16 @@ import { fromWebSocket, type RawWebSocket } from "@/Rivet/WebSocket.ts";
 import type { DurableObjectExport } from "@/Workers/DurableObject.ts";
 import { WorkerEnvironment, type WorkerBuild } from "@/Workers/Worker.ts";
 import { Telemetry } from "@/TelemetryRuntime.ts";
+import { RuntimeContext } from "@/RuntimeContext.ts";
+import * as Schema from "effect/Schema";
+import { makeRivetCallbackStore } from "@/Rivet/AlarmCallback.ts";
+import { allocateClientId } from "@/Rivet/RpcWebSocket.ts";
+import { rivetRpcWebSocketUrl } from "@/Rivet/Gateway.ts";
+import {
+  readRpcMetadata,
+  writeRpcMetadata,
+} from "@/Workers/WebSocketAttachment.ts";
+import { connectionAttachment } from "@/Rivet/WebSocket.ts";
 import * as Layer from "effect/Layer";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
@@ -39,6 +49,20 @@ const makeNative = (actorId: string) => {
     key: [actorId, "partition"],
     name: "Counter",
     state: { kv: {} },
+    conn: { id: `connection-${actorId}`, state: { version: 1, tags: [] } },
+    abortSignal: new AbortController().signal,
+    saveState: () => Effect.runPromise(Effect.void),
+    keepAwake: (promise) => promise,
+    sleep: () => {},
+    destroy: () => {},
+    cron: {
+      get: () => Effect.runPromise(Effect.succeed(undefined)),
+      every: () => Effect.runPromise(Effect.void),
+      set: () => Effect.runPromise(Effect.void),
+      delete: () => Effect.runPromise(Effect.succeed(true)),
+      list: () => Effect.runPromise(Effect.succeed([])),
+      history: () => Effect.runPromise(Effect.succeed([])),
+    },
     db: {
       execute: () => Effect.runPromise(Effect.succeed([])),
       transaction: () => Effect.runPromise(Effect.die("not used")),
@@ -86,6 +110,13 @@ const makeBuild = (constructor: DurableObjectExport["constructor"]) => () =>
     Effect.succeed({
       context: Context.make(WorkerEnvironment, {}).pipe(
         Context.add(Telemetry, Layer.empty),
+        Context.add(RuntimeContext, {
+          Type: "Rivet.Worker",
+          id: "unit",
+          env: {},
+          get: () => Effect.succeed(undefined),
+          set: (key) => Effect.succeed(key),
+        }),
       ),
       export: {
         kind: "durableObject",
@@ -170,6 +201,177 @@ const makeSocket = () => {
 };
 
 describe("Rivet provider-owned runtime", () => {
+  it.effect(
+    "routes raw WebSockets only to the private gateway without management credentials",
+    () =>
+      Effect.sync(() => {
+        const url = new URL(
+          rivetRpcWebSocketUrl(
+            {
+              endpoint: "https://default:management-token@engine.internal",
+              namespace: "private",
+              pool: "actors",
+            },
+            "Room",
+            "team/room",
+          ),
+        );
+        expect(url.protocol).toBe("wss:");
+        expect(url.host).toBe("engine.internal");
+        expect(url.pathname).toBe("/gateway/Room/websocket/");
+        expect(url.username).toBe("");
+        expect(url.password).toBe("");
+        expect(url.searchParams.get("rvt-key")).toBe("team/room");
+        expect(url.searchParams.get("rvt-namespace")).toBe("private");
+        expect(url.searchParams.get("rvt-runner")).toBe("actors");
+      }),
+    { timeout: 5000 },
+  );
+  it.effect(
+    "persists fresh RPC IDs independently of lazily restored sockets",
+    () =>
+      Effect.gen(function* () {
+        const { native } = makeNative("rpc-ids");
+        const persisted: number[] = [];
+        native.saveState = () =>
+          Effect.runPromise(
+            Effect.sync(() => {
+              persisted.push(native.state.rpcNextClientId!);
+            }),
+          );
+        const ids = yield* Effect.all([allocateClientId, allocateClientId], {
+          concurrency: 2,
+        }).pipe(Effect.provideService(NativeContext, native));
+        expect(ids).toEqual([0, 1]);
+        expect(persisted).toHaveLength(2);
+        const fresh = { ...native, state: { ...native.state } };
+        expect(
+          yield* allocateClientId.pipe(
+            Effect.provideService(NativeContext, fresh),
+          ),
+        ).toBe(2);
+      }),
+    { timeout: 5000 },
+  );
+  it.effect(
+    "preserves reserved RPC metadata and rejects non-JSON attachments",
+    () =>
+      Effect.gen(function* () {
+        const { native } = makeNative("attachments");
+        const { socket } = makeSocket();
+        const wrapped = fromWebSocket(socket, native.conn!);
+        const storage = connectionAttachment(native.conn!);
+        storage.write(writeRpcMetadata(null, { version: 1, pending: true }));
+        yield* wrapped.setAttachment(Schema.Struct({ value: Schema.String }), {
+          value: "application",
+        });
+        expect(readRpcMetadata(storage.read())).toEqual({
+          version: 1,
+          pending: true,
+        });
+        expect(
+          yield* wrapped.getAttachment(Schema.Struct({ value: Schema.String })),
+        ).toEqual({ value: "application" });
+        const date = yield* Effect.sync(() => new Date());
+        const failed = yield* wrapped
+          .setAttachment(Schema.Unknown, date)
+          .pipe(Effect.exit);
+        expect(Exit.isFailure(failed)).toBe(true);
+        expect(readRpcMetadata(storage.read())).toEqual({
+          version: 1,
+          pending: true,
+        });
+      }),
+    { timeout: 5000 },
+  );
+
+  it.effect(
+    "arms recurring recovery before publishing callbacks and persists removal before disarming",
+    () =>
+      Effect.gen(function* () {
+        const { native } = makeNative("callbacks");
+        const order: string[] = [];
+        native.cron.every = () =>
+          Effect.runPromise(
+            Effect.sync(() => {
+              order.push("arm");
+            }),
+          );
+        native.cron.delete = () =>
+          Effect.runPromise(
+            Effect.sync(() => {
+              order.push("disarm");
+              return true;
+            }),
+          );
+        native.saveState = () =>
+          Effect.runPromise(
+            Effect.sync(() => {
+              order.push(
+                Object.keys(native.state.callbacks ?? {}).length
+                  ? "save-job"
+                  : "save-empty",
+              );
+            }),
+          );
+        const store = makeRivetCallbackStore();
+        const job = {
+          callback: "archive",
+          id: "same",
+          version: "one",
+          runAt: 100,
+          payload: "null",
+        };
+        yield* Effect.gen(function* () {
+          yield* store.put(job);
+          expect(order[0]).toBe("arm");
+          expect(order[1]).toBe("save-job");
+          expect(yield* store.claim(job, 200)).toBe(true);
+          expect(yield* store.claim(job, 200)).toBe(false);
+          yield* store.put({ ...job, version: "two", runAt: 300 });
+          yield* store.acknowledge(job);
+          expect(yield* store.due(300, 100)).toHaveLength(1);
+          order.length = 0;
+          yield* store.remove(job.callback, job.id);
+          expect(order.indexOf("save-empty")).toBeLessThan(
+            order.indexOf("disarm"),
+          );
+        }).pipe(Effect.provideService(NativeContext, native));
+      }),
+    { timeout: 5000 },
+  );
+
+  it.effect(
+    "closes the activation scope on sleep without closing retained sockets",
+    () =>
+      Effect.gen(function* () {
+        let finalizers = 0;
+        const definition = register(
+          Effect.succeed(
+            Effect.gen(function* () {
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => {
+                  finalizers++;
+                }),
+              );
+              return {};
+            }),
+          ),
+          [],
+        );
+        const { native } = makeNative("retirement");
+        const vars = yield* Effect.promise(() => definition.createVars(native));
+        const { socket, closed } = makeSocket();
+        yield* Effect.promise(() =>
+          Promise.resolve(definition.onWebSocket({ ...native, vars }, socket)),
+        );
+        yield* Effect.promise(() => definition.onSleep({ ...native, vars }));
+        yield* Effect.promise(() => definition.onDestroy({ ...native, vars }));
+        expect(finalizers).toBe(1);
+        expect(closed).toEqual([]);
+      }),
+    { timeout: 5000 },
+  );
   it.effect(
     "exposes only native-backed state and storage operations",
     () =>
@@ -624,7 +826,9 @@ describe("Rivet provider-owned runtime", () => {
         const { native, pending } = makeNative("socket");
         const vars = yield* Effect.promise(() => definition.createVars(native));
         const { socket, listeners, sent, closed } = makeSocket();
-        definition.onWebSocket({ ...native, vars }, socket);
+        yield* Effect.promise(() =>
+          Promise.resolve(definition.onWebSocket({ ...native, vars }, socket)),
+        );
         const message = listeners.get("message")!({
           type: "message",
           data: "hello",
@@ -650,14 +854,13 @@ describe("Rivet provider-owned runtime", () => {
         if (close === undefined)
           throw new Error("Close callback did not return its promise");
         yield* Effect.promise(() => close);
-        const wrapped = fromWebSocket(socket);
+        const wrapped = fromWebSocket(socket, native.conn!);
         expect(wrapped.ws).toBe(socket);
-        for (const key of [
-          "accept",
-          "serializeAttachment",
-          "deserializeAttachment",
-        ])
-          expect(key in wrapped).toBe(false);
+        expect("accept" in wrapped).toBe(false);
+        yield* wrapped.setAttachment(Schema.Struct({ name: Schema.String }), {
+          name: "retained",
+        });
+        expect(native.conn!.state.attachment).toEqual({ name: "retained" });
         yield* Effect.gen(function* () {
           yield* wrapped.send("reply");
           yield* wrapped.close(1000, "done");
@@ -670,25 +873,44 @@ describe("Rivet provider-owned runtime", () => {
   );
 
   it.effect(
-    "fails method discovery instead of hiding SQL initialization failures",
+    "registers without constructing a probe and initializes SQL only on native activation",
     () =>
       Effect.gen(function* () {
-        const build = makeBuild(
+        let constructions = 0;
+        const definition = register(
           Effect.gen(function* () {
             const state = yield* DurableObjectState;
-            return state.storage.sql
-              .exec("SELECT 1")
-              .pipe(Effect.as({ alarm: () => Effect.void }));
+            return Effect.gen(function* () {
+              constructions++;
+              yield* state.storage.sql.exec("SELECT 1");
+              return { read: () => Effect.succeed(42) };
+            });
           }),
+          [],
         );
-        const exit = yield* Effect.exit(
-          Effect.promise(() => discoverDurableObjectMethods(build)),
-        );
-        expect(Exit.isFailure(exit)).toBe(true);
-        if (Exit.isFailure(exit))
-          expect(String(Cause.squash(exit.cause))).toContain(
-            "method discovery cannot execute native SQL",
-          );
+        expect(constructions).toBe(0);
+        const { native, pending } = makeNative("sql-activation");
+        const vars = yield* Effect.promise(() => definition.createVars(native));
+        expect(constructions).toBe(1);
+        expect(
+          yield* action(
+            definition,
+            CALL_ACTION,
+            { ...native, vars },
+            "read",
+            [],
+          ),
+        ).toBe(42);
+        const rejected = yield* action(
+          definition,
+          CALL_ACTION,
+          { ...native, vars },
+          "toString",
+          [],
+        ).pipe(Effect.exit);
+        expect(Exit.isFailure(rejected)).toBe(true);
+        yield* drain(pending);
+        yield* Effect.promise(() => definition.onSleep({ ...native, vars }));
       }),
     { timeout: 5_000 },
   );

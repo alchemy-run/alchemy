@@ -14,6 +14,10 @@
  * @internal not exported from the Celld barrel.
  */
 import { isDurableObjectExport } from "../Workers/DurableObject.ts";
+import {
+  isSqlMigrationsExport,
+  type SqlMigrationSnapshot,
+} from "../Workers/SqlMigrationsRuntime.ts";
 import { isWorkflowExport } from "./Workflows/Workflow.ts";
 
 export const makeCelldVirtualEntry = (
@@ -26,12 +30,18 @@ export const makeCelldVirtualEntry = (
   const workflowClasses = Object.keys(exports).filter((className) =>
     isWorkflowExport(exports[className]),
   );
+  const migrations: Record<string, SqlMigrationSnapshot> = {};
+  for (const [key, entry] of Object.entries(exports)) {
+    if (isSqlMigrationsExport(entry)) migrations[key] = entry.snapshot;
+  }
+  const hasMigrations = Object.keys(migrations).length > 0;
   return (importPath: string) => `
 import { DurableObject, WorkerEntrypoint${workflowClasses.length ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { makeFleetBootstrap } from "alchemy/Runtime/Bootstrap/CelldFleet";
+${hasMigrations ? 'import { withSqlMigrations } from "alchemy/Workers/SqlMigrationsRuntime";' : ""}
 import entrypoint from ${JSON.stringify(importPath)};
 
-const fleet = makeFleetBootstrap({ DurableObject, WorkerEntrypoint${workflowClasses.length ? ", WorkflowEntrypoint" : ""} }, entrypoint, {
+const fleet = makeFleetBootstrap({ DurableObject, WorkerEntrypoint${workflowClasses.length ? ", WorkflowEntrypoint" : ""} }, ${hasMigrations ? `withSqlMigrations(entrypoint, ${JSON.stringify(migrations)})` : "entrypoint"}, {
   stack: {
     name: ${JSON.stringify(stack.name)},
     stage: ${JSON.stringify(stack.stage)},

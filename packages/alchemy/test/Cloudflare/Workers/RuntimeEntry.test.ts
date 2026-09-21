@@ -15,8 +15,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import { requestWorker } from "../Utils/WorkerRequest.ts";
 import RuntimeEntryWorker from "./fixtures/runtime-entry/worker.ts";
 
 const plannerSources = [
@@ -304,17 +304,12 @@ for (const dev of [false, true]) {
       Effect.gen(function* () {
         yield* stack.destroy();
         const worker = yield* stack.deploy(RuntimeEntryWorker);
-        const client = yield* HttpClient.HttpClient;
-        const body = yield* client.get(worker.url!).pipe(
-          Effect.flatMap((response) => response.text),
-          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            times: 8,
-            until: (body) => body === "runtime-entry:ok",
-          }),
+        const response = yield* requestWorker(
+          HttpClientRequest.get(worker.url!),
+          { retryDelay: "3 seconds" },
         );
-        expect(body).toBe("runtime-entry:ok");
+        expect(response.status).toBe(200);
+        expect(yield* response.text).toBe("runtime-entry:ok");
         yield* stack.destroy();
       }),
     );

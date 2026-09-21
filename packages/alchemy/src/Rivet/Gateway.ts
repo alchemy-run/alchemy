@@ -44,6 +44,31 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { decodeRpcResult } from "../Rpc.ts";
 
+/** Private routing metadata, never forwarded as a native action. @internal */
+export const RivetRpcWebSocketUrl = Symbol.for("Alchemy.Rivet.RpcWebSocketUrl");
+
+/** Compose a raw-WebSocket route on the existing private guard endpoint. */
+export const rivetRpcWebSocketUrl = (
+  connection: RivetGatewayConnection,
+  actorName: string,
+  key: string,
+): string => {
+  const url = new URL(
+    `/gateway/${encodeURIComponent(actorName)}/websocket/`,
+    connection.endpoint,
+  );
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.username = "";
+  url.password = "";
+  url.search = new URLSearchParams({
+    "rvt-namespace": connection.namespace ?? RIVET_ACTOR_NAMESPACE,
+    "rvt-method": "getOrCreate",
+    "rvt-key": key,
+    "rvt-runner": connection.pool ?? RIVET_RUNNER_POOL,
+  }).toString();
+  return url.toString();
+};
+
 /** A named Durable Object (actor) namespace client. */
 export interface RivetDurableObjectNamespaceClient<Shape = any> {
   /** Address the instance keyed `name`; the stub's methods mirror `Shape`. */
@@ -180,6 +205,8 @@ const makeRivetActorStub = (
     {},
     {
       get: (obj, prop) => {
+        if (prop === RivetRpcWebSocketUrl)
+          return rivetRpcWebSocketUrl(connection, actorName, key);
         if (prop in obj) return obj[prop as keyof typeof obj];
         if (typeof prop !== "string") return undefined;
         // Guard against thenable/inspection probing on the Proxy.
@@ -199,13 +226,13 @@ const makeRivetActorStub = (
                 const endpoint = connection.endpoint.replace(/\/+$/, "");
                 const url = `${endpoint}/gateway/${encodeURIComponent(
                   actorName,
-                )}/action/${encodeURIComponent(prop)}?${params.toString()}`;
+                )}/action/__alchemyCall?${params.toString()}`;
 
                 const response = yield* client
                   .execute(
                     HttpClientRequest.post(url).pipe(
                       HttpClientRequest.bodyText(
-                        JSON.stringify({ args }),
+                        JSON.stringify({ args: [prop, args] }),
                         "application/json",
                       ),
                     ),
@@ -262,9 +289,9 @@ const makeRivetActorStub = (
  * `getByName(name)` addresses the instance keyed `name`, creating it on
  * first touch (`rvt-method=getOrCreate`).
  */
-export const makeRivetActorClient = (
+export const makeRivetActorClient = <Shape = any>(
   connection: RivetGatewayConnection,
   actorName: string,
-): RivetDurableObjectNamespaceClient => ({
+): RivetDurableObjectNamespaceClient<Shape> => ({
   getByName: (name: string) => makeRivetActorStub(connection, actorName, name),
 });
