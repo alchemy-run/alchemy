@@ -1,5 +1,6 @@
 import { make as makeVite } from "@alchemy.run/frontend-frameworks/vite";
 import { make as makeNext } from "@alchemy.run/frontend-frameworks/nextjs/node";
+import { make as makeVinext } from "@alchemy.run/frontend-frameworks/vinext/node";
 import { createComputeArchive } from "@/Prisma/ComputeArchive";
 import { stageWebsiteArtifact } from "@/Prisma/Website/Artifact";
 import { findAvailablePort } from "@/Util/Node";
@@ -203,6 +204,56 @@ describe.sequential("Prisma Website artifacts", () => {
         }),
       ).pipe(Effect.provide(services)),
     { timeout: 90_000 },
+  );
+
+  it.live(
+    "builds vinext and preserves vendored package paths in the extracted artifact",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const root = yield* path.fromFileUrl(
+            new URL(
+              "../../../../examples/prisma-website-vinext/",
+              import.meta.url,
+            ),
+          );
+          const framework = yield* makeVinext({ root });
+          const built = yield* framework.build({ root });
+          const staged = yield* stageWebsiteArtifact({
+            root,
+            distDir: built.distDirectory,
+            serverEntry: path.join(
+              built.distDirectory,
+              built.serverModules[0]!.name,
+            ),
+          });
+          const extracted = yield* extract(yield* createComputeArchive(staged));
+          const files = yield* listFiles(extracted);
+          expect(
+            files.some(
+              (file) =>
+                file.includes("/deps/.pnpm/pathslash@") &&
+                file.endsWith("/dist/index.js"),
+            ),
+          ).toBe(true);
+          const url = yield* serve(extracted);
+          const home = yield* HttpClient.get(url);
+          expect(home.status).toBe(200);
+          expect(yield* home.text).toContain("Hello from vinext on Prisma!");
+          const asset = yield* HttpClient.get(`${url}/example.json`);
+          expect(yield* asset.json).toEqual({
+            framework: "vinext",
+            greeting: "Hello from vinext on Prisma!",
+          });
+          const api = yield* HttpClient.get(`${url}/api/hello?name=artifact`);
+          expect(yield* api.json).toEqual({
+            name: "artifact",
+            greeting: "hello",
+          });
+        }),
+      ).pipe(Effect.provide(services)),
+    { timeout: 120_000 },
   );
 
   it.live(

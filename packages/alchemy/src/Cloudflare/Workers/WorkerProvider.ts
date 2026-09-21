@@ -5305,7 +5305,7 @@ export const LiveWorkerProvider = () =>
             yield* session.note("Pre-creating worker...", { kind: "status" });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
-            const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...") } };\n${doClasses
+            const placeholderScript = `${doClasses.length > 0 ? 'import { DurableObject } from "cloudflare:workers";\n\n' : ""}export default { fetch() { return new Response("Alchemy worker is being deployed...", { status: 503, headers: { "Cache-Control": "no-store" } }) } };\n${doClasses
               .map(
                 (className) =>
                   `export class ${className} extends DurableObject {}`,

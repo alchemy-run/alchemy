@@ -148,6 +148,8 @@ export interface ApplyNodeBase<
    * FQN, then delete every former row.
    */
   renamedFrom?: string[] | undefined;
+  /** Preserve the FQN-reuse exclusion across generations and state transitions. */
+  adoptionBlocked?: "migrated-fqn";
 }
 
 export interface Create<
@@ -156,6 +158,8 @@ export interface Create<
   action: "create";
   props: R["Props"];
   state: CreatingResourceState | undefined;
+  /** Ownership probe deferred until upstream identities resolve during apply. */
+  deferredAdoption?: { adopt: boolean };
 }
 
 export interface Update<
@@ -1280,16 +1284,25 @@ export const make = <A>(
       // unresolved upstream Outputs (e.g. a `streamArn` referencing
       // a stream being created in the same plan). Calling `read` with
       // an unresolved value would surface as `ParseError` from the
-      // SDK protocol layer. Resources whose props depend on
-      // not-yet-created upstreams cannot themselves be pre-existing
-      // — there's nothing to adopt.
+      // SDK protocol layer. Upstream creation can produce existing children
+      // (e.g. a cloned branch's Auth integration), so Apply must perform the
+      // deferred ownership probe once those identities resolve.
       // A resource declared at a former FQN whose row just migrated
       // away is genuinely NEW by declaration — skip the probe. Its
       // predecessor's physical resource still carries tags branded
       // with THIS logical id (the migrated row's reconcile hasn't
       // re-branded them yet), so a tag-based `read` would find it
       // and silently adopt the very resource that was renamed away.
-      const reusesMigratedFqn = migratedRowFqns.has(fqn);
+      const claimant = formerFqnClaims.get(fqn);
+      const claimantRow =
+        claimant === undefined ? undefined : persistedRows.get(claimant);
+      const reusesMigratedFqn =
+        migratedRowFqns.has(fqn) ||
+        oldState?.adoptionBlocked === "migrated-fqn" ||
+        // Migration can commit before the fresh create records its exclusion.
+        (oldState === undefined &&
+          claimantRow !== undefined &&
+          !isActionState(claimantRow));
       let forceUpdateAfterAdoption = false;
       if (
         oldState === undefined &&
@@ -1375,6 +1388,7 @@ export const make = <A>(
       // `deleteOldGenerations` / `collectGarbage`).
       const modeSwitched = hasModeSwitched(mode, oldState);
 
+      const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
       const Node = <T extends Apply>(
         node: Omit<
           T,
@@ -1389,6 +1403,15 @@ export const make = <A>(
           downstream,
           mode,
           renamedFrom,
+          adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
+          deferredAdoption:
+            node.action === "create" &&
+            provider.read &&
+            !reusesMigratedFqn &&
+            ((oldState === undefined && !isResolved(news)) ||
+              (oldState?.status === "creating" && oldState.attr === undefined))
+              ? { adopt: adoptThis }
+              : undefined,
         }) as any as T;
 
       // Plan against the persisted state we have, not the ideal final state we
@@ -1409,14 +1432,14 @@ export const make = <A>(
         // provider can recover an attribute snapshot, keep driving the same
         // create instead of starting over blindly.
         //
-        // `creating` state persists the RAW plan-time props, which may
+        // Early `creating` checkpoints contain raw plan-time props, which may
         // still contain unresolved Output expressions (e.g. a name
         // referencing an upstream created in the same failed deploy).
         // `read` implementations derive identity from `olds` when
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && isResolved(oldState.props)) {
+        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
           const attr = yield* provider
             .read({
               id,

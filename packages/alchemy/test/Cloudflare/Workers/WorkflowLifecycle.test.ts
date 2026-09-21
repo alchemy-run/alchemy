@@ -276,6 +276,48 @@ describe.concurrent.each([
     );
   }
 
+  test(
+    "repeated starts keep the same instance and execute the scenario once",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const startUrl = `${url}/start/success?id=repeated-start`;
+      const first = yield* request(startUrl, "POST");
+      expect(yield* request(startUrl, "POST")).toBe(first);
+      const { id } = yield* Effect.try(
+        () => JSON.parse(first) as { id: string },
+      );
+      expect(id).toBe("repeated-start");
+      const status = yield* request(`${url}/status/${id}`).pipe(
+        Effect.flatMap((body) => Effect.try(() => JSON.parse(body) as Status)),
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          times: 10,
+          until: (status) => status.status === "complete",
+        }),
+      );
+      expect(status).toMatchObject({
+        status: "complete",
+        entries: ["open:1:captured:true", "close:1", "after-task"],
+      });
+    }),
+    { timeout: 60_000 },
+  );
+
+  test(
+    "preserves native validation failures when starting an instance",
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const response = yield* requestWorker(
+        HttpClientRequest.post(`${url}/start/success?id=invalid%2Fid`),
+      );
+      expect(response.status).toBe(500);
+      const body = yield* response.text;
+      expect(body).not.toContain("WorkflowControlUnavailable");
+      expect(body.toLowerCase()).toContain("invalid");
+    }),
+    { timeout: 60_000 },
+  );
+
   for (const scenario of [
     "replay",
     "replay-inherited",
@@ -313,6 +355,22 @@ describe.concurrent.each([
           );
         }
         expect(recovered).toContain(`${caught}:true`);
+        // A journal write does not acknowledge native run completion.
+        const completed = yield* request(`${url}/status/${id}`).pipe(
+          Effect.flatMap((body) =>
+            Effect.try(() => JSON.parse(body) as Status),
+          ),
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            times: 10,
+            until: (status) =>
+              status.status === "complete" || status.status === "errored",
+          }),
+        );
+        expect(completed, JSON.stringify(completed)).toMatchObject({
+          status: "complete",
+          output: recovered,
+        });
         yield* request(`${url}/restart/${id}`, "POST");
         const journal = yield* request(`${url}/journal/${id}`).pipe(
           Effect.flatMap((body) =>
@@ -327,6 +385,13 @@ describe.concurrent.each([
         yield* Effect.logInfo(
           `Replay journal ${id}: ${JSON.stringify(journal)}`,
         );
+        if (!journal.includes("after-task")) {
+          yield* Effect.logInfo(
+            "Workflow checkpoint restart status",
+            yield* request(`${url}/status/${id}`),
+          );
+        }
+        expect(journal).toContain("after-task");
         // Native terminal failures may rerun on an explicit checkpoint restart.
         const reranTerminal =
           terminal && journal.includes("open:3:captured:true");

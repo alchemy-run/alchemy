@@ -40,6 +40,8 @@ import {
   PrismaUploadClientLive,
 } from "./Internal/HttpClient.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
+import { Contract, ContractProvider } from "./ORM/Contract.ts";
+import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import {
   SourceRepository,
@@ -232,6 +234,8 @@ export const providers = () =>
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
+      Contract,
+      Migrate,
       Server,
       WebsiteArtifact,
     ]),
@@ -250,6 +254,8 @@ export const providers = () =>
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
+        ContractProvider(),
+        MigrateProvider(),
         ServerProvider(),
         WebsiteArtifactProvider(),
       ),
