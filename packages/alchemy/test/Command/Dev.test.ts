@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { assertDead, lifecycleFixture } from "./fixture/lifecycle-support.ts";
 
 const { test } = Test.make({
   // DevServer is provider-agnostic — register it directly without dragging
@@ -512,3 +513,25 @@ describe("extractUrl", () => {
     expect(Command.extractUrl("no url here")).toBeUndefined();
   });
 });
+
+test.provider.skipIf(process.platform === "win32")(
+  "restart and destroy let wrappers clean their detached children",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const first = yield* lifecycleFixture();
+      const second = yield* lifecycleFixture();
+      yield* stack.deploy(Command.Dev("Graceful", first.props));
+      const old = yield* first.ready;
+      yield* stack.deploy(Command.Dev("Graceful", second.props));
+      const current = yield* second.ready;
+      expect(yield* first.has("wrapper.clean")).toBe(true);
+      yield* assertDead(old.wrapper);
+      yield* assertDead(old.leaf);
+      yield* stack.destroy();
+      expect(yield* second.has("wrapper.clean")).toBe(true);
+      yield* assertDead(current.wrapper);
+      yield* assertDead(current.leaf);
+    }),
+  { timeout: 30_000 },
+);

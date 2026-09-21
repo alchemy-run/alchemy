@@ -1,5 +1,8 @@
 import * as Floci from "@alchemy.run/floci";
 import * as Effect from "effect/Effect";
+import * as Console from "effect/Console";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -10,6 +13,8 @@ import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
+import { acquireDevSession } from "../DevSession.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import {
   configPath,
@@ -48,23 +53,42 @@ export const devCommand = Command.make(
     stage: devStage,
     profile,
   },
-  Effect.fn(
-    function* (rawArgs) {
-      const args = yield* resolveStackArgs("dev")(rawArgs);
-      // This process is only the exec child's supervisor; the child owns the
-      // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
-      // hits both processes and the interrupt message prints twice.
-      yield* suppressInterruptMessages;
-      const options = yield* Schema.encodeEffect(DevOptions)(args);
-      // A missing entry is this process's error to report, not a stack
-      // trace out of the exec child.
-      yield* resolveStackEntrypoint(options.main);
+  Effect.fn(function* (rawArgs) {
+    const args = yield* resolveStackArgs("dev")(rawArgs);
+    // This process is only the exec child's supervisor; the child owns the
+    // terminal and announces the Ctrl+C shutdown. Without this, a SIGINT
+    // hits both processes and the interrupt message prints twice.
+    yield* suppressInterruptMessages;
+    const options = yield* Schema.encodeEffect(DevOptions)(args);
+    // A missing entry is this process's error to report, not a stack
+    // trace out of the exec child.
+    yield* resolveStackEntrypoint(options.main);
+    const configProvider = yield* loadConfigProvider(args.envFile);
+    const effectiveProfile =
+      args.profile ??
+      (yield* Config.String("ALCHEMY_PROFILE").pipe(
+        Config.withDefault("default"),
+        Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+      ));
+    const owner = yield* acquireDevSession({
+      ...options,
+      profile: effectiveProfile,
+    });
+    if (!owner.owned) {
+      yield* Console.log(
+        `Dev session already running or starting (owner PID ${owner.pid}). The original terminal retains control.`,
+      );
+      return;
+    }
+    yield* Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       // Set on THIS process too, so the RPC spawner's sidecars (and the workerd
       // they launch) inherit it — they are forked from here, not from the exec
       // child below.
       if (yield* fs.exists(Floci.FLOCI_CA_PATH)) {
-        process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+        yield* Effect.sync(() => {
+          process.env.NODE_EXTRA_CA_CERTS ??= Floci.FLOCI_CA_PATH;
+        });
       }
       const spawner = yield* RpcSpawner.RpcSpawner;
       // Neither runtime uses its native `--watch`: those hard-restart the exec
@@ -97,7 +121,10 @@ export const devCommand = Command.make(
         stdout: "inherit",
         stderr: "inherit",
         env: {
-          ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
+          ALCHEMY_EXEC_OPTIONS: JSON.stringify({
+            ...options,
+            profile: effectiveProfile,
+          }),
           ALCHEMY_DEV: "true",
           ...(process.env.NODE_EXTRA_CA_CERTS
             ? { NODE_EXTRA_CA_CERTS: process.env.NODE_EXTRA_CA_CERTS }
@@ -118,13 +145,14 @@ export const devCommand = Command.make(
       yield* Effect.repeat(runChild, {
         until: (code) => code !== DEV_RELOAD_EXIT_CODE,
       });
-    },
-    (effect, args) =>
+    }).pipe(
       Effect.provide(
         RpcSpawner.layerServer({
-          profile: args.profile,
+          profile: effectiveProfile,
           envFile: Option.getOrUndefined(args.envFile),
         }),
-      )(effect),
-  ),
+      ),
+      Effect.scoped,
+    );
+  }, Effect.scoped),
 ).pipe(Command.withDescription("Develop a stack with live reload"));
