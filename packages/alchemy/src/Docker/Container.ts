@@ -686,10 +686,7 @@ const findObservedDrift = (
     ["volumes", setEquals(live.HostConfig.Binds ?? [], args.volume)],
     ["memory", live.HostConfig.Memory === memory],
     ["memorySwap", live.HostConfig.MemorySwap === memorySwap],
-    [
-      "readOnly",
-      live.HostConfig.ReadonlyRootfs === (args["read-only"] ?? false),
-    ],
+    ["readOnly", live.HostConfig.ReadonlyRootfs === args["read-only"]],
     // Unset keeps the image user, which the observed container reports.
     ["user", args.user === undefined || live.Config.User === args.user],
     [

@@ -54,6 +54,24 @@ const decodeRegistryAuthConfig = Schema.Struct({
   Schema.decodeEffect(schema, { onExcessProperty: "error" }),
 );
 
+const decodeDockerCliConfig = Schema.Struct({
+  currentContext: Schema.optional(Schema.String),
+}).pipe(Schema.fromJsonString, (schema) => Schema.decodeEffect(schema));
+
+const encodeRegistryAuth = (credentials: RegistryCredentials) => {
+  const password = Redacted.isRedacted(credentials.password)
+    ? Redacted.value(credentials.password)
+    : credentials.password;
+  return Encoding.encodeBase64(`${credentials.username}:${password}`);
+};
+
+// `network disconnect` reports a container that already left the network as
+// "is not connected to network".
+const isNotFound = (stderr: string) =>
+  /no such|not found|is not connected to network/i.test(stderr);
+
+const isAlreadyExists = (stderr: string) => /already exists/i.test(stderr);
+
 export class Docker extends Context.Service<
   Docker,
   {
@@ -93,9 +111,9 @@ export class Docker extends Context.Service<
         memory: string | undefined;
         "memory-swap": string | undefined;
         "security-opt": Array<string> | undefined;
-        "read-only": boolean | undefined;
-        /** `--user`: `uid[:gid]` or a name. Unset keeps the image user. */
-        user?: string | undefined;
+        "read-only": boolean;
+        /** `uid[:gid]` or a name. Unset keeps the image user. */
+        user: string | undefined;
         label?: Record<string, string>;
         /** Network joined at create time. Unset means the default bridge. */
         network?: string;
@@ -526,6 +544,10 @@ const DockerBin = Config.String("DOCKER_BIN").pipe(
   Effect.orElseSucceed(() => "docker"),
 );
 
+const HomeDir = Config.NonEmptyString("HOME").pipe(
+  Config.orElse(() => Config.NonEmptyString("USERPROFILE")),
+);
+
 export const DockerLive = Layer.effect(
   Docker,
   Effect.gen(function* () {
@@ -534,77 +556,61 @@ export const DockerLive = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const bin = yield* DockerBin;
 
-    const globalDockerConfigDir = Config.String("DOCKER_CONFIG").pipe(
+    const globalDockerConfigDir = Config.NonEmptyString("DOCKER_CONFIG").pipe(
       Config.orElse(() =>
-        Config.String("HOME").pipe(
-          Config.orElse(() => Config.String("USERPROFILE")),
-          Config.map((home) => path.join(home, ".docker")),
-        ),
+        HomeDir.pipe(Config.map((home) => path.join(home, ".docker"))),
       ),
+      Config.map((dir) => path.resolve(dir)),
       Effect.orElseSucceed(() => undefined),
     );
 
-    /** The `currentContext` of the global `config.json`, if it has one. */
-    const readGlobalCurrentContext = (globalConfigDir: string) =>
+    const readCurrentContext = (globalConfigDir: string) =>
       fs.readFileString(path.join(globalConfigDir, "config.json")).pipe(
-        Effect.flatMap((text) =>
-          Effect.try({
-            try: () => JSON.parse(text) as { currentContext?: unknown },
-            catch: (cause) => cause,
-          }),
+        Effect.flatMap(decodeDockerCliConfig),
+        Effect.map((config) => config.currentContext),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
+        // Schema diagnostics may include the config's `auths`. Do not log them.
+        Effect.catch(() =>
+          Effect.logWarning(
+            "Unreadable Docker config.json; using the default context.",
+          ).pipe(Effect.as(undefined)),
         ),
-        Effect.map((config) =>
-          typeof config.currentContext === "string"
-            ? config.currentContext
-            : undefined,
-        ),
-        Effect.orElseSucceed(() => undefined),
       );
 
-    // Do not use `docker login`. Docker Desktop sends `docker login` to the
-    // system credential helper and ignores `DOCKER_CONFIG`. Write the
-    // `auths` entry directly. Docker reads contexts and `currentContext`
-    // from `DOCKER_CONFIG`. Link the global `contexts/` directory and copy
-    // `currentContext` into the temp config.
-    const makeCredentialConfigDir = Effect.fn(function* (
-      credentials: RegistryCredentials,
-    ) {
+    /** Copies the global contexts into `configDir` and returns the global `currentContext`. */
+    const inheritGlobalContexts = Effect.fn(function* (configDir: string) {
+      const globalConfigDir = yield* globalDockerConfigDir;
+      if (globalConfigDir === undefined) return undefined;
+      const globalContextsDir = path.join(globalConfigDir, "contexts");
+      if (yield* fs.exists(globalContextsDir)) {
+        yield* fs.copy(globalContextsDir, path.join(configDir, "contexts"));
+      }
+      return yield* readCurrentContext(globalConfigDir);
+    });
+
+    // `docker login` cannot isolate credentials: Docker Desktop routes it
+    // through the shared keychain helper regardless of DOCKER_CONFIG, so
+    // concurrent deploys race the keychain (-25299) or leave this config
+    // without an `auths` entry. DOCKER_AUTH_CONFIG would avoid the directory,
+    // but Docker CLI < 28.3 ignores it. Docker resolves `--context` and
+    // `currentContext` under DOCKER_CONFIG, so the isolated config inherits
+    // both from the global one.
+    const makeIsolatedDockerConfig = Effect.fn(
+      "Docker.makeIsolatedDockerConfig",
+    )(function* (credentials: RegistryCredentials) {
       const configDir = yield* fs.makeTempDirectoryScoped({
         prefix: "alchemy-docker-",
       });
-      const globalConfigDir = yield* globalDockerConfigDir;
-      const currentContext =
-        globalConfigDir === undefined
-          ? undefined
-          : yield* readGlobalCurrentContext(globalConfigDir);
-      const config = yield* Effect.sync(() => {
-        const password = Redacted.isRedacted(credentials.password)
-          ? Redacted.value(credentials.password)
-          : credentials.password;
-        const auth = Buffer.from(
-          `${credentials.username}:${password}`,
-        ).toString("base64");
-        return JSON.stringify({
+      const currentContext = yield* inheritGlobalContexts(configDir);
+      yield* fs.writeFileString(
+        path.join(configDir, "config.json"),
+        JSON.stringify({
           currentContext,
           auths: {
-            [credentials.server]: { auth },
+            [credentials.server]: { auth: encodeRegistryAuth(credentials) },
           },
-        });
-      });
-      yield* fs.writeFileString(path.join(configDir, "config.json"), config);
-      if (globalConfigDir !== undefined) {
-        const contexts = path.join(globalConfigDir, "contexts");
-        const hasContexts = yield* fs
-          .exists(contexts)
-          .pipe(
-            Effect.catchReason("PlatformError", "NotFound", () =>
-              Effect.succeed(false),
-            ),
-          );
-        if (hasContexts) {
-          yield* fs.symlink(contexts, path.join(configDir, "contexts"));
-        }
-      }
+        }),
+      );
       return configDir;
     });
 
@@ -660,20 +666,14 @@ export const DockerLive = Layer.effect(
             /^Error response from daemon: /,
             "",
           );
-          if (
-            stderr.match(/no such/i) ||
-            stderr.match(/not found/i) ||
-            // A `network disconnect` on a detached container returns this
-            // message.
-            stderr.match(/is not connected to network/i)
-          ) {
+          if (isNotFound(stderr)) {
             return systemError({
               _tag: "NotFound",
               args,
               description: stderr,
             });
           }
-          if (stderr.match(/already exists/i)) {
+          if (isAlreadyExists(stderr)) {
             return systemError({
               _tag: "AlreadyExists",
               args,
@@ -712,12 +712,7 @@ export const DockerLive = Layer.effect(
             }),
           ),
           Effect.map((current) => {
-            const password = Redacted.isRedacted(credentials.password)
-              ? Redacted.value(credentials.password)
-              : credentials.password;
-            const auth = Encoding.encodeBase64(
-              `${credentials.username}:${password}`,
-            );
+            const auth = encodeRegistryAuth(credentials);
             // Preserve Docker's file/helper fallback, contexts, and builders.
             return {
               DOCKER_AUTH_CONFIG: JSON.stringify({
@@ -756,30 +751,15 @@ export const DockerLive = Layer.effect(
 
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context) {
-        // Write the registry credentials directly into an isolated docker config
-        // as a plaintext `auths` entry and skip `docker login` entirely.
-        //
-        // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
-        // through the shared `osxkeychain`/`desktop` credential helper *regardless*
-        // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
-        // keychain (`The specified item already exists in the keychain (-25299)`) or
-        // land the credential in the helper — leaving this isolated config without
-        // an `auths` entry, so the subsequent `docker push` fails with "no basic
-        // auth credentials". Embedding the base64 `auth` inline (the same thing
-        // `docker login` would write when no credsStore is configured) makes each
-        // deploy fully self-contained: no credential helper, no keychain, no login
-        // race. Only `push` and an authenticated `pull` read this config;
-        // `build`/`tag` keep using the global docker config (buildx builders,
-        // `docker context`, etc. intact).
-        const dir = yield* makeCredentialConfigDir(credentials);
+        const configDir = yield* makeIsolatedDockerConfig(credentials);
         if (platform === undefined) {
           return yield* run([...formatArgs({ context }), "push", ref], {
-            DOCKER_CONFIG: dir,
+            DOCKER_CONFIG: configDir,
           });
         }
         return yield* run(
           [...formatArgs({ context }), "push", "--platform", platform, ref],
-          { DOCKER_CONFIG: dir },
+          { DOCKER_CONFIG: configDir },
         ).pipe(
           // Engines without the containerd image store reject `--platform`
           // on push; their local tag is already narrowed to the requested
@@ -789,7 +769,7 @@ export const DockerLive = Layer.effect(
               /--platform|unknown flag|containerd/i.test(String(error)),
             () =>
               run([...formatArgs({ context }), "push", ref], {
-                DOCKER_CONFIG: dir,
+                DOCKER_CONFIG: configDir,
               }),
           ),
         );
@@ -936,7 +916,12 @@ export const DockerLive = Layer.effect(
             ),
           );
         }),
-        pull: Effect.fn(function* (ref, platform, context, credentials) {
+        pull: Effect.fn("Docker.image.pull")(function* (
+          ref,
+          platform,
+          context,
+          credentials,
+        ) {
           const args = [
             ...formatArgs({ context }),
             "image",
@@ -947,7 +932,7 @@ export const DockerLive = Layer.effect(
           if (credentials === undefined) {
             return yield* run(args);
           }
-          const configDir = yield* makeCredentialConfigDir(credentials);
+          const configDir = yield* makeIsolatedDockerConfig(credentials);
           return yield* run(args, { DOCKER_CONFIG: configDir });
         }, Effect.scoped),
         inspect: (ref, context) =>

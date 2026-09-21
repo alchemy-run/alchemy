@@ -205,9 +205,7 @@ describe("Docker.RemoteImage", { concurrent: false }, () => {
 
       yield* docker.image.remove(targetRef, true);
 
-      const anonymousPull = yield* Effect.result(
-        docker.image.pull(targetRef, undefined, undefined, undefined),
-      );
+      const anonymousPull = yield* Effect.result(docker.image.pull(targetRef));
       expect(Result.isFailure(anonymousPull)).toBe(true);
 
       const pulled = yield* stack.deploy(

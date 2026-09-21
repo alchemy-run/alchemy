@@ -400,7 +400,7 @@ const secretsBackupFile = Argument.File("file").pipe(
   ),
 );
 
-const secretsBackupOverwrite = Flag.Boolean("force").pipe(
+const secretsBackupForce = Flag.Boolean("force").pipe(
   Flag.withDescription("Overwrite the file if it exists."),
   Flag.withDefault(false),
 );
@@ -434,7 +434,7 @@ const secretsBackupCommand = Command.make(
     profile,
     workerName: cloudflareWorkerName,
     file: secretsBackupFile,
-    force: secretsBackupOverwrite,
+    force: secretsBackupForce,
   },
   instrumentCommand(
     "cloudflare.state.secrets.backup",
