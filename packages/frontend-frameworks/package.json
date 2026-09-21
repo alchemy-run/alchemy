@@ -56,6 +56,7 @@
     "@effect/platform-node": "catalog:",
     "esbuild": "catalog:",
     "rolldown": "catalog:",
+    "srvx": "catalog:",
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
@@ -137,6 +138,12 @@
     }
   },
   "exports": {
+    "./*/neon": {
+      "types": "./dist/*/neon.d.ts",
+      "bun": "./dist/*/neon.js",
+      "worker": "./dist/*/neon.js",
+      "import": "./dist/*/neon.js"
+    },
     "./aws-lambda": {
       "types": "./dist/aws-lambda/index.d.ts",
       "bun": "./dist/aws-lambda/index.js",

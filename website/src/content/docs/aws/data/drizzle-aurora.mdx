@@ -1,33 +1,141 @@
 ---
 title: Drizzle + Aurora PostgreSQL
-description: Connect a Lambda to Aurora PostgreSQL with RDS.Connect and Effect-native Drizzle, keeping reviewed SQL migrations separate from infrastructure deployment.
+description: Drizzle on Lambda with private Aurora PostgreSQL, IAM authentication, verified TLS, and reviewed SQL migrations.
 ---
 
-## Install the runtime driver
+[Runnable example](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-aurora-drizzle) · [AWS setup](/aws/setup) · [Aurora DSQL instead](/aws/data/drizzle-dsql)
+
+## Prerequisites
 
 ```sh
-pnpm add effect@4.0.0-rc.115 @effect/sql-pg@4.0.0-rc.115 \
-  drizzle-orm@1.0.0-rc.5-ab785fc pg
-pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+git clone https://github.com/alchemy-run/alchemy.git
+cd alchemy
+pnpm install
+cd examples/aws-aurora-drizzle
 ```
 
-Start from an Alchemy AWS project; these examples use Effect 4 and Drizzle's Effect integration over `pg`, not the RDS Data API driver. For the other AWS database integration, use [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql); [SQL databases](/sql/databases) compares the choices.
+The example uses `us-west-2`, Aurora PostgreSQL 17.5, and Node.js 22. Change both subnet availability zones if you change region. Application queries use Effect-native Drizzle over `pg`, not the RDS Data API driver; [SQL databases](/sql/databases) compares the integrations.
 
-## Define the table
+:::caution
+Aurora is billable until destroyed. This example is disposable: destroy deletes its database data.
+:::
+
+## Provision a private database
 
 ```typescript
-// src/schema.ts
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
-
-export const Notes = pgTable("notes", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
+const aurora = yield* AWS.RDS.Aurora("Database", {
+  databaseName: "app",
+  engine: "aurora-postgresql",
+  engineVersion: "17.5",
+  subnetIds,
+  securityGroupIds: [dbSecurityGroup.groupId],
+  secret: { username: "dbadmin" },
+  dataApi: true,
+  cluster: {
+    enableIAMDatabaseAuthentication: true,
+    serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
+  },
+  instance: { dbInstanceClass: "db.serverless", publiclyAccessible: false },
 });
 ```
 
-This is an Aurora PostgreSQL schema; its PostgreSQL DDL is not a portability guarantee for DSQL.
+[Network setup](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/database.ts) allows port 5432 only from the Lambda's security group. [Aurora options](/aws/data/rds).
 
-## Configure SQL generation
+## Initialize the schema during deployment
+
+```typescript
+import { bootstrap } from "./bootstrap.ts";
+
+const schemaVersion = yield* bootstrap;
+```
+
+The [deployment Action](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/bootstrap.ts) creates `todos` and the restricted `app_iam` login through the Data API. This is initial setup only, not a versioned migration runner. The application role gets table CRUD but cannot create objects in `public`.
+
+## Bind the application identity
+
+```typescript
+const connect = yield* AWS.RDS.Connect(aurora.cluster, {
+  auth: "iam",
+  username: "app_iam",
+  database: "app",
+  subnetIds,
+  securityGroupIds: [lambdaSecurityGroup.groupId],
+});
+```
+
+Provide `AWS.RDS.ConnectHttp` on the Lambda Effect. The binding attaches Lambda to the VPC and grants `rds-db:connect` for `app_iam`; runtime authentication signs an IAM token rather than reading the administrator secret. [Complete handler](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/Api.ts).
+
+## Verify the database certificate
+
+Set the Lambda environment:
+
+```typescript
+env: { NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem" }
+```
+
+The RDS binding currently emits `sslmode=no-verify`. Override it to require certificate and hostname verification:
+
+```typescript
+import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+
+const db = yield* Drizzle.Postgres(
+  connect.pipe(
+    Effect.map((connection) => {
+      const url = new URL(Redacted.value(connection.url));
+      url.searchParams.set("sslmode", "verify-full");
+      return Redacted.make(url.toString());
+    }),
+  ),
+);
+```
+
+The CA path is specific to [managed Lambda Node.js runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html#nodejs-certificate-loading). The connection stays lazy: the first query resolves the redacted URL and opens a pool scoped to that invocation, which closes when its scope ends.
+
+## Package the driver
+
+```sh
+pnpm add alchemy effect@4.0.0-rc.115 @effect/sql-pg@4.0.0-rc.115 \
+  drizzle-orm@1.0.0-rc.5-ab785fc pg
+pnpm add -D @types/pg
+```
+
+```typescript
+build: { install: ["pg"] }
+```
+
+`build.install` keeps the CommonJS `pg` package intact in the Lambda artifact.
+
+## Query with Drizzle
+
+```typescript
+const rows = yield* db.select().from(todos);
+```
+
+[Schema and queries](/sql/drizzle/postgres) · [Connection lifecycle](/sql/effect-sql/lifecycle)
+
+## Deploy and invoke
+
+```sh
+pnpm deploy --profile testing --stage aurora-example
+aws lambda invoke --region us-west-2 \
+  --function-name '<functionName>' \
+  --cli-binary-format raw-in-base64-out \
+  --payload file://health-event.json response.json
+```
+
+Use the printed function name. The Function URL requires [SigV4-signed requests](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/test/integ.test.ts).
+
+## Evolve the schema
+
+The example's bootstrap does not alter existing tables or maintain Drizzle migration history. Before adopting generated migrations for an already-bootstrapped database, establish a reviewed baseline matching the existing schema; do not replay an initial `CREATE TABLE` migration over it.
+
+### Configure SQL generation
+
+```sh
+pnpm add -D drizzle-kit@1.0.0-rc.5-ab785fc
+```
 
 ```typescript
 // drizzle.config.ts
@@ -40,225 +148,27 @@ export default defineConfig({
 });
 ```
 
-Generation compares the schema with local snapshots and does not need a database connection.
+Generation compares the [schema module](https://github.com/alchemy-run/alchemy/blob/main/examples/aws-aurora-drizzle/src/schema.ts) with local snapshots and does not need a database connection.
 
-## Generate after a schema change
+### Generate after a schema change
 
 ```sh
 pnpm exec drizzle-kit generate --config=drizzle.config.ts
 ```
 
-Run this when you change `src/schema.ts`, before deploying; do not put SQL generation in a deploy hook.
+Run this whenever `src/schema.ts` changes, before deployment. Do not put SQL generation in a deploy hook.
 
-## Review and commit the migration
+### Review and commit the migration
 
 ```sh
 git add src/schema.ts drizzle.config.ts migrations/
 git diff --cached -- src/schema.ts drizzle.config.ts migrations/
-git commit -m "feat(db): add notes schema and migration"
+git commit -m "feat(db): update Aurora schema and migration"
 ```
 
-Review the staged SQL and snapshots before running the commit command, including any destructive operations or rename decisions. Commit the entire generated migration directory with the schema, not just its SQL file.
+Review the staged SQL, snapshots, destructive operations, and rename decisions before committing. Commit the entire generated migration directory with the schema. The release process consumes committed SQL; deployment must not generate or silently rewrite it.
 
-## Create the private network
-
-```typescript
-// src/network.ts
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-
-export const Network = Effect.gen(function* () {
-  const network = yield* AWS.EC2.Network("Network", {
-    cidrBlock: "10.0.0.0/16",
-    availabilityZones: 2,
-    nat: "single",
-  });
-
-  return { network };
-});
-```
-
-The private Lambda needs outbound access to Secrets Manager for the credential strategy used here; this network provides NAT. See [RDS & Aurora](/aws/data/rds) for the infrastructure options.
-
-## Give Lambda its security group
-
-```diff lang="typescript"
- // src/network.ts, after creating network
--  return { network };
-+  const functionSecurityGroup = yield* AWS.EC2.SecurityGroup(
-+    "FunctionSecurityGroup",
-+    {
-+      vpcId: network.vpcId,
-+      description: "Lambda database client",
-+    },
-+  );
-+
-+  return { network, functionSecurityGroup };
-```
-
-Keep the Lambda's client group separate from the database's ingress rules.
-
-## Allow PostgreSQL traffic from Lambda
-
-```diff lang="typescript"
- // src/network.ts, after creating functionSecurityGroup
--  return { network, functionSecurityGroup };
-+  const databaseSecurityGroup = yield* AWS.EC2.SecurityGroup(
-+    "DatabaseSecurityGroup",
-+    {
-+      vpcId: network.vpcId,
-+      description: "Aurora PostgreSQL",
-+      ingress: [
-+        {
-+          ipProtocol: "tcp",
-+          fromPort: 5432,
-+          toPort: 5432,
-+          referencedGroupId: functionSecurityGroup.groupId,
-+        },
-+      ],
-+    },
-+  );
-+
-+  return { network, functionSecurityGroup, databaseSecurityGroup };
-```
-
-Only clients with the referenced security group can use this ingress rule.
-
-## Declare Aurora PostgreSQL
-
-```typescript
-// src/database.ts
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-import { Network } from "./network.ts";
-
-export const Database = Effect.gen(function* () {
-  const { network, functionSecurityGroup, databaseSecurityGroup } =
-    yield* Network;
-  const aurora = yield* AWS.RDS.Aurora("Database", {
-    engine: "aurora-postgresql",
-    databaseName: "app",
-    subnetIds: network.privateSubnetIds,
-    securityGroupIds: [databaseSecurityGroup.groupId],
-    dataApi: false,
-  });
-
-  return { aurora, network, functionSecurityGroup };
-});
-```
-
-`Aurora` creates the cluster, writer, subnet group, and credential secret; this guide uses the PostgreSQL socket endpoint rather than HTTPS SQL execution.
-
-## Create the Lambda
-
-```typescript
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
-    runtime: "nodejs24.x",
-    functionUrl: { authType: "AWS_IAM" },
-    build: { install: ["pg"] },
-  },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("ready")),
-    };
-  }),
-) {}
-```
-
-The Function URL requires SigV4-signed requests; `build.install` keeps the CommonJS `pg` package intact in the Lambda artifact.
-
-## Bind Aurora to the Lambda
-
-```diff lang="typescript"
- // src/api.ts
-+import { Database } from "./database.ts";
-
-   Effect.gen(function* () {
-+    const { aurora, network, functionSecurityGroup } = yield* Database;
-+    const connect = yield* AWS.RDS.Connect(aurora.cluster, {
-+      secret: aurora.secret,
-+      database: "app",
-+      subnetIds: network.privateSubnetIds,
-+      securityGroupIds: [functionSecurityGroup.groupId],
-+    });
-+
-     return {
-       fetch: Effect.succeed(HttpServerResponse.text("ready")),
-     };
--  }),
-+  }).pipe(Effect.provide(AWS.RDS.ConnectHttp)),
-```
-
-The binding attaches Lambda to the VPC and grants access to the secret, whose credentials are resolved at runtime. The current RDS binding URL enables TLS with `sslmode=no-verify`, so this path does not verify the server certificate; assess that limitation against your production TLS requirements.
-
-## Open Drizzle lazily
-
-```diff lang="typescript"
- // src/api.ts
-+import * as Drizzle from "alchemy/Drizzle/Postgres";
-
-+    const db = yield* Drizzle.Postgres(
-+      connect.pipe(Effect.map((info) => info.url)),
-+    );
-```
-
-Insert `db` after `RDS.Connect`; the connection effect stays lazy, and the pool opens on the first query of each invocation and closes with its scope.
-
-## Add a schema-independent health query
-
-```diff lang="typescript"
- // src/api.ts
-+import { sql } from "drizzle-orm";
-
-     return {
--      fetch: Effect.succeed(HttpServerResponse.text("ready")),
-+      fetch: Effect.gen(function* () {
-+        const rows = yield* db.execute(sql`select 1 as one`);
-+        return yield* HttpServerResponse.json({ rows });
-+      }).pipe(Effect.orDie),
-     };
-```
-
-The health query needs no application table, so the first infrastructure deployment can precede migration application.
-
-## Declare the stack
-
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-import Api from "./src/api.ts";
-
-export default Alchemy.Stack(
-  "AuroraDrizzle",
-  { providers: AWS.providers(), state: AWS.state() },
-  Effect.gen(function* () {
-    const api = yield* Api;
-    return { url: api.functionUrl };
-  }),
-);
-```
-
-Neither `AWS.RDS.Aurora` nor `AWS.RDS.DBCluster` accepts a `migrations` prop; deploying this stack does not apply the checked-in SQL.
-
-## Provision the first database
-
-```sh
-pnpm exec alchemy deploy
-```
-
-This first deployment creates the infrastructure needed by the migration runner, after SQL review and commit. Aurora provisioning can take several minutes.
-
-## Configure the migration connection
+### Configure the migration connection
 
 ```typescript
 // drizzle.migrate.config.ts
@@ -274,36 +184,32 @@ export default defineConfig({
 });
 ```
 
-Inject a migration-role PostgreSQL URL through the runner's secret store, with the Aurora endpoint, `app` database, and appropriate TLS trust configuration. The runner needs its own network route and security-group access to the private cluster; Lambda's binding does not grant access to your laptop or CI job.
+Inject a migration-role PostgreSQL URL for the `app` database through the runner's secret store, using `sslmode=verify-full` and the RDS CA trust bundle. The runner needs its own network route and security-group access to the private cluster; Lambda's binding grants neither to a laptop or CI job. Keep this DDL-capable identity separate from `app_iam`.
 
-## Apply the reviewed SQL
+### Apply the committed SQL
 
 ```sh
 pnpm exec drizzle-kit migrate --config=drizzle.migrate.config.ts
 ```
 
-Run this from the authorized migration runner before releasing code that requires the new schema. Keep `drizzle-kit migrate` as the application step for this PostgreSQL integration; `alchemy deploy` is not its replacement.
+Run from the authorized migration runner before releasing code that requires the new schema. Keep an existing `drizzle-kit migrate` workflow; `alchemy deploy` is not its replacement. Neither `AWS.RDS.Aurora` nor `AWS.RDS.DBCluster` accepts a `migrations` prop, and the example's Action only performs its explicit bootstrap SQL.
 
-## Query the table
-
-```diff lang="typescript"
- // src/api.ts
--import { sql } from "drizzle-orm";
-+import { Notes } from "./schema.ts";
-
-       fetch: Effect.gen(function* () {
--        const rows = yield* db.execute(sql`select 1 as one`);
-+        const rows = yield* db.select().from(Notes).limit(20);
-         return yield* HttpServerResponse.json({ rows });
-       }).pipe(Effect.orDie),
-```
-
-The query builder is an Effect; [Drizzle Postgres](/sql/drizzle/postgres) covers the shared query API, not Aurora-specific deployment or migration wiring.
-
-## Deploy the application change
+## Run the integration test
 
 ```sh
-pnpm exec alchemy deploy
+AWS_TEST_SLOW=1 ALCHEMY_PROFILE=testing bun test test/integ.test.ts
 ```
 
-For subsequent schema changes, repeat generation, SQL-and-snapshot review and commit, migration application, then application deployment. To add RPC and a frontend, follow the [full-stack walkthrough](/aws/frontend/full-stack-tanstack-rpc-drizzle) while retaining this Aurora connection and migration path instead of its DSQL bootstrap.
+This deploys real AWS resources and destroys them afterward; provisioning and cleanup take several minutes.
+
+## Clean up
+
+```sh
+pnpm destroy --profile testing --stage aurora-example
+```
+
+Wait for deletion to finish. Reuse the same profile and stage if cleanup is interrupted.
+
+## Next steps
+
+[SQL databases](/sql/databases) · [Aurora configuration](/aws/data/rds) · [Lambda](/aws/compute/lambda)

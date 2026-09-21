@@ -399,11 +399,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Neon",
     intro:
-      "Serverless Postgres with copy-on-write branching as Stack resources. Composes with Cloudflare Hyperdrive; branch-per-PR guides are listed under Cloudflare.",
+      "Neon backend resources: Postgres branches, Functions, private object storage, managed Auth, Data API, AI Gateway and Website adapters. The upload tutorial combines native and Effect handlers with authenticated browser uploads.",
     pages: {
       slugs: [
         "neon/index",
         "neon/setup",
+        "neon/governance",
+        "neon/guides/ai-gateway",
+        "neon/guides/production-auth",
+        "neon/guides/private-networking",
+        "neon/guides/custom-domains",
+        "neon/guides/state-recovery",
+        "neon/tutorial/index",
+        "neon/tutorial/backend",
+        "neon/tutorial/functions",
+        "neon/tutorial/frontend",
+        "neon/tutorial/previews",
         "neon/data/branching",
         "neon/data/connections",
         "neon/data/migrations",

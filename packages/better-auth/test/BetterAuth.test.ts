@@ -73,7 +73,10 @@ describe("BetterAuth (memory)", () => {
         auth.fetch,
         new Request("http://localhost:3000/auth/sign-in/email", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "192.0.2.1",
+          },
           body: JSON.stringify({
             email: "user@example.com",
             password: "password1234",

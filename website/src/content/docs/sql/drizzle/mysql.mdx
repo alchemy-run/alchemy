@@ -10,7 +10,7 @@ export const devDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
 
 `Drizzle.MySQL` provides typed, Effect-native queries for compatible MySQL databases, independently of where your application runs. Choose a database in [SQL databases](/sql/databases) and supply its connection through your runtime's binding or configuration.
 
-Install the toolchain — all optional peers of alchemy:
+Install the optional dependencies:
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -77,7 +77,7 @@ export const makeQueries = <E, R>(
   });
 ```
 
-Pass an Effect that resolves a redacted URL; wrap an already resolved redacted URL with `Effect.succeed(url)`. Call `listUsers()` inside a request or an explicit `Effect.scoped` block so the pool follows the [connection lifecycle](/sql/effect-sql/lifecycle).
+Pass an Effect that resolves a redacted URL, such as `Config.Redacted("DATABASE_URL")` or a runtime binding's `connectionString`; wrap an already resolved redacted URL with `Effect.succeed(url)`. Call `listUsers()` inside a request or an explicit `Effect.scoped` block so the pool follows the [connection lifecycle](/sql/effect-sql/lifecycle).
 
 ## Configure the driver
 
@@ -146,7 +146,7 @@ git diff --cached
 git commit -m "Add database migration"
 ```
 
-Generate with each schema change, review the staged schema, SQL, and snapshots, then deploy committed files with your chosen migration runner. [Migrations](/sql/drizzle/migrations) covers application ownership; the optional [`Drizzle.Schema` resource](/providers/drizzle/schema) is not required, and an existing `drizzle-kit migrate` workflow can stay in place.
+Generate on each schema change, stage and review the schema, SQL, and snapshots, then commit them before application. Apply the committed migrations with your existing runner before deploying code that needs the new schema. [Migrations](/sql/drizzle/migrations) covers application ownership: [`Drizzle.Schema`](/providers/drizzle/schema) is optional, and `alchemy deploy` does not replace an existing `drizzle-kit migrate` workflow.
 
 ## Where next
 

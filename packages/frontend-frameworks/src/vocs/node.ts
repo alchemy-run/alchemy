@@ -206,6 +206,9 @@ export const make = (options: VocsNodeFrameworkOptions = {}) =>
         const root = resolveRoot(devOptions?.root);
         if (!isInsideDevChild()) {
           return runDevChild({
+            // Vocs's Vite dev server (like its build) exhausts memory under
+            // Bun; run the dev child under Node from PATH.
+            runtime: "node",
             framework: "vocs",
             module: "@alchemy.run/frontend-frameworks/vocs/node",
             callerUrl: import.meta.url,
