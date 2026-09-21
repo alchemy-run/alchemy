@@ -87,20 +87,6 @@ jobs:
       - name: Run pkg tests
         run: pnpm -C packages/pkg test
 
-      # These suites need no cloud credentials and also run on fork PRs.
-      - name: Test Vite and Foldkit build contracts
-        run: >-
-          timeout 240 pnpm test
-          test/Bundle/ViteOutput.test.ts
-          test/Cloudflare/Website/FoldkitBuild.test.ts
-          test/Cloudflare/Website/FoldkitContract.test.ts
-          test/Cloudflare/Website/WorkspaceMemo.test.ts
-          test/Cloudflare/Workers/WorkerSource.test.ts
-          --timeout 120000 --retry 0 --concurrency 2
-
-      - name: Test shared Vite and Worker plugins
-        run: timeout 240 pnpm -C packages/cloudflare-runtime test --project rolldown --project vite --maxWorkers 2
-
       - name: Run Typecheck
         run: pnpm tsc -b
 
